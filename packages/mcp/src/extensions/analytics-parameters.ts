@@ -76,18 +76,19 @@ export function getAnalyticsParameterOwnership(
   return {
     context: analyticsOwnsParameter(inputSchema, 'context'),
     conversationId: analyticsOwnsParameter(inputSchema, 'conversation_id'),
+    llmModel: analyticsOwnsParameter(inputSchema, 'llm_model'),
     outputInstructions: canDeclareOutputInstructions(outputSchema),
   }
 }
 
 /**
  * Removes the arguments we injected, leaving the host's own. Input-side only, so
- * it takes just those two flags rather than the whole ownership record — callers
+ * it takes just those flags rather than the whole ownership record — callers
  * that have no output-schema context should not have to invent a value for it.
  */
 export function stripOwnedAnalyticsArguments(
   args: unknown,
-  ownership: Pick<AnalyticsParameterOwnership, 'context' | 'conversationId'>
+  ownership: Pick<AnalyticsParameterOwnership, 'context' | 'conversationId' | 'llmModel'>
 ): unknown {
   let cleanedArgs = args
   if (ownership.context && cleanedArgs && typeof cleanedArgs === 'object' && 'context' in cleanedArgs) {
@@ -96,6 +97,10 @@ export function stripOwnedAnalyticsArguments(
   }
   if (ownership.conversationId && cleanedArgs && typeof cleanedArgs === 'object' && 'conversation_id' in cleanedArgs) {
     const { conversation_id: _conversationId, ...rest } = cleanedArgs
+    cleanedArgs = rest
+  }
+  if (ownership.llmModel && cleanedArgs && typeof cleanedArgs === 'object' && 'llm_model' in cleanedArgs) {
+    const { llm_model: _llmModel, ...rest } = cleanedArgs
     cleanedArgs = rest
   }
   return cleanedArgs

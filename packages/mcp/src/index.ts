@@ -228,6 +228,8 @@ export type {
   McpCaptureCommon,
   MCPAnalyticsContextOptions,
   MCPAnalyticsIntentSource,
+  MCPAnalyticsModelOptions,
+  MCPAnalyticsModelSource,
   MCPAnalyticsOptions,
   MissingCapabilityCaptureData,
   PreparedToolCall,

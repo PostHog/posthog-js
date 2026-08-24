@@ -170,6 +170,14 @@ function addCommonEventProperties(event: Event, properties: Record<string, unkno
   if (event.userIntentSource) {
     properties[PostHogMCPAnalyticsProperty.IntentSource] = event.userIntentSource
   }
+  // Self-reported by the calling agent (`captureModel`), so present only on the
+  // requests where the agent supplied a definite value — never inferred.
+  if (event.llmModel) {
+    properties[PostHogMCPAnalyticsProperty.LlmModel] = event.llmModel
+  }
+  if (event.llmModelSource) {
+    properties[PostHogMCPAnalyticsProperty.LlmModelSource] = event.llmModelSource
+  }
   if (event.isError !== undefined) {
     properties[PostHogMCPAnalyticsProperty.IsError] = event.isError
   }

@@ -17,6 +17,13 @@ import type {
 import { getAnalyticsParameterOwnership, stripOwnedAnalyticsArguments } from './analytics-parameters'
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
 import {
+  addModelParameterToTools,
+  getModelArgument,
+  getModelDescription,
+  isCaptureModelEnabled,
+  setEventModel,
+} from './model-parameters'
+import {
   addConversationIdToTools,
   type ConversationIdResolution,
   canInjectConversationIdPromptBack,
@@ -179,6 +186,7 @@ function getActiveAnalyticsParameterOwnership(
     contextOwnershipKnown: ownership !== undefined,
     context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
     conversationId: data.options.enableConversationId === true && ownership?.conversationId === true,
+    llmModel: isCaptureModelEnabled(data.options.captureModel) && ownership?.llmModel === true,
     // Deliberately read off `listed`, never the override: only the advertised
     // JSON Schema can say whether `tools/list` declared `_mcp_instructions` (an
     // override is built from the live registry, which holds Zod on the
@@ -263,6 +271,13 @@ async function prepareToolCallEvent(
 
     await applyResolvedMetadata(event, data, request, extra)
     setEventIntent(event, await resolveToolCallIntent(data, request, canCaptureContextIntent, extra))
+    // Unlike intent, the model is only read under positive ownership: with
+    // ownership unresolved, `llm_model` may be the application's own argument,
+    // and recording a customer value as the calling agent's model is worse
+    // than a gap in coverage.
+    if (ownership.llmModel) {
+      setEventModel(event, getModelArgument(request))
+    }
     return { event, requestAttribution }
   } catch (error) {
     data.logger(
@@ -645,6 +660,9 @@ async function getTracedToolsList(
     }
     if (data && isContextEnabled(data.options.context)) {
       tools = addContextParameterToTools(tools, getContextDescription(data.options.context), data.logger)
+    }
+    if (data && isCaptureModelEnabled(data.options.captureModel)) {
+      tools = addModelParameterToTools(tools, getModelDescription(data.options.captureModel), data.logger)
     }
 
     if (data) {
