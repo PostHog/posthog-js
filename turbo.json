@@ -61,6 +61,9 @@
             "cache": false
         },
         "test:functional": {},
+        "@posthog/rollup-plugin#test:functional": {
+            "dependsOn": ["build"]
+        },
         "test:e2e": {},
         "test": {
             "dependsOn": ["lint", "test:unit", "test:functional", "test:e2e"]

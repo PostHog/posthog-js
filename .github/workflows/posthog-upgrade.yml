@@ -49,10 +49,10 @@ jobs:
                   node-version: 24
 
             - name: Setup pnpm
-              uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
+              uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
               with:
                   cache: false
-                  install: false
+                  run_install: false
 
             - name: Wait for package to become available on npm
               shell: bash

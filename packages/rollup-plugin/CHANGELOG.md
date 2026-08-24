@@ -1,5 +1,29 @@
 # @posthog/rollup-plugin
 
+## 1.5.1
+
+### Patch Changes
+
+- [#4563](https://github.com/PostHog/posthog-js/pull/4563) [`530d88b`](https://github.com/PostHog/posthog-js/commit/530d88b8821acecd2dcf6d43e5fd07a2275348ee) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Bump `@posthog/cli` to `~0.14.1`, which makes `sourcemap inject --release-mode=event` adopt a bundler-emitted ECMA-426 debug id as the chunk id instead of deriving its own, so the ids webpack stamps into each chunk are the ones the CLI uploads against.
+  (2026-08-24)
+
+- [#4601](https://github.com/PostHog/posthog-js/pull/4601) [`a54efda`](https://github.com/PostHog/posthog-js/commit/a54efda6ab09d1e6293d9857a731e8cb36620e9b) Thanks [@marandaneto](https://github.com/marandaneto)! - Restore chunk ID comments after Vite 8 output minification so client source maps are uploaded.
+  (2026-08-24)
+
+## 1.5.0
+
+### Minor Changes
+
+- [#4541](https://github.com/PostHog/posthog-js/pull/4541) [`74d8f5a`](https://github.com/PostHog/posthog-js/commit/74d8f5abd567fa3ec4a746b1c9c3f7c0a64d726c) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Add experimental `sourcemaps.releaseMode: 'event'` to the rollup plugin. In event mode the plugin resolves the release with `posthog-cli release resolve` and injects its id into every chunk, so exceptions report their release directly instead of it being bound to the uploaded symbol sets, and chunk ids are derived from chunk content so a rebuild of unchanged code reuses the symbol set already uploaded. The option defaults to the `POSTHOG_RELEASE_MODE` environment variable and then to `symbol-set`, which behaves exactly as before. Event mode needs a posthog-cli with the `release resolve` command.
+  (2026-08-19)
+
+### Patch Changes
+
+- [#4541](https://github.com/PostHog/posthog-js/pull/4541) [`74d8f5a`](https://github.com/PostHog/posthog-js/commit/74d8f5abd567fa3ec4a746b1c9c3f7c0a64d726c) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Bump `@posthog/cli` to `~0.13.0`, which ships the `release resolve` command the rollup plugin's event release mode spawns.
+  (2026-08-19)
+- Updated dependencies [[`74d8f5a`](https://github.com/PostHog/posthog-js/commit/74d8f5abd567fa3ec4a746b1c9c3f7c0a64d726c)]:
+    - @posthog/plugin-utils@1.2.0
+
 ## 1.4.9
 
 ### Patch Changes

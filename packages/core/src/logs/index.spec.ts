@@ -1,4 +1,5 @@
 import { PostHogPersistedProperty } from '../types'
+import { createTestClient, PostHogCoreTestClient } from '../testing'
 import type { Logger } from '../types'
 import { PostHogLogs } from './index'
 import type { BufferedLogEntry, ResolvedPostHogLogsConfig } from './types'
@@ -78,6 +79,82 @@ const readQueue = (instance: any): BufferedLogEntry[] => {
 const getContextFor = (instance: any) => (): { distinctId?: string; sessionId?: string } => ({
   distinctId: instance.getDistinctId() || undefined,
   sessionId: instance.getSessionId() || undefined,
+})
+
+// Drives a real core host rather than a stubbed `_sendLogsBatch`, so the sender's
+// error classification and the queue bookkeeping are exercised together.
+describe('PostHogLogs over the core sender', () => {
+  const createLogsOverCore = (status: number): { logs: PostHogLogs; client: PostHogCoreTestClient } => {
+    const [client, mocks] = createTestClient('TEST_API_KEY', {
+      fetchRetryCount: 0,
+      preloadFeatureFlags: false,
+    })
+    mocks.fetch.mockResolvedValue({
+      status,
+      text: () => Promise.resolve('err'),
+      json: () => Promise.resolve({ status: 'err' }),
+    })
+    const logs = new PostHogLogs(
+      client,
+      resolveForTest(),
+      createMockLogger(),
+      () => ({ distinctId: 'user-123' }),
+      immediateOnReady
+    )
+    return { logs, client }
+  }
+
+  const queueOf = (client: PostHogCoreTestClient): BufferedLogEntry[] =>
+    client.getPersistedProperty<BufferedLogEntry[]>(PostHogPersistedProperty.LogsQueue) ?? []
+
+  it.each([408, 429, 500, 503])('keeps records queued when the endpoint answers %i', async (status) => {
+    const { logs, client } = createLogsOverCore(status)
+    logs.captureLog({ body: 'keep me' })
+
+    await expect(logs.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
+
+    expect(queueOf(client)).toHaveLength(1)
+  })
+
+  it('retains and resends records after transport retries are exhausted', async () => {
+    jest.useRealTimers()
+    const [client, mocks] = createTestClient('TEST_API_KEY', {
+      fetchRetryCount: 2,
+      fetchRetryDelay: 1,
+      preloadFeatureFlags: false,
+    })
+    const unavailableResponse = { status: 503, text: async () => 'unavailable', json: async () => ({}) }
+    mocks.fetch
+      .mockResolvedValueOnce(unavailableResponse)
+      .mockResolvedValueOnce(unavailableResponse)
+      .mockResolvedValueOnce(unavailableResponse)
+      .mockResolvedValueOnce({ status: 200, text: async () => 'ok', json: async () => ({}) })
+    const logs = new PostHogLogs(
+      client,
+      resolveForTest(),
+      createMockLogger(),
+      () => ({ distinctId: 'user-123' }),
+      immediateOnReady
+    )
+
+    logs.captureLog({ body: 'retry me' })
+    await expect(logs.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
+    expect(mocks.fetch).toHaveBeenCalledTimes(3)
+    expect(queueOf(client)).toHaveLength(1)
+
+    await expect(logs.flush()).resolves.toBeUndefined()
+    expect(mocks.fetch).toHaveBeenCalledTimes(4)
+    expect(queueOf(client)).toHaveLength(0)
+  })
+
+  it('drops the batch when the endpoint answers 401', async () => {
+    const { logs, client } = createLogsOverCore(401)
+    logs.captureLog({ body: 'unauthorized' })
+
+    await expect(logs.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
+
+    expect(queueOf(client)).toHaveLength(0)
+  })
 })
 
 describe('PostHogLogs', () => {

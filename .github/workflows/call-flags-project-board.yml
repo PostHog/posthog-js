@@ -10,9 +10,11 @@ on:
 jobs:
     call-flags-project:
         if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: PostHog/.github/.github/workflows/flags-project-board.yml@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1
+        uses: PostHog/.github/.github/workflows/flags-project-board.yml@5ba5d24966f2c416ca792654638e4ce6f19f545b
         with:
             pr_number: ${{ github.event.pull_request.number }}
             pr_node_id: ${{ github.event.pull_request.node_id }}
             is_draft: ${{ github.event.pull_request.draft }}
-        secrets: inherit # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit -- reusable workflow requires inherited secrets
+        secrets:
+            PROJECT_BOARD_BOT_APP_ID: ${{ secrets.PROJECT_BOARD_BOT_APP_ID }}
+            PROJECT_BOARD_BOT_PRIVATE_KEY: ${{ secrets.PROJECT_BOARD_BOT_PRIVATE_KEY }}

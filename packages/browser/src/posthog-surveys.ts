@@ -1,3 +1,8 @@
+import type { ApiResponse, Client, DeepReadonly, Disposable, Extension, SendRequestInit } from '@posthog/browser-common'
+import { document } from '@posthog/browser-common/utils/globals'
+import { continueWith } from '@posthog/browser-common/utils/promise-utils'
+import { isBoolean, isNullish, isUndefined, isNumber } from '@posthog/core'
+
 import {
     LOAD_EXT_NOT_FOUND,
     SURVEYS,
@@ -5,12 +10,7 @@ import {
     SURVEYS_LOADED_AT,
     SURVEYS_REFRESH_BACKOFF_MS,
 } from './constants'
-
-const SURVEY_NOT_LOADED = 'SDK is not enabled or survey functionality is not yet loaded'
-const SURVEY_DISABLED = 'Disabled. Not loading surveys.'
-import { SurveyManager } from './extensions/surveys'
-import type { Extension } from './extensions/types'
-import { PostHog } from './posthog-core'
+import type { SurveyManager } from './extensions/surveys'
 import {
     DisplaySurveyOptions,
     DisplaySurveyType,
@@ -18,10 +18,9 @@ import {
     SurveyCallback,
     SurveyRenderReason,
 } from './posthog-surveys-types'
+import type { SurveysConfigSource, SurveysExtensionHost } from './surveys-config'
 import { Properties, RemoteConfigResult } from './types'
-import { document } from '@posthog/browser-common/utils/globals'
-import { assignableWindow } from './utils/globals'
-import { SurveyEventReceiver } from './utils/survey-event-receiver'
+import type { SurveyEventReceiver } from './utils/survey-event-receiver'
 import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
@@ -32,44 +31,97 @@ import {
     SURVEY_IN_PROGRESS_PREFIX,
     SURVEY_SEEN_PREFIX,
 } from './utils/survey-utils'
-import { isNullish, isUndefined, isArray, isNumber } from '@posthog/core'
+
+const SURVEY_NOT_LOADED = 'SDK is not enabled or survey functionality is not yet loaded'
+const SURVEY_DISABLED = 'Disabled. Not loading surveys.'
+
+export type SurveyFetchResult = {
+    surveys: Survey[]
+    context?: { isLoaded: boolean; error?: string }
+}
+
+type SurveysClientState = Pick<Client, 'projectToken' | 'kv'>
 
 export class PostHogSurveys implements Extension {
+    readonly name = 'surveys'
     // this is set to undefined until the remote config is loaded
     // then it's set to true if there are surveys to load
     // or false if there are no surveys to load
     // or false if the surveys feature is disabled in the project settings
-    private _isSurveysEnabled?: boolean = undefined
-    public _surveyEventReceiver: SurveyEventReceiver | null
+    private _isSurveysEnabled?: boolean
+    public _surveyEventReceiver: SurveyEventReceiver | null = null
     private _surveyManager: SurveyManager | null = null
-    private _isInitializingSurveys: boolean = false
+    private _isInitializingSurveys = false
     private _surveyCallbacks: SurveyCallback[] = []
     // Promise for in-flight survey fetch - allows multiple callers to await the same request
-    private _getSurveysInFlightPromise: Promise<{
-        surveys: Survey[]
-        context: { isLoaded: boolean; error?: string }
-    }> | null = null
+    private _getSurveysInFlightPromise: Promise<SurveyFetchResult> | null = null
     // Backs off the stale-cache refresh for one TTL after a failure, so a surveys-API outage can't
     // turn the ~1s display poll into a per-poll request storm.
     private _lastSurveyRefreshFailedAt: number | null = null
+    private _client?: Client
+    private _initializingClient?: Client
+    private _remoteConfigSubscription?: Disposable
+    private _disposed = false
+    private _renderTimeouts = new Set<ReturnType<typeof setTimeout>>()
+    constructor(
+        private readonly _configSource: SurveysConfigSource,
+        private readonly _initialClientState?: SurveysClientState
+    ) {}
 
-    private get _config() {
-        return this._instance.config
+    setup(client: Client): void | Promise<void> {
+        if (this._disposed) {
+            return
+        }
+        this._initializingClient = client
+        return continueWith(client.kv.initialize(), () => {
+            if (this._initializingClient !== client || this._disposed) {
+                return
+            }
+            this._initializingClient = undefined
+            this._client = client
+            const subscription = client.onRemoteConfig(this.onRemoteConfig)
+            if (this._disposed) {
+                subscription.dispose()
+                return
+            }
+            this._remoteConfigSubscription = subscription
+            this.loadIfEnabled()
+        })
     }
 
-    constructor(private readonly _instance: PostHog) {
-        // we set this to undefined here because we need the persistence storage for this type
-        // but that's not initialized until loadIfEnabled is called.
+    dispose(): void {
+        if (this._disposed) {
+            return
+        }
+        this._disposed = true
+        this._initializingClient = undefined
+        this._client = undefined
+        this._remoteConfigSubscription?.dispose()
+        this._remoteConfigSubscription = undefined
+        this._surveyEventReceiver?.dispose()
         this._surveyEventReceiver = null
+        this._surveyManager?.dispose?.()
+        this._surveyManager = null
+        this._surveyCallbacks = []
+        this._getSurveysInFlightPromise = null
+        this._renderTimeouts.forEach((timeout) => clearTimeout(timeout))
+        this._renderTimeouts.clear()
+    }
+
+    private get _config() {
+        return this._configSource.get()
     }
 
     initialize() {
         this.loadIfEnabled()
     }
 
-    onRemoteConfig(result: RemoteConfigResult) {
+    onRemoteConfig = (result: DeepReadonly<RemoteConfigResult>): void => {
+        if (this._disposed) {
+            return
+        }
         // only load surveys if they are enabled and there are surveys to load
-        if (this._config.disable_surveys) {
+        if (this._config.disableSurveys) {
             return
         }
 
@@ -82,8 +134,7 @@ export class PostHogSurveys implements Extension {
         if (isNullish(surveys)) {
             return logger.warn('Flags not loaded yet. Not loading surveys.')
         }
-        const isArrayResponse = isArray(surveys)
-        this._isSurveysEnabled = isArrayResponse ? surveys.length > 0 : surveys
+        this._isSurveysEnabled = isBoolean(surveys) ? surveys : surveys.length > 0
         logger.info(`flags response received, isSurveysEnabled: ${this._isSurveysEnabled}`)
         this.loadIfEnabled()
     }
@@ -110,6 +161,10 @@ export class PostHogSurveys implements Extension {
     }
 
     loadIfEnabled() {
+        if (this._disposed || !this._client) {
+            return
+        }
+        const config = this._config
         // Initial guard clauses
         if (this._surveyManager) {
             return
@@ -118,16 +173,16 @@ export class PostHogSurveys implements Extension {
             logger.info('Already initializing surveys, skipping...')
             return
         }
-        if (this._config.disable_surveys) {
+        if (config.disableSurveys) {
             logger.info(SURVEY_DISABLED)
             return
         }
-        if (this._config.cookieless_mode && this._instance.consent.isOptedOut()) {
+        if (config.cookielessMode && this._configSource.isOptedOut()) {
             logger.info('Not loading surveys in cookieless mode without consent.')
             return
         }
 
-        const phExtensions = assignableWindow?.__PosthogExtensions__
+        const phExtensions = this._configSource.getExtensions()
         if (!phExtensions) {
             logger.error('PostHog Extensions not found.')
             return
@@ -135,11 +190,11 @@ export class PostHogSurveys implements Extension {
 
         // waiting for remote config to load
         // if surveys is forced enable (like external surveys), ignore the remote config and load surveys
-        if (isUndefined(this._isSurveysEnabled) && !this._config.advanced_enable_surveys) {
+        if (isUndefined(this._isSurveysEnabled) && !config.advancedEnableSurveys) {
             return
         }
 
-        const isSurveysEnabled = this._isSurveysEnabled || this._config.advanced_enable_surveys
+        const isSurveysEnabled = this._isSurveysEnabled || config.advancedEnableSurveys
 
         this._isInitializingSurveys = true
 
@@ -148,6 +203,7 @@ export class PostHogSurveys implements Extension {
             if (generateSurveys) {
                 // Surveys code is already loaded
                 this._completeSurveyInitialization(generateSurveys, isSurveysEnabled)
+                this._isInitializingSurveys = false
                 return
             }
 
@@ -156,34 +212,44 @@ export class PostHogSurveys implements Extension {
             if (!loadExternalDependency) {
                 // Cannot load surveys code
                 this._handleSurveyLoadError(LOAD_EXT_NOT_FOUND)
+                this._isInitializingSurveys = false
                 return
             }
 
-            // If we reach here, we need to load the dependency
-            loadExternalDependency(this._instance, 'surveys', (err) => {
-                if (err || !phExtensions.generateSurveys) {
-                    this._handleSurveyLoadError('Could not load surveys script', err)
-                } else {
-                    // Need to get the function reference again inside the callback
-                    this._completeSurveyInitialization(phExtensions.generateSurveys, isSurveysEnabled)
+            // Keep the initialization guard active until the dependency callback completes.
+            loadExternalDependency((err) => {
+                try {
+                    if (this._disposed) {
+                        return
+                    }
+                    const loadedExtensions = this._configSource.getExtensions()
+                    if (err || !loadedExtensions?.generateSurveys) {
+                        this._handleSurveyLoadError('Could not load surveys script', err)
+                    } else {
+                        // Need to get the function reference again inside the callback
+                        this._completeSurveyInitialization(loadedExtensions.generateSurveys, isSurveysEnabled)
+                    }
+                } finally {
+                    this._isInitializingSurveys = false
                 }
             })
         } catch (e) {
+            this._isInitializingSurveys = false
             this._handleSurveyLoadError('Error initializing surveys', e)
             throw e
-        } finally {
-            // Ensure the flag is always reset
-            this._isInitializingSurveys = false
         }
     }
 
     /** Helper to finalize survey initialization */
     private _completeSurveyInitialization(
-        generateSurveysFn: (instance: PostHog, isSurveysEnabled: boolean) => any,
+        generateSurveysFn: NonNullable<SurveysExtensionHost['generateSurveys']>,
         isSurveysEnabled: boolean
     ): void {
-        this._surveyManager = generateSurveysFn(this._instance, isSurveysEnabled)
-        this._surveyEventReceiver = new SurveyEventReceiver(this._instance)
+        if (this._disposed) {
+            return
+        }
+        this._surveyManager = generateSurveysFn(isSurveysEnabled)
+        this._surveyEventReceiver = this._configSource.createEventReceiver()
         logger.info('Surveys loaded successfully')
         this._notifySurveyCallbacks({ isLoaded: true })
     }
@@ -228,91 +294,108 @@ export class PostHogSurveys implements Extension {
         }
     }
 
-    getSurveys(callback: SurveyCallback, forceReload = false) {
-        // In case we manage to load the surveys script, but config says not to load surveys
-        // then we shouldn't return survey data
-        if (this._config.disable_surveys) {
+    getSurveys(callback: SurveyCallback, forceReload = false): void {
+        const client = this._client ?? this._initialClientState
+        if (!client || this._disposed) {
+            return
+        }
+        if (this._config.disableSurveys) {
             logger.info(SURVEY_DISABLED)
             return callback([])
         }
 
-        const existingSurveys = this._instance.get_property(SURVEYS)
-        if (existingSurveys && !forceReload) {
-            // Serve the cached definitions synchronously so callers that rely on a synchronous
-            // callback (e.g. _getSurveyById) keep working.
-            callback(existingSurveys, {
-                isLoaded: true,
-            })
-            // If the cache has aged past its TTL, kick off a background refresh so server-side
-            // changes (e.g. a survey switched from popover to API) reach a long-lived tab. The
-            // next poll then evaluates the refreshed definitions.
+        const surveys = client.kv.get<Survey[]>(SURVEYS)
+        if (surveys && !forceReload) {
+            callback(surveys, { isLoaded: true })
             if (this._shouldBackgroundRefreshSurveys()) {
                 this.getSurveys(() => {}, true)
             }
             return
         }
 
-        // If a fetch is already in progress and Promise is available, reuse that promise
-        // In browsers without Promise (IE11), we skip this optimization and just make concurrent requests
-        if (typeof Promise !== 'undefined' && this._getSurveysInFlightPromise) {
-            this._getSurveysInFlightPromise.then(({ surveys, context }) => callback(surveys, context))
+        if (this._getSurveysInFlightPromise) {
+            void this._getSurveysInFlightPromise
+                .then(({ surveys, context }) => {
+                    if (!this._disposed) {
+                        callback(surveys, context)
+                    }
+                })
+                .catch((error) => logger.error('Error in survey callback', error))
             return
         }
 
-        // Create a new promise for this fetch that other callers can reuse
-        // We need to assign the promise before starting the request, because
-        // in tests (and potentially in some edge cases) the callback may fire synchronously
-        let resolvePromise: (value: { surveys: Survey[]; context: { isLoaded: boolean; error?: string } }) => void
-        if (typeof Promise !== 'undefined') {
-            this._getSurveysInFlightPromise = new Promise((resolve) => {
-                resolvePromise = resolve
-            })
+        const request = this._sendSurveysRequest('/api/surveys/', {
+            method: 'GET',
+            query: { token: client.projectToken },
+            sentAt: 'query',
+            timeoutMs: this._config.requestTimeoutMs,
+        }).then(
+            (response) => {
+                try {
+                    return this._handleSurveyResponse(client, response)
+                } catch (error) {
+                    logger.error('Error processing surveys response', error)
+                    return this._handleSurveyResponse(client, { statusCode: 0, error })
+                }
+            },
+            (error) => this._handleSurveyResponse(client, { statusCode: 0, error })
+        )
+        this._getSurveysInFlightPromise = request
+
+        const clearInFlight = (): void => {
+            if (this._getSurveysInFlightPromise === request) {
+                this._getSurveysInFlightPromise = null
+            }
+        }
+        void request
+            .then((result) => {
+                clearInFlight()
+                if (!this._disposed) {
+                    callback(result.surveys, result.context)
+                }
+            }, clearInFlight)
+            .catch((error) => logger.error('Error in survey callback', error))
+    }
+
+    protected _sendSurveysRequest(path: string, init: SendRequestInit): Promise<ApiResponse> {
+        const client = this._client
+        if (!client) {
+            return new Promise((resolve) => resolve({ statusCode: 0, error: new Error(SURVEY_NOT_LOADED) }))
+        }
+        return client.sendRequest(path, init)
+    }
+
+    private _handleSurveyResponse(client: SurveysClientState, response: ApiResponse): SurveyFetchResult {
+        if (this._disposed) {
+            return { surveys: [], context: { isLoaded: false, error: SURVEY_NOT_LOADED } }
         }
 
-        this._instance._send_request({
-            url: this._instance.requestRouter.endpointFor('api', `/api/surveys/?token=${this._config.token}`),
-            method: 'GET',
-            timestampMode: 'query',
-            timeout: this._config.surveys_request_timeout_ms,
-            callback: (response) => {
-                this._getSurveysInFlightPromise = null
+        const statusCode = response.statusCode
+        if (statusCode !== 200 || !response.json) {
+            const error = `Surveys API could not be loaded, status: ${statusCode}`
+            if (statusCode !== 0) {
+                logger.error(error)
+            } else if (!response.error) {
+                logger.warn(error)
+            }
+            this._lastSurveyRefreshFailedAt = Date.now()
+            return { surveys: [], context: { isLoaded: false, error } }
+        }
 
-                const statusCode = response.statusCode
-                if (statusCode !== 200 || !response.json) {
-                    const error = `Surveys API could not be loaded, status: ${statusCode}`
-                    if (statusCode !== 0) {
-                        logger.error(error)
-                    } else if (!response.error) {
-                        logger.warn(error)
-                    }
-                    this._lastSurveyRefreshFailedAt = Date.now()
-                    const context = { isLoaded: false, error }
-                    callback([], context)
-                    resolvePromise?.({ surveys: [], context })
-                    return
-                }
-                this._lastSurveyRefreshFailedAt = null
-                const surveys = response.json.surveys || []
+        this._lastSurveyRefreshFailedAt = null
+        const surveys = (response.json as { surveys?: Survey[] }).surveys || []
+        const eventOrActionBasedSurveys = surveys.filter(
+            (survey) =>
+                isSurveyRunning(survey) && (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
+        )
+        if (eventOrActionBasedSurveys.length > 0) {
+            this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
+        }
 
-                const eventOrActionBasedSurveys = surveys.filter(
-                    (survey: Survey) =>
-                        isSurveyRunning(survey) &&
-                        (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
-                )
-
-                if (eventOrActionBasedSurveys.length > 0) {
-                    this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
-                }
-
-                // Stamp when these definitions were fetched so the split-storage
-                // loader can tell a fresher main-blob write-back from a stale
-                // `__surveys` entry (the survey analogue of $feature_flag_evaluated_at).
-                this._instance.persistence?.register({ [SURVEYS]: surveys, [SURVEYS_LOADED_AT]: Date.now() })
-                const context = { isLoaded: true }
-                callback(surveys, context)
-                resolvePromise?.({ surveys, context })
-            },
-        })
+        // Stamp when these definitions were fetched so the split-storage loader can tell a fresher
+        // main-blob write-back from a stale `__surveys` entry.
+        client.kv.set({ [SURVEYS]: surveys, [SURVEYS_LOADED_AT]: Date.now() })
+        return { surveys, context: { isLoaded: true } }
     }
 
     /**
@@ -328,7 +411,7 @@ export class PostHogSurveys implements Extension {
      * timestamp is recorded (e.g. surveys injected directly in tests) so the cache stays valid.
      */
     private _isSurveyCacheStale(): boolean {
-        const surveysLoadedAt = this._instance.get_property(SURVEYS_LOADED_AT)
+        const surveysLoadedAt = (this._client ?? this._initialClientState)?.kv.get(SURVEYS_LOADED_AT)
         return isNumber(surveysLoadedAt) && Date.now() - surveysLoadedAt > SURVEYS_CACHE_TTL_MS
     }
 
@@ -473,13 +556,18 @@ export class PostHogSurveys implements Extension {
             logger.info(
                 `Rendering survey ${survey.id} with delay of ${survey.appearance.surveyPopupDelaySeconds} seconds`
             )
-            setTimeout(() => {
+            const timeout = setTimeout(() => {
+                this._renderTimeouts.delete(timeout)
+                if (this._disposed) {
+                    return
+                }
                 logger.info(
                     `Rendering survey ${survey.id} with delay of ${survey.appearance?.surveyPopupDelaySeconds} seconds`
                 )
                 this._surveyManager?.renderSurvey(survey, elem, properties)
                 logger.info(`Survey ${survey.id} rendered`)
             }, survey.appearance.surveyPopupDelaySeconds * 1000)
+            this._renderTimeouts.add(timeout)
             return
         }
         this._surveyManager.renderSurvey(survey, elem, properties)

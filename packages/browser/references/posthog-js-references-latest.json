@@ -3070,12 +3070,12 @@
           "releaseTag": "deprecated"
         },
         {
-          "description": "Determines whether PostHog should capture pageview events automatically.\nCan be:\n- `true`: Capture regular pageviews (default)\n- `false`: Don't capture any pageviews\n- `'history_change'`: Capture pageviews on the initial page load and on history API changes (pushState, replaceState, popstate)",
-          "type": "boolean | \"history_change\"",
+          "description": "Determines whether PostHog should capture pageview events automatically.\nCan be:\n- `true`: Capture the initial pageview\n- `false`: Don't capture any pageviews\n- `'history_change'`: Capture the initial pageview and pageviews when the pathname changes\n- An object: Capture the initial pageview and pageviews when any selected URL component changes",
+          "type": "boolean | \"history_change\" | CapturePageviewOptions",
           "name": "capture_pageview"
         },
         {
-          "description": "Determines whether PostHog should capture pageleave events.\nIf set to `true`, it will capture pageleave events for all pages.\nIf set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is also set to `true` or `'history_change'`.",
+          "description": "Determines whether PostHog should capture pageleave events.\nIf set to `true`, it will capture pageleave events for all pages.\nIf set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is enabled.",
           "type": "boolean | \"if_capture_pageview\"",
           "name": "capture_pageleave"
         },

@@ -22,7 +22,7 @@
  * @module
  */
 
-import { Autocapture } from '../autocapture'
+import { BrowserAutocapture } from '../browser-autocapture'
 import { DeadClicksAutocapture } from './dead-clicks-autocapture'
 import { ExceptionObserver } from './exception-autocapture'
 import { HistoryAutocapture } from './history-autocapture'
@@ -33,7 +33,7 @@ import { Heatmaps } from '../heatmaps'
 import { PostHogProductTours } from '../posthog-product-tours'
 import { SiteApps } from '../site-apps'
 import { PostHogConfig } from '../types'
-import { PostHogSurveys } from '../posthog-surveys'
+import { BrowserSurveys } from '../browser-surveys'
 import { Toolbar } from './toolbar'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { PostHogExceptions } from '../posthog-exceptions'
@@ -56,7 +56,7 @@ export const SessionReplayExtensions = {
 
 /** Autocapture, click tracking, heatmaps, and web vitals. */
 export const AnalyticsExtensions = {
-    autocapture: Autocapture,
+    autocapture: BrowserAutocapture,
     historyAutocapture: HistoryAutocapture,
     heatmaps: Heatmaps,
     deadClicksAutocapture: DeadClicksAutocapture,
@@ -87,7 +87,7 @@ export const TracingExtensions = {
 
 /** In-app surveys. Includes feature flags for targeting. */
 export const SurveysExtensions = {
-    surveys: PostHogSurveys,
+    surveys: BrowserSurveys,
     ...FeatureFlagsExtensions,
 } as const satisfies ExtensionClasses
 
