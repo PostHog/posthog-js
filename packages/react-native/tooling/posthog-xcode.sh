@@ -130,69 +130,47 @@ SOURCEMAP_PACKAGER_FILE="$CONFIGURATION_BUILD_DIR/$SOURCEMAP_NAME"
 # The native runtime reports these values from the built Info.plist. Prefer the source Info.plist so
 # source maps use the same release when Expo EAS remote versioning does not update Xcode's defaults.
 resolve_posthog_ios_release_info() {
-  resolve_posthog_build_setting_reference() {
+  resolve_posthog_build_setting_references() {
     local value="$1"
+    local token
     local name
+    local replacement
+    local prefix
+    local suffix
 
-    case "$value" in
-      \$\(*\))
-        name=${value#\$(}
-        printenv "${name%)}" 2>/dev/null || true
-        ;;
-      \$\{*\})
-        name=${value#\$\{}
-        printenv "${name%\}}" 2>/dev/null || true
-        ;;
-      *) printf '%s' "$value" ;;
-    esac
+    while [[ "$value" =~ (\$\(([A-Za-z_][A-Za-z0-9_]*)\)|\$\{([A-Za-z_][A-Za-z0-9_]*)\}) ]]; do
+      token=${BASH_REMATCH[1]}
+      name=${BASH_REMATCH[2]:-${BASH_REMATCH[3]}}
+      replacement=$(printenv "$name" 2>/dev/null) || return
+      prefix=${value%%"$token"*}
+      suffix=${value#*"$token"}
+      value="${prefix}${replacement}${suffix}"
+    done
+    printf '%s' "$value"
   }
 
   POSTHOG_RELEASE_VERSION="${MARKETING_VERSION:-}"
   POSTHOG_BUILD_VERSION="${CURRENT_PROJECT_VERSION:-}"
   POSTHOG_PLIST_BUDDY="${POSTHOG_PLIST_BUDDY:-/usr/libexec/PlistBuddy}"
-  POSTHOG_SOURCE_INFO_PLIST="${INFOPLIST_FILE:-}"
-  POSTHOG_PROCESSED_INFO_PLIST=""
-  POSTHOG_INFO_PLIST=""
+  POSTHOG_INFO_PLIST="${INFOPLIST_FILE:-}"
 
-  if [ ! -x "$POSTHOG_PLIST_BUDDY" ]; then
-    return
+  # Bare C preprocessor macros cannot be expanded safely here, and the product plist may belong to
+  # a previous build. Preserve the existing Xcode-setting fallback for preprocessed plists.
+  if [ "${INFOPLIST_PREPROCESS:-}" = "YES" ] || [ -z "$POSTHOG_INFO_PLIST" ] || [ ! -x "$POSTHOG_PLIST_BUDDY" ]; then
+    return 0
   fi
-  case "$POSTHOG_SOURCE_INFO_PLIST" in
-    "") ;;
+  case "$POSTHOG_INFO_PLIST" in
     /*) ;;
-    *) POSTHOG_SOURCE_INFO_PLIST="${SRCROOT}/${POSTHOG_SOURCE_INFO_PLIST}" ;;
+    *) POSTHOG_INFO_PLIST="${SRCROOT}/${POSTHOG_INFO_PLIST}" ;;
   esac
-  if [ -n "${TARGET_BUILD_DIR:-}" ] && [ -n "${INFOPLIST_PATH:-}" ]; then
-    POSTHOG_PROCESSED_INFO_PLIST="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
-  fi
-
-  if [ "${INFOPLIST_PREPROCESS:-}" = "YES" ] && [ -f "$POSTHOG_PROCESSED_INFO_PLIST" ]; then
-    POSTHOG_INFO_PLIST="$POSTHOG_PROCESSED_INFO_PLIST"
-  elif [ -f "$POSTHOG_SOURCE_INFO_PLIST" ]; then
-    POSTHOG_INFO_PLIST="$POSTHOG_SOURCE_INFO_PLIST"
-  elif [ -f "$POSTHOG_PROCESSED_INFO_PLIST" ]; then
-    POSTHOG_INFO_PLIST="$POSTHOG_PROCESSED_INFO_PLIST"
-  else
+  if [ ! -f "$POSTHOG_INFO_PLIST" ]; then
     return 0
   fi
 
   POSTHOG_PLIST_RELEASE_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleShortVersionString" "$POSTHOG_INFO_PLIST" 2>/dev/null || true)
   POSTHOG_PLIST_BUILD_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleVersion" "$POSTHOG_INFO_PLIST" 2>/dev/null || true)
-  POSTHOG_PLIST_RELEASE_VERSION=$(resolve_posthog_build_setting_reference "$POSTHOG_PLIST_RELEASE_VERSION")
-  POSTHOG_PLIST_BUILD_VERSION=$(resolve_posthog_build_setting_reference "$POSTHOG_PLIST_BUILD_VERSION")
-
-  if [ "$POSTHOG_INFO_PLIST" != "$POSTHOG_PROCESSED_INFO_PLIST" ] && [ -f "$POSTHOG_PROCESSED_INFO_PLIST" ]; then
-    case "$POSTHOG_PLIST_RELEASE_VERSION" in
-      ""|*"\$("*|*"\${"*)
-        POSTHOG_PLIST_RELEASE_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleShortVersionString" "$POSTHOG_PROCESSED_INFO_PLIST" 2>/dev/null || true)
-        ;;
-    esac
-    case "$POSTHOG_PLIST_BUILD_VERSION" in
-      ""|*"\$("*|*"\${"*)
-        POSTHOG_PLIST_BUILD_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleVersion" "$POSTHOG_PROCESSED_INFO_PLIST" 2>/dev/null || true)
-        ;;
-    esac
-  fi
+  POSTHOG_PLIST_RELEASE_VERSION=$(resolve_posthog_build_setting_references "$POSTHOG_PLIST_RELEASE_VERSION" || true)
+  POSTHOG_PLIST_BUILD_VERSION=$(resolve_posthog_build_setting_references "$POSTHOG_PLIST_BUILD_VERSION" || true)
 
   case "$POSTHOG_PLIST_RELEASE_VERSION" in
     ""|*"\$("*|*"\${"*) ;;

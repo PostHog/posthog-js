@@ -192,23 +192,15 @@ describe('posthog-xcode.sh release version resolution', () => {
     plistBuild: string,
     marketingVersion = '1.0',
     projectVersion = '1',
-    buildSettings: Record<string, string> = {},
-    processedVersions?: { release: string; build: string }
+    buildSettings: Record<string, string> = {}
   ): string => {
     const plistBuddy = path.join(tempDir, 'plist-buddy')
     const infoPlist = path.join(tempDir, 'ExampleApp', 'Info.plist')
-    const targetBuildDir = path.join(tempDir, 'build')
-    const infoPlistPath = 'ExampleApp.app/Info.plist'
-    const processedInfoPlist = path.join(targetBuildDir, infoPlistPath)
     fs.mkdirSync(path.dirname(infoPlist), { recursive: true })
     fs.writeFileSync(infoPlist, '')
-    if (processedVersions) {
-      fs.mkdirSync(path.dirname(processedInfoPlist), { recursive: true })
-      fs.writeFileSync(processedInfoPlist, '')
-    }
     fs.writeFileSync(
       plistBuddy,
-      '#!/bin/sh\nif [ "$3" = "$TEST_PROCESSED_INFO_PLIST" ]; then\n  case "$2" in\n    *CFBundleShortVersionString*) printf %s "$TEST_PROCESSED_PLIST_VERSION" ;;\n    *CFBundleVersion*) printf %s "$TEST_PROCESSED_PLIST_BUILD" ;;\n  esac\nelse\n  case "$2" in\n    *CFBundleShortVersionString*) printf %s "$TEST_PLIST_VERSION" ;;\n    *CFBundleVersion*) printf %s "$TEST_PLIST_BUILD" ;;\n  esac\nfi\n',
+      '#!/bin/sh\ncase "$2" in\n  *CFBundleShortVersionString*) printf %s "$TEST_PLIST_VERSION" ;;\n  *CFBundleVersion*) printf %s "$TEST_PLIST_BUILD" ;;\nesac\n',
       { mode: 0o755 }
     )
 
@@ -218,16 +210,11 @@ describe('posthog-xcode.sh release version resolution', () => {
         ...process.env,
         SRCROOT: tempDir,
         INFOPLIST_FILE: 'ExampleApp/Info.plist',
-        INFOPLIST_PATH: infoPlistPath,
-        TARGET_BUILD_DIR: targetBuildDir,
         POSTHOG_PLIST_BUDDY: plistBuddy,
         MARKETING_VERSION: marketingVersion,
         CURRENT_PROJECT_VERSION: projectVersion,
         TEST_PLIST_VERSION: plistVersion,
         TEST_PLIST_BUILD: plistBuild,
-        TEST_PROCESSED_INFO_PLIST: processedInfoPlist,
-        TEST_PROCESSED_PLIST_VERSION: processedVersions?.release ?? '',
-        TEST_PROCESSED_PLIST_BUILD: processedVersions?.build ?? '',
         ...buildSettings,
       },
     }).toString()
@@ -256,23 +243,30 @@ describe('posthog-xcode.sh release version resolution', () => {
     }
   })
 
-  it('uses the processed Info.plist for compound Xcode build settings', () => {
+  it('resolves compound Xcode build settings referenced by the source Info.plist', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-version-'))
     try {
       expect(
-        resolveReleaseInfo(
-          tempDir,
-          '$(VERSION_MAJOR).$(VERSION_MINOR)',
-          '$(BUILD_PREFIX)$(BUILD_NUMBER)',
-          '1.0',
-          '1',
-          {},
-          {
-            release: '2.10.0',
-            build: '154',
-          }
-        )
+        resolveReleaseInfo(tempDir, '$(VERSION_MAJOR).$(VERSION_MINOR)', '$(BUILD_PREFIX)$(BUILD_NUMBER)', '1.0', '1', {
+          VERSION_MAJOR: '2',
+          VERSION_MINOR: '10.0',
+          BUILD_PREFIX: '1',
+          BUILD_NUMBER: '54',
+        })
       ).toBe('2.10.0|154')
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps Xcode versions when Info.plist preprocessing is enabled', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-version-'))
+    try {
+      expect(
+        resolveReleaseInfo(tempDir, 'APP_VERSION', 'APP_BUILD', '1.0', '1', {
+          INFOPLIST_PREPROCESS: 'YES',
+        })
+      ).toBe('1.0|1')
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true })
     }
