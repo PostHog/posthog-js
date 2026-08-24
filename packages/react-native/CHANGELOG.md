@@ -1,5 +1,40 @@
 # posthog-react-native
 
+## 4.64.0
+
+### Minor Changes
+
+- [#4529](https://github.com/PostHog/posthog-js/pull/4529) [`ad6d5c6`](https://github.com/PostHog/posthog-js/commit/ad6d5c6b4bbcac41c40eb9a775ae863f917740a4) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `sessionReplayConfig.verifyScreenshotMaskAlignment` for Android session replay. This option requires `@posthog/react-native-plugin`.
+  (2026-08-24)
+
+### Patch Changes
+
+- Updated dependencies [[`ad6d5c6`](https://github.com/PostHog/posthog-js/commit/ad6d5c6b4bbcac41c40eb9a775ae863f917740a4)]:
+  - @posthog/react-native-plugin@2.5.0
+
+## 4.63.9
+
+### Patch Changes
+
+- [#4623](https://github.com/PostHog/posthog-js/pull/4623) [`be299df`](https://github.com/PostHog/posthog-js/commit/be299dff71d2cf0c955efff1ca0b9cadc3b64713) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix buffered logs being dropped instead of retried after HTTP 408, 429 or 5xx
+  (2026-08-24)
+- Updated dependencies [[`be299df`](https://github.com/PostHog/posthog-js/commit/be299dff71d2cf0c955efff1ca0b9cadc3b64713)]:
+  - @posthog/core@1.48.10
+
+## 4.63.8
+
+### Patch Changes
+
+- [#4631](https://github.com/PostHog/posthog-js/pull/4631) [`1167239`](https://github.com/PostHog/posthog-js/commit/116723906ab68404fb6140d298bc648c5c330075) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix session replay started with `startRecording()` capturing nothing on Android by requiring `@posthog/react-native-plugin` 2.4.3 or newer.
+  (2026-08-24)
+
+## 4.63.7
+
+### Patch Changes
+
+- [#4602](https://github.com/PostHog/posthog-js/pull/4602) [`9e53f91`](https://github.com/PostHog/posthog-js/commit/9e53f91cf3e0e4c146ca8914925d775f7752c2ea) Thanks [@marandaneto](https://github.com/marandaneto)! - Use the iOS version reported by Info.plist when uploading Hermes source maps, including custom Xcode build settings. Matching native dSYM attribution requires @posthog/react-native-plugin 2.4.2 or later (PostHog/posthog-ios#776).
+  (2026-08-24)
+
 ## 4.63.6
 
 ### Patch Changes

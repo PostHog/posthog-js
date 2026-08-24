@@ -17,6 +17,7 @@ const knownNonAbiOverlaps = [
     '_buffer',
     '_client',
     '_config',
+    '_disposed',
     '_enqueue',
     '_events',
     '_extends',
