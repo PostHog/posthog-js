@@ -1171,17 +1171,40 @@ describe('surveys', () => {
             )
         })
 
-        it('should not shuffle questions while the survey has in-progress state', () => {
-            localStorage.setItem(
-                `inProgressSurvey_${surveyWithShufflingQuestions.id}`,
-                JSON.stringify({ surveySubmissionId: 'sub', responses: {}, lastQuestionIndex: 1 })
-            )
+        const inProgress = (questionOrder?: string[]) =>
+            ({ surveySubmissionId: 'sub', responses: {}, lastQuestionIndex: 0, questionOrder }) as any
 
-            expect(getDisplayOrderQuestions(surveyWithShufflingQuestions)).toEqual(
+        it('should restore the recorded question order for a survey already in progress', () => {
+            const order = surveyWithShufflingQuestions.questions.map((q) => q.id).reverse() as string[]
+
+            expect(getDisplayOrderQuestions(surveyWithShufflingQuestions, inProgress(order)).map((q) => q.id)).toEqual(
+                order
+            )
+        })
+
+        it('should use the configured order for state persisted without a question order', () => {
+            expect(getDisplayOrderQuestions(surveyWithShufflingQuestions, inProgress())).toEqual(
                 surveyWithShufflingQuestions.questions
             )
+        })
 
-            localStorage.removeItem(`inProgressSurvey_${surveyWithShufflingQuestions.id}`)
+        it('should use the configured order when a recorded question is no longer in the survey', () => {
+            const ids = surveyWithShufflingQuestions.questions.map((q) => q.id) as string[]
+            const orderWithRemovedQuestion = [...ids.slice(0, -1), 'removed-question-id']
+
+            expect(
+                getDisplayOrderQuestions(surveyWithShufflingQuestions, inProgress(orderWithRemovedQuestion)).map(
+                    (q) => q.id
+                )
+            ).toEqual(ids)
+        })
+
+        it('should use the configured order when the recorded order covers only some of the questions', () => {
+            const ids = surveyWithShufflingQuestions.questions.map((q) => q.id) as string[]
+
+            expect(
+                getDisplayOrderQuestions(surveyWithShufflingQuestions, inProgress(ids.slice(0, -1))).map((q) => q.id)
+            ).toEqual(ids)
         })
 
         it('should not shuffle questions if any question has branching', () => {

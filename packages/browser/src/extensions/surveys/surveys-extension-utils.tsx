@@ -577,21 +577,56 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
 const hasBranching = (survey: Survey): boolean => survey.questions.some((question) => !!question.branching?.type)
 
 /**
- * Shuffling is skipped whenever positions into survey.questions are also used elsewhere, because a
- * shuffled array makes those positions refer to a different question:
- * - branching rules hold the position of their target question. The API rejects surveys that set
- *   both shuffleQuestions and branching, so that guard covers rows predating the validation.
- * - in-progress state holds the position the respondent is on and the positions already answered.
- *   Prefill writes that state before the survey renders.
+ * Restores the question order a persisted record's indices point into, so a resumed survey reads
+ * them against the same order that produced them. Returns null when the record predates the stored
+ * order, or when it no longer describes this survey's questions.
  */
-export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
-    if (
-        !survey.appearance ||
-        !survey.appearance.shuffleQuestions ||
-        survey.enable_partial_responses ||
-        hasBranching(survey) ||
-        isSurveyInProgress(survey)
-    ) {
+const restorePersistedOrder = (survey: Survey, questionOrder: string[] | undefined): SurveyQuestion[] | null => {
+    if (!questionOrder || questionOrder.length !== survey.questions.length) {
+        return null
+    }
+
+    const questionsById = new Map(survey.questions.map((question) => [question.id, question]))
+    const restored: SurveyQuestion[] = []
+    for (const id of questionOrder) {
+        const question = questionsById.get(id)
+        if (!question) {
+            return null
+        }
+        restored.push(question)
+    }
+
+    return restored
+}
+
+/** Question ids in the given order, or undefined when any question lacks an id to record. */
+export const getQuestionOrder = (questions: SurveyQuestion[]): string[] | undefined => {
+    const ids = questions.map((question) => question.id)
+    return ids.every((id): id is string => !!id) ? ids : undefined
+}
+
+/**
+ * Branching rules hold the position of their target question in survey.questions, so a survey that
+ * uses branching is always read in the configured order. The API rejects surveys that set both
+ * shuffleQuestions and branching, so that covers rows predating the validation.
+ *
+ * A survey the respondent has already started keeps the order its persisted indices point into.
+ * Without a recorded order those indices came from a build that did not store one, and the order
+ * that produced them is unknowable, so the configured order is the only safe reading.
+ */
+export const getDisplayOrderQuestions = (
+    survey: Survey,
+    inProgressState?: InProgressSurveyState | null
+): SurveyQuestion[] => {
+    if (hasBranching(survey)) {
+        return survey.questions
+    }
+
+    if (inProgressState) {
+        return restorePersistedOrder(survey, inProgressState.questionOrder) ?? survey.questions
+    }
+
+    if (!survey.appearance || !survey.appearance.shuffleQuestions || survey.enable_partial_responses) {
         return survey.questions
     }
 
@@ -710,6 +745,9 @@ export function doesSurveyMatchSelector(survey: Survey): boolean {
 interface InProgressSurveyState {
     surveySubmissionId: string
     lastQuestionIndex: number
+    // Question ids in the order the persisted indices point into. Optional for backwards compat with
+    // state written before the order was recorded.
+    questionOrder?: string[]
     // Indices the respondent has visited, in order, excluding the current one. Pushed on next, popped on back.
     // Optional for backwards compat with state persisted before the back-navigation feature.
     visitedIndices?: number[]

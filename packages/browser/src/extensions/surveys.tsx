@@ -52,6 +52,7 @@ import {
     doesSurveyMatchSelector,
     doesSurveyUrlMatch,
     getDisplayOrderQuestions,
+    getQuestionOrder,
     getInProgressSurveyState,
     getSurveyContainerClass,
     getSurveyResponseKey,
@@ -641,6 +642,7 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 responses: responses,
                 lastQuestionIndex: startQuestionIndex,
+                questionOrder: getQuestionOrder(survey.questions),
                 // Mark auto-advanced questions visited so a manual submit doesn't prune their answers.
                 visitedIndices: skippedIndices,
                 surveyLanguage,
@@ -1563,7 +1565,10 @@ export function Questions({
             (index) => index >= 0 && index < survey.questions.length
         )
     })
-    const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
+    const surveyQuestions = useMemo(
+        () => getDisplayOrderQuestions(survey, initialInProgressState),
+        [survey, initialInProgressState]
+    )
 
     // Sync preview state. Negative sentinels (the intro screen page) are rendered by SurveyPopup
     // instead of Questions, so they must never reach currentQuestionIndex.
@@ -1608,6 +1613,7 @@ export function Questions({
                 surveySubmissionId: surveySubmissionId,
                 responses: newResponses,
                 lastQuestionIndex: nextStep,
+                questionOrder: getQuestionOrder(surveyQuestions),
                 visitedIndices: newVisitedIndices,
                 surveyLanguage,
             })
@@ -1656,6 +1662,7 @@ export function Questions({
             surveySubmissionId,
             responses: questionsResponses,
             lastQuestionIndex: previousIndex,
+            questionOrder: getQuestionOrder(surveyQuestions),
             visitedIndices: newVisitedIndices,
             surveyLanguage,
         })
