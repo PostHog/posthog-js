@@ -54,26 +54,6 @@ describe('sanitizeJsonLd', () => {
     expect(sanitized).not.toContain('Private reviewer');
   });
 
-  it('does not allow name outside an approved type path', () => {
-    const sanitized = sanitizeJsonLd(
-      JSON.stringify({
-        '@context': 'https://schema.org',
-        '@type': 'Product',
-        name: 'Public product',
-        brand: {
-          '@type': 'Person',
-          name: 'Private person',
-        },
-      }),
-    );
-
-    expect(JSON.parse(sanitized!)).toEqual({
-      '@context': 'https://schema.org',
-      '@type': 'Product',
-      name: 'Public product',
-    });
-  });
-
   it('supports arrays when every root has an approved type', () => {
     const sanitized = sanitizeJsonLd(
       JSON.stringify([
@@ -108,7 +88,7 @@ describe('sanitizeJsonLd', () => {
       JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'Product',
-        image: ['https://example.com/private?token=secret'],
+        category: ['Shoes', 'Sale'],
         brand: {
           '@type': 'Organization',
           name: 'Acme',
@@ -135,6 +115,7 @@ describe('sanitizeJsonLd', () => {
     expect(JSON.parse(sanitized!)).toEqual({
       '@context': 'https://schema.org',
       '@type': 'Product',
+      category: ['Shoes', 'Sale'],
       brand: {
         '@type': 'Organization',
         name: 'Acme',

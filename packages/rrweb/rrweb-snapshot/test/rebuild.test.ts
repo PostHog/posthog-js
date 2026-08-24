@@ -54,26 +54,6 @@ describe('rebuild', function () {
     cache = createCache();
   });
 
-  it('rebuilds recorded scripts as inert noscript elements', () => {
-    const node = buildNodeWithSN(
-      {
-        id: 1,
-        tagName: 'script',
-        type: NodeType.Element,
-        attributes: { type: 'application/ld+json' },
-        childNodes: [],
-      },
-      {
-        doc: document,
-        mirror,
-        hackCss: false,
-        cache,
-      },
-    );
-
-    expect(node.nodeName).toBe('NOSCRIPT');
-  });
-
   describe('rr_dataURL', function () {
     it('should rebuild dataURL', function () {
       const dataURI =

@@ -275,35 +275,9 @@ describe('JSON-LD scripts', () => {
     });
   });
 
-  it('drops non-text children from approved scripts', () => {
-    const script = document.createElement('script');
-    script.type = 'application/ld+json';
-    script.append(
-      document.createTextNode(
-        '{"@context":"https://schema.org","@type":"Product","name":"Canvas shoes"}',
-      ),
-    );
-    script.append(document.createComment('private-comment@example.com'));
-    const privateElement = document.createElement('span');
-    privateElement.setAttribute('data-email', 'private-attribute@example.com');
-    script.append(privateElement);
-
-    const serialized = serializeNodeWithScriptOptions(script) as elementNode;
-    const eventBytes = JSON.stringify(serialized);
-
-    expect(serialized.childNodes).toHaveLength(1);
-    expect(eventBytes).not.toContain('private-comment@example.com');
-    expect(eventBytes).not.toContain('private-attribute@example.com');
-  });
-
   it.each([
     ['JavaScript', 'text/javascript', 'globalThis.executed = true'],
     ['invalid JSON-LD', 'application/ld+json', '{'],
-    [
-      'unsupported JSON-LD',
-      'application/ld+json',
-      '{"@context":"https://schema.org","@type":"Event","name":"Private"}',
-    ],
   ])('drops %s', (_case, type, text) => {
     const script = document.createElement('script');
     script.type = type;

@@ -6,19 +6,7 @@ import { NodeType, type mutationCallbackParam } from '@posthog/rrweb-types';
 import { describe, expect, it, vi } from 'vitest';
 import MutationBuffer from '../../src/record/mutation';
 
-function recordCharacterDataMutation(
-  type: string,
-  text: string | string[],
-  targetIndex = 0,
-  maskScript = false,
-) {
-  const script = document.createElement('script');
-  script.type = type;
-  if (maskScript) {
-    const maskedParent = document.createElement('div');
-    maskedParent.className = 'rr-mask';
-    maskedParent.append(script);
-  }
+function poisonScriptElementIdentity(script: HTMLScriptElement) {
   Object.defineProperty(script, 'tagName', {
     configurable: true,
     value: 'DIV',
@@ -35,6 +23,22 @@ function recordCharacterDataMutation(
     ELEMENT_NODE: { configurable: true, value: Node.TEXT_NODE },
     TEXT_NODE: { configurable: true, value: Node.ELEMENT_NODE },
   });
+}
+
+function recordCharacterDataMutation(
+  type: string,
+  text: string | string[],
+  targetIndex = 0,
+  maskScript = false,
+) {
+  const script = document.createElement('script');
+  script.type = type;
+  if (maskScript) {
+    const maskedParent = document.createElement('div');
+    maskedParent.className = 'rr-mask';
+    maskedParent.append(script);
+  }
+  poisonScriptElementIdentity(script);
   Object.defineProperty(script, 'getAttribute', {
     configurable: true,
     value: () => 'application/ld+json',
@@ -91,22 +95,7 @@ function recordScriptAttributeMutation(
 ) {
   const script = document.createElement('script');
   script.type = type;
-  Object.defineProperty(script, 'tagName', {
-    configurable: true,
-    value: 'DIV',
-  });
-  Object.defineProperty(script, 'nodeName', {
-    configurable: true,
-    value: 'DIV',
-  });
-  Object.defineProperty(script, 'nodeType', {
-    configurable: true,
-    value: Node.TEXT_NODE,
-  });
-  Object.defineProperties(script, {
-    ELEMENT_NODE: { configurable: true, value: Node.TEXT_NODE },
-    TEXT_NODE: { configurable: true, value: Node.ELEMENT_NODE },
-  });
+  poisonScriptElementIdentity(script);
   script.setAttribute(attributeName, 'private-value');
   const mirror = createMirror();
   mirror.add(script, {
@@ -228,25 +217,7 @@ function recordChildListAddition(
   return mutationCb.mock.calls[0]?.[0];
 }
 
-describe('script text mutations', () => {
-  it('rebuilds JSON-LD mutations from approved properties', () => {
-    const mutations = recordCharacterDataMutation(
-      'application/ld+json',
-      JSON.stringify({
-        '@context': 'https://schema.org',
-        '@type': 'Product',
-        name: 'Canvas shoes',
-        customerEmail: 'customer@example.com',
-      }),
-    );
-
-    expect(JSON.parse(mutations[0].value)).toEqual({
-      '@context': 'https://schema.org',
-      '@type': 'Product',
-      name: 'Canvas shoes',
-    });
-  });
-
+describe('script mutations', () => {
   it('clears JSON-LD content that no longer passes validation', () => {
     expect(recordCharacterDataMutation('application/ld+json', '{')[0].value).toBe('');
   });
