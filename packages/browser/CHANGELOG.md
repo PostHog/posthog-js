@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.418.14
+
+### Patch Changes
+
+- [#4513](https://github.com/PostHog/posthog-js/pull/4513) [`cb7e4a6`](https://github.com/PostHog/posthog-js/commit/cb7e4a6750f0abffe02f2e89db3ec7ef5538b4fa) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Migrate browser autocapture to the shared extension lifecycle.
+  (2026-08-24)
+
+- [#4623](https://github.com/PostHog/posthog-js/pull/4623) [`be299df`](https://github.com/PostHog/posthog-js/commit/be299dff71d2cf0c955efff1ca0b9cadc3b64713) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix logs and metrics batches being dropped instead of retried after HTTP 408
+  (2026-08-24)
+- Updated dependencies [[`be299df`](https://github.com/PostHog/posthog-js/commit/be299dff71d2cf0c955efff1ca0b9cadc3b64713)]:
+    - @posthog/core@1.48.10
+
 ## 1.418.13
 
 ### Patch Changes
