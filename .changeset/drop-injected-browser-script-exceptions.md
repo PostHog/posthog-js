@@ -3,4 +3,4 @@
 '@posthog/types': patch
 ---
 
-fix(browser): drop exceptions thrown by injected browser scripts. Firefox for iOS and Chrome for iOS inject their own user scripts, which the browser attributes to the host page. When such a script reads a browser-private global (for example `__firefox__`) before it exists, it throws, and error tracking captured it as the page's own error. We now match the private global in the exception value and drop the exception, gated by the same `captureExtensionExceptions` config.
+Drop exceptions thrown by user scripts the browser injects into every page (Firefox for iOS, Chrome for iOS) instead of reporting them as the page's own errors. Set `error_tracking.captureExtensionExceptions: true` to keep capturing them.
