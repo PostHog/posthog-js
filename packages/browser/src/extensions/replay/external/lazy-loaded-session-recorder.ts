@@ -2529,7 +2529,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             maskInputFn: undefined,
             maskAllElementAttributes: false,
             maskAttributeFn: undefined,
-            slimDOMOptions: {},
+            slimDOMOptions: { script: true },
             collectFonts: false,
             inlineStylesheet: true,
             // inlining every CSSRule of every sheet is the dominant cost of a full
@@ -2570,6 +2570,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     // @ts-ignore
                     sessionRecordingOptions[key] = value
                 }
+            }
+        }
+
+        if (sessionRecordingOptions.slimDOMOptions !== true && sessionRecordingOptions.slimDOMOptions !== 'all') {
+            sessionRecordingOptions.slimDOMOptions = {
+                ...sessionRecordingOptions.slimDOMOptions,
+                script: true,
             }
         }
 

@@ -19,7 +19,14 @@ type BasePrototypeCache = {
 };
 
 const testableAccessors = {
-  Node: ['childNodes', 'parentNode', 'parentElement', 'textContent'] as const,
+  Node: [
+    'childNodes',
+    'parentNode',
+    'parentElement',
+    'textContent',
+    'nodeName',
+    'nodeType',
+  ] as const,
   ShadowRoot: ['host', 'styleSheets'] as const,
   Element: ['shadowRoot'] as const,
   MutationObserver: [] as const,
@@ -28,7 +35,7 @@ const testableAccessors = {
 const testableMethods = {
   Node: ['contains', 'getRootNode'] as const,
   ShadowRoot: ['getSelection'],
-  Element: ['querySelector', 'querySelectorAll'],
+  Element: ['querySelector', 'querySelectorAll', 'getAttribute'],
   MutationObserver: ['constructor'],
 } as const;
 
@@ -230,6 +237,14 @@ export function textContent(n: Node): string | null {
   return getUntaintedAccessor('Node', n, 'textContent');
 }
 
+export function nodeName(node: Node): string {
+  return getUntaintedAccessor('Node', node, 'nodeName');
+}
+
+export function nodeType(node: Node): number {
+  return getUntaintedAccessor('Node', node, 'nodeType');
+}
+
 export function contains(n: Node, other: Node): boolean {
   return getUntaintedMethod('Node', n, 'contains')(other);
 }
@@ -261,6 +276,10 @@ export function querySelectorAll(
   selectors: string,
 ): NodeListOf<Element> {
   return getUntaintedMethod('Element', n, 'querySelectorAll')(selectors);
+}
+
+export function getAttribute(n: Element, name: string): string | null {
+  return getUntaintedMethod('Element', n, 'getAttribute')(name);
 }
 
 export function mutationObserverCtor(): (typeof MutationObserver)['prototype']['constructor'] {
@@ -376,6 +395,8 @@ export default {
   parentNode,
   parentElement,
   textContent,
+  nodeName,
+  nodeType,
   contains,
   getRootNode,
   host,
@@ -383,6 +404,7 @@ export default {
   shadowRoot,
   querySelector,
   querySelectorAll,
+  getAttribute,
   mutationObserver: mutationObserverCtor,
   patch,
 };

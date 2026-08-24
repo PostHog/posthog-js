@@ -17,6 +17,7 @@ import snapshot, {
 export * from './types';
 export * from './utils';
 export * from './snapshot-cost';
+export * from './json-ld';
 
 export {
   snapshot,

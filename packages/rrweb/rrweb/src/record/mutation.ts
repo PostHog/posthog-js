@@ -14,6 +14,8 @@ import {
   nowMs,
   getSuspensionGeneration,
   recordMutationCost,
+  isJsonLdScript,
+  sanitizeJsonLdScript,
 } from '@posthog/rrweb-snapshot';
 import type { observerParam, MutationBufferParam } from '../types';
 import type {
@@ -141,6 +143,8 @@ const moveKey = (id: number, parentId: number) => `${id}@${parentId}`;
 const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
 const XMLNS_NAMESPACE = 'http://www.w3.org/2000/xmlns/';
 const XLINK_NAMESPACE = 'http://www.w3.org/1999/xlink';
+const DOCUMENT_FRAGMENT_NODE = 11;
+const TEXT_NODE = 3;
 
 function getSerializedAttributeName(
   target: Element,
@@ -168,6 +172,7 @@ export default class MutationBuffer {
   private locked = false;
 
   private texts: textCursor[] = [];
+  private textMap = new WeakMap<Node, textCursor>();
   private attributes: attributeCursor[] = [];
   private attributeMap = new WeakMap<Node, attributeCursor>();
   private generatedAttributes = new WeakMap<Node, Set<string>>();
@@ -371,6 +376,8 @@ export default class MutationBuffer {
       if (parentId === -1 || nextId === -1) {
         return addList.addNode(n);
       }
+      const serializeJsonLdChildren =
+        dom.nodeName(n) === 'SCRIPT' && isJsonLdScript(n as Element);
       const sn = serializeNodeWithId(n, {
         doc: this.doc,
         mirror: this.mirror,
@@ -378,7 +385,7 @@ export default class MutationBuffer {
         blockSelector: this.blockSelector,
         maskTextClass: this.maskTextClass,
         maskTextSelector: this.maskTextSelector,
-        skipChild: true,
+        skipChild: !serializeJsonLdChildren,
         newlyAddedElement: true,
         inlineStylesheet: this.inlineStylesheet,
         maskInputOptions: this.maskInputOptions,
@@ -493,7 +500,7 @@ export default class MutationBuffer {
               const unhandledNode = _node.value;
               const parent = dom.parentNode(unhandledNode);
               // If the node is the direct child of a shadow root, we treat the shadow host as its parent node.
-              if (parent && parent.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+              if (parent && dom.nodeType(parent) === DOCUMENT_FRAGMENT_NODE) {
                 const shadowHost = dom.host(parent as ShadowRoot);
                 const parentId = this.mirror.getId(shadowHost);
                 if (parentId !== -1) {
@@ -604,6 +611,7 @@ export default class MutationBuffer {
 
     // reset
     this.texts = [];
+    this.textMap = new WeakMap<Node, textCursor>();
     this.attributes = [];
     this.attributeMap = new WeakMap<Node, attributeCursor>();
     this.generatedAttributes = new WeakMap<Node, Set<string>>();
@@ -649,35 +657,76 @@ export default class MutationBuffer {
 
   private processMutation = (m: mutationRecord) => {
     if (isIgnored(m.target, this.mirror, this.slimDOMOptions)) {
-      return;
+      const parent =
+        m.type === 'characterData' ? dom.parentNode(m.target) : null;
+      const firstJsonLdTextNode =
+        parent && dom.nodeName(parent) === 'SCRIPT' && isJsonLdScript(parent as Element)
+          ? Array.from(dom.childNodes(parent)).find(
+              (child) => dom.nodeType(child) === TEXT_NODE,
+            )
+          : null;
+      if (
+        !firstJsonLdTextNode ||
+        isIgnored(firstJsonLdTextNode, this.mirror, this.slimDOMOptions)
+      ) {
+        return;
+      }
     }
     switch (m.type) {
       case 'characterData': {
-        const value = dom.textContent(m.target);
+        const parent = dom.parentNode(m.target);
+        const script =
+          parent && dom.nodeName(parent) === 'SCRIPT'
+            ? (parent as Element)
+            : null;
+        const firstScriptTextNode =
+          script && isJsonLdScript(script)
+            ? Array.from(dom.childNodes(script)).find(
+                (child) => dom.nodeType(child) === TEXT_NODE,
+              )
+            : null;
+        const textNode = firstScriptTextNode || m.target;
+        const value = script
+          ? firstScriptTextNode
+            ? sanitizeJsonLdScript(script) || ''
+            : 'SCRIPT_PLACEHOLDER'
+          : dom.textContent(m.target);
 
         if (
-          !isBlocked(m.target, this.blockClass, this.blockSelector, false) &&
+          !isBlocked(textNode, this.blockClass, this.blockSelector, false) &&
           value !== m.oldValue
         ) {
-          this.texts.push({
-            value:
+          const sanitizedValue =
+            !script &&
               needMaskingText(
-                m.target,
+                textNode,
                 this.maskTextClass,
                 this.maskTextSelector,
                 true, // checkAncestors
               ) && value
-                ? this.maskTextFn
-                  ? this.maskTextFn(value, closestElementOfNode(m.target))
-                  : value.replace(/[\S]/g, '*')
-                : value,
-            node: m.target,
-          });
+              ? this.maskTextFn
+                ? this.maskTextFn(value, closestElementOfNode(textNode))
+                : value.replace(/[\S]/g, '*')
+              : value;
+          const existingText = this.textMap.get(textNode);
+          if (existingText) {
+            existingText.value = sanitizedValue;
+          } else {
+            const text = { value: sanitizedValue, node: textNode };
+            this.texts.push(text);
+            this.textMap.set(textNode, text);
+          }
         }
         break;
       }
       case 'attributes': {
         const target = m.target as Element;
+        if (
+          dom.nodeName(target) === 'SCRIPT' &&
+          (this.slimDOMOptions.script || isJsonLdScript(target))
+        ) {
+          return;
+        }
         const sourceAttributeName = m.attributeName as string;
         const attributeNamespace = m.attributeNamespace ?? null;
         let attributeName = getSerializedAttributeName(
@@ -886,6 +935,33 @@ export default class MutationBuffer {
    * Make sure you check if `n`'s parent is blocked before calling this function
    * */
   private genAdds = (n: Node, target?: Node) => {
+    const parent = dom.parentNode(n);
+    if (
+      this.slimDOMOptions.script &&
+      parent &&
+      dom.nodeName(parent) === 'SCRIPT'
+    ) {
+      if (
+        !isJsonLdScript(parent as Element) ||
+        sanitizeJsonLdScript(parent as Element) === null
+      ) {
+        return;
+      }
+      const firstTextNode = Array.from(dom.childNodes(parent)).find(
+        (child) => dom.nodeType(child) === TEXT_NODE,
+      );
+      if (n !== firstTextNode) {
+        return;
+      }
+    }
+    if (
+      this.slimDOMOptions.script &&
+      dom.nodeName(n) === 'SCRIPT' &&
+      sanitizeJsonLdScript(n as Element) === null
+    ) {
+      return;
+    }
+
     // this node was already recorded in other buffer, ignore it
     if (this.processedNodeManager.inOtherBuffer(n, this)) return;
 
@@ -923,7 +999,12 @@ export default class MutationBuffer {
 
     // if this node is blocked `serializeNode` will turn it into a placeholder element
     // but we have to remove it's children otherwise they will be added as placeholders too
-    if (!isBlocked(n, this.blockClass, this.blockSelector, false)) {
+    const serializedWithChildren =
+      dom.nodeName(n) === 'SCRIPT' && isJsonLdScript(n as Element);
+    if (
+      !serializedWithChildren &&
+      !isBlocked(n, this.blockClass, this.blockSelector, false)
+    ) {
       dom.childNodes(n).forEach((childN) => this.genAdds(childN));
       if (hasShadowRoot(n)) {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion

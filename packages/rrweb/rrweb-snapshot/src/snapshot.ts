@@ -35,6 +35,7 @@ import {
   recompressBase64Image,
   absolutifyURLs,
 } from './utils';
+import { isJsonLdScript, sanitizeJsonLdScript } from './json-ld';
 import dom from '@posthog/rrweb-utils';
 import {
   beginSnapshotCostTracking,
@@ -47,6 +48,12 @@ import {
 
 let _id = 1;
 const tagNameRegex = new RegExp('[^a-z0-9-_:]');
+const DOCUMENT_NODE = 9;
+const DOCUMENT_TYPE_NODE = 10;
+const ELEMENT_NODE = 1;
+const TEXT_NODE = 3;
+const CDATA_SECTION_NODE = 4;
+const COMMENT_NODE = 8;
 
 export const IGNORED_NODE = -2;
 
@@ -55,11 +62,7 @@ export function genId(): number {
 }
 
 function getValidTagName(element: Element): Lowercase<string> {
-  if (element instanceof HTMLFormElement) {
-    return 'form';
-  }
-
-  const processedTagName = toLowerCase(element.tagName);
+  const processedTagName = toLowerCase(dom.nodeName(element));
 
   if (tagNameRegex.test(processedTagName)) {
     // if the tag name is odd and we cannot extract
@@ -309,7 +312,7 @@ export function classMatchesRegex(
   checkAncestors: boolean,
 ): boolean {
   if (!node) return false;
-  if (node.nodeType !== node.ELEMENT_NODE) {
+  if (dom.nodeType(node) !== ELEMENT_NODE) {
     if (!checkAncestors) return false;
     return classMatchesRegex(dom.parentNode(node), regex, checkAncestors);
   }
@@ -557,8 +560,8 @@ function serializeNode(
   } = options;
   // Only record root id when document object is not the base document
   const rootId = getRootId(doc, mirror);
-  switch (n.nodeType) {
-    case n.DOCUMENT_NODE:
+  switch (dom.nodeType(n)) {
+    case DOCUMENT_NODE:
       if ((n as Document).compatMode !== 'CSS1Compat') {
         return {
           type: NodeType.Document,
@@ -571,7 +574,7 @@ function serializeNode(
           childNodes: [],
         };
       }
-    case n.DOCUMENT_TYPE_NODE:
+    case DOCUMENT_TYPE_NODE:
       return {
         type: NodeType.DocumentType,
         name: (n as DocumentType).name,
@@ -579,7 +582,7 @@ function serializeNode(
         systemId: (n as DocumentType).systemId,
         rootId,
       };
-    case n.ELEMENT_NODE:
+    case ELEMENT_NODE:
       return serializeElementNode(n as Element, {
         doc,
         blockClass,
@@ -597,20 +600,20 @@ function serializeNode(
         newlyAddedElement,
         rootId,
       });
-    case n.TEXT_NODE:
+    case TEXT_NODE:
       return serializeTextNode(n as Text, {
         doc,
         needsMask,
         maskTextFn,
         rootId,
       });
-    case n.CDATA_SECTION_NODE:
+    case CDATA_SECTION_NODE:
       return {
         type: NodeType.CDATA,
         textContent: '',
         rootId,
       };
-    case n.COMMENT_NODE:
+    case COMMENT_NODE:
       return {
         type: NodeType.Comment,
         textContent: dom.textContent(n as Comment) || '',
@@ -640,7 +643,7 @@ function serializeTextNode(
   // The parent node may not be a html element which has a tagName attribute.
   // So just let it be undefined which is ok in this use case.
   const parent = dom.parentNode(n);
-  const parentTagName = parent && (parent as HTMLElement).tagName;
+  const parentTagName = parent ? dom.nodeName(parent) : undefined;
   let text = dom.textContent(n);
   const isStyle = parentTagName === 'STYLE' ? true : undefined;
   const isScript = parentTagName === 'SCRIPT' ? true : undefined;
@@ -678,7 +681,14 @@ function serializeTextNode(
     text = absolutifyURLs(text, getHref(options.doc));
   }
   if (isScript) {
-    text = 'SCRIPT_PLACEHOLDER';
+    if (parent && isJsonLdScript(parent as Element)) {
+      const firstTextNode = Array.from(dom.childNodes(parent)).find(
+        (child) => dom.nodeType(child) === TEXT_NODE,
+      );
+      text = firstTextNode === n ? sanitizeJsonLdScript(parent as Element) || '' : '';
+    } else {
+      text = 'SCRIPT_PLACEHOLDER';
+    }
   }
   if (!isStyle && !isScript && text && needsMask) {
     text = maskTextFn
@@ -1056,6 +1066,10 @@ function serializeElementNode(
   }
   serializationComplete = true;
 
+  if (isJsonLdScript(n)) {
+    attributes = { type: 'application/ld+json' };
+  }
+
   let isCustomElement: true | undefined;
   try {
     if (customElements.get(tagName)) isCustomElement = true;
@@ -1088,19 +1102,39 @@ function lowerIfExists(
 function slimDOMExcluded(
   sn: serializedNode,
   slimDOMOptions: SlimDOMOptions,
+  node: Node,
 ): boolean {
+  const parent = dom.parentNode(node);
+  if (
+    parent &&
+    dom.nodeName(parent) === 'SCRIPT' &&
+    isJsonLdScript(parent as Element)
+  ) {
+    const firstTextNode = Array.from(dom.childNodes(parent)).find(
+      (child) => dom.nodeType(child) === TEXT_NODE,
+    );
+    if (node !== firstTextNode) {
+      return true;
+    }
+  }
+
   if (slimDOMOptions.comment && sn.type === NodeType.Comment) {
     // TODO: convert IE conditional comments to real nodes
     return true;
   } else if (sn.type === NodeType.Element) {
-    if (
+    if (sn.tagName === 'script') {
+      if (isJsonLdScript(node as Element)) {
+        return sanitizeJsonLdScript(node as Element) === null;
+      }
+      if (slimDOMOptions.script) {
+        return true;
+      }
+    } else if (
       slimDOMOptions.script &&
-      // script tag
-      (sn.tagName === 'script' ||
-        // (module)preload link
-        (sn.tagName === 'link' &&
-          ((sn.attributes.rel === 'preload' && sn.attributes.as === 'script') ||
-            sn.attributes.rel === 'modulepreload')) ||
+      // (module)preload link
+      ((sn.tagName === 'link' &&
+        ((sn.attributes.rel === 'preload' && sn.attributes.as === 'script') ||
+          sn.attributes.rel === 'modulepreload')) ||
         // prefetch link
         (sn.tagName === 'link' &&
           sn.attributes.rel === 'prefetch' &&
@@ -1324,7 +1358,7 @@ export function serializeNodeWithId(
     // Reuse the previous id
     id = mirror.getId(n);
   } else if (
-    slimDOMExcluded(_serializedNode, slimDOMOptions) ||
+    slimDOMExcluded(_serializedNode, slimDOMOptions, n) ||
     (!preserveWhiteSpace &&
       _serializedNode.type === NodeType.Text &&
       !_serializedNode.isStyle &&

@@ -168,6 +168,180 @@ describe('absolute url to stylesheet', () => {
   });
 });
 
+describe('JSON-LD scripts', () => {
+  function serializeNodeWithScriptOptions(
+    node: Node,
+    slimDOMOptions: SlimDOMOptions = { script: true },
+  ) {
+    return serializeNodeWithId(node, {
+      doc: document,
+      mirror: new Mirror(),
+      blockClass: 'blockblock',
+      blockSelector: null,
+      maskTextClass: 'maskmask',
+      maskTextSelector: null,
+      skipChild: false,
+      inlineStylesheet: true,
+      maskTextFn: undefined,
+      maskInputFn: undefined,
+      slimDOMOptions,
+    });
+  }
+
+  it('keeps only sanitized JSON-LD content and attributes', () => {
+    const script = document.createElement('script');
+    script.setAttribute('type', ' Application/LD+JSON ');
+    script.setAttribute('nonce', 'private-nonce');
+    script.setAttribute('data-customer-email', 'customer@example.com');
+    script.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: 'Canvas shoes',
+      customerEmail: 'customer@example.com',
+    });
+
+    const serialized = serializeNodeWithScriptOptions(script) as elementNode;
+
+    expect(serialized.attributes).toEqual({ type: 'application/ld+json' });
+    expect(serialized.childNodes).toHaveLength(1);
+    expect(JSON.parse(serialized.childNodes[0].textContent)).toEqual({
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: 'Canvas shoes',
+    });
+  });
+
+  it('writes sanitized JSON once when a script has multiple text nodes', () => {
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.append(document.createTextNode('{"@context":"https://schema.org",'));
+    script.append(
+      document.createTextNode(
+        '"@type":"Product","name":"Canvas shoes","email":"private@example.com"}',
+      ),
+    );
+
+    const serialized = serializeNodeWithScriptOptions(script) as elementNode;
+    const serializedText = serialized.childNodes
+      .map((child) => child.textContent)
+      .join('');
+
+    expect(JSON.parse(serializedText)).toEqual({
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: 'Canvas shoes',
+    });
+    expect(serialized.childNodes.filter((child) => child.textContent)).toHaveLength(1);
+  });
+
+  it('uses an untainted text getter', () => {
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.textContent =
+      '{"@context":"https://schema.org","@type":"Product","name":"Canvas shoes"}';
+    Object.defineProperty(script, 'textContent', {
+      configurable: true,
+      get: () => {
+        throw new Error('patched getter');
+      },
+    });
+    Object.defineProperty(script, 'tagName', {
+      configurable: true,
+      value: 'DIV',
+    });
+    Object.defineProperty(script, 'nodeName', {
+      configurable: true,
+      value: 'DIV',
+    });
+    Object.defineProperty(script, 'nodeType', {
+      configurable: true,
+      value: Node.TEXT_NODE,
+    });
+    Object.defineProperties(script, {
+      ELEMENT_NODE: { configurable: true, value: Node.TEXT_NODE },
+      TEXT_NODE: { configurable: true, value: Node.ELEMENT_NODE },
+    });
+    Object.defineProperty(script, 'getAttribute', {
+      configurable: true,
+      value: () => 'text/javascript',
+    });
+
+    const serialized = serializeNodeWithScriptOptions(script) as elementNode;
+
+    expect(JSON.parse(serialized.childNodes[0].textContent)).toEqual({
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: 'Canvas shoes',
+    });
+  });
+
+  it('drops non-text children from approved scripts', () => {
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.append(
+      document.createTextNode(
+        '{"@context":"https://schema.org","@type":"Product","name":"Canvas shoes"}',
+      ),
+    );
+    script.append(document.createComment('private-comment@example.com'));
+    const privateElement = document.createElement('span');
+    privateElement.setAttribute('data-email', 'private-attribute@example.com');
+    script.append(privateElement);
+
+    const serialized = serializeNodeWithScriptOptions(script) as elementNode;
+    const eventBytes = JSON.stringify(serialized);
+
+    expect(serialized.childNodes).toHaveLength(1);
+    expect(eventBytes).not.toContain('private-comment@example.com');
+    expect(eventBytes).not.toContain('private-attribute@example.com');
+  });
+
+  it.each([
+    ['JavaScript', 'text/javascript', 'globalThis.executed = true'],
+    ['invalid JSON-LD', 'application/ld+json', '{'],
+    [
+      'unsupported JSON-LD',
+      'application/ld+json',
+      '{"@context":"https://schema.org","@type":"Person","name":"Private"}',
+    ],
+  ])('drops %s', (_case, type, text) => {
+    const script = document.createElement('script');
+    script.type = type;
+    script.textContent = text;
+
+    expect(serializeNodeWithScriptOptions(script)).toBeNull();
+  });
+
+  it('uses a placeholder when JavaScript is not removed by slim DOM options', () => {
+    const script = document.createElement('script');
+    script.textContent = 'globalThis.customerEmail = "customer@example.com"';
+
+    const serialized = serializeNodeWithScriptOptions(
+      script,
+      {},
+    ) as elementNode;
+
+    expect(serialized.childNodes[0].textContent).toBe('SCRIPT_PLACEHOLDER');
+  });
+
+  it.each([
+    ['preload', 'script', ''],
+    ['modulepreload', null, ''],
+    ['prefetch', null, '/main.js'],
+  ])('drops %s links for scripts', (rel, as, href) => {
+    const link = document.createElement('link');
+    link.rel = rel;
+    if (as) {
+      link.setAttribute('as', as);
+    }
+    if (href) {
+      link.setAttribute('href', href);
+    }
+
+    expect(serializeNodeWithScriptOptions(link)).toBeNull();
+  });
+});
+
 describe('isBlockedElement()', () => {
   const subject = (html: string, opt: any = {}) =>
     _isBlockedElement(render(html), 'rr-block', opt.blockSelector);

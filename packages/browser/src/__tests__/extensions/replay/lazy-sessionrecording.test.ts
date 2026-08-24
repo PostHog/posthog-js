@@ -3452,13 +3452,25 @@ describe('Lazy SessionRecording', () => {
                 maskInputFn: undefined,
                 maskAllElementAttributes: false,
                 maskAttributeFn: undefined,
-                slimDOMOptions: {},
+                slimDOMOptions: { script: true },
                 collectFonts: false,
                 plugins: [],
                 inlineStylesheet: true,
                 inlineStylesheetBudgetRules: 10_000,
                 recordCrossOriginIframes: false,
             })
+        })
+
+        it('always removes scripts when user slim DOM options override defaults', () => {
+            posthog.config.session_recording.slimDOMOptions = { script: false, comment: true }
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    slimDOMOptions: { script: true, comment: true },
+                })
+            )
         })
 
         it('contains and logs recorder-owned callback failures once without swallowing host failures', () => {
