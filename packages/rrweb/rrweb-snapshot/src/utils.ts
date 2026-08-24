@@ -24,7 +24,7 @@ import {
 } from './snapshot-cost';
 
 export function isElement(n: Node): n is Element {
-  return dom.nodeType(n) === 1;
+  return n.nodeType === n.ELEMENT_NODE;
 }
 
 export function isShadowRoot(n: Node): n is ShadowRoot {
