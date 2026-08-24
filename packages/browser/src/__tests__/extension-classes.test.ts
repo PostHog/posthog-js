@@ -1,6 +1,6 @@
 import { PostHog } from '../posthog-core'
 import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
-import { AllExtensions, FeatureFlagsExtensions } from '../extensions/extension-bundles'
+import { AllExtensions, FeatureFlagsExtensions, SurveysExtensions } from '../extensions/extension-bundles'
 import { BrowserAutocapture } from '../browser-autocapture'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { SessionRecording } from '../extensions/replay/session-recording'
@@ -121,6 +121,76 @@ describe('__extensionClasses enrollment', () => {
         expect(constructorArgument).toBe(posthog)
         expect(initialize).toHaveBeenCalledTimes(1)
         expect(destroy).toHaveBeenCalledTimes(1)
+    })
+
+    it('preserves the PostHog constructor and initialize contract for custom surveys classes', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const initialize = jest.fn()
+        const setup = jest.fn()
+        let constructorArgument: PostHog | undefined
+
+        class LegacySurveys {
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            setup(): void {
+                setup()
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __preview_deferred_init_extensions: false,
+            __extensionClasses: { surveys: LegacySurveys as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(initialize).toHaveBeenCalledTimes(1)
+        expect(setup).not.toHaveBeenCalled()
+    })
+
+    it('enrolls shared surveys exactly once through the shared lifecycle', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const setup = jest.fn()
+        const initialize = jest.fn()
+        let constructorArgument: PostHog | undefined
+
+        class SharedSurveys {
+            readonly name = 'surveys'
+
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            setup(): void {
+                setup()
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __preview_deferred_init_extensions: false,
+            __extensionClasses: { surveys: SharedSurveys as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(setup).toHaveBeenCalledTimes(1)
+        expect(initialize).not.toHaveBeenCalled()
+    })
+
+    it('keeps surveys bundled with feature flags for targeting', () => {
+        expect(SurveysExtensions).toEqual(
+            expect.objectContaining({ surveys: expect.any(Function), featureFlags: PostHogFeatureFlags })
+        )
     })
 
     it('preserves the PostHog constructor and initialize contract for custom autocapture classes', async () => {

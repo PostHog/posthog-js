@@ -124,7 +124,7 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { BrowserClientAdapter } from './extensions/browser-client'
 import type { Extension as BrowserCommonExtension } from '@posthog/browser-common'
-import type { PostHogSurveys } from './posthog-surveys'
+import type { BrowserSurveys } from './browser-surveys'
 import type { BrowserAutocapture } from './browser-autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
@@ -416,7 +416,7 @@ export class PostHog implements PostHogInterface {
     scrollManager: ScrollManager
     pageViewManager: PageViewManager
     featureFlags: TreeShakeable<PostHogFeatureFlags>
-    surveys: TreeShakeable<PostHogSurveys>
+    surveys: TreeShakeable<BrowserSurveys>
     conversations: TreeShakeable<PostHogConversations>
     logs: TreeShakeable<PostHogLogs>
     metrics: TreeShakeable<PostHogMetrics>
@@ -1034,7 +1034,7 @@ export class PostHog implements PostHogInterface {
             this._enrollExtension((this.autocapture = new ext.autocapture(this) as BrowserAutocapture), initTasks)
         }
         if (ext.surveys) {
-            this._extensions.push((this.surveys = this.surveys ?? new ext.surveys(this)))
+            this._enrollExtension((this.surveys = this.surveys ?? new ext.surveys(this)), initTasks)
         }
         if (ext.logs) {
             this._extensions.push((this.logs = this.logs ?? new ext.logs(this)))

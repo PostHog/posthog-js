@@ -1,6 +1,8 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { RemoteConfig, RemoteConfigResult } from '../types'
+import type { Client } from '@posthog/browser-common'
+import { PostHog } from '../posthog-core'
 
 jest.mock('@posthog/browser-common/utils/globals', () => {
     const orig = jest.requireActual('@posthog/browser-common/utils/globals')
@@ -142,6 +144,39 @@ describe('deferred extension initialization', () => {
 
             // Config should NOT be stored when deferred init is disabled
             expect((posthog as any)._pendingRemoteConfig).toBeUndefined()
+        })
+
+        it('delivers pending remote config to shared surveys exactly once', async () => {
+            const savedDefaults = PostHog.__defaultExtensionClasses
+            PostHog.__defaultExtensionClasses = {}
+            const received: RemoteConfigResult[] = []
+            class TestSurveys {
+                readonly name = 'surveys'
+
+                setup(client: Client): void {
+                    client.onRemoteConfig((result) => received.push(result as RemoteConfigResult))
+                }
+            }
+
+            try {
+                const posthog = await createPosthogInstance(uuidv7(), {
+                    __preview_deferred_init_extensions: true,
+                    __extensionClasses: { surveys: TestSurveys as any },
+                    advanced_disable_decide: false,
+                    capture_pageview: false,
+                    disable_session_recording: true,
+                })
+                const result = { ok: true, config: { surveys: true, marker: 'shared-surveys' } as any } as const
+
+                posthog._onRemoteConfig(result)
+                await new Promise((resolve) => setTimeout(resolve, 200))
+
+                expect(
+                    received.filter((entry) => entry.ok && (entry.config as any).marker === 'shared-surveys')
+                ).toEqual([result])
+            } finally {
+                PostHog.__defaultExtensionClasses = savedDefaults
+            }
         })
 
         it('should replay pending remote config to extensions when they initialize', async () => {

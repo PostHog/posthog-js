@@ -140,7 +140,9 @@ export class SurveyManager {
     private _surveyTimeouts: Map<string, ReturnType<Window['setTimeout']>> = new Map()
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
+    private _renderedTargets: Map<ShadowRoot, Element> = new Map()
     private _prefillHandledSurveys: Set<string> = new Set()
+    private _automaticDisplayDispose?: () => void
 
     constructor(posthog: PostHog) {
         this._posthog = posthog
@@ -188,6 +190,23 @@ export class SurveyManager {
         if (this._surveyInFocus === surveyId) {
             this._surveyInFocus = null
         }
+    }
+
+    public setAutomaticDisplayDispose(dispose: () => void): void {
+        this._automaticDisplayDispose = dispose
+    }
+
+    public dispose(): void {
+        this._automaticDisplayDispose?.()
+        this._automaticDisplayDispose = undefined
+        this._surveyTimeouts.forEach((_timeout, surveyId) => this._clearSurveyTimeout(surveyId))
+        this._widgetSelectorListeners.forEach((_listener, surveyId) => this._detachWidgetSelectorListener(surveyId))
+        this._renderedTargets.forEach((container, target) => {
+            render(null, target)
+            container?.remove()
+        })
+        this._renderedTargets.clear()
+        this._surveyInFocus = null
     }
 
     /**
@@ -246,6 +265,7 @@ export class SurveyManager {
 
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
         const { shadow } = retrieveSurveyShadow(survey, this._posthog)
+        this._renderedTargets.set(shadow, shadow.host)
 
         const surveyPopupProps: SurveyPopupProps = {
             posthog: this._posthog,
@@ -322,6 +342,7 @@ export class SurveyManager {
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         // Ensure widget container exists if it doesn't
         const { shadow, isNewlyCreated } = retrieveSurveyShadow(translatedSurvey, this._posthog)
+        this._renderedTargets.set(shadow, shadow.host)
 
         // If the widget is already rendered, do nothing. Otherwise the widget will be re-rendered every second
         if (!isNewlyCreated) {
@@ -465,6 +486,7 @@ export class SurveyManager {
     public renderPopover = (survey: Survey): void => {
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         const { shadow } = retrieveSurveyShadow(translatedSurvey, this._posthog)
+        this._renderedTargets.set(shadow, shadow.host)
         render(
             <SurveyPopup
                 posthog={this._posthog}
@@ -896,6 +918,7 @@ export class SurveyManager {
             const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
             if (shadowContainer?.shadowRoot) {
                 render(null, shadowContainer.shadowRoot)
+                this._renderedTargets.delete(shadowContainer.shadowRoot)
             }
             shadowContainer?.remove()
         } catch (error) {
@@ -1039,13 +1062,18 @@ export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean | un
 
     startInterval()
 
-    addEventListener(document, 'visibilitychange', () => {
+    const onVisibilityChange = () => {
         if (document.hidden) {
             stopInterval()
         } else {
             surveyManager.callSurveysAndEvaluateDisplayLogic(false)
             startInterval()
         }
+    }
+    addEventListener(document, 'visibilitychange', onVisibilityChange)
+    surveyManager.setAutomaticDisplayDispose(() => {
+        stopInterval()
+        document.removeEventListener('visibilitychange', onVisibilityChange)
     })
 
     return surveyManager
@@ -1217,6 +1245,7 @@ export function usePopupVisibility(
             return
         }
 
+        let autoDisappearTimeout: ReturnType<typeof setTimeout> | undefined
         const handleSurveySent = (event: CustomEvent) => {
             if (event.detail.surveyId !== survey.id) {
                 return
@@ -1226,9 +1255,10 @@ export function usePopupVisibility(
             }
             setIsSurveySent(true)
             if (survey.appearance?.autoDisappear) {
-                setTimeout(() => {
-                    hidePopupWithAnimation()
-                }, 5000)
+                if (autoDisappearTimeout) {
+                    clearTimeout(autoDisappearTimeout)
+                }
+                autoDisappearTimeout = setTimeout(hidePopupWithAnimation, 5000)
             }
         }
 
@@ -1259,22 +1289,20 @@ export function usePopupVisibility(
         addEventListener(window, 'PHSurveyClosed', handleSurveyClosed as EventListener)
         addEventListener(window, 'PHSurveySent', handleSurveySent as EventListener)
 
-        if (millisecondDelay > 0) {
-            // This path is only used for direct usage of SurveyPopup,
-            // not for surveys managed by SurveyManager
-            const timeoutId = setTimeout(showSurvey, millisecondDelay)
-            return () => {
-                clearTimeout(timeoutId)
-                window.removeEventListener('PHSurveyClosed', handleSurveyClosed as EventListener)
-                window.removeEventListener('PHSurveySent', handleSurveySent as EventListener)
-            }
-        } else {
-            // This is the path used for surveys managed by SurveyManager
+        // The delay path is only used for direct usage of SurveyPopup, not surveys managed by SurveyManager.
+        const showTimeout = millisecondDelay > 0 ? setTimeout(showSurvey, millisecondDelay) : undefined
+        if (isUndefined(showTimeout)) {
             showSurvey()
-            return () => {
-                window.removeEventListener('PHSurveyClosed', handleSurveyClosed as EventListener)
-                window.removeEventListener('PHSurveySent', handleSurveySent as EventListener)
+        }
+        return () => {
+            if (!isUndefined(showTimeout)) {
+                clearTimeout(showTimeout)
             }
+            if (!isUndefined(autoDisappearTimeout)) {
+                clearTimeout(autoDisappearTimeout)
+            }
+            window.removeEventListener('PHSurveyClosed', handleSurveyClosed as EventListener)
+            window.removeEventListener('PHSurveySent', handleSurveySent as EventListener)
         }
     }, [])
 
@@ -1696,6 +1724,7 @@ export function FeedbackWidget({
     const [isFeedbackButtonVisible, setIsFeedbackButtonVisible] = useState(true)
     const [showSurvey, setShowSurvey] = useState(false)
     const [styleOverrides, setStyleOverrides] = useState<JSX.CSSProperties>({})
+    const resetTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
     const toggleSurvey = () => {
         setShowSurvey(!showSurvey)
@@ -1728,8 +1757,11 @@ export function FeedbackWidget({
 
         addEventListener(window, DISPATCH_FEEDBACK_WIDGET_EVENT, handleShowSurvey)
 
-        // Cleanup listener on component unmount
         return () => {
+            if (!isUndefined(resetTimeout.current)) {
+                clearTimeout(resetTimeout.current)
+                resetTimeout.current = undefined
+            }
             window.removeEventListener(DISPATCH_FEEDBACK_WIDGET_EVENT, handleShowSurvey)
         }
     }, [
@@ -1757,7 +1789,11 @@ export function FeedbackWidget({
             setIsFeedbackButtonVisible(false)
         }
         // important so our view transition has time to run
-        setTimeout(() => {
+        if (!isUndefined(resetTimeout.current)) {
+            clearTimeout(resetTimeout.current)
+        }
+        resetTimeout.current = setTimeout(() => {
+            resetTimeout.current = undefined
             setShowSurvey(false)
         }, 200)
     }
