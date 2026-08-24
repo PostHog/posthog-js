@@ -1789,7 +1789,6 @@ describe('surveys', () => {
             expect(properties).toEqual(
                 expect.objectContaining({ $survey_completed: false, $survey_response_q1: 'yes' })
             )
-            // q2 was prefilled but does not auto-submit, so it is not part of the partial response
             expect(properties).not.toHaveProperty('$survey_response_q2')
         })
 

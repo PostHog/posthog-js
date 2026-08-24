@@ -556,8 +556,6 @@ export class SurveyManager {
      * On load, capture a response for prefilled questions only when:
      * 1) the survey is complete, OR
      * 2) partial responses are enabled AND the skipped questions were set to auto-submit.
-     *
-     * Both prefill paths share this gate.
      */
     private _autoSubmitPrefilledResponses(
         survey: Survey,
