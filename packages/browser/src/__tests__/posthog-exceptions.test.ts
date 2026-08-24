@@ -268,10 +268,13 @@ describe('PostHogExceptions', () => {
             }
 
             it.each([
-                ['Firefox for iOS', "ReferenceError: Can't find variable: __firefox__"],
-                ['Chrome for iOS', "undefined is not an object (evaluating 'window.__gCrWeb.something')"],
-            ])('does not capture exceptions thrown by %s injected scripts', (_browser, value) => {
-                const exception = { value, stacktrace: { frames: [pageFrame], type: 'raw' } }
+                ['Firefox for iOS', { type: 'ReferenceError', value: "Can't find variable: __firefox__" }],
+                [
+                    'Chrome for iOS',
+                    { type: 'TypeError', value: "undefined is not an object (evaluating 'window.__gCrWeb.something')" },
+                ],
+            ])('does not capture exceptions thrown by %s injected scripts', (_browser, exceptionFields) => {
+                const exception = { ...exceptionFields, stacktrace: { frames: [pageFrame], type: 'raw' } }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
                 expect(captureMock).not.toBeCalledWith(
                     '$exception',
@@ -282,7 +285,8 @@ describe('PostHogExceptions', () => {
 
             it('captures the exception when the value does not reference an injected global', () => {
                 const exception = {
-                    value: 'ReferenceError: something is not defined',
+                    type: 'ReferenceError',
+                    value: 'something is not defined',
                     stacktrace: { frames: [pageFrame], type: 'raw' },
                 }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
@@ -295,7 +299,8 @@ describe('PostHogExceptions', () => {
                     config: { errorTracking: { captureExtensionExceptions: true } } as RemoteConfig,
                 })
                 const exception = {
-                    value: "ReferenceError: Can't find variable: __firefox__",
+                    type: 'ReferenceError',
+                    value: "Can't find variable: __firefox__",
                     stacktrace: { frames: [pageFrame], type: 'raw' },
                 }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
