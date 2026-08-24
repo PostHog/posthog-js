@@ -150,25 +150,49 @@ resolve_posthog_ios_release_info() {
   POSTHOG_RELEASE_VERSION="${MARKETING_VERSION:-}"
   POSTHOG_BUILD_VERSION="${CURRENT_PROJECT_VERSION:-}"
   POSTHOG_PLIST_BUDDY="${POSTHOG_PLIST_BUDDY:-/usr/libexec/PlistBuddy}"
+  POSTHOG_SOURCE_INFO_PLIST="${INFOPLIST_FILE:-}"
+  POSTHOG_PROCESSED_INFO_PLIST=""
+  POSTHOG_INFO_PLIST=""
 
-  if [ -z "${INFOPLIST_FILE:-}" ] || [ ! -x "$POSTHOG_PLIST_BUDDY" ]; then
+  if [ ! -x "$POSTHOG_PLIST_BUDDY" ]; then
     return
   fi
-
-  POSTHOG_INFO_PLIST="$INFOPLIST_FILE"
-  case "$POSTHOG_INFO_PLIST" in
+  case "$POSTHOG_SOURCE_INFO_PLIST" in
+    "") ;;
     /*) ;;
-    *) POSTHOG_INFO_PLIST="${SRCROOT}/${POSTHOG_INFO_PLIST}" ;;
+    *) POSTHOG_SOURCE_INFO_PLIST="${SRCROOT}/${POSTHOG_SOURCE_INFO_PLIST}" ;;
   esac
+  if [ -n "${TARGET_BUILD_DIR:-}" ] && [ -n "${INFOPLIST_PATH:-}" ]; then
+    POSTHOG_PROCESSED_INFO_PLIST="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+  fi
 
-  if [ ! -f "$POSTHOG_INFO_PLIST" ]; then
-    return
+  if [ "${INFOPLIST_PREPROCESS:-}" = "YES" ] && [ -f "$POSTHOG_PROCESSED_INFO_PLIST" ]; then
+    POSTHOG_INFO_PLIST="$POSTHOG_PROCESSED_INFO_PLIST"
+  elif [ -f "$POSTHOG_SOURCE_INFO_PLIST" ]; then
+    POSTHOG_INFO_PLIST="$POSTHOG_SOURCE_INFO_PLIST"
+  elif [ -f "$POSTHOG_PROCESSED_INFO_PLIST" ]; then
+    POSTHOG_INFO_PLIST="$POSTHOG_PROCESSED_INFO_PLIST"
+  else
+    return 0
   fi
 
   POSTHOG_PLIST_RELEASE_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleShortVersionString" "$POSTHOG_INFO_PLIST" 2>/dev/null || true)
   POSTHOG_PLIST_BUILD_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleVersion" "$POSTHOG_INFO_PLIST" 2>/dev/null || true)
   POSTHOG_PLIST_RELEASE_VERSION=$(resolve_posthog_build_setting_reference "$POSTHOG_PLIST_RELEASE_VERSION")
   POSTHOG_PLIST_BUILD_VERSION=$(resolve_posthog_build_setting_reference "$POSTHOG_PLIST_BUILD_VERSION")
+
+  if [ "$POSTHOG_INFO_PLIST" != "$POSTHOG_PROCESSED_INFO_PLIST" ] && [ -f "$POSTHOG_PROCESSED_INFO_PLIST" ]; then
+    case "$POSTHOG_PLIST_RELEASE_VERSION" in
+      ""|*"\$("*|*"\${"*)
+        POSTHOG_PLIST_RELEASE_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleShortVersionString" "$POSTHOG_PROCESSED_INFO_PLIST" 2>/dev/null || true)
+        ;;
+    esac
+    case "$POSTHOG_PLIST_BUILD_VERSION" in
+      ""|*"\$("*|*"\${"*)
+        POSTHOG_PLIST_BUILD_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleVersion" "$POSTHOG_PROCESSED_INFO_PLIST" 2>/dev/null || true)
+        ;;
+    esac
+  fi
 
   case "$POSTHOG_PLIST_RELEASE_VERSION" in
     ""|*"\$("*|*"\${"*) ;;
