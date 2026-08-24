@@ -1,5 +1,5 @@
 ---
-'@posthog/browser-common': patch
+'@posthog/browser-common': minor
 'posthog-js': patch
 ---
 

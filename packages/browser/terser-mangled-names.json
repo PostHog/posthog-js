@@ -206,6 +206,7 @@
         "_expire_days",
         "_extensionEventPropertyProducers",
         "_extensions",
+        "_featureFlags",
         "_featureFlagsReloadingUnsubscribe",
         "_finishQueuedCompressionEvent",
         "_finishSetup",

@@ -21,12 +21,14 @@ port easier to review and keeps future fixes comparable with v1.
 ```ts
 import type { Client, Extension } from '@posthog/browser-common'
 
+import { MyExtensionToken } from './my-extension-contract'
+
 export interface MyExtensionOptions {
     enabled?: boolean
 }
 
 export class MyExtension implements Extension {
-    readonly name = 'myExtension'
+    readonly name = MyExtensionToken
     private _client: Client | undefined
 
     constructor(private readonly _options: MyExtensionOptions = {}) {}
