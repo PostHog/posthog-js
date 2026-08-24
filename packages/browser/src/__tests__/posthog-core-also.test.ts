@@ -444,7 +444,6 @@ describe('posthog core', () => {
     describe('_onRemoteConfig failure dispatch', () => {
         it('passes the failure result to every extension', async () => {
             const posthog = await createPosthogInstance()
-            const autocaptureResult = jest.spyOn(posthog.autocapture!, 'onRemoteConfig')
             const heatmapsResult = jest.spyOn(posthog.heatmaps!, 'onRemoteConfig')
 
             // the test helper delivers a successful config during init; clear that
@@ -456,7 +455,6 @@ describe('posthog core', () => {
 
             // autocapture keeps waiting for a server verdict: stays disabled,
             // with no server opt-out value persisted
-            expect(autocaptureResult).toHaveBeenCalledWith({ ok: false })
             expect(posthog.autocapture!.isEnabled).toBe(false)
             expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBeUndefined()
 

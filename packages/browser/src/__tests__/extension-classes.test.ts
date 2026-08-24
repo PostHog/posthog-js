@@ -1,7 +1,7 @@
 import { PostHog } from '../posthog-core'
 import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
 import { AllExtensions, FeatureFlagsExtensions } from '../extensions/extension-bundles'
-import { Autocapture } from '../autocapture'
+import { BrowserAutocapture } from '../browser-autocapture'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { createPosthogInstance } from './helpers/posthog-instance'
@@ -25,7 +25,7 @@ describe('__extensionClasses enrollment', () => {
 
         const posthog = await createPosthogInstance(undefined, {
             __preview_deferred_init_extensions: false,
-            __extensionClasses: { autocapture: Autocapture, sessionRecording: SessionRecording },
+            __extensionClasses: { autocapture: BrowserAutocapture, sessionRecording: SessionRecording },
             capture_pageview: false,
         })
 
@@ -72,16 +72,24 @@ describe('__extensionClasses enrollment', () => {
 
     it('__extensionClasses overrides __defaultExtensionClasses', async () => {
         PostHog.__defaultExtensionClasses = AllExtensions
+        let constructorArgument: PostHog | undefined
 
-        class MockAutocapture extends Autocapture {}
+        class MockAutocapture {
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            initialize(): void {}
+        }
 
         const posthog = await createPosthogInstance(undefined, {
             __preview_deferred_init_extensions: false,
-            __extensionClasses: { autocapture: MockAutocapture },
+            __extensionClasses: { autocapture: MockAutocapture as any },
             capture_pageview: false,
         })
 
         expect(posthog.autocapture).toBeInstanceOf(MockAutocapture)
+        expect(constructorArgument).toBe(posthog)
     })
 
     it('preserves the PostHog lifecycle contract for custom feature flags classes', async () => {
@@ -113,6 +121,30 @@ describe('__extensionClasses enrollment', () => {
         expect(constructorArgument).toBe(posthog)
         expect(initialize).toHaveBeenCalledTimes(1)
         expect(destroy).toHaveBeenCalledTimes(1)
+    })
+
+    it('preserves the PostHog constructor and initialize contract for custom autocapture classes', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const initialize = jest.fn()
+        let constructorArgument: PostHog | undefined
+
+        class LegacyAutocapture {
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __extensionClasses: { autocapture: LegacyAutocapture as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(initialize).toHaveBeenCalledTimes(1)
     })
 
     it('eagerly constructs extensions from defaults before init()', () => {
@@ -361,6 +393,58 @@ describe('extension lifecycle', () => {
             })
 
             expect(posthog.autocapture).toBeInstanceOf(MinimalExtension)
+        })
+
+        it('does not treat a legacy setup method as the shared lifecycle without a name', async () => {
+            PostHog.__defaultExtensionClasses = {}
+            const setup = jest.fn()
+            const initialize = jest.fn()
+
+            class LegacyExtension {
+                setup(): void {
+                    setup()
+                }
+
+                initialize(): void {
+                    initialize()
+                }
+            }
+
+            await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                __extensionClasses: { autocapture: LegacyExtension as any },
+                capture_pageview: false,
+            })
+
+            expect(initialize).toHaveBeenCalledTimes(1)
+            expect(setup).not.toHaveBeenCalled()
+        })
+
+        it('enrolls an extension with name and setup through the shared lifecycle', async () => {
+            PostHog.__defaultExtensionClasses = {}
+            const setup = jest.fn()
+            const initialize = jest.fn()
+
+            class SharedExtension {
+                readonly name = 'autocapture'
+
+                setup(): void {
+                    setup()
+                }
+
+                initialize(): void {
+                    initialize()
+                }
+            }
+
+            await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                __extensionClasses: { autocapture: SharedExtension as any },
+                capture_pageview: false,
+            })
+
+            expect(setup).toHaveBeenCalledTimes(1)
+            expect(initialize).not.toHaveBeenCalled()
         })
     })
 
