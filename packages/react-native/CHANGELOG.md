@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.63.7
+
+### Patch Changes
+
+- [#4602](https://github.com/PostHog/posthog-js/pull/4602) [`9e53f91`](https://github.com/PostHog/posthog-js/commit/9e53f91cf3e0e4c146ca8914925d775f7752c2ea) Thanks [@marandaneto](https://github.com/marandaneto)! - Use the iOS version reported by Info.plist when uploading Hermes source maps, including custom Xcode build settings. Matching native dSYM attribution requires @posthog/react-native-plugin 2.4.2 or later (PostHog/posthog-ios#776).
+  (2026-08-24)
+
 ## 4.63.6
 
 ### Patch Changes
