@@ -1,5 +1,6 @@
 ---
 'posthog-js': minor
+'@posthog/types': patch
 '@posthog/rrweb': patch
 '@posthog/rrweb-snapshot': patch
 '@posthog/rrweb-utils': patch
