@@ -369,6 +369,7 @@
         "_isIdle",
         "_isInitializing",
         "_isInitializingSurveys",
+        "_isInjectedBrowserScriptException",
         "_isInteractiveEvent",
         "_isItemPermanentlyIneligible",
         "_isLoaded",
