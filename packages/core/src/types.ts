@@ -299,12 +299,14 @@ export enum PostHogPersistedProperty {
   DeviceId = 'device_id', // only used by posthog-react-native
 }
 
+export type PostHogFetchBodyBytes = Uint8Array & { buffer: ArrayBuffer }
+
 export type PostHogFetchOptions = {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH'
   mode?: 'no-cors'
   credentials?: 'omit'
   headers: { [key: string]: string }
-  body?: string | Blob | Uint8Array<ArrayBuffer>
+  body?: string | Blob | PostHogFetchBodyBytes
   signal?: AbortSignal
 }
 

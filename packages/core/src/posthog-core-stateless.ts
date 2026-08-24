@@ -17,6 +17,7 @@ import {
   FeatureFlagDetail,
   SurveyResponse,
   PostHogFetchResponse,
+  PostHogFetchBodyBytes,
   PostHogFetchOptions,
   PostHogPersistedProperty,
   PostHogQueueItem,
@@ -1447,7 +1448,7 @@ export abstract class PostHogCoreStateless {
    * Compresses an outgoing payload. Runtime-specific clients can override this
    * to avoid using the Web Streams compression implementation.
    */
-  protected compressPayload(payload: string): Promise<Blob | Uint8Array<ArrayBuffer> | null> {
+  protected compressPayload(payload: string): Promise<Blob | PostHogFetchBodyBytes | null> {
     return gzipCompress(payload, this.isDebug)
   }
 

@@ -4,6 +4,7 @@ import { createModulerModifier } from '../extensions/error-tracking/modifiers/mo
 import { addSourceContext } from '../extensions/error-tracking/modifiers/context-lines.node'
 import { createRelativePathModifier } from '../extensions/error-tracking/modifiers/relative-path.node'
 
+import type { PostHogFetchBodyBytes } from '@posthog/core'
 import { PostHogBackendClient } from '../client'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { PostHogContext } from '../extensions/context/context'
@@ -14,7 +15,7 @@ export class PostHog extends PostHogBackendClient {
     return 'posthog-node'
   }
 
-  protected override compressPayload(payload: string): Promise<Uint8Array<ArrayBuffer> | null> {
+  protected override compressPayload(payload: string): Promise<PostHogFetchBodyBytes | null> {
     return gzipCompress(payload, this.isDebug)
   }
 
