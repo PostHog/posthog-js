@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.63.6
+
+### Patch Changes
+
+- [#4498](https://github.com/PostHog/posthog-js/pull/4498) [`9b2a1b1`](https://github.com/PostHog/posthog-js/commit/9b2a1b18db64f9f6b331cbded543c5ead3ccf0cb) Thanks [@posthog](https://github.com/apps/posthog)! - fix(react-native): warn when a local `sessionReplayConfig.sampleRate` overrides the project setting, warn when replay starts with no cached remote config, and log the native plugin version next to the replay config
+  (2026-08-24)
+
 ## 4.63.5
 
 ### Patch Changes
