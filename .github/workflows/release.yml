@@ -420,13 +420,14 @@ jobs:
                   set -euo pipefail
                   release_sha=$(git rev-parse HEAD)
                   tag="$PACKAGE_NAME@$PACKAGE_VERSION"
+                  encoded_tag=$(jq -rn --arg tag "$tag" '$tag | @uri')
                   create_error=$(mktemp)
-                  if ! gh api "repos/${{ github.repository }}/git/ref/tags/$tag" >/dev/null 2>&1; then
+                  if ! gh api "repos/${{ github.repository }}/git/ref/tags/$encoded_tag" >/dev/null 2>&1; then
                       gh api "repos/${{ github.repository }}/git/refs" \
                           -f "ref=refs/tags/$tag" \
                           -f "sha=$release_sha" 2>"$create_error" || true
                   fi
-                  if ! tag_sha=$(gh api "repos/${{ github.repository }}/git/ref/tags/$tag" --jq '.object.sha'); then
+                  if ! tag_sha=$(gh api "repos/${{ github.repository }}/git/ref/tags/$encoded_tag" --jq '.object.sha'); then
                       cat "$create_error" >&2
                       rm -f "$create_error"
                       echo "::error::Could not create or verify $tag."
