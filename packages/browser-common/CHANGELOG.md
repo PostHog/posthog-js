@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.5.1
+
+### Patch Changes
+
+- [#4532](https://github.com/PostHog/posthog-js/pull/4532) [`60ee0ac`](https://github.com/PostHog/posthog-js/commit/60ee0ac04c3c08a467717464b4936d74e7d1532e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Migrate surveys to the shared browser extension lifecycle.
+  (2026-08-24)
+
 ## 0.5.0
 
 ### Minor Changes
