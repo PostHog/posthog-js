@@ -74,6 +74,7 @@ function recordCharacterDataMutation(
     maskTextClass: 'rr-mask',
     maskTextSelector: null,
     maskTextFn: undefined,
+    slimDOMOptions: { script: true, jsonLd: true },
     canvasManager: { acquire: vi.fn(), reset: vi.fn() },
     shadowDomManager: { reset: vi.fn() },
   } as never);
@@ -116,7 +117,7 @@ function recordScriptAttributeMutation(
     maskTextClass: 'rr-mask',
     maskTextSelector: null,
     maskTextFn: undefined,
-    slimDOMOptions: { script: removeScripts },
+    slimDOMOptions: { script: removeScripts, jsonLd: true },
     canvasManager: { acquire: vi.fn(), reset: vi.fn() },
     shadowDomManager: { reset: vi.fn() },
   } as never);
@@ -137,6 +138,7 @@ function recordChildListAddition(
   parent: Element = document.createElement('div'),
   recordedParentAttributes: Record<string, string> = {},
   removeScripts = true,
+  captureJsonLd = true,
 ) {
   if (child.parentNode !== parent) {
     parent.append(child);
@@ -174,7 +176,7 @@ function recordChildListAddition(
     maskInputFn: undefined,
     maskAllElementAttributes: false,
     maskAttributeFn: undefined,
-    slimDOMOptions: { script: removeScripts },
+    slimDOMOptions: { script: removeScripts, jsonLd: captureJsonLd },
     inlineStylesheet: true,
     dataURLOptions: {},
     inlineImages: false,
@@ -309,6 +311,17 @@ describe('script mutations', () => {
     expect(eventBytes).not.toContain('private-nonce');
     expect(eventBytes).not.toContain('private-comment@example.com');
     expect(eventBytes).not.toContain('private-attribute@example.com');
+  });
+
+  it('drops dynamically added JSON-LD unless capture is enabled', () => {
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.textContent =
+      '{"@context":"https://schema.org","@type":"Product","name":"Canvas shoes"}';
+
+    expect(
+      recordChildListAddition(script, undefined, {}, true, false),
+    ).toBeUndefined();
   });
 
   it('drops dynamically added JSON-LD under an explicit text mask', () => {

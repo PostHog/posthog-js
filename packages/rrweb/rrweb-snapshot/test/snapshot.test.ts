@@ -171,7 +171,7 @@ describe('absolute url to stylesheet', () => {
 describe('JSON-LD scripts', () => {
   function serializeNodeWithScriptOptions(
     node: Node,
-    slimDOMOptions: SlimDOMOptions = { script: true },
+    slimDOMOptions: SlimDOMOptions = { script: true, jsonLd: true },
   ) {
     return serializeNodeWithId(node, {
       doc: document,
@@ -187,6 +187,17 @@ describe('JSON-LD scripts', () => {
       slimDOMOptions,
     });
   }
+
+  it('drops valid JSON-LD unless capture is enabled', () => {
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.textContent =
+      '{"@context":"https://schema.org","@type":"Product","name":"Canvas shoes"}';
+
+    expect(
+      serializeNodeWithScriptOptions(script, { script: true }),
+    ).toBeNull();
+  });
 
   it('keeps only sanitized JSON-LD content and attributes', () => {
     const script = document.createElement('script');

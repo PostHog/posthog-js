@@ -3453,6 +3453,7 @@ describe('Lazy SessionRecording', () => {
                 maskAllElementAttributes: false,
                 maskAttributeFn: undefined,
                 slimDOMOptions: { script: true },
+                captureJsonLd: false,
                 collectFonts: false,
                 plugins: [],
                 inlineStylesheet: true,
@@ -3470,6 +3471,16 @@ describe('Lazy SessionRecording', () => {
                 expect.objectContaining({
                     slimDOMOptions: { script: true, comment: true },
                 })
+            )
+        })
+
+        it('passes the JSON-LD capture option to rrweb', () => {
+            posthog.config.session_recording.captureJsonLd = true
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({ captureJsonLd: true })
             )
         })
 

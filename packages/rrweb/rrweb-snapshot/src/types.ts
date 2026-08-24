@@ -129,6 +129,7 @@ export type MaskInputOptions = Partial<{
 
 export type SlimDOMOptions = Partial<{
   script: boolean;
+  jsonLd: boolean;
   comment: boolean;
   headFavicon: boolean;
   headWhitespace: boolean;

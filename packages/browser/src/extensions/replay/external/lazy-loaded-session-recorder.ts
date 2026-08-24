@@ -2530,6 +2530,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             maskAllElementAttributes: false,
             maskAttributeFn: undefined,
             slimDOMOptions: { script: true },
+            captureJsonLd: false,
             collectFonts: false,
             inlineStylesheet: true,
             // inlining every CSSRule of every sheet is the dominant cost of a full

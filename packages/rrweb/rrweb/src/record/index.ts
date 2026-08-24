@@ -347,6 +347,7 @@ function record<T = eventWithTime>(
     maskTextFn,
     maskAllElementAttributes = false,
     maskAttributeFn,
+    captureJsonLd = false,
     hooks,
     packFn,
     sampling = {},
@@ -436,9 +437,12 @@ function record<T = eventWithTime>(
       ? _maskInputOptions
       : { password: true };
 
-  const slimDOMOptions = slimDOMDefaults(
-    _slimDOMOptions !== undefined ? _slimDOMOptions : false,
-  );
+  const slimDOMOptions = {
+    ...slimDOMDefaults(
+      _slimDOMOptions !== undefined ? _slimDOMOptions : false,
+    ),
+    jsonLd: captureJsonLd === true,
+  };
 
   polyfill();
 

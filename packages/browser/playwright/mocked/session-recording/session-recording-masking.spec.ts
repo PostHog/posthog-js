@@ -8,11 +8,12 @@ import { CaptureResult } from '@/types'
 
 const remoteMaskingTextSelector = '*'
 
-const startOptions = (masking: Record<string, any>) => ({
+const startOptions = (masking: Record<string, any>, captureJsonLd = false) => ({
     options: {
         session_recording: {
             // not the default but makes for easier test assertions
             compress_events: false,
+            captureJsonLd,
         },
     },
     flagsResponseOverrides: {
@@ -100,10 +101,13 @@ test.describe('Session recording - masking', () => {
                 document.onreadystatechange = appendWhenHeadExists
             }
         })
-        const options = startOptions({
-            maskAllInputs: true,
-            maskTextSelector: '.json-ld-mask',
-        })
+        const options = startOptions(
+            {
+                maskAllInputs: true,
+                maskTextSelector: '.json-ld-mask',
+            },
+            true
+        )
         await start(options, page, context)
         await waitForSessionRecordingToStart(page)
 

@@ -60,6 +60,7 @@ export type recordOptions<T> = {
   maskAllElementAttributes?: boolean;
   maskAttributeFn?: MaskAttributeFn;
   slimDOMOptions?: SlimDOMOptions | 'all' | true;
+  captureJsonLd?: boolean;
   ignoreCSSAttributes?: Set<string>;
   /**
    * Limit which DOM attributes the MutationObserver watches, by passing the

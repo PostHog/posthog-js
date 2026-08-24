@@ -247,7 +247,7 @@ iframe.contentDocument.querySelector('center').clientHeight
       });
 
       const result = (await page.evaluate(`${code}
-        const jsonLdSnapshot = rrwebSnapshot.snapshot(document, { slimDOM: { script: true } });
+        const jsonLdSnapshot = rrwebSnapshot.snapshot(document, { slimDOM: { script: true, jsonLd: true } });
         const jsonLdBytes = JSON.stringify(jsonLdSnapshot);
         const replayFrame = document.createElement('iframe');
         document.body.append(replayFrame);

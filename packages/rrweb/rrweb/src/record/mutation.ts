@@ -378,7 +378,8 @@ export default class MutationBuffer {
       if (parentId === -1 || nextId === -1) {
         return addList.addNode(n);
       }
-      const serializeJsonLdChildren = isJsonLdScript(n);
+      const serializeJsonLdChildren =
+        this.slimDOMOptions.jsonLd && isJsonLdScript(n);
       const sn = serializeNodeWithId(n, {
         doc: this.doc,
         mirror: this.mirror,
@@ -661,7 +662,7 @@ export default class MutationBuffer {
       const parent =
         m.type === 'characterData' ? dom.parentNode(m.target) : null;
       const firstJsonLdTextNode =
-        parent && isJsonLdScript(parent)
+        parent && this.slimDOMOptions.jsonLd && isJsonLdScript(parent)
           ? getJsonLdScriptTextNode(parent)
           : null;
       if (
@@ -677,7 +678,7 @@ export default class MutationBuffer {
         const script =
           parent && isScriptElement(parent) ? parent : null;
         const firstScriptTextNode =
-          script && isJsonLdScript(script)
+          script && this.slimDOMOptions.jsonLd && isJsonLdScript(script)
             ? getJsonLdScriptTextNode(script)
             : null;
         if (
@@ -730,7 +731,8 @@ export default class MutationBuffer {
         const target = m.target as Element;
         if (
           isScriptElement(target) &&
-          (this.slimDOMOptions.script || isJsonLdScript(target))
+          (this.slimDOMOptions.script ||
+            (this.slimDOMOptions.jsonLd && isJsonLdScript(target)))
         ) {
           return;
         }
@@ -949,6 +951,7 @@ export default class MutationBuffer {
       isScriptElement(parent)
     ) {
       if (
+        !this.slimDOMOptions.jsonLd ||
         !isJsonLdScript(parent) ||
         needMaskingText(parent, this.maskTextClass, this.maskTextSelector, true) ||
         sanitizeJsonLdScript(parent) === null
@@ -963,7 +966,8 @@ export default class MutationBuffer {
     if (
       this.slimDOMOptions.script &&
       isScriptElement(n) &&
-      (needMaskingText(n, this.maskTextClass, this.maskTextSelector, true) ||
+      (!this.slimDOMOptions.jsonLd ||
+        needMaskingText(n, this.maskTextClass, this.maskTextSelector, true) ||
         sanitizeJsonLdScript(n) === null)
     ) {
       return;
@@ -1006,7 +1010,8 @@ export default class MutationBuffer {
 
     // if this node is blocked `serializeNode` will turn it into a placeholder element
     // but we have to remove it's children otherwise they will be added as placeholders too
-    const serializedWithChildren = isJsonLdScript(n);
+    const serializedWithChildren =
+      this.slimDOMOptions.jsonLd && isJsonLdScript(n);
     if (
       !serializedWithChildren &&
       !isBlocked(n, this.blockClass, this.blockSelector, false)

@@ -531,6 +531,7 @@ function serializeNode(
     maskInputFn: MaskInputFn | undefined;
     maskAllElementAttributes: boolean;
     maskAttributeFn: MaskAttributeFn | undefined;
+    captureJsonLd: boolean;
     dataURLOptions?: DataURLOptions;
     inlineImages: boolean;
     recordCanvas: boolean;
@@ -554,6 +555,7 @@ function serializeNode(
     maskInputFn,
     maskAllElementAttributes = false,
     maskAttributeFn,
+    captureJsonLd,
     dataURLOptions = {},
     inlineImages,
     recordCanvas,
@@ -595,6 +597,7 @@ function serializeNode(
         maskInputFn,
         maskAllElementAttributes,
         maskAttributeFn,
+        captureJsonLd,
         dataURLOptions,
         inlineImages,
         recordCanvas,
@@ -608,6 +611,7 @@ function serializeNode(
         doc,
         needsMask,
         maskTextFn,
+        captureJsonLd,
         rootId,
       });
     case n.CDATA_SECTION_NODE:
@@ -639,10 +643,11 @@ function serializeTextNode(
     doc: Document;
     needsMask: boolean;
     maskTextFn: MaskTextFn | undefined;
+    captureJsonLd: boolean;
     rootId: number | undefined;
   },
 ): serializedNode {
-  const { needsMask, maskTextFn, rootId } = options;
+  const { needsMask, maskTextFn, captureJsonLd, rootId } = options;
   // The parent node may not be a html element which has a tagName attribute.
   // So just let it be undefined which is ok in this use case.
   const parent = dom.parentNode(n);
@@ -684,7 +689,7 @@ function serializeTextNode(
     text = absolutifyURLs(text, getHref(options.doc));
   }
   if (isScript) {
-    if (parent && isJsonLdScript(parent)) {
+    if (captureJsonLd && parent && isJsonLdScript(parent)) {
       const firstTextNode = getJsonLdScriptTextNode(parent);
       text = firstTextNode === n ? sanitizeJsonLdScript(parent) || '' : '';
     } else {
@@ -732,6 +737,7 @@ function serializeElementNode(
     maskInputFn: MaskInputFn | undefined;
     maskAllElementAttributes: boolean;
     maskAttributeFn: MaskAttributeFn | undefined;
+    captureJsonLd: boolean;
     dataURLOptions?: DataURLOptions;
     inlineImages: boolean;
     recordCanvas: boolean;
@@ -753,6 +759,7 @@ function serializeElementNode(
     maskInputFn,
     maskAllElementAttributes = false,
     maskAttributeFn,
+    captureJsonLd,
     dataURLOptions = {},
     inlineImages,
     recordCanvas,
@@ -1067,7 +1074,7 @@ function serializeElementNode(
   }
   serializationComplete = true;
 
-  if (isJsonLdScript(n)) {
+  if (captureJsonLd && isJsonLdScript(n)) {
     attributes = { type: 'application/ld+json' };
   }
 
@@ -1106,9 +1113,7 @@ function slimDOMExcluded(
   node: Node,
 ): boolean {
   const parent = dom.parentNode(node);
-  if (
-    parent && isJsonLdScript(parent)
-  ) {
+  if (slimDOMOptions.jsonLd && parent && isJsonLdScript(parent)) {
     const firstTextNode = getJsonLdScriptTextNode(parent);
     if (node !== firstTextNode) {
       return true;
@@ -1120,7 +1125,7 @@ function slimDOMExcluded(
     return true;
   } else if (sn.type === NodeType.Element) {
     if (sn.tagName === 'script') {
-      if (isJsonLdScript(node)) {
+      if (slimDOMOptions.jsonLd && isJsonLdScript(node)) {
         return sanitizeJsonLdScript(node) === null;
       }
       if (slimDOMOptions.script) {
@@ -1323,10 +1328,7 @@ export function serializeNodeWithId(
     );
   }
 
-  if (
-    needsMask &&
-    isJsonLdScript(n)
-  ) {
+  if (needsMask && slimDOMOptions.jsonLd && isJsonLdScript(n)) {
     return null;
   }
 
@@ -1344,6 +1346,7 @@ export function serializeNodeWithId(
     maskInputFn,
     maskAllElementAttributes,
     maskAttributeFn,
+    captureJsonLd: slimDOMOptions.jsonLd === true,
     dataURLOptions,
     inlineImages,
     recordCanvas,

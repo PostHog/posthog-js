@@ -95,6 +95,7 @@ export type recordOptions = {
     maskAllElementAttributes?: boolean
     maskAttributeFn?: MaskAttributeFn
     slimDOMOptions?: SlimDOMOptions | 'all' | true
+    captureJsonLd?: boolean
     ignoreCSSAttributes?: Set<string>
     attributeFilter?: string[]
     inlineStylesheet?: boolean
