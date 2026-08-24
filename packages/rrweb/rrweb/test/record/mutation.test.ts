@@ -10,9 +10,15 @@ function recordCharacterDataMutation(
   type: string,
   text: string | string[],
   targetIndex = 0,
+  maskScript = false,
 ) {
   const script = document.createElement('script');
   script.type = type;
+  if (maskScript) {
+    const maskedParent = document.createElement('div');
+    maskedParent.className = 'rr-mask';
+    maskedParent.append(script);
+  }
   Object.defineProperty(script, 'tagName', {
     configurable: true,
     value: 'DIV',
@@ -245,6 +251,17 @@ describe('script text mutations', () => {
     expect(recordCharacterDataMutation('application/ld+json', '{')[0].value).toBe('');
   });
 
+  it('does not record masked JSON-LD text mutations', () => {
+    expect(
+      recordCharacterDataMutation(
+        'application/ld+json',
+        '{"@context":"https://schema.org","@type":"Product","name":"Private product"}',
+        0,
+        true,
+      ),
+    ).toEqual([]);
+  });
+
   it('does not record JavaScript source', () => {
     expect(
       recordCharacterDataMutation(
@@ -321,6 +338,16 @@ describe('script text mutations', () => {
     expect(eventBytes).not.toContain('private-nonce');
     expect(eventBytes).not.toContain('private-comment@example.com');
     expect(eventBytes).not.toContain('private-attribute@example.com');
+  });
+
+  it('drops dynamically added JSON-LD under an explicit text mask', () => {
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.className = 'rr-mask';
+    script.textContent =
+      '{"@context":"https://schema.org","@type":"Product","name":"Private product"}';
+
+    expect(recordChildListAddition(script)).toBeUndefined();
   });
 
   it('drops dynamically added JavaScript', () => {

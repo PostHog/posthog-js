@@ -230,6 +230,51 @@ iframe.contentDocument.querySelector('center').clientHeight
     );
   });
 
+  it('rebuilds sanitized JSON-LD without executing it', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setContent('<!doctype html><html><head></head><body></body></html>');
+      await page.evaluate(() => {
+        const script = document.createElement('script');
+        script.type = 'application/ld+json';
+        script.textContent = JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'Product',
+          name: '</noscript><script>globalThis.REPLAY_EXECUTED = true</script>',
+          email: 'PRIVATE_REPLAY_EMAIL',
+        });
+        document.head.append(script);
+      });
+
+      const result = (await page.evaluate(`${code}
+        const jsonLdSnapshot = rrwebSnapshot.snapshot(document, { slimDOM: { script: true } });
+        const jsonLdBytes = JSON.stringify(jsonLdSnapshot);
+        const replayFrame = document.createElement('iframe');
+        document.body.append(replayFrame);
+        rrwebSnapshot.rebuild(jsonLdSnapshot, { doc: replayFrame.contentDocument });
+        ({
+          bytes: jsonLdBytes,
+          noscriptCount: replayFrame.contentDocument.querySelectorAll('noscript').length,
+          scriptCount: replayFrame.contentDocument.querySelectorAll('script').length,
+          executed: Boolean(replayFrame.contentWindow.REPLAY_EXECUTED),
+        });
+      `)) as {
+        bytes: string;
+        noscriptCount: number;
+        scriptCount: number;
+        executed: boolean;
+      };
+
+      expect(result.bytes).toContain('REPLAY_EXECUTED');
+      expect(result.bytes).not.toContain('PRIVATE_REPLAY_EMAIL');
+      expect(result.noscriptCount).toBe(1);
+      expect(result.scriptCount).toBe(0);
+      expect(result.executed).toBe(false);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('correctly saves images offline', async () => {
     const page: puppeteer.Page = await browser.newPage();
 

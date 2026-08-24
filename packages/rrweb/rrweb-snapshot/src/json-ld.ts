@@ -2,64 +2,30 @@ import dom from '@posthog/rrweb-utils';
 
 type JsonLdScalar = string | number | boolean | null;
 type JsonLdType =
-  | 'Product'
-  | 'Brand'
-  | 'Organization'
-  | 'Offer'
+  | 'Action'
   | 'AggregateOffer'
-  | 'AggregateRating';
-type JsonLdPropertyRule = true | readonly JsonLdType[];
+  | 'AggregateRating'
+  | 'Brand'
+  | 'CreativeWork'
+  | 'Offer'
+  | 'Organization'
+  | 'Person'
+  | 'Place'
+  | 'Product';
+type JsonLdPropertyRule = true | readonly JsonLdEntityRule[];
 type JsonLdTypeRule = Record<string, JsonLdPropertyRule>;
+type JsonLdEntityRule = {
+  type: JsonLdType;
+  properties: JsonLdTypeRule;
+};
 
-const MAX_JSON_LD_LENGTH = 100_000;
+const MAX_JSON_LD_INPUT_LENGTH = 100_000;
+const MAX_JSON_LD_OUTPUT_LENGTH = 20_000;
 const SCHEMA_CONTEXT = 'https://schema.org';
-const ROOT_TYPES: readonly JsonLdType[] = ['Product'];
 
-const JSON_LD_RULES: Record<JsonLdType, JsonLdTypeRule> = {
-  Product: {
-    name: true,
-    description: true,
-    image: true,
-    url: true,
-    sku: true,
-    mpn: true,
-    gtin: true,
-    gtin8: true,
-    gtin12: true,
-    gtin13: true,
-    gtin14: true,
-    productID: true,
-    category: true,
-    color: true,
-    material: true,
-    pattern: true,
-    size: true,
-    brand: ['Brand', 'Organization'],
-    offers: ['Offer', 'AggregateOffer'],
-    aggregateRating: ['AggregateRating'],
-  },
-  Brand: {
-    name: true,
-  },
-  Organization: {
-    name: true,
-  },
-  Offer: {
-    price: true,
-    priceCurrency: true,
-    availability: true,
-    itemCondition: true,
-    url: true,
-  },
-  AggregateOffer: {
-    lowPrice: true,
-    highPrice: true,
-    priceCurrency: true,
-    offerCount: true,
-    availability: true,
-    offers: ['Offer'],
-  },
-  AggregateRating: {
+const aggregateRatingRule: JsonLdEntityRule = {
+  type: 'AggregateRating',
+  properties: {
     ratingValue: true,
     ratingCount: true,
     reviewCount: true,
@@ -67,6 +33,118 @@ const JSON_LD_RULES: Record<JsonLdType, JsonLdTypeRule> = {
     worstRating: true,
   },
 };
+const brandRule: JsonLdEntityRule = {
+  type: 'Brand',
+  properties: { name: true },
+};
+const nestedOrganizationRule: JsonLdEntityRule = {
+  type: 'Organization',
+  properties: { name: true },
+};
+const offerRule: JsonLdEntityRule = {
+  type: 'Offer',
+  properties: {
+    price: true,
+    priceCurrency: true,
+    priceValidUntil: true,
+    availability: true,
+    itemCondition: true,
+    seller: [nestedOrganizationRule],
+  },
+};
+const aggregateOfferRule: JsonLdEntityRule = {
+  type: 'AggregateOffer',
+  properties: {
+    lowPrice: true,
+    highPrice: true,
+    priceCurrency: true,
+    offerCount: true,
+    availability: true,
+    offers: [offerRule],
+  },
+};
+const ROOT_RULES: readonly JsonLdEntityRule[] = [
+  {
+    type: 'Action',
+    properties: { actionStatus: true },
+  },
+  {
+    type: 'CreativeWork',
+    properties: {
+      genre: true,
+      inLanguage: true,
+      encodingFormat: true,
+      dateCreated: true,
+      dateModified: true,
+      datePublished: true,
+      expires: true,
+      isAccessibleForFree: true,
+      isFamilyFriendly: true,
+      contentRating: true,
+      learningResourceType: true,
+      educationalLevel: true,
+      educationalUse: true,
+      interactivityType: true,
+      aggregateRating: [aggregateRatingRule],
+      publisher: [nestedOrganizationRule],
+    },
+  },
+  {
+    type: 'Organization',
+    properties: {
+      name: true,
+      legalName: true,
+      foundingDate: true,
+      dissolutionDate: true,
+      nonprofitStatus: true,
+      aggregateRating: [aggregateRatingRule],
+      brand: [brandRule],
+    },
+  },
+  {
+    type: 'Person',
+    properties: {},
+  },
+  {
+    type: 'Place',
+    properties: {
+      publicAccess: true,
+      smokingAllowed: true,
+      maximumAttendeeCapacity: true,
+      isAccessibleForFree: true,
+      aggregateRating: [aggregateRatingRule],
+    },
+  },
+  {
+    type: 'Product',
+    properties: {
+      name: true,
+      sku: true,
+      mpn: true,
+      gtin: true,
+      gtin8: true,
+      gtin12: true,
+      gtin13: true,
+      gtin14: true,
+      productID: true,
+      productGroupID: true,
+      asin: true,
+      model: true,
+      category: true,
+      color: true,
+      material: true,
+      pattern: true,
+      size: true,
+      productionDate: true,
+      releaseDate: true,
+      brand: [brandRule, nestedOrganizationRule],
+      manufacturer: [nestedOrganizationRule],
+      offers: [offerRule, aggregateOfferRule],
+      aggregateRating: [aggregateRatingRule],
+    },
+  },
+];
+
 const sanitizedJsonLdScriptCache = new WeakMap<
   Element,
   { text: string; sanitized: string | null }
@@ -111,7 +189,7 @@ function sanitizeScalar(
 
 function sanitizeEntity(
   value: unknown,
-  allowedTypes: readonly JsonLdType[],
+  allowedRules: readonly JsonLdEntityRule[],
 ): Record<string, unknown> | null {
   if (
     !isObject(value) ||
@@ -121,16 +199,15 @@ function sanitizeEntity(
     return null;
   }
 
-  const type = value['@type'] as JsonLdType;
-  const rules = allowedTypes.includes(type) ? JSON_LD_RULES[type] : undefined;
-  if (!rules) {
+  const entityRule = allowedRules.find((rule) => rule.type === value['@type']);
+  if (!entityRule) {
     return null;
   }
 
   const result: Record<string, unknown> = Object.create(null);
-  result['@type'] = type;
+  result['@type'] = entityRule.type;
 
-  for (const property of Object.keys(rules)) {
+  for (const property of Object.keys(entityRule.properties)) {
     if (!hasOwnProperty(value, property)) {
       continue;
     }
@@ -139,7 +216,7 @@ function sanitizeEntity(
       continue;
     }
 
-    const rule = rules[property];
+    const rule = entityRule.properties[property];
     if (rule === true) {
       const scalar = sanitizeScalar(propertyValue);
       if (scalar !== undefined) {
@@ -183,7 +260,7 @@ function sanitizeRoot(value: unknown): Record<string, unknown> | null {
     return null;
   }
 
-  const entity = sanitizeEntity(value, ROOT_TYPES);
+  const entity = sanitizeEntity(value, ROOT_RULES);
   if (!entity) {
     return null;
   }
@@ -197,7 +274,7 @@ function sanitizeRoot(value: unknown): Record<string, unknown> | null {
 }
 
 export function sanitizeJsonLd(text: string): string | null {
-  if (!text || text.length > MAX_JSON_LD_LENGTH) {
+  if (!text || text.length > MAX_JSON_LD_INPUT_LENGTH) {
     return null;
   }
 
@@ -215,7 +292,8 @@ export function sanitizeJsonLd(text: string): string | null {
       return null;
     }
 
-    return JSON.stringify(sanitized).replace(/</g, '\\u003c');
+    const output = JSON.stringify(sanitized).replace(/</g, '\\u003c');
+    return output.length <= MAX_JSON_LD_OUTPUT_LENGTH ? output : null;
   } catch {
     return null;
   }

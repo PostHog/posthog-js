@@ -1,5 +1,5 @@
 import { test, expect } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page } from '@playwright/test'
 import { CaptureResult } from '@/types'
 
@@ -55,6 +55,93 @@ function assertTheConfigIsAsExpected(snapshotEvents: CaptureResult[], expectedMa
 }
 
 test.describe('Session recording - masking', () => {
+    test('sanitizes JSON-LD in emitted browser events', async ({ page, context }) => {
+        await page.addInitScript(() => {
+            const appendInitialJsonLd = () => {
+                const appendJsonLd = (value: Record<string, unknown>, className = '') => {
+                    const script = document.createElement('script')
+                    script.type = 'application/ld+json'
+                    script.className = className
+                    script.setAttribute('data-private', 'PRIVATE_ATTRIBUTE')
+                    script.textContent = JSON.stringify(value)
+                    script.append(document.createComment('PRIVATE_COMMENT'))
+                    document.head.append(script)
+                }
+                appendJsonLd({
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    name: 'ALLOWED_INITIAL_PRODUCT',
+                    email: 'PRIVATE_UNAPPROVED_EMAIL',
+                    description: 'PRIVATE_DESCRIPTION',
+                    url: 'https://example.com/?token=PRIVATE_URL_TOKEN',
+                    brand: {
+                        '@type': 'Person',
+                        name: 'PRIVATE_NESTED_PERSON',
+                    },
+                })
+                appendJsonLd(
+                    {
+                        '@context': 'https://schema.org',
+                        '@type': 'Product',
+                        name: 'PRIVATE_MASKED_PRODUCT',
+                    },
+                    'json-ld-mask'
+                )
+            }
+            const appendWhenHeadExists = () => {
+                if (document.head) {
+                    document.onreadystatechange = null
+                    appendInitialJsonLd()
+                }
+            }
+            if (document.head) {
+                appendInitialJsonLd()
+            } else {
+                document.onreadystatechange = appendWhenHeadExists
+            }
+        })
+        const options = startOptions({
+            maskAllInputs: true,
+            maskTextSelector: '.json-ld-mask',
+        })
+        await start(options, page, context)
+        await waitForSessionRecordingToStart(page)
+
+        await page.evaluate(() => {
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            script.append(document.createTextNode('{"@context":"https://schema.org",'))
+            script.append(
+                document.createTextNode(
+                    '"@type":"Product","name":"ALLOWED_DYNAMIC_PRODUCT","email":"PRIVATE_DYNAMIC_EMAIL"}'
+                )
+            )
+            document.head.append(script)
+        })
+        await page.locator('[data-cy-input]').type('flush recording')
+        await page.waitForTimeout(2500)
+
+        const eventBytes = JSON.stringify(
+            (await page.capturedEvents())
+                .filter((event) => event.event === '$snapshot')
+                .flatMap((event) => event.properties['$snapshot_data'])
+        )
+        expect(eventBytes).toContain('ALLOWED_INITIAL_PRODUCT')
+        expect(eventBytes).toContain('ALLOWED_DYNAMIC_PRODUCT')
+        for (const privateMarker of [
+            'PRIVATE_ATTRIBUTE',
+            'PRIVATE_COMMENT',
+            'PRIVATE_UNAPPROVED_EMAIL',
+            'PRIVATE_DESCRIPTION',
+            'PRIVATE_URL_TOKEN',
+            'PRIVATE_NESTED_PERSON',
+            'PRIVATE_MASKED_PRODUCT',
+            'PRIVATE_DYNAMIC_EMAIL',
+        ]) {
+            expect(eventBytes).not.toContain(privateMarker)
+        }
+    })
+
     test('masks text', async ({ page, context }) => {
         await start(
             startOptions({

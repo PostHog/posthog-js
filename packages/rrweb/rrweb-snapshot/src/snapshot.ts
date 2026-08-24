@@ -1326,6 +1326,14 @@ export function serializeNodeWithId(
     );
   }
 
+  if (
+    needsMask &&
+    dom.nodeName(n) === 'SCRIPT' &&
+    isJsonLdScript(n as Element)
+  ) {
+    return null;
+  }
+
   countSerializedNode();
 
   const _serializedNode = serializeNode(n, {

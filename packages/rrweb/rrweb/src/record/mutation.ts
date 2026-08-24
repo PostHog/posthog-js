@@ -685,6 +685,18 @@ export default class MutationBuffer {
                 (child) => dom.nodeType(child) === TEXT_NODE,
               )
             : null;
+        if (
+          script &&
+          firstScriptTextNode &&
+          needMaskingText(
+            script,
+            this.maskTextClass,
+            this.maskTextSelector,
+            true,
+          )
+        ) {
+          break;
+        }
         const textNode = firstScriptTextNode || m.target;
         const value = script
           ? firstScriptTextNode
@@ -943,6 +955,7 @@ export default class MutationBuffer {
     ) {
       if (
         !isJsonLdScript(parent as Element) ||
+        needMaskingText(parent, this.maskTextClass, this.maskTextSelector, true) ||
         sanitizeJsonLdScript(parent as Element) === null
       ) {
         return;
@@ -957,7 +970,8 @@ export default class MutationBuffer {
     if (
       this.slimDOMOptions.script &&
       dom.nodeName(n) === 'SCRIPT' &&
-      sanitizeJsonLdScript(n as Element) === null
+      (needMaskingText(n, this.maskTextClass, this.maskTextSelector, true) ||
+        sanitizeJsonLdScript(n as Element) === null)
     ) {
       return;
     }

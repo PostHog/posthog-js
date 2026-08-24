@@ -84,8 +84,8 @@ describe('sanitizeJsonLd', () => {
         },
         {
           '@context': 'https://schema.org',
-          '@type': 'Product',
-          name: 'Second product',
+          '@type': 'Person',
+          name: 'Private person',
         },
       ]),
     );
@@ -98,8 +98,7 @@ describe('sanitizeJsonLd', () => {
       },
       {
         '@context': 'https://schema.org',
-        '@type': 'Product',
-        name: 'Second product',
+        '@type': 'Person',
       },
     ]);
   });
@@ -109,10 +108,7 @@ describe('sanitizeJsonLd', () => {
       JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'Product',
-        image: [
-          'https://example.com/front.jpg',
-          'https://example.com/back.jpg',
-        ],
+        image: ['https://example.com/private?token=secret'],
         brand: {
           '@type': 'Organization',
           name: 'Acme',
@@ -139,7 +135,6 @@ describe('sanitizeJsonLd', () => {
     expect(JSON.parse(sanitized!)).toEqual({
       '@context': 'https://schema.org',
       '@type': 'Product',
-      image: ['https://example.com/front.jpg', 'https://example.com/back.jpg'],
       brand: {
         '@type': 'Organization',
         name: 'Acme',
@@ -169,8 +164,8 @@ describe('sanitizeJsonLd', () => {
           },
           {
             '@context': 'https://schema.org',
-            '@type': 'Person',
-            name: 'Private person',
+            '@type': 'Event',
+            name: 'Private event',
           },
         ]),
       ),
@@ -186,7 +181,7 @@ describe('sanitizeJsonLd', () => {
     ],
     [
       'unsupported root type',
-      '{"@context":"https://schema.org","@type":"Person","name":"Private"}',
+      '{"@context":"https://schema.org","@type":"Event","name":"Private"}',
     ],
     ['empty root array', '[]'],
   ])('drops %s', (_case, value) => {
@@ -196,6 +191,90 @@ describe('sanitizeJsonLd', () => {
   it('drops empty and oversized input before parsing', () => {
     expect(sanitizeJsonLd('')).toBeNull();
     expect(sanitizeJsonLd(' '.repeat(100_001))).toBeNull();
+  });
+
+  it('drops output that exceeds the replay metadata limit after escaping', () => {
+    expect(
+      sanitizeJsonLd(
+        JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'Product',
+          name: '<'.repeat(4_000),
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it.each([
+    [
+      'Action',
+      {
+        actionStatus: 'https://schema.org/CompletedActionStatus',
+        agent: 'Private person',
+      },
+      { actionStatus: 'https://schema.org/CompletedActionStatus' },
+    ],
+    [
+      'CreativeWork',
+      { genre: 'Documentation', inLanguage: 'en', author: 'Private person' },
+      { genre: 'Documentation', inLanguage: 'en' },
+    ],
+    [
+      'Organization',
+      { name: 'Acme', legalName: 'Acme Ltd', email: 'private@example.com' },
+      { name: 'Acme', legalName: 'Acme Ltd' },
+    ],
+    ['Person', { name: 'Private person', email: 'private@example.com' }, {}],
+    [
+      'Place',
+      { publicAccess: true, name: 'Private home', address: 'Private address' },
+      { publicAccess: true },
+    ],
+    [
+      'Product',
+      {
+        name: 'Canvas shoes',
+        category: 'Footwear',
+        description: 'Private description',
+        url: 'https://example.com/?email=private@example.com',
+      },
+      { name: 'Canvas shoes', category: 'Footwear' },
+    ],
+  ])('uses conservative paths for %s', (type, properties, expected) => {
+    const sanitized = sanitizeJsonLd(
+      JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': type,
+        ...properties,
+      }),
+    );
+
+    expect(JSON.parse(sanitized!)).toEqual({
+      '@context': 'https://schema.org',
+      '@type': type,
+      ...expected,
+    });
+  });
+
+  it('uses narrower rules for nested organizations', () => {
+    const sanitized = sanitizeJsonLd(
+      JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        manufacturer: {
+          '@type': 'Organization',
+          name: 'Acme',
+          legalName: 'Private subsidiary name',
+          nonprofitStatus: 'Private status',
+        },
+      }),
+    );
+
+    expect(JSON.parse(sanitized!)).toEqual({
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      manufacturer: { '@type': 'Organization', name: 'Acme' },
+    });
   });
 
   it('escapes markup characters in the serialized JSON', () => {

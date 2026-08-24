@@ -302,12 +302,22 @@ describe('JSON-LD scripts', () => {
     [
       'unsupported JSON-LD',
       'application/ld+json',
-      '{"@context":"https://schema.org","@type":"Person","name":"Private"}',
+      '{"@context":"https://schema.org","@type":"Event","name":"Private"}',
     ],
   ])('drops %s', (_case, type, text) => {
     const script = document.createElement('script');
     script.type = type;
     script.textContent = text;
+
+    expect(serializeNodeWithScriptOptions(script)).toBeNull();
+  });
+
+  it('drops JSON-LD under an explicit text mask', () => {
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.className = 'maskmask';
+    script.textContent =
+      '{"@context":"https://schema.org","@type":"Product","name":"Private product"}';
 
     expect(serializeNodeWithScriptOptions(script)).toBeNull();
   });
