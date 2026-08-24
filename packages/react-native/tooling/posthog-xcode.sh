@@ -127,16 +127,46 @@ fi
 # mimics how the file is defined in node_modules/react-native/scripts/react-native-xcode.sh (PACKAGER_SOURCEMAP_FILE)
 SOURCEMAP_PACKAGER_FILE="$CONFIGURATION_BUILD_DIR/$SOURCEMAP_NAME"
 
-# Pass release info from Xcode build settings when available
+# Read a literal value out of the target's Info.plist. Returns nothing when the key is absent or
+# still holds an unexpanded build-setting reference such as $(MARKETING_VERSION), which tells the
+# caller to use the build setting instead.
+posthog_plist_value() {
+  posthog_plist_file="${SRCROOT:-}/${INFOPLIST_FILE:-}"
+  if [ -z "${INFOPLIST_FILE:-}" ] || [ ! -f "$posthog_plist_file" ]; then
+    return 0
+  fi
+  posthog_plist_result=$(/usr/libexec/PlistBuddy -c "Print :$1" "$posthog_plist_file" 2>/dev/null) || return 0
+  case "$posthog_plist_result" in
+    *'$('*) return 0 ;;
+  esac
+  printf '%s' "$posthog_plist_result"
+}
+
+# The SDK reports $app_version and $app_build from the app's Info.plist. Xcode's MARKETING_VERSION
+# and CURRENT_PROJECT_VERSION are only the usual source for those keys. Expo writes literal
+# versions into Info.plist and leaves the build settings at their template defaults, so the two
+# disagree, and a release keyed on the build setting does not describe the app that ships. Read the
+# plist that ships, and fall back to the build setting when it holds a reference to one.
+POSTHOG_APP_VERSION=$(posthog_plist_value CFBundleShortVersionString)
+if [ -z "$POSTHOG_APP_VERSION" ]; then
+  POSTHOG_APP_VERSION="${MARKETING_VERSION:-}"
+fi
+POSTHOG_APP_BUILD=$(posthog_plist_value CFBundleVersion)
+if [ -z "$POSTHOG_APP_BUILD" ]; then
+  POSTHOG_APP_BUILD="${CURRENT_PROJECT_VERSION:-}"
+fi
+
+# The bundle identifier is read from the build setting alone. Info.plist normally references it
+# rather than repeating it, and the SDK reports the resolved value.
 CLI_RELEASE_ARGS=""
 if [ -n "${PRODUCT_BUNDLE_IDENTIFIER}" ]; then
   CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --release-name $PRODUCT_BUNDLE_IDENTIFIER"
 fi
-if [ -n "${MARKETING_VERSION}" ]; then
-  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --release-version $MARKETING_VERSION"
+if [ -n "$POSTHOG_APP_VERSION" ]; then
+  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --release-version $POSTHOG_APP_VERSION"
 fi
-if [ -n "${CURRENT_PROJECT_VERSION}" ]; then
-  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --build $CURRENT_PROJECT_VERSION"
+if [ -n "$POSTHOG_APP_BUILD" ]; then
+  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --build $POSTHOG_APP_BUILD"
 fi
 
 # RN deletes the PACKAGER_SOURCEMAP_FILE file after execution but we need it
