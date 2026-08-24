@@ -110,6 +110,7 @@ export type BaseFlagEvaluationOptions = {
   groups?: Record<string, string>
   personProperties?: Properties
   groupProperties?: Record<string, Properties>
+  /** Skip remote fallback and omit flags that local definitions cannot resolve. */
   onlyEvaluateLocally?: boolean
   disableGeoip?: boolean
 }
@@ -118,6 +119,12 @@ export type FlagEvaluationOptions = BaseFlagEvaluationOptions & {
 }
 
 export type AllFlagsOptions = BaseFlagEvaluationOptions & {
+  /**
+   * Restrict local evaluation, the `/flags` request, and the returned snapshot to these keys.
+   * `evaluateFlags()` falls back remotely when a requested key is missing from local definitions
+   * unless `onlyEvaluateLocally` is true. Remote evaluation responses are not cached, so a key
+   * missing both locally and remotely costs one `/flags` request per `evaluateFlags()` call.
+   */
   flagKeys?: string[]
 }
 
@@ -695,14 +702,14 @@ export interface IPostHog {
    * posthog.capture({ distinctId: 'user_123', event: 'page_viewed', flags })
    * ```
    *
-   * @param options - Optional configuration for flag evaluation. Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags.
+   * @param options - Optional configuration for flag evaluation. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. Missing local keys trigger fallback unless `onlyEvaluateLocally` is true.
    */
   evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
   /**
    * @description Evaluate all feature flags for a specific user.
    *
    * @param distinctId - The user's distinct ID
-   * @param options - Optional configuration for flag evaluation. Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags.
+   * @param options - Optional configuration for flag evaluation. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. Missing local keys trigger fallback unless `onlyEvaluateLocally` is true.
    */
   evaluateFlags(distinctId: string, options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
 
