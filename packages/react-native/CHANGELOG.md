@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.64.2
+
+### Patch Changes
+
+- [#4634](https://github.com/PostHog/posthog-js/pull/4634) [`e81d375`](https://github.com/PostHog/posthog-js/commit/e81d3755c019534b7d980106b5bad10a41e5f9fa) Thanks [@marandaneto](https://github.com/marandaneto)! - Use posthog-cli 0.15.1 and newer to read iOS release metadata directly from Info.plist during Hermes source map uploads.
+  (2026-08-25)
+
+- [#4611](https://github.com/PostHog/posthog-js/pull/4611) [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12) Thanks [@marandaneto](https://github.com/marandaneto)! - Share survey property matching between the browser and React Native SDKs while preserving their existing missing-value behavior.
+  (2026-08-25)
+- Updated dependencies [[`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+  - @posthog/core@1.48.11
+
 ## 4.64.1
 
 ### Patch Changes
