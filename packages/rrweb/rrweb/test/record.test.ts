@@ -1317,6 +1317,32 @@ describe('record', function (this: ISuite) {
     expect(serializedEvents).not.toContain('updated-private-value');
   });
 
+  it('does not observe shadow roots on blocked hosts discovered during serialization', async () => {
+    await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+
+      const host = document.createElement('div');
+      host.id = 'blocked-shadow-host';
+      host.className = 'rr-block';
+      host.attachShadow({ mode: 'open' });
+      document.body.appendChild(host);
+    });
+    await waitForRAF(ctx.page);
+
+    await ctx.page.evaluate(() => {
+      const host = document.querySelector('#blocked-shadow-host')!;
+      const privateNode = document.createElement('span');
+      privateNode.textContent = 'late-private-shadow-marker';
+      host.shadowRoot!.appendChild(privateNode);
+    });
+    await waitForRAF(ctx.page);
+
+    expect(JSON.stringify(ctx.events)).not.toContain(
+      'late-private-shadow-marker',
+    );
+  });
+
   it('does not record setter values from blocked canvases', async () => {
     await ctx.page.evaluate(() => {
       const blockedCanvas = document.createElement('canvas');

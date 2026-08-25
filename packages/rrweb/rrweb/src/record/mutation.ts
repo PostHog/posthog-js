@@ -400,7 +400,15 @@ export default class MutationBuffer {
               currentN as HTMLLinkElement,
             );
           }
-          if (hasShadowRoot(currentN)) {
+          if (
+            hasShadowRoot(currentN) &&
+            !isBlocked(
+              currentN,
+              this.blockClass,
+              this.blockSelector,
+              true,
+            )
+          ) {
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
             this.shadowDomManager.addShadowRoot(
               dom.shadowRoot(currentN)!,
