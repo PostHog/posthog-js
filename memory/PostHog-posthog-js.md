@@ -2,20 +2,7 @@
 
 ...<older entries truncated>
 
- has already been implemented, regression-tested, and released. Attempting to delete sibling-origin localStorage would not be possible with browser storage APIs.
-
-## 2026-08-22T16:23:59.119Z
-- Item: issue #3582 — Feature Request: React Native surveys - respect customization settings
-- Conclusion: Survey position support is already released; font-family customization remains an unscoped React Native surveys enhancement.
-- Labels: enhancement, feature/surveys, feature/mobile, react-native
-- URL: https://github.com/PostHog/posthog-js/issues/3582
-- Relevant files: `packages/react-native/src/surveys/surveys-utils.ts`, `packages/react-native/src/surveys/components/SurveyModal.tsx`, `packages/react-native/test/resolveSurveyAlignment.spec.ts`, `packages/react-native/src/surveys/PostHogSurveyProvider.tsx`, `packages/core/src/types.ts`, `packages/react-native/CHANGELOG.md`
-- Findings: `SurveyModal` passes `appearance.position` to `resolveSurveyAlignment`, which maps all nine `SurveyPosition` values to React Native vertical and horizontal alignment.; `resolveSurveyAlignment` has tests covering every supported position plus the default and invalid-position fallback.; The React Native changelog records PR #3498 as released in `posthog-react-native` 4.43.13, explicitly fixing `SurveyModal` to honor `appearance.position`.; `PostHogSurveyProvider` merges project survey appearance with `defaultSurveyAppearance` and the optional `defaultSurveyAppearance` provider prop.; The shared `SurveyAppearance` type has color, text, button, input, position, and related survey fields, but no `fontFamily` field.; The inspected React Native survey text and input components apply colors and sizing but do not apply a font-family appearance override.
-- Fix assessment: Position needs no new change, while typography needs an explicit product/API decision. A speculative `fontFamily` addition could be incomplete across headings, body text, buttons, rating controls, and inputs, and may not match the app's regular/bold font setup.
-
-## 2026-08-22T16:24:57.867Z
-- Item: issue #3590 — Bug: Canvas content missing or disappears during session replay (Flutter web & raw canvas)
-- Conclusion: Credible session-replay canvas state-restoration bug; not a safe small fix without a focused seek regression test.
+n: Credible session-replay canvas state-restoration bug; not a safe small fix without a focused seek regression test.
 - Labels: feature/replay, web
 - URL: https://github.com/PostHog/posthog-js/issues/3590
 - Relevant files: `packages/browser/src/extensions/replay/external/lazy-loaded-session-recorder.ts`, `packages/rrweb/rrweb/src/record/observers/canvas/canvas-manager.ts`, `packages/rrweb/rrweb/src/record/workers/image-bitmap-data-url-worker.ts`, `packages/rrweb/rrweb/src/replay/index.ts`, `packages/rrweb/rrweb/src/replay/canvas/2d.ts`, `packages/rrweb/rrweb-snapshot/src/rebuild.ts`, `packages/rrweb/rrdom/src/diff.ts`, `packages/rrweb/rrweb/test/replayer.test.ts`
@@ -94,3 +81,12 @@
 - Findings: `packages/browser/package.json`, the manifest published as `posthog-js`, has no `peerDependencies` or `peerDependenciesMeta` entries for React.; `packages/browser/react/package.json` is the manifest included for the `posthog-js/react` subpath, but it also declares no dependencies or peers.; `packages/react/package.json` for the standalone `@posthog/react` package already declares `react: >=16.8.0` as a peer dependency and marks only `@types/react` optional.; The React source imports React throughout the public integration, and the Rollup configuration keeps `react` external, so the emitted React bundle requires the consumer's installed React package at runtime.; No inspected React integration source imports `react-dom`; adding it as a peer would not be evidence-backed for the reported missing-module failure.; Because Node-style resolution from `posthog-js/react/dist/umd/index.js` climbs to `posthog-js/node_modules`, declaring React as an optional peer on the published parent `posthog-js` package is the relevant installer metadata change for isolated layouts.
 - Fix assessment: The failure is explained by missing package metadata, and the standalone React package provides an existing compatible React peer range. An optional peer preserves the requested behavior for users who do not import the React subpath.
 - PR: https://github.com/PostHog/posthog-js/pull/4638
+
+## 2026-08-25T18:15:32.860Z
+- Item: issue #4646 — uploadNativeSymbols: main app dSYM never ready on EAS Build, archive always fails
+- Conclusion: Confirmed likely React Native Expo-plugin build-ordering bug affecting iOS native-symbol uploads with embedded extensions.
+- Labels: react-native, iOS, feature/error-tracking, team/client-libraries
+- URL: https://github.com/PostHog/posthog-js/issues/4646
+- Relevant files: `packages/react-native/src/tooling/expoconfig.ts`, `packages/react-native/test/expoconfig.spec.ts`, `packages/react-native/package.json`, `packages/react-native/CHANGELOG.md`
+- Findings: `packages/react-native/src/tooling/expoconfig.ts` enables this phase when `uploadNativeSymbols` is configured, by calling `addDsymUploadBuildPhase` from the iOS Expo plugin.; `addDsymUploadBuildPhase` currently calls `xcodeProject.addBuildPhase([],... )` with an empty file list and only provides `shellPath` and `shellScript`; it does not declare a main-app dSYM input path or input file list.; The generated shell phase only locates and executes posthog-ios's `build-tools/upload-symbols.sh`; the Expo plugin itself does not establish a dSYM-producing build dependency.; The source comment says the phase is appended last so that it runs after the dSYM bundle is produced, but phase append order alone is not an explicit Xcode dependency and does not guarantee the reported ordering on EAS.; Existing unit tests validate phase creation, script content, options, and idempotency, but do not assert Xcode input paths or build ordering.; `packages/react-native/package.json` identifies the affected SDK version as `4.64.2`, matching the reporter's environment. The changelog's existing native-symbol changes concern Android wiring and upload conflicts, not main-app dSYM scheduling.
+- Fix assessment: The missing dependency declaration is clear, but the minimal input-path choice must be validated against Xcode target dependency behavior with embedded extensions. The report specifically identifies the extension case as one where a prior design avoided explicit dSYM inputs, so blindly adding an input path could trade this deterministic timeout for a dependency cycle.
