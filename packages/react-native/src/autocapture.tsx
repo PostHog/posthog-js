@@ -78,6 +78,16 @@ export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: Pos
 
   let currentInst: Element | undefined = e._targetInst
 
+  // Check the full ancestor chain before applying the element capture limit.
+  while (currentInst) {
+    if (currentInst.memoizedProps?.[noCaptureProp]) {
+      return
+    }
+    currentInst = currentInst.return
+  }
+
+  currentInst = e._targetInst
+
   while (
     currentInst &&
     // maxComponentTreeSize will always be defined as we have a defaultProps. But ts needs a check so this is here.

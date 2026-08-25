@@ -20,6 +20,26 @@ describe('PostHog React Native', () => {
       expect(mockPostHog.autocapture).toHaveBeenCalledTimes(0)
     })
 
+    it('should ignore a no-capture ancestor beyond maxElementsCaptured', () => {
+      const mockPostHog = { autocapture: jest.fn() } as any
+      let targetInst: any = {
+        memoizedProps: { 'ph-no-capture': true },
+        return: null,
+      }
+
+      for (let i = 0; i <= 20; i++) {
+        targetInst = {
+          elementType: { name: `View${i}` },
+          memoizedProps: {},
+          return: targetInst,
+        }
+      }
+
+      autocaptureFromTouchEvent({ _targetInst: targetInst, nativeEvent }, mockPostHog)
+
+      expect(mockPostHog.autocapture).not.toHaveBeenCalled()
+    })
+
     it('should handle animated styles without errors', () => {
       const mockPostHog = { autocapture: jest.fn() } as any
 
