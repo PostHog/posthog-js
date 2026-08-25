@@ -529,7 +529,7 @@ export class Autocapture implements Extension {
             if (eventName === COPY_AUTOCAPTURE_EVENT) {
                 const clipType = e.type || 'clipboard'
 
-                // The page usually emits an input change event with the new value, so paste only records the interaction.
+                // Don't add the contents for paste events, as usually the page emits an input change with the new value
                 if (clipType !== 'paste') {
                     const selectedText = window?.getSelection()?.toString()
                     const selectedContent = makeSafeText(selectedText)
