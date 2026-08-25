@@ -1,5 +1,66 @@
 # posthog-react-native
 
+## 4.64.2
+
+### Patch Changes
+
+- [#4634](https://github.com/PostHog/posthog-js/pull/4634) [`e81d375`](https://github.com/PostHog/posthog-js/commit/e81d3755c019534b7d980106b5bad10a41e5f9fa) Thanks [@marandaneto](https://github.com/marandaneto)! - Use posthog-cli 0.15.1 and newer to read iOS release metadata directly from Info.plist during Hermes source map uploads.
+  (2026-08-25)
+
+- [#4611](https://github.com/PostHog/posthog-js/pull/4611) [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12) Thanks [@marandaneto](https://github.com/marandaneto)! - Share survey property matching between the browser and React Native SDKs while preserving their existing missing-value behavior.
+  (2026-08-25)
+- Updated dependencies [[`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+  - @posthog/core@1.48.11
+
+## 4.64.1
+
+### Patch Changes
+
+- [#4604](https://github.com/PostHog/posthog-js/pull/4604) [`42ffca6`](https://github.com/PostHog/posthog-js/commit/42ffca657f9056eaccdbaf8c6a7cbbb5af866709) Thanks [@AyobamiH](https://github.com/AyobamiH)! - Fix bare React Native Hermes sourcemap Chunk ID generation in the Metro serializer. Requires posthog-cli >= 0.14.1 to clone and upload the generated camel-case `chunkId` metadata.
+  (2026-08-24)
+
+## 4.64.0
+
+### Minor Changes
+
+- [#4529](https://github.com/PostHog/posthog-js/pull/4529) [`ad6d5c6`](https://github.com/PostHog/posthog-js/commit/ad6d5c6b4bbcac41c40eb9a775ae863f917740a4) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `sessionReplayConfig.verifyScreenshotMaskAlignment` for Android session replay. This option requires `@posthog/react-native-plugin`.
+  (2026-08-24)
+
+### Patch Changes
+
+- Updated dependencies [[`ad6d5c6`](https://github.com/PostHog/posthog-js/commit/ad6d5c6b4bbcac41c40eb9a775ae863f917740a4)]:
+  - @posthog/react-native-plugin@2.5.0
+
+## 4.63.9
+
+### Patch Changes
+
+- [#4623](https://github.com/PostHog/posthog-js/pull/4623) [`be299df`](https://github.com/PostHog/posthog-js/commit/be299dff71d2cf0c955efff1ca0b9cadc3b64713) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix buffered logs being dropped instead of retried after HTTP 408, 429 or 5xx
+  (2026-08-24)
+- Updated dependencies [[`be299df`](https://github.com/PostHog/posthog-js/commit/be299dff71d2cf0c955efff1ca0b9cadc3b64713)]:
+  - @posthog/core@1.48.10
+
+## 4.63.8
+
+### Patch Changes
+
+- [#4631](https://github.com/PostHog/posthog-js/pull/4631) [`1167239`](https://github.com/PostHog/posthog-js/commit/116723906ab68404fb6140d298bc648c5c330075) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix session replay started with `startRecording()` capturing nothing on Android by requiring `@posthog/react-native-plugin` 2.4.3 or newer.
+  (2026-08-24)
+
+## 4.63.7
+
+### Patch Changes
+
+- [#4602](https://github.com/PostHog/posthog-js/pull/4602) [`9e53f91`](https://github.com/PostHog/posthog-js/commit/9e53f91cf3e0e4c146ca8914925d775f7752c2ea) Thanks [@marandaneto](https://github.com/marandaneto)! - Use the iOS version reported by Info.plist when uploading Hermes source maps, including custom Xcode build settings. Matching native dSYM attribution requires @posthog/react-native-plugin 2.4.2 or later (PostHog/posthog-ios#776).
+  (2026-08-24)
+
+## 4.63.6
+
+### Patch Changes
+
+- [#4498](https://github.com/PostHog/posthog-js/pull/4498) [`9b2a1b1`](https://github.com/PostHog/posthog-js/commit/9b2a1b18db64f9f6b331cbded543c5ead3ccf0cb) Thanks [@posthog](https://github.com/apps/posthog)! - fix(react-native): warn when a local `sessionReplayConfig.sampleRate` overrides the project setting, warn when replay starts with no cached remote config, and log the native plugin version next to the replay config
+  (2026-08-24)
+
 ## 4.63.5
 
 ### Patch Changes

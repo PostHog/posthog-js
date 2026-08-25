@@ -299,12 +299,14 @@ export enum PostHogPersistedProperty {
   DeviceId = 'device_id', // only used by posthog-react-native
 }
 
+export type PostHogFetchBodyBytes = Uint8Array & { buffer: ArrayBuffer }
+
 export type PostHogFetchOptions = {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH'
   mode?: 'no-cors'
   credentials?: 'omit'
   headers: { [key: string]: string }
-  body?: string | Blob
+  body?: string | Blob | PostHogFetchBodyBytes
   signal?: AbortSignal
 }
 
@@ -830,6 +832,22 @@ export const SurveyMatchType = {
 } as const
 export type SurveyMatchType = (typeof SurveyMatchType)[keyof typeof SurveyMatchType]
 
+export type PropertyMatchType = SurveyMatchType
+export type PropertyOperator = PropertyMatchType | 'gt' | 'lt'
+
+export type PropertyFilters = Record<
+  string,
+  {
+    values: string[]
+    operator: PropertyOperator
+  }
+>
+
+export interface SurveyEventWithFilters {
+  name: string
+  propertyFilters?: PropertyFilters
+}
+
 export const SurveySchedule = {
   Once: 'once',
   Recurring: 'recurring',
@@ -879,9 +897,7 @@ export type Survey = {
     urlMatchType?: SurveyMatchType
     events?: {
       repeatedActivation?: boolean
-      values?: {
-        name: string
-      }[]
+      values?: SurveyEventWithFilters[]
     }
     actions?: {
       values: SurveyActionType[]

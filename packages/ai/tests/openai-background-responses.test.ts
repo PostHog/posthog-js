@@ -9,7 +9,23 @@ const output = [
     type: 'message',
     role: 'assistant',
     status: 'completed',
-    content: [{ type: 'output_text', text: 'Background work complete.', annotations: [], logprobs: [] }],
+    content: [
+      {
+        type: 'output_text',
+        text: 'Background work complete.',
+        annotations: [{ type: 'url_citation', url: 'https://example.com', start_index: 0, end_index: 10 }],
+        logprobs: [],
+      },
+    ],
+  },
+]
+const tools = [
+  {
+    type: 'function' as const,
+    name: 'lookup_account',
+    description: 'Look up an account',
+    parameters: { type: 'object', properties: {} },
+    strict: false,
   },
 ]
 const usage = {
@@ -193,7 +209,13 @@ const providerCases = [
         maxRetries: 0,
         posthog,
       } as any),
-    expectedOutput: output,
+    // Azure and OpenAI share the same OpenAI-compatible background formatter.
+    expectedOutput: [
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Background work complete.' }],
+      },
+    ],
   },
 ] as const
 
@@ -203,6 +225,7 @@ async function createTrackedBackgroundResponse(client: ReturnType<(typeof provid
     input: 'Run this in the background.',
     background: true,
     temperature: 0.25,
+    tools,
     posthogDistinctId: 'background-user',
     posthogTraceId: 'background-trace',
     posthogProperties: { workflow: 'nightly' },
@@ -221,6 +244,7 @@ describe.each(providerCases)('$provider background Responses', ({ provider, crea
       input: 'Run this in the background.',
       background: true,
       temperature: 0.25,
+      tools,
       posthogDistinctId: 'background-user',
       posthogTraceId: 'background-trace',
       posthogProperties: { workflow: 'nightly' },
@@ -264,6 +288,8 @@ describe.each(providerCases)('$provider background Responses', ({ provider, crea
       $ai_reasoning_tokens: 2,
       $ai_cache_read_input_tokens: 3,
       $ai_usage: usage,
+      $ai_web_search_count: 1,
+      $ai_tools: tools,
       $ai_latency: 4,
       $ai_completion_id: responseID,
       $ai_stop_reason: 'completed',

@@ -262,7 +262,7 @@ export class PostHogLogs {
       }
 
       if (outcome.kind === 'retry-later') {
-        // Network error: keep records in the queue for the next flush cycle
+        // Transient failure: keep records in the queue for the next flush cycle
         // and surface the error so the caller can log/react.
         throw outcome.error
       }
