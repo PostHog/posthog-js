@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact'
 import { FeedbackWidget } from '../../../extensions/surveys'
-import { Survey, SurveyQuestionType, SurveyType, SurveyWidgetType } from '../../../posthog-surveys-types'
+import { Survey, SurveyPosition, SurveyQuestionType, SurveyType, SurveyWidgetType } from '../../../posthog-surveys-types'
 import { createMockPostHog } from '../../helpers/posthog-instance'
 import { PostHogFeatureFlags } from '../../../posthog-featureflags'
 
@@ -271,6 +271,44 @@ describe('FeedbackWidget', () => {
         })
 
         expectSurveySentEvent(selectorWidgetSurvey.id, { '$survey_response_q-open-1': 'Selector feedback!' })
+    })
+
+    test('positions survey next to the tab button when position is NextToTrigger', async () => {
+        const nextToTriggerTabSurvey: Survey = {
+            ...baseWidgetSurvey,
+            id: 'widget-survey-tab-next-to-trigger',
+            appearance: {
+                ...baseWidgetSurvey.appearance,
+                position: SurveyPosition.NextToTrigger,
+            },
+        }
+
+        render(<FeedbackWidget survey={nextToTriggerTabSurvey} posthog={mockPosthog} />)
+
+        const tab = screen.getByText('Feedback')
+        // jsdom returns a zero rect by default; just needs to be a real DOMRect so
+        // getNextToTriggerPosition can compute against it.
+        tab.getBoundingClientRect = jest.fn(() => ({
+            top: 200,
+            bottom: 240,
+            left: 300,
+            right: 380,
+            width: 80,
+            height: 40,
+            x: 300,
+            y: 200,
+            toJSON: () => {},
+        }))
+
+        fireEvent.click(tab)
+
+        const form = await screen.findByRole('form')
+        const popup = form.closest('.ph-survey') as HTMLElement
+
+        // Should be positioned relative to the tab button (fixed + computed left/top), not the
+        // hardcoded `top: 50%` used for the tab widget's default (non-NextToTrigger) position.
+        expect(popup.style.position).toBe('fixed')
+        expect(popup.style.top).not.toBe('50%')
     })
 
     test('closes survey popup when cancel button is clicked', async () => {

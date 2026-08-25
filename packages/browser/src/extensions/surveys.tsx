@@ -1725,8 +1725,25 @@ export function FeedbackWidget({
     const [showSurvey, setShowSurvey] = useState(false)
     const [styleOverrides, setStyleOverrides] = useState<JSX.CSSProperties>({})
     const resetTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+    const tabButtonRef = useRef<HTMLButtonElement>(null)
 
     const toggleSurvey = () => {
+        // Mirror the selector widget's behavior: when the tab widget is configured to show the
+        // survey next to its trigger, compute the position relative to the tab button itself
+        // instead of relying on the widgetType default below, which always wins otherwise.
+        if (
+            survey.appearance?.widgetType === 'tab' &&
+            survey.appearance?.position === SurveyPosition.NextToTrigger &&
+            tabButtonRef.current
+        ) {
+            const nextToTriggerStyle = getNextToTriggerPosition(
+                tabButtonRef.current,
+                parseInt(survey.appearance?.maxWidth || defaultSurveyAppearance.maxWidth)
+            )
+            if (nextToTriggerStyle) {
+                setStyleOverrides(nextToTriggerStyle)
+            }
+        }
         setShowSurvey(!showSurvey)
     }
 
@@ -1739,7 +1756,7 @@ export function FeedbackWidget({
             return
         }
 
-        if (survey.appearance?.widgetType === 'tab') {
+        if (survey.appearance?.widgetType === 'tab' && survey.appearance?.position !== SurveyPosition.NextToTrigger) {
             setStyleOverrides({
                 top: '50%',
                 bottom: 'auto',
@@ -1771,6 +1788,7 @@ export function FeedbackWidget({
         survey.appearance?.widgetType,
         survey.appearance?.widgetSelector,
         survey.appearance?.borderColor,
+        survey.appearance?.position,
     ])
 
     useHideSurveyOnURLChange({
@@ -1802,6 +1820,7 @@ export function FeedbackWidget({
         <Fragment>
             {survey.appearance?.widgetType === 'tab' && (
                 <button
+                    ref={tabButtonRef}
                     className={`ph-survey-widget-tab ${survey.appearance?.tabPosition === SurveyTabPosition.Top ? 'widget-tab-top' : ''}`}
                     onClick={toggleSurvey}
                     disabled={readOnly}
