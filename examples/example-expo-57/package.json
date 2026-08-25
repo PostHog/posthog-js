@@ -1,0 +1,62 @@
+{
+    "name": "example-expo-57",
+    "main": "expo-router/entry",
+    "version": "1.0.0",
+    "packageManager": "pnpm@10.15.0",
+    "scripts": {
+        "start": "expo start",
+        "reset-project": "node ./scripts/reset-project.js",
+        "android": "expo run:android",
+        "ios": "expo run:ios",
+        "web": "expo start --web --clear",
+        "lint": "expo lint"
+    },
+    "dependencies": {
+        "@expo/metro-runtime": "~57.0.12",
+        "@expo/vector-icons": "^15.1.1",
+        "@posthog/react-native-plugin": "*",
+        "expo": "~57.0.15",
+        "expo-application": "~57.0.2",
+        "expo-blur": "~57.0.2",
+        "expo-constants": "~57.0.13",
+        "expo-device": "~57.0.1",
+        "expo-file-system": "~57.0.5",
+        "expo-font": "~57.0.1",
+        "expo-haptics": "~57.0.1",
+        "expo-image": "~57.0.3",
+        "expo-linking": "~57.0.7",
+        "expo-localization": "~57.0.1",
+        "expo-router": "~57.0.15",
+        "expo-splash-screen": "~57.0.7",
+        "expo-status-bar": "~57.0.1",
+        "expo-symbols": "~57.0.2",
+        "expo-system-ui": "~57.0.2",
+        "expo-web-browser": "~57.0.2",
+        "posthog-react-native": "*",
+        "react": "19.2.3",
+        "react-dom": "19.2.3",
+        "react-native": "0.86.2",
+        "react-native-gesture-handler": "~2.32.0",
+        "react-native-reanimated": "~4.5.1",
+        "react-native-safe-area-context": "5.7.0",
+        "react-native-screens": "~4.26.2",
+        "react-native-svg": "15.15.4",
+        "react-native-web": "~0.21.2",
+        "react-native-webview": "13.16.1",
+        "react-native-worklets": "0.10.1"
+    },
+    "devDependencies": {
+        "@types/react": "~19.2.18",
+        "eslint": "^9.25.0",
+        "eslint-config-expo": "~57.0.1",
+        "typescript": "~6.0.3"
+    },
+    "expo": {
+        "doctor": {
+            "appConfigFieldsNotSyncedCheck": {
+                "enabled": false
+            }
+        }
+    },
+    "private": true
+}

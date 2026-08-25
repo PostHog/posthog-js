@@ -291,6 +291,28 @@ describe('SurveyPopup', () => {
         // implicitly testing that clearInProgressSurveyState would be called internally.
     })
 
+    test('clears the auto-disappear timer when unmounted', () => {
+        const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+        const { unmount } = render(
+            <SurveyPopup
+                survey={{
+                    ...mockSurvey,
+                    appearance: { ...mockSurvey.appearance, autoDisappear: true },
+                }}
+                removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                isPopup={true}
+                posthog={mockPosthog as any}
+            />
+        )
+
+        window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: mockSurvey.id } }))
+        window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: mockSurvey.id } }))
+        unmount()
+
+        expect(clearTimeoutSpy).toHaveBeenCalledTimes(2)
+        clearTimeoutSpy.mockRestore()
+    })
+
     test('clears localStorage on dismissal', async () => {
         const existingState = {
             surveySubmissionId: 'existing-uuid-dismiss',

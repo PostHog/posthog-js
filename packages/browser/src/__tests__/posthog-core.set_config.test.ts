@@ -182,6 +182,16 @@ describe('posthog.set_config', () => {
             expect(posthog.config.debug).toBe(originalConfig.debug)
             expect(posthog.config.api_host).toBe(originalConfig.api_host)
         })
+
+        it('should apply capture_pageview updates to history autocapture', () => {
+            const token = uuidv7()
+            const posthog = defaultPostHog().init(token, { capture_pageview: false }, token)!
+            const startIfEnabledOrStop = jest.spyOn(posthog.historyAutocapture!, 'startIfEnabledOrStop')
+
+            posthog.set_config({ capture_pageview: { hash: true } })
+
+            expect(startIfEnabledOrStop).toHaveBeenCalledTimes(1)
+        })
     })
 
     describe('persistence configuration', () => {

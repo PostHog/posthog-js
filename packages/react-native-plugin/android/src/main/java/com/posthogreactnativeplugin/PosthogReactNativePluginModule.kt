@@ -158,6 +158,8 @@ class PosthogReactNativePluginModule(
               sessionReplayConfig.maskAllImages = maskAllImages
               sessionReplayConfig.maskAllTextInputs = maskAllTextInputs
               sessionReplayConfig.sampleRate = getDoubleOrNull(sdkReplayConfig, "sampleRate")
+              sessionReplayConfig.verifyScreenshotMaskAlignment =
+                getBoolean(sdkReplayConfig, "verifyScreenshotMaskAlignment", false)
 
               val endpoint = getString(decideReplayConfig, "endpoint", "")
               if (endpoint.isNotEmpty()) {
@@ -373,17 +375,6 @@ class PosthogReactNativePluginModule(
         null
       }
     }.getOrNull()
-
-  private fun hasKey(
-    map: ReadableMap?,
-    key: String,
-  ): Boolean = runCatching { map != null && map.hasKey(key) && !map.isNull(key) }.getOrDefault(false)
-
-  private fun getBoolean(
-    map: ReadableMap?,
-    key: String,
-    default: Boolean,
-  ): Boolean = runCatching { if (hasKey(map, key)) map?.getBoolean(key) ?: default else default }.getOrDefault(default)
 
   private fun getString(
     map: ReadableMap?,
@@ -634,3 +625,14 @@ class PosthogReactNativePluginModule(
           }
   }
 }
+
+private fun hasKey(
+  map: ReadableMap?,
+  key: String,
+): Boolean = runCatching { map != null && map.hasKey(key) && !map.isNull(key) }.getOrDefault(false)
+
+internal fun getBoolean(
+  map: ReadableMap?,
+  key: String,
+  default: Boolean,
+): Boolean = runCatching { if (hasKey(map, key)) map?.getBoolean(key) ?: default else default }.getOrDefault(default)
