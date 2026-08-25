@@ -285,6 +285,31 @@ describe('JSON-LD replay capture', () => {
         })
     })
 
+    it('keeps non-PII leaf properties without a type-specific path', () => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': 'Thing',
+                    availability: 'https://schema.org/InStock',
+                    isAccessibleForFree: true,
+                    name: 'Private name',
+                    numberOfItems: 2,
+                    priceCurrency: 'GBP',
+                    ratingValue: 4.5,
+                })
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@type': 'Thing',
+            availability: 'https://schema.org/InStock',
+            isAccessibleForFree: true,
+            numberOfItems: 2,
+            priceCurrency: 'GBP',
+            ratingValue: 4.5,
+        })
+    })
+
     it('sanitizes root and nested entity arrays', () => {
         expect(
             sanitizeJsonLd(
@@ -329,7 +354,7 @@ describe('JSON-LD replay capture', () => {
         expect(sanitizeJsonLd(value)).toBeNull()
     })
 
-    it.each(['ContactPoint', 'Person', 'PostalAddress'])('drops all %s properties other than @id', (type) => {
+    it.each(['ContactPoint', 'Person', 'PostalAddress'])('drops PII-bearing %s properties', (type) => {
         expect(
             sanitizeJsonLd(
                 JSON.stringify({
@@ -350,8 +375,8 @@ describe('JSON-LD replay capture', () => {
     })
 
     it('ignores inherited JSON-LD properties', () => {
-        const properties = ['@context', '@type', '@id', 'name']
-        const values = ['https://schema.org', 'Product', 'private-id', 'private-name']
+        const properties = ['@context', '@type', '@id', 'name', 'ratingValue']
+        const values = ['https://schema.org', 'Product', 'private-id', 'private-name', 5]
         const descriptors = properties.map((property) => Object.getOwnPropertyDescriptor(Object.prototype, property))
         let inheritedContext: ReturnType<typeof sanitizeJsonLd>
         let inheritedType: ReturnType<typeof sanitizeJsonLd>
@@ -610,6 +635,24 @@ describe('JSON-LD replay capture', () => {
         capture.scan()
 
         expect(emit).toHaveBeenCalledTimes(2)
+        capture.stop()
+    })
+
+    it('retries an event that a forced scan cannot emit', () => {
+        let acceptsEvents = true
+        const emit = jest.fn(() => acceptsEvents)
+        document.body.appendChild(
+            jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' })
+        )
+        const capture = startJsonLdCapture(document, MutationObserver, { emit })
+
+        capture.scan()
+        acceptsEvents = false
+        capture.scan(true)
+        acceptsEvents = true
+        capture.scan()
+
+        expect(emit).toHaveBeenCalledTimes(3)
         capture.stop()
     })
 })

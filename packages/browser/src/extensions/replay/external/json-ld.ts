@@ -9,6 +9,10 @@ const MAX_JSON_LD_LENGTH = 100_000
 const MAX_JSON_LD_OUTPUT_LENGTH = 20_000
 const SCHEMA_CONTEXT = 'https://schema.org'
 const ANY_ENTITY_TYPES: readonly string[] = []
+const TYPE_INDEPENDENT_LEAF_PROPERTIES =
+    'actionStatus availability bestRating contentRating encodingFormat eventAttendanceMode eventStatus highPrice inLanguage isAccessibleForFree isFamilyFriendly itemCondition itemListOrder lowPrice maximumAttendeeCapacity nonprofitStatus numberOfItems offerCount position price priceCurrency priceValidUntil publicAccess ratingCount ratingValue reviewCount smokingAllowed worstRating'.split(
+        ' '
+    )
 const ACTION_TYPES = 'Action BorrowAction ReadAction SearchAction SeekToAction SolveMathAction WatchAction'.split(' ')
 const ORGANIZATION_TYPES =
     'AutoDealer Bakery BarOrPub CafeOrCoffeeShop CollegeOrUniversity Corporation DaySpa Dentist EducationalOrganization Electrician FoodEstablishment GovernmentOrganization HealthClub Hotel LegalService Library LibrarySystem LocalBusiness Locksmith LodgingBusiness MedicalBusiness NGO OnlineStore Organization PerformingGroup Pharmacy Physician Plumber RealEstateAgent Restaurant School SportsOrganization Store'.split(
@@ -17,23 +21,8 @@ const ORGANIZATION_TYPES =
 const PLACE_TYPES = 'Accommodation AdministrativeArea Country Place State'.split(' ')
 
 const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
-    Action: {
-        actionStatus: true,
-    },
     AggregateOffer: {
-        lowPrice: true,
-        highPrice: true,
-        priceCurrency: true,
-        offerCount: true,
-        availability: true,
         offers: ['Offer'],
-    },
-    AggregateRating: {
-        ratingValue: true,
-        ratingCount: true,
-        reviewCount: true,
-        bestRating: true,
-        worstRating: true,
     },
     Brand: {
         name: true,
@@ -43,15 +32,10 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
     },
     CreativeWork: {
         genre: true,
-        inLanguage: true,
-        encodingFormat: true,
         dateCreated: true,
         dateModified: true,
         datePublished: true,
         expires: true,
-        isAccessibleForFree: true,
-        isFamilyFriendly: true,
-        contentRating: true,
         learningResourceType: true,
         educationalLevel: true,
         educationalUse: true,
@@ -64,28 +48,16 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
         startDate: true,
         endDate: true,
         previousStartDate: true,
-        eventStatus: true,
-        eventAttendanceMode: true,
-        maximumAttendeeCapacity: true,
-        isAccessibleForFree: true,
         aggregateRating: ['AggregateRating'],
         offers: ['AggregateOffer', 'Offer'],
     },
     ItemList: {
-        itemListOrder: true,
-        numberOfItems: true,
         itemListElement: ['ListItem'],
     },
     ListItem: {
-        position: true,
         item: ANY_ENTITY_TYPES,
     },
     Offer: {
-        price: true,
-        priceCurrency: true,
-        priceValidUntil: true,
-        availability: true,
-        itemCondition: true,
         seller: ORGANIZATION_TYPES,
     },
     Organization: {
@@ -93,16 +65,11 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
         legalName: true,
         foundingDate: true,
         dissolutionDate: true,
-        nonprofitStatus: true,
         aggregateRating: ['AggregateRating'],
         brand: ['Brand'],
     },
     Person: {},
     Place: {
-        publicAccess: true,
-        smokingAllowed: true,
-        maximumAttendeeCapacity: true,
-        isAccessibleForFree: true,
         aggregateRating: ['AggregateRating'],
     },
     Product: {
@@ -147,7 +114,7 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
 
 const EMPTY_ENTITY_RULES: JsonLdEntityRules = {}
 const INHERITED_RULE_GROUPS: readonly JsonLdRuleGroup[] = [
-    [ACTION_TYPES, ENTITY_RULES.Action],
+    [ACTION_TYPES, EMPTY_ENTITY_RULES],
     [
         '3DModel AboutPage Answer Article AudioObject Blog BlogPosting Book Clip CollectionPage Comment ContactPage Course CreativeWorkSeason CreativeWorkSeries DataCatalog DataDownload DataFeed Dataset DiscussionForumPosting Episode FAQPage Game HowTo HowToDirection HowToSection HowToStep HowToTip ImageObject LearningResource MediaObject Message MobileApplication Movie MusicPlaylist MusicRecording NewsArticle Photograph PodcastEpisode PodcastSeries ProfilePage QAPage Question Quiz Recipe Review ScholarlyArticle SearchResultsPage SiteNavigationElement SocialMediaPosting SoftwareApplication TVEpisode TVSeries TechArticle VacationRental VideoGame VideoObject WebApplication WebPage WebPageElement WebSite'.split(
             ' '
@@ -161,7 +128,7 @@ const INHERITED_RULE_GROUPS: readonly JsonLdRuleGroup[] = [
     [ORGANIZATION_TYPES, ENTITY_RULES.Organization],
     [PLACE_TYPES, ENTITY_RULES.Place],
     ['Car IndividualProduct ProductGroup ProductModel'.split(' '), ENTITY_RULES.Product],
-    ['EmployerAggregateRating Rating'.split(' '), ENTITY_RULES.AggregateRating],
+    ['AggregateRating EmployerAggregateRating Rating'.split(' '), EMPTY_ENTITY_RULES],
 ]
 const TYPES_WITHOUT_PROPERTIES =
     'AlignmentObject BedDetails Certification ContactPoint CreditCard DefinedRegion EducationalOccupationalCredential EntryPoint GeoCoordinates GeoShape InteractionCounter JobPosting LocationFeatureSpecification MathSolver MemberProgram MemberProgramTier MerchantReturnPolicy MerchantReturnPolicySeasonalOverride MonetaryAmount NutritionInformation OccupationalExperienceRequirements OfferShippingDetails OpeningHoursSpecification PeopleAudience PostalAddress PriceSpecification PropertyValue QuantitativeValue ServicePeriod ShippingConditions ShippingDeliveryTime ShippingRateSettings ShippingService SpeakableSpecification Thing UnitPriceSpecification'.split(
@@ -223,6 +190,13 @@ function sanitizeEntity(value: unknown, allowedTypes?: readonly string[]): Recor
     const id = sanitizeScalar(getOwnProperty(value, '@id'))
     if (!isUndefined(id)) {
         result['@id'] = id
+    }
+
+    for (const property of TYPE_INDEPENDENT_LEAF_PROPERTIES) {
+        const scalar = sanitizeScalar(getOwnProperty(value, property))
+        if (!isUndefined(scalar)) {
+            result[property] = scalar
+        }
     }
 
     for (const type of types) {
@@ -364,11 +338,12 @@ export function startJsonLdCapture(
     }
 ): { scan: (force?: boolean) => void; stop: () => void } {
     const lastJsonByScript = new WeakMap<HTMLScriptElement, string>()
+    const getCaptureState = options.getCaptureState || (() => true)
     let remainingLength = MAX_JSON_LD_LENGTH
 
-    const captureScript = (script: HTMLScriptElement, force = false): void => {
+    const captureScript = (script: HTMLScriptElement): void => {
         try {
-            const captureState = options.getCaptureState ? options.getCaptureState() : true
+            const captureState = getCaptureState()
             if (
                 !remainingLength ||
                 captureState === false ||
@@ -388,7 +363,7 @@ export function startJsonLdCapture(
                 lastJsonByScript.set(script, json)
                 return
             }
-            if (force || lastJsonByScript.get(script) !== json) {
+            if (lastJsonByScript.get(script) !== json) {
                 if (json.length > remainingLength) {
                     remainingLength = 0
                     return
@@ -406,33 +381,30 @@ export function startJsonLdCapture(
     try {
         const observer = new MutationObserverClass((mutations) => {
             try {
-                if (!remainingLength || options.getCaptureState?.() === false) {
+                if (!remainingLength || getCaptureState() === false) {
                     return
                 }
-                const scripts = new Set<HTMLScriptElement>()
-                const addScripts = (node: Node): void => {
+                const captureScripts = (node: Node): void => {
                     for (const script of getJsonLdScripts(node)) {
-                        scripts.add(script)
+                        captureScript(script)
                     }
                 }
 
                 for (const mutation of mutations) {
                     if (mutation.type === 'childList') {
                         if (isJsonLdScript(mutation.target)) {
-                            scripts.add(mutation.target)
+                            captureScript(mutation.target)
                         }
-                        mutation.addedNodes.forEach(addScripts)
+                        mutation.addedNodes.forEach(captureScripts)
                     } else if (mutation.type === 'characterData') {
                         const parent = mutation.target.parentNode
                         if (parent && isJsonLdScript(parent)) {
-                            scripts.add(parent)
+                            captureScript(parent)
                         }
                     } else if (mutation.type === 'attributes' && isJsonLdScript(mutation.target)) {
-                        scripts.add(mutation.target)
+                        captureScript(mutation.target)
                     }
                 }
-
-                scripts.forEach((script) => captureScript(script))
             } catch {
                 return
             }
@@ -446,10 +418,15 @@ export function startJsonLdCapture(
             subtree: true,
         })
         const scan = (force = false): void => {
-            if (!remainingLength || options.getCaptureState?.() === false) {
+            if (!remainingLength || getCaptureState() === false) {
                 return
             }
-            getJsonLdScripts(doc.documentElement).forEach((script) => captureScript(script, force))
+            getJsonLdScripts(doc.documentElement).forEach((script) => {
+                if (force) {
+                    lastJsonByScript.delete(script)
+                }
+                captureScript(script)
+            })
         }
 
         return { scan, stop: () => observer.disconnect() }
