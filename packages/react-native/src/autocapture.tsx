@@ -62,6 +62,8 @@ export const defaultPostHogLabelProp = 'ph-label'
 const captureAttributePrefix = 'data-ph-capture-attribute-'
 
 // react-native-web internals; skipped only where RNW puts them, so a same-named app component is kept.
+// Verified against RNW 0.20.0 and 0.21.2: createElement wraps in LocaleProvider only when
+// `domProps.dir` is set, so a nested element inside a text ancestor never gets one. Recheck on bump.
 const frameworkInternalLabels = ['LocaleProvider']
 
 const reactFiberKeyPattern = /^__react(Fiber|InternalInstance)\$/

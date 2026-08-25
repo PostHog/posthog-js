@@ -3046,7 +3046,7 @@
       "name": "PostHogAutocaptureOptions",
       "properties": [
         {
-          "description": "Enable autocapture of touch events.\n\nOn React Native Web this also captures `click` events from mouse and trackpad input,\nemitted with `$event_type: 'click'`, since browsers fire `touchend` only for touch input.",
+          "description": "Enable autocapture of touch events.\n\nOn React Native Web this also captures `click` events — mouse, trackpad, keyboard\nactivation and programmatic clicks — emitted with `$event_type: 'click'`, since\nbrowsers fire `touchend` only for touch input.",
           "type": "boolean",
           "name": "captureTouches"
         },
