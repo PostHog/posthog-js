@@ -1,5 +1,19 @@
 # @posthog/browser-common
 
+## 0.6.0
+
+### Minor Changes
+
+- [#4592](https://github.com/PostHog/posthog-js/pull/4592) [`ca540f9`](https://github.com/PostHog/posthog-js/commit/ca540f94f2c301f4ea8f5273a250ac2516292613) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add typed stable-name lookup for installed browser extensions and use it when independently loaded survey code resolves feature flags.
+  (2026-08-25)
+
+### Patch Changes
+
+- [#4533](https://github.com/PostHog/posthog-js/pull/4533) [`53fcb2d`](https://github.com/PostHog/posthog-js/commit/53fcb2d34eac1e83afbfa810ab7b9e9f691d6ce6) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Expose host capture permission to browser extensions.
+  (2026-08-25)
+- Updated dependencies [[`ed4dd97`](https://github.com/PostHog/posthog-js/commit/ed4dd97d461f9dd871507c8b929ab38cae376181)]:
+    - @posthog/types@1.406.1
+
 ## 0.5.2
 
 ### Patch Changes
