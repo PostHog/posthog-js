@@ -467,6 +467,30 @@ describe('logs-utils', () => {
       expect(record.observedTimeUnixNano).toBe(record.timeUnixNano)
     })
 
+    it('stamps both timestamps from the event time when the record is built late', () => {
+      const occurredAtMs = Date.now() - 5000
+      const record = buildOtlpLogRecord({ body: 'buffered' }, minimalSdkContext, undefined, occurredAtMs)
+
+      expect(record.timeUnixNano).toBe(String(occurredAtMs) + '000000')
+      // The logs spec requires the client to keep the two equal.
+      expect(record.observedTimeUnixNano).toBe(record.timeUnixNano)
+    })
+
+    it.each([undefined, NaN, 'nope' as unknown as number])(
+      'falls back to now when the event time is %p',
+      (occurredAtMs) => {
+        const before = Date.now()
+        const record = buildOtlpLogRecord({ body: 'x' }, minimalSdkContext, undefined, occurredAtMs)
+        // Divide and the 19-digit nanosecond value loses its last digits to float.
+        const stampedMs = Number(record.timeUnixNano.slice(0, -6))
+
+        expect(record.timeUnixNano).toMatch(/^\d+000000$/)
+        expect(stampedMs).toBeGreaterThanOrEqual(before)
+        expect(stampedMs).toBeLessThanOrEqual(Date.now())
+        expect(record.observedTimeUnixNano).toBe(record.timeUnixNano)
+      }
+    )
+
     it('maps severity levels correctly', () => {
       const record = buildOtlpLogRecord({ body: 'test', level: 'error' }, minimalSdkContext)
       expect(record.severityText).toBe('ERROR')

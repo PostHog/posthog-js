@@ -191,6 +191,29 @@ describe('PostHogLogs', () => {
       )
     })
 
+    it('stamps a record from `capturedAt` rather than live state', () => {
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      const occurredAtMs = Date.now() - 5000
+
+      logs.captureLog(
+        { body: 'buffered before identify' },
+        { context: { distinctId: 'anon-1', sessionId: 'session-1' }, occurredAtMs }
+      )
+
+      const [{ record }] = readQueue(mockInstance)
+      const attributes = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value.stringValue]))
+      expect(attributes.posthogDistinctId).toBe('anon-1')
+      expect(attributes.sessionId).toBe('session-1')
+      expect(record.timeUnixNano).toBe(String(occurredAtMs) + '000000')
+      expect(record.observedTimeUnixNano).toBe(record.timeUnixNano)
+    })
+
     it('maps severity levels correctly', () => {
       const logs = new PostHogLogs(
         mockInstance,

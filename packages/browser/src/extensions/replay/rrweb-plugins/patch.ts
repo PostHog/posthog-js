@@ -26,6 +26,15 @@ const noop = () => {
     //
 }
 
+// Both this module and rrweb's `patch` install a `{ next }` layer; only the marker
+// name differs.
+const spliceableLayer = (method: unknown): PatchLayer | undefined => {
+    if (!isFunction(method)) {
+        return undefined
+    }
+    return ((method as any).__posthog_layer__ ?? (method as any).__rrweb_layer__) as PatchLayer | undefined
+}
+
 export function patch(
     source: { [key: string]: any },
     name: string,
@@ -77,17 +86,22 @@ export function patch(
                 return
             }
 
-            // Otherwise newer wrappers sit on top of us. Find the posthog layer directly
-            // above us and re-point it past us, removing our wrapper from the call path
-            // without disturbing the newer wrappers.
+            // Otherwise newer wrappers sit on top of us. Find the layer directly above us
+            // and re-point it past us, removing our wrapper from the call path without
+            // disturbing the newer wrappers. rrweb's own `patch` builds the identical
+            // layer under a different marker and session replay's console plugin wraps
+            // the same console methods this module does, so walk both markers — a walk
+            // that recognised only its own would give up and leak the wrapper beneath.
+            // rrweb's copy walks `__rrweb_layer__` alone; this covers restores issued here.
             let current: any = source[name]
-            while (isFunction(current) && (current as any).__posthog_layer__) {
-                const currentLayer = (current as any).__posthog_layer__ as PatchLayer
+            let currentLayer = spliceableLayer(current)
+            while (currentLayer) {
                 if (currentLayer.next === wrapped) {
                     currentLayer.next = layer.next
                     return
                 }
                 current = currentLayer.next
+                currentLayer = spliceableLayer(current)
             }
 
             // If we get here we're buried under a non-posthog wrapper that closed over

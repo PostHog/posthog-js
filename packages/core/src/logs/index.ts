@@ -88,7 +88,15 @@ export class PostHogLogs {
     this._flushInBackground()
   }
 
-  captureLog(options: CaptureLogOptions): void {
+  /**
+   * Captures one log record: runs `beforeSend`, applies the rate cap, builds the
+   * OTLP record and enqueues it.
+   *
+   * @param capturedAt State snapshotted when the event occurred, for a caller that
+   * observes an event earlier than it can build the record. Defaults to the identity,
+   * session and flags as of now.
+   */
+  captureLog(options: CaptureLogOptions, capturedAt?: { context?: LogSdkContext; occurredAtMs?: number }): void {
     if (this._instance.isDisabled) {
       return
     }
@@ -119,7 +127,12 @@ export class PostHogLogs {
     // Build before deferring so attributes reflect state at capture time, not
     // at drain time (identity/session changes between capture and drain must
     // not corrupt recorded attributes).
-    const record = buildOtlpLogRecord(filtered, this._getContext(), this._logger)
+    const record = buildOtlpLogRecord(
+      filtered,
+      capturedAt?.context ?? this._getContext(),
+      this._logger,
+      capturedAt?.occurredAtMs
+    )
     const entry: BufferedLogEntry = { record }
 
     this._onReady(() => this._enqueue(entry))

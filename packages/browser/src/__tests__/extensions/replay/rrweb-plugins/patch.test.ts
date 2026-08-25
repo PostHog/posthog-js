@@ -1,4 +1,5 @@
 import { patch } from '../../../../extensions/replay/rrweb-plugins/patch'
+import { patch as rrwebPatch } from '@posthog/rrweb-utils'
 
 const fakeWindow = {
     fakeFetch: () => {},
@@ -11,6 +12,29 @@ describe('patch', () => {
 
     afterEach(() => {
         fakeWindow.fakeFetch = originalFakeFetch
+    })
+
+    // This module and rrweb's `patch` build the same layer under different markers,
+    // and both wrap the same globals (console, fetch), so a restore has to reach past
+    // the other library's wrapper.
+    it('splices itself out from under an rrweb wrapper', () => {
+        const calls: string[] = []
+        const base = () => calls.push('base')
+        const target: any = { fn: base }
+
+        const removeOurs = patch(target, 'fn', (next: any) => () => {
+            calls.push('ours')
+            return next()
+        })
+        rrwebPatch(target, 'fn', (next: any) => () => {
+            calls.push('rrweb')
+            return next()
+        })
+
+        removeOurs()
+        target.fn()
+
+        expect(calls).toEqual(['rrweb', 'base'])
     })
 
     it('marks a function as wrapped', () => {

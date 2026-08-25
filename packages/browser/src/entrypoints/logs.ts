@@ -1,11 +1,12 @@
 import { assignableWindow } from '../utils/globals'
+import { patch } from '../extensions/replay/rrweb-plugins/patch'
+import type { BufferedConsoleEntry } from '../logs-types'
 import { LogsExtension } from '../extension-tokens'
 import type { PostHog } from '../posthog-core'
 import type { CaptureLogOptions } from '../types'
 import type { Client } from '@posthog/browser-common'
 import { isArray, isBoolean, isFunction, isNull, isNumber, isObject } from '@posthog/core'
 import type { LogSeverityLevel } from '@posthog/types'
-import type { BufferedConsoleEntry } from '../types'
 
 const LOG_BODY_SIZE_LIMIT = 10000
 const LOG_ATTRIBUTES_LIMIT = 50
@@ -432,7 +433,7 @@ const initializeLogs = (host: PostHog | Client): (() => void) => {
 
     for (const level of Object.keys(LEVEL_MAP) as ConsoleLevel[]) {
         const logWrapper =
-            (originalConsoleLog: any) =>
+            (next: any) =>
             (...args: any[]) => {
                 // Tracks whether *this* invocation acquired the re-entrancy guard, so that a
                 // nested console call which skips capture doesn't release the guard early and
@@ -474,23 +475,26 @@ const initializeLogs = (host: PostHog | Client): (() => void) => {
                     if (acquiredGuard) {
                         isCapturingLog = false
                     }
-                    originalConsoleLog.apply(assignableWindow.console, args)
+                    next.apply(assignableWindow.console, args)
                 }
             }
 
+        // Install as a `patch` layer rather than a bare assignment: session replay's
+        // console plugin and the main bundle's pre-load recorder wrap these same
+        // methods, and a top-of-stack-only restore leaks whichever wrapper ends up
+        // underneath — and resurrects a lower one that has since been removed.
         const originalConsoleLog = assignableWindow.console[level]
-        const wrapped = logWrapper(originalConsoleLog)
-        // Expose the original console method the same way rrweb's console plugin does, so
-        // PostHog's internal logger (utils/logger.ts) writes to the real console instead of
-        // re-entering this wrapper when it emits debug lines from inside the capture path.
-        // Flatten an existing marker if another console plugin already wrapped this method.
-        ;(wrapped as any).__rrweb_original__ = originalConsoleMethod(originalConsoleLog)
-        assignableWindow.console[level] = wrapped
-        restoreConsoleMethods.push(() => {
-            if (assignableWindow.console[level] === wrapped) {
-                assignableWindow.console[level] = originalConsoleLog
-            }
-        })
+        restoreConsoleMethods.push(
+            patch(assignableWindow.console, level, (next: any) => {
+                const wrapped = logWrapper(next)
+                // Expose the original console method the same way rrweb's console plugin
+                // does, so PostHog's internal logger writes to the real console instead of
+                // re-entering this wrapper from inside the capture path. Flatten an
+                // existing marker if another console plugin already wrapped this method.
+                ;(wrapped as any).__rrweb_original__ = originalConsoleMethod(originalConsoleLog)
+                return wrapped
+            })
+        )
     }
 
     return () => {
@@ -499,9 +503,10 @@ const initializeLogs = (host: PostHog | Client): (() => void) => {
     }
 }
 
-// Console calls the core bundle recorded before this script loaded.
-const replayConsoleBuffer = (posthog: PostHog, entries: BufferedConsoleEntry[]) => {
-    if (!posthog.is_capturing()) {
+/** Replays console calls the main bundle recorded before this script loaded. */
+const replayConsoleBuffer = (host: PostHog | Client, entries: BufferedConsoleEntry[]) => {
+    const logs = getCapturingLogs(host)
+    if (!logs) {
         return
     }
     for (const entry of entries) {
@@ -511,19 +516,22 @@ const replayConsoleBuffer = (posthog: PostHog, entries: BufferedConsoleEntry[]) 
                 truncated,
                 attributes: flattenedAttributes,
             } = stringifyArgsSafely(entry.args, LOG_BODY_SIZE_LIMIT)
-            posthog.logs?._captureConsoleLog({
-                level: LEVEL_MAP[entry.level],
-                body,
-                attributes: {
-                    'log.source': `console.${entry.level}`,
-                    'log.buffered_at': entry.timestamp,
-                    host: assignableWindow.location.host,
-                    ...(truncated ? { body_truncated: 'true' } : {}),
-                    ...flattenedAttributes,
+            logs.captureBufferedConsoleLog?.(
+                {
+                    level: LEVEL_MAP[entry.level],
+                    body,
+                    attributes: {
+                        'log.source': `console.${entry.level}`,
+                        host: assignableWindow.location.host,
+                        ...(truncated ? { body_truncated: 'true' } : {}),
+                        ...flattenedAttributes,
+                    },
                 },
-            })
+                entry.context,
+                entry.occurredAtMs
+            )
         } catch {
-            // A single unserializable entry should not drop the rest of the buffer.
+            // One entry that cannot be captured must not drop the rest of the buffer.
         }
     }
 }
