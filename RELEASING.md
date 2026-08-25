@@ -35,7 +35,7 @@ A stable browser release uploads:
 - mutable major-version aliases under `/static/<major>/`; and
 - top-level compatibility aliases under `/static/`.
 
-Prerelease versions receive only immutable versioned assets. The workflow does not purge CDN caches, so mutable aliases can continue serving cached bytes until their normal TTL expires.
+Prerelease versions receive only immutable versioned assets. The workflow does not purge CDN caches. Mutable aliases use `Cache-Control: public, max-age=300`, so they can continue serving cached bytes for up to five minutes. Versioned assets use `Cache-Control: public, max-age=31536000, immutable`.
 
 PostHoggers can join [`#alerts-posthog-js`](https://posthog.slack.com/archives/C07HTMN9X47) for release workflow failure notifications.
 
@@ -43,7 +43,7 @@ PostHoggers can join [`#alerts-posthog-js`](https://posthog.slack.com/archives/C
 
 S3 recovery is an exceptional path for repairing a failed or incomplete browser release. If the failure was transient and the original run is still safe to resume, first retry its failed jobs. Use recovery when the original run cannot be completed safely, for example when one regional upload succeeded before the other failed or an existing release is missing immutable assets.
 
-Recovery always rebuilds and uploads the browser SDK and toolbar. It is not an npm-only, alias-only, artifact-promotion, rollback, or S3 deletion mechanism.
+Recovery always rebuilds and uploads the browser SDK and toolbar. It is not an npm-only, alias-only, artifact-promotion, rollback, or S3 deletion mechanism. If a bad version is already live, ship a corrected patch and deprecate the bad npm version if needed. Do not use recovery to point mutable aliases at an earlier release.
 
 ### Starting recovery
 
@@ -58,15 +58,15 @@ After validation, the workflow notifies `#approvals-client-libraries` with the t
 
 ### Recovery inputs
 
-| Input                   | Default | Behavior                                                                                                                                                                                                                                     |
-| ----------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `target_version`        | empty   | Required S3 destination version, for example `1.418.2`.                                                                                                                                                                                      |
-| `source_sha`            | empty   | Full `PostHog/posthog-js` commit to build. When empty, resolves the `posthog-js@<target_version>` tag. A version that never received a tag requires its full version-bump commit SHA. The commit must be current `main` or an ancestor.      |
-| `toolbar_sha`           | empty   | Full `PostHog/posthog` commit used to build the toolbar. When empty, uses current `master`. The commit must be current `master` or an ancestor. Prefer the toolbar commit recorded in the original failed run when reproducing that release. |
-| `region`                | `all`   | `all`, `us`, or `eu`. Updating latest aliases or publishing to npm requires `all`.                                                                                                                                                           |
-| `update_latest_aliases` | `false` | Also updates `/static/` and `/static/<major>/`. Leave disabled for an older release or immutable-only repair.                                                                                                                                |
-| `publish_to_npm`        | `false` | After both S3 regions succeed, publish and finalize an unpublished current `posthog-js` version. This requires latest aliases, both regions, `NPM Release` approval, and OIDC.                                                               |
-| `force_overwrite`       | `false` | Allows existing immutable `/static/<version>/` objects to be replaced. By default the workflow refuses existing immutable assets and protects writes against races. Overwriting does not purge CDN caches.                                   |
+| Input                   | Default | Behavior                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `target_version`        | empty   | Required S3 destination version, for example `1.418.2`.                                                                                                                                                                                                                                                                                                                     |
+| `source_sha`            | empty   | Full `PostHog/posthog-js` commit to build. When empty, resolves the `posthog-js@<target_version>` tag. A version that never received a tag requires its full version-bump commit SHA. The commit must be current `main` or an ancestor.                                                                                                                                     |
+| `toolbar_sha`           | empty   | Full `PostHog/posthog` commit used to build the toolbar. When empty, uses current `master`. The commit must be current `master` or an ancestor. Normal releases resolve `PostHog/posthog@master` at release time rather than pinning it to the SDK version. To reproduce a release, copy the toolbar commit from the original run's **Resolve toolbar source** job summary. |
+| `region`                | `all`   | `all`, `us`, or `eu`. Updating latest aliases or publishing to npm requires `all`.                                                                                                                                                                                                                                                                                          |
+| `update_latest_aliases` | `false` | Also updates `/static/` and `/static/<major>/`. Leave disabled for an older release or immutable-only repair.                                                                                                                                                                                                                                                               |
+| `publish_to_npm`        | `false` | After both S3 regions succeed, publish and finalize an unpublished current `posthog-js` version. This requires latest aliases, both regions, `NPM Release` approval, and OIDC.                                                                                                                                                                                              |
+| `force_overwrite`       | `false` | Allows existing immutable `/static/<version>/` objects to be replaced. By default the workflow refuses existing immutable assets and protects writes against races. Overwriting does not purge CDN caches.                                                                                                                                                                  |
 
 S3-only recovery permits the selected SDK package version to differ from `target_version` so an explicitly reviewed source can repair a destination path. The resolved source version appears in the approval summary and Slack message. Approve a mismatch only when it is intentional; otherwise the destination path would identify bytes from a different package version.
 
@@ -129,7 +129,7 @@ done
 
 Immutable responses have long-lived cache headers, and recovery does not purge copies already held by browsers or CDN edges. A successful cache-busted comparison does not invalidate those older cached responses.
 
-If latest aliases were updated, also verify `/static/array.js` and `/static/<major>/array.js` in both regions after allowing for their cache TTL.
+If latest aliases were updated, also verify `/static/array.js` and `/static/<major>/array.js` in both regions after allowing up to five minutes for their `max-age=300` cache lifetime.
 
 If npm finalization was requested, verify npm, the tag, and the GitHub release:
 
