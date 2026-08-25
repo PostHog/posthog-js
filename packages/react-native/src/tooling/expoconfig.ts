@@ -2,7 +2,7 @@
 // Copyright (c) 2017 Sentry
 // Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 
-const { withAppBuildGradle, withGradleProperties, withProjectBuildGradle, withXcodeProject } =
+const { withAppBuildGradle, withBaseMod, withGradleProperties, withProjectBuildGradle, withXcodeProject } =
   require('@expo/config-plugins')
 
 // com.posthog.android uploads R8 mapping files and injects a matching map-id so native
@@ -295,6 +295,30 @@ function decodePbxShellScript(stored: string): string {
   return stored.slice(1, -1).replace(/\\(.)/g, (_match, ch) => (ch === 'n' ? '\n' : ch === 't' ? '\t' : ch))
 }
 
+function isPluginGeneratedDsymUploadBuildPhase(phase: any): boolean {
+  if (typeof phase?.shellScript !== 'string') {
+    return false
+  }
+  return [false, true].some((source) =>
+    [false, true].some((skip) => decodePbxShellScript(phase.shellScript) === buildDsymUploadShellScript(source, skip))
+  )
+}
+
+export function moveDsymUploadBuildPhaseToEnd(xcodeProject: any): void {
+  const existing = xcodeProject.pbxItemByComment(POSTHOG_DSYM_BUILD_PHASE_NAME, 'PBXShellScriptBuildPhase')
+  if (!isPluginGeneratedDsymUploadBuildPhase(existing)) {
+    return
+  }
+
+  const buildPhases = xcodeProject.getFirstTarget?.().firstTarget?.buildPhases
+  if (Array.isArray(buildPhases)) {
+    const phaseIndex = buildPhases.findIndex((phase: any) => phase.comment === POSTHOG_DSYM_BUILD_PHASE_NAME)
+    if (phaseIndex !== -1 && phaseIndex !== buildPhases.length - 1) {
+      buildPhases.push(...buildPhases.splice(phaseIndex, 1))
+    }
+  }
+}
+
 // Keeps the upload phase last and declares the main DWARF as an input, matching the native iOS
 // setup guide. Both are required: the input makes Xcode wait for dSYM generation, while placing
 // the phase after extension embedding avoids dependency cycles in apps with app extensions.
@@ -302,34 +326,21 @@ function decodePbxShellScript(stored: string): string {
 export function addDsymUploadBuildPhase(xcodeProject: any, includeSource = false, skipOnConflict = false): void {
   const existing = xcodeProject.pbxItemByComment(POSTHOG_DSYM_BUILD_PHASE_NAME, 'PBXShellScriptBuildPhase')
   if (existing) {
-    const generatedVariants = [false, true].flatMap((source) =>
-      [false, true].map((skip) => buildDsymUploadShellScript(source, skip))
-    )
-    if (
-      typeof existing.shellScript === 'string' &&
-      generatedVariants.includes(decodePbxShellScript(existing.shellScript))
-    ) {
+    if (isPluginGeneratedDsymUploadBuildPhase(existing)) {
       existing.shellScript = encodePbxShellScript(buildDsymUploadShellScript(includeSource, skipOnConflict))
       existing.inputPaths = Array.from(
         new Set([...(Array.isArray(existing.inputPaths) ? existing.inputPaths : []), POSTHOG_DSYM_INPUT_PATH])
       )
-
-      const buildPhases = xcodeProject.getFirstTarget?.().firstTarget?.buildPhases
-      if (Array.isArray(buildPhases)) {
-        const phaseIndex = buildPhases.findIndex((phase: any) => phase.comment === POSTHOG_DSYM_BUILD_PHASE_NAME)
-        if (phaseIndex !== -1 && phaseIndex !== buildPhases.length - 1) {
-          buildPhases.push(...buildPhases.splice(phaseIndex, 1))
-        }
-      }
     }
-    return
+  } else {
+    xcodeProject.addBuildPhase([], 'PBXShellScriptBuildPhase', POSTHOG_DSYM_BUILD_PHASE_NAME, null, {
+      inputPaths: [POSTHOG_DSYM_INPUT_PATH],
+      shellPath: '/bin/sh',
+      shellScript: buildDsymUploadShellScript(includeSource, skipOnConflict),
+    })
   }
 
-  xcodeProject.addBuildPhase([], 'PBXShellScriptBuildPhase', POSTHOG_DSYM_BUILD_PHASE_NAME, null, {
-    inputPaths: [POSTHOG_DSYM_INPUT_PATH],
-    shellPath: '/bin/sh',
-    shellScript: buildDsymUploadShellScript(includeSource, skipOnConflict),
-  })
+  moveDsymUploadBuildPhaseToEnd(xcodeProject)
 }
 
 export function disableUserScriptSandboxing(xcodeProject: any): void {
@@ -513,8 +524,25 @@ export function resolveNativeSymbolUpload(prop: PostHogPluginProps['uploadNative
   return { enabled: false, includeSource: false }
 }
 
+// Expo's standard mods run their action before the previously registered action. This wrapper
+// deliberately runs its action after the rest of the Xcode mod chain, so later config plugins
+// cannot leave a newly created extension-embedding phase after the PostHog upload phase.
+const withFinalizedXcodeProject = (config: any, action: (config: any) => any) => {
+  return withBaseMod(config, {
+    platform: 'ios',
+    mod: 'xcodeproj',
+    async action(config: any) {
+      const { nextMod, ...modRequest } = config.modRequest
+      const results = await nextMod({ ...config, modRequest })
+      return action(results)
+    },
+  })
+}
+
 const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
-  return withXcodeProject(config, (config: any) => {
+  const nativeSymbols = resolveNativeSymbolUpload(props.uploadNativeSymbols)
+
+  config = withXcodeProject(config, (config: any) => {
     const xcodeProject = config.modResults
 
     const bundleReactNativePhase = xcodeProject.pbxItemByComment(
@@ -524,7 +552,6 @@ const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
 
     modifyExistingXcodeBuildScript(bundleReactNativePhase, props.skipOnConflict === true)
 
-    const nativeSymbols = resolveNativeSymbolUpload(props.uploadNativeSymbols)
     if (nativeSymbols.enabled) {
       addDsymUploadBuildPhase(xcodeProject, nativeSymbols.includeSource, props.skipOnConflict === true)
     }
@@ -544,6 +571,15 @@ const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
 
     return config
   })
+
+  if (nativeSymbols.enabled) {
+    config = withFinalizedXcodeProject(config, (config: any) => {
+      moveDsymUploadBuildPhaseToEnd(config.modResults)
+      return config
+    })
+  }
+
+  return config
 }
 
 const withPostHogPlugin = (config: any, rawProps: PostHogPluginProps = {}) => {
@@ -574,6 +610,7 @@ module.exports.addPostHogWithBundledScriptsToBundleShellScript = addPostHogWithB
 module.exports.disableUserScriptSandboxing = disableUserScriptSandboxing
 module.exports.buildDsymUploadShellScript = buildDsymUploadShellScript
 module.exports.addDsymUploadBuildPhase = addDsymUploadBuildPhase
+module.exports.moveDsymUploadBuildPhaseToEnd = moveDsymUploadBuildPhaseToEnd
 module.exports.resolveNativeSymbolUpload = resolveNativeSymbolUpload
 module.exports.buildAndroidSkipOnConflictGradleLine = buildAndroidSkipOnConflictGradleLine
 module.exports.addPostHogAndroidGradlePluginClasspath = addPostHogAndroidGradlePluginClasspath

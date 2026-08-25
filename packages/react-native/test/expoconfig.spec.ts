@@ -1,5 +1,7 @@
+import { withXcodeProject } from '@expo/config-plugins'
 import { spawnSync } from 'child_process'
 
+import * as postHogExpoPluginModule from '../src/tooling/expoconfig'
 import {
   addDsymUploadBuildPhase,
   addPostHogAndroidGradlePluginClasspath,
@@ -12,10 +14,13 @@ import {
   buildIosDotenvFileBuildSetting,
   disableUserScriptSandboxing,
   modifyExistingXcodeBuildScript,
+  moveDsymUploadBuildPhaseToEnd,
   resolveDotenvFileProp,
   resolveNativeSymbolUpload,
   updateDotenvFileGradleProperties,
 } from '../src/tooling/expoconfig'
+
+const postHogExpoPlugin = (postHogExpoPluginModule as any).default
 
 type MockBuildConfig = { buildSettings: Record<string, string> }
 
@@ -378,6 +383,77 @@ describe('addDsymUploadBuildPhase', () => {
       'Embed App Extensions',
       'Upload PostHog Debug Symbols',
     ])
+  })
+
+  it('moves a newly added phase again after a later plugin appends extension embedding', () => {
+    let existing: any
+    const buildPhases = [{ value: 'SOURCES', comment: 'Sources' }]
+    const xp = mockXcodeProjectForBuildPhase(undefined, buildPhases)
+    xp.pbxItemByComment.mockImplementation(() => existing)
+    xp.addBuildPhase.mockImplementation((_files, _isa, comment, _target, options) => {
+      existing = {
+        isa: 'PBXShellScriptBuildPhase',
+        shellScript: encodePbx(options.shellScript),
+      }
+      buildPhases.push({ value: 'POSTHOG', comment })
+    })
+
+    addDsymUploadBuildPhase(xp)
+    buildPhases.push({ value: 'EXTENSION', comment: 'Embed App Extensions' })
+    moveDsymUploadBuildPhaseToEnd(xp)
+
+    expect(buildPhases.map((phase) => phase.comment)).toEqual([
+      'Sources',
+      'Embed App Extensions',
+      'Upload PostHog Debug Symbols',
+    ])
+  })
+
+  it('finalizes phase ordering after all Expo Xcode project mods', async () => {
+    jest.useRealTimers()
+    let uploadPhase: any
+    const bundlePhase = {
+      shellScript: JSON.stringify('../node_modules/react-native/scripts/react-native-xcode.sh'),
+    }
+    const buildPhases: any[] = [{ value: 'SOURCES', comment: 'Sources' }]
+    const xcodeProject = {
+      pbxItemByComment: jest.fn((comment: string) => {
+        if (comment === 'Bundle React Native code and images') {
+          return bundlePhase
+        }
+        if (comment === 'Upload PostHog Debug Symbols') {
+          return uploadPhase
+        }
+      }),
+      addBuildPhase: jest.fn((_files, _isa, comment, _target, options) => {
+        uploadPhase = {
+          isa: 'PBXShellScriptBuildPhase',
+          shellScript: encodePbx(options.shellScript),
+        }
+        buildPhases.push({ value: 'POSTHOG', comment })
+      }),
+      getFirstTarget: jest.fn(() => ({ firstTarget: { buildPhases } })),
+      pbxXCBuildConfigurationSection: jest.fn(() => ({})),
+    }
+
+    let config: any = { name: 'Test', slug: 'test' }
+    config = withXcodeProject(config, (config: any) => {
+      buildPhases.push({ value: 'EXTENSION', comment: 'Embed App Extensions' })
+      return config
+    })
+    config = postHogExpoPlugin(config, {
+      disableSandboxing: false,
+      uploadNativeSymbols: true,
+    })
+
+    await config.mods.ios.xcodeproj({ ...config, modRequest: {}, modResults: xcodeProject })
+
+    expect(buildPhases.map((phase) => phase.comment)).toEqual([
+      'Sources',
+      'Embed App Extensions',
+      'Upload PostHog Debug Symbols',
+    ])
+    jest.useFakeTimers()
   })
 
   it('refreshing with unchanged options preserves the stored pbxproj representation', () => {
