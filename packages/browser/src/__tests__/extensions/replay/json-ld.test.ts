@@ -4,6 +4,10 @@ const GOOGLE_SEARCH_TYPES =
     '3DModel Accommodation Action AdministrativeArea AggregateOffer AggregateRating AlignmentObject Answer Article BedDetails Blog BlogPosting Book BorrowAction Brand BreadcrumbList BroadcastEvent Car Certification Clip Comment ContactPoint Country Course CreativeWork CreativeWorkSeason CreativeWorkSeries CreditCard DataCatalog DataDownload DataFeed Dataset DaySpa DefinedRegion DiscussionForumPosting EducationalOccupationalCredential Electrician EmployerAggregateRating EntryPoint Episode Event Game GeoCoordinates GeoShape HealthClub Hotel HowTo HowToDirection HowToSection HowToStep HowToTip ImageObject InteractionCounter ItemList JobPosting LearningResource Library LibrarySystem ListItem LocalBusiness LocationFeatureSpecification Locksmith LodgingBusiness MathSolver MediaObject MemberProgram MemberProgramTier MerchantReturnPolicy MerchantReturnPolicySeasonalOverride Message MobileApplication MonetaryAmount Movie MusicPlaylist MusicRecording NewsArticle NutritionInformation OccupationalExperienceRequirements Offer OfferShippingDetails OnlineStore OpeningHoursSpecification Organization PeopleAudience PerformingGroup Person Pharmacy Place Plumber PostalAddress PriceSpecification Product ProductGroup ProfilePage PropertyValue QAPage QuantitativeValue Question Quiz Rating ReadAction Recipe Restaurant Review SeekToAction ServicePeriod ShippingConditions ShippingDeliveryTime ShippingRateSettings ShippingService SocialMediaPosting SoftwareApplication SolveMathAction SpeakableSpecification State Store Thing UnitPriceSpecification VacationRental VideoGame VideoObject WatchAction WebApplication WebPage WebPageElement'.split(
         ' '
     )
+const COMMON_SCHEMA_TYPES =
+    'AboutPage AudioObject AutoDealer Bakery BarOrPub BusinessEvent CafeOrCoffeeShop CollegeOrUniversity CollectionPage ContactPage Corporation Dentist EducationEvent EducationalOrganization FAQPage Festival FoodEstablishment GovernmentOrganization IndividualProduct LegalService MedicalBusiness MusicEvent NGO OfferCatalog Photograph Physician PodcastEpisode PodcastSeries ProductModel RealEstateAgent ScholarlyArticle School SearchAction SearchResultsPage Service SiteNavigationElement SportsEvent SportsOrganization TVEpisode TVSeries TechArticle TheaterEvent WebSite'.split(
+        ' '
+    )
 
 function jsonLdScript(value: unknown): HTMLScriptElement {
     const script = document.createElement('script')
@@ -29,6 +33,163 @@ describe('JSON-LD replay capture', () => {
                 '@type': type,
             })
         }
+    })
+
+    it('accepts common Schema.org types outside the Google list', () => {
+        for (const type of COMMON_SCHEMA_TYPES) {
+            expect(sanitizeJsonLd(JSON.stringify({ '@context': 'https://schema.org', '@type': type }))?.[0]).toEqual({
+                '@context': 'https://schema.org',
+                '@type': type,
+            })
+        }
+    })
+
+    it('sanitizes root graphs and drops unsupported graph entities', () => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@graph': [
+                        {
+                            '@type': 'WebSite',
+                            datePublished: '2026-08-25',
+                            email: 'private@example.com',
+                            potentialAction: {
+                                '@type': 'SearchAction',
+                                actionStatus: 'https://schema.org/PotentialActionStatus',
+                                target: 'https://example.com/search?q={private}',
+                            },
+                        },
+                        {
+                            '@type': 'FAQPage',
+                            inLanguage: 'en',
+                            text: 'Private question and answer',
+                        },
+                        {
+                            '@type': 'Person',
+                            '@id': 'person-id',
+                            name: 'Private name',
+                        },
+                        {
+                            '@type': 'PrivateType',
+                            email: 'private@example.com',
+                        },
+                        'private@example.com',
+                    ],
+                })
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@graph': [
+                {
+                    '@type': 'WebSite',
+                    datePublished: '2026-08-25',
+                    potentialAction: {
+                        '@type': 'SearchAction',
+                        actionStatus: 'https://schema.org/PotentialActionStatus',
+                    },
+                },
+                {
+                    '@type': 'FAQPage',
+                    inLanguage: 'en',
+                },
+                {
+                    '@type': 'Person',
+                    '@id': 'person-id',
+                },
+            ],
+        })
+    })
+
+    it.each(['BreadcrumbList', 'ItemList'])('sanitizes nested items in %s', (type) => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': type,
+                    itemListElement: [
+                        {
+                            '@type': 'ListItem',
+                            position: 1,
+                            name: 'Private label',
+                            item: {
+                                '@type': 'Product',
+                                name: 'Camera',
+                                email: 'private@example.com',
+                            },
+                        },
+                        {
+                            '@type': 'Person',
+                            '@id': 'private-person',
+                        },
+                    ],
+                })
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@type': type,
+            itemListElement: [
+                {
+                    '@type': 'ListItem',
+                    position: 1,
+                    item: {
+                        '@type': 'Product',
+                        name: 'Camera',
+                    },
+                },
+            ],
+        })
+    })
+
+    it('sanitizes offer catalogs and services', () => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify([
+                    {
+                        '@context': 'https://schema.org',
+                        '@type': 'OfferCatalog',
+                        name: 'Services',
+                        itemListElement: {
+                            '@type': 'Offer',
+                            price: 100,
+                            email: 'private@example.com',
+                        },
+                    },
+                    {
+                        '@context': 'https://schema.org',
+                        '@type': 'Service',
+                        name: 'Installation',
+                        serviceType: 'Installation',
+                        email: 'private@example.com',
+                        provider: {
+                            '@type': 'EducationalOrganization',
+                            name: 'Acme',
+                            telephone: '+44 0000 000000',
+                        },
+                    },
+                ])
+            )?.[0]
+        ).toEqual([
+            {
+                '@context': 'https://schema.org',
+                '@type': 'OfferCatalog',
+                name: 'Services',
+                itemListElement: {
+                    '@type': 'Offer',
+                    price: 100,
+                },
+            },
+            {
+                '@context': 'https://schema.org',
+                '@type': 'Service',
+                name: 'Installation',
+                serviceType: 'Installation',
+                provider: {
+                    '@type': 'EducationalOrganization',
+                    name: 'Acme',
+                },
+            },
+        ])
     })
 
     it('sanitizes type arrays and full Schema.org type URLs', () => {
@@ -156,6 +317,7 @@ describe('JSON-LD replay capture', () => {
         JSON.stringify({ '@context': 'https://example.com', '@type': 'Product' }),
         JSON.stringify({ '@context': 'https://schema.org', '@type': 'PrivateType' }),
         JSON.stringify({ '@context': 'https://schema.org', '@type': ['PrivateType', 'OtherPrivateType'] }),
+        JSON.stringify({ '@context': 'https://schema.org', '@graph': [{ '@type': 'PrivateType' }] }),
         JSON.stringify({ '@context': 'https://schema.org', '@type': 'constructor', '@id': 'private@example.com' }),
         JSON.stringify({ '@context': 'https://schema.org', '@type': 'toString', '@id': 'private@example.com' }),
         JSON.stringify({ '@context': 'https://schema.org', '@type': '__proto__', '@id': 'private@example.com' }),

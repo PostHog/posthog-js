@@ -8,6 +8,13 @@ type JsonLdRuleGroup = readonly [readonly string[], JsonLdEntityRules]
 const MAX_JSON_LD_LENGTH = 100_000
 const MAX_JSON_LD_OUTPUT_LENGTH = 20_000
 const SCHEMA_CONTEXT = 'https://schema.org'
+const ANY_ENTITY_TYPES: readonly string[] = []
+const ACTION_TYPES = 'Action BorrowAction ReadAction SearchAction SeekToAction SolveMathAction WatchAction'.split(' ')
+const ORGANIZATION_TYPES =
+    'AutoDealer Bakery BarOrPub CafeOrCoffeeShop CollegeOrUniversity Corporation DaySpa Dentist EducationalOrganization Electrician FoodEstablishment GovernmentOrganization HealthClub Hotel LegalService Library LibrarySystem LocalBusiness Locksmith LodgingBusiness MedicalBusiness NGO OnlineStore Organization PerformingGroup Pharmacy Physician Plumber RealEstateAgent Restaurant School SportsOrganization Store'.split(
+        ' '
+    )
+const PLACE_TYPES = 'Accommodation AdministrativeArea Country Place State'.split(' ')
 
 const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
     Action: {
@@ -31,6 +38,9 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
     Brand: {
         name: true,
     },
+    BreadcrumbList: {
+        itemListElement: ['ListItem'],
+    },
     CreativeWork: {
         genre: true,
         inLanguage: true,
@@ -47,7 +57,8 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
         educationalUse: true,
         interactivityType: true,
         aggregateRating: ['AggregateRating'],
-        publisher: ['Organization'],
+        potentialAction: ACTION_TYPES,
+        publisher: ORGANIZATION_TYPES,
     },
     Event: {
         startDate: true,
@@ -60,13 +71,22 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
         aggregateRating: ['AggregateRating'],
         offers: ['AggregateOffer', 'Offer'],
     },
+    ItemList: {
+        itemListOrder: true,
+        numberOfItems: true,
+        itemListElement: ['ListItem'],
+    },
+    ListItem: {
+        position: true,
+        item: ANY_ENTITY_TYPES,
+    },
     Offer: {
         price: true,
         priceCurrency: true,
         priceValidUntil: true,
         availability: true,
         itemCondition: true,
-        seller: ['Organization'],
+        seller: ORGANIZATION_TYPES,
     },
     Organization: {
         name: true,
@@ -106,34 +126,45 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
         productionDate: true,
         releaseDate: true,
         brand: ['Brand', 'Organization'],
-        manufacturer: ['Organization'],
+        manufacturer: ORGANIZATION_TYPES,
         offers: ['Offer', 'AggregateOffer'],
         aggregateRating: ['AggregateRating'],
+    },
+    Service: {
+        name: true,
+        serviceType: true,
+        category: true,
+        provider: ORGANIZATION_TYPES,
+        areaServed: PLACE_TYPES,
+        offers: ['AggregateOffer', 'Offer'],
+        aggregateRating: ['AggregateRating'],
+    },
+    OfferCatalog: {
+        name: true,
+        itemListElement: ANY_ENTITY_TYPES,
     },
 }
 
 const EMPTY_ENTITY_RULES: JsonLdEntityRules = {}
 const INHERITED_RULE_GROUPS: readonly JsonLdRuleGroup[] = [
-    ['BorrowAction ReadAction SeekToAction SolveMathAction WatchAction'.split(' '), ENTITY_RULES.Action],
+    [ACTION_TYPES, ENTITY_RULES.Action],
     [
-        '3DModel Answer Article Blog BlogPosting Book Clip Comment Course CreativeWorkSeason CreativeWorkSeries DataCatalog DataDownload DataFeed Dataset DiscussionForumPosting Episode Game HowTo HowToDirection HowToSection HowToStep HowToTip ImageObject LearningResource MediaObject Message MobileApplication Movie MusicPlaylist MusicRecording NewsArticle ProfilePage QAPage Question Quiz Recipe Review SocialMediaPosting SoftwareApplication VacationRental VideoGame VideoObject WebApplication WebPage WebPageElement'.split(
+        '3DModel AboutPage Answer Article AudioObject Blog BlogPosting Book Clip CollectionPage Comment ContactPage Course CreativeWorkSeason CreativeWorkSeries DataCatalog DataDownload DataFeed Dataset DiscussionForumPosting Episode FAQPage Game HowTo HowToDirection HowToSection HowToStep HowToTip ImageObject LearningResource MediaObject Message MobileApplication Movie MusicPlaylist MusicRecording NewsArticle Photograph PodcastEpisode PodcastSeries ProfilePage QAPage Question Quiz Recipe Review ScholarlyArticle SearchResultsPage SiteNavigationElement SocialMediaPosting SoftwareApplication TVEpisode TVSeries TechArticle VacationRental VideoGame VideoObject WebApplication WebPage WebPageElement WebSite'.split(
             ' '
         ),
         ENTITY_RULES.CreativeWork,
     ],
-    [['BroadcastEvent'], ENTITY_RULES.Event],
     [
-        'DaySpa Electrician HealthClub Hotel Library LibrarySystem LocalBusiness Locksmith LodgingBusiness OnlineStore PerformingGroup Pharmacy Plumber Restaurant Store'.split(
-            ' '
-        ),
-        ENTITY_RULES.Organization,
+        'BroadcastEvent BusinessEvent EducationEvent Festival MusicEvent SportsEvent TheaterEvent'.split(' '),
+        ENTITY_RULES.Event,
     ],
-    ['Accommodation AdministrativeArea Country State'.split(' '), ENTITY_RULES.Place],
-    ['Car ProductGroup'.split(' '), ENTITY_RULES.Product],
+    [ORGANIZATION_TYPES, ENTITY_RULES.Organization],
+    [PLACE_TYPES, ENTITY_RULES.Place],
+    ['Car IndividualProduct ProductGroup ProductModel'.split(' '), ENTITY_RULES.Product],
     ['EmployerAggregateRating Rating'.split(' '), ENTITY_RULES.AggregateRating],
 ]
 const TYPES_WITHOUT_PROPERTIES =
-    'AlignmentObject BedDetails BreadcrumbList Certification ContactPoint CreditCard DefinedRegion EducationalOccupationalCredential EntryPoint GeoCoordinates GeoShape InteractionCounter ItemList JobPosting ListItem LocationFeatureSpecification MathSolver MemberProgram MemberProgramTier MerchantReturnPolicy MerchantReturnPolicySeasonalOverride MonetaryAmount NutritionInformation OccupationalExperienceRequirements OfferShippingDetails OpeningHoursSpecification PeopleAudience PostalAddress PriceSpecification PropertyValue QuantitativeValue ServicePeriod ShippingConditions ShippingDeliveryTime ShippingRateSettings ShippingService SpeakableSpecification Thing UnitPriceSpecification'.split(
+    'AlignmentObject BedDetails Certification ContactPoint CreditCard DefinedRegion EducationalOccupationalCredential EntryPoint GeoCoordinates GeoShape InteractionCounter JobPosting LocationFeatureSpecification MathSolver MemberProgram MemberProgramTier MerchantReturnPolicy MerchantReturnPolicySeasonalOverride MonetaryAmount NutritionInformation OccupationalExperienceRequirements OfferShippingDetails OpeningHoursSpecification PeopleAudience PostalAddress PriceSpecification PropertyValue QuantitativeValue ServicePeriod ShippingConditions ShippingDeliveryTime ShippingRateSettings ShippingService SpeakableSpecification Thing UnitPriceSpecification'.split(
         ' '
     )
 
@@ -181,7 +212,9 @@ function sanitizeEntity(value: unknown, allowedTypes?: readonly string[]): Recor
         return null
     }
     const typeValue = getOwnProperty(value, '@type')
-    const types = getEntityTypes(typeValue).filter((type) => !allowedTypes || allowedTypes.includes(type))
+    const types = getEntityTypes(typeValue).filter(
+        (type) => !allowedTypes || !allowedTypes.length || allowedTypes.includes(type)
+    )
     if (!types.length) {
         return null
     }
@@ -229,7 +262,16 @@ function sanitizeRoot(value: unknown): Record<string, unknown> | null {
     }
 
     const entity = sanitizeEntity(value)
-    return entity ? { '@context': SCHEMA_CONTEXT, ...entity } : null
+    if (entity) {
+        return { '@context': SCHEMA_CONTEXT, ...entity }
+    }
+
+    const graph = getOwnProperty(value, '@graph')
+    if (!isArray(graph)) {
+        return null
+    }
+    const entities = graph.map((entity) => sanitizeEntity(entity)).filter(isObject)
+    return entities.length ? { '@context': SCHEMA_CONTEXT, '@graph': entities } : null
 }
 
 export function sanitizeJsonLd(text: string): [unknown, string] | null {

@@ -87,6 +87,20 @@ test.describe('Session recording - masking', () => {
                         email: 'PRIVATE_MANUFACTURER_EMAIL',
                     },
                 })
+                appendJsonLd({
+                    '@context': 'https://schema.org',
+                    '@graph': [
+                        {
+                            '@type': 'WebSite',
+                            inLanguage: 'ALLOWED_GRAPH_LANGUAGE',
+                            email: 'PRIVATE_GRAPH_EMAIL',
+                        },
+                        {
+                            '@type': 'PrivateType',
+                            name: 'PRIVATE_GRAPH_ENTITY',
+                        },
+                    ],
+                })
                 appendJsonLd(
                     {
                         '@context': 'https://schema.org',
@@ -156,6 +170,7 @@ test.describe('Session recording - masking', () => {
         expect(eventBytes).toContain('ALLOWED_DYNAMIC_PRODUCT')
         expect(eventBytes).toContain('ALLOWED_MANUFACTURER')
         expect(eventBytes).toContain('ALLOWED_MANUFACTURER_LEGAL_NAME')
+        expect(eventBytes).toContain('ALLOWED_GRAPH_LANGUAGE')
         expect(eventBytes).not.toContain('"tagName":"script"')
         for (const privateMarker of [
             'PRIVATE_ATTRIBUTE',
@@ -165,6 +180,8 @@ test.describe('Session recording - masking', () => {
             'PRIVATE_URL_TOKEN',
             'PRIVATE_NESTED_PERSON',
             'PRIVATE_MANUFACTURER_EMAIL',
+            'PRIVATE_GRAPH_EMAIL',
+            'PRIVATE_GRAPH_ENTITY',
             'PRIVATE_MASKED_PRODUCT',
             'PRIVATE_DYNAMIC_EMAIL',
             'PRIVATE_DYNAMIC_MASKED_PRODUCT',
