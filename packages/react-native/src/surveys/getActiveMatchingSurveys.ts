@@ -1,5 +1,9 @@
-import { canSurveyActivateRepeatedly, doesSurveyActivateByEvent, getSurveyIterationKey } from '@posthog/core/surveys'
-import { surveyValidationMap } from './surveys-utils'
+import {
+  canSurveyActivateRepeatedly,
+  doesSurveyActivateByEvent,
+  getSurveyIterationKey,
+  propertyComparisons,
+} from '@posthog/core/surveys'
 import { currentDeviceType } from '../native-deps'
 import { FeatureFlagValue, Survey, SurveyMatchType } from '@posthog/core'
 
@@ -14,7 +18,7 @@ function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
     return true
   }
 
-  return surveyValidationMap[defaultMatchType(survey.conditions.deviceTypesMatchType)](survey.conditions.deviceTypes, [
+  return propertyComparisons[defaultMatchType(survey.conditions.deviceTypesMatchType)](survey.conditions.deviceTypes, [
     currentDeviceType,
   ])
 }
