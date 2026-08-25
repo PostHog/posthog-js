@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4648](https://github.com/PostHog/posthog-js/issues/4648) | Confirmed React Native autocapture privacy bug; a focused, small fix and regression test are appropriate. | react-native, feature/autocapture, team/client-libraries | https://github.com/PostHog/posthog-js/pull/4649 | no | 2026-08-25T19:04:51.529Z |
 | PostHog/posthog-js | [issue 4646](https://github.com/PostHog/posthog-js/issues/4646) | Confirmed likely React Native Expo-plugin build-ordering bug affecting iOS native-symbol uploads with embedded extensions. | react-native, iOS, feature/error-tracking, team/client-libraries |  | no | 2026-08-25T18:15:29.495Z |
 | PostHog/posthog-js | [issue 4637](https://github.com/PostHog/posthog-js/issues/4637) | Valid packaging bug: the embedded `posthog-js/react` entry point imports React, but `posthog-js` does not declare React as an optional peer dependency. | web, team/client-libraries | https://github.com/PostHog/posthog-js/pull/4638 | no | 2026-08-25T10:30:34.814Z |
 | PostHog/posthog-js | [issue 3981](https://github.com/PostHog/posthog-js/issues/3981) | Valid surveys feature request; browser SDK support is absent and the complete feature requires coordinated product/backend work. | enhancement, feature/surveys, web |  | no | 2026-08-22T16:41:20.187Z |
