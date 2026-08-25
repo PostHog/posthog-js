@@ -3,6 +3,7 @@ import { isArray, isUndefined } from '@posthog/core'
 import type { JsonType, PostHogConfig } from './types'
 
 const logger = createLogger('[FeatureFlags]')
+const DEFAULT_REFRESH_INTERVAL_MS = 5 * 60 * 1000
 
 export interface FeatureFlagsConfig {
     readonly bootstrap: {
@@ -14,6 +15,7 @@ export interface FeatureFlagsConfig {
     readonly onlyEvaluateSurveyFeatureFlags: boolean
     readonly deduplicateCallsPerSession: boolean
     readonly cacheTtlMs?: number
+    readonly refreshIntervalMs?: number
     readonly requestTimeoutMs: number
     readonly compression: 'base64' | 'none'
     readonly evaluationContexts: readonly string[]
@@ -34,6 +36,7 @@ const snapshot = (config: PostHogConfig, remoteRequestsDisabled: boolean): Featu
     onlyEvaluateSurveyFeatureFlags: !!config.advanced_only_evaluate_survey_feature_flags,
     deduplicateCallsPerSession: !!config.advanced_feature_flags_dedup_per_session,
     cacheTtlMs: config.feature_flag_cache_ttl_ms,
+    refreshIntervalMs: config.remote_config_refresh_interval_ms ?? DEFAULT_REFRESH_INTERVAL_MS,
     requestTimeoutMs: config.feature_flag_request_timeout_ms,
     compression: config.disable_compression ? 'none' : 'base64',
     evaluationContexts: config.evaluation_contexts ?? config.evaluation_environments ?? [],

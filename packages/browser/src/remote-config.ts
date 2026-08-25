@@ -2,20 +2,12 @@ import { PostHog } from './posthog-core'
 import { RemoteConfig } from './types'
 
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
 import type { RequestResponse } from '@posthog/types'
 
 const logger = createLogger('[RemoteConfig]')
 
-// Default refresh interval for feature flags in long-running sessions.
-// 5 minutes balances freshness with server load - flags typically don't change
-// frequently, and most sessions are shorter than this anyway.
-const DEFAULT_REFRESH_INTERVAL = 5 * 60 * 1000
-
 export class RemoteConfigLoader {
-    private _refreshInterval: ReturnType<typeof setInterval> | undefined
-
     constructor(private readonly _instance: PostHog) {}
 
     get remoteConfig(): RemoteConfig | undefined {
@@ -46,7 +38,6 @@ export class RemoteConfigLoader {
             if (this.remoteConfig) {
                 logger.info('Using preloaded remote config', this.remoteConfig)
                 this._onRemoteConfig(this.remoteConfig)
-                this._startRefreshInterval()
                 return
             }
 
@@ -63,56 +54,16 @@ export class RemoteConfigLoader {
                     // Attempt 3 Load the config json instead of the script - we won't get site apps etc. but we will get the config
                     this._loadRemoteConfigJSON((response) => {
                         this._onRemoteConfig(response.json as RemoteConfig | undefined, response)
-                        this._startRefreshInterval()
                     })
                     return
                 }
 
                 this._onRemoteConfig(config)
-                this._startRefreshInterval()
             })
         } catch (error) {
             logger.error('Error loading remote config', error)
             this._onRemoteConfig()
         }
-    }
-
-    stop(): void {
-        if (this._refreshInterval) {
-            clearInterval(this._refreshInterval)
-            this._refreshInterval = undefined
-        }
-    }
-
-    /**
-     * Refresh feature flags for long-running sessions.
-     * Calls reloadFeatureFlags() directly rather than re-fetching config — the initial
-     * config load already determined whether flags are enabled, and reloadFeatureFlags()
-     * is a no-op when flags are disabled. This avoids an unnecessary network round-trip.
-     */
-    refresh(): void {
-        if (this._instance._shouldDisableFlags() || !document || document.visibilityState === 'hidden') {
-            return
-        }
-
-        this._instance.reloadFeatureFlags()
-    }
-
-    private _startRefreshInterval(): void {
-        if (this._refreshInterval) {
-            return
-        }
-
-        const intervalMs = this._instance.config.remote_config_refresh_interval_ms ?? DEFAULT_REFRESH_INTERVAL
-
-        // Allow users to disable periodic refresh by setting interval to 0
-        if (intervalMs === 0) {
-            return
-        }
-
-        this._refreshInterval = setInterval(() => {
-            this.refresh()
-        }, intervalMs)
     }
 
     private _onRemoteConfig(config?: RemoteConfig, response?: RequestResponse): void {
