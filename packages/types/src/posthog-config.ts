@@ -687,6 +687,13 @@ export interface SessionRecordingOptions {
     slimDOMOptions?: true | Partial<SlimDOMOptions> | 'all'
 
     /**
+     * Captures sanitized Schema.org JSON-LD as session replay custom events.
+     * JSON-LD inside a text mask or blocked element is never captured.
+     * @default false
+     */
+    captureJsonLd?: boolean
+
+    /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default false

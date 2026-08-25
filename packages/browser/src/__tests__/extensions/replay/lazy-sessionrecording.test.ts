@@ -3452,13 +3452,71 @@ describe('Lazy SessionRecording', () => {
                 maskInputFn: undefined,
                 maskAllElementAttributes: false,
                 maskAttributeFn: undefined,
-                slimDOMOptions: {},
+                slimDOMOptions: { script: true },
                 collectFonts: false,
                 plugins: [],
                 inlineStylesheet: true,
                 inlineStylesheetBudgetRules: 10_000,
                 recordCrossOriginIframes: false,
             })
+        })
+
+        it('always removes scripts when user slim DOM options override defaults', () => {
+            posthog.config.session_recording.slimDOMOptions = { script: false, comment: true }
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    slimDOMOptions: { script: true, comment: true },
+                })
+            )
+        })
+
+        it('emits sanitized JSON-LD when capture is enabled', () => {
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            script.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                '@id': 'https://example.com/products/123',
+                name: 'Camera',
+                email: 'private@example.com',
+            })
+            document.body.appendChild(script)
+            posthog.config.session_recording.captureJsonLd = true
+
+            try {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+                expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    '@id': 'https://example.com/products/123',
+                    name: 'Camera',
+                })
+            } finally {
+                script.remove()
+            }
+        })
+
+        it('does not emit JSON-LD by default', () => {
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            script.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'Camera',
+            })
+            document.body.appendChild(script)
+
+            try {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+                expect(_addCustomEvent.mock.calls.some(([tag]) => tag === '$json_ld')).toBe(false)
+            } finally {
+                script.remove()
+            }
         })
 
         it('contains and logs recorder-owned callback failures once without swallowing host failures', () => {

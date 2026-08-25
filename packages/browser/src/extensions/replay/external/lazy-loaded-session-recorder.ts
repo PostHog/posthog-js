@@ -90,6 +90,7 @@ import {
     decodeSamplingDecision,
 } from './recording-strategies'
 import { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS } from '@posthog/browser-common/utils/event-utils'
+import { JSON_LD_EVENT_TAG, startJsonLdCapture } from './json-ld'
 
 const BASE_ENDPOINT = '/s/'
 const DEFAULT_CANVAS_QUALITY = 0.4
@@ -492,6 +493,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _forceAllowLocalhostNetworkCapture = false
     private _stopRrweb: listenerHandler | undefined = undefined
+    private _stopJsonLdCapture: (() => void) | undefined
     private _lastActivityTimestamp: number = Date.now()
     private _isActivatingTrigger: boolean = false
     /**
@@ -1427,6 +1429,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Clear any queued rrweb events to prevent memory leaks from closures
         this._queuedRRWebEvents = []
 
+        this._stopJsonLdCapture?.()
+        this._stopJsonLdCapture = undefined
         this._stopRrweb?.()
         this._stopRrweb = undefined
     }
@@ -2529,7 +2533,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             maskInputFn: undefined,
             maskAllElementAttributes: false,
             maskAttributeFn: undefined,
-            slimDOMOptions: {},
+            slimDOMOptions: { script: true },
             collectFonts: false,
             inlineStylesheet: true,
             // inlining every CSSRule of every sheet is the dominant cost of a full
@@ -2570,6 +2574,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     // @ts-ignore
                     sessionRecordingOptions[key] = value
                 }
+            }
+        }
+
+        if (sessionRecordingOptions.slimDOMOptions !== true && sessionRecordingOptions.slimDOMOptions !== 'all') {
+            sessionRecordingOptions.slimDOMOptions = {
+                ...sessionRecordingOptions.slimDOMOptions,
+                script: true,
             }
         }
 
@@ -2688,6 +2699,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         this._rrwebError = false
+
+        if (
+            userSessionRecordingOptions?.captureJsonLd &&
+            document &&
+            window?.MutationObserver &&
+            !this._stopJsonLdCapture
+        ) {
+            this._stopJsonLdCapture = startJsonLdCapture(document, window.MutationObserver, {
+                blockClass: sessionRecordingOptions.blockClass,
+                blockSelector: sessionRecordingOptions.blockSelector,
+                maskTextClass: sessionRecordingOptions.maskTextClass,
+                maskTextSelector: sessionRecordingOptions.maskTextSelector,
+                emit: (jsonLd) => this._tryAddCustomEvent(JSON_LD_EVENT_TAG, jsonLd),
+            })
+        }
 
         // We reset the last activity timestamp, resetting the idle timer
         this._lastActivityTimestamp = Date.now()
