@@ -1171,6 +1171,62 @@ describe('surveys', () => {
             )
         })
 
+        const inProgress = (questionOrder?: string[]) =>
+            ({ surveySubmissionId: 'sub', responses: {}, lastQuestionIndex: 0, questionOrder }) as any
+
+        it('should restore the recorded question order for a survey already in progress', () => {
+            const order = surveyWithShufflingQuestions.questions.map((q) => q.id).reverse() as string[]
+
+            expect(getDisplayOrderQuestions(surveyWithShufflingQuestions, inProgress(order)).map((q) => q.id)).toEqual(
+                order
+            )
+        })
+
+        it('should use the configured order for state persisted without a question order', () => {
+            expect(getDisplayOrderQuestions(surveyWithShufflingQuestions, inProgress())).toEqual(
+                surveyWithShufflingQuestions.questions
+            )
+        })
+
+        it('should use the configured order when a recorded question is no longer in the survey', () => {
+            const ids = surveyWithShufflingQuestions.questions.map((q) => q.id) as string[]
+            const orderWithRemovedQuestion = [...ids.slice(0, -1), 'removed-question-id']
+
+            expect(
+                getDisplayOrderQuestions(surveyWithShufflingQuestions, inProgress(orderWithRemovedQuestion)).map(
+                    (q) => q.id
+                )
+            ).toEqual(ids)
+        })
+
+        it('should use the configured order when the recorded order covers only some of the questions', () => {
+            const ids = surveyWithShufflingQuestions.questions.map((q) => q.id) as string[]
+
+            expect(
+                getDisplayOrderQuestions(surveyWithShufflingQuestions, inProgress(ids.slice(0, -1))).map((q) => q.id)
+            ).toEqual(ids)
+        })
+
+        it('should not shuffle questions if any question has branching', () => {
+            const surveyWithBranching = {
+                ...surveyWithShufflingQuestions,
+                questions: surveyWithShufflingQuestions.questions.map((question, index) =>
+                    index === 1 ? { ...question, branching: { type: SurveyQuestionBranchingType.End } } : question
+                ),
+            } as unknown as Survey
+
+            expect(getDisplayOrderQuestions(surveyWithBranching)).toEqual(surveyWithBranching.questions)
+        })
+
+        it('should shuffle questions when branching is present but has no type', () => {
+            const surveyWithEmptyBranching = {
+                ...surveyWithShufflingQuestions,
+                questions: surveyWithShufflingQuestions.questions.map((question) => ({ ...question, branching: {} })),
+            } as unknown as Survey
+
+            expect(getDisplayOrderQuestions(surveyWithEmptyBranching)).not.toEqual(surveyWithEmptyBranching.questions)
+        })
+
         it('should be able to find the original question from its ID', () => {
             const shuffledQuestions = getDisplayOrderQuestions(surveyWithShufflingQuestions)
             for (let i = 0; i < shuffledQuestions.length; i++) {
@@ -1702,6 +1758,93 @@ describe('surveys', () => {
                 } as Partial<RemoteConfig> as RemoteConfig,
             })
             expect(surveys['_isSurveysEnabled']).toBe(undefined)
+        })
+    })
+
+    describe('prefill initial responses', () => {
+        const singleChoiceSurvey = (overrides: Partial<Survey>): Survey =>
+            ({
+                id: 'prefill-gate-survey',
+                name: 'Prefill gate survey',
+                type: SurveyType.Popover,
+                questions: [
+                    { type: SurveyQuestionType.SingleChoice, question: 'Q1', id: 'q1', choices: ['yes', 'no'] },
+                    { type: SurveyQuestionType.SingleChoice, question: 'Q2', id: 'q2', choices: ['yes', 'no'] },
+                ],
+                current_iteration: null,
+                current_iteration_start_date: null,
+                ...overrides,
+            }) as unknown as Survey
+
+        beforeEach(() => {
+            ;(instance.capture as jest.Mock).mockClear()
+        })
+
+        it('does not send a survey sent event for an incomplete prefill when partial responses are off', () => {
+            const surveyManager = (surveys as any)._surveyManager
+            const survey = singleChoiceSurvey({ enable_partial_responses: false })
+
+            const completed = surveyManager._handleInitialResponses(survey, { 0: 0 })
+
+            expect(completed).toBe(false)
+            expect(instance.capture).not.toHaveBeenCalledWith('survey sent', expect.anything())
+        })
+
+        it('sends a partial survey sent event when partial responses are on and the prefill auto-submits', () => {
+            const surveyManager = (surveys as any)._surveyManager
+            const survey = singleChoiceSurvey({
+                enable_partial_responses: true,
+                questions: [
+                    {
+                        type: SurveyQuestionType.SingleChoice,
+                        question: 'Q1',
+                        id: 'q1',
+                        choices: ['yes', 'no'],
+                        skipSubmitButton: true,
+                    },
+                    { type: SurveyQuestionType.SingleChoice, question: 'Q2', id: 'q2', choices: ['yes', 'no'] },
+                ],
+            } as Partial<Survey>)
+
+            expect(surveyManager._handleInitialResponses(survey, { 0: 0, 1: 1 })).toBe(false)
+
+            const [, properties] = (instance.capture as jest.Mock).mock.calls.find(([event]) => event === 'survey sent')
+            expect(properties).toEqual(
+                expect.objectContaining({ $survey_completed: false, $survey_response_q1: 'yes' })
+            )
+            expect(properties).not.toHaveProperty('$survey_response_q2')
+        })
+
+        it('does not send a partial event when the prefilled question does not auto-submit', () => {
+            const surveyManager = (surveys as any)._surveyManager
+            const survey = singleChoiceSurvey({ enable_partial_responses: true })
+
+            expect(surveyManager._handleInitialResponses(survey, { 0: 0 })).toBe(false)
+            expect(instance.capture).not.toHaveBeenCalledWith('survey sent', expect.anything())
+        })
+
+        it('sends a completed survey sent event when the prefill answers every question', () => {
+            const surveyManager = (surveys as any)._surveyManager
+            const survey = singleChoiceSurvey({
+                enable_partial_responses: false,
+                questions: [
+                    {
+                        type: SurveyQuestionType.SingleChoice,
+                        question: 'Q1',
+                        id: 'q1',
+                        choices: ['yes', 'no'],
+                        skipSubmitButton: true,
+                    },
+                ],
+            } as Partial<Survey>)
+
+            const completed = surveyManager._handleInitialResponses(survey, { 0: 0 })
+
+            expect(completed).toBe(true)
+            expect(instance.capture).toHaveBeenCalledWith(
+                'survey sent',
+                expect.objectContaining({ $survey_completed: true })
+            )
         })
     })
 })

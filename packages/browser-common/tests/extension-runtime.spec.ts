@@ -4,6 +4,7 @@ import type { Logger } from '@posthog/core'
 import type { Client } from '../src/client'
 import type { Extension } from '../src/extension'
 import { ExtensionRuntime } from '../src/extension-runtime'
+import type { ExtensionToken } from '../src/token'
 import { createTestClient } from './helpers/test-client'
 
 const logger: Logger = {
@@ -59,6 +60,37 @@ describe('ExtensionRuntime', () => {
 
         resolveSetup?.()
         await registration
+    })
+
+    it('resolves registered extensions by typed stable name during setup and removes them on disposal', async () => {
+        interface LogsExtension extends Extension {
+            captureLog(): void
+        }
+        const LogsExtension = 'logs' as ExtensionToken<LogsExtension>
+        const ConsumerLogsExtension = `${'logs'}` as ExtensionToken<LogsExtension>
+        const MissingExtension = 'missing' as ExtensionToken<LogsExtension>
+        const { runtime, add } = createRuntime()
+        const captureLog = jest.fn()
+        let resolvedDuringSetup: LogsExtension | undefined
+        const extension: LogsExtension = {
+            name: LogsExtension,
+            setup: () => {
+                resolvedDuringSetup = runtime.getExtension(ConsumerLogsExtension)
+                resolvedDuringSetup?.captureLog()
+            },
+            captureLog,
+        }
+
+        expect(runtime.getExtension(MissingExtension)).toBeUndefined()
+        await add(extension)
+
+        expect(resolvedDuringSetup).toBe(extension)
+        expect(captureLog).toHaveBeenCalledTimes(1)
+        expect(runtime.getExtension(LogsExtension)).toBe(extension)
+        expect(runtime.getExtension<LogsExtension>('logs')).toBe(extension)
+
+        runtime.dispose()
+        expect(runtime.getExtension(LogsExtension)).toBeUndefined()
     })
 
     it.each([

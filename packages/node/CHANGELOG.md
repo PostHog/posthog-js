@@ -1,5 +1,17 @@
 # posthog-node
 
+## 5.51.2
+
+### Patch Changes
+
+- [#4639](https://github.com/PostHog/posthog-js/pull/4639) [`1faeb74`](https://github.com/PostHog/posthog-js/commit/1faeb749974a0c49ad86a6cb68ac4cd5f6414084) Thanks [@marandaneto](https://github.com/marandaneto)! - Handle empty feature flag evaluation key scopes without running local or remote evaluation.
+  (2026-08-25)
+
+- [#4610](https://github.com/PostHog/posthog-js/pull/4610) [`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74) Thanks [@marandaneto](https://github.com/marandaneto)! - Share feature flag matching, hashing, variant, and payload evaluation helpers across the Node.js and Convex SDKs without changing their runtime-specific SemVer behavior.
+  (2026-08-25)
+- Updated dependencies [[`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+  - @posthog/core@1.48.11
+
 ## 5.51.1
 
 ### Patch Changes

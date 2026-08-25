@@ -124,6 +124,16 @@ if [ -z "$PH_CLI_PATH" ] || [ ! -x "$PH_CLI_PATH" ]; then
   exit 1
 fi
 
+INFO_PLIST_MIN_POSTHOG_CLI_VERSION="0.15.1"
+PH_CLI_VERSION=$("$PH_CLI_PATH" --version 2>/dev/null | grep -oE '[0-9]+(\.[0-9]+)+' | head -n1 || true)
+POSTHOG_CLI_SUPPORTS_INFO_PLIST=0
+if [ -n "$PH_CLI_VERSION" ]; then
+  LOWEST_POSTHOG_CLI_VERSION=$(printf '%s\n%s\n' "$INFO_PLIST_MIN_POSTHOG_CLI_VERSION" "$PH_CLI_VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)
+  if [ "$LOWEST_POSTHOG_CLI_VERSION" = "$INFO_PLIST_MIN_POSTHOG_CLI_VERSION" ]; then
+    POSTHOG_CLI_SUPPORTS_INFO_PLIST=1
+  fi
+fi
+
 # mimics how the file is defined in node_modules/react-native/scripts/react-native-xcode.sh (PACKAGER_SOURCEMAP_FILE)
 SOURCEMAP_PACKAGER_FILE="$CONFIGURATION_BUILD_DIR/$SOURCEMAP_NAME"
 
@@ -153,10 +163,11 @@ resolve_posthog_ios_release_info() {
   POSTHOG_BUILD_VERSION="${CURRENT_PROJECT_VERSION:-}"
   POSTHOG_PLIST_BUDDY="${POSTHOG_PLIST_BUDDY:-/usr/libexec/PlistBuddy}"
   POSTHOG_INFO_PLIST="${INFOPLIST_FILE:-}"
+  POSTHOG_USE_INFO_PLIST=0
 
   # Bare C preprocessor macros cannot be expanded safely here, and the product plist may belong to
   # a previous build. Preserve the existing Xcode-setting fallback for preprocessed plists.
-  if [ "${INFOPLIST_PREPROCESS:-}" = "YES" ] || [ -z "$POSTHOG_INFO_PLIST" ] || [ ! -x "$POSTHOG_PLIST_BUDDY" ]; then
+  if [ "${INFOPLIST_PREPROCESS:-}" = "YES" ] || [ -z "$POSTHOG_INFO_PLIST" ]; then
     return 0
   fi
   case "$POSTHOG_INFO_PLIST" in
@@ -164,6 +175,13 @@ resolve_posthog_ios_release_info() {
     *) POSTHOG_INFO_PLIST="${SRCROOT}/${POSTHOG_INFO_PLIST}" ;;
   esac
   if [ ! -f "$POSTHOG_INFO_PLIST" ]; then
+    return 0
+  fi
+  if [ "$POSTHOG_CLI_SUPPORTS_INFO_PLIST" = "1" ]; then
+    POSTHOG_USE_INFO_PLIST=1
+    return 0
+  fi
+  if [ ! -x "$POSTHOG_PLIST_BUDDY" ]; then
     return 0
   fi
 
@@ -185,14 +203,18 @@ resolve_posthog_ios_release_info() {
 resolve_posthog_ios_release_info
 
 CLI_RELEASE_ARGS=()
-if [ -n "${PRODUCT_BUNDLE_IDENTIFIER}" ]; then
-  CLI_RELEASE_ARGS+=(--release-name "$PRODUCT_BUNDLE_IDENTIFIER")
-fi
-if [ -n "${POSTHOG_RELEASE_VERSION}" ]; then
-  CLI_RELEASE_ARGS+=(--release-version "$POSTHOG_RELEASE_VERSION")
-fi
-if [ -n "${POSTHOG_BUILD_VERSION}" ]; then
-  CLI_RELEASE_ARGS+=(--build "$POSTHOG_BUILD_VERSION")
+if [ "$POSTHOG_USE_INFO_PLIST" = "1" ]; then
+  CLI_RELEASE_ARGS+=(--info-plist "$POSTHOG_INFO_PLIST")
+else
+  if [ -n "${PRODUCT_BUNDLE_IDENTIFIER}" ]; then
+    CLI_RELEASE_ARGS+=(--release-name "$PRODUCT_BUNDLE_IDENTIFIER")
+  fi
+  if [ -n "${POSTHOG_RELEASE_VERSION}" ]; then
+    CLI_RELEASE_ARGS+=(--release-version "$POSTHOG_RELEASE_VERSION")
+  fi
+  if [ -n "${POSTHOG_BUILD_VERSION}" ]; then
+    CLI_RELEASE_ARGS+=(--build "$POSTHOG_BUILD_VERSION")
+  fi
 fi
 
 # RN deletes the PACKAGER_SOURCEMAP_FILE file after execution but we need it

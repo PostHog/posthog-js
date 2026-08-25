@@ -30,6 +30,8 @@ import {
 } from '../utils/survey-utils'
 import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
 import { Properties } from '../types'
+import { FeatureFlagsExtension } from '../extension-tokens'
+import type { PostHogFeatureFlags } from '../posthog-featureflags'
 import { SURVEYS } from '../constants'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
@@ -52,6 +54,7 @@ import {
     doesSurveyMatchSelector,
     doesSurveyUrlMatch,
     getDisplayOrderQuestions,
+    getQuestionOrder,
     getInProgressSurveyState,
     getSurveyContainerClass,
     getSurveyResponseKey,
@@ -148,6 +151,11 @@ export class SurveyManager {
         this._posthog = posthog
         // This is used to track the survey that is currently in focus. We only show one survey at a time.
         this._surveyInFocus = null
+    }
+
+    private get _featureFlags(): PostHogFeatureFlags | undefined {
+        // A newly deployed surveys bundle can still be loaded by an older cached core.
+        return this._posthog.getExtension?.(FeatureFlagsExtension) ?? this._posthog.featureFlags
     }
 
     public handlePageUnload = (): void => {
@@ -544,13 +552,26 @@ export class SurveyManager {
             return false
         }
 
-        const { responses, submissionId, isSurveyCompleted, skippedResponses } = result
+        this._autoSubmitPrefilledResponses(survey, result, properties, surveyLanguage)
 
-        /**
-         * auto-submit some survey events on pageload only if:
-         * 1) survey is complete, OR
-         * 2) partial responses are enabled AND the skipped questions were set to auto-submit
-         */
+        // Mark this survey as having been prefilled
+        this._prefillHandledSurveys.add(survey.id)
+
+        return result.isSurveyCompleted
+    }
+
+    /**
+     * On load, capture a response for prefilled questions only when:
+     * 1) the survey is complete, OR
+     * 2) partial responses are enabled AND the skipped questions were set to auto-submit.
+     */
+    private _autoSubmitPrefilledResponses(
+        survey: Survey,
+        result: NonNullable<ReturnType<SurveyManager['_processPrefillData']>>,
+        properties?: Properties,
+        surveyLanguage?: string | null
+    ): void {
+        const { responses, submissionId, isSurveyCompleted, skippedResponses } = result
         const shouldAutoSubmitPrefilled = Object.keys(skippedResponses).length > 0 && survey.enable_partial_responses
         if (shouldAutoSubmitPrefilled || isSurveyCompleted) {
             sendSurveyEvent({
@@ -563,11 +584,6 @@ export class SurveyManager {
                 surveyLanguage,
             })
         }
-
-        // Mark this survey as having been prefilled
-        this._prefillHandledSurveys.add(survey.id)
-
-        return isSurveyCompleted
     }
 
     /**
@@ -594,20 +610,9 @@ export class SurveyManager {
             return false
         }
 
-        const { responses, submissionId, isSurveyCompleted } = result
+        this._autoSubmitPrefilledResponses(survey, result, properties, surveyLanguage)
 
-        // always capture immediately
-        sendSurveyEvent({
-            responses,
-            survey,
-            surveySubmissionId: submissionId,
-            posthog: this._posthog,
-            isSurveyCompleted,
-            properties,
-            surveyLanguage,
-        })
-
-        return isSurveyCompleted
+        return result.isSurveyCompleted
     }
 
     private _processPrefillData(
@@ -644,6 +649,7 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 responses: responses,
                 lastQuestionIndex: startQuestionIndex,
+                questionOrder: getQuestionOrder(survey.questions),
                 // Mark auto-advanced questions visited so a manual submit doesn't prune their answers.
                 visitedIndices: skippedIndices,
                 surveyLanguage,
@@ -662,12 +668,13 @@ export class SurveyManager {
         if (!flagKey) {
             return true
         }
-        const isFeatureEnabled = !!this._posthog.featureFlags?.isFeatureEnabled(flagKey, {
+        const featureFlags = this._featureFlags
+        const isFeatureEnabled = !!featureFlags?.isFeatureEnabled(flagKey, {
             send_event: !flagKey.startsWith(SURVEY_TARGETING_FLAG_PREFIX),
         })
         let flagVariantCheck = true
         if (flagVariant) {
-            const flagVariantValue = this._posthog.featureFlags?.getFeatureFlag(flagKey, { send_event: false })
+            const flagVariantValue = featureFlags?.getFeatureFlag(flagKey, { send_event: false })
             flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
         }
         return isFeatureEnabled && flagVariantCheck
@@ -710,7 +717,7 @@ export class SurveyManager {
         if (
             survey.internal_targeting_flag_key &&
             isSurveyIterationBased(survey) &&
-            !this._posthog.featureFlags?.hasLoadedFlags
+            !this._featureFlags?.hasLoadedFlags
         ) {
             return {
                 satisfied: false,
@@ -1566,7 +1573,10 @@ export function Questions({
             (index) => index >= 0 && index < survey.questions.length
         )
     })
-    const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
+    const surveyQuestions = useMemo(
+        () => getDisplayOrderQuestions(survey, initialInProgressState),
+        [survey, initialInProgressState]
+    )
 
     // Sync preview state. Negative sentinels (the intro screen page) are rendered by SurveyPopup
     // instead of Questions, so they must never reach currentQuestionIndex.
@@ -1611,6 +1621,7 @@ export function Questions({
                 surveySubmissionId: surveySubmissionId,
                 responses: newResponses,
                 lastQuestionIndex: nextStep,
+                questionOrder: getQuestionOrder(surveyQuestions),
                 visitedIndices: newVisitedIndices,
                 surveyLanguage,
             })
@@ -1659,6 +1670,7 @@ export function Questions({
             surveySubmissionId,
             responses: questionsResponses,
             lastQuestionIndex: previousIndex,
+            questionOrder: getQuestionOrder(surveyQuestions),
             visitedIndices: newVisitedIndices,
             surveyLanguage,
         })

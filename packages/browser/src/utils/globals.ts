@@ -1,4 +1,5 @@
 import { window as commonWindow } from '@posthog/browser-common/utils/globals'
+import type { Client } from '@posthog/browser-common'
 import type { DeferredStylesheetStats, MutationCost, SnapshotCost } from '@posthog/rrweb-record'
 import type { ErrorTracking } from '@posthog/core'
 
@@ -175,17 +176,29 @@ export interface WebVitalsReportOpts {
     reportSoftNavs?: boolean
 }
 
+/**
+ * Options only the attribution build understands, so they are passed to attributed
+ * observers and never to the observers in the default bundle.
+ */
+export interface WebVitalsAttributionReportOpts extends WebVitalsReportOpts {
+    includeProcessedEventEntries?: boolean
+}
+
 export type WebVitalsCallbackFlavor =
     | 'web-vitals'
     | 'web-vitals-with-attribution'
     | 'web-vitals-soft-navs'
     | 'web-vitals-with-attribution-soft-navs'
 
-export type WebVitalsCallbacks = {
+export type WebVitalsMetricCallbacks = {
     onLCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onCLS: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onFCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onINP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+}
+
+export type WebVitalsCallbacks = WebVitalsMetricCallbacks & {
+    withoutAttribution?: WebVitalsMetricCallbacks
 }
 
 export type PostHogExtensionKind =
@@ -283,7 +296,7 @@ interface PostHogExtensions {
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
     generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined
     logs?: {
-        initializeLogs?: (posthog: PostHog) => any | undefined
+        initializeLogs?: (host: PostHog | Client) => (() => void) | undefined
     }
     /** @deprecated Use `postHogWebVitalsCallbacksByFlavor` to select callbacks explicitly. */
     postHogWebVitalsCallbacks?: WebVitalsCallbacks

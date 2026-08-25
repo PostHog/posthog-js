@@ -11,12 +11,13 @@ import {
     stripUrlHash,
 } from '@posthog/core'
 import type { BufferedLogEntry, ResolvedPostHogLogsConfig, SendLogsBatchOutcome } from '@posthog/core'
+import type { Client, DeepReadonly, Disposable, Extension } from '@posthog/browser-common'
 import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { Extension } from './extensions/types'
 import { resolveLogsConfig } from './logs-defaults'
+import { LogsExtension } from './extension-tokens'
 import {
     isStatusZeroFailureCircuitBreakerTripped,
     updateStatusZeroFailureCount,
@@ -55,8 +56,10 @@ const isHandledLogsRequestError = (error: unknown): error is HandledLogsRequestE
     (error as Partial<HandledLogsRequestError>)[HANDLED_LOGS_REQUEST_ERROR] === true
 
 export class PostHogLogs implements Extension {
+    readonly name = LogsExtension
     private _isLogsEnabled: boolean = false
     private _isLoaded: boolean = false
+    private _isLoading: boolean = false
     private readonly _logger = createLogger('[logs]')
     // Core owns retry/backoff but the browser request layer owns transport logging.
     // Filter only errors explicitly branded by this adapter; fatal core errors remain visible.
@@ -81,12 +84,16 @@ export class PostHogLogs implements Extension {
     // defaults to `posthog-browser-logs`). Built lazily, only when console runs.
     private _consoleQueue: BufferedLogEntry[] = []
     private _consoleCore: CorePostHogLogs | undefined
+    private _consoleLogsDispose: (() => void) | undefined
     private _consoleResolvedConfig: ResolvedPostHogLogsConfig | undefined
     private _consoleResolvedFrom: PostHog['config']['logs']
 
     // Shared across both cores: they send to the same endpoint, so one blocker
     // verdict covers both.
     private _consecutiveStatusZeroFailures = 0
+    private _client?: Client
+    private _remoteConfigSubscription?: Disposable
+    private _disposed = false
 
     constructor(private readonly _instance: PostHog) {
         if (this._instance && this._instance.config.logs?.captureConsoleLogs) {
@@ -99,6 +106,9 @@ export class PostHogLogs implements Extension {
     }
 
     private _onReconnect = (): void => {
+        if (this._disposed) {
+            return
+        }
         this._consecutiveStatusZeroFailures = 0
         this._core?.onReconnect()
         this._consoleCore?.onReconnect()
@@ -160,12 +170,46 @@ export class PostHogLogs implements Extension {
         return this._consoleCore
     }
 
-    initialize() {
-        this.loadIfEnabled()
+    setup(client: Client): void {
+        if (this._disposed) {
+            return
+        }
+        this._client = client
+        let replayedEnabledConfig = false
+        const subscription = client.onRemoteConfig((result) => {
+            replayedEnabledConfig = result.ok && result.config.logs?.captureConsoleLogs === true
+            this.onRemoteConfig(result)
+        })
+        if (this._disposed) {
+            subscription.dispose()
+            return
+        }
+        this._remoteConfigSubscription = subscription
+        if (!replayedEnabledConfig) {
+            this.loadIfEnabled()
+        }
     }
 
-    onRemoteConfig(result: RemoteConfigResult) {
-        if (!result.ok) {
+    dispose(): void {
+        if (this._disposed) {
+            return
+        }
+        this._disposed = true
+        this._remoteConfigSubscription?.dispose()
+        this._remoteConfigSubscription = undefined
+        this._client = undefined
+        this._isLoading = false
+        window?.removeEventListener('online', this._onReconnect)
+        // TODO: Multiplex console capture across instances and settle pending log sends so
+        // wrappers and request timers cannot outlive their final owner.
+        this._consoleLogsDispose?.()
+        this._consoleLogsDispose = undefined
+        this._core?.reset()
+        this._consoleCore?.reset()
+    }
+
+    onRemoteConfig(result: DeepReadonly<RemoteConfigResult>): void {
+        if (this._disposed || !result.ok) {
             // Failure behaves like a response without a logs key.
             return
         }
@@ -187,14 +231,18 @@ export class PostHogLogs implements Extension {
     }
 
     captureLog(options: CaptureLogOptions): void {
-        this._getCore().captureLog(options)
+        if (!this._disposed) {
+            this._getCore().captureLog(options)
+        }
     }
 
     // Console auto-capture (the lazy `logs` chunk) routes here so its records run
     // through the shared core pipeline and carry `service.name: posthog-browser-logs`.
     /** @internal */
-    _captureConsoleLog(options: CaptureLogOptions): void {
-        this._getConsoleCore().captureLog(options)
+    captureConsoleLog(options: CaptureLogOptions): void {
+        if (!this._disposed) {
+            this._getConsoleCore().captureLog(options)
+        }
     }
 
     get logger(): Logger {
@@ -233,8 +281,8 @@ export class PostHogLogs implements Extension {
         }
     }
 
-    loadIfEnabled() {
-        if (!this._isLogsEnabled || this._isLoaded) {
+    loadIfEnabled(): void {
+        if (this._disposed || !this._isLogsEnabled || this._isLoaded || this._isLoading) {
             return
         }
 
@@ -250,14 +298,25 @@ export class PostHogLogs implements Extension {
             return
         }
 
-        loadExternalDependency(this._instance, 'logs', (err) => {
-            if (err || !phExtensions.logs?.initializeLogs) {
-                this._logger.error('Could not load logs script', err)
-            } else {
-                phExtensions.logs.initializeLogs(this._instance)
-                this._isLoaded = true
-            }
-        })
+        this._isLoading = true
+        try {
+            loadExternalDependency(this._instance, 'logs', (err) => {
+                this._isLoading = false
+                if (this._disposed) {
+                    return
+                }
+                const logsExtension = phExtensions.logs
+                if (err || !logsExtension?.initializeLogs) {
+                    this._logger.error('Could not load logs script', err)
+                } else {
+                    this._consoleLogsDispose = logsExtension.initializeLogs(this._client ?? this._instance)
+                    this._isLoaded = true
+                }
+            })
+        } catch (error) {
+            this._isLoading = false
+            throw error
+        }
     }
 
     // Host adapter for core's `PostHogLogs`; structurally checked against `LogsHost`
