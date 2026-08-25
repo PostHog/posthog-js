@@ -878,7 +878,7 @@ describe('Autocapture system', () => {
                 const mockCall = beforeSendMock.mock.calls[0][0]
                 expect(mockCall.event).toEqual('$copy_autocapture')
                 expect(mockCall.properties).toHaveProperty('$selected_content', 'copy this test')
-                expect(mockCall.properties).not.toHaveProperty('$clipboard_text_length')
+                expect(mockCall.properties).toHaveProperty('$clipboard_text_length', 14)
                 expect(mockCall.properties).toHaveProperty('$copy_type', 'copy')
             })
 
@@ -895,7 +895,7 @@ describe('Autocapture system', () => {
                 expect(spyArgs.length).toBe(1)
                 expect(spyArgs[0][0].event).toEqual('$copy_autocapture')
                 expect(spyArgs[0][0].properties).toHaveProperty('$selected_content', 'cut this test')
-                expect(spyArgs[0][0].properties).not.toHaveProperty('$clipboard_text_length')
+                expect(spyArgs[0][0].properties).toHaveProperty('$clipboard_text_length', 13)
                 expect(spyArgs[0][0].properties).toHaveProperty('$copy_type', 'cut')
             })
 

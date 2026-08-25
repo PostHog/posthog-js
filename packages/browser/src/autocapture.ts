@@ -536,6 +536,7 @@ export class Autocapture implements Extension {
                         return false
                     }
                     props['$selected_content'] = selectedContent
+                    props['$clipboard_text_length'] = selectedText?.length ?? 0
                 }
                 props['$copy_type'] = clipType
             }
