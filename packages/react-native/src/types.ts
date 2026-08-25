@@ -186,6 +186,17 @@ export type PostHogSessionReplayConfig = {
    */
   captureNetworkTelemetry?: boolean
   /**
+   * Verify that masks remain aligned while capturing session replay screenshots.
+   * Android only. Requires `@posthog/react-native-plugin`.
+   *
+   * Enabling this can preserve screenshots during pixel-only redraws, including
+   * continuously animated content, but performs additional view hierarchy walks
+   * while a screenshot is captured.
+   *
+   * @default false
+   */
+  verifyScreenshotMaskAlignment?: boolean
+  /**
    * Schedule screenshot image capture on a background queue.
    * iOS only
    * Experimental support

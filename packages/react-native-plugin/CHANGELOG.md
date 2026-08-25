@@ -1,5 +1,26 @@
 # @posthog/react-native-plugin
 
+## 2.5.0
+
+### Minor Changes
+
+- [#4529](https://github.com/PostHog/posthog-js/pull/4529) [`ad6d5c6`](https://github.com/PostHog/posthog-js/commit/ad6d5c6b4bbcac41c40eb9a775ae863f917740a4) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `sessionReplayConfig.verifyScreenshotMaskAlignment` for Android session replay. This option requires `@posthog/react-native-plugin`.
+  (2026-08-24)
+
+## 2.4.3
+
+### Patch Changes
+
+- [#4630](https://github.com/PostHog/posthog-js/pull/4630) [`97e1cf8`](https://github.com/PostHog/posthog-js/commit/97e1cf813e11fefc71b396e5cd816116d74f708c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix session replay started with `startRecording()` capturing nothing on Android by bumping `com.posthog:posthog-android` to `3.60.7`.
+  (2026-08-24)
+
+## 2.4.2
+
+### Patch Changes
+
+- [#4624](https://github.com/PostHog/posthog-js/pull/4624) [`41f276d`](https://github.com/PostHog/posthog-js/commit/41f276dbd987d776259bcbadc6a8fefcfa6a038d) Thanks [@marandaneto](https://github.com/marandaneto)! - Require posthog-ios 3.69.10 so native dSYMs are uploaded after they are ready.
+  (2026-08-24)
+
 ## 2.4.1
 
 ### Patch Changes

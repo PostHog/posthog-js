@@ -1,14 +1,7 @@
 import OpenAIOrignal, { AzureOpenAI } from 'openai'
 import type { AzureClientOptions } from 'openai/azure'
 import { PostHog } from 'posthog-node'
-import {
-  AIEvent,
-  formatResponseOpenAI,
-  getModelParams,
-  MonitoringParams,
-  withPrivacyMode,
-  formatOpenAIResponsesInput,
-} from '../utils'
+import { formatResponseOpenAI, MonitoringParams } from '../utils'
 import { captureAiGeneration } from './capture'
 import type { APIPromise } from 'openai'
 import { Stream } from 'openai/streaming'
@@ -19,26 +12,28 @@ import type {
   ResponseRetrieveParamsStreaming,
 } from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
-import type { FormattedMessage, FormattedContent } from '../types'
-import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
-import {
-  isResponseTokenChunk,
-  extractRequestId,
-  buildProviderMetadata,
-  extractCacheWriteTokens,
-  isTerminalResponse,
-  getResponseFailure,
-} from './utils'
+import { isTerminalResponse } from './utils'
 import type { MonitoringEventPropertiesWithDefaults } from '../utils'
 import {
   BackgroundResponseTracker,
-  getBackgroundResponseLatency,
   isPendingBackgroundResponse,
   wrapBackgroundResponseStream,
 } from './background-responses'
 import { callWithOriginalCreate, preserveProviderPromise } from '../providerPromise'
 import { monitoredStreamTee } from '../stream'
+import { OpenAIChatStreamAccumulator, OpenAIResponsesStreamAccumulator } from './stream-accumulators'
+import {
+  buildBackgroundResponseOptions,
+  buildChatErrorOptions,
+  buildChatSuccessOptions,
+  buildChatUsage,
+  buildEmbeddingErrorOptions,
+  buildEmbeddingSuccessOptions,
+  buildResponsesErrorOptions,
+  buildResponsesSuccessOptions,
+  captureAiGenerationAfterSuccess,
+} from './telemetry'
 
 type ChatCompletion = OpenAIOrignal.ChatCompletion
 type ChatCompletionChunk = OpenAIOrignal.ChatCompletionChunk
@@ -134,181 +129,53 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
             (iterator, controller) => new Stream(iterator, controller)
           )
           ;(async () => {
-            // Hoisted so the catch block can surface whatever was accumulated
-            // from the streamed chunks before the failure.
-            let completionIdFromResponse: string | undefined
-            let systemFingerprintFromResponse: string | undefined
+            const accumulator = new OpenAIChatStreamAccumulator()
             try {
-              const contentBlocks: FormattedContent = []
-              let accumulatedContent = ''
-              let modelFromResponse: string | undefined
-              let serviceTierFromResponse: string | undefined
-              let firstTokenTime: number | undefined
-              let usage: {
-                inputTokens?: number
-                outputTokens?: number
-                reasoningTokens?: number
-                cacheReadInputTokens?: number
-                cacheCreationInputTokens?: number
-              } = {
-                inputTokens: 0,
-                outputTokens: 0,
-              }
-
-              // Map to track in-progress tool calls
-              const toolCallsInProgress = new Map<
-                number,
-                {
-                  id: string
-                  name: string
-                  arguments: string
-                }
-              >()
-
               for await (const chunk of stream1) {
-                // Extract model and completion metadata from chunk (Chat Completions chunks carry these fields)
-                if (!modelFromResponse && chunk.model) {
-                  modelFromResponse = chunk.model
-                }
-                if (!completionIdFromResponse && chunk.id) {
-                  completionIdFromResponse = chunk.id
-                }
-                if (!systemFingerprintFromResponse && chunk.system_fingerprint) {
-                  systemFingerprintFromResponse = chunk.system_fingerprint
-                }
-                if (chunk.service_tier != null) {
-                  serviceTierFromResponse = chunk.service_tier
-                }
-
-                const choice = chunk?.choices?.[0]
-
-                // Handle text content
-                const deltaContent = choice?.delta?.content
-                if (deltaContent) {
-                  if (firstTokenTime === undefined) {
-                    firstTokenTime = Date.now()
-                  }
-                  accumulatedContent += deltaContent
-                }
-
-                // Handle tool calls
-                const deltaToolCalls = choice?.delta?.tool_calls
-                if (deltaToolCalls && Array.isArray(deltaToolCalls)) {
-                  if (firstTokenTime === undefined) {
-                    firstTokenTime = Date.now()
-                  }
-                  for (const toolCall of deltaToolCalls) {
-                    const index = toolCall.index
-
-                    if (index !== undefined) {
-                      if (!toolCallsInProgress.has(index)) {
-                        // New tool call
-                        toolCallsInProgress.set(index, {
-                          id: toolCall.id || '',
-                          name: toolCall.function?.name || '',
-                          arguments: '',
-                        })
-                      }
-
-                      const inProgressCall = toolCallsInProgress.get(index)
-                      if (inProgressCall) {
-                        // Update tool call data
-                        if (toolCall.id) {
-                          inProgressCall.id = toolCall.id
-                        }
-                        if (toolCall.function?.name) {
-                          inProgressCall.name = toolCall.function.name
-                        }
-                        if (toolCall.function?.arguments) {
-                          inProgressCall.arguments += toolCall.function.arguments
-                        }
-                      }
-                    }
-                  }
-                }
-
-                // Handle usage information
-                if (chunk.usage) {
-                  usage = {
-                    inputTokens: chunk.usage.prompt_tokens ?? 0,
-                    outputTokens: chunk.usage.completion_tokens ?? 0,
-                    reasoningTokens: chunk.usage.completion_tokens_details?.reasoning_tokens ?? 0,
-                    cacheReadInputTokens: chunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
-                    cacheCreationInputTokens: extractCacheWriteTokens(chunk.usage.prompt_tokens_details),
-                  }
-                }
+                accumulator.consume(chunk)
               }
-
-              // Build final content blocks
-              if (accumulatedContent) {
-                contentBlocks.push({ type: 'text', text: accumulatedContent })
-              }
-
-              // Add completed tool calls to content blocks
-              for (const toolCall of toolCallsInProgress.values()) {
-                if (toolCall.name) {
-                  contentBlocks.push({
-                    type: 'function',
-                    id: toolCall.id,
-                    function: {
-                      name: toolCall.name,
-                      arguments: toolCall.arguments,
-                    },
-                  })
-                }
-              }
-
-              // Format output to match non-streaming version
-              const formattedOutput: FormattedMessage[] =
-                contentBlocks.length > 0
-                  ? [
-                      {
-                        role: 'assistant',
-                        content: contentBlocks,
-                      },
-                    ]
-                  : [
-                      {
-                        role: 'assistant',
-                        content: [{ type: 'text', text: '' }],
-                      },
-                    ]
-
-              const latency = (Date.now() - startTime) / 1000
-              const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
-              await captureAiGeneration(this.phClient, {
-                ...posthogParams,
-                model: openAIParams.model ?? modelFromResponse,
-                provider: 'azure',
-                input: sanitizeOpenAI(openAIParams.messages, this.phClient),
-                output: sanitizeOpenAIResponse(formattedOutput, this.phClient),
-                latency,
-                timeToFirstToken,
-                baseURL: this.baseURL,
-                modelParameters: getModelParams(body, serviceTierFromResponse),
-                httpStatus: 200,
-                usage,
-                completionId: completionIdFromResponse,
-                providerMetadata: buildProviderMetadata({ systemFingerprint: systemFingerprintFromResponse }),
-              })
+              const accumulated = accumulator.result()
+              await captureAiGeneration(
+                this.phClient,
+                buildChatSuccessOptions(
+                  {
+                    client: this.phClient,
+                    provider: 'azure',
+                    baseURL: this.baseURL,
+                    params: openAIParams,
+                    monitoring: posthogParams,
+                    modelParametersSource: body,
+                  },
+                  {
+                    ...accumulated,
+                    latency: (Date.now() - startTime) / 1000,
+                    timeToFirstToken:
+                      accumulated.firstTokenTime === undefined
+                        ? undefined
+                        : (accumulated.firstTokenTime - startTime) / 1000,
+                  }
+                )
+              )
             } catch (error: unknown) {
-              await captureAiGeneration(this.phClient, {
-                ...posthogParams,
-                model: openAIParams.model,
-                provider: 'azure',
-                input: sanitizeOpenAI(openAIParams.messages, this.phClient),
-                output: [],
-                latency: 0,
-                baseURL: this.baseURL,
-                modelParameters: getModelParams(body),
-                usage: { inputTokens: 0, outputTokens: 0 },
-                // If the stream fails mid-flight, surface whatever completion
-                // metadata the consumed chunks already provided so the error
-                // event can still be correlated to OpenAI's Logs dashboard.
-                completionId: completionIdFromResponse,
-                providerMetadata: buildProviderMetadata({ systemFingerprint: systemFingerprintFromResponse }),
-                error: error,
-              })
+              const accumulated = accumulator.result()
+              await captureAiGeneration(
+                this.phClient,
+                buildChatErrorOptions(
+                  {
+                    client: this.phClient,
+                    provider: 'azure',
+                    baseURL: this.baseURL,
+                    params: openAIParams,
+                    monitoring: posthogParams,
+                    modelParametersSource: body,
+                  },
+                  error,
+                  {
+                    completionId: accumulated.completionId,
+                    systemFingerprint: accumulated.systemFingerprint,
+                  }
+                )
+              )
               throw error
             }
           })().catch(() => {
@@ -327,55 +194,48 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
       const wrappedPromise = parentPromise.then(
         async (result) => {
           if ('choices' in result) {
-            const latency = (Date.now() - startTime) / 1000
-            await captureAiGeneration(this.phClient, {
-              ...posthogParams,
-              model: openAIParams.model ?? result.model,
-              provider: 'azure',
-              input: sanitizeOpenAI(openAIParams.messages, this.phClient),
-              output: sanitizeOpenAIResponse(formatResponseOpenAI(result), this.phClient),
-              latency,
-              baseURL: this.baseURL,
-              modelParameters: getModelParams(body, result.service_tier),
-              httpStatus: 200,
-              usage: {
-                inputTokens: result.usage?.prompt_tokens ?? 0,
-                outputTokens: result.usage?.completion_tokens ?? 0,
-                reasoningTokens: result.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
-                cacheReadInputTokens: result.usage?.prompt_tokens_details?.cached_tokens ?? 0,
-                cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.prompt_tokens_details),
-              },
-              completionId: result.id,
-              providerMetadata: buildProviderMetadata({
-                systemFingerprint: result.system_fingerprint,
-                requestId: extractRequestId(result),
-              }),
-            })
+            await captureAiGenerationAfterSuccess(
+              this.phClient,
+              buildChatSuccessOptions(
+                {
+                  client: this.phClient,
+                  provider: 'azure',
+                  baseURL: this.baseURL,
+                  params: openAIParams,
+                  monitoring: posthogParams,
+                  modelParametersSource: body,
+                },
+                {
+                  output: formatResponseOpenAI(result),
+                  model: result.model,
+                  serviceTier: result.service_tier ?? undefined,
+                  latency: (Date.now() - startTime) / 1000,
+                  usage: buildChatUsage(result.usage, result),
+                  stopReason: result.choices[0]?.finish_reason ?? undefined,
+                  completionId: result.id,
+                  systemFingerprint: result.system_fingerprint,
+                  requestId: (result as { _request_id?: string })._request_id,
+                }
+              )
+            )
           }
           return result
         },
         async (error: unknown) => {
-          const httpStatus =
-            error && typeof error === 'object' && 'status' in error
-              ? ((error as { status?: number }).status ?? 500)
-              : 500
-
-          await captureAiGeneration(this.phClient, {
-            ...posthogParams,
-            model: openAIParams.model,
-            provider: 'azure',
-            input: sanitizeOpenAI(openAIParams.messages, this.phClient),
-            output: [],
-            latency: 0,
-            baseURL: this.baseURL,
-            modelParameters: getModelParams(body),
-            httpStatus,
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
-            error,
-          })
+          await captureAiGeneration(
+            this.phClient,
+            buildChatErrorOptions(
+              {
+                client: this.phClient,
+                provider: 'azure',
+                baseURL: this.baseURL,
+                params: openAIParams,
+                monitoring: posthogParams,
+                modelParametersSource: body,
+              },
+              error
+            )
+          )
           throw error
         }
       )
@@ -401,32 +261,20 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     context: BackgroundResponseState
   ): Promise<void> {
     const { openAIParams, posthogParams } = context
-    await captureAiGeneration(this.phClient, {
-      ...posthogParams,
-      model: openAIParams.model ?? result.model,
-      provider: 'azure',
-      input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
-      output: result.output,
-      latency: getBackgroundResponseLatency(result),
-      baseURL: this.baseURL,
-      modelParameters: getModelParams(openAIParams, result.service_tier),
-      httpStatus: 200,
-      usage: {
-        inputTokens: result.usage?.input_tokens ?? 0,
-        outputTokens: result.usage?.output_tokens ?? 0,
-        reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
-        cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
-        cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.input_tokens_details),
-        rawUsage: result.usage,
-      },
-      stopReason: result.status ?? undefined,
-      completionId: result.id,
-      providerMetadata: buildProviderMetadata({
-        requestId: extractRequestId(result),
-        incompleteDetails: result.incomplete_details,
-      }),
-      error: getResponseFailure(result),
-    })
+    await captureAiGenerationAfterSuccess(
+      this.phClient,
+      buildBackgroundResponseOptions(
+        {
+          client: this.phClient,
+          provider: 'azure',
+          baseURL: this.baseURL,
+          params: openAIParams,
+          monitoring: posthogParams,
+          modelParametersSource: openAIParams,
+        },
+        result
+      )
+    )
   }
 
   // --- Overload #1: Non-streaming
@@ -468,123 +316,87 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             (iterator, controller) => new Stream(iterator, controller)
           )
           ;(async () => {
-            // Hoisted so the catch block can surface the completion ID that
-            // was accumulated from the streamed chunks before the failure.
-            let completionIdFromResponse: string | undefined
+            const accumulator = new OpenAIResponsesStreamAccumulator()
             try {
-              let finalContent: any[] = []
-              let modelFromResponse: string | undefined
-              let serviceTierFromResponse: string | undefined
-              let firstTokenTime: number | undefined
-              let usage: {
-                inputTokens?: number
-                outputTokens?: number
-                reasoningTokens?: number
-                cacheReadInputTokens?: number
-                cacheCreationInputTokens?: number
-              } = {
-                inputTokens: 0,
-                outputTokens: 0,
-              }
-              let terminalResponse: OpenAIOrignal.Responses.Response | undefined
-
               for await (const chunk of stream1) {
-                // Track first token time on content delta events
-                if (firstTokenTime === undefined && isResponseTokenChunk(chunk)) {
-                  firstTokenTime = Date.now()
-                }
-
-                if ('response' in chunk && chunk.response) {
-                  // Extract model and completion ID from the response object in the chunk (for stored prompts)
-                  if (!modelFromResponse && chunk.response.model) {
-                    modelFromResponse = chunk.response.model
-                  }
-                  if (!completionIdFromResponse && chunk.response.id) {
-                    completionIdFromResponse = chunk.response.id
-                  }
-                  if (openAIParams.background === true && !this.backgroundResponses.get(chunk.response.id)) {
-                    this.backgroundResponses.set(chunk.response.id, { openAIParams, posthogParams })
-                  }
-                  if (chunk.response.service_tier != null) {
-                    serviceTierFromResponse = chunk.response.service_tier
-                  }
-                  if (isTerminalResponse(chunk.response)) {
-                    terminalResponse = chunk.response
-                    finalContent = chunk.response.output ?? []
-                  }
-                }
-                if ('response' in chunk && chunk.response?.usage) {
-                  usage = {
-                    inputTokens: chunk.response.usage.input_tokens ?? 0,
-                    outputTokens: chunk.response.usage.output_tokens ?? 0,
-                    reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
-                    cacheReadInputTokens: chunk.response.usage.input_tokens_details?.cached_tokens ?? 0,
-                    cacheCreationInputTokens: extractCacheWriteTokens(chunk.response.usage.input_tokens_details),
-                  }
+                accumulator.consume(chunk)
+                if (
+                  openAIParams.background === true &&
+                  'response' in chunk &&
+                  chunk.response &&
+                  !this.backgroundResponses.get(chunk.response.id)
+                ) {
+                  this.backgroundResponses.set(chunk.response.id, { openAIParams, posthogParams })
                 }
               }
 
+              const accumulated = accumulator.result()
               if (openAIParams.background === true) {
-                if (terminalResponse) {
-                  const context = this.backgroundResponses.take(terminalResponse.id)
+                if (accumulated.terminalResponse) {
+                  const context = this.backgroundResponses.take(accumulated.terminalResponse.id)
                   if (context) {
-                    await this.captureBackgroundResponse(terminalResponse, context).catch(() => undefined)
+                    await this.captureBackgroundResponse(accumulated.terminalResponse, context).catch(() => undefined)
                   }
                 }
                 return
               }
 
-              const latency = (Date.now() - startTime) / 1000
-              const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
-              await captureAiGeneration(this.phClient, {
-                ...posthogParams,
-                model: openAIParams.model ?? modelFromResponse,
-                provider: 'azure',
-                input: formatOpenAIResponsesInput(
-                  sanitizeOpenAIResponse(openAIParams.input, this.phClient),
-                  openAIParams.instructions
-                ),
-                output: sanitizeOpenAIResponse(finalContent, this.phClient),
-                latency,
-                timeToFirstToken,
-                baseURL: this.baseURL,
-                modelParameters: getModelParams(body, serviceTierFromResponse),
-                httpStatus: 200,
-                usage,
-                stopReason: terminalResponse?.status ?? undefined,
-                completionId: completionIdFromResponse,
-                providerMetadata: buildProviderMetadata({
-                  incompleteDetails: terminalResponse?.incomplete_details,
-                }),
-                error: getResponseFailure(terminalResponse),
-              })
+              const response: Parameters<typeof buildResponsesSuccessOptions>[1]['response'] =
+                accumulated.terminalResponse ?? {
+                  id: accumulated.completionId ?? '',
+                  model: accumulated.model ?? openAIParams.model,
+                  status: accumulated.stopReason as OpenAIOrignal.Responses.Response['status'],
+                  service_tier: accumulated.serviceTier,
+                }
+              await captureAiGeneration(
+                this.phClient,
+                buildResponsesSuccessOptions(
+                  {
+                    client: this.phClient,
+                    provider: 'azure',
+                    baseURL: this.baseURL,
+                    params: openAIParams,
+                    monitoring: posthogParams,
+                    modelParametersSource: body,
+                  },
+                  {
+                    response,
+                    output: accumulated.output,
+                    latency: (Date.now() - startTime) / 1000,
+                    timeToFirstToken:
+                      accumulated.firstTokenTime === undefined
+                        ? undefined
+                        : (accumulated.firstTokenTime - startTime) / 1000,
+                    usage: accumulated.usage,
+                    includeTools: true,
+                  }
+                )
+              )
             } catch (error: unknown) {
+              const accumulated = accumulator.result()
               if (
                 openAIParams.background === true &&
-                completionIdFromResponse &&
-                this.backgroundResponses.get(completionIdFromResponse)
+                accumulated.completionId &&
+                this.backgroundResponses.get(accumulated.completionId)
               ) {
                 throw error
               }
 
-              await captureAiGeneration(this.phClient, {
-                ...posthogParams,
-                model: openAIParams.model,
-                provider: 'azure',
-                input: formatOpenAIResponsesInput(
-                  sanitizeOpenAIResponse(openAIParams.input, this.phClient),
-                  openAIParams.instructions
-                ),
-                output: [],
-                latency: 0,
-                baseURL: this.baseURL,
-                modelParameters: getModelParams(body),
-                usage: { inputTokens: 0, outputTokens: 0 },
-                // Surface the completion ID from any chunks consumed before
-                // the stream failed so the error event remains correlatable.
-                completionId: completionIdFromResponse,
-                error: error,
-              })
+              await captureAiGeneration(
+                this.phClient,
+                buildResponsesErrorOptions(
+                  {
+                    client: this.phClient,
+                    provider: 'azure',
+                    baseURL: this.baseURL,
+                    params: openAIParams,
+                    monitoring: posthogParams,
+                    modelParametersSource: body,
+                  },
+                  error,
+                  accumulated.completionId
+                )
+              )
               throw error
             }
           })().catch(() => {
@@ -607,64 +419,44 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               return result
             }
 
-            const latency = (Date.now() - startTime) / 1000
-            await captureAiGeneration(this.phClient, {
-              ...posthogParams,
-              model: openAIParams.model ?? result.model,
-              provider: 'azure',
-              input: formatOpenAIResponsesInput(
-                sanitizeOpenAIResponse(openAIParams.input, this.phClient),
-                openAIParams.instructions
-              ),
-              output: sanitizeOpenAIResponse(result.output, this.phClient),
-              latency,
-              baseURL: this.baseURL,
-              modelParameters: getModelParams(body, result.service_tier),
-              httpStatus: 200,
-              usage: {
-                inputTokens: result.usage?.input_tokens ?? 0,
-                outputTokens: result.usage?.output_tokens ?? 0,
-                reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
-                cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
-                cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.input_tokens_details),
-                rawUsage: result.usage,
-              },
-              stopReason: result.status ?? undefined,
-              completionId: result.id,
-              providerMetadata: buildProviderMetadata({
-                requestId: extractRequestId(result),
-                incompleteDetails: result.incomplete_details,
-              }),
-              error: getResponseFailure(result),
-            })
+            await captureAiGenerationAfterSuccess(
+              this.phClient,
+              buildResponsesSuccessOptions(
+                {
+                  client: this.phClient,
+                  provider: 'azure',
+                  baseURL: this.baseURL,
+                  params: openAIParams,
+                  monitoring: posthogParams,
+                  modelParametersSource: body,
+                },
+                {
+                  response: result,
+                  output: formatResponseOpenAI({ output: result.output }),
+                  latency: (Date.now() - startTime) / 1000,
+                  includeTools: true,
+                  includeRequestId: true,
+                }
+              )
+            )
           }
           return result
         },
         async (error: unknown) => {
-          const httpStatus =
-            error && typeof error === 'object' && 'status' in error
-              ? ((error as { status?: number }).status ?? 500)
-              : 500
-
-          await captureAiGeneration(this.phClient, {
-            ...posthogParams,
-            model: openAIParams.model,
-            provider: 'azure',
-            input: formatOpenAIResponsesInput(
-              sanitizeOpenAIResponse(openAIParams.input, this.phClient),
-              openAIParams.instructions
-            ),
-            output: [],
-            latency: 0,
-            baseURL: this.baseURL,
-            modelParameters: getModelParams(body),
-            httpStatus,
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
-            error,
-          })
+          await captureAiGeneration(
+            this.phClient,
+            buildResponsesErrorOptions(
+              {
+                client: this.phClient,
+                provider: 'azure',
+                baseURL: this.baseURL,
+                params: openAIParams,
+                monitoring: posthogParams,
+                modelParametersSource: body,
+              },
+              error
+            )
+          )
           throw error
         }
       )
@@ -770,58 +562,42 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           return result
         }
 
-        const latency = (Date.now() - startTime) / 1000
-        await captureAiGeneration(this.phClient, {
-          ...posthogParams,
-          model: openAIParams.model ?? result.model,
-          provider: 'azure',
-          input: formatOpenAIResponsesInput(
-            sanitizeOpenAIResponse(openAIParams.input, this.phClient),
-            openAIParams.instructions
-          ),
-          output: sanitizeOpenAIResponse(result.output, this.phClient),
-          latency,
-          baseURL: this.baseURL,
-          modelParameters: getModelParams(body, result.service_tier),
-          httpStatus: 200,
-          usage: {
-            inputTokens: result.usage?.input_tokens ?? 0,
-            outputTokens: result.usage?.output_tokens ?? 0,
-            reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
-            cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
-            cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.input_tokens_details),
-            rawUsage: result.usage,
-          },
-          stopReason: result.status ?? undefined,
-          completionId: result.id,
-          providerMetadata: buildProviderMetadata({
-            requestId: extractRequestId(result),
-            incompleteDetails: result.incomplete_details,
-          }),
-          error: getResponseFailure(result),
-        })
+        await captureAiGeneration(
+          this.phClient,
+          buildResponsesSuccessOptions(
+            {
+              client: this.phClient,
+              provider: 'azure',
+              baseURL: this.baseURL,
+              params: openAIParams,
+              monitoring: posthogParams,
+              modelParametersSource: body,
+            },
+            {
+              response: result,
+              output: result.output,
+              latency: (Date.now() - startTime) / 1000,
+              includeRequestId: true,
+            }
+          )
+        )
         return result
       },
       async (error: any) => {
-        await captureAiGeneration(this.phClient, {
-          ...posthogParams,
-          model: openAIParams.model,
-          provider: 'azure',
-          input: formatOpenAIResponsesInput(
-            sanitizeOpenAIResponse(openAIParams.input, this.phClient),
-            openAIParams.instructions
-          ),
-          output: [],
-          latency: 0,
-          baseURL: this.baseURL,
-          modelParameters: getModelParams(body),
-          httpStatus: error?.status ? error.status : 500,
-          usage: {
-            inputTokens: 0,
-            outputTokens: 0,
-          },
-          error,
-        })
+        await captureAiGeneration(
+          this.phClient,
+          buildResponsesErrorOptions(
+            {
+              client: this.phClient,
+              provider: 'azure',
+              baseURL: this.baseURL,
+              params: openAIParams,
+              monitoring: posthogParams,
+              modelParametersSource: body,
+            },
+            error
+          )
+        )
         throw error
       }
     )
@@ -850,44 +626,38 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
     const parentPromise = super.create(openAIParams, options)
     const wrappedPromise = parentPromise.then(
       async (result) => {
-        const latency = (Date.now() - startTime) / 1000
-        await captureAiGeneration(this.phClient, {
-          eventType: AIEvent.Embedding,
-          ...posthogParams,
-          model: openAIParams.model,
-          provider: 'azure',
-          input: withPrivacyMode(this.phClient, posthogParams.privacyMode, openAIParams.input),
-          output: null, // Embeddings don't have output content
-          latency,
-          baseURL: this.baseURL,
-          modelParameters: getModelParams(body),
-          httpStatus: 200,
-          usage: {
-            inputTokens: result.usage?.prompt_tokens ?? 0,
-          },
-        })
+        await captureAiGeneration(
+          this.phClient,
+          buildEmbeddingSuccessOptions(
+            {
+              client: this.phClient,
+              provider: 'azure',
+              baseURL: this.baseURL,
+              params: openAIParams,
+              monitoring: posthogParams,
+              modelParametersSource: body,
+            },
+            result.usage,
+            (Date.now() - startTime) / 1000
+          )
+        )
         return result
       },
       async (error: unknown) => {
-        const httpStatus =
-          error && typeof error === 'object' && 'status' in error ? ((error as { status?: number }).status ?? 500) : 500
-
-        await captureAiGeneration(this.phClient, {
-          eventType: AIEvent.Embedding,
-          ...posthogParams,
-          model: openAIParams.model,
-          provider: 'azure',
-          input: withPrivacyMode(this.phClient, posthogParams.privacyMode, openAIParams.input),
-          output: null,
-          latency: 0,
-          baseURL: this.baseURL,
-          modelParameters: getModelParams(body),
-          httpStatus,
-          usage: {
-            inputTokens: 0,
-          },
-          error,
-        })
+        await captureAiGeneration(
+          this.phClient,
+          buildEmbeddingErrorOptions(
+            {
+              client: this.phClient,
+              provider: 'azure',
+              baseURL: this.baseURL,
+              params: openAIParams,
+              monitoring: posthogParams,
+              modelParametersSource: body,
+            },
+            error
+          )
+        )
         throw error
       }
     )

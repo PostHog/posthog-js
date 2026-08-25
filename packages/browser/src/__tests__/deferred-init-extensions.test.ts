@@ -1,6 +1,8 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { RemoteConfig, RemoteConfigResult } from '../types'
+import type { Client } from '@posthog/browser-common'
+import { PostHog } from '../posthog-core'
 
 jest.mock('@posthog/browser-common/utils/globals', () => {
     const orig = jest.requireActual('@posthog/browser-common/utils/globals')
@@ -70,6 +72,37 @@ describe('deferred extension initialization', () => {
             expect(posthog.autocapture).toBeDefined()
         })
 
+        it('does not start autocapture before setup when set_config runs between deferred tasks', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), {
+                __preview_deferred_init_extensions: true,
+                advanced_disable_flags: true,
+                autocapture: true,
+                capture_pageview: false,
+                disable_session_recording: true,
+            })
+            const initTasks: Array<() => void> = []
+            const processInitTaskQueue = jest
+                .spyOn(posthog as any, '_processInitTaskQueue')
+                .mockImplementation((queue: Array<() => void>) => initTasks.push(...queue))
+
+            await new Promise((resolve) => setTimeout(resolve, 20))
+
+            const autocapture = posthog.autocapture!
+            expect(autocapture['_client']).toBeUndefined()
+
+            posthog.set_config({ autocapture: true })
+
+            expect(autocapture['_initialized']).toBe(false)
+
+            initTasks.forEach((task) => task())
+
+            expect(autocapture['_client']).toBe(posthog._getBrowserClientAdapter())
+            expect(autocapture['_initialized']).toBe(true)
+
+            processInitTaskQueue.mockRestore()
+            await posthog.shutdown()
+        })
+
         it('should handle remote config arriving after extensions initialize', async () => {
             const token = uuidv7()
             const remoteConfig: RemoteConfig = {
@@ -111,6 +144,39 @@ describe('deferred extension initialization', () => {
 
             // Config should NOT be stored when deferred init is disabled
             expect((posthog as any)._pendingRemoteConfig).toBeUndefined()
+        })
+
+        it('delivers pending remote config to shared surveys exactly once', async () => {
+            const savedDefaults = PostHog.__defaultExtensionClasses
+            PostHog.__defaultExtensionClasses = {}
+            const received: RemoteConfigResult[] = []
+            class TestSurveys {
+                readonly name = 'surveys'
+
+                setup(client: Client): void {
+                    client.onRemoteConfig((result) => received.push(result as RemoteConfigResult))
+                }
+            }
+
+            try {
+                const posthog = await createPosthogInstance(uuidv7(), {
+                    __preview_deferred_init_extensions: true,
+                    __extensionClasses: { surveys: TestSurveys as any },
+                    advanced_disable_decide: false,
+                    capture_pageview: false,
+                    disable_session_recording: true,
+                })
+                const result = { ok: true, config: { surveys: true, marker: 'shared-surveys' } as any } as const
+
+                posthog._onRemoteConfig(result)
+                await new Promise((resolve) => setTimeout(resolve, 200))
+
+                expect(
+                    received.filter((entry) => entry.ok && (entry.config as any).marker === 'shared-surveys')
+                ).toEqual([result])
+            } finally {
+                PostHog.__defaultExtensionClasses = savedDefaults
+            }
         })
 
         it('should replay pending remote config to extensions when they initialize', async () => {
@@ -191,6 +257,24 @@ describe('deferred extension initialization', () => {
             // Now extensions should be initialized
             expect(posthog.sessionRecording).toBeDefined()
             expect(posthog.autocapture).toBeDefined()
+        })
+
+        it('does not set up autocapture after shutdown', async () => {
+            const setup = jest.fn()
+            class TestAutocapture {
+                readonly name = 'autocapture'
+                setup = setup
+            }
+
+            const posthog = await createPosthogInstance(uuidv7(), {
+                __preview_deferred_init_extensions: true,
+                __extensionClasses: { autocapture: TestAutocapture as any },
+                capture_pageview: false,
+            })
+            await posthog.shutdown()
+            await new Promise((resolve) => setTimeout(resolve, 20))
+
+            expect(setup).not.toHaveBeenCalled()
         })
     })
 })
