@@ -175,17 +175,29 @@ export interface WebVitalsReportOpts {
     reportSoftNavs?: boolean
 }
 
+/**
+ * Options only the attribution build understands, so they are passed to attributed
+ * observers and never to the observers in the default bundle.
+ */
+export interface WebVitalsAttributionReportOpts extends WebVitalsReportOpts {
+    includeProcessedEventEntries?: boolean
+}
+
 export type WebVitalsCallbackFlavor =
     | 'web-vitals'
     | 'web-vitals-with-attribution'
     | 'web-vitals-soft-navs'
     | 'web-vitals-with-attribution-soft-navs'
 
-export type WebVitalsCallbacks = {
+export type WebVitalsMetricCallbacks = {
     onLCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onCLS: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onFCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onINP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+}
+
+export type WebVitalsCallbacks = WebVitalsMetricCallbacks & {
+    withoutAttribution?: WebVitalsMetricCallbacks
 }
 
 export type PostHogExtensionKind =
