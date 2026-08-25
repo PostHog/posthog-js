@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.64.3
+
+### Patch Changes
+
+- [#4647](https://github.com/PostHog/posthog-js/pull/4647) [`3da18f9`](https://github.com/PostHog/posthog-js/commit/3da18f9a910eef497fb8141c05e7bed8ccbeb0fc) Thanks [@marandaneto](https://github.com/marandaneto)! - Ensure the Expo native-symbol upload phase runs last and declares the main app dSYM as an Xcode input, preventing EAS archives from uploading symbols before the dSYM is ready.
+  (2026-08-25)
+
 ## 4.64.2
 
 ### Patch Changes
