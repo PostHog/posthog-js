@@ -89,7 +89,12 @@ const getFallbackTargetInstance = (e: any): Element | undefined => {
   }
 }
 
-export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: PostHogAutocaptureOptions = {}): void => {
+export const autocaptureFromTouchEvent = (
+  e: any,
+  posthog: PostHog,
+  options: PostHogAutocaptureOptions = {},
+  eventType: 'touch' | 'click' = 'touch'
+): void => {
   const {
     noCaptureProp = 'ph-no-capture',
     customLabelProp = defaultPostHogLabelProp,
@@ -195,7 +200,7 @@ export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: Pos
         element['tag_name'] = lastLabel
       }
     }
-    posthog.autocapture('touch', elements, {
+    posthog.autocapture(eventType, elements, {
       ...autocaptureProperties,
       // DOM touch events (RN Web) carry pageX/pageY on changedTouches, not directly on nativeEvent.
       $touch_x: e.nativeEvent?.pageX ?? e.nativeEvent?.changedTouches?.[0]?.pageX,

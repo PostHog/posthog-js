@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import { GestureResponderEvent, StyleProp, View, ViewStyle } from 'react-native'
 import { PostHog, PostHogOptions } from './posthog-rn'
 import { autocaptureFromTouchEvent } from './autocapture'
 import { useNavigationTracker } from './hooks/useNavigationTracker'
 import { PostHogContext } from './PostHogContext'
 import { PostHogAutocaptureOptions } from './types'
+import { isWeb } from './utils'
 import { defaultPostHogLabelProp } from './autocapture'
 
 /**
@@ -173,11 +174,32 @@ export const PostHogProvider = ({
     [captureTouches, posthog, autocaptureOptions]
   )
 
+  // Browsers fire touchend only for touch input, so a mouse never reaches onTouchEndCapture.
+  // On web listen for click on the host node in the CAPTURE phase: RNW's Pressable calls
+  // stopPropagation, so a bubble-phase handler (onClick) never sees presses on a button.
+  const hostRef = useRef<any>(null)
+  useEffect(() => {
+    const node = hostRef.current
+    if (!isWeb() || !captureTouches || !node?.addEventListener) {
+      return
+    }
+    const handler = (e: any): void => {
+      autocaptureFromTouchEvent({ target: e.target, nativeEvent: e }, posthog, autocaptureOptions, 'click')
+    }
+    node.addEventListener('click', handler, true)
+    return () => node.removeEventListener('click', handler, true)
+  }, [captureTouches, posthog, autocaptureOptions])
+
+  const captureProps = isWeb()
+    ? {}
+    : { onTouchEndCapture: captureTouches ? (e: GestureResponderEvent) => onTouch('end', e) : undefined }
+
   return (
     <View
       {...{ [phLabelProp]: 'PostHogProvider' }} // Dynamically setting customLabelProp (default: ph-label)
+      ref={hostRef}
       style={style || { flex: 1 }}
-      onTouchEndCapture={captureTouches ? (e) => onTouch('end', e) : undefined}
+      {...captureProps}
     >
       <PostHogContext.Provider value={{ client: posthog }}>
         {captureScreens && <PostHogNavigationHook options={autocaptureOptions} client={posthog} />}
