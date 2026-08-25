@@ -175,20 +175,27 @@ export const PostHogProvider = ({
   )
 
   // Browsers fire touchend only for touch input, so a mouse never reaches onTouchEndCapture.
-  // On web listen for click on the host node in the CAPTURE phase: RNW's Pressable calls
-  // stopPropagation, so a bubble-phase handler (onClick) never sees presses on a button.
-  const hostRef = useRef<any>(null)
+  // On web listen for click on the document in the CAPTURE phase, matching the browser SDK:
+  // RNW's Pressable calls stopPropagation so a bubble-phase handler never sees presses on a
+  // button, and RNW's Modal portals its content to document.body, outside this provider's subtree.
+  // Read through a ref so an inline `autocapture` object prop doesn't re-attach on every render.
+  const optionsRef = useRef(autocaptureOptions)
   useEffect(() => {
-    const node = hostRef.current
-    if (!isWeb() || !captureTouches || !node?.addEventListener) {
+    optionsRef.current = autocaptureOptions
+  }, [autocaptureOptions])
+
+  useEffect(() => {
+    // The package targets ESNext without the DOM lib, so reach the document off the global.
+    const doc = (globalThis as any)?.document
+    if (!isWeb() || !captureTouches || !doc?.addEventListener) {
       return
     }
     const handler = (e: any): void => {
-      autocaptureFromTouchEvent({ target: e.target, nativeEvent: e }, posthog, autocaptureOptions, 'click')
+      autocaptureFromTouchEvent({ target: e.target, nativeEvent: e }, posthog, optionsRef.current, 'click')
     }
-    node.addEventListener('click', handler, true)
-    return () => node.removeEventListener('click', handler, true)
-  }, [captureTouches, posthog, autocaptureOptions])
+    doc.addEventListener('click', handler, true)
+    return () => doc.removeEventListener('click', handler, true)
+  }, [captureTouches, posthog])
 
   const captureProps = isWeb()
     ? {}
@@ -197,7 +204,6 @@ export const PostHogProvider = ({
   return (
     <View
       {...{ [phLabelProp]: 'PostHogProvider' }} // Dynamically setting customLabelProp (default: ph-label)
-      ref={hostRef}
       style={style || { flex: 1 }}
       {...captureProps}
     >

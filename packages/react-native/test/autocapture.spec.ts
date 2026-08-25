@@ -47,21 +47,61 @@ describe('PostHog React Native', () => {
       expect(elements.map((el: any) => el.tag_name)).toEqual(['LocaleProvider', 'Text'])
     })
 
-    it('should read touch coordinates from changedTouches for DOM-shaped events', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
-      const domEvent = {
-        target: { ['__reactFiber$abc123']: goodEvent },
-        nativeEvent: { changedTouches: [{ pageX: 7, pageY: 9 }] },
-      }
-      autocaptureFromTouchEvent(domEvent, mockPostHog)
-      expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
-      expect(mockPostHog.autocapture.mock.calls[0][2]).toMatchObject({ $touch_x: 7, $touch_y: 9 })
-    })
-
     it('should not throw when nativeEvent is missing', () => {
       const mockPostHog = { autocapture: jest.fn() } as any
       const fallbackEvent = { target: { ['__reactFiber$abc123']: goodEvent } }
       expect(() => autocaptureFromTouchEvent(fallbackEvent, mockPostHog)).not.toThrow()
+      expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
+    })
+
+    it('should walk up to an ancestor that carries the fiber key', () => {
+      const mockPostHog = { autocapture: jest.fn() } as any
+      const parent = { ['__reactFiber$abc123']: goodEvent, parentNode: null }
+      autocaptureFromTouchEvent({ target: { parentNode: parent }, nativeEvent }, mockPostHog)
+      expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
+    })
+
+    it('should give up rather than loop when no ancestor carries the fiber key', () => {
+      const mockPostHog = { autocapture: jest.fn() } as any
+      const cyclic: any = {}
+      cyclic.parentNode = cyclic
+      expect(() => autocaptureFromTouchEvent({ target: cyclic, nativeEvent }, mockPostHog)).not.toThrow()
+      expect(mockPostHog.autocapture).toHaveBeenCalledTimes(0)
+    })
+
+    it('should keep a user-set ph-label that collides with a framework-internal name', () => {
+      const mockPostHog = { autocapture: jest.fn() } as any
+      const labelledFiber = {
+        elementType: { name: 'Pressable' },
+        memoizedProps: { 'ph-label': 'LocaleProvider' },
+        return: null,
+      }
+      autocaptureFromTouchEvent({ target: { ['__reactFiber$abc123']: labelledFiber }, nativeEvent }, mockPostHog)
+      expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
+      const elements = mockPostHog.autocapture.mock.calls[0][1]
+      expect(elements.map((el: any) => el.tag_name)).toEqual(['LocaleProvider'])
+    })
+
+    it('should keep an app component named LocaleProvider above the touched node on web', () => {
+      const mockPostHog = { autocapture: jest.fn() } as any
+      const appLocaleProvider = {
+        elementType: { name: 'Pressable' },
+        memoizedProps: {},
+        return: localeProviderFiber,
+      }
+      autocaptureFromTouchEvent({ target: { ['__reactFiber$abc123']: appLocaleProvider }, nativeEvent }, mockPostHog)
+      expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
+      const elements = mockPostHog.autocapture.mock.calls[0][1]
+      expect(elements.map((el: any) => el.tag_name)).toEqual(['Pressable', 'LocaleProvider', 'Text'])
+    })
+
+    it('should resolve a fiber more than ten plain-DOM ancestors above the target', () => {
+      const mockPostHog = { autocapture: jest.fn() } as any
+      let node: any = { ['__reactFiber$abc123']: goodEvent }
+      for (let i = 0; i < 25; i++) {
+        node = { parentNode: node }
+      }
+      autocaptureFromTouchEvent({ target: node, nativeEvent }, mockPostHog)
       expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
     })
 

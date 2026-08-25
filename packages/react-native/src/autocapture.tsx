@@ -61,39 +61,57 @@ export const defaultPostHogLabelProp = 'ph-label'
 
 const captureAttributePrefix = 'data-ph-capture-attribute-'
 
-// react-native-web internals; skipped only on the fallback path so a same-named native component is kept.
+// react-native-web internals; skipped only where RNW puts them, so a same-named app component is kept.
 const frameworkInternalLabels = ['LocaleProvider']
 
 const reactFiberKeyPattern = /^__react(Fiber|InternalInstance)\$/
 
-// Fires per touch, so warn once: a persistent failure here silently disables touch autocapture.
-let warnedFallbackFailure = false
+// Cycle guard, not a depth policy: real DOM chains null-terminate, a malformed parentNode may not.
+const maxFallbackAncestors = 100
 
-// react-dom (RN Web) events have no _targetInst; the fiber sits on e.target under a randomised __reactFiber$ key.
+// Fires per interaction, so warn once: a persistent failure here silently disables autocapture.
+let warnedCaptureFailure = false
+
+// react-dom (RN Web) events have no _targetInst; the fiber sits on e.target under a randomised
+// __reactFiber$ key. The clicked node may be a non-React node inside a React subtree, so walk up.
 const getFallbackTargetInstance = (e: any): Element | undefined => {
-  try {
-    const target = e.target
-    if (!target || typeof target !== 'object') {
-      return undefined
-    }
+  let node = e.target
 
-    const key = Object.getOwnPropertyNames(target).find((name) => reactFiberKeyPattern.test(name))
-
-    return key ? target[key] : undefined
-  } catch (error) {
-    if (!warnedFallbackFailure) {
-      warnedFallbackFailure = true
-      console.warn('PostHog touch autocapture: reading the React fiber from the touch target threw:', error)
+  for (let depth = 0; node && typeof node === 'object' && depth < maxFallbackAncestors; depth++) {
+    const key = Object.getOwnPropertyNames(node).find((name) => reactFiberKeyPattern.test(name))
+    if (key) {
+      return node[key]
     }
-    return undefined
+    node = node.parentNode
   }
+
+  return undefined
 }
 
+// Autocapture must never break the host app: a throw would escape into RN's touch dispatch on
+// native, or the DOM click handler on web. Matches the browser SDK, which guards its equivalent
+// document-level handler (packages/browser/src/autocapture.ts).
 export const autocaptureFromTouchEvent = (
   e: any,
   posthog: PostHog,
   options: PostHogAutocaptureOptions = {},
   eventType: 'touch' | 'click' = 'touch'
+): void => {
+  try {
+    captureFromEvent(e, posthog, options, eventType)
+  } catch (error) {
+    if (!warnedCaptureFailure) {
+      warnedCaptureFailure = true
+      console.warn('PostHog autocapture: capturing the interaction threw:', error)
+    }
+  }
+}
+
+const captureFromEvent = (
+  e: any,
+  posthog: PostHog,
+  options: PostHogAutocaptureOptions,
+  eventType: 'touch' | 'click'
 ): void => {
   const {
     noCaptureProp = 'ph-no-capture',
@@ -108,7 +126,6 @@ export const autocaptureFromTouchEvent = (
   if (!targetInst) {
     return
   }
-  const skippedLabels = nativeInst ? ignoreLabels : [...frameworkInternalLabels, ...ignoreLabels]
   const elements: PostHogAutocaptureElement[] = []
   const autocaptureProperties: Record<string, JsonType> = {}
 
@@ -166,14 +183,19 @@ export const autocaptureFromTouchEvent = (
     }
 
     // Try and find a sensible label
-    const label =
-      typeof props?.[customLabelProp] !== 'undefined'
-        ? `${props[customLabelProp]}`
-        : currentInst.elementType?.displayName || currentInst.elementType?.name
+    const hasCustomLabel = typeof props?.[customLabelProp] !== 'undefined'
+    const label = hasCustomLabel
+      ? `${props?.[customLabelProp]}`
+      : currentInst.elementType?.displayName || currentInst.elementType?.name
 
     Object.assign(autocaptureProperties, elAutocaptureProperties)
 
-    if (label && !skippedLabels.includes(label)) {
+    // RNW wraps the touched host node directly, so its internals only ever head the chain; a match
+    // further up is the app's own component. A user-set label is never a framework internal.
+    const isFrameworkWrapper =
+      !nativeInst && !hasCustomLabel && elements.length === 0 && frameworkInternalLabels.includes(label as string)
+
+    if (label && !isFrameworkWrapper && !ignoreLabels.includes(label)) {
       el.tag_name = sanitiseLabel(label)
       elements.push(el)
     }
@@ -202,9 +224,8 @@ export const autocaptureFromTouchEvent = (
     }
     posthog.autocapture(eventType, elements, {
       ...autocaptureProperties,
-      // DOM touch events (RN Web) carry pageX/pageY on changedTouches, not directly on nativeEvent.
-      $touch_x: e.nativeEvent?.pageX ?? e.nativeEvent?.changedTouches?.[0]?.pageX,
-      $touch_y: e.nativeEvent?.pageY ?? e.nativeEvent?.changedTouches?.[0]?.pageY,
+      $touch_x: e.nativeEvent?.pageX,
+      $touch_y: e.nativeEvent?.pageY,
     })
   }
 }
