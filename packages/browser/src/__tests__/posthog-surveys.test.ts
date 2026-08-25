@@ -10,22 +10,28 @@ jest.useFakeTimers()
 import { SURVEYS, SURVEYS_CACHE_TTL_MS, SURVEYS_LOADED_AT, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { SurveyManager } from '../extensions/surveys'
 import { PostHog } from '../posthog-core'
-import { PostHogSurveys } from '../posthog-surveys'
+import { BrowserSurveys } from '../browser-surveys'
 import { Survey, SurveySchedule, SurveyType } from '../posthog-surveys-types'
 import { FlagsResponse } from '../types'
 import { assignableWindow } from '../utils/globals'
 import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { createMockPostHog } from './helpers/posthog-instance'
+import { createSurveysClient } from './helpers/surveys-client'
 
 const mockLogger = jest.requireMock('@posthog/browser-common/utils/logger').createLogger.mock.results[0].value
 
+const flushPromises = async (): Promise<void> => {
+    await Promise.resolve()
+    await Promise.resolve()
+}
+
 describe('posthog-surveys', () => {
-    describe('PostHogSurveys Class', () => {
+    describe('BrowserSurveys Class', () => {
         let mockPostHog: PostHog & {
             get_property: jest.Mock
             _send_request: jest.Mock
         }
-        let surveys: PostHogSurveys
+        let surveys: BrowserSurveys
         let mockGenerateSurveys: jest.Mock
         let mockLoadExternalDependency: jest.Mock
 
@@ -134,7 +140,7 @@ describe('posthog-surveys', () => {
             }
 
             // Create surveys instance
-            surveys = new PostHogSurveys(mockPostHog as PostHog)
+            surveys = new BrowserSurveys(mockPostHog as PostHog)
 
             // Mock window.__PosthogExtensions__
             mockGenerateSurveys = jest.fn()
@@ -143,6 +149,7 @@ describe('posthog-surveys', () => {
                 generateSurveys: mockGenerateSurveys,
                 loadExternalDependency: mockLoadExternalDependency,
             }
+            surveys.setup(createSurveysClient(mockPostHog))
 
             surveys.reset()
         })
@@ -572,8 +579,7 @@ describe('posthog-surveys', () => {
                 // Let the async fetch complete
                 jest.advanceTimersByTime(100)
 
-                // Flush the promise microtask queue
-                await Promise.resolve()
+                await flushPromises()
 
                 // The callback should have been called with the actual surveys
                 expect(callback).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
@@ -613,6 +619,17 @@ describe('posthog-surveys', () => {
                 mockCallback.mockClear()
             })
 
+            it('should return cached surveys before shared extension setup', () => {
+                const uninitializedSurveys = new BrowserSurveys(mockPostHog)
+                mockPostHog.get_property.mockReturnValue(mockSurveys)
+                const callback = jest.fn()
+
+                uninitializedSurveys.getSurveys(callback)
+
+                expect(callback).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
+                expect(mockPostHog._send_request).not.toHaveBeenCalled()
+            })
+
             it('should return cached surveys and not fetch if they exist', () => {
                 mockPostHog.get_property.mockReturnValue(mockSurveys)
 
@@ -646,8 +663,7 @@ describe('posthog-surveys', () => {
                 // Complete the request
                 jest.advanceTimersByTime(100)
 
-                // Flush the promise microtask queue
-                await Promise.resolve()
+                await flushPromises()
 
                 // Both callbacks should receive the surveys
                 expect(callback1).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
@@ -672,7 +688,7 @@ describe('posthog-surveys', () => {
 
                 // Complete the request with error
                 jest.advanceTimersByTime(100)
-                await Promise.resolve()
+                await flushPromises()
 
                 // Both callbacks should receive the error
                 const expectedError = { isLoaded: false, error: 'Surveys API could not be loaded, status: 500' }
@@ -680,12 +696,40 @@ describe('posthog-surveys', () => {
                 expect(callback2).toHaveBeenCalledWith([], expectedError)
             })
 
-            it('should clear promise after successful API call', () => {
+            it('delivers uncached results asynchronously when the legacy transport completes synchronously', async () => {
+                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                    callback({ statusCode: 200, json: { surveys: mockSurveys } })
+                })
+                const callback = jest.fn()
+
+                surveys.getSurveys(callback)
+                expect(callback).not.toHaveBeenCalled()
+
+                await flushPromises()
+                expect(callback).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
+            })
+
+            it('contains callback failures for asynchronous results', async () => {
+                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                    callback({ statusCode: 200, json: { surveys: mockSurveys } })
+                })
+                const callbackError = new Error('callback failed')
+
+                surveys.getSurveys(() => {
+                    throw callbackError
+                })
+                await flushPromises()
+
+                expect(mockLogger.error).toHaveBeenCalledWith('Error in survey callback', callbackError)
+            })
+
+            it('should clear promise after successful API call', async () => {
                 mockPostHog._send_request.mockImplementation(({ callback }) => {
                     callback({ statusCode: 200, json: { surveys: mockSurveys } })
                 })
 
                 surveys.getSurveys(mockCallback)
+                await flushPromises()
 
                 expect(surveys['_getSurveysInFlightPromise']).toBeNull()
                 expect(mockCallback).toHaveBeenCalledWith(mockSurveys, {
@@ -697,12 +741,32 @@ describe('posthog-surveys', () => {
                 })
             })
 
-            it('should clear promise after failed API call (non-200 status)', () => {
+            it('clears the request and reports an error when a successful response is malformed', async () => {
+                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                    callback({ statusCode: 200, json: { surveys: {} } })
+                })
+
+                surveys.getSurveys(mockCallback)
+                await flushPromises()
+
+                expect(surveys['_getSurveysInFlightPromise']).toBeNull()
+                expect(mockCallback).toHaveBeenCalledWith([], {
+                    isLoaded: false,
+                    error: 'Surveys API could not be loaded, status: 0',
+                })
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'Error processing surveys response',
+                    expect.any(TypeError)
+                )
+            })
+
+            it('should clear promise after failed API call (non-200 status)', async () => {
                 mockPostHog._send_request.mockImplementation(({ callback }) => {
                     callback({ statusCode: 500 })
                 })
 
                 surveys.getSurveys(mockCallback)
+                await flushPromises()
 
                 expect(surveys['_getSurveysInFlightPromise']).toBeNull()
                 expect(mockCallback).toHaveBeenCalledWith([], {
@@ -712,7 +776,24 @@ describe('posthog-surveys', () => {
                 expect(mockLogger.error).toHaveBeenCalledWith('Surveys API could not be loaded, status: 500')
             })
 
-            it('should clear promise when request times out', () => {
+            it('settles dropped requests when the browser client invokes the drop callback', async () => {
+                mockPostHog._send_request.mockImplementation(({ callback, fireCallbackOnDrop }) => {
+                    if (fireCallbackOnDrop) {
+                        callback({ statusCode: 0 })
+                    }
+                })
+
+                surveys.getSurveys(mockCallback)
+                await flushPromises()
+
+                expect(surveys['_getSurveysInFlightPromise']).toBeNull()
+                expect(mockCallback).toHaveBeenCalledWith([], {
+                    isLoaded: false,
+                    error: 'Surveys API could not be loaded, status: 0',
+                })
+            })
+
+            it('should clear promise when request times out', async () => {
                 // Mock a request that will timeout
                 mockPostHog._send_request.mockImplementation(({ callback }) => {
                     // Simulate a timeout by calling callback with status 0
@@ -720,6 +801,7 @@ describe('posthog-surveys', () => {
                 })
 
                 surveys.getSurveys(mockCallback)
+                await flushPromises()
 
                 expect(surveys['_getSurveysInFlightPromise']).toBeNull()
                 expect(mockCallback).toHaveBeenCalledWith([], {
@@ -730,18 +812,19 @@ describe('posthog-surveys', () => {
                 expect(mockLogger.error).not.toHaveBeenCalled()
             })
 
-            it('does not re-log status-zero failures already handled by the request layer', () => {
+            it('does not re-log status-zero failures already handled by the request layer', async () => {
                 mockPostHog._send_request.mockImplementation(({ callback }) => {
                     callback({ statusCode: 0, error: new TypeError('Failed to fetch') })
                 })
 
                 surveys.getSurveys(mockCallback)
+                await flushPromises()
 
                 expect(mockLogger.warn).not.toHaveBeenCalled()
                 expect(mockLogger.error).not.toHaveBeenCalled()
             })
 
-            it('should handle delayed successful responses correctly', () => {
+            it('should handle delayed successful responses correctly', async () => {
                 const delayedSurveys = [{ id: 'delayed-survey' }]
 
                 // Mock a request that takes some time to respond
@@ -761,6 +844,7 @@ describe('posthog-surveys', () => {
 
                 // After the response comes in
                 jest.advanceTimersByTime(100)
+                await flushPromises()
 
                 expect(surveys['_getSurveysInFlightPromise']).toBeNull()
                 expect(mockCallback).toHaveBeenCalledWith(delayedSurveys, {
@@ -775,9 +859,14 @@ describe('posthog-surveys', () => {
             it('should set correct timeout value in request', () => {
                 surveys.getSurveys(mockCallback)
 
+                expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith(
+                    'api',
+                    '/api/surveys/?token=test-token'
+                )
                 expect(mockPostHog._send_request).toHaveBeenCalledWith(
                     expect.objectContaining({
                         timeout: SURVEYS_REQUEST_TIMEOUT_MS,
+                        fireCallbackOnDrop: true,
                     })
                 )
             })
@@ -803,7 +892,7 @@ describe('posthog-surveys', () => {
                 expect(mockPostHog._send_request).not.toHaveBeenCalled()
             })
 
-            it('should serve the cache then refresh in the background when the cache is stale', () => {
+            it('should serve the cache then refresh in the background when the cache is stale', async () => {
                 const staleLoadedAt = Date.now() - (SURVEYS_CACHE_TTL_MS + 1000)
                 const freshSurveys = [{ id: 'fresh-survey' }]
                 mockPostHog.get_property.mockImplementation((key: string) => {
@@ -821,6 +910,7 @@ describe('posthog-surveys', () => {
                 expect(mockCallback).toHaveBeenCalledWith(mockSurveys, { isLoaded: true })
                 // A background refresh is triggered so the next poll picks up the new definitions.
                 expect(mockPostHog._send_request).toHaveBeenCalled()
+                await flushPromises()
                 expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({
                     [SURVEYS]: freshSurveys,
                     [SURVEYS_LOADED_AT]: expect.any(Number),
@@ -843,7 +933,7 @@ describe('posthog-surveys', () => {
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
             })
 
-            it('backs off further background refreshes after a failed refresh', () => {
+            it('backs off further background refreshes after a failed refresh', async () => {
                 const staleLoadedAt = Date.now() - (SURVEYS_CACHE_TTL_MS + 1000)
                 mockPostHog.get_property.mockImplementation((key: string) => {
                     if (key === SURVEYS) return mockSurveys
@@ -856,6 +946,7 @@ describe('posthog-surveys', () => {
 
                 surveys.getSurveys(mockCallback)
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+                await flushPromises()
 
                 // A later stale poll within the back-off window must not re-hit the endpoint,
                 // otherwise a surveys-API outage becomes a per-poll request storm.

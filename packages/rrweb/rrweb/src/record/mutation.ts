@@ -12,6 +12,7 @@ import {
   getInputType,
   toLowerCase,
   nowMs,
+  getSuspensionGeneration,
   recordMutationCost,
 } from '@posthog/rrweb-snapshot';
 import type { observerParam, MutationBufferParam } from '../types';
@@ -329,10 +330,11 @@ export default class MutationBuffer {
     // pages (virtualized lists, calendars) is where the recorder's main-thread time
     // goes. Measure it so that cost is visible without a Chrome trace.
     const startedAt = nowMs();
+    const startGeneration = getSuspensionGeneration();
     try {
       this.processBufferedMutations();
     } finally {
-      recordMutationCost(nowMs() - startedAt);
+      recordMutationCost(nowMs() - startedAt, startGeneration);
     }
   };
 
@@ -398,9 +400,20 @@ export default class MutationBuffer {
               currentN as HTMLLinkElement,
             );
           }
-          if (hasShadowRoot(n)) {
+          if (
+            hasShadowRoot(currentN) &&
+            !isBlocked(
+              currentN,
+              this.blockClass,
+              this.blockSelector,
+              true,
+            )
+          ) {
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            this.shadowDomManager.addShadowRoot(dom.shadowRoot(n)!, this.doc);
+            this.shadowDomManager.addShadowRoot(
+              dom.shadowRoot(currentN)!,
+              this.doc,
+            );
           }
         },
         onIframeLoad: (iframe, childSn) => {
@@ -941,8 +954,14 @@ export default class MutationBuffer {
  * that.
  */
 function deepDelete(addsSet: Set<Node>, n: Node) {
-  addsSet.delete(n);
-  dom.childNodes(n).forEach((childN) => deepDelete(addsSet, childN));
+  const stack = [n];
+
+  while (stack.length) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const next = stack.pop()!;
+    addsSet.delete(next);
+    dom.childNodes(next).forEach((childN) => stack.push(childN));
+  }
 }
 
 function processRemoves(n: Node, cache: Set<Node>) {
@@ -976,16 +995,11 @@ function _isParentRemoved(
 
 function isAncestorInSet(set: Set<Node>, n: Node): boolean {
   if (set.size === 0) return false;
-  return _isAncestorInSet(set, n);
-}
 
-function _isAncestorInSet(set: Set<Node>, n: Node): boolean {
-  const parent = dom.parentNode(n);
-  if (!parent) {
-    return false;
+  let parent = dom.parentNode(n);
+  while (parent) {
+    if (set.has(parent)) return true;
+    parent = dom.parentNode(parent);
   }
-  if (set.has(parent)) {
-    return true;
-  }
-  return _isAncestorInSet(set, parent);
+  return false;
 }

@@ -88,6 +88,39 @@ describe('ErrorEventCoercer', () => {
     })
   })
 
+  it.each([
+    { name: 'a zeroed position', lineno: 0, colno: 0 },
+    { name: 'no position at all', lineno: undefined, colno: undefined },
+    { name: 'a column but no line', lineno: 0, colno: 13 },
+  ])('reports no stack trace for $name', ({ lineno, colno }) => {
+    const exception = buildException(
+      new FakeErrorEvent({
+        message: 'ResizeObserver loop completed with undelivered notifications.',
+        filename: 'https://example.com/dashboard/1',
+        lineno,
+        colno,
+      })
+    )
+
+    expect(exception.stacktrace).toBeUndefined()
+    expect(exception).toMatchObject({ value: 'ResizeObserver loop completed with undelivered notifications.' })
+  })
+
+  it('keeps a frame when only the column is zero', () => {
+    const exception = buildException(
+      new FakeErrorEvent({
+        message: 'Uncaught TypeError: x is not a function',
+        filename: 'https://example.com/app.js',
+        lineno: 42,
+        colno: 0,
+      })
+    )
+
+    expect(exception.stacktrace?.frames).toEqual([
+      expect.objectContaining({ filename: 'https://example.com/app.js', lineno: 42, colno: 0 }),
+    ])
+  })
+
   it('does not parse frame-shaped lines from a multiline message', () => {
     const exception = buildException(
       new FakeErrorEvent({

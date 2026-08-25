@@ -461,18 +461,29 @@ describe('diff algorithm for rrdom', () => {
       vi.restoreAllMocks();
     });
 
-    it('can diff properties for canvas', async () => {
-      const element = document.createElement('canvas');
+    it('hydrates canvas data URLs with images from the canvas owner document', () => {
+      const iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+      const ownerDocument = iframe.contentDocument!;
+      const element = ownerDocument.createElement('canvas');
       const rrDocument = new RRDocument();
       const rrCanvas = rrDocument.createElement('canvas');
       const sn = Object.assign({}, elementSn, { tagName: 'canvas' });
       rrDocument.mirror.add(rrCanvas, sn);
-      rrCanvas.attributes['rr_dataURL'] = 'data:image/png;base64,';
+      rrCanvas.rr_dataURL = 'data:image/png;base64,initial';
+      rrCanvas.attributes['rr_dataURL'] = 'data:image/png;base64,updated';
 
-      vi.spyOn(document, 'createElement');
+      const ownerCreateElement = vi.spyOn(ownerDocument, 'createElement');
+      const globalCreateElement = vi.spyOn(document, 'createElement');
 
       diff(element, rrCanvas, replayer);
-      expect(document.createElement).toHaveBeenCalledWith('img');
+
+      expect(ownerCreateElement).toHaveBeenCalledTimes(2);
+      expect(ownerCreateElement).toHaveBeenNthCalledWith(1, 'img');
+      expect(ownerCreateElement).toHaveBeenNthCalledWith(2, 'img');
+      expect(globalCreateElement).not.toHaveBeenCalledWith('img');
+
+      iframe.remove();
       vi.restoreAllMocks();
     });
 

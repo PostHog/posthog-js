@@ -184,7 +184,7 @@ describe('instrument() on an MCP SDK v2 high-level server', () => {
   })
 
   /**
-   * `enableConversationId` appends a `[SERVER]: Reuse conversation_id=…` block to
+   * `enableConversationId` appends a data-only conversation ID block to
    * the result so the agent echoes the handle back. On v2 a thrown error is
    * already flattened into an `isError` result by the time we see it, so that
    * result *is* our only description of the failure — and reading the error off
@@ -214,8 +214,8 @@ describe('instrument() on an MCP SDK v2 high-level server', () => {
     expect(call.properties.$mcp_error_message).not.toMatch(/conversation_id/)
 
     // The caller still gets the handle, on the failed call.
-    const delivered = (result.content as { text: string }[]).map((block) => block.text).join('\n')
-    expect(delivered).toMatch(/Reuse conversation_id=/)
+    const delivered = (result.content as { text: string }[]).find((block) => block.text.includes('"conversation_id"'))
+    expect(JSON.parse(delivered?.text ?? '')).toEqual({ conversation_id: expect.any(String) })
   })
 
   /**

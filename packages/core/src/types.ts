@@ -272,6 +272,7 @@ export enum PostHogPersistedProperty {
   // legacy (v0) transport while other events move to Capture V1 — segregated so a
   // failure on one route can't re-send events already accepted on the other.
   AiQueue = 'ai_queue',
+  AiCaptureQueue = 'ai_capture_queue',
   // Logs queue. Individual SDKs may route this key to an isolated storage
   // instance if they want to separate logs write volume from main state.
   LogsQueue = 'logs_queue',
@@ -298,12 +299,14 @@ export enum PostHogPersistedProperty {
   DeviceId = 'device_id', // only used by posthog-react-native
 }
 
+export type PostHogFetchBodyBytes = Uint8Array & { buffer: ArrayBuffer }
+
 export type PostHogFetchOptions = {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH'
   mode?: 'no-cors'
   credentials?: 'omit'
   headers: { [key: string]: string }
-  body?: string | Blob
+  body?: string | Blob | PostHogFetchBodyBytes
   signal?: AbortSignal
 }
 
@@ -311,7 +314,7 @@ export type PostHogFetchOptions = {
 export type PostHogCaptureOptions = {
   /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string
-  /** If provided overrides the auto-generated timestamp */
+  /** If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC. */
   timestamp?: Date
   disableGeoip?: boolean
   /**
@@ -829,6 +832,22 @@ export const SurveyMatchType = {
 } as const
 export type SurveyMatchType = (typeof SurveyMatchType)[keyof typeof SurveyMatchType]
 
+export type PropertyMatchType = SurveyMatchType
+export type PropertyOperator = PropertyMatchType | 'gt' | 'lt'
+
+export type PropertyFilters = Record<
+  string,
+  {
+    values: string[]
+    operator: PropertyOperator
+  }
+>
+
+export interface SurveyEventWithFilters {
+  name: string
+  propertyFilters?: PropertyFilters
+}
+
 export const SurveySchedule = {
   Once: 'once',
   Recurring: 'recurring',
@@ -878,9 +897,7 @@ export type Survey = {
     urlMatchType?: SurveyMatchType
     events?: {
       repeatedActivation?: boolean
-      values?: {
-        name: string
-      }[]
+      values?: SurveyEventWithFilters[]
     }
     actions?: {
       values: SurveyActionType[]

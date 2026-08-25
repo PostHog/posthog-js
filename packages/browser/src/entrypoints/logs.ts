@@ -1,5 +1,8 @@
 import { assignableWindow } from '../utils/globals'
-import { PostHog } from '../posthog-core'
+import { LogsExtension } from '../extension-tokens'
+import type { PostHog } from '../posthog-core'
+import type { CaptureLogOptions } from '../types'
+import type { Client } from '@posthog/browser-common'
 import { isArray, isBoolean, isFunction, isNull, isNumber, isObject } from '@posthog/core'
 import type { LogSeverityLevel } from '@posthog/types'
 import type { BufferedConsoleEntry } from '../types'
@@ -351,13 +354,77 @@ const originalConsoleMethod = (method: any): any => {
     return method
 }
 
-const initializeLogs = (posthog: PostHog) => {
+const isClient = (host: PostHog | Client): host is Client => 'canCapture' in host
+
+const getCapturingLogs = (host: PostHog | Client) => {
+    if (isClient(host)) {
+        return host.canCapture ? host.getExtension(LogsExtension) : undefined
+    }
+    return host.is_capturing() ? host.logs : undefined
+}
+
+type HistoricalCaptureConsoleLogName = 'le' | 'de' | 'he' | 'ui' | 'ci' | 'vi'
+type HistoricalLogs = Partial<Record<HistoricalCaptureConsoleLogName, (options: CaptureLogOptions) => void>>
+
+// Compatibility for a bug where `_captureConsoleLog` was inadvertently used across
+// independently built bundles and received different mangled names. Pre-stable-ABI
+// cores used `le` through 1.410.4, `de` through 1.410.10, `he` through 1.418.3, `ui`
+// through 1.418.10, `ci` through 1.418.14, and `vi` through 1.419.2.
+const historicalCaptureConsoleLogName = (version: string): HistoricalCaptureConsoleLogName | undefined => {
+    const match = /^1\.(\d+)\.(\d+)$/.exec(version)
+    if (!match) {
+        return undefined
+    }
+
+    const minor = Number(match[1])
+    const patch = Number(match[2])
+    if (minor < 392 || minor > 419) {
+        return undefined
+    }
+    if (minor === 410) {
+        return patch <= 4 ? 'le' : patch <= 10 ? 'de' : undefined
+    }
+    if (minor === 418) {
+        return patch <= 3 ? 'he' : patch <= 10 ? 'ui' : patch <= 14 ? 'ci' : patch <= 17 ? 'vi' : undefined
+    }
+    if (minor === 419) {
+        return patch <= 2 ? 'vi' : undefined
+    }
+    return minor < 410 ? 'le' : 'he'
+}
+
+const captureConsoleLogForHost = (
+    host: PostHog | Client,
+    logs: NonNullable<PostHog['logs']>,
+    options: CaptureLogOptions
+): void => {
+    if (isClient(host)) {
+        logs.captureConsoleLog(options)
+        return
+    }
+
+    // `_captureConsoleLog` had six generated names across core-backed releases.
+    // Select by the stable SDK version instead of probing generated names,
+    // because the same name can identify a different method in another release.
+    // Keep this historical ABI isolated here. A `captureLog` fallback would change the
+    // service name, scope, queue, and rate limits.
+    const name = historicalCaptureConsoleLogName(host.version)
+    const historicalCaptureConsoleLog = name ? (logs as unknown as HistoricalLogs)[name] : undefined
+    if (isFunction(historicalCaptureConsoleLog)) {
+        historicalCaptureConsoleLog.call(logs, options)
+    }
+}
+
+const initializeLogs = (host: PostHog | Client): (() => void) => {
+    let currentHost: PostHog | Client | undefined = host
+    const restoreConsoleMethods: Array<() => void> = []
+
     // `host` is carried here because the core SDK context has no equivalent. Session
     // attributes (window.id, sessionStartTimestamp, lastActivityTimestamp) are added
     // downstream by the core pipeline from the SDK context, alongside sessionId.
     const attributes: Record<string, string> = { host: assignableWindow.location.host }
 
-    // Re-entrancy guard: the capture path itself logs — `_captureConsoleLog` calls into
+    // Re-entrancy guard: the capture path itself logs — `captureConsoleLog` calls into
     // session management, which emits internal debug lines through PostHog's own logger,
     // which in turn writes to the (now wrapped) console. Without this flag that would
     // re-enter capture and recurse until the stack overflows.
@@ -372,28 +439,33 @@ const initializeLogs = (posthog: PostHog) => {
                 // reopen the capture path while the outer invocation is still running.
                 let acquiredGuard = false
                 try {
-                    if (args.length > 0 && !isCapturingLog && posthog.is_capturing()) {
-                        isCapturingLog = true
-                        acquiredGuard = true
-                        const {
-                            body,
-                            truncated,
-                            attributes: flattenedAttributes,
-                        } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
-                        const logAttributes = {
-                            ...attributes,
-                            ...(truncated ? { body_truncated: 'true' } : {}),
+                    const activeHost = currentHost
+                    if (args.length > 0 && !isCapturingLog && activeHost) {
+                        const logs = getCapturingLogs(activeHost)
+                        if (logs) {
+                            isCapturingLog = true
+                            acquiredGuard = true
+                            const {
+                                body,
+                                truncated,
+                                attributes: flattenedAttributes,
+                            } = stringifyArgsSafely(args, LOG_BODY_SIZE_LIMIT)
+                            const logAttributes = {
+                                ...attributes,
+                                ...(truncated ? { body_truncated: 'true' } : {}),
+                            }
+                            const options = {
+                                level: LEVEL_MAP[level],
+                                body,
+                                attributes: {
+                                    'log.source': `console.${level}`,
+                                    ...logAttributes,
+                                    ...flattenedAttributes,
+                                },
+                            }
+                            // The core pipeline adds posthogDistinctId and url.full from the SDK context.
+                            captureConsoleLogForHost(activeHost, logs, options)
                         }
-                        // The core pipeline adds posthogDistinctId and url.full from the SDK context.
-                        posthog.logs?._captureConsoleLog({
-                            level: LEVEL_MAP[level],
-                            body,
-                            attributes: {
-                                'log.source': `console.${level}`,
-                                ...logAttributes,
-                                ...flattenedAttributes,
-                            },
-                        })
                     }
                 } catch {
                     // Capture must never break the page's own console output, so the
@@ -414,6 +486,16 @@ const initializeLogs = (posthog: PostHog) => {
         // Flatten an existing marker if another console plugin already wrapped this method.
         ;(wrapped as any).__rrweb_original__ = originalConsoleMethod(originalConsoleLog)
         assignableWindow.console[level] = wrapped
+        restoreConsoleMethods.push(() => {
+            if (assignableWindow.console[level] === wrapped) {
+                assignableWindow.console[level] = originalConsoleLog
+            }
+        })
+    }
+
+    return () => {
+        currentHost = undefined
+        restoreConsoleMethods.forEach((restore) => restore())
     }
 }
 

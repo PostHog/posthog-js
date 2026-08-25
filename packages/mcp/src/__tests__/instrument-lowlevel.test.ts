@@ -505,7 +505,7 @@ describe('Low-level Server tracing (e2e)', () => {
 
         expect(receivedCalls.at(-1)).toEqual({ name: 'owned_reserved', arguments: suppliedArguments })
         expect(
-          (result.content as { text?: string }[]).some((content) => content.text?.includes('conversation_id='))
+          (result.content as { text?: string }[]).some((content) => content.text?.includes('"conversation_id"'))
         ).toBe(false)
 
         await new Promise((resolve) => setTimeout(resolve, 50))
@@ -569,7 +569,7 @@ describe('Low-level Server tracing (e2e)', () => {
         arguments: { context: 'unknown context', conversation_id: 'unknown conversation', text: 'hi' },
       })
       expect(
-        (result.content as { text?: string }[]).some((content) => content.text?.includes('conversation_id='))
+        (result.content as { text?: string }[]).some((content) => content.text?.includes('"conversation_id"'))
       ).toBe(false)
       await new Promise((resolve) => setTimeout(resolve, 50))
       const event = eventCapture.getEvents().find((candidate) => candidate.resourceName === 'echo')

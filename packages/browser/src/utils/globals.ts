@@ -1,11 +1,11 @@
 import { window as commonWindow } from '@posthog/browser-common/utils/globals'
-import type { MutationCost, SnapshotCost } from '@posthog/rrweb-record'
+import type { Client } from '@posthog/browser-common'
+import type { DeferredStylesheetStats, MutationCost, SnapshotCost } from '@posthog/rrweb-record'
 import type { ErrorTracking } from '@posthog/core'
 
 import type { PostHog } from '../posthog-core'
 import type { SessionIdManager } from '../sessionid'
 import type {
-    BufferedConsoleEntry,
     DeadClicksAutoCaptureConfig,
     ExternalIntegrationKind,
     Properties,
@@ -82,6 +82,17 @@ export type AssignableWindow = Window &
          * @deprecated use `__PosthogExtensions__.errorWrappingFunctions` instead
          */
         posthogErrorWrappingFunctions: any
+
+        /**
+         * Legacy exception autocapture entrypoint names used by posthog-js <= 1.141.0.
+         * Both spellings are required because those clients checked one and called the other.
+         *
+         * See entrypoints/exception-autocapture.ts
+         *
+         * @deprecated use `__PosthogExtensions__.errorWrappingFunctions` instead
+         */
+        extendPostHogWithExceptionAutoCapture: any
+        extendPostHogWithExceptionAutocapture: any
 
         /**
          * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
@@ -165,17 +176,29 @@ export interface WebVitalsReportOpts {
     reportSoftNavs?: boolean
 }
 
+/**
+ * Options only the attribution build understands, so they are passed to attributed
+ * observers and never to the observers in the default bundle.
+ */
+export interface WebVitalsAttributionReportOpts extends WebVitalsReportOpts {
+    includeProcessedEventEntries?: boolean
+}
+
 export type WebVitalsCallbackFlavor =
     | 'web-vitals'
     | 'web-vitals-with-attribution'
     | 'web-vitals-soft-navs'
     | 'web-vitals-with-attribution-soft-navs'
 
-export type WebVitalsCallbacks = {
+export type WebVitalsMetricCallbacks = {
     onLCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onCLS: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onFCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onINP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+}
+
+export type WebVitalsCallbacks = WebVitalsMetricCallbacks & {
+    withoutAttribution?: WebVitalsMetricCallbacks
 }
 
 export type PostHogExtensionKind =
@@ -265,14 +288,15 @@ interface PostHogExtensions {
         // see rrweb-snapshot/src/snapshot-cost.ts
         getLastSnapshotCost?: () => SnapshotCost | null
         getMutationCost?: () => MutationCost
+        getDeferredStylesheetStats?: () => DeferredStylesheetStats
+        getDiscardedDurationSamples?: () => number
         resetSnapshotCostState?: () => void
     }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
     generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined
     logs?: {
-        initializeLogs?: (posthog: PostHog) => any | undefined
-        replayConsoleBuffer?: (posthog: PostHog, entries: BufferedConsoleEntry[]) => void
+        initializeLogs?: (host: PostHog | Client) => (() => void) | undefined
     }
     /** @deprecated Use `postHogWebVitalsCallbacksByFlavor` to select callbacks explicitly. */
     postHogWebVitalsCallbacks?: WebVitalsCallbacks

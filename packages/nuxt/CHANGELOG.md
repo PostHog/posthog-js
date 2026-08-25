@@ -1,5 +1,55 @@
 # @posthog/nuxt
 
+## 1.7.86
+
+### Patch Changes
+
+- [#4563](https://github.com/PostHog/posthog-js/pull/4563) [`530d88b`](https://github.com/PostHog/posthog-js/commit/530d88b8821acecd2dcf6d43e5fd07a2275348ee) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Bump `@posthog/cli` to `~0.14.1`, which makes `sourcemap inject --release-mode=event` adopt a bundler-emitted ECMA-426 debug id as the chunk id instead of deriving its own, so the ids webpack stamps into each chunk are the ones the CLI uploads against.
+  (2026-08-24)
+- Updated dependencies [[`ca030a6`](https://github.com/PostHog/posthog-js/commit/ca030a66bacd0f084845838e19c0f0b18d54e468), [`325870a`](https://github.com/PostHog/posthog-js/commit/325870a3b6473b1dd302fa66b9a98a02287eb825)]:
+  - posthog-js@1.418.11
+
+## 1.7.85
+
+### Patch Changes
+
+- [#4578](https://github.com/PostHog/posthog-js/pull/4578) [`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916) Thanks [@marandaneto](https://github.com/marandaneto)! - Drop events when a before-send hook throws instead of sending the unmodified event.
+  (2026-08-20)
+- Updated dependencies [[`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916), [`aef2f49`](https://github.com/PostHog/posthog-js/commit/aef2f493cc8d834780f6b670e15e909e6363c259)]:
+  - @posthog/core@1.48.6
+  - posthog-js@1.418.6
+  - posthog-node@5.49.2
+
+## 1.7.84
+
+### Patch Changes
+
+- [#4541](https://github.com/PostHog/posthog-js/pull/4541) [`74d8f5a`](https://github.com/PostHog/posthog-js/commit/74d8f5abd567fa3ec4a746b1c9c3f7c0a64d726c) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Bump `@posthog/cli` to `~0.13.0`, which ships the `release resolve` command the rollup plugin's event release mode spawns.
+  (2026-08-19)
+- Updated dependencies [[`74d8f5a`](https://github.com/PostHog/posthog-js/commit/74d8f5abd567fa3ec4a746b1c9c3f7c0a64d726c), [`3e0edff`](https://github.com/PostHog/posthog-js/commit/3e0edff32a6a6285876026fae35a402d7faef004)]:
+  - @posthog/plugin-utils@1.2.0
+  - posthog-js@1.418.2
+
+## 1.7.83
+
+### Patch Changes
+
+- [#4445](https://github.com/PostHog/posthog-js/pull/4445) [`b2a445a`](https://github.com/PostHog/posthog-js/commit/b2a445a32e685ec810edc0abb2eb05edbdaabdef) Thanks [@onmax](https://github.com/onmax)! - Load the browser SDK only on the client and select explicit Nitro 2 or Nitro 3 runtime imports for Nuxt 3, 4, and 5 compatibility.
+  (2026-08-17)
+- Updated dependencies [[`8d74821`](https://github.com/PostHog/posthog-js/commit/8d74821112fae5e23fb86e4f457cfda03aac10df)]:
+  - posthog-js@1.417.4
+
+## 1.7.82
+
+### Patch Changes
+
+- [#4516](https://github.com/PostHog/posthog-js/pull/4516) [`1c5bf6f`](https://github.com/PostHog/posthog-js/commit/1c5bf6fecb1edf49b0cb813d7ee63f2b47ba063e) Thanks [@marandaneto](https://github.com/marandaneto)! - Bump `@posthog/cli` to `~0.11.1`.
+  (2026-08-13)
+- Updated dependencies [[`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f), [`b2c6830`](https://github.com/PostHog/posthog-js/commit/b2c683051fae7da40be872666a3e8cadf958f804)]:
+  - @posthog/core@1.48.0
+  - posthog-node@5.49.0
+  - posthog-js@1.416.1
+
 ## 1.7.81
 
 ### Patch Changes

@@ -3,6 +3,7 @@
  * clients.
  */
 export type { Extension } from './extension'
+export type { ExtensionToken } from './token'
 export * from './types'
 export { createDisposable, type Disposable } from './disposable'
 export type { Listener } from './pubsub'

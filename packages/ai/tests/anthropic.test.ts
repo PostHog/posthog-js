@@ -394,6 +394,47 @@ describe('PostHogAnthropic', () => {
       expect(properties['$ai_tokens_source']).toBe('sdk')
     })
 
+    conditionalTest('preserves images when the client enables multimodal capture', async () => {
+      Object.assign(mockPostHogClient, { enableFullAiCapture: true })
+      const dataUrl = 'a'.repeat(80)
+
+      await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [
+          {
+            role: 'user',
+            content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: dataUrl } }],
+          } as any,
+        ],
+        max_tokens: 100,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      const captureMock = mockPostHogClient.capture as jest.Mock
+      const [captureArgs] = captureMock.mock.calls
+      expect(JSON.stringify(captureArgs[0].properties['$ai_input'])).toContain(dataUrl)
+    })
+
+    conditionalTest('redacts images when the client does not enable multimodal capture', async () => {
+      const dataUrl = 'a'.repeat(80)
+
+      await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [
+          {
+            role: 'user',
+            content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: dataUrl } }],
+          } as any,
+        ],
+        max_tokens: 100,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      const captureMock = mockPostHogClient.capture as jest.Mock
+      const [captureArgs] = captureMock.mock.calls
+      expect(JSON.stringify(captureArgs[0].properties['$ai_input'])).toContain('redacted')
+    })
+
     conditionalTest('should set tokens_source to passthrough when token properties are overridden', async () => {
       const response = await client.messages.create({
         model: 'claude-3-opus-20240229',

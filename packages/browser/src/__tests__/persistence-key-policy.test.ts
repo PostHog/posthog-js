@@ -775,6 +775,7 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
     const allowedSinkCallerMethods = new Set([
         '_setProp',
         '_deleteProp',
+        '_syncCookieProperties',
         'register',
         'register_once',
         'unregister',

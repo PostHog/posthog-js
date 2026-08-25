@@ -200,16 +200,27 @@ describe('capture v1 transform', () => {
       expect(buildV1Event(baseMessage({ properties: [1, 2] })).properties).toEqual({})
     })
 
-    it('passes a string timestamp through unchanged', () => {
-      const event = buildV1Event(baseMessage({ timestamp: '2024-01-15T10:30:00.000Z' }))
-      expect(event.timestamp).toBe('2024-01-15T10:30:00.000Z')
+    it('normalizes a parseable string timestamp to the equivalent UTC instant', () => {
+      const event = buildV1Event(baseMessage({ timestamp: '2024-01-15T10:30:00.000+05:30' }))
+      expect(event.timestamp).toBe('2024-01-15T05:00:00.000Z')
     })
 
-    it('converts a Date timestamp to an ISO string', () => {
+    it('preserves sub-millisecond precision when normalizing a string timestamp', () => {
+      const event = buildV1Event(baseMessage({ timestamp: '2024-01-15T10:30:00.123456+05:30' }))
+      expect(event.timestamp).toBe('2024-01-15T05:00:00.123456Z')
+    })
+
+    it('converts a Date timestamp to the equivalent UTC ISO string', () => {
       const event = buildV1Event(
-        baseMessage({ timestamp: new Date('2024-01-15T10:30:00.000Z') as unknown as JsonType })
+        baseMessage({ timestamp: new Date('2024-01-15T10:30:00.000-04:00') as unknown as JsonType })
       )
-      expect(event.timestamp).toBe('2024-01-15T10:30:00.000Z')
+      expect(event.timestamp).toBe('2024-01-15T14:30:00.000Z')
+    })
+
+    it('normalizes a timezone-less string from the configured non-UTC timezone', () => {
+      expect(process.env.TZ).toBe('America/Los_Angeles')
+      const event = buildV1Event(baseMessage({ timestamp: '2024-01-15T10:30:00.123456' }))
+      expect(event.timestamp).toBe('2024-01-15T18:30:00.123456Z')
     })
 
     it('treats a numeric timestamp as epoch milliseconds', () => {

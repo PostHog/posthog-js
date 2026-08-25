@@ -17,6 +17,7 @@ const knownNonAbiOverlaps = [
     '_buffer',
     '_client',
     '_config',
+    '_disposed',
     '_enqueue',
     '_events',
     '_extends',
@@ -32,11 +33,9 @@ const knownNonAbiOverlaps = [
     '_onRemoteConfig',
     '_persistence',
     '_queue',
-    '_refreshInterval',
     '_remove',
     '_runBeforeSend',
     '_set',
-    '_startRefreshInterval',
 ]
 
 module.exports = {

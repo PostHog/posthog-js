@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "8.7.1",
+  "version": "8.8.1",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -23,11 +23,11 @@
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "devDependencies": {
-    "@ai-sdk/provider": "^3.0.14",
-    "@anthropic-ai/sdk": "^0.112.3",
+    "@ai-sdk/provider": "^3.0.15",
+    "@anthropic-ai/sdk": "^0.117.1",
     "@google/genai": "^1.52.0",
-    "@langchain/core": "^1.2.3",
-    "openai": "^6.48.0",
+    "@langchain/core": "^1.2.8",
+    "openai": "^6.49.0",
     "@openai/agents": "^0.8.0",
     "@openai/agents-core": "^0.8.0",
     "@opentelemetry/api": "^1.9.0",

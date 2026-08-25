@@ -2,8 +2,10 @@ import { version } from './version'
 
 import {
   FeatureFlagValue,
+  getEventUuid,
   isBlockedUA,
   isPlainObject,
+  isPostHogFetchContentTooLargeError,
   JsonType,
   minimizeFlagCalledEventProperties,
   PostHogCaptureOptions,
@@ -58,6 +60,8 @@ import { ContextData, ContextOptions, IPostHogContext } from './extensions/conte
 import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
 import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routing'
 import { V1CaptureSender } from './capture-v1/sender'
+import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
+import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -143,6 +147,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   private readonly captureMode: CaptureMode
   private _v1Sender?: V1CaptureSender
+  /** Whether this client captures full AI content: see `enableFullAiCapture` in `PostHogOptions`. */
+  public readonly enableFullAiCapture: boolean
+  private _aiCaptureRouteActive = false
 
   // Feature flag overrides for local testing/development
   private _flagOverrides?: Record<string, FeatureFlagValue>
@@ -209,6 +216,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     this.options = normalizedOptions
     this.captureMode = resolveCaptureMode()
+    this.enableFullAiCapture = normalizedOptions.enableFullAiCapture === true
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =
@@ -262,8 +270,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.maxCacheSize = normalizedOptions.maxCacheSize || MAX_CACHE_SIZE
   }
 
-  protected override enqueue(type: string, message: any, options?: PostHogCaptureOptions): void {
-    super.enqueue(type, message, options)
+  protected override enqueue(
+    type: string,
+    message: any,
+    options?: PostHogCaptureOptions,
+    explicitRoute?: string
+  ): void {
+    super.enqueue(type, message, options, explicitRoute)
     this.scheduleDebouncedFlush()
   }
 
@@ -433,13 +446,22 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   protected persistedQueueKeyForRoute(route: string): PostHogPersistedProperty {
+    if (route === AI_CAPTURE_ROUTE) {
+      return PostHogPersistedProperty.AiCaptureQueue
+    }
     return route === AI_ROUTE ? PostHogPersistedProperty.AiQueue : PostHogPersistedProperty.Queue
   }
 
   protected getActiveQueueRoutes(): string[] {
-    // Only surface the AI route in v1 mode — v0 mode never enqueues onto it, so keeping it out
-    // keeps v0's flush/shutdown identical to before (a single queue on ANALYTICS_ROUTE).
-    return this.captureMode === 'v1' ? [ANALYTICS_ROUTE, AI_ROUTE] : [ANALYTICS_ROUTE]
+    const routes = this.captureMode === 'v1' ? [ANALYTICS_ROUTE, AI_ROUTE] : [ANALYTICS_ROUTE]
+    if (this._aiCaptureRouteActive) {
+      routes.push(AI_CAPTURE_ROUTE)
+    }
+    return routes
+  }
+
+  protected getBatchEndpointPath(route: string): string {
+    return route === AI_CAPTURE_ROUTE ? AI_CAPTURE_ENDPOINT_PATH : super.getBatchEndpointPath(route)
   }
 
   /**
@@ -455,6 +477,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     retryOptions?: Partial<RetriableOptions>,
     route: string = ANALYTICS_ROUTE
   ): Promise<void> {
+    if (route === AI_CAPTURE_ROUTE) {
+      return this.sendAiCaptureBatch(batchMessages, retryOptions)
+    }
+
     if (this.captureMode !== 'v1' || route === AI_ROUTE) {
       return super.sendBatch(batchMessages, retryOptions, route)
     }
@@ -463,6 +489,46 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // undefined for a freshly-enqueued event; drop any legacy undefined queue artifacts.
     const v1Events = batchMessages.filter((message): message is PostHogEventProperties => message !== undefined)
     await this.getV1Sender().sendV1Batch(v1Events)
+  }
+
+  private async sendAiCaptureBatch(
+    batchMessages: (PostHogEventProperties | undefined)[],
+    retryOptions?: Partial<RetriableOptions>
+  ): Promise<void> {
+    const { batches, dropped } = partitionAiBatch(batchMessages)
+    for (const { event, bytes } of dropped) {
+      const message = `Event ${event} (${bytes} bytes) exceeds the ${AI_MAX_EVENT_BYTES / (1024 * 1024)}MiB limit for ${AI_CAPTURE_ENDPOINT_PATH}, dropping.`
+      this._logger.error(message)
+      this._events.emit('error', new Error(message))
+    }
+    for (const batch of batches) {
+      await this.sendAiSubBatch(batch, retryOptions)
+    }
+  }
+
+  // A single-event 413 means the server's cap is below that event's size, so no split can save it.
+  private async sendAiSubBatch(
+    batch: PostHogEventProperties[],
+    retryOptions?: Partial<RetriableOptions>
+  ): Promise<void> {
+    try {
+      await super.sendBatch(batch, retryOptions, AI_CAPTURE_ROUTE)
+    } catch (err) {
+      if (!isPostHogFetchContentTooLargeError(err)) {
+        throw err
+      }
+      if (batch.length === 1) {
+        const [event] = batch
+        const eventName = typeof event.event === 'string' ? event.event : 'unknown'
+        const message = `Event ${eventName} (${eventByteSize(event)} bytes) was rejected with 413 by ${AI_CAPTURE_ENDPOINT_PATH} on its own, dropping.`
+        this._logger.error(message)
+        this._events.emit('error', new Error(message))
+        return
+      }
+      const mid = Math.ceil(batch.length / 2)
+      await this.sendAiSubBatch(batch.slice(0, mid), retryOptions)
+      await this.sendAiSubBatch(batch.slice(mid), retryOptions)
+    }
   }
 
   private getV1Sender(): V1CaptureSender {
@@ -658,7 +724,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     type: string,
     props: EventMessage,
     immediate: boolean,
-    prepareOptions?: { includeContextProperties?: boolean }
+    prepareOptions?: { includeContextProperties?: boolean },
+    explicitRoute?: string
   ): Promise<void> {
     return this.addPendingPromise(
       this._prepareEventMessage(props, prepareOptions)
@@ -677,8 +744,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             },
           }
           return immediate
-            ? this.sendImmediate(type, message, captureOptions)
-            : this.enqueue(type, message, captureOptions)
+            ? this.sendImmediate(type, message, captureOptions, explicitRoute)
+            : this.enqueue(type, message, captureOptions, explicitRoute)
         })
         .catch((err) => {
           if (err) {
@@ -769,6 +836,54 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       "Capturing a `$exception` event via `posthog.captureImmediate('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureExceptionImmediate(error)` instead, which attaches this metadata by default."
     )
     return this._capturePreparedEvent(props, true)
+  }
+
+  /**
+   * Capture an AI event on the dedicated AI capture endpoint.
+   *
+   * Beta: the signature is stable; operational limits (per-event size cap,
+   * batching, endpoint) may change without notice. Delivery is async, and no
+   * redaction or truncation is applied to the payload.
+   *
+   * {@label Capture}
+   *
+   * @param props - The event properties
+   * @returns The event UUID, or `undefined` when the client is disabled
+   */
+  captureAi(props: EventMessage): string | undefined {
+    if (this.disabled) {
+      return undefined
+    }
+    const uuid = getEventUuid(props.uuid, uuidv7)
+    void this._sendPreparedAiEvent({ ...props, uuid }, false)
+    return uuid
+  }
+
+  /**
+   * Capture an AI event on the dedicated AI capture endpoint, resolving after
+   * the send completes. Use in short-lived processes (serverless) where the
+   * runtime may freeze before a background flush runs.
+   *
+   * {@label Capture}
+   *
+   * @param props - The event properties
+   * @returns The event UUID, or `undefined` when the client is disabled
+   */
+  async captureAiImmediate(props: EventMessage): Promise<string | undefined> {
+    if (this.disabled) {
+      return undefined
+    }
+    const uuid = getEventUuid(props.uuid, uuidv7)
+    await this._sendPreparedAiEvent({ ...props, uuid }, true)
+    return uuid
+  }
+
+  private _sendPreparedAiEvent(props: EventMessage, immediate: boolean): Promise<void> {
+    if (typeof props?.event === 'string' && !props.event.startsWith('$ai_')) {
+      this._logger.debug(`captureAi called with non-AI event ${props.event}; routing it to the AI endpoint anyway.`)
+    }
+    this._aiCaptureRouteActive = true
+    return this._sendPreparedEvent('capture', props, immediate, undefined, AI_CAPTURE_ROUTE)
   }
 
   /**
@@ -1232,7 +1347,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           result = {
             key,
             enabled: flagDetail.enabled,
-            variant: flagDetail.variant,
+            // The flags API serializes missing variants as null
+            variant: flagDetail.variant ?? undefined,
             payload: parsedPayload,
           }
         }
@@ -1825,11 +1941,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * **Local evaluation is transparent.** When the poller can resolve a flag from
    * cached definitions, no network call is made and the snapshot's `$feature_flag_called`
-   * events are tagged `locally_evaluated: true`.
+   * events are tagged `locally_evaluated: true`. A requested key missing from local
+   * definitions is included in a `/flags` fallback unless `onlyEvaluateLocally` is true.
+   * Locally resolved values remain authoritative when remote results are merged.
    *
-   * **Trim the request.** Pass `flagKeys` to scope the underlying `/flags` request
-   * to a subset of flags — useful when you only need a few flags and want to reduce
-   * the response payload.
+   * **Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying
+   * `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation
+   * responses are not cached, so a key missing both locally and remotely costs one
+   * `/flags` request per `evaluateFlags()` call.
    *
    * **Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()`
    * to filter which flags get attached to a captured event without re-fetching.
@@ -1876,7 +1995,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Feature flags}
    *
    * @param distinctIdOrOptions - The user's distinct ID, or options when the distinctId comes from `withContext()`
-   * @param options - Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`, including `flagKeys` to scope the `/flags` request.
+   * @param options - Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent.
    * @returns Promise that resolves to a `FeatureFlagEvaluations` snapshot
    */
   async evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
@@ -1910,7 +2029,19 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       })
     }
 
-    const { groups, disableGeoip, flagKeys } = resolvedOptions || {}
+    const { groups, disableGeoip } = resolvedOptions || {}
+    const flagKeys = resolvedOptions?.flagKeys ?? undefined
+
+    if (flagKeys?.length === 0) {
+      return new FeatureFlagEvaluations({
+        host: this._getFeatureFlagEvaluationsHost(),
+        distinctId: resolvedDistinctId,
+        groups,
+        disableGeoip,
+        flags: {},
+      })
+    }
+
     let { onlyEvaluateLocally, personProperties, groupProperties } = resolvedOptions || {}
 
     const adjustedProperties = this.addLocalPersonAndGroupProperties(
@@ -1932,6 +2063,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       onlyEvaluateLocally = this.options.strictLocalEvaluation ?? false
     }
 
+    const requestedFlagKeys = flagKeys ? new Set(flagKeys) : undefined
     const records: Record<string, EvaluatedFlagRecord> = {}
     let requestId: string | undefined = undefined
     let evaluatedAt: number | undefined = undefined
@@ -1965,7 +2097,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // Fall back to remote evaluation for any flags the poller couldn't resolve locally.
     // We use the detail-shaped endpoint so the resulting records carry id/version/reason
     // and fired $feature_flag_called events match what isFeatureEnabled()/getFeatureFlag() emit.
-    const fallbackToFlags = localResult ? localResult.fallbackToFlags : true
+    const requestedFlagMissingLocally =
+      requestedFlagKeys !== undefined &&
+      Array.from(requestedFlagKeys).some((key) => this.featureFlagsPoller?.featureFlagsByKey[key] === undefined)
+    const fallbackToFlags = localResult ? localResult.fallbackToFlags || requestedFlagMissingLocally : true
     if (fallbackToFlags && !onlyEvaluateLocally) {
       const details = await super.getFeatureFlagDetailsStateless(
         evaluationContext.distinctId,
@@ -2034,6 +2169,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         const existing = records[key]
         if (existing) {
           records[key] = { ...existing, payload }
+        }
+      }
+    }
+
+    if (requestedFlagKeys !== undefined) {
+      for (const key of Object.keys(records)) {
+        if (!requestedFlagKeys.has(key)) {
+          delete records[key]
         }
       }
     }
@@ -2942,14 +3085,19 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     let result: EventMessage | null = eventMessage
 
     for (const fn of fns) {
-      result = fn(result)
-      if (!result) {
-        this._logger.info(`Event '${eventMessage.event}' was rejected in beforeSend function`)
+      try {
+        result = fn(result)
+        if (!result) {
+          this._logger.info(`Event '${eventMessage.event}' was rejected in beforeSend function`)
+          return null
+        }
+        if (!result.properties || Object.keys(result.properties).length === 0) {
+          const message = `Event '${result.event}' has no properties after beforeSend function, this is likely an error.`
+          this._logger.warn(message)
+        }
+      } catch (error) {
+        this._logger.error(`Error in before_send function for event '${eventMessage.event}':`, error)
         return null
-      }
-      if (!result.properties || Object.keys(result.properties).length === 0) {
-        const message = `Event '${result.event}' has no properties after beforeSend function, this is likely an error.`
-        this._logger.warn(message)
       }
     }
 

@@ -55,6 +55,7 @@ export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
    * request on capture and may return different values than the ones the code branched on.
    */
   sendFeatureFlags?: boolean | SendFeatureFlagsOptions
+  /** If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC. */
   timestamp?: Date
   /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string
@@ -109,6 +110,7 @@ export type BaseFlagEvaluationOptions = {
   groups?: Record<string, string>
   personProperties?: Properties
   groupProperties?: Record<string, Properties>
+  /** Skip remote fallback and omit flags that local definitions cannot resolve. */
   onlyEvaluateLocally?: boolean
   disableGeoip?: boolean
 }
@@ -117,6 +119,13 @@ export type FlagEvaluationOptions = BaseFlagEvaluationOptions & {
 }
 
 export type AllFlagsOptions = BaseFlagEvaluationOptions & {
+  /**
+   * Restrict local evaluation, the `/flags` request, and the returned snapshot to these keys.
+   * An empty array returns an empty snapshot without evaluating flags; omitting this option
+   * evaluates all flags. `evaluateFlags()` falls back remotely when a requested key is missing
+   * from local definitions unless `onlyEvaluateLocally` is true. Remote evaluation responses are
+   * not cached, so a key missing both locally and remotely costs one `/flags` request per call.
+   */
   flagKeys?: string[]
 }
 
@@ -336,6 +345,13 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * new PostHog('key', { isServer: false })
    */
   isServer?: boolean
+  /**
+   * Capture full AI content: PostHog AI wrapper events route through the
+   * dedicated AI capture endpoint, skip string truncation, and pass media
+   * (base64 / data URIs) through unredacted. Privacy mode always wins.
+   * Defaults to false.
+   */
+  enableFullAiCapture?: boolean
 } & ExceptionRateLimiterConfig
 
 export type PostHogFeatureFlag = {
@@ -424,6 +440,38 @@ export interface IPostHog {
    * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
    */
   captureImmediate({ distinctId, event, properties, groups, flags, sendFeatureFlags }: EventMessage): Promise<void>
+
+  /**
+   * @description Capture an AI event on the dedicated AI capture endpoint.
+   * Beta: the signature is stable; operational limits (per-event size cap, batching, endpoint) may change without notice. Delivery is async, and no redaction or truncation is applied to the payload.
+   * @param distinctId which uniquely identifies your user
+   * @param event We recommend using [verb] [noun], like movie played or movie updated to easily identify what your events mean later on.
+   * @param properties OPTIONAL | which can be a object with any information you'd like to add
+   * @param groups OPTIONAL | object of what groups are related to this event, example: { company: 'id:5' }. Can be used to analyze companies instead of users.
+   * @param flags OPTIONAL | A `FeatureFlagEvaluations` snapshot from `evaluateFlags()`. Attaches those exact flag values to the event with no extra network call.
+   * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
+   * @returns The event UUID, or `undefined` when the client is disabled
+   */
+  captureAi({ distinctId, event, properties, groups, flags, sendFeatureFlags }: EventMessage): string | undefined
+
+  /**
+   * @description Capture an AI event on the dedicated AI capture endpoint, resolving after the send completes. Use in short-lived processes (serverless) where the runtime may freeze before a background flush runs.
+   * @param distinctId which uniquely identifies your user
+   * @param event We recommend using [verb] [noun], like movie played or movie updated to easily identify what your events mean later on.
+   * @param properties OPTIONAL | which can be a object with any information you'd like to add
+   * @param groups OPTIONAL | object of what groups are related to this event, example: { company: 'id:5' }. Can be used to analyze companies instead of users.
+   * @param flags OPTIONAL | A `FeatureFlagEvaluations` snapshot from `evaluateFlags()`. Attaches those exact flag values to the event with no extra network call.
+   * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
+   * @returns The event UUID, or `undefined` when the client is disabled
+   */
+  captureAiImmediate({
+    distinctId,
+    event,
+    properties,
+    groups,
+    flags,
+    sendFeatureFlags,
+  }: EventMessage): Promise<string | undefined>
 
   /**
    * @description Identify lets you add metadata on your users so you can more easily identify who they are in PostHog,
@@ -655,14 +703,14 @@ export interface IPostHog {
    * posthog.capture({ distinctId: 'user_123', event: 'page_viewed', flags })
    * ```
    *
-   * @param options - Optional configuration for flag evaluation. Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags.
+   * @param options - Optional configuration for flag evaluation. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. Missing local keys trigger fallback unless `onlyEvaluateLocally` is true.
    */
   evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
   /**
    * @description Evaluate all feature flags for a specific user.
    *
    * @param distinctId - The user's distinct ID
-   * @param options - Optional configuration for flag evaluation. Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags.
+   * @param options - Optional configuration for flag evaluation. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. Missing local keys trigger fallback unless `onlyEvaluateLocally` is true.
    */
   evaluateFlags(distinctId: string, options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
 

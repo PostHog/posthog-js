@@ -41,6 +41,7 @@ import {
   countSerializedNode,
   deferStylesheetLink,
   endSnapshotCostTracking,
+  runNonDeferrableStylesheetWork,
   shouldDeferStylesheetInlining,
 } from './snapshot-cost';
 
@@ -810,8 +811,10 @@ function serializeElementNode(
     // TODO: Currently we only try to get dynamic stylesheet when it is an empty style element
     !((n as HTMLElement).innerText || dom.textContent(n) || '').trim().length
   ) {
-    const cssText = stringifyStylesheet(
-      (n as HTMLStyleElement).sheet as CSSStyleSheet,
+    // a CSSOM-only sheet has no href or textContent fallback, so it can never
+    // be deferred; its rules must not charge the budget either
+    const cssText = runNonDeferrableStylesheetWork(() =>
+      stringifyStylesheet((n as HTMLStyleElement).sheet as CSSStyleSheet),
     );
     if (cssText) {
       attributes._cssText = cssText;

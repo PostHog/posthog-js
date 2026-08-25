@@ -8,6 +8,18 @@ import { isString, isArray, isObject, ErrorTracking, isNullish } from '@posthog/
 
 const logger = createLogger('[Error tracking]')
 
+// Browser extensions serve their content scripts from these schemes. `safari-extension:` and
+// `safari-web-extension:` are synthesised by the stack parser (see extractSafariExtensionDetails)
+// rather than being real URLs, but they mark the frame just as definitively.
+const EXTENSION_URL_PREFIXES = ['chrome-extension://', 'moz-extension://', 'safari-extension:', 'safari-web-extension:']
+
+// Some mobile browsers inject their own user scripts into every page. These scripts read
+// browser-private globals, and when a script runs before its global exists it throws. The
+// browser attributes the injected script to the host document, so the frame filename is the
+// page URL and EXTENSION_URL_PREFIXES cannot catch it. We match the private global in the
+// exception value instead. No page or SDK code references these names.
+const INJECTED_BROWSER_SCRIPT_GLOBALS = ['__firefox__', '__gCrWeb']
+
 export function buildErrorPropertiesBuilder() {
     return new ErrorTracking.ErrorPropertiesBuilder(
         [
@@ -128,6 +140,12 @@ export class PostHogExceptions implements Extension {
                 if (!this._captureExtensionExceptions && this._isExtensionException(exceptionList)) {
                     this._addDroppedExceptionStep('Exception dropped: thrown by a browser extension')
                     logger.info('Skipping exception capture because it was thrown by an extension')
+                    return
+                }
+
+                if (!this._captureExtensionExceptions && this._isInjectedBrowserScriptException(exceptionList)) {
+                    this._addDroppedExceptionStep('Exception dropped: thrown by an injected browser script')
+                    logger.info('Skipping exception capture because it was thrown by an injected browser script')
                     return
                 }
 
@@ -261,7 +279,15 @@ export class PostHogExceptions implements Extension {
 
     private _isExtensionException(exceptionList: ErrorTracking.ExceptionList): boolean {
         const frames = exceptionList.flatMap((e) => e.stacktrace?.frames ?? [])
-        return frames.some((f) => f.filename && f.filename.startsWith('chrome-extension://'))
+        return frames.some(({ filename }) => {
+            return !!filename && EXTENSION_URL_PREFIXES.some((prefix) => filename.startsWith(prefix))
+        })
+    }
+
+    private _isInjectedBrowserScriptException(exceptionList: ErrorTracking.ExceptionList): boolean {
+        return exceptionList.some(({ value }) => {
+            return isString(value) && INJECTED_BROWSER_SCRIPT_GLOBALS.some((global) => value.includes(global))
+        })
     }
 
     private _isPostHogException(exceptionList: ErrorTracking.ExceptionList): boolean {

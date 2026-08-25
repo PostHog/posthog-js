@@ -30,6 +30,8 @@ import {
 } from '../utils/survey-utils'
 import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
 import { Properties } from '../types'
+import { FeatureFlagsExtension } from '../extension-tokens'
+import type { PostHogFeatureFlags } from '../posthog-featureflags'
 import { SURVEYS } from '../constants'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
@@ -52,6 +54,7 @@ import {
     doesSurveyMatchSelector,
     doesSurveyUrlMatch,
     getDisplayOrderQuestions,
+    getQuestionOrder,
     getInProgressSurveyState,
     getSurveyContainerClass,
     getSurveyResponseKey,
@@ -140,12 +143,19 @@ export class SurveyManager {
     private _surveyTimeouts: Map<string, ReturnType<Window['setTimeout']>> = new Map()
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
+    private _renderedTargets: Map<ShadowRoot, Element> = new Map()
     private _prefillHandledSurveys: Set<string> = new Set()
+    private _automaticDisplayDispose?: () => void
 
     constructor(posthog: PostHog) {
         this._posthog = posthog
         // This is used to track the survey that is currently in focus. We only show one survey at a time.
         this._surveyInFocus = null
+    }
+
+    private get _featureFlags(): PostHogFeatureFlags | undefined {
+        // A newly deployed surveys bundle can still be loaded by an older cached core.
+        return this._posthog.getExtension?.(FeatureFlagsExtension) ?? this._posthog.featureFlags
     }
 
     public handlePageUnload = (): void => {
@@ -188,6 +198,23 @@ export class SurveyManager {
         if (this._surveyInFocus === surveyId) {
             this._surveyInFocus = null
         }
+    }
+
+    public setAutomaticDisplayDispose(dispose: () => void): void {
+        this._automaticDisplayDispose = dispose
+    }
+
+    public dispose(): void {
+        this._automaticDisplayDispose?.()
+        this._automaticDisplayDispose = undefined
+        this._surveyTimeouts.forEach((_timeout, surveyId) => this._clearSurveyTimeout(surveyId))
+        this._widgetSelectorListeners.forEach((_listener, surveyId) => this._detachWidgetSelectorListener(surveyId))
+        this._renderedTargets.forEach((container, target) => {
+            render(null, target)
+            container?.remove()
+        })
+        this._renderedTargets.clear()
+        this._surveyInFocus = null
     }
 
     /**
@@ -246,6 +273,7 @@ export class SurveyManager {
 
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
         const { shadow } = retrieveSurveyShadow(survey, this._posthog)
+        this._renderedTargets.set(shadow, shadow.host)
 
         const surveyPopupProps: SurveyPopupProps = {
             posthog: this._posthog,
@@ -322,6 +350,7 @@ export class SurveyManager {
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         // Ensure widget container exists if it doesn't
         const { shadow, isNewlyCreated } = retrieveSurveyShadow(translatedSurvey, this._posthog)
+        this._renderedTargets.set(shadow, shadow.host)
 
         // If the widget is already rendered, do nothing. Otherwise the widget will be re-rendered every second
         if (!isNewlyCreated) {
@@ -465,6 +494,7 @@ export class SurveyManager {
     public renderPopover = (survey: Survey): void => {
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         const { shadow } = retrieveSurveyShadow(translatedSurvey, this._posthog)
+        this._renderedTargets.set(shadow, shadow.host)
         render(
             <SurveyPopup
                 posthog={this._posthog}
@@ -522,13 +552,26 @@ export class SurveyManager {
             return false
         }
 
-        const { responses, submissionId, isSurveyCompleted, skippedResponses } = result
+        this._autoSubmitPrefilledResponses(survey, result, properties, surveyLanguage)
 
-        /**
-         * auto-submit some survey events on pageload only if:
-         * 1) survey is complete, OR
-         * 2) partial responses are enabled AND the skipped questions were set to auto-submit
-         */
+        // Mark this survey as having been prefilled
+        this._prefillHandledSurveys.add(survey.id)
+
+        return result.isSurveyCompleted
+    }
+
+    /**
+     * On load, capture a response for prefilled questions only when:
+     * 1) the survey is complete, OR
+     * 2) partial responses are enabled AND the skipped questions were set to auto-submit.
+     */
+    private _autoSubmitPrefilledResponses(
+        survey: Survey,
+        result: NonNullable<ReturnType<SurveyManager['_processPrefillData']>>,
+        properties?: Properties,
+        surveyLanguage?: string | null
+    ): void {
+        const { responses, submissionId, isSurveyCompleted, skippedResponses } = result
         const shouldAutoSubmitPrefilled = Object.keys(skippedResponses).length > 0 && survey.enable_partial_responses
         if (shouldAutoSubmitPrefilled || isSurveyCompleted) {
             sendSurveyEvent({
@@ -541,11 +584,6 @@ export class SurveyManager {
                 surveyLanguage,
             })
         }
-
-        // Mark this survey as having been prefilled
-        this._prefillHandledSurveys.add(survey.id)
-
-        return isSurveyCompleted
     }
 
     /**
@@ -572,20 +610,9 @@ export class SurveyManager {
             return false
         }
 
-        const { responses, submissionId, isSurveyCompleted } = result
+        this._autoSubmitPrefilledResponses(survey, result, properties, surveyLanguage)
 
-        // always capture immediately
-        sendSurveyEvent({
-            responses,
-            survey,
-            surveySubmissionId: submissionId,
-            posthog: this._posthog,
-            isSurveyCompleted,
-            properties,
-            surveyLanguage,
-        })
-
-        return isSurveyCompleted
+        return result.isSurveyCompleted
     }
 
     private _processPrefillData(
@@ -622,6 +649,7 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 responses: responses,
                 lastQuestionIndex: startQuestionIndex,
+                questionOrder: getQuestionOrder(survey.questions),
                 // Mark auto-advanced questions visited so a manual submit doesn't prune their answers.
                 visitedIndices: skippedIndices,
                 surveyLanguage,
@@ -640,12 +668,13 @@ export class SurveyManager {
         if (!flagKey) {
             return true
         }
-        const isFeatureEnabled = !!this._posthog.featureFlags?.isFeatureEnabled(flagKey, {
+        const featureFlags = this._featureFlags
+        const isFeatureEnabled = !!featureFlags?.isFeatureEnabled(flagKey, {
             send_event: !flagKey.startsWith(SURVEY_TARGETING_FLAG_PREFIX),
         })
         let flagVariantCheck = true
         if (flagVariant) {
-            const flagVariantValue = this._posthog.featureFlags?.getFeatureFlag(flagKey, { send_event: false })
+            const flagVariantValue = featureFlags?.getFeatureFlag(flagKey, { send_event: false })
             flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
         }
         return isFeatureEnabled && flagVariantCheck
@@ -688,7 +717,7 @@ export class SurveyManager {
         if (
             survey.internal_targeting_flag_key &&
             isSurveyIterationBased(survey) &&
-            !this._posthog.featureFlags?.hasLoadedFlags
+            !this._featureFlags?.hasLoadedFlags
         ) {
             return {
                 satisfied: false,
@@ -896,6 +925,7 @@ export class SurveyManager {
             const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
             if (shadowContainer?.shadowRoot) {
                 render(null, shadowContainer.shadowRoot)
+                this._renderedTargets.delete(shadowContainer.shadowRoot)
             }
             shadowContainer?.remove()
         } catch (error) {
@@ -1039,13 +1069,18 @@ export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean | un
 
     startInterval()
 
-    addEventListener(document, 'visibilitychange', () => {
+    const onVisibilityChange = () => {
         if (document.hidden) {
             stopInterval()
         } else {
             surveyManager.callSurveysAndEvaluateDisplayLogic(false)
             startInterval()
         }
+    }
+    addEventListener(document, 'visibilitychange', onVisibilityChange)
+    surveyManager.setAutomaticDisplayDispose(() => {
+        stopInterval()
+        document.removeEventListener('visibilitychange', onVisibilityChange)
     })
 
     return surveyManager
@@ -1128,6 +1163,10 @@ export function useHideSurveyOnURLChange({
     }, [isPreviewMode, survey, removeSurveyFromFocus, setSurveyVisible, posthog])
 }
 
+// Duration of the survey close fade-out, in milliseconds. Kept short so the popup
+// disappears promptly; also the window the fallback settle timer waits on.
+const CLOSE_ANIMATION_DURATION_MS = 200
+
 export function usePopupVisibility(
     survey: Survey,
     posthog: PostHog | undefined,
@@ -1144,13 +1183,12 @@ export function usePopupVisibility(
     )
     const [isSurveySent, setIsSurveySent] = useState(false)
 
-    // Tracks whether a view transition is already in flight so a second close
-    // (e.g. Enter + button click, or a dismiss fired while the thank-you screen
-    // is animating out) doesn't start an overlapping transition. Overlapping
-    // transitions on the same document are a known source of renderer crashes.
-    const isTransitionInFlightRef = useRef(false)
+    // Tracks whether a close is already animating so a second close (e.g. Enter +
+    // button click, or a dismiss fired while the thank-you screen is animating out)
+    // doesn't start a second animation or tear the popup down twice.
+    const isClosingRef = useRef(false)
 
-    const hidePopupWithViewTransition = () => {
+    const hidePopupWithAnimation = () => {
         const removeDOMAndHidePopup = () => {
             if (isPopup) {
                 removeSurveyFromFocus(survey)
@@ -1158,58 +1196,51 @@ export function usePopupVisibility(
             setIsPopupVisible(false)
         }
 
-        // No View Transitions API (jsdom, older browsers): tear down synchronously.
-        if (typeof document === 'undefined' || !document.startViewTransition) {
+        // A close is already animating. Don't start a second one — the in-flight
+        // close settles the popup when it finishes.
+        if (isClosingRef.current) {
+            return
+        }
+
+        // No element to animate (jsdom, or the ref never attached): tear down now.
+        // Do this before raising isClosingRef so the guard is only ever set for a real
+        // in-flight animation — this early return has no timer to clear it, so setting
+        // the flag here would leave it stuck and block every later close.
+        const container = surveyContainerRef?.current
+        if (!container) {
             removeDOMAndHidePopup()
             return
         }
 
-        // A transition is already animating the close. Don't start a second one —
-        // overlapping transitions on the same document are themselves a renderer
-        // crash risk. The in-flight transition's `finish` will hide the popup.
-        if (isTransitionInFlightRef.current) {
-            return
-        }
+        // Committing to the fade now — raise the guard so a second close can't start
+        // another animation; the settle timer below clears it.
+        isClosingRef.current = true
 
-        isTransitionInFlightRef.current = true
+        // Fade the popup out with a plain CSS opacity transition scoped to the
+        // survey's own container, which lives in an isolated shadow root. We
+        // deliberately do NOT use document.startViewTransition: that API snapshots
+        // the ENTIRE page viewport, and on a heavy host page (e.g. a large dashboard)
+        // capturing that snapshot can exhaust renderer memory and crash the tab (grey
+        // "Aw, Snap"). A scoped opacity transition costs nothing on the rest of the page.
+        container.style.transition = `opacity ${CLOSE_ANIMATION_DURATION_MS}ms ease-out`
+        container.style.opacity = '0'
 
-        const finish = () => {
-            isTransitionInFlightRef.current = false
+        // Unmount once the fade has had time to run. This uses a timer rather than a
+        // `transitionend` listener because transitionend never fires for a cancelled or
+        // zero-duration transition (backgrounded tab, reduced motion), so a timer would
+        // have to back it up regardless — and settling a few ms later than strictly
+        // necessary is imperceptible for an element that is already fully transparent.
+        setTimeout(() => {
+            isClosingRef.current = false
             removeDOMAndHidePopup()
-        }
-
-        try {
-            // The transition callback only animates the fade-out of the survey
-            // container. It must NOT own the DOM teardown — removing the element
-            // inside the callback (the previous behaviour) is what triggered a
-            // Chromium renderer crash (grey "Aw, Snap" tab) on heavy SPAs, because
-            // the transition's captured snapshot ended up pointing at a removed
-            // node. React unmounts the container via setIsPopupVisible(false) +
-            // removeSurveyFromFocus once the transition settles.
-            const transition = document.startViewTransition(() => {
-                if (surveyContainerRef?.current) {
-                    surveyContainerRef.current.style.opacity = '0'
-                }
-            })
-
-            // `transition.finished` rejects if the transition is skipped or
-            // interrupted (e.g. tab backgrounded, reduced motion, another transition
-            // supersedes it). Always settle the state so the popup is never left
-            // visible with a stale ref.
-            transition.finished.then(finish, finish)
-        } catch (error) {
-            // startViewTransition can throw if the document is not in a state that
-            // allows a transition (e.g. during unload). Fall back to a plain remove.
-            logger.warn('View transition failed, removing survey without animation:', error)
-            finish()
-        }
+        }, CLOSE_ANIMATION_DURATION_MS + 50)
     }
 
     const handleSurveyClosed = (event: CustomEvent) => {
         if (event.detail.surveyId !== survey.id) {
             return
         }
-        hidePopupWithViewTransition()
+        hidePopupWithAnimation()
     }
 
     useEffect(() => {
@@ -1221,18 +1252,20 @@ export function usePopupVisibility(
             return
         }
 
+        let autoDisappearTimeout: ReturnType<typeof setTimeout> | undefined
         const handleSurveySent = (event: CustomEvent) => {
             if (event.detail.surveyId !== survey.id) {
                 return
             }
             if (!survey.appearance?.displayThankYouMessage) {
-                return hidePopupWithViewTransition()
+                return hidePopupWithAnimation()
             }
             setIsSurveySent(true)
             if (survey.appearance?.autoDisappear) {
-                setTimeout(() => {
-                    hidePopupWithViewTransition()
-                }, 5000)
+                if (autoDisappearTimeout) {
+                    clearTimeout(autoDisappearTimeout)
+                }
+                autoDisappearTimeout = setTimeout(hidePopupWithAnimation, 5000)
             }
         }
 
@@ -1263,22 +1296,20 @@ export function usePopupVisibility(
         addEventListener(window, 'PHSurveyClosed', handleSurveyClosed as EventListener)
         addEventListener(window, 'PHSurveySent', handleSurveySent as EventListener)
 
-        if (millisecondDelay > 0) {
-            // This path is only used for direct usage of SurveyPopup,
-            // not for surveys managed by SurveyManager
-            const timeoutId = setTimeout(showSurvey, millisecondDelay)
-            return () => {
-                clearTimeout(timeoutId)
-                window.removeEventListener('PHSurveyClosed', handleSurveyClosed as EventListener)
-                window.removeEventListener('PHSurveySent', handleSurveySent as EventListener)
-            }
-        } else {
-            // This is the path used for surveys managed by SurveyManager
+        // The delay path is only used for direct usage of SurveyPopup, not surveys managed by SurveyManager.
+        const showTimeout = millisecondDelay > 0 ? setTimeout(showSurvey, millisecondDelay) : undefined
+        if (isUndefined(showTimeout)) {
             showSurvey()
-            return () => {
-                window.removeEventListener('PHSurveyClosed', handleSurveyClosed as EventListener)
-                window.removeEventListener('PHSurveySent', handleSurveySent as EventListener)
+        }
+        return () => {
+            if (!isUndefined(showTimeout)) {
+                clearTimeout(showTimeout)
             }
+            if (!isUndefined(autoDisappearTimeout)) {
+                clearTimeout(autoDisappearTimeout)
+            }
+            window.removeEventListener('PHSurveyClosed', handleSurveyClosed as EventListener)
+            window.removeEventListener('PHSurveySent', handleSurveySent as EventListener)
         }
     }, [])
 
@@ -1290,7 +1321,7 @@ export function usePopupVisibility(
         posthog,
     })
 
-    return { isPopupVisible, isSurveySent, setIsPopupVisible, hidePopupWithViewTransition }
+    return { isPopupVisible, isSurveySent, setIsPopupVisible, hidePopupWithAnimation }
 }
 
 interface SurveyPopupProps {
@@ -1358,7 +1389,7 @@ export function SurveyPopup({
     const surveyPopupDelayMilliseconds = survey.appearance?.surveyPopupDelaySeconds
         ? survey.appearance.surveyPopupDelaySeconds * 1000
         : 0
-    const { isPopupVisible, isSurveySent, hidePopupWithViewTransition } = usePopupVisibility(
+    const { isPopupVisible, isSurveySent, hidePopupWithAnimation } = usePopupVisibility(
         survey,
         posthog,
         surveyPopupDelayMilliseconds,
@@ -1452,7 +1483,7 @@ export function SurveyPopup({
                         contentType={survey.appearance?.thankYouMessageDescriptionContentType}
                         appearance={survey.appearance || defaultSurveyAppearance}
                         onClose={() => {
-                            hidePopupWithViewTransition()
+                            hidePopupWithAnimation()
                             onCloseConfirmationMessage()
                         }}
                     />
@@ -1542,7 +1573,10 @@ export function Questions({
             (index) => index >= 0 && index < survey.questions.length
         )
     })
-    const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
+    const surveyQuestions = useMemo(
+        () => getDisplayOrderQuestions(survey, initialInProgressState),
+        [survey, initialInProgressState]
+    )
 
     // Sync preview state. Negative sentinels (the intro screen page) are rendered by SurveyPopup
     // instead of Questions, so they must never reach currentQuestionIndex.
@@ -1587,6 +1621,7 @@ export function Questions({
                 surveySubmissionId: surveySubmissionId,
                 responses: newResponses,
                 lastQuestionIndex: nextStep,
+                questionOrder: getQuestionOrder(surveyQuestions),
                 visitedIndices: newVisitedIndices,
                 surveyLanguage,
             })
@@ -1635,6 +1670,7 @@ export function Questions({
             surveySubmissionId,
             responses: questionsResponses,
             lastQuestionIndex: previousIndex,
+            questionOrder: getQuestionOrder(surveyQuestions),
             visitedIndices: newVisitedIndices,
             surveyLanguage,
         })
@@ -1700,6 +1736,7 @@ export function FeedbackWidget({
     const [isFeedbackButtonVisible, setIsFeedbackButtonVisible] = useState(true)
     const [showSurvey, setShowSurvey] = useState(false)
     const [styleOverrides, setStyleOverrides] = useState<JSX.CSSProperties>({})
+    const resetTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
     const toggleSurvey = () => {
         setShowSurvey(!showSurvey)
@@ -1732,8 +1769,11 @@ export function FeedbackWidget({
 
         addEventListener(window, DISPATCH_FEEDBACK_WIDGET_EVENT, handleShowSurvey)
 
-        // Cleanup listener on component unmount
         return () => {
+            if (!isUndefined(resetTimeout.current)) {
+                clearTimeout(resetTimeout.current)
+                resetTimeout.current = undefined
+            }
             window.removeEventListener(DISPATCH_FEEDBACK_WIDGET_EVENT, handleShowSurvey)
         }
     }, [
@@ -1761,7 +1801,11 @@ export function FeedbackWidget({
             setIsFeedbackButtonVisible(false)
         }
         // important so our view transition has time to run
-        setTimeout(() => {
+        if (!isUndefined(resetTimeout.current)) {
+            clearTimeout(resetTimeout.current)
+        }
+        resetTimeout.current = setTimeout(() => {
+            resetTimeout.current = undefined
             setShowSurvey(false)
         }, 200)
     }

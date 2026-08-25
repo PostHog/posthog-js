@@ -223,8 +223,13 @@ describe('PostHogExceptions', () => {
         })
 
         describe('Extension exceptions', () => {
-            it('does not capture exceptions with frames from extensions by default', () => {
-                const frame = { filename: 'chrome-extension://', platform: 'javascript:web' }
+            it.each([
+                ['chrome', 'chrome-extension://abc/content.js'],
+                ['firefox', 'moz-extension://abc/content.js'],
+                ['safari', 'safari-extension:abc/content.js'],
+                ['safari web', 'safari-web-extension:abc/content.js'],
+            ])('does not capture exceptions with frames from %s extensions by default', (_browser, filename) => {
+                const frame = { filename, platform: 'javascript:web' }
                 const exception = { stacktrace: { frames: [frame], type: 'raw' } }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
                 expect(captureMock).not.toBeCalledWith(
@@ -234,6 +239,16 @@ describe('PostHogExceptions', () => {
                 )
             })
 
+            it('captures exceptions from the page even when a filename merely mentions an extension', () => {
+                const frame = {
+                    filename: 'https://example.com/moz-extension://not-really.js',
+                    platform: 'javascript:web',
+                }
+                const exception = { stacktrace: { frames: [frame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
             it('captures extension exceptions when enabled', () => {
                 exceptions.onRemoteConfig({
                     ok: true,
@@ -241,6 +256,53 @@ describe('PostHogExceptions', () => {
                 })
                 const frame = { filename: 'chrome-extension://', platform: 'javascript:web' }
                 const exception = { stacktrace: { frames: [frame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+        })
+
+        describe('Injected browser script exceptions', () => {
+            const pageFrame = {
+                filename: 'https://example.com/project/566302/sessions/index.js',
+                platform: 'javascript:web',
+            }
+
+            it.each([
+                ['Firefox for iOS', { type: 'ReferenceError', value: "Can't find variable: __firefox__" }],
+                [
+                    'Chrome for iOS',
+                    { type: 'TypeError', value: "undefined is not an object (evaluating 'window.__gCrWeb.something')" },
+                ],
+            ])('does not capture exceptions thrown by %s injected scripts', (_browser, exceptionFields) => {
+                const exception = { ...exceptionFields, stacktrace: { frames: [pageFrame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toBeCalledWith(
+                    '$exception',
+                    { $exception_list: [exception] },
+                    expect.anything()
+                )
+            })
+
+            it('captures the exception when the value does not reference an injected global', () => {
+                const exception = {
+                    type: 'ReferenceError',
+                    value: 'something is not defined',
+                    stacktrace: { frames: [pageFrame], type: 'raw' },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('captures injected browser script exceptions when extension capture is enabled', () => {
+                exceptions.onRemoteConfig({
+                    ok: true,
+                    config: { errorTracking: { captureExtensionExceptions: true } } as RemoteConfig,
+                })
+                const exception = {
+                    type: 'ReferenceError',
+                    value: "Can't find variable: __firefox__",
+                    stacktrace: { frames: [pageFrame], type: 'raw' },
+                }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
                 expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
             })

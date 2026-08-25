@@ -163,6 +163,64 @@
           "path": "src/entrypoints/index.node.ts"
         },
         {
+          "category": "Capture",
+          "description": "Capture an AI event on the dedicated AI capture endpoint.\nBeta: the signature is stable; operational limits (per-event size cap, batching, endpoint) may change without notice. Delivery is async, and no redaction or truncation is applied to the payload.",
+          "details": null,
+          "id": "captureAi",
+          "showDocs": true,
+          "title": "captureAi",
+          "examples": [
+            {
+              "id": "captureai",
+              "name": "Generated example for captureAi",
+              "code": "// Generated example for captureAi\nposthog.captureAi();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The event properties",
+              "isOptional": false,
+              "type": "EventMessage",
+              "name": "props"
+            }
+          ],
+          "returnType": {
+            "id": "string | undefined",
+            "name": "string | undefined"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Capture",
+          "description": "Capture an AI event on the dedicated AI capture endpoint, resolving after the send completes. Use in short-lived processes (serverless) where the runtime may freeze before a background flush runs.",
+          "details": null,
+          "id": "captureAiImmediate",
+          "showDocs": true,
+          "title": "captureAiImmediate",
+          "examples": [
+            {
+              "id": "captureaiimmediate",
+              "name": "Generated example for captureAiImmediate",
+              "code": "// Generated example for captureAiImmediate\nposthog.captureAiImmediate();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The event properties",
+              "isOptional": false,
+              "type": "EventMessage",
+              "name": "props"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<string | undefined>",
+            "name": "Promise<string | undefined>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
           "category": "Error tracking",
           "description": "Capture an error exception as an event.",
           "details": null,
@@ -426,7 +484,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Evaluate all feature flags for a user in a single call and return a  snapshot. Branch on `.isEnabled()` / `.getFlag()`, then pass the same snapshot to `capture()` via the `flags` option so the captured event carries the exact flag values the code branched on.\nPrefer this over repeated `isFeatureEnabled()` / `getFeatureFlag()` calls and over `capture({ sendFeatureFlags: true })` — it consolidates flag evaluation into a single `/flags` request per incoming request.\n**Local evaluation is transparent.** When the poller can resolve a flag from cached definitions, no network call is made and the snapshot's `$feature_flag_called` events are tagged `locally_evaluated: true`.\n**Trim the request.** Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags — useful when you only need a few flags and want to reduce the response payload.\n**Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()` to filter which flags get attached to a captured event without re-fetching.",
+          "description": "Evaluate all feature flags for a user in a single call and return a  snapshot. Branch on `.isEnabled()` / `.getFlag()`, then pass the same snapshot to `capture()` via the `flags` option so the captured event carries the exact flag values the code branched on.\nPrefer this over repeated `isFeatureEnabled()` / `getFeatureFlag()` calls and over `capture({ sendFeatureFlags: true })` — it consolidates flag evaluation into a single `/flags` request per incoming request.\n**Local evaluation is transparent.** When the poller can resolve a flag from cached definitions, no network call is made and the snapshot's `$feature_flag_called` events are tagged `locally_evaluated: true`. A requested key missing from local definitions is included in a `/flags` fallback unless `onlyEvaluateLocally` is true. Locally resolved values remain authoritative when remote results are merged.\n**Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation responses are not cached, so a key missing both locally and remotely costs one `/flags` request per `evaluateFlags()` call.\n**Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()` to filter which flags get attached to a captured event without re-fetching.",
           "details": null,
           "id": "evaluateFlags",
           "showDocs": true,
@@ -456,7 +514,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`, including `flagKeys` to scope the `/flags` request.",
+              "description": "Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent.",
               "isOptional": true,
               "type": "AllFlagsOptions",
               "name": "options"
@@ -1655,6 +1713,7 @@
           "name": "groupProperties"
         },
         {
+          "description": "Skip remote fallback and omit flags that local definitions cannot resolve.",
           "type": "boolean",
           "name": "onlyEvaluateLocally"
         },
@@ -1663,6 +1722,7 @@
           "name": "disableGeoip"
         },
         {
+          "description": "Restrict local evaluation, the `/flags` request, and the returned snapshot to these keys.\nAn empty array returns an empty snapshot without evaluating flags; omitting this option\nevaluates all flags. `evaluateFlags()` falls back remotely when a requested key is missing\nfrom local definitions unless `onlyEvaluateLocally` is true. Remote evaluation responses are\nnot cached, so a key missing both locally and remotely costs one `/flags` request per call.",
           "type": "string[]",
           "name": "flagKeys"
         }
@@ -1705,6 +1765,7 @@
           "name": "groupProperties"
         },
         {
+          "description": "Skip remote fallback and omit flags that local definitions cannot resolve.",
           "type": "boolean",
           "name": "onlyEvaluateLocally"
         },
@@ -2007,6 +2068,7 @@
           "releaseTag": "deprecated"
         },
         {
+          "description": "If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC.",
           "type": "Date",
           "name": "timestamp"
         },
@@ -2293,6 +2355,7 @@
           "name": "groupProperties"
         },
         {
+          "description": "Skip remote fallback and omit flags that local definitions cannot resolve.",
           "type": "boolean",
           "name": "onlyEvaluateLocally"
         },
@@ -2727,7 +2790,7 @@
           "name": "uuid"
         },
         {
-          "description": "If provided overrides the auto-generated timestamp",
+          "description": "If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC.",
           "type": "Date",
           "name": "timestamp"
         },
@@ -3101,6 +3164,38 @@
       "path": "../core/src/types.ts"
     },
     {
+      "id": "PostHogFetchBodyBytes",
+      "name": "PostHogFetchBodyBytes",
+      "properties": [
+        {
+          "description": "The size in bytes of each element in the array.",
+          "type": "number",
+          "name": "BYTES_PER_ELEMENT"
+        },
+        {
+          "description": "The ArrayBuffer instance referenced by the array.",
+          "type": "ArrayBufferLike & ArrayBuffer",
+          "name": "buffer"
+        },
+        {
+          "description": "The length in bytes of the array.",
+          "type": "number",
+          "name": "byteLength"
+        },
+        {
+          "description": "The offset in bytes of the array.",
+          "type": "number",
+          "name": "byteOffset"
+        },
+        {
+          "description": "The length of the array.",
+          "type": "number",
+          "name": "length"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
       "id": "PostHogFetchOptions",
       "name": "PostHogFetchOptions",
       "properties": [
@@ -3121,7 +3216,7 @@
           "name": "headers"
         },
         {
-          "type": "string | Blob",
+          "type": "string | PostHogFetchBodyBytes | Blob",
           "name": "body"
         },
         {
@@ -3478,6 +3573,11 @@
           "name": "isServer"
         },
         {
+          "description": "Capture full AI content: PostHog AI wrapper events route through the\ndedicated AI capture endpoint, skip string truncation, and pass media\n(base64 / data URIs) through unredacted. Privacy mode always wins.\nDefaults to false.",
+          "type": "boolean",
+          "name": "enableFullAiCapture"
+        },
+        {
           "description": "ADVANCED: alters the refill rate for the error tracking rate limiter's token bucket.\nNormally only altered alongside PostHog support guidance.\nAccepts values between 0 and 100.",
           "type": "number",
           "name": "exceptionRateLimiterRefillRate"
@@ -3494,6 +3594,10 @@
       "id": "PostHogPersistedProperty",
       "name": "PostHogPersistedProperty",
       "properties": [
+        {
+          "type": "\"ai_capture_queue\"",
+          "name": "AiCaptureQueue"
+        },
         {
           "type": "\"ai_queue\"",
           "name": "AiQueue"
@@ -3691,6 +3795,13 @@
       "path": "../core/src/error-tracking/coercers/promise-rejection-event.ts"
     },
     {
+      "id": "PropertyFilters",
+      "name": "PropertyFilters",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "Record<string, {\n    values: string[];\n    operator: PropertyOperator;\n}>"
+    },
+    {
       "id": "PropertyGroup",
       "name": "PropertyGroup",
       "properties": [
@@ -3704,6 +3815,19 @@
         }
       ],
       "path": "src/types.ts"
+    },
+    {
+      "id": "PropertyMatchType",
+      "name": "PropertyMatchType",
+      "properties": [],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "PropertyOperator",
+      "name": "PropertyOperator",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "\"gt\" | \"lt\""
     },
     {
       "id": "RatingSurveyQuestion",
@@ -4074,7 +4198,7 @@
           "name": "appearance"
         },
         {
-          "type": "{ url?: string; selector?: string; seenSurveyWaitPeriodInDays?: number; urlMatchType?: SurveyMatchType; events?: { repeatedActivation?: boolean; values?: { name: string; }[]; }; actions?: { values: SurveyActionType[]; }; deviceTypes?: string[]; deviceTypesMatchType?: SurveyMatchType; linkedFlagVariant?: string; }",
+          "type": "{ url?: string; selector?: string; seenSurveyWaitPeriodInDays?: number; urlMatchType?: SurveyMatchType; events?: { repeatedActivation?: boolean; values?: SurveyEventWithFilters[]; }; actions?: { values: SurveyActionType[]; }; deviceTypes?: string[]; deviceTypesMatchType?: SurveyMatchType; linkedFlagVariant?: string; }",
           "name": "conditions"
         },
         {
@@ -4246,6 +4370,21 @@
         {
           "type": "string",
           "name": "widgetColor"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyEventWithFilters",
+      "name": "SurveyEventWithFilters",
+      "properties": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "PropertyFilters",
+          "name": "propertyFilters"
         }
       ],
       "path": "../core/src/types.ts"

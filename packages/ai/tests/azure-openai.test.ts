@@ -95,24 +95,13 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
   let mockPostHogClient: PostHog
   let client: PostHogAzureOpenAI
 
-  beforeAll(() => {
-    if (!process.env.AZURE_OPENAI_API_KEY) {
-      console.warn('⚠️ Skipping Azure OpenAI tests: No AZURE_OPENAI_API_KEY environment variable set')
-    }
-  })
-
   beforeEach(() => {
-    // Skip all tests if no API key is present
-    if (!process.env.AZURE_OPENAI_API_KEY) {
-      return
-    }
-
     jest.clearAllMocks()
 
     // Reset the default mocks
     mockPostHogClient = new (PostHog as any)()
     client = new PostHogAzureOpenAI({
-      apiKey: process.env.AZURE_OPENAI_API_KEY || '',
+      apiKey: 'mock-azure-key',
       posthog: mockPostHogClient as any,
     })
 
@@ -138,10 +127,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     EmbeddingsMock.prototype.create = jest.fn().mockResolvedValue(mockAzureEmbeddingResponse)
   })
 
-  // Conditionally run tests based on API key availability
-  const conditionalTest = process.env.AZURE_OPENAI_API_KEY ? test : test.skip
-
-  conditionalTest('basic completion', async () => {
+  test('basic completion', async () => {
     // Set up mock response for chat completions
     const mockAzureChatResponse = {
       id: 'chatcmpl-test-response-id',
@@ -159,6 +145,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
             role: 'assistant',
             content: 'Hello from Azure OpenAI!',
             refusal: null,
+            annotations: [{ type: 'url_citation', url: 'https://example.com' }],
           },
           logprobs: null,
         },
@@ -167,8 +154,20 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
         prompt_tokens: 20,
         completion_tokens: 10,
         total_tokens: 30,
+        prompt_tokens_details: { cached_tokens: 4, cache_write_tokens: 2 },
+        completion_tokens_details: { reasoning_tokens: 3 },
       },
     }
+    const availableTools = [
+      {
+        type: 'function' as const,
+        function: {
+          name: 'lookup_weather',
+          description: 'Look up weather',
+          parameters: { type: 'object', properties: {} },
+        },
+      },
+    ]
 
     const ChatMock: any = openaiModule.Chat
     ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(mockAzureChatResponse)
@@ -176,6 +175,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     const response = await client.chat.completions.create({
       model: 'gpt-4',
       messages: [{ role: 'user', content: 'Hello' }],
+      tools: availableTools,
       posthogDistinctId: 'test-id',
       posthogProperties: { foo: 'bar' },
     })
@@ -204,6 +204,13 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     ])
     expect(properties['$ai_input_tokens']).toBe(20)
     expect(properties['$ai_output_tokens']).toBe(10)
+    expect(properties['$ai_reasoning_tokens']).toBe(3)
+    expect(properties['$ai_cache_read_input_tokens']).toBe(4)
+    expect(properties['$ai_cache_creation_input_tokens']).toBe(2)
+    expect(properties['$ai_web_search_count']).toBe(1)
+    expect(properties['$ai_usage']).toBe(mockAzureChatResponse.usage)
+    expect(properties['$ai_stop_reason']).toBe('stop')
+    expect(properties['$ai_tools']).toEqual(availableTools)
     expect(properties['$ai_http_status']).toBe(200)
     expect(properties['foo']).toBe('bar')
     expect(typeof properties['$ai_latency']).toBe('number')
@@ -214,7 +221,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     })
   })
 
-  conditionalTest('responses create is wrapped and captures a generation', async () => {
+  test('responses create is wrapped and captures a generation', async () => {
     // Regression test for #2946: PostHogAzureOpenAI must wrap `responses` so that
     // responses.create(...) is tracked, like the non-Azure PostHogOpenAI client.
     const mockAzureResponsesResult = {
@@ -255,7 +262,12 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(properties['$ai_model']).toBe('gpt-4')
     expect(properties['$ai_completion_id']).toBe('resp_test-response-id')
     expect(properties['$ai_input']).toEqual([{ role: 'user', content: 'Hello' }])
-    expect(properties['$ai_output_choices']).toEqual(mockAzureResponsesResult.output)
+    expect(properties['$ai_output_choices']).toEqual([
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Hello from Azure Responses!' }],
+      },
+    ])
     expect(properties['$ai_input_tokens']).toBe(20)
     expect(properties['$ai_output_tokens']).toBe(10)
     expect(properties['$ai_http_status']).toBe(200)
@@ -263,7 +275,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(properties['foo']).toBe('bar')
   })
 
-  conditionalTest('redacts chat and Responses input/output without changing Azure payloads', async () => {
+  test('redacts chat and Responses input/output without changing Azure payloads', async () => {
     const binary = 'A'.repeat(80)
     const chatResponse = {
       id: 'chatcmpl-binary',
@@ -329,10 +341,10 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(JSON.stringify(responsesProperties['$ai_input'])).not.toContain(binary)
     expect(JSON.stringify(responsesProperties['$ai_output_choices'])).not.toContain(binary)
     expect(JSON.stringify(responsesProperties)).toContain('[base64 image/png redacted]')
-    expect(JSON.stringify(responsesProperties)).toContain('[base64 redacted]')
+    expect(JSON.stringify(responsesProperties)).toContain('[base64 image redacted]')
   })
 
-  conditionalTest('groups', async () => {
+  test('groups', async () => {
     const mockAzureChatResponse = {
       id: 'test-response-id',
       model: 'gpt-4',
@@ -373,7 +385,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(groups).toEqual({ company: 'test_company' })
   })
 
-  conditionalTest('privacy mode local', async () => {
+  test('privacy mode local', async () => {
     const mockAzureChatResponse = {
       id: 'test-response-id',
       model: 'gpt-4',
@@ -415,7 +427,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(properties['$ai_output_choices']).toBeNull()
   })
 
-  conditionalTest('privacy mode global', async () => {
+  test('privacy mode global', async () => {
     // override mock to appear globally in privacy mode
     ;(mockPostHogClient as any).privacy_mode = true
 
@@ -461,7 +473,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(properties['$ai_output_choices']).toBeNull()
   })
 
-  conditionalTest('captureImmediate flag', async () => {
+  test('captureImmediate flag', async () => {
     const mockAzureChatResponse = {
       id: 'test-response-id',
       model: 'gpt-4',
@@ -501,7 +513,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(0)
   })
 
-  conditionalTest('anonymous user - $process_person_profile set to false', async () => {
+  test('anonymous user - $process_person_profile set to false', async () => {
     const mockAzureChatResponse = {
       id: 'test-response-id',
       model: 'gpt-4',
@@ -543,7 +555,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(properties['$process_person_profile']).toBe(false)
   })
 
-  conditionalTest('identified user - $process_person_profile not set', async () => {
+  test('identified user - $process_person_profile not set', async () => {
     const mockAzureChatResponse = {
       id: 'test-response-id',
       model: 'gpt-4',
@@ -586,7 +598,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(properties['$process_person_profile']).toBeUndefined()
   })
 
-  conditionalTest('system prompt handling', async () => {
+  test('system prompt handling', async () => {
     const mockAzureChatResponse = {
       id: 'test-response-id',
       model: 'gpt-4',
@@ -637,7 +649,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
   })
 
   describe('Embeddings', () => {
-    conditionalTest('basic embeddings', async () => {
+    test('basic embeddings', async () => {
       const response = await client.embeddings.create({
         model: 'text-embedding-3-small',
         input: 'Hello world',
@@ -658,13 +670,14 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       expect(properties['$ai_input']).toBe('Hello world')
       expect(properties['$ai_output_choices']).toBeNull() // Embeddings don't have output
       expect(properties['$ai_input_tokens']).toBe(5)
+      expect(properties['$ai_usage']).toBe(mockAzureEmbeddingResponse.usage)
       expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens
       expect(properties['$ai_http_status']).toBe(200)
       expect(properties['test']).toBe('embeddings')
       expect(typeof properties['$ai_latency']).toBe('number')
     })
 
-    conditionalTest('embeddings with array input', async () => {
+    test('embeddings with array input', async () => {
       const arrayInput = ['Hello', 'World', 'Test']
       mockAzureEmbeddingResponse = {
         object: 'list',
@@ -713,7 +726,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens
     })
 
-    conditionalTest('embeddings privacy mode', async () => {
+    test('embeddings privacy mode', async () => {
       await client.embeddings.create({
         model: 'text-embedding-3-small',
         input: 'Sensitive data',
@@ -729,7 +742,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       expect(properties['$ai_output_choices']).toBeNull()
     })
 
-    conditionalTest('embeddings error handling', async () => {
+    test('embeddings error handling', async () => {
       const EmbeddingsMock: any = openaiModule.Embeddings || class MockEmbeddings {}
       const testError = new Error('API Error') as Error & { status: number }
       testError.status = 400
@@ -753,7 +766,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       expect(properties['$ai_error']).toContain('400')
     })
 
-    conditionalTest('embeddings captureImmediate flag', async () => {
+    test('embeddings captureImmediate flag', async () => {
       await client.embeddings.create({
         model: 'text-embedding-3-small',
         input: 'Test input',
@@ -766,7 +779,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(0)
     })
 
-    conditionalTest('embeddings with default trace ID', async () => {
+    test('embeddings with default trace ID', async () => {
       await client.embeddings.create({
         model: 'text-embedding-3-small',
         input: 'Test input',
@@ -782,7 +795,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       expect(properties['$ai_trace_id']).toHaveLength(36) // UUID v4 length
     })
 
-    conditionalTest('embeddings with custom trace ID', async () => {
+    test('embeddings with custom trace ID', async () => {
       const customTraceId = 'custom-trace-123'
 
       await client.embeddings.create({
@@ -799,7 +812,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       expect(properties['$ai_trace_id']).toBe(customTraceId)
     })
 
-    conditionalTest('embeddings with groups', async () => {
+    test('embeddings with groups', async () => {
       const testGroups = { company: 'acme', team: 'engineering' }
 
       await client.embeddings.create({
@@ -817,7 +830,7 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     })
   })
 
-  conditionalTest('posthogProperties are not sent to Azure OpenAI', async () => {
+  test('posthogProperties are not sent to Azure OpenAI', async () => {
     const ChatMock: any = openaiModule.Chat
     const mockCreate = jest.fn().mockResolvedValue({})
     const originalCreate = (ChatMock.Completions as any).prototype.create
@@ -916,6 +929,7 @@ describe('PostHogAzureOpenAI - streaming error safety', () => {
         model: 'gpt-4',
         object: 'chat.completion.chunk',
         created: 1,
+        system_fingerprint: 'fp-partial',
         choices: [{ index: 0, delta: { content: 'partial' }, finish_reason: null, logprobs: null }],
       },
       stubCreate: (impl) => {
@@ -931,7 +945,10 @@ describe('PostHogAzureOpenAI - streaming error safety', () => {
     },
     {
       name: 'responses',
-      firstChunk: { type: 'response.output_text.delta', delta: 'partial' },
+      firstChunk: {
+        type: 'response.created',
+        response: { id: 'resp-partial', model: 'gpt-4', status: 'in_progress', output: [] },
+      },
       stubCreate: (impl) => {
         ;((openaiModule as any).Responses as any).prototype.create = impl
       },
@@ -967,8 +984,15 @@ describe('PostHogAzureOpenAI - streaming error safety', () => {
       }).rejects.toThrow(streamError)
     })
 
-    // The analytics error event is still captured
+    // The analytics error event retains metadata accumulated before the failure.
     expect(safetyMockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const properties = (safetyMockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    expect(properties['$ai_completion_id']).toBe(
+      streamErrorCase.name === 'chat completions' ? 'chatcmpl-test' : 'resp-partial'
+    )
+    if (streamErrorCase.name === 'chat completions') {
+      expect(properties['$ai_provider_metadata']).toEqual({ system_fingerprint: 'fp-partial' })
+    }
 
     // The detached analytics consumer must not crash the host process
     expect(unhandledRejections).toEqual([])
@@ -976,10 +1000,7 @@ describe('PostHogAzureOpenAI - streaming error safety', () => {
 })
 
 describe('PostHogAzureOpenAI - cache token reporting convention', () => {
-  // Deliberately not `conditionalTest`: azure.ts routes captures through the
-  // OpenAI capture helper, and with the credential-gated suite above skipped
-  // in CI (no AZURE_OPENAI_API_KEY), a gated test would never catch the Azure
-  // path bypassing the declaration. Everything here is mocked.
+  // Everything is mocked so this contract always runs without Azure credentials.
   test.each([
     { behavior: 'declares inclusive reporting by default', posthogProperties: undefined, expectedFlag: false },
     {
@@ -1112,6 +1133,55 @@ describe('PostHogAzureOpenAI - cache token reporting convention', () => {
   })
 })
 
+describe('PostHogAzureOpenAI - full AI capture', () => {
+  // This is mocked so the full-capture contract always runs without Azure credentials.
+  test('preserves binary audio content in chat completions input/output when enabled', async () => {
+    const binary = 'A'.repeat(80)
+    const mockPostHogClient = new (PostHog as any)()
+    ;(mockPostHogClient as any).enableFullAiCapture = true
+    const client = new PostHogAzureOpenAI({
+      apiKey: 'mock-azure-key',
+      posthog: mockPostHogClient as any,
+    })
+
+    const chatResponse = {
+      id: 'chatcmpl-full-capture',
+      model: 'gpt-4o-audio-preview',
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'stop',
+          message: {
+            role: 'assistant',
+            content: null,
+            audio: { id: 'audio-1', data: binary, transcript: 'hello', expires_at: 0 },
+          },
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    }
+    const ChatMock: any = openaiModule.Chat
+    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(chatResponse)
+
+    await client.chat.completions.create({
+      model: 'gpt-4o-audio-preview',
+      messages: [
+        {
+          role: 'user' as const,
+          content: [{ type: 'input_audio' as const, input_audio: { data: binary, format: 'wav' as const } }],
+        },
+      ],
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    expect(JSON.stringify(properties['$ai_input'])).toContain(binary)
+    expect(JSON.stringify(properties['$ai_output_choices'])).toContain(binary)
+    expect(JSON.stringify(properties)).not.toContain('redacted')
+  })
+})
+
 describe('PostHogAzureOpenAI - Responses terminal statuses', () => {
   let mockPostHogClient: PostHog
   let client: PostHogAzureOpenAI
@@ -1179,7 +1249,12 @@ describe('PostHogAzureOpenAI - Responses terminal statuses', () => {
     expect(properties['$ai_stop_reason']).toBe(status)
     expect(properties['$ai_input_tokens']).toBe(11)
     expect(properties['$ai_output_tokens']).toBe(7)
-    expect(properties['$ai_output_choices']).toEqual(response.output)
+    expect(properties['$ai_output_choices']).toEqual([
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: `${status} output` }],
+      },
+    ])
     expect(properties['$ai_is_error']).toBe(status === 'failed' ? true : undefined)
     if (status === 'failed') {
       expect(properties['$ai_error']).toContain('provider response failed')

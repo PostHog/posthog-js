@@ -85,11 +85,11 @@ jobs:
         run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted
         working-directory: ${{ env.EXAMPLE_DIR }}
 
-      - name: Build example for Android
+      - name: Build example and test plugin for Android
         if: steps.is-affected.outputs.is-affected == 'true'
         env:
           JAVA_OPTS: '-XX:MaxHeapSize=6g'
-        run: ./gradlew assembleDebug --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a
+        run: ./gradlew assembleDebug :posthog_react-native-plugin:testDebugUnitTest --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a
         working-directory: ${{ env.EXAMPLE_DIR }}/android
 
   build-ios-static-lib:

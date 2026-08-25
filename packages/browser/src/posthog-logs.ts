@@ -1,15 +1,7 @@
-import { LOAD_EXT_NOT_FOUND, LOGS_CAPTURE_ENABLED_SERVER_SIDE } from './constants'
+import { LOAD_EXT_NOT_FOUND } from './constants'
 import Config from './config'
 import { PostHog } from './posthog-core'
-import type {
-    BufferedConsoleEntry,
-    CaptureLogOptions,
-    RemoteConfigResult,
-    Logger,
-    LogSdkContext,
-    OtlpLogsPayload,
-} from './types'
-import { patch } from './extensions/replay/rrweb-plugins/patch'
+import type { CaptureLogOptions, RemoteConfigResult, Logger, LogSdkContext, OtlpLogsPayload } from './types'
 import {
     PostHogLogs as CorePostHogLogs,
     buildOtlpLogsPayload,
@@ -19,12 +11,13 @@ import {
     stripUrlHash,
 } from '@posthog/core'
 import type { BufferedLogEntry, ResolvedPostHogLogsConfig, SendLogsBatchOutcome } from '@posthog/core'
+import type { Client, DeepReadonly, Disposable, Extension } from '@posthog/browser-common'
 import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { Extension } from './extensions/types'
 import { resolveLogsConfig } from './logs-defaults'
+import { LogsExtension } from './extension-tokens'
 import {
     isStatusZeroFailureCircuitBreakerTripped,
     updateStatusZeroFailureCount,
@@ -49,25 +42,6 @@ const LOGS_SEND_TIMEOUT_MS = 90000
 const MAX_CONSECUTIVE_STATUS_ZERO_FAILURES = 3
 const HANDLED_LOGS_REQUEST_ERROR = '__posthogHandledLogsRequestError' as const
 
-/**
- * Must mirror the level set of the console-capture entrypoint, which owns the
- * level mapping and serialization of buffered entries.
- */
-const RECORDER_CONSOLE_LEVELS = ['debug', 'log', 'warn', 'error', 'info'] as const
-
-/**
- * If remote config or the logs script never settles the question, stop holding
- * references to console arguments after this long.
- */
-const RECORDER_MAX_AGE_MS = 30000
-
-const consoleMethodBehindWrappers = (method: any): any => {
-    while (method?.__rrweb_original__) {
-        method = method.__rrweb_original__
-    }
-    return method
-}
-
 type HandledLogsRequestError = Error & { [HANDLED_LOGS_REQUEST_ERROR]: true }
 
 const markLogsRequestErrorAsHandled = (error: unknown, fallbackMessage: string): HandledLogsRequestError => {
@@ -82,8 +56,10 @@ const isHandledLogsRequestError = (error: unknown): error is HandledLogsRequestE
     (error as Partial<HandledLogsRequestError>)[HANDLED_LOGS_REQUEST_ERROR] === true
 
 export class PostHogLogs implements Extension {
+    readonly name = LogsExtension
     private _isLogsEnabled: boolean = false
     private _isLoaded: boolean = false
+    private _isLoading: boolean = false
     private readonly _logger = createLogger('[logs]')
     // Core owns retry/backoff but the browser request layer owns transport logging.
     // Filter only errors explicitly branded by this adapter; fatal core errors remain visible.
@@ -108,17 +84,16 @@ export class PostHogLogs implements Extension {
     // defaults to `posthog-browser-logs`). Built lazily, only when console runs.
     private _consoleQueue: BufferedLogEntry[] = []
     private _consoleCore: CorePostHogLogs | undefined
+    private _consoleLogsDispose: (() => void) | undefined
     private _consoleResolvedConfig: ResolvedPostHogLogsConfig | undefined
     private _consoleResolvedFrom: PostHog['config']['logs']
 
     // Shared across both cores: they send to the same endpoint, so one blocker
     // verdict covers both.
     private _consecutiveStatusZeroFailures = 0
-
-    private _consoleBuffer: BufferedConsoleEntry[] = []
-    private _consoleRecorderUnpatchers: (() => void)[] = []
-    private _isRecordingConsole: boolean = false
-    private _consoleRecorderTimeout: ReturnType<typeof setTimeout> | undefined
+    private _client?: Client
+    private _remoteConfigSubscription?: Disposable
+    private _disposed = false
 
     constructor(private readonly _instance: PostHog) {
         if (this._instance && this._instance.config.logs?.captureConsoleLogs) {
@@ -131,6 +106,9 @@ export class PostHogLogs implements Extension {
     }
 
     private _onReconnect = (): void => {
+        if (this._disposed) {
+            return
+        }
         this._consecutiveStatusZeroFailures = 0
         this._core?.onReconnect()
         this._consoleCore?.onReconnect()
@@ -192,45 +170,59 @@ export class PostHogLogs implements Extension {
         return this._consoleCore
     }
 
-    initialize() {
-        // A persisted "enabled" is a hint, not an authority: remote config may have
-        // turned capture off since last session, so nothing is captured from it.
-        // It only starts a local recorder whose buffer replays (or drops) once
-        // remote config settles the question.
-        if (!this._isLogsEnabled && this._instance?.persistence?.props?.[LOGS_CAPTURE_ENABLED_SERVER_SIDE]) {
-            this._startConsoleRecorder()
+    setup(client: Client): void {
+        if (this._disposed) {
+            return
         }
-        this.loadIfEnabled()
+        this._client = client
+        let replayedEnabledConfig = false
+        const subscription = client.onRemoteConfig((result) => {
+            replayedEnabledConfig = result.ok && result.config.logs?.captureConsoleLogs === true
+            this.onRemoteConfig(result)
+        })
+        if (this._disposed) {
+            subscription.dispose()
+            return
+        }
+        this._remoteConfigSubscription = subscription
+        if (!replayedEnabledConfig) {
+            this.loadIfEnabled()
+        }
     }
 
-    onRemoteConfig(result: RemoteConfigResult) {
-        if (!result.ok) {
+    dispose(): void {
+        if (this._disposed) {
+            return
+        }
+        this._disposed = true
+        this._remoteConfigSubscription?.dispose()
+        this._remoteConfigSubscription = undefined
+        this._client = undefined
+        this._isLoading = false
+        window?.removeEventListener('online', this._onReconnect)
+        // TODO: Multiplex console capture across instances and settle pending log sends so
+        // wrappers and request timers cannot outlive their final owner.
+        this._consoleLogsDispose?.()
+        this._consoleLogsDispose = undefined
+        this._core?.reset()
+        this._consoleCore?.reset()
+    }
+
+    onRemoteConfig(result: DeepReadonly<RemoteConfigResult>): void {
+        if (this._disposed || !result.ok) {
             // Failure behaves like a response without a logs key.
-            this._stopConsoleRecorder()
             return
         }
 
         const logCapture = result.config.logs?.captureConsoleLogs
-        if (!isNullish(logCapture) && this._instance?.persistence) {
-            this._instance.persistence.register({
-                [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: !!logCapture,
-            })
-        }
-
         if (isNullish(logCapture) || !logCapture) {
-            this._stopConsoleRecorder()
             return
         }
-        /**
-         * The recorder keeps running until the logs script initializes;
-         * loadIfEnabled stops it and hands the buffer over.
-         */
         this._isLogsEnabled = true
         this.loadIfEnabled()
     }
 
     reset(): void {
-        this._stopConsoleRecorder()
         this._queue = []
         this._core?.reset()
         this._consoleQueue = []
@@ -238,71 +230,19 @@ export class PostHogLogs implements Extension {
         this._consecutiveStatusZeroFailures = 0
     }
 
-    private _startConsoleRecorder(): void {
-        if (this._isRecordingConsole || !assignableWindow?.console) {
-            return
-        }
-        const maxBufferSize = resolveLogsConfig(this._instance?.config?.logs).maxBufferSize
-        for (const level of RECORDER_CONSOLE_LEVELS) {
-            const trueOriginal = consoleMethodBehindWrappers(assignableWindow.console[level])
-            if (!trueOriginal) {
-                continue
-            }
-            this._consoleRecorderUnpatchers.push(
-                patch(assignableWindow.console, level, (next: any) => {
-                    const wrapped = (...args: any[]) => {
-                        if (
-                            this._isRecordingConsole &&
-                            args.length > 0 &&
-                            this._consoleBuffer.length < maxBufferSize &&
-                            this._instance?.is_capturing()
-                        ) {
-                            this._consoleBuffer.push({ level, args, timestamp: Date.now() })
-                        }
-                        return next.apply(assignableWindow.console, args)
-                    }
-                    /**
-                     * Later patchers walk this marker to reach the real console
-                     * method instead of re-entering the recorder.
-                     */
-                    ;(wrapped as any).__rrweb_original__ = trueOriginal
-                    return wrapped
-                })
-            )
-        }
-        this._isRecordingConsole = true
-        this._consoleRecorderTimeout = setTimeout(() => {
-            this._stopConsoleRecorder()
-        }, RECORDER_MAX_AGE_MS)
-    }
-
-    private _stopConsoleRecorder(): BufferedConsoleEntry[] {
-        const buffered = this._consoleBuffer
-        this._consoleBuffer = []
-        if (!this._isRecordingConsole) {
-            return buffered
-        }
-        this._isRecordingConsole = false
-        if (this._consoleRecorderTimeout) {
-            clearTimeout(this._consoleRecorderTimeout)
-            this._consoleRecorderTimeout = undefined
-        }
-        for (const unpatch of this._consoleRecorderUnpatchers) {
-            unpatch()
-        }
-        this._consoleRecorderUnpatchers = []
-        return buffered
-    }
-
     captureLog(options: CaptureLogOptions): void {
-        this._getCore().captureLog(options)
+        if (!this._disposed) {
+            this._getCore().captureLog(options)
+        }
     }
 
     // Console auto-capture (the lazy `logs` chunk) routes here so its records run
     // through the shared core pipeline and carry `service.name: posthog-browser-logs`.
     /** @internal */
-    _captureConsoleLog(options: CaptureLogOptions): void {
-        this._getConsoleCore().captureLog(options)
+    captureConsoleLog(options: CaptureLogOptions): void {
+        if (!this._disposed) {
+            this._getConsoleCore().captureLog(options)
+        }
     }
 
     get logger(): Logger {
@@ -341,8 +281,8 @@ export class PostHogLogs implements Extension {
         }
     }
 
-    loadIfEnabled() {
-        if (!this._isLogsEnabled || this._isLoaded) {
+    loadIfEnabled(): void {
+        if (this._disposed || !this._isLogsEnabled || this._isLoaded || this._isLoading) {
             return
         }
 
@@ -358,19 +298,25 @@ export class PostHogLogs implements Extension {
             return
         }
 
-        loadExternalDependency(this._instance, 'logs', (err) => {
-            if (err || !phExtensions.logs?.initializeLogs) {
-                this._logger.error('Could not load logs script', err)
-                this._stopConsoleRecorder()
-            } else {
-                phExtensions.logs.initializeLogs(this._instance)
-                this._isLoaded = true
-                const buffered = this._stopConsoleRecorder()
-                if (buffered.length > 0) {
-                    phExtensions.logs.replayConsoleBuffer?.(this._instance, buffered)
+        this._isLoading = true
+        try {
+            loadExternalDependency(this._instance, 'logs', (err) => {
+                this._isLoading = false
+                if (this._disposed) {
+                    return
                 }
-            }
-        })
+                const logsExtension = phExtensions.logs
+                if (err || !logsExtension?.initializeLogs) {
+                    this._logger.error('Could not load logs script', err)
+                } else {
+                    this._consoleLogsDispose = logsExtension.initializeLogs(this._client ?? this._instance)
+                    this._isLoaded = true
+                }
+            })
+        } catch (error) {
+            this._isLoading = false
+            throw error
+        }
     }
 
     // Host adapter for core's `PostHogLogs`; structurally checked against `LogsHost`
@@ -456,8 +402,8 @@ export class PostHogLogs implements Extension {
                         settle({ kind: 'ok' })
                     } else if (status === 413) {
                         settle({ kind: 'too-large' })
-                    } else if (status === 0 || status === 429 || status >= 500) {
-                        // Transient (network / rate-limit / server error): keep and retry.
+                    } else if (status === 0 || status === 408 || status === 429 || status >= 500) {
+                        // Transient (network / timeout / rate-limit / server error): keep and retry.
                         if (status === 0) {
                             // `_send_request` already logs fetch failures. Bare status 0 is the
                             // XHR/synthetic path, so keep one warning for it here.

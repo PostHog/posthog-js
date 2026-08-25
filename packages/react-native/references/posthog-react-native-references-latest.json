@@ -3104,7 +3104,7 @@
           "name": "uuid"
         },
         {
-          "description": "If provided overrides the auto-generated timestamp",
+          "description": "If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC.",
           "type": "Date",
           "name": "timestamp"
         },
@@ -3539,6 +3539,38 @@
       "path": "../core/src/types.ts"
     },
     {
+      "id": "PostHogFetchBodyBytes",
+      "name": "PostHogFetchBodyBytes",
+      "properties": [
+        {
+          "description": "The size in bytes of each element in the array.",
+          "type": "number",
+          "name": "BYTES_PER_ELEMENT"
+        },
+        {
+          "description": "The ArrayBuffer instance referenced by the array.",
+          "type": "ArrayBuffer",
+          "name": "buffer"
+        },
+        {
+          "description": "The length in bytes of the array.",
+          "type": "number",
+          "name": "byteLength"
+        },
+        {
+          "description": "The offset in bytes of the array.",
+          "type": "number",
+          "name": "byteOffset"
+        },
+        {
+          "description": "The length of the array.",
+          "type": "number",
+          "name": "length"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
       "id": "PostHogFetchOptions",
       "name": "PostHogFetchOptions",
       "properties": [
@@ -3559,7 +3591,7 @@
           "name": "headers"
         },
         {
-          "type": "string | Blob",
+          "type": "string | PostHogFetchBodyBytes | Blob",
           "name": "body"
         },
         {
@@ -3837,6 +3869,10 @@
       "id": "PostHogPersistedProperty",
       "name": "PostHogPersistedProperty",
       "properties": [
+        {
+          "type": "\"ai_capture_queue\"",
+          "name": "AiCaptureQueue"
+        },
         {
           "type": "\"ai_queue\"",
           "name": "AiQueue"
@@ -4173,6 +4209,11 @@
           "name": "captureNetworkTelemetry"
         },
         {
+          "description": "Verify that masks remain aligned while capturing session replay screenshots.\nAndroid only. Requires `@posthog/react-native-plugin`.\n\nEnabling this can preserve screenshots during pixel-only redraws, including\ncontinuously animated content, but performs additional view hierarchy walks\nwhile a screenshot is captured.",
+          "type": "boolean",
+          "name": "verifyScreenshotMaskAlignment"
+        },
+        {
           "description": "Schedule screenshot image capture on a background queue.\niOS only\nExperimental support\n\nWarning: Enabling this option will trigger Main Thread Checker warnings and may\nbriefly freeze the app the first time a screenshot is captured. Consider disabling\nMain Thread Checker in your scheme's run diagnostics when enabling this.",
           "type": "boolean",
           "name": "screenshotModeBackgroundCapture"
@@ -4250,6 +4291,26 @@
       "properties": [],
       "path": "dist/PostHogErrorBoundary.d.ts",
       "example": "Record<string, any>"
+    },
+    {
+      "id": "PropertyFilters",
+      "name": "PropertyFilters",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "Record<string, {\n    values: string[];\n    operator: PropertyOperator;\n}>"
+    },
+    {
+      "id": "PropertyMatchType",
+      "name": "PropertyMatchType",
+      "properties": [],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "PropertyOperator",
+      "name": "PropertyOperator",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "\"gt\" | \"lt\""
     },
     {
       "id": "RatingSurveyQuestion",
@@ -4551,7 +4612,7 @@
           "name": "appearance"
         },
         {
-          "type": "{ url?: string; selector?: string; seenSurveyWaitPeriodInDays?: number; urlMatchType?: SurveyMatchType; events?: { repeatedActivation?: boolean; values?: { name: string; }[]; }; actions?: { values: SurveyActionType[]; }; deviceTypes?: string[]; deviceTypesMatchType?: SurveyMatchType; linkedFlagVariant?: string; }",
+          "type": "{ url?: string; selector?: string; seenSurveyWaitPeriodInDays?: number; urlMatchType?: SurveyMatchType; events?: { repeatedActivation?: boolean; values?: SurveyEventWithFilters[]; }; actions?: { values: SurveyActionType[]; }; deviceTypes?: string[]; deviceTypesMatchType?: SurveyMatchType; linkedFlagVariant?: string; }",
           "name": "conditions"
         },
         {
@@ -4837,6 +4898,21 @@
         }
       ],
       "path": "dist/surveys/surveys-utils.d.ts"
+    },
+    {
+      "id": "SurveyEventWithFilters",
+      "name": "SurveyEventWithFilters",
+      "properties": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "PropertyFilters",
+          "name": "propertyFilters"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "SurveyMatchType",
