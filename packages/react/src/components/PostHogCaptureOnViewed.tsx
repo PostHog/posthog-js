@@ -21,7 +21,7 @@ function TrackedChild({
     name?: string
     properties?: Record<string, any>
     observerOptions?: IntersectionObserverInit
-}): ReactElement {
+}): ReactElement<any, any> {
     const trackedRef = useRef(false)
     const posthog = usePostHog()
 
@@ -82,7 +82,7 @@ export function PostHogCaptureOnViewed({
     trackAllChildren,
     children,
     ...props
-}: PostHogCaptureOnViewedProps): ReactElement {
+}: PostHogCaptureOnViewedProps): ReactElement<any, any> {
     const trackedRef = useRef(false)
     const posthog = usePostHog()
 

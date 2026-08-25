@@ -24,7 +24,7 @@ export function VisibilityAndClickTrackers({
     options?: IntersectionObserverInit
     onInteract?: () => void
     onView?: () => void
-}): ReactElement {
+}): ReactElement<any, any> {
     const clickTrackedRef = useRef(false)
     const visibilityTrackedRef = useRef(false)
 

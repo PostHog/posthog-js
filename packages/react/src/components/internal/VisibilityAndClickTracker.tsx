@@ -20,7 +20,7 @@ export function VisibilityAndClickTracker({
     onClick?: MouseEventHandler<HTMLDivElement>
     trackView: boolean
     options?: IntersectionObserverInit
-}): ReactElement {
+}): ReactElement<any, any> {
     const ref = useRef<HTMLDivElement>(null)
 
     const observerOptions = useMemo(

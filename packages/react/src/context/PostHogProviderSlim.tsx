@@ -8,7 +8,13 @@ import { PostHogContext } from './PostHogContext'
  * Only accepts a pre-initialized `client` instance. Does not support
  * `apiKey`/`options` props since the slim bundle has no posthog-js runtime.
  */
-export function PostHogProvider({ client, children }: { client: PostHog; children?: React.ReactNode }): ReactElement {
+export function PostHogProvider({
+    client,
+    children,
+}: {
+    client: PostHog
+    children?: React.ReactNode
+}): ReactElement<any, any> {
     const value = useMemo(() => ({ client, bootstrap: client.config?.bootstrap }), [client])
     return <PostHogContext.Provider value={value}>{children}</PostHogContext.Provider>
 }

@@ -44,7 +44,7 @@ export function PostHogProvider({
     client,
     apiKey,
     options,
-}: WithOptionalChildren<PostHogProviderProps>): ReactElement {
+}: WithOptionalChildren<PostHogProviderProps>): ReactElement<any, any> {
     // Used to detect if the client was already initialized
     // This is used to prevent double initialization when running under React.StrictMode
     // We're not storing a simple boolean here because we want to be able to detect if the

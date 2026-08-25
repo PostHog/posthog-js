@@ -293,7 +293,7 @@ importers:
         specifier: workspace:^
         version: link:../types
       '@types/react':
-        specifier: '>=16.9.0'
+        specifier: '>=16.8.0'
         version: 19.2.17
       core-js:
         specifier: ^3.49.0

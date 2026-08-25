@@ -23,7 +23,7 @@ export function PostHogFeature({
     trackInteraction,
     trackView,
     ...props
-}: PostHogFeatureProps): ReactElement | null {
+}: PostHogFeatureProps): ReactElement<any, any> | null {
     const payload = useFeatureFlagPayload(flag)
     const variant = useFeatureFlagVariantKey(flag)
     const posthog = usePostHog()
