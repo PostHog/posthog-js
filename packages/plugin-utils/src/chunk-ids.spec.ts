@@ -1,15 +1,41 @@
-import { createChunkId, createChunkIdComment, createChunkIdSnippet, determineChunkIdFromSource } from './chunk-ids'
+import {
+    createChunkId,
+    createChunkIdComment,
+    createChunkIdSnippet,
+    createStableChunkId,
+    determineChunkIdFromSource,
+} from './chunk-ids'
 
 // Mirrors cli/src/sourcemaps/constant.rs in PostHog/posthog. The CLI de-duplicates
 // and removes injected snippets by exact substring match, so the JS and Rust
 // templates must stay byte-identical — update both sides together.
 const CLI_CODE_SNIPPET_TEMPLATE = `!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="__POSTHOG_CHUNK_ID__")}catch(e){}}();`
+const CLI_CODE_SNIPPET_WITH_RELEASE_TEMPLATE = `!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{};e._posthogReleaseId=e._posthogReleaseId||__POSTHOG_RELEASE_ID__;var n=(new e.Error).stack;n&&(e._posthogChunkIds=e._posthogChunkIds||{},e._posthogChunkIds[n]="__POSTHOG_CHUNK_ID__")}catch(e){}}();`
 const CLI_CHUNKID_COMMENT_PREFIX = '\n//# chunkId=__POSTHOG_CHUNK_ID__'
 const CLI_CHUNKID_PLACEHOLDER = '__POSTHOG_CHUNK_ID__'
+const CLI_RELEASE_ID_PLACEHOLDER = '__POSTHOG_RELEASE_ID__'
 
 describe('chunk-ids', () => {
     it('emits the snippet byte-identical to the posthog-cli template', () => {
         expect(createChunkIdSnippet(CLI_CHUNKID_PLACEHOLDER)).toBe(CLI_CODE_SNIPPET_TEMPLATE)
+    })
+
+    it('emits the release snippet byte-identical to the posthog-cli template', () => {
+        // The CLI substitutes __POSTHOG_RELEASE_ID__ with a JSON-encoded string, which brings its
+        // own quotes, so rendering the placeholder as an id yields the template with it quoted.
+        const expected = CLI_CODE_SNIPPET_WITH_RELEASE_TEMPLATE.replace(
+            CLI_RELEASE_ID_PLACEHOLDER,
+            `"${CLI_RELEASE_ID_PLACEHOLDER}"`
+        )
+
+        expect(createChunkIdSnippet(CLI_CHUNKID_PLACEHOLDER, CLI_RELEASE_ID_PLACEHOLDER)).toBe(expected)
+    })
+
+    it('derives a chunk id from content with the same namespace as posthog-cli', () => {
+        // Golden vector cross-checked against the CLI: injecting a chunk whose bytes are exactly
+        // `code();\n` writes this id. A different namespace or digest silently gives every chunk a
+        // new id on the next build, so the symbol sets stop deduplicating.
+        expect(createStableChunkId('code();\n')).toBe('58a7864c-f7b3-5a2e-ba91-18655350fd89')
     })
 
     it('emits the chunk id comment byte-identical to the posthog-cli template', () => {

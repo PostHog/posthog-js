@@ -1347,7 +1347,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           result = {
             key,
             enabled: flagDetail.enabled,
-            variant: flagDetail.variant,
+            // The flags API serializes missing variants as null
+            variant: flagDetail.variant ?? undefined,
             payload: parsedPayload,
           }
         }
@@ -1940,11 +1941,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * **Local evaluation is transparent.** When the poller can resolve a flag from
    * cached definitions, no network call is made and the snapshot's `$feature_flag_called`
-   * events are tagged `locally_evaluated: true`.
+   * events are tagged `locally_evaluated: true`. A requested key missing from local
+   * definitions is included in a `/flags` fallback unless `onlyEvaluateLocally` is true.
+   * Locally resolved values remain authoritative when remote results are merged.
    *
-   * **Trim the request.** Pass `flagKeys` to scope the underlying `/flags` request
-   * to a subset of flags — useful when you only need a few flags and want to reduce
-   * the response payload.
+   * **Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying
+   * `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation
+   * responses are not cached, so a key missing both locally and remotely costs one
+   * `/flags` request per `evaluateFlags()` call.
    *
    * **Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()`
    * to filter which flags get attached to a captured event without re-fetching.
@@ -1991,7 +1995,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Feature flags}
    *
    * @param distinctIdOrOptions - The user's distinct ID, or options when the distinctId comes from `withContext()`
-   * @param options - Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`, including `flagKeys` to scope the `/flags` request.
+   * @param options - Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent.
    * @returns Promise that resolves to a `FeatureFlagEvaluations` snapshot
    */
   async evaluateFlags(options?: AllFlagsOptions): Promise<FeatureFlagEvaluations>
@@ -2025,7 +2029,19 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       })
     }
 
-    const { groups, disableGeoip, flagKeys } = resolvedOptions || {}
+    const { groups, disableGeoip } = resolvedOptions || {}
+    const flagKeys = resolvedOptions?.flagKeys ?? undefined
+
+    if (flagKeys?.length === 0) {
+      return new FeatureFlagEvaluations({
+        host: this._getFeatureFlagEvaluationsHost(),
+        distinctId: resolvedDistinctId,
+        groups,
+        disableGeoip,
+        flags: {},
+      })
+    }
+
     let { onlyEvaluateLocally, personProperties, groupProperties } = resolvedOptions || {}
 
     const adjustedProperties = this.addLocalPersonAndGroupProperties(
@@ -2047,6 +2063,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       onlyEvaluateLocally = this.options.strictLocalEvaluation ?? false
     }
 
+    const requestedFlagKeys = flagKeys ? new Set(flagKeys) : undefined
     const records: Record<string, EvaluatedFlagRecord> = {}
     let requestId: string | undefined = undefined
     let evaluatedAt: number | undefined = undefined
@@ -2080,7 +2097,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // Fall back to remote evaluation for any flags the poller couldn't resolve locally.
     // We use the detail-shaped endpoint so the resulting records carry id/version/reason
     // and fired $feature_flag_called events match what isFeatureEnabled()/getFeatureFlag() emit.
-    const fallbackToFlags = localResult ? localResult.fallbackToFlags : true
+    const requestedFlagMissingLocally =
+      requestedFlagKeys !== undefined &&
+      Array.from(requestedFlagKeys).some((key) => this.featureFlagsPoller?.featureFlagsByKey[key] === undefined)
+    const fallbackToFlags = localResult ? localResult.fallbackToFlags || requestedFlagMissingLocally : true
     if (fallbackToFlags && !onlyEvaluateLocally) {
       const details = await super.getFeatureFlagDetailsStateless(
         evaluationContext.distinctId,
@@ -2149,6 +2169,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         const existing = records[key]
         if (existing) {
           records[key] = { ...existing, payload }
+        }
+      }
+    }
+
+    if (requestedFlagKeys !== undefined) {
+      for (const key of Object.keys(records)) {
+        if (!requestedFlagKeys.has(key)) {
+          delete records[key]
         }
       }
     }
@@ -3057,14 +3085,19 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     let result: EventMessage | null = eventMessage
 
     for (const fn of fns) {
-      result = fn(result)
-      if (!result) {
-        this._logger.info(`Event '${eventMessage.event}' was rejected in beforeSend function`)
+      try {
+        result = fn(result)
+        if (!result) {
+          this._logger.info(`Event '${eventMessage.event}' was rejected in beforeSend function`)
+          return null
+        }
+        if (!result.properties || Object.keys(result.properties).length === 0) {
+          const message = `Event '${result.event}' has no properties after beforeSend function, this is likely an error.`
+          this._logger.warn(message)
+        }
+      } catch (error) {
+        this._logger.error(`Error in before_send function for event '${eventMessage.event}':`, error)
         return null
-      }
-      if (!result.properties || Object.keys(result.properties).length === 0) {
-        const message = `Event '${result.event}' has no properties after beforeSend function, this is likely an error.`
-        this._logger.warn(message)
       }
     }
 

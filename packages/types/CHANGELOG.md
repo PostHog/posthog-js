@@ -1,5 +1,45 @@
 # @posthog/types
 
+## 1.406.1
+
+### Patch Changes
+
+- [#4476](https://github.com/PostHog/posthog-js/pull/4476) [`ed4dd97`](https://github.com/PostHog/posthog-js/commit/ed4dd97d461f9dd871507c8b929ab38cae376181) Thanks [@posthog](https://github.com/apps/posthog)! - fix(browser): refresh configured feature flags when a hidden tab becomes visible
+
+    Feature flags now own their automatic refresh timer and visibility listener.
+    Hidden tabs reload due flags when they become visible. The existing five-minute
+    default and `remote_config_refresh_interval_ms` behavior remain unchanged. (2026-08-25)
+
+## 1.406.0
+
+### Minor Changes
+
+- [#4598](https://github.com/PostHog/posthog-js/pull/4598) [`334159b`](https://github.com/PostHog/posthog-js/commit/334159bfd70cf78412d902b27bf27ae4107ecf91) Thanks [@posthog](https://github.com/apps/posthog)! - Web vitals now capture attribution by default for INP and LCP, so a slow interaction or paint arrives with the target element and phase breakdown that make it diagnosable. CLS stays without attribution by default, because its attribution holds detached DOM nodes and can leak memory in single-page apps. Set `capture_performance.web_vitals_attribution` to `false` to opt out, `true` for every metric, or an array to name the metrics. The captured metric also drops the empty `entries` array and bounds attribution to a small set of useful fields, and the attributed INP observer no longer collects the `processedEventEntries` we never read.
+  (2026-08-25)
+
+## 1.405.3
+
+### Patch Changes
+
+- [#4607](https://github.com/PostHog/posthog-js/pull/4607) [`7ec4f0d`](https://github.com/PostHog/posthog-js/commit/7ec4f0dd2575aee0a5b664ccad0c59e9fac9c89e) Thanks [@posthog](https://github.com/apps/posthog)! - Drop exceptions thrown by user scripts the browser injects into every page (Firefox for iOS, Chrome for iOS) instead of reporting them as the page's own errors. Set `error_tracking.captureExtensionExceptions: true` to keep capturing them.
+  (2026-08-24)
+
+## 1.405.2
+
+### Patch Changes
+
+- [#4418](https://github.com/PostHog/posthog-js/pull/4418) [`be2161d`](https://github.com/PostHog/posthog-js/commit/be2161d68946b30d27d7a0a5c2cb5671b04d5ac0) Thanks [@posthog](https://github.com/apps/posthog)! - feat: add granular automatic pageview options for SPA navigation
+
+    `capture_pageview` now accepts an object with `path`, `search`, and `hash` options. Each selected URL component triggers a `$pageview` when it changes, including direct hash changes used by hash-based routers. The existing `'history_change'` option continues to capture pathname changes. (2026-08-24)
+
+## 1.405.1
+
+### Patch Changes
+
+- [#4583](https://github.com/PostHog/posthog-js/pull/4583) [`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix logs and metrics being silently dropped when an attribute holds a very large integer, a function, a symbol, a sparse array, or a truncated emoji.
+  Cap log and metric attributes at 20 levels of nesting, 1,000 entries per object and 10,000 values in total, marking anything beyond as `[Truncated]`.
+  Type `OtlpAnyValue.intValue` as `string | number` — code reading that field must handle both. (2026-08-21)
+
 ## 1.405.0
 
 ### Minor Changes

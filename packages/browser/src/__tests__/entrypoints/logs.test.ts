@@ -4,8 +4,7 @@ import { PostHog } from '../../posthog-core'
 describe('logs entrypoint', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
-    // Console capture now routes through the core pipeline via
-    // `posthog.logs._captureConsoleLog`; assert against that seam.
+    // Legacy PostHog capture routes through its historical console capture ABI.
     let mockEmit: jest.Mock
 
     beforeEach(() => {
@@ -34,7 +33,8 @@ describe('logs entrypoint', () => {
             },
             get_distinct_id: jest.fn(() => 'user-123'),
             is_capturing: jest.fn(() => true),
-            logs: { _captureConsoleLog: mockEmit },
+            version: '1.392.0',
+            logs: { le: mockEmit },
         } as unknown as PostHog
 
         // Mock assignableWindow
@@ -72,7 +72,7 @@ describe('logs entrypoint', () => {
             require('../../entrypoints/logs')
         })
 
-        it('routes console capture through posthog.logs._captureConsoleLog with the mapped level', () => {
+        it('routes legacy PostHog capture through its historical console method with the mapped level', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
@@ -634,7 +634,7 @@ describe('logs entrypoint', () => {
         })
 
         it('does not recurse when the capture path itself logs to the console', () => {
-            // Simulate the real fault: _captureConsoleLog logs to the (wrapped) console,
+            // Simulate the real fault: the console capture method logs to the wrapped console,
             // as checkAndGetSessionAndWindowId does via PostHog's internal logger.
             mockEmit.mockImplementation(() => {
                 assignableWindow.console.log('internal debug from capture path')

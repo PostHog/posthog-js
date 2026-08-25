@@ -1,6 +1,6 @@
 import { SurveyActionType, SurveyEventType, SurveyEventWithFilters } from '../posthog-surveys-types'
 import { ActionMatcher } from '../extensions/surveys/action-matcher'
-import { PostHog } from '../posthog-core'
+import type { PostHog } from '../posthog-core'
 import { CaptureResult } from '../types'
 import { matchPropertyFilters } from '@posthog/browser-common/utils/property-utils'
 import { isEmptyObject, isNumber, isUndefined } from '@posthog/core'
@@ -52,6 +52,8 @@ export abstract class EventReceiver<T extends EventTriggerable> {
      * the trigger never fired.
      */
     private _pendingActivatedItems: string[] = []
+    private _captureHookUnsubscribe?: () => void
+    private _sessionIdUnsubscribe?: () => void
 
     constructor(instance: PostHog) {
         this._instance = instance
@@ -67,7 +69,7 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         // rotation, since merely checking whether to show a survey should never keep a session
         // alive). The read-time check in `_getPersistedActivatedIds` remains as a complementary
         // backstop for a session that had already rotated in persistence before this page loaded.
-        this._instance?.onSessionId?.((sessionId) => this._onSessionIdChanged(sessionId))
+        this._sessionIdUnsubscribe = this._instance?.onSessionId?.((sessionId) => this._onSessionIdChanged(sessionId))
     }
 
     // Abstract methods for subclasses to implement
@@ -173,62 +175,74 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     }
 
     register(items: T[]): void {
+        this._register(items, false)
+    }
+
+    replace(items: T[]): void {
+        this._register(items, true)
+    }
+
+    private _register(items: T[], replace: boolean): void {
         if (isUndefined(this._instance?._addCaptureHook)) {
             return
         }
 
-        this._setupEventBasedItems(items)
-        this._setupActionBasedItems(items)
+        this._setupEventBasedItems(items, replace)
+        this._setupActionBasedItems(items, replace)
     }
 
-    private _setupActionBasedItems(items: T[]) {
-        const actionBasedItems = items.filter(
-            (item: T) => item.conditions?.actions && item.conditions?.actions?.values?.length > 0
-        )
+    private _setupActionBasedItems(items: T[], replace: boolean): void {
+        const actionBasedItems = items.filter((item) => item.conditions?.actions?.values?.length)
+        if (replace) {
+            this._actionToItems.clear()
+        }
 
         if (actionBasedItems.length === 0) {
+            if (replace) {
+                this._actionMatcher?.replace([])
+            }
             return
         }
 
-        if (this._actionMatcher == null) {
+        if (!this._actionMatcher) {
             this._actionMatcher = new ActionMatcher(this._instance)
             this._actionMatcher.init()
-            // match any actions to its corresponding item.
-            const matchActionToItem = (actionName: string) => {
-                this.onAction(actionName)
-            }
-
-            this._actionMatcher._addActionHook(matchActionToItem)
+            this._actionMatcher._addActionHook((actionName) => this.onAction(actionName))
         }
 
+        const actions: SurveyActionType[] = []
         actionBasedItems.forEach((item) => {
-            if (
-                item.conditions &&
-                item.conditions?.actions &&
-                item.conditions?.actions?.values &&
-                item.conditions?.actions?.values?.length > 0
-            ) {
-                // register the known set of actions with
-                // the action-matcher so it can match
-                // events to actions
-                this._actionMatcher?.register(item.conditions.actions.values)
-
-                // maintain a mapping of (Action1) => [Item1, Item2, Item3]
-                // where Items 1-3 are all activated by Action1
-                item.conditions?.actions?.values?.forEach((action) => {
-                    if (action && action.name) {
-                        const knownItems: string[] | undefined = this._actionToItems.get(action.name)
-                        if (knownItems) {
-                            knownItems.push(item.id)
-                        }
-                        this._actionToItems.set(action.name, knownItems || [item.id])
+            item.conditions?.actions?.values.forEach((action) => {
+                actions.push(action)
+                if (action.name) {
+                    const matchingItems = this._actionToItems.get(action.name) ?? []
+                    if (!matchingItems.includes(item.id)) {
+                        matchingItems.push(item.id)
                     }
-                })
-            }
+                    this._actionToItems.set(action.name, matchingItems)
+                }
+            })
+        })
+        if (replace) {
+            this._actionMatcher.replace(actions)
+        } else {
+            this._actionMatcher.register(actions)
+        }
+    }
+
+    private _mergeItemMaps(target: Map<string, string[]>, source: Map<string, string[]>): void {
+        source.forEach((itemIds, eventName) => {
+            const matchingItems = target.get(eventName) ?? []
+            itemIds.forEach((itemId) => {
+                if (!matchingItems.includes(itemId)) {
+                    matchingItems.push(itemId)
+                }
+            })
+            target.set(eventName, matchingItems)
         })
     }
 
-    private _setupEventBasedItems(items: T[]) {
+    private _setupEventBasedItems(items: T[], replace: boolean): void {
         const eventBasedItems = items.filter(
             (item: T) => item.conditions?.events && item.conditions?.events?.values?.length > 0
         )
@@ -237,6 +251,15 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             (item: T) => item.conditions?.cancelEvents && item.conditions?.cancelEvents?.values?.length > 0
         )
 
+        const eventToItems = this._buildEventToItemMap(items, SurveyEventType.Activation)
+        const cancelEventToItems = this._buildEventToItemMap(items, SurveyEventType.Cancellation)
+        if (replace) {
+            this._eventToItems = eventToItems
+            this._cancelEventToItems = cancelEventToItems
+        } else {
+            this._mergeItemMaps(this._eventToItems, eventToItems)
+            this._mergeItemMaps(this._cancelEventToItems, cancelEventToItems)
+        }
         if (eventBasedItems.length === 0 && itemsWithCancelEvents.length === 0) {
             return
         }
@@ -245,10 +268,7 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         const matchEventToItem = (eventName: string, eventPayload?: CaptureResult) => {
             this.onEvent(eventName, eventPayload)
         }
-        this._instance?._addCaptureHook(matchEventToItem)
-
-        this._eventToItems = this._buildEventToItemMap(items, SurveyEventType.Activation)
-        this._cancelEventToItems = this._buildEventToItemMap(items, SurveyEventType.Cancellation)
+        this._captureHookUnsubscribe ??= this._instance?._addCaptureHook(matchEventToItem)
     }
 
     onEvent(event: string, eventPayload?: CaptureResult): void {
@@ -525,6 +545,15 @@ export abstract class EventReceiver<T extends EventTriggerable> {
      * (without a full page reload) does not leave an event-armed item live for the next
      * user — the in-memory set would otherwise survive `persistence.clear()`.
      */
+    dispose(): void {
+        this._sessionIdUnsubscribe?.()
+        this._sessionIdUnsubscribe = undefined
+        this._captureHookUnsubscribe?.()
+        this._captureHookUnsubscribe = undefined
+        this._actionMatcher?.dispose()
+        this._actionMatcher = undefined
+    }
+
     reset(): void {
         this._pendingActivatedItems = []
         if (this._getRawPersistedActivatedIds().length > 0) {

@@ -1,5 +1,35 @@
 # @posthog/browser-common
 
+## 0.6.0
+
+### Minor Changes
+
+- [#4592](https://github.com/PostHog/posthog-js/pull/4592) [`ca540f9`](https://github.com/PostHog/posthog-js/commit/ca540f94f2c301f4ea8f5273a250ac2516292613) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add typed stable-name lookup for installed browser extensions and use it when independently loaded survey code resolves feature flags.
+  (2026-08-25)
+
+### Patch Changes
+
+- [#4533](https://github.com/PostHog/posthog-js/pull/4533) [`53fcb2d`](https://github.com/PostHog/posthog-js/commit/53fcb2d34eac1e83afbfa810ab7b9e9f691d6ce6) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Expose host capture permission to browser extensions.
+  (2026-08-25)
+- Updated dependencies [[`ed4dd97`](https://github.com/PostHog/posthog-js/commit/ed4dd97d461f9dd871507c8b929ab38cae376181)]:
+    - @posthog/types@1.406.1
+
+## 0.5.2
+
+### Patch Changes
+
+- [#4611](https://github.com/PostHog/posthog-js/pull/4611) [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12) Thanks [@marandaneto](https://github.com/marandaneto)! - Share survey property matching between the browser and React Native SDKs while preserving their existing missing-value behavior.
+  (2026-08-25)
+- Updated dependencies [[`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+    - @posthog/core@1.48.11
+
+## 0.5.1
+
+### Patch Changes
+
+- [#4532](https://github.com/PostHog/posthog-js/pull/4532) [`60ee0ac`](https://github.com/PostHog/posthog-js/commit/60ee0ac04c3c08a467717464b4936d74e7d1532e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Migrate surveys to the shared browser extension lifecycle.
+  (2026-08-24)
+
 ## 0.5.0
 
 ### Minor Changes

@@ -100,8 +100,19 @@ function rewriteToPostHog(request: NextRequest, config: ResolvedRewriteConfig): 
     const pathname = request.nextUrl.pathname.slice(config.pathPrefix.length) || '/'
     // eslint-disable-next-line compat/compat
     const url = new URL(pathname, config.host)
+    // eslint-disable-next-line compat/compat
+    const hostOrigin = new URL('/', config.host).origin
+
+    if (url.origin !== hostOrigin) {
+        return new NextResponse('Invalid rewrite destination', { status: 400 })
+    }
+
     url.search = request.nextUrl.search
     return NextResponse.rewrite(url)
+}
+
+function matchesPathPrefix(pathname: string, pathPrefix: string): boolean {
+    return pathname === pathPrefix || pathname.startsWith(pathPrefix.endsWith('/') ? pathPrefix : `${pathPrefix}/`)
 }
 
 /**
@@ -136,7 +147,7 @@ export function postHogMiddleware(config: PostHogMiddlewareOptions = {}) {
     return async function middleware(request: NextRequest) {
         // Proxy ingest requests to PostHog's host. These are API calls
         // from the browser SDK and don't need cookie seeding.
-        if (proxyConfig && request.nextUrl.pathname.startsWith(proxyConfig.pathPrefix)) {
+        if (proxyConfig && matchesPathPrefix(request.nextUrl.pathname, proxyConfig.pathPrefix)) {
             return rewriteToPostHog(request, proxyConfig)
         }
 

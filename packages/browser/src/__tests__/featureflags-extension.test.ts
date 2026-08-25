@@ -26,18 +26,356 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
     it('has a side-effect-free constructor and disposes setup listeners idempotently', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
-        const addListener = jest.spyOn(window, 'addEventListener')
-        const removeListener = jest.spyOn(window, 'removeEventListener')
+        const addWindowListener = jest.spyOn(window, 'addEventListener')
+        const removeWindowListener = jest.spyOn(window, 'removeEventListener')
+        const addDocumentListener = jest.spyOn(document, 'addEventListener')
+        const removeDocumentListener = jest.spyOn(document, 'removeEventListener')
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
 
-        expect(addListener).not.toHaveBeenCalled()
+        expect(addWindowListener).not.toHaveBeenCalled()
+        expect(addDocumentListener).not.toHaveBeenCalled()
         featureFlags.setup(posthog._getBrowserClientAdapter())
-        expect(addListener).toHaveBeenCalledWith('online', expect.any(Function), { capture: false, passive: true })
+        expect(addWindowListener).toHaveBeenCalledWith('online', expect.any(Function), {
+            capture: false,
+            passive: true,
+        })
+        expect(addDocumentListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function), {
+            capture: false,
+            passive: true,
+        })
 
         featureFlags.dispose()
         featureFlags.dispose()
-        expect(removeListener).toHaveBeenCalledTimes(1)
-        expect(removeListener).toHaveBeenCalledWith('online', expect.any(Function))
+        expect(removeWindowListener).toHaveBeenCalledTimes(1)
+        expect(removeWindowListener).toHaveBeenCalledWith('online', expect.any(Function))
+        expect(removeDocumentListener).toHaveBeenCalledTimes(1)
+        expect(removeDocumentListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function))
+    })
+
+    describe('automatic refresh', () => {
+        const refreshIntervalMs = 60_000
+        const defaultRefreshIntervalMs = 5 * 60_000
+        let featureFlags: PostHogFeatureFlags | undefined
+
+        const setVisibilityState = (state: DocumentVisibilityState): void => {
+            Object.defineProperty(document, 'visibilityState', { value: state, configurable: true })
+        }
+
+        const setupFeatureFlags = async (interval?: number): Promise<PostHogFeatureFlags> => {
+            const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+            const config = defaultConfig()
+            config.remote_config_refresh_interval_ms = interval
+            featureFlags = new PostHogFeatureFlags(posthog)
+            featureFlags.updateConfig(config, false)
+            await featureFlags.setup(posthog._getBrowserClientAdapter())
+            return featureFlags
+        }
+
+        const setupFeatureFlagsWithInternalInterval = async (
+            refreshIntervalMs?: number
+        ): Promise<PostHogFeatureFlags> => {
+            const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+            const config = new MutableFeatureFlagsConfigSource(defaultConfig()).get()
+            featureFlags = new PostHogFeatureFlags({
+                get: () => ({ ...config, refreshIntervalMs }),
+            })
+            await featureFlags.setup(posthog._getBrowserClientAdapter())
+            return featureFlags
+        }
+
+        beforeEach(() => {
+            setVisibilityState('visible')
+        })
+
+        afterEach(() => {
+            featureFlags?.dispose()
+            featureFlags = undefined
+            setVisibilityState('visible')
+        })
+
+        it('does not start when the internal refresh interval is undefined', async () => {
+            const featureFlags = await setupFeatureFlagsWithInternalInterval()
+            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+            jest.advanceTimersByTime(defaultRefreshIntervalMs)
+            document.dispatchEvent(new Event('visibilitychange'))
+
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+        })
+
+        it('starts only after remote requests are enabled', async () => {
+            const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+            const config = defaultConfig()
+            config.remote_config_refresh_interval_ms = refreshIntervalMs
+            featureFlags = new PostHogFeatureFlags(posthog)
+            featureFlags.updateConfig(config, true)
+            const addDocumentListener = jest.spyOn(document, 'addEventListener')
+
+            await featureFlags.setup(posthog._getBrowserClientAdapter())
+
+            expect(featureFlags['_refreshInterval']).toBeUndefined()
+            expect(addDocumentListener).not.toHaveBeenCalledWith(
+                'visibilitychange',
+                expect.any(Function),
+                expect.anything()
+            )
+
+            featureFlags.updateConfig(config, false)
+
+            expect(featureFlags['_refreshInterval']).toBeDefined()
+            expect(addDocumentListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function), {
+                capture: false,
+                passive: true,
+            })
+        })
+
+        it.each([0, -1])('does not start when the public refresh interval is %s', async (interval) => {
+            const featureFlags = await setupFeatureFlags(interval)
+            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+            jest.advanceTimersByTime(defaultRefreshIntervalMs)
+            document.dispatchEvent(new Event('visibilitychange'))
+
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+        })
+
+        it('uses the existing five-minute default when the public option is undefined', async () => {
+            const featureFlags = await setupFeatureFlags()
+            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+            jest.advanceTimersByTime(defaultRefreshIntervalMs - 1)
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+            jest.advanceTimersByTime(1)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+        })
+
+        it('applies an interval configured from the loaded callback', async () => {
+            const posthog = await createPosthogInstance(undefined, {
+                advanced_disable_feature_flags: true,
+                loaded: (instance) => instance.set_config({ remote_config_refresh_interval_ms: refreshIntervalMs }),
+            })
+            featureFlags = posthog.featureFlags
+            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+            jest.advanceTimersByTime(refreshIntervalMs)
+
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            await posthog.shutdown()
+        })
+
+        it('enables, restarts, or stops automatic refresh when public config changes', async () => {
+            const posthog = await createPosthogInstance(undefined, {
+                advanced_disable_feature_flags: true,
+                remote_config_refresh_interval_ms: 0,
+            })
+            featureFlags = posthog.featureFlags
+            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+            jest.advanceTimersByTime(defaultRefreshIntervalMs)
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+
+            posthog.set_config({ remote_config_refresh_interval_ms: refreshIntervalMs })
+            jest.advanceTimersByTime(refreshIntervalMs / 2)
+            posthog.set_config({ remote_config_refresh_interval_ms: refreshIntervalMs * 2 })
+
+            jest.advanceTimersByTime(refreshIntervalMs * 2 - 1)
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+            jest.advanceTimersByTime(1)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+
+            posthog.set_config({ remote_config_refresh_interval_ms: 0 })
+            jest.advanceTimersByTime(refreshIntervalMs * 2)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            await posthog.shutdown()
+        })
+
+        it('uses the latest interval when asynchronous setup completes', async () => {
+            const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+            const client = posthog._getBrowserClientAdapter()
+            let resolveInitialization: (() => void) | undefined
+            jest.spyOn(client.kv, 'initialize').mockReturnValue(
+                new Promise<void>((resolve) => {
+                    resolveInitialization = resolve
+                })
+            )
+            featureFlags = new PostHogFeatureFlags(posthog)
+            const setup = featureFlags.setup(client)
+            const config = defaultConfig()
+            config.remote_config_refresh_interval_ms = refreshIntervalMs
+            featureFlags.updateConfig(config, false)
+            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+            resolveInitialization?.()
+            await setup
+            jest.advanceTimersByTime(refreshIntervalMs)
+
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+        })
+
+        it('reloads flags on the configured interval while visible', async () => {
+            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+            jest.advanceTimersByTime(refreshIntervalMs - 1)
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+
+            jest.advanceTimersByTime(1)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+        })
+
+        it('reloads due flags when a hidden page becomes visible', async () => {
+            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+            setVisibilityState('hidden')
+            jest.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+
+            setVisibilityState('visible')
+            document.dispatchEvent(new Event('visibilitychange'))
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+        })
+
+        it('starts a full interval after a visibility refresh', async () => {
+            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+            setVisibilityState('hidden')
+            jest.advanceTimersByTime(refreshIntervalMs + refreshIntervalMs / 2)
+            setVisibilityState('visible')
+            document.dispatchEvent(new Event('visibilitychange'))
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+
+            jest.advanceTimersByTime(refreshIntervalMs - 1)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            jest.advanceTimersByTime(1)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
+        })
+
+        it('does not reload flags when the page becomes visible before the interval elapses', async () => {
+            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+            setVisibilityState('hidden')
+            jest.advanceTimersByTime(refreshIntervalMs - 1)
+            setVisibilityState('visible')
+            document.dispatchEvent(new Event('visibilitychange'))
+
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+        })
+
+        it('keeps automatic refresh active after flag state resets', async () => {
+            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+            featureFlags.reset()
+            jest.advanceTimersByTime(refreshIntervalMs)
+
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+        })
+
+        it('stops automatic refresh on dispose', async () => {
+            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+            featureFlags.dispose()
+            jest.advanceTimersByTime(refreshIntervalMs)
+            document.dispatchEvent(new Event('visibilitychange'))
+
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+        })
+
+        it('stops automatic refresh through the legacy destroy method', async () => {
+            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+            featureFlags.destroy()
+            const config = defaultConfig()
+            config.remote_config_refresh_interval_ms = refreshIntervalMs
+            featureFlags.updateConfig(config, false)
+            jest.advanceTimersByTime(refreshIntervalMs)
+            document.dispatchEvent(new Event('visibilitychange'))
+
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+        })
+
+        it('does not start automatic refresh when destroyed during asynchronous setup', async () => {
+            const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+            const client = posthog._getBrowserClientAdapter()
+            let resolveInitialization: (() => void) | undefined
+            jest.spyOn(client.kv, 'initialize').mockReturnValue(
+                new Promise<void>((resolve) => {
+                    resolveInitialization = resolve
+                })
+            )
+            featureFlags = new PostHogFeatureFlags(posthog)
+            const config = defaultConfig()
+            config.remote_config_refresh_interval_ms = refreshIntervalMs
+            featureFlags.updateConfig(config, false)
+            const setup = featureFlags.setup(client)
+            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+            featureFlags.destroy()
+            resolveInitialization?.()
+            await setup
+            jest.advanceTimersByTime(refreshIntervalMs)
+
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+        })
+
+        it('does not start without a document', async () => {
+            const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+            const config = new MutableFeatureFlagsConfigSource(defaultConfig()).get()
+            const setRefreshInterval = jest.spyOn(globalThis, 'setInterval')
+            const addDocumentListener = jest.spyOn(document, 'addEventListener')
+            setRefreshInterval.mockClear()
+            addDocumentListener.mockClear()
+            jest.doMock('@posthog/browser-common/utils/globals', () => ({
+                ...jest.requireActual('@posthog/browser-common/utils/globals'),
+                document: undefined,
+            }))
+
+            try {
+                jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { PostHogFeatureFlags: NoDocumentFeatureFlags } = require('../posthog-featureflags')
+                    const noDocumentFeatureFlags = new NoDocumentFeatureFlags({
+                        get: () => ({ ...config, refreshIntervalMs }),
+                    })
+
+                    noDocumentFeatureFlags.setup(posthog._getBrowserClientAdapter())
+
+                    expect(noDocumentFeatureFlags['_refreshInterval']).toBeUndefined()
+                    noDocumentFeatureFlags.dispose()
+                })
+            } finally {
+                jest.dontMock('@posthog/browser-common/utils/globals')
+            }
+
+            expect(setRefreshInterval).not.toHaveBeenCalled()
+            expect(addDocumentListener).not.toHaveBeenCalledWith(
+                'visibilitychange',
+                expect.any(Function),
+                expect.anything()
+            )
+            await posthog.shutdown()
+        })
+
+        it('starts without a document event API', async () => {
+            const addEventListener = document.addEventListener
+            Object.defineProperty(document, 'addEventListener', { value: undefined, configurable: true })
+
+            try {
+                const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+                const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+
+                jest.advanceTimersByTime(refreshIntervalMs)
+
+                expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            } finally {
+                Object.defineProperty(document, 'addEventListener', { value: addEventListener, configurable: true })
+            }
+        })
     })
 
     it('preserves the legacy initialize and destroy methods', async () => {

@@ -51,6 +51,7 @@ function patchGLPrototype(
             const result = original.apply(this, args);
             saveWebGLVar(result, win, this);
             if (
+              !!this.canvas &&
               'tagName' in this.canvas &&
               !isBlocked(this.canvas, blockClass, blockSelector, true)
             ) {
@@ -72,14 +73,18 @@ function patchGLPrototype(
     } catch {
       const hookHandler = hookSetter<typeof prototype>(prototype, prop, {
         set(v) {
-          // TODO: this could potentially also be an OffscreenCanvas as well as HTMLCanvasElement
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          cb(this.canvas as HTMLCanvasElement, {
-            type,
-            property: prop,
-            args: [v],
-            setter: true,
-          });
+          if (
+            !!this.canvas &&
+            'tagName' in this.canvas &&
+            !isBlocked(this.canvas, blockClass, blockSelector, true)
+          ) {
+            cb(this.canvas, {
+              type,
+              property: prop,
+              args: [v],
+              setter: true,
+            });
+          }
         },
       });
       handlers.push(hookHandler);

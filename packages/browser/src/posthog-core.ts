@@ -123,8 +123,9 @@ import {
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { BrowserClientAdapter } from './extensions/browser-client'
-import type { PostHogSurveys } from './posthog-surveys'
-import type { Autocapture } from './autocapture'
+import type { Extension as BrowserCommonExtension, ExtensionToken } from '@posthog/browser-common'
+import type { BrowserSurveys } from './browser-surveys'
+import type { BrowserAutocapture } from './browser-autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
 import type { HistoryAutocapture } from './extensions/history-autocapture'
@@ -415,7 +416,7 @@ export class PostHog implements PostHogInterface {
     scrollManager: ScrollManager
     pageViewManager: PageViewManager
     featureFlags: TreeShakeable<PostHogFeatureFlags>
-    surveys: TreeShakeable<PostHogSurveys>
+    surveys: TreeShakeable<BrowserSurveys>
     conversations: TreeShakeable<PostHogConversations>
     logs: TreeShakeable<PostHogLogs>
     metrics: TreeShakeable<PostHogMetrics>
@@ -431,7 +432,7 @@ export class PostHog implements PostHogInterface {
     sessionPropsManager?: SessionPropsManager
     requestRouter: RequestRouter
     siteApps?: SiteApps
-    autocapture?: Autocapture
+    autocapture?: BrowserAutocapture
     heatmaps?: Heatmaps
     tracingHeaders?: TracingHeaders
     webVitalsAutocapture?: WebVitalsAutocapture
@@ -490,6 +491,50 @@ export class PostHog implements PostHogInterface {
             this.config.cookieless_mode === COOKIELESS_ALWAYS ||
             (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected())
         )
+    }
+
+    /**
+     * Replace a stale cookieless sentinel distinct_id with an anonymous device id.
+     *
+     * Consent lives in shared cookie/localStorage, but the in-memory distinct_id does not. A tab
+     * that started in cookieless mode holds the `$posthog_cookieless` sentinel as its distinct_id;
+     * when consent is flipped to opted-in in another tab, this tab stops being cookieless
+     * (`_inCookielessMode()` becomes false) while the sentinel remains in memory. If that sentinel
+     * then escapes into a real event — or into `identify()` as `$anon_distinct_id` — the plugin
+     * server never hashes it and every affected browser collapses onto a single
+     * `$posthog_cookieless` person.
+     */
+    private _healCookielessSentinelDistinctId(): void {
+        if (this._inCookielessMode() || this.get_distinct_id() !== COOKIELESS_SENTINEL_VALUE) {
+            return
+        }
+
+        const persistence = this.persistence
+        if (!persistence) {
+            return
+        }
+
+        if (!this._is_persistence_disabled()) {
+            // The tab that handled the shared consent change already persisted its replacement
+            // identity. Reload it before re-enabling this stale tab's persistence so we neither
+            // split one browser across device IDs nor overwrite the shared identity with stale state.
+            persistence.load(true)
+        }
+
+        const currentDistinctId = this.get_distinct_id()
+        if (!currentDistinctId || currentDistinctId === COOKIELESS_SENTINEL_VALUE) {
+            const uuid = this.config.get_device_id(uuidv7())
+            this.register({
+                distinct_id: uuid,
+                $device_id: uuid,
+            })
+            // distinct id == $device_id is a proxy for an anonymous user
+            persistence.set_property(USER_STATE, USER_STATE_ANONYMOUS)
+        }
+
+        // A cross-tab consent change bypasses opt_in_capturing() in this tab, so reconcile its
+        // persistence state now that the shared consent store says persistence is allowed.
+        this._sync_opt_out_with_persistence()
     }
 
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
@@ -920,6 +965,27 @@ export class PostHog implements PostHogInterface {
         return this
     }
 
+    private _isSharedExtension(extension: Extension | BrowserCommonExtension): extension is BrowserCommonExtension {
+        const sharedExtension = extension as BrowserCommonExtension
+        return isString(sharedExtension.name) && isFunction(sharedExtension.setup)
+    }
+
+    private _enrollExtension(extension: Extension | BrowserCommonExtension, initTasks: Array<() => void>): void {
+        if (this._isSharedExtension(extension)) {
+            initTasks.push(
+                () =>
+                    void this._getBrowserClientAdapter()
+                        .add(extension)
+                        .catch(() => extension.dispose?.())
+                        .catch((error) => {
+                            logger.error(`Failed to dispose browser extension "${extension.name}"`, error)
+                        })
+            )
+        } else {
+            this._extensions.push(extension)
+        }
+    }
+
     private _enrollFeatureFlags(): void {
         const FeatureFlagsClass =
             this.config.__extensionClasses?.featureFlags ?? PostHog.__defaultExtensionClasses?.featureFlags
@@ -973,13 +1039,13 @@ export class PostHog implements PostHogInterface {
             })
         }
         if (ext.autocapture) {
-            this._extensions.push((this.autocapture = new ext.autocapture(this)))
+            this._enrollExtension((this.autocapture = new ext.autocapture(this) as BrowserAutocapture), initTasks)
         }
         if (ext.surveys) {
-            this._extensions.push((this.surveys = this.surveys ?? new ext.surveys(this)))
+            this._enrollExtension((this.surveys = this.surveys ?? new ext.surveys(this)), initTasks)
         }
         if (ext.logs) {
-            this._extensions.push((this.logs = this.logs ?? new ext.logs(this)))
+            this._enrollExtension((this.logs = this.logs ?? new ext.logs(this)), initTasks)
         }
         if (ext.metrics) {
             this._extensions.push((this.metrics = this.metrics ?? new ext.metrics(this)))
@@ -1411,6 +1477,8 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        this._healCookielessSentinelDistinctId()
+
         const isBot = !this.config.opt_out_useragent_filter && this._is_bot()
         const shouldDropBotEvent = isBot && !this.config.__preview_capture_bot_pageviews
 
@@ -1603,6 +1671,22 @@ export class PostHog implements PostHogInterface {
 
     _addCaptureHook(callback: (eventName: string, eventPayload?: CaptureResult) => void): () => void {
         return this.on('eventCaptured', (data) => callback(data.event, data))
+    }
+
+    /**
+     * Returns an installed browser extension by its typed stable name.
+     *
+     * @internal
+     */
+    getExtension<T extends BrowserCommonExtension>(token: ExtensionToken<T>): T | undefined
+    /**
+     * Returns an installed browser extension by its stable name.
+     *
+     * @internal
+     */
+    getExtension<T extends BrowserCommonExtension = BrowserCommonExtension>(name: string): T | undefined
+    getExtension<T extends BrowserCommonExtension = BrowserCommonExtension>(name: string): T | undefined {
+        return this._browserClientAdapter?.getExtension<T>(name)
     }
 
     _getBrowserClientAdapter(): BrowserClientAdapter {
@@ -2757,6 +2841,8 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        this._healCookielessSentinelDistinctId()
+
         // Adopt any sibling identity first, then make this explicit identify
         // authoritative until its complete replacement cookie is published. Keep
         // the pre-sync identity so adopting the requested ID still performs the
@@ -3304,9 +3390,6 @@ export class PostHog implements PostHogInterface {
                 this.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: recordingRemoteConfig })
             }
             this.surveys?.reset()
-            // Stop the refresh interval before resetting flags — featureFlags.reset() clears
-            // the debouncer, so if the order were reversed a pending refresh could fire after reset.
-            this._remoteConfigLoader?.stop()
             this.featureFlags?.reset()
             this.conversations?.reset()
             this.logs?.reset()
@@ -3417,8 +3500,7 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        this._remoteConfigLoader?.stop()
-        this._browserClientAdapter?.dispose()
+        this._getBrowserClientAdapter().dispose()
         this.sessionRecording?.dispose()
 
         // Best-effort flush of anything still queued, mirroring page-unload teardown
@@ -3701,6 +3783,9 @@ export class PostHog implements PostHogInterface {
             this.tracingHeaders?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
+            if ('capture_pageview' in config || 'disable_capture_url_hashes' in config) {
+                this.historyAutocapture?.startIfEnabledOrStop()
+            }
             this.exceptionObserver?.startIfEnabledOrStop()
             this.deadClicksAutocapture?.startIfEnabledOrStop()
             this.surveys?.loadIfEnabled()
@@ -4088,8 +4173,7 @@ export class PostHog implements PostHogInterface {
     _shouldCapturePageleave(): boolean {
         return (
             this.config.capture_pageleave === true ||
-            (this.config.capture_pageleave === 'if_capture_pageview' &&
-                (this.config.capture_pageview === true || this.config.capture_pageview === 'history_change'))
+            (this.config.capture_pageleave === 'if_capture_pageview' && !!this.config.capture_pageview)
         )
     }
 
@@ -4579,20 +4663,25 @@ export class PostHog implements PostHogInterface {
         const fns = isArray(this.config.before_send) ? this.config.before_send : [this.config.before_send]
         let beforeSendResult: CaptureResult | null = data
         for (const fn of fns) {
-            beforeSendResult = fn(beforeSendResult)
-            if (isNullish(beforeSendResult)) {
-                const logMessage = `Event '${data.event}' was rejected in beforeSend function`
-                if (isKnownUnsafeEditableEvent(data.event)) {
-                    logger.warn(`${logMessage}. This can cause unexpected behavior.`)
-                } else {
-                    logger.info(logMessage)
+            try {
+                beforeSendResult = fn(beforeSendResult)
+                if (isNullish(beforeSendResult)) {
+                    const logMessage = `Event '${data.event}' was rejected in beforeSend function`
+                    if (isKnownUnsafeEditableEvent(data.event)) {
+                        logger.warn(`${logMessage}. This can cause unexpected behavior.`)
+                    } else {
+                        logger.info(logMessage)
+                    }
+                    return null
                 }
+                if (!beforeSendResult.properties || isEmptyObject(beforeSendResult.properties)) {
+                    logger.warn(
+                        `Event '${data.event}' has no properties after beforeSend function, this is likely an error.`
+                    )
+                }
+            } catch (e) {
+                logger.error(`Error in beforeSend function for event '${data.event}':`, e)
                 return null
-            }
-            if (!beforeSendResult.properties || isEmptyObject(beforeSendResult.properties)) {
-                logger.warn(
-                    `Event '${data.event}' has no properties after beforeSend function, this is likely an error.`
-                )
             }
         }
         // If a beforeSend hook removed a property the event needs to be ingested

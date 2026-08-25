@@ -1,5 +1,70 @@
 # @posthog/core
 
+## 1.48.11
+
+### Patch Changes
+
+- [#4610](https://github.com/PostHog/posthog-js/pull/4610) [`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74) Thanks [@marandaneto](https://github.com/marandaneto)! - Share feature flag matching, hashing, variant, and payload evaluation helpers across the Node.js and Convex SDKs without changing their runtime-specific SemVer behavior.
+  (2026-08-25)
+
+- [#4611](https://github.com/PostHog/posthog-js/pull/4611) [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12) Thanks [@marandaneto](https://github.com/marandaneto)! - Share survey property matching between the browser and React Native SDKs while preserving their existing missing-value behavior.
+  (2026-08-25)
+
+## 1.48.10
+
+### Patch Changes
+
+- [#4623](https://github.com/PostHog/posthog-js/pull/4623) [`be299df`](https://github.com/PostHog/posthog-js/commit/be299dff71d2cf0c955efff1ca0b9cadc3b64713) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix buffered logs being dropped instead of retried after HTTP 408, 429 or 5xx
+  (2026-08-24)
+
+## 1.48.9
+
+### Patch Changes
+
+- [#4614](https://github.com/PostHog/posthog-js/pull/4614) [`3593c43`](https://github.com/PostHog/posthog-js/commit/3593c43e98269cbe0bc18e697d38b8c862419b09) Thanks [@iamomiid](https://github.com/iamomiid)! - The Node SDK now sends the raw gzip bytes as the request body instead of wrapping them in a `Blob`. On Node 24.16 and later, reading a `Blob` request body leaks a native `BlobReader` that is never released, so a service calling `capture()` and `flush()` once per request grew by roughly 2.3 KB of heap per event and never gave it back. This completes the work in #4423: switching to `node:zlib` removed the compression-time Blob reads, but the body itself was still a Blob and still got read once per request. Compression behaviour, headers and the wire format are unchanged, and the edge build keeps using `CompressionStream`.
+  (2026-08-24)
+
+## 1.48.8
+
+### Patch Changes
+
+- [#4581](https://github.com/PostHog/posthog-js/pull/4581) [`556d235`](https://github.com/PostHog/posthog-js/commit/556d23503a0409b455b4e77334624db583effbd0) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `reloadFeatureFlags` and `reloadFeatureFlagsAsync` returning flags evaluated before the caller's most recent identity or person-property change when several reloads overlap, and stop overlapping reloads from skipping the remote config refresh
+  (2026-08-21)
+
+## 1.48.7
+
+### Patch Changes
+
+- [#4583](https://github.com/PostHog/posthog-js/pull/4583) [`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix logs and metrics being silently dropped when an attribute holds a very large integer, a function, a symbol, a sparse array, or a truncated emoji.
+  Cap log and metric attributes at 20 levels of nesting, 1,000 entries per object and 10,000 values in total, marking anything beyond as `[Truncated]`.
+  Type `OtlpAnyValue.intValue` as `string | number` — code reading that field must handle both. (2026-08-21)
+- Updated dependencies [[`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395)]:
+  - @posthog/types@1.405.1
+
+## 1.48.6
+
+### Patch Changes
+
+- [#4578](https://github.com/PostHog/posthog-js/pull/4578) [`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916) Thanks [@marandaneto](https://github.com/marandaneto)! - Drop events when a before-send hook throws instead of sending the unmodified event.
+  (2026-08-20)
+
+- [#4582](https://github.com/PostHog/posthog-js/pull/4582) [`aef2f49`](https://github.com/PostHog/posthog-js/commit/aef2f493cc8d834780f6b670e15e909e6363c259) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Stop building a stack frame for a `window.onerror` report that carries no code position, such as the `ResizeObserver` loop warning. The frame named the document URL rather than a script, so no source map could resolve it. These exceptions now arrive with no stack trace.
+  (2026-08-20)
+
+## 1.48.5
+
+### Patch Changes
+
+- [#4572](https://github.com/PostHog/posthog-js/pull/4572) [`9701637`](https://github.com/PostHog/posthog-js/commit/9701637b359859f69d8c876838241ed90ccbfa99) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Stop counting Chromium `<anonymous>` stack frames (extension-injected, devtools or string-evaluated code) as in-app code.
+  (2026-08-19)
+
+## 1.48.4
+
+### Patch Changes
+
+- [#4558](https://github.com/PostHog/posthog-js/pull/4558) [`3f9ba71`](https://github.com/PostHog/posthog-js/commit/3f9ba71c50aa106e82d54f2e8f176fde9a4d54a2) Thanks [@posthog](https://github.com/apps/posthog)! - Fall back to the synthetic exception stack when a captured `Error` has no stack, so frameless failures (such as a Firefox network `fetch` `TypeError`) keep their call-site frames and group per call site instead of merging into one issue.
+  (2026-08-19)
+
 ## 1.48.3
 
 ### Patch Changes

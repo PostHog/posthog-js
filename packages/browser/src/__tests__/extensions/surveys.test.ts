@@ -26,6 +26,9 @@ import '@testing-library/jest-dom'
 import * as Preact from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../../posthog-core'
+import { PostHogFeatureFlags } from '../../posthog-featureflags'
+import { MutableFeatureFlagsConfigSource } from '../../feature-flags-config'
+import { FeatureFlagsExtension } from '../../extension-tokens'
 import { FlagsResponse } from '../../types'
 import { SURVEY_IN_PROGRESS_PREFIX } from '../../utils/survey-utils'
 import { createMockPostHog } from '../helpers/posthog-instance'
@@ -262,7 +265,7 @@ describe('usePopupVisibility', () => {
     })
 })
 
-describe('usePopupVisibility view-transition close path', () => {
+describe('usePopupVisibility close animation path', () => {
     const mockSurvey: Survey = {
         id: 'testSurvey1',
         name: 'Test survey 1',
@@ -299,159 +302,129 @@ describe('usePopupVisibility view-transition close path', () => {
     })
     const removeSurvey = jest.fn()
 
-    // Installs a controllable mock for document.startViewTransition. Returns
-    // helpers to resolve/reject the transition.finished promise so tests can
-    // drive the async settle path deterministically.
-    const installViewTransitionMock = () => {
-        let resolveFinished: () => void
-        let rejectFinished: (reason?: any) => void
-        const finished = new Promise<void>((resolve, reject) => {
-            resolveFinished = resolve
-            rejectFinished = reject
+    const renderWithContainer = (container?: HTMLElement) =>
+        renderHook(() =>
+            usePopupVisibility(
+                mockSurvey,
+                mockPostHog,
+                0,
+                false,
+                removeSurvey,
+                true,
+                container ? ({ current: container } as any) : undefined
+            )
+        )
+
+    const attachedContainer = () => {
+        const container = document.createElement('div')
+        document.body.appendChild(container)
+        return container
+    }
+
+    beforeEach(() => {
+        removeSurvey.mockClear()
+        jest.useFakeTimers()
+    })
+
+    afterEach(() => {
+        jest.useRealTimers()
+    })
+
+    test('tears down synchronously when there is no container ref to animate', () => {
+        const { result } = renderWithContainer()
+        expect(result.current.isPopupVisible).toBe(true)
+
+        act(() => {
+            result.current.hidePopupWithAnimation()
         })
-        const updateCallback = jest.fn()
-        const skipTransition = jest.fn()
-        const startViewTransition = jest.fn((cb: () => void) => {
-            // Mimic the browser: run the update callback synchronously.
-            cb()
-            return { finished, updateCallbackDone: finished, ready: Promise.resolve(), skipTransition }
+
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(removeSurvey).toHaveBeenCalledTimes(1)
+    })
+
+    test('fades the container out without removing it, then unmounts once the fade has run', () => {
+        const container = attachedContainer()
+        const { result } = renderWithContainer(container)
+
+        act(() => {
+            result.current.hidePopupWithAnimation()
         })
+
+        // The container is faded out via a scoped opacity transition — NOT removed,
+        // and the popup stays mounted until the fade has had time to run.
+        expect(container.parentNode).not.toBeNull()
+        expect(container.style.opacity).toBe('0')
+        expect(container.style.transition).toContain('opacity')
+        expect(result.current.isPopupVisible).toBe(true)
+        expect(removeSurvey).not.toHaveBeenCalled()
+
+        act(() => {
+            jest.advanceTimersByTime(1000)
+        })
+
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(removeSurvey).toHaveBeenCalledTimes(1)
+    })
+
+    test('never calls document.startViewTransition (no full-page snapshot on heavy pages)', () => {
+        const startViewTransition = jest.fn()
         Object.defineProperty(document, 'startViewTransition', {
             configurable: true,
             writable: true,
             value: startViewTransition,
         })
-        return {
-            startViewTransition,
-            updateCallback,
-            skipTransition,
-            // Call the stored resolver, then return a promise that resolves on the
-            // next microtask so callers can `await` inside act() and let the
-            // transition.finished .then(finish) callback flush before asserting.
-            resolve: () => {
-                resolveFinished()
-                return Promise.resolve()
-            },
-            reject: (reason?: any) => {
-                rejectFinished(reason)
-                return Promise.resolve()
-            },
-        }
-    }
 
-    beforeEach(() => {
-        removeSurvey.mockClear()
-    })
+        const { result } = renderWithContainer(attachedContainer())
+        act(() => {
+            result.current.hidePopupWithAnimation()
+            jest.advanceTimersByTime(1000)
+        })
 
-    afterAll(() => {
-        // jsdom has no startViewTransition; restore that state.
-        // @ts-expect-error - deleting a property that may have been added by a test
+        // The whole point of the fix: closing a survey must not snapshot the page.
+        expect(startViewTransition).not.toHaveBeenCalled()
+        expect(result.current.isPopupVisible).toBe(false)
+
+        // @ts-expect-error - clean up the property we added
         delete document.startViewTransition
     })
 
-    test('hides the popup synchronously when startViewTransition is unavailable', () => {
-        // @ts-expect-error - jsdom does not define startViewTransition
-        delete document.startViewTransition
-        expect(document.startViewTransition).toBeUndefined()
-
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true))
-        expect(result.current.isPopupVisible).toBe(true)
+    test('does not tear down twice on repeated close calls', () => {
+        const { result } = renderWithContainer(attachedContainer())
 
         act(() => {
-            result.current.hidePopupWithViewTransition()
+            result.current.hidePopupWithAnimation()
+            // A second close while the first is still animating.
+            result.current.hidePopupWithAnimation()
+            jest.advanceTimersByTime(1000)
         })
 
-        expect(result.current.isPopupVisible).toBe(false)
         expect(removeSurvey).toHaveBeenCalledTimes(1)
     })
 
-    test('does not remove the survey container inside the transition callback', () => {
-        const vt = installViewTransitionMock()
-        const container = document.createElement('div')
-        document.body.appendChild(container)
-
-        const { result } = renderHook(() =>
-            usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true, {
-                current: container,
-            } as any)
-        )
+    test('a no-container close does not leave the close guard stuck for a later close', () => {
+        // The no-container path tears down synchronously with no settle timer, so it
+        // must not raise the in-flight guard — otherwise a popup that is shown again
+        // (e.g. a tab widget re-shown on a URL match) can never be closed a second time.
+        const { result } = renderWithContainer()
 
         act(() => {
-            result.current.hidePopupWithViewTransition()
+            result.current.hidePopupWithAnimation()
         })
-
-        // The transition ran...
-        expect(vt.startViewTransition).toHaveBeenCalledTimes(1)
-        // ...but the callback only faded the container out, it did NOT remove it.
-        expect(container.parentNode).not.toBeNull()
-        expect(container.style.opacity).toBe('0')
-        // And the popup is still "visible" until the transition settles.
-        expect(result.current.isPopupVisible).toBe(true)
-        expect(removeSurvey).not.toHaveBeenCalled()
-
-        // Settling the transition tears the DOM down via the React path.
-        return act(async () => {
-            await vt.resolve()
-        }).then(() => {
-            expect(result.current.isPopupVisible).toBe(false)
-            expect(removeSurvey).toHaveBeenCalledTimes(1)
-        })
-    })
-
-    test('settles the popup state even if the transition is interrupted (finished rejects)', () => {
-        const vt = installViewTransitionMock()
-
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true))
-
-        act(() => {
-            result.current.hidePopupWithViewTransition()
-        })
-        expect(result.current.isPopupVisible).toBe(true)
-
-        // An interrupted/skipped transition rejects transition.finished.
-        return act(async () => {
-            await vt.reject(new Error('transition skipped'))
-        }).then(() => {
-            // The popup must still end up hidden — no stale visible state.
-            expect(result.current.isPopupVisible).toBe(false)
-            expect(removeSurvey).toHaveBeenCalledTimes(1)
-        })
-    })
-
-    test('does not start a second transition on repeated close calls', () => {
-        const vt = installViewTransitionMock()
-        const container = document.createElement('div')
-        document.body.appendChild(container)
-
-        const { result } = renderHook(() =>
-            usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true, {
-                current: container,
-            } as any)
-        )
-
-        act(() => {
-            result.current.hidePopupWithViewTransition()
-            // A second close while the first transition is still animating.
-            result.current.hidePopupWithViewTransition()
-        })
-
-        expect(vt.startViewTransition).toHaveBeenCalledTimes(1)
-    })
-
-    test('falls back to a plain remove if startViewTransition throws', () => {
-        const vt = installViewTransitionMock()
-        vt.startViewTransition.mockImplementation(() => {
-            throw new Error('not allowed in this document state')
-        })
-
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey, true))
-
-        act(() => {
-            result.current.hidePopupWithViewTransition()
-        })
-
         expect(result.current.isPopupVisible).toBe(false)
         expect(removeSurvey).toHaveBeenCalledTimes(1)
+
+        // The same hook instance shows the popup again.
+        act(() => {
+            result.current.setIsPopupVisible(true)
+        })
+        expect(result.current.isPopupVisible).toBe(true)
+
+        // The second close must still tear down — the guard was not left stuck.
+        act(() => {
+            result.current.hidePopupWithAnimation()
+        })
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(removeSurvey).toHaveBeenCalledTimes(2)
     })
 })
 
@@ -524,6 +497,33 @@ describe('SurveyManager', () => {
         })
 
         surveyManager = new SurveyManager(mockPostHog)
+    })
+
+    it('resolves feature flags through the extension registry', () => {
+        const registeredFeatureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(mockPostHog.config))
+        jest.spyOn(registeredFeatureFlags, 'getFeatureFlag').mockReturnValue('control')
+        jest.spyOn(registeredFeatureFlags, 'isFeatureEnabled').mockReturnValue(true)
+        mockPostHog.getExtension = jest.fn(() => registeredFeatureFlags) as PostHog['getExtension']
+        const survey = {
+            ...mockSurveys[0],
+            linked_flag_key: 'linked-flag-key',
+            conditions: { linkedFlagVariant: 'control' },
+        }
+
+        expect(surveyManager.checkSurveyEligibility(survey).eligible).toBe(true)
+        expect(mockPostHog.getExtension).toHaveBeenCalledWith(FeatureFlagsExtension)
+        expect(registeredFeatureFlags.isFeatureEnabled).toHaveBeenCalledWith('linked-flag-key', { send_event: true })
+        expect(registeredFeatureFlags.getFeatureFlag).toHaveBeenCalledWith('linked-flag-key', { send_event: false })
+        expect(mockPostHog.featureFlags.isFeatureEnabled).not.toHaveBeenCalled()
+    })
+
+    it('falls back to the legacy featureFlags property when extension lookup is unavailable', () => {
+        const survey = { ...mockSurveys[0], linked_flag_key: 'linked-flag-key' }
+
+        expect(surveyManager.checkSurveyEligibility(survey).eligible).toBe(true)
+        expect(mockPostHog.featureFlags.isFeatureEnabled).toHaveBeenCalledWith('linked-flag-key', {
+            send_event: true,
+        })
     })
 
     test('callSurveysAndEvaluateDisplayLogic should handle a single popover survey correctly', () => {

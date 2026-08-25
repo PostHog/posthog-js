@@ -1,12 +1,19 @@
 import { PostHog } from '../posthog-core'
 import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
-import { AllExtensions, FeatureFlagsExtensions } from '../extensions/extension-bundles'
-import { Autocapture } from '../autocapture'
+import {
+    AllExtensions,
+    FeatureFlagsExtensions,
+    LogsExtensions,
+    SurveysExtensions,
+} from '../extensions/extension-bundles'
+import { BrowserAutocapture } from '../browser-autocapture'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
+import { FeatureFlagsExtension } from '../extension-tokens'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { assignableWindow } from '../utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
 
 describe('__extensionClasses enrollment', () => {
     let savedDefaults: PostHogConfig['__extensionClasses']
@@ -25,7 +32,7 @@ describe('__extensionClasses enrollment', () => {
 
         const posthog = await createPosthogInstance(undefined, {
             __preview_deferred_init_extensions: false,
-            __extensionClasses: { autocapture: Autocapture, sessionRecording: SessionRecording },
+            __extensionClasses: { autocapture: BrowserAutocapture, sessionRecording: SessionRecording },
             capture_pageview: false,
         })
 
@@ -72,16 +79,24 @@ describe('__extensionClasses enrollment', () => {
 
     it('__extensionClasses overrides __defaultExtensionClasses', async () => {
         PostHog.__defaultExtensionClasses = AllExtensions
+        let constructorArgument: PostHog | undefined
 
-        class MockAutocapture extends Autocapture {}
+        class MockAutocapture {
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            initialize(): void {}
+        }
 
         const posthog = await createPosthogInstance(undefined, {
             __preview_deferred_init_extensions: false,
-            __extensionClasses: { autocapture: MockAutocapture },
+            __extensionClasses: { autocapture: MockAutocapture as any },
             capture_pageview: false,
         })
 
         expect(posthog.autocapture).toBeInstanceOf(MockAutocapture)
+        expect(constructorArgument).toBe(posthog)
     })
 
     it('preserves the PostHog lifecycle contract for custom feature flags classes', async () => {
@@ -113,6 +128,192 @@ describe('__extensionClasses enrollment', () => {
         expect(constructorArgument).toBe(posthog)
         expect(initialize).toHaveBeenCalledTimes(1)
         expect(destroy).toHaveBeenCalledTimes(1)
+    })
+
+    it('preserves the PostHog constructor and initialize contract for custom surveys classes', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const initialize = jest.fn()
+        const setup = jest.fn()
+        let constructorArgument: PostHog | undefined
+
+        class LegacySurveys {
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            setup(): void {
+                setup()
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __preview_deferred_init_extensions: false,
+            __extensionClasses: { surveys: LegacySurveys as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(initialize).toHaveBeenCalledTimes(1)
+        expect(setup).not.toHaveBeenCalled()
+    })
+
+    it('enrolls shared surveys exactly once through the shared lifecycle', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const setup = jest.fn()
+        const initialize = jest.fn()
+        let constructorArgument: PostHog | undefined
+
+        class SharedSurveys {
+            readonly name = 'surveys'
+
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            setup(): void {
+                setup()
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __preview_deferred_init_extensions: false,
+            __extensionClasses: { surveys: SharedSurveys as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(setup).toHaveBeenCalledTimes(1)
+        expect(initialize).not.toHaveBeenCalled()
+    })
+
+    it('keeps surveys bundled with feature flags for targeting', () => {
+        expect(SurveysExtensions).toEqual(
+            expect.objectContaining({ surveys: expect.any(Function), featureFlags: PostHogFeatureFlags })
+        )
+    })
+
+    it('preserves the PostHog constructor and initialize contract for custom logs classes', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const initialize = jest.fn()
+        const setup = jest.fn()
+        let constructorArgument: PostHog | undefined
+
+        class LegacyLogs {
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            setup(): void {
+                setup()
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __preview_deferred_init_extensions: false,
+            __extensionClasses: { logs: LegacyLogs as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(initialize).toHaveBeenCalledTimes(1)
+        expect(setup).not.toHaveBeenCalled()
+    })
+
+    it('enrolls shared logs exactly once through the shared lifecycle', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const setup = jest.fn()
+        const initialize = jest.fn()
+        let constructorArgument: PostHog | undefined
+
+        class SharedLogs {
+            readonly name = 'logs'
+
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            setup(): void {
+                setup()
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __preview_deferred_init_extensions: false,
+            __extensionClasses: { logs: SharedLogs as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(setup).toHaveBeenCalledTimes(1)
+        expect(initialize).not.toHaveBeenCalled()
+    })
+
+    it('logs cleanup errors when shared extension enrollment fails', async () => {
+        const posthog = new PostHog()
+        const disposeError = new Error('dispose failed')
+        const dispose = jest.fn(() => {
+            throw disposeError
+        })
+        const loggerError = jest.spyOn(logger, 'error').mockImplementation()
+        jest.spyOn(posthog._getBrowserClientAdapter(), 'add').mockRejectedValue(new Error('enrollment failed'))
+        const initTasks: Array<() => void> = []
+
+        posthog['_enrollExtension']({ name: 'logs', setup: jest.fn(), dispose } as any, initTasks)
+        initTasks[0]?.()
+        await Promise.resolve()
+        await Promise.resolve()
+
+        expect(dispose).toHaveBeenCalledTimes(1)
+        expect(loggerError).toHaveBeenCalledWith('Failed to dispose browser extension "logs"', disposeError)
+    })
+
+    it('bundles logs through the shared lifecycle', () => {
+        PostHog.__defaultExtensionClasses = {}
+        const logs = new LogsExtensions.logs(new PostHog())
+
+        expect(logs.name).toBe('logs')
+        expect(logs.setup).toEqual(expect.any(Function))
+        logs.dispose()
+    })
+
+    it('preserves the PostHog constructor and initialize contract for custom autocapture classes', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const initialize = jest.fn()
+        let constructorArgument: PostHog | undefined
+
+        class LegacyAutocapture {
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __extensionClasses: { autocapture: LegacyAutocapture as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(initialize).toHaveBeenCalledTimes(1)
     })
 
     it('eagerly constructs extensions from defaults before init()', () => {
@@ -170,6 +371,7 @@ describe('__extensionClasses enrollment', () => {
             })
 
             expect(posthog.featureFlags).toBeInstanceOf(PostHogFeatureFlags)
+            expect(posthog.getExtension(FeatureFlagsExtension)).toBe(posthog.featureFlags)
             expect(beforeInitCallback).toHaveBeenCalledTimes(1)
             expect(beforeInitCallback).toHaveBeenLastCalledWith(true)
 
@@ -361,6 +563,58 @@ describe('extension lifecycle', () => {
             })
 
             expect(posthog.autocapture).toBeInstanceOf(MinimalExtension)
+        })
+
+        it('does not treat a legacy setup method as the shared lifecycle without a name', async () => {
+            PostHog.__defaultExtensionClasses = {}
+            const setup = jest.fn()
+            const initialize = jest.fn()
+
+            class LegacyExtension {
+                setup(): void {
+                    setup()
+                }
+
+                initialize(): void {
+                    initialize()
+                }
+            }
+
+            await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                __extensionClasses: { autocapture: LegacyExtension as any },
+                capture_pageview: false,
+            })
+
+            expect(initialize).toHaveBeenCalledTimes(1)
+            expect(setup).not.toHaveBeenCalled()
+        })
+
+        it('enrolls an extension with name and setup through the shared lifecycle', async () => {
+            PostHog.__defaultExtensionClasses = {}
+            const setup = jest.fn()
+            const initialize = jest.fn()
+
+            class SharedExtension {
+                readonly name = 'autocapture'
+
+                setup(): void {
+                    setup()
+                }
+
+                initialize(): void {
+                    initialize()
+                }
+            }
+
+            await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                __extensionClasses: { autocapture: SharedExtension as any },
+                capture_pageview: false,
+            })
+
+            expect(setup).toHaveBeenCalledTimes(1)
+            expect(initialize).not.toHaveBeenCalled()
         })
     })
 

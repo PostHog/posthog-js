@@ -1,5 +1,66 @@
 # posthog-node
 
+## 5.51.2
+
+### Patch Changes
+
+- [#4639](https://github.com/PostHog/posthog-js/pull/4639) [`1faeb74`](https://github.com/PostHog/posthog-js/commit/1faeb749974a0c49ad86a6cb68ac4cd5f6414084) Thanks [@marandaneto](https://github.com/marandaneto)! - Handle empty feature flag evaluation key scopes without running local or remote evaluation.
+  (2026-08-25)
+
+- [#4610](https://github.com/PostHog/posthog-js/pull/4610) [`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74) Thanks [@marandaneto](https://github.com/marandaneto)! - Share feature flag matching, hashing, variant, and payload evaluation helpers across the Node.js and Convex SDKs without changing their runtime-specific SemVer behavior.
+  (2026-08-25)
+- Updated dependencies [[`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+  - @posthog/core@1.48.11
+
+## 5.51.1
+
+### Patch Changes
+
+- [#4614](https://github.com/PostHog/posthog-js/pull/4614) [`3593c43`](https://github.com/PostHog/posthog-js/commit/3593c43e98269cbe0bc18e697d38b8c862419b09) Thanks [@iamomiid](https://github.com/iamomiid)! - The Node SDK now sends the raw gzip bytes as the request body instead of wrapping them in a `Blob`. On Node 24.16 and later, reading a `Blob` request body leaks a native `BlobReader` that is never released, so a service calling `capture()` and `flush()` once per request grew by roughly 2.3 KB of heap per event and never gave it back. This completes the work in #4423: switching to `node:zlib` removed the compression-time Blob reads, but the body itself was still a Blob and still got read once per request. Compression behaviour, headers and the wire format are unchanged, and the edge build keeps using `CompressionStream`.
+  (2026-08-24)
+- Updated dependencies [[`3593c43`](https://github.com/PostHog/posthog-js/commit/3593c43e98269cbe0bc18e697d38b8c862419b09)]:
+  - @posthog/core@1.48.9
+
+## 5.51.0
+
+### Minor Changes
+
+- [#4564](https://github.com/PostHog/posthog-js/pull/4564) [`233ac88`](https://github.com/PostHog/posthog-js/commit/233ac88afd0168476178bda66d9f823a95bac068) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back to remote evaluation when a requested flag is missing from loaded local definitions. This
+  changes scoped calls that previously omitted the flag without making a request. (2026-08-24)
+
+## 5.50.0
+
+### Minor Changes
+
+- [#4484](https://github.com/PostHog/posthog-js/pull/4484) [`557140e`](https://github.com/PostHog/posthog-js/commit/557140e4bb344eb22b5bbd1d324487b3fcef895e) Thanks [@posthog](https://github.com/apps/posthog)! - `FeatureFlagEvaluations.isEnabled()` now accepts an optional `defaultValue` option, returned whenever the flag has no value (missing key, not loaded, or a failed request). A flag with a present value — including `false` and variant strings — always wins over `defaultValue`. Purely additive; omitting the option preserves the existing `false`-on-miss behavior.
+  (2026-08-21)
+
+## 5.49.4
+
+### Patch Changes
+
+- [#4569](https://github.com/PostHog/posthog-js/pull/4569) [`00d22ea`](https://github.com/PostHog/posthog-js/commit/00d22ea71400190a0154d1a961b3f52652c50a1e) Thanks [@v11t](https://github.com/v11t)! - fix getFeatureFlagResult returning null variant instead of undefined when remotely evaluated
+  (2026-08-21)
+
+## 5.49.3
+
+### Patch Changes
+
+- [#4583](https://github.com/PostHog/posthog-js/pull/4583) [`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix logs and metrics being silently dropped when an attribute holds a very large integer, a function, a symbol, a sparse array, or a truncated emoji.
+  Cap log and metric attributes at 20 levels of nesting, 1,000 entries per object and 10,000 values in total, marking anything beyond as `[Truncated]`.
+  Type `OtlpAnyValue.intValue` as `string | number` — code reading that field must handle both. (2026-08-21)
+- Updated dependencies [[`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395)]:
+  - @posthog/core@1.48.7
+
+## 5.49.2
+
+### Patch Changes
+
+- [#4578](https://github.com/PostHog/posthog-js/pull/4578) [`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916) Thanks [@marandaneto](https://github.com/marandaneto)! - Drop events when a before-send hook throws instead of sending the unmodified event.
+  (2026-08-20)
+- Updated dependencies [[`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916), [`aef2f49`](https://github.com/PostHog/posthog-js/commit/aef2f493cc8d834780f6b670e15e909e6363c259)]:
+  - @posthog/core@1.48.6
+
 ## 5.49.1
 
 ### Patch Changes
