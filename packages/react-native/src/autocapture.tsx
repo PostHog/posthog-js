@@ -73,6 +73,10 @@ const reactFiberKeyPattern = /^__react(Fiber|InternalInstance)\$/
 // Cycle guard, not a depth policy: real DOM chains null-terminate, a malformed parentNode may not.
 const maxFallbackAncestors = 100
 
+// Separate bound for the fiber walk: unrelated to the DOM guard above, so tuning one never
+// silently retunes the other.
+const maxOwnerAncestors = 100
+
 // Fires per interaction, so warn once: a persistent failure here silently disables autocapture.
 let warnedCaptureFailure = false
 
@@ -92,19 +96,20 @@ const getFallbackTargetInstance = (e: any): Element | undefined => {
   return undefined
 }
 
-// Walks the fiber tree, not the DOM: RNW's Modal portals to document.body, so the DOM parent
-// chain leaves the subtree but fiber `.return` does not. Kept separate from the element walk
-// below, which stops at maxElementsCaptured and would falsely reject a deep target.
-const isOwnedBy = (inst: Element | undefined, ownerNodes: ReadonlySet<unknown>): boolean => {
-  let current = inst
-  for (let depth = 0; current && depth < maxFallbackAncestors; depth++) {
-    if (current.stateNode && ownerNodes.has(current.stateNode)) {
-      return true
+// Returns the owner node this event happened under, or undefined if none owns it. Walks the fiber
+// tree, not the DOM: RNW's Modal portals to document.body, so the DOM parent chain leaves the
+// subtree but fiber `.return` does not. Kept separate from the element walk in captureFromEvent,
+// which stops at maxElementsCaptured and would falsely reject a deep target.
+export const findOwningNode = (e: any, owners: { has(node: unknown): boolean }): unknown => {
+  let current: Element | undefined = e._targetInst || getFallbackTargetInstance(e)
+  for (let depth = 0; current && depth < maxOwnerAncestors; depth++) {
+    if (current.stateNode && owners.has(current.stateNode)) {
+      return current.stateNode
     }
     current = current.return
   }
 
-  return false
+  return undefined
 }
 
 // Autocapture must never break the host app: a throw would escape into RN's touch dispatch on
@@ -114,11 +119,10 @@ export const autocaptureFromTouchEvent = (
   e: any,
   posthog: PostHog,
   options: PostHogAutocaptureOptions = {},
-  eventType: 'touch' | 'click' = 'touch',
-  ownerNodes?: ReadonlySet<unknown>
+  eventType: 'touch' | 'click' = 'touch'
 ): void => {
   try {
-    captureFromEvent(e, posthog, options, eventType, ownerNodes)
+    captureFromEvent(e, posthog, options, eventType)
   } catch (error) {
     if (!warnedCaptureFailure) {
       warnedCaptureFailure = true
@@ -131,8 +135,7 @@ const captureFromEvent = (
   e: any,
   posthog: PostHog,
   options: PostHogAutocaptureOptions,
-  eventType: 'touch' | 'click',
-  ownerNodes?: ReadonlySet<unknown>
+  eventType: 'touch' | 'click'
 ): void => {
   const {
     noCaptureProp = 'ph-no-capture',
@@ -145,9 +148,6 @@ const captureFromEvent = (
   const nativeInst = e._targetInst
   const targetInst: Element | undefined = nativeInst || getFallbackTargetInstance(e)
   if (!targetInst) {
-    return
-  }
-  if (ownerNodes && !isOwnedBy(targetInst, ownerNodes)) {
     return
   }
   const elements: PostHogAutocaptureElement[] = []

@@ -80,6 +80,34 @@ describe('PostHogProvider web click capture', () => {
     expect(client.autocapture.mock.calls[0][0]).toEqual('click')
   })
 
+  it('should capture each provider with its own options, not the first to mount', () => {
+    const client = createClient()
+    Platform.OS = 'web'
+    render(
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(
+          PostHogProvider,
+          { client, autocapture: { captureTouches: true, captureScreens: false, customLabelProp: 'first-label' } },
+          React.createElement('button', { type: 'button', 'first-label': 'from-first' } as any, 'first')
+        ),
+        React.createElement(
+          PostHogProvider,
+          { client, autocapture: { captureTouches: true, captureScreens: false, customLabelProp: 'second-label' } },
+          React.createElement('button', { type: 'button', 'second-label': 'from-second' } as any, 'second')
+        )
+      )
+    )
+
+    const buttons = Array.from(document.querySelectorAll('button'))
+    ;(buttons.find((b) => b.textContent === 'second') as HTMLButtonElement).click()
+
+    expect(client.autocapture).toHaveBeenCalledTimes(1)
+    const tags = client.autocapture.mock.calls[0][1].map((el: any) => el.tag_name)
+    expect(tags).toContain('from-second')
+  })
+
   it('should not capture a click outside the provider', () => {
     const client = createClient()
     Platform.OS = 'web'

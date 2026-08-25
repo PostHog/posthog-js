@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import { GestureResponderEvent, StyleProp, View, ViewStyle } from 'react-native'
 import { PostHog, PostHogOptions } from './posthog-rn'
-import { autocaptureFromTouchEvent } from './autocapture'
+import { autocaptureFromTouchEvent, findOwningNode } from './autocapture'
 import { useNavigationTracker } from './hooks/useNavigationTracker'
 import { PostHogContext } from './PostHogContext'
 import { PostHogAutocaptureOptions } from './types'
@@ -45,9 +45,11 @@ export interface PostHogProviderProps {
 }
 
 // One document click listener per client, shared across sibling providers, so one interaction
-// enqueues exactly one $autocapture event (sdk-specs autocapture). `owners` holds every mounted
-// provider's host node: it scopes the shared listener, and its size doubles as the refcount.
-const webClickListeners = new WeakMap<PostHog, { owners: Set<unknown>; remove: () => void }>()
+// enqueues exactly one $autocapture event (sdk-specs autocapture). `owners` maps each mounted
+// provider's host node to its own options, so a click is scoped to the owning subtree AND
+// captured with that provider's config; its size doubles as the refcount.
+type WebClickOwners = Map<unknown, React.MutableRefObject<PostHogAutocaptureOptions>>
+const webClickListeners = new WeakMap<PostHog, { owners: WebClickOwners; remove: () => void }>()
 
 function PostHogNavigationHook({
   options,
@@ -198,22 +200,27 @@ export const PostHogProvider = ({
     }
 
     const ownerNode = hostRef.current
+    if (!ownerNode) {
+      // Without a host node nothing can be scoped to this provider, and a null key would collide
+      // with any sibling in the same state.
+      return
+    }
+
     const existing = webClickListeners.get(posthog)
     if (existing) {
-      existing.owners.add(ownerNode)
+      existing.owners.set(ownerNode, optionsRef)
     } else {
-      // Options come from whichever provider installed the listener; sibling providers on one
-      // client are expected to be configured alike.
-      const optionsForClient = optionsRef
-      const owners = new Set<unknown>([ownerNode])
+      const owners: WebClickOwners = new Map([[ownerNode, optionsRef]])
       const handler = (e: any): void => {
-        autocaptureFromTouchEvent(
-          { target: e.target, nativeEvent: e },
-          posthog,
-          optionsForClient.current,
-          'click',
-          owners
-        )
+        const owner = findOwningNode(e, owners)
+        if (!owner) {
+          return
+        }
+        const options = owners.get(owner)?.current
+        if (!options) {
+          return
+        }
+        autocaptureFromTouchEvent({ target: e.target, nativeEvent: e }, posthog, options, 'click')
       }
       doc.addEventListener('click', handler, true)
       webClickListeners.set(posthog, {
