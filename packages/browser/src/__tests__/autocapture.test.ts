@@ -878,6 +878,7 @@ describe('Autocapture system', () => {
                 const mockCall = beforeSendMock.mock.calls[0][0]
                 expect(mockCall.event).toEqual('$copy_autocapture')
                 expect(mockCall.properties).toHaveProperty('$selected_content', 'copy this test')
+                expect(mockCall.properties).toHaveProperty('$clipboard_text_length', 14)
                 expect(mockCall.properties).toHaveProperty('$copy_type', 'copy')
             })
 
@@ -894,7 +895,35 @@ describe('Autocapture system', () => {
                 expect(spyArgs.length).toBe(1)
                 expect(spyArgs[0][0].event).toEqual('$copy_autocapture')
                 expect(spyArgs[0][0].properties).toHaveProperty('$selected_content', 'cut this test')
+                expect(spyArgs[0][0].properties).toHaveProperty('$clipboard_text_length', 13)
                 expect(spyArgs[0][0].properties).toHaveProperty('$copy_type', 'cut')
+            })
+
+            it('captures paste length from the DOM without capturing pasted text', async () => {
+                const pasteBeforeSend = jest.fn().mockImplementation((event) => event)
+                const pastePosthog = await createPosthogInstance(uuidv7(), {
+                    autocapture: { capture_copied_text: true },
+                    before_send: pasteBeforeSend,
+                })
+
+                try {
+                    document.body.appendChild(elTarget)
+                    const pasteEvent = new Event('paste', { bubbles: true, cancelable: true })
+                    const getData = jest.fn().mockReturnValue('paste this test')
+                    Object.defineProperty(pasteEvent, 'clipboardData', { value: { getData } })
+
+                    elTarget.dispatchEvent(pasteEvent)
+
+                    expect(getData).toHaveBeenCalledWith('text/plain')
+                    expect(pasteBeforeSend).toHaveBeenCalledTimes(1)
+                    const captured = pasteBeforeSend.mock.calls[0][0]
+                    expect(captured.event).toEqual('$copy_autocapture')
+                    expect(captured.properties).toHaveProperty('$copy_type', 'paste')
+                    expect(captured.properties).toHaveProperty('$clipboard_text_length', 15)
+                    expect(captured.properties).not.toHaveProperty('$selected_content')
+                } finally {
+                    await pastePosthog.shutdown()
+                }
             })
 
             it('ignores empty selection', () => {

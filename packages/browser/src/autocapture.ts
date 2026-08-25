@@ -34,6 +34,15 @@ const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
 const logger = createLogger('[AutoCapture]')
 
+function getPastedTextLength(event: ClipboardEvent): number {
+    try {
+        const pastedText = event.clipboardData?.getData('text/plain')
+        return typeof pastedText === 'string' ? pastedText.length : 0
+    } catch {
+        return 0
+    }
+}
+
 function limitText(length: number, text: string): string {
     if (text.length > length) {
         return text.slice(0, length) + '...'
@@ -365,12 +374,13 @@ export class Autocapture implements Extension {
                 try {
                     this._captureEvent(e, COPY_AUTOCAPTURE_EVENT)
                 } catch (error) {
-                    logger.error('Failed to capture copy/cut event', error)
+                    logger.error('Failed to capture clipboard event', error)
                 }
             })
 
             addEventListener(document, 'copy', copiedTextHandler, { capture: true })
             addEventListener(document, 'cut', copiedTextHandler, { capture: true })
+            addEventListener(document, 'paste', copiedTextHandler, { capture: true })
         }
     }
 
@@ -384,6 +394,7 @@ export class Autocapture implements Extension {
         if (this._copiedTextHandler) {
             document?.removeEventListener('copy', this._copiedTextHandler, true)
             document?.removeEventListener('cut', this._copiedTextHandler, true)
+            document?.removeEventListener('paste', this._copiedTextHandler, true)
             this._copiedTextHandler = undefined
         }
         this._initialized = false
@@ -489,19 +500,19 @@ export class Autocapture implements Extension {
             }
         }
 
-        const isCopyAutocapture = eventName === COPY_AUTOCAPTURE_EVENT
+        const isClipboardAutocapture = eventName === COPY_AUTOCAPTURE_EVENT
         if (
             target &&
             shouldCaptureDomEvent(
                 target,
                 e,
                 config,
-                // mostly this method cares about the target element, but in the case of copy events,
+                // mostly this method cares about the target element, but for clipboard events,
                 // we want some of the work this check does without insisting on the target element's type
-                isCopyAutocapture,
-                // we also don't want to restrict copy checks to clicks,
+                isClipboardAutocapture,
+                // we also don't want to restrict clipboard checks to clicks,
                 // so we pass that knowledge in here, rather than add the logic inside the check
-                isCopyAutocapture ? ['copy', 'cut'] : undefined,
+                isClipboardAutocapture ? ['copy', 'cut', 'paste'] : undefined,
                 { config: { get_current_url: config.getCurrentUrl } }
             )
         ) {
@@ -524,14 +535,24 @@ export class Autocapture implements Extension {
             }
 
             if (eventName === COPY_AUTOCAPTURE_EVENT) {
-                // you can't read the data from the clipboard event,
-                // but you can guess that you can read it from the window's current selection
-                const selectedContent = makeSafeText(window?.getSelection()?.toString())
-                const clipType = (e as ClipboardEvent).type || 'clipboard'
-                if (!selectedContent) {
-                    return false
+                const clipboardEvent = e as ClipboardEvent
+                const clipType = clipboardEvent.type || 'clipboard'
+
+                if (clipType === 'paste') {
+                    const pastedTextLength = getPastedTextLength(clipboardEvent)
+                    if (!pastedTextLength) {
+                        return false
+                    }
+                    props['$clipboard_text_length'] = pastedTextLength
+                } else {
+                    const selectedText = window?.getSelection()?.toString()
+                    const selectedContent = makeSafeText(selectedText)
+                    if (!selectedContent) {
+                        return false
+                    }
+                    props['$selected_content'] = selectedContent
+                    props['$clipboard_text_length'] = selectedText?.length ?? 0
                 }
-                props['$selected_content'] = selectedContent
                 props['$copy_type'] = clipType
             }
 
