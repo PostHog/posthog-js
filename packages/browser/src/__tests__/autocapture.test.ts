@@ -878,7 +878,7 @@ describe('Autocapture system', () => {
                 const mockCall = beforeSendMock.mock.calls[0][0]
                 expect(mockCall.event).toEqual('$copy_autocapture')
                 expect(mockCall.properties).toHaveProperty('$selected_content', 'copy this test')
-                expect(mockCall.properties).toHaveProperty('$clipboard_text_length', 14)
+                expect(mockCall.properties).not.toHaveProperty('$clipboard_text_length')
                 expect(mockCall.properties).toHaveProperty('$copy_type', 'copy')
             })
 
@@ -895,14 +895,14 @@ describe('Autocapture system', () => {
                 expect(spyArgs.length).toBe(1)
                 expect(spyArgs[0][0].event).toEqual('$copy_autocapture')
                 expect(spyArgs[0][0].properties).toHaveProperty('$selected_content', 'cut this test')
-                expect(spyArgs[0][0].properties).toHaveProperty('$clipboard_text_length', 13)
+                expect(spyArgs[0][0].properties).not.toHaveProperty('$clipboard_text_length')
                 expect(spyArgs[0][0].properties).toHaveProperty('$copy_type', 'cut')
             })
 
-            it('captures paste length from the DOM without capturing pasted text', async () => {
+            it('captures paste without reading pasted text', async () => {
                 const pasteBeforeSend = jest.fn().mockImplementation((event) => event)
                 const pastePosthog = await createPosthogInstance(uuidv7(), {
-                    autocapture: { capture_copied_text: true },
+                    autocapture: { capture_copied_text: true, dom_event_allowlist: ['click'] },
                     before_send: pasteBeforeSend,
                 })
 
@@ -914,14 +914,41 @@ describe('Autocapture system', () => {
 
                     elTarget.dispatchEvent(pasteEvent)
 
-                    expect(getData).toHaveBeenCalledWith('text/plain')
+                    expect(getData).not.toHaveBeenCalled()
                     expect(pasteBeforeSend).toHaveBeenCalledTimes(1)
                     const captured = pasteBeforeSend.mock.calls[0][0]
                     expect(captured.event).toEqual('$copy_autocapture')
                     expect(captured.properties).toHaveProperty('$copy_type', 'paste')
-                    expect(captured.properties).toHaveProperty('$clipboard_text_length', 15)
+                    expect(captured.properties).not.toHaveProperty('$clipboard_text_length')
                     expect(captured.properties).not.toHaveProperty('$selected_content')
                 } finally {
+                    await pastePosthog.shutdown()
+                }
+            })
+
+            it('does not capture paste from sensitive fields or ancestors', async () => {
+                const pasteBeforeSend = jest.fn().mockImplementation((event) => event)
+                const pastePosthog = await createPosthogInstance(uuidv7(), {
+                    autocapture: { capture_copied_text: true },
+                    before_send: pasteBeforeSend,
+                })
+                const container = document.createElement('div')
+                const passwordInput = document.createElement('input')
+                passwordInput.type = 'password'
+                const sensitiveParent = document.createElement('div')
+                sensitiveParent.className = 'ph-sensitive'
+                const sensitiveInput = document.createElement('input')
+                sensitiveParent.appendChild(sensitiveInput)
+                container.append(passwordInput, sensitiveParent)
+                document.body.appendChild(container)
+
+                try {
+                    passwordInput.dispatchEvent(new Event('paste', { bubbles: true, cancelable: true }))
+                    sensitiveInput.dispatchEvent(new Event('paste', { bubbles: true, cancelable: true }))
+
+                    expect(pasteBeforeSend).not.toHaveBeenCalled()
+                } finally {
+                    container.remove()
                     await pastePosthog.shutdown()
                 }
             })

@@ -34,15 +34,6 @@ const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
 const logger = createLogger('[AutoCapture]')
 
-function getPastedTextLength(event: ClipboardEvent): number {
-    try {
-        const pastedText = event.clipboardData?.getData('text/plain')
-        return typeof pastedText === 'string' ? pastedText.length : 0
-    } catch {
-        return 0
-    }
-}
-
 function limitText(length: number, text: string): string {
     if (text.length > length) {
         return text.slice(0, length) + '...'
@@ -168,9 +159,9 @@ export function autocapturePropertiesForElement(
         elementsChainAsString: boolean
         disableCaptureUrlHashes: boolean
     }
-): { props: Properties; explicitNoCapture?: boolean } {
+): { props: Properties; explicitNoCapture?: boolean; hasNonCapturableElement?: boolean } {
     if (!isElementNode(target)) {
-        return { props: {} }
+        return { props: {}, hasNonCapturableElement: true }
     }
 
     const targetElementList: Element[] = [target]
@@ -206,9 +197,11 @@ export function autocapturePropertiesForElement(
     const autocaptureAugmentProperties: Properties = {}
     let href: string | false = false
     let explicitNoCapture = false
+    let hasNonCapturableElement = false
 
     each(targetElementList, (el) => {
         const shouldCaptureEl = shouldCaptureElement(el)
+        hasNonCapturableElement ||= !shouldCaptureEl
 
         // if the element or a parent element is an anchor tag
         // include the href as a property
@@ -243,7 +236,7 @@ export function autocapturePropertiesForElement(
     })
 
     if (explicitNoCapture) {
-        return { props: {}, explicitNoCapture }
+        return { props: {}, explicitNoCapture, hasNonCapturableElement }
     }
 
     if (!maskAllText) {
@@ -277,7 +270,7 @@ export function autocapturePropertiesForElement(
         autocaptureAugmentProperties
     )
 
-    return { props }
+    return { props, hasNonCapturableElement }
 }
 
 export class Autocapture implements Extension {
@@ -501,12 +494,13 @@ export class Autocapture implements Extension {
         }
 
         const isClipboardAutocapture = eventName === COPY_AUTOCAPTURE_EVENT
+        const eventConfig = isClipboardAutocapture ? { ...config, dom_event_allowlist: undefined } : config
         if (
             target &&
             shouldCaptureDomEvent(
                 target,
                 e,
-                config,
+                eventConfig,
                 // mostly this method cares about the target element, but for clipboard events,
                 // we want some of the work this check does without insisting on the target element's type
                 isClipboardAutocapture,
@@ -516,7 +510,7 @@ export class Autocapture implements Extension {
                 { config: { get_current_url: config.getCurrentUrl } }
             )
         ) {
-            const { props, explicitNoCapture } = autocapturePropertiesForElement(target, {
+            const { props, explicitNoCapture, hasNonCapturableElement } = autocapturePropertiesForElement(target, {
                 e,
                 maskAllElementAttributes: config.maskAllElementAttributes,
                 maskAllText: config.maskAllText,
@@ -535,15 +529,12 @@ export class Autocapture implements Extension {
             }
 
             if (eventName === COPY_AUTOCAPTURE_EVENT) {
-                const clipboardEvent = e as ClipboardEvent
-                const clipType = clipboardEvent.type || 'clipboard'
+                const clipType = e.type || 'clipboard'
 
                 if (clipType === 'paste') {
-                    const pastedTextLength = getPastedTextLength(clipboardEvent)
-                    if (!pastedTextLength) {
+                    if (hasNonCapturableElement) {
                         return false
                     }
-                    props['$clipboard_text_length'] = pastedTextLength
                 } else {
                     const selectedText = window?.getSelection()?.toString()
                     const selectedContent = makeSafeText(selectedText)
@@ -551,7 +542,6 @@ export class Autocapture implements Extension {
                         return false
                     }
                     props['$selected_content'] = selectedContent
-                    props['$clipboard_text_length'] = selectedText?.length ?? 0
                 }
                 props['$copy_type'] = clipType
             }

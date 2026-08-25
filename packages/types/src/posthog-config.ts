@@ -96,7 +96,7 @@ export interface AutocaptureConfig {
     element_attribute_ignorelist?: string[]
 
     /**
-     * When true, autocapture captures cut, copy, and paste interactions. Paste events contain the text length, not the text.
+     * When true, autocapture captures cut, copy, and paste interactions. Paste events do not contain pasted text.
      */
     capture_copied_text?: boolean
 }
