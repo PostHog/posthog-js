@@ -1,4 +1,4 @@
-import React, { Children, useCallback, useRef, JSX } from 'react'
+import React, { Children, ReactElement, useCallback, useRef } from 'react'
 import { usePostHog } from '../hooks'
 import { VisibilityAndClickTracker } from './internal/VisibilityAndClickTracker'
 
@@ -21,7 +21,7 @@ function TrackedChild({
     name?: string
     properties?: Record<string, any>
     observerOptions?: IntersectionObserverInit
-}): JSX.Element {
+}): ReactElement {
     const trackedRef = useRef(false)
     const posthog = usePostHog()
 
@@ -82,7 +82,7 @@ export function PostHogCaptureOnViewed({
     trackAllChildren,
     children,
     ...props
-}: PostHogCaptureOnViewedProps): JSX.Element {
+}: PostHogCaptureOnViewedProps): ReactElement {
     const trackedRef = useRef(false)
     const posthog = usePostHog()
 

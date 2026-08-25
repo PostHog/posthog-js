@@ -1,4 +1,4 @@
-import React, { Children, ReactNode, useCallback, useRef, JSX } from 'react'
+import React, { Children, ReactElement, ReactNode, useCallback, useRef } from 'react'
 import { VisibilityAndClickTracker } from './VisibilityAndClickTracker'
 
 /**
@@ -24,7 +24,7 @@ export function VisibilityAndClickTrackers({
     options?: IntersectionObserverInit
     onInteract?: () => void
     onView?: () => void
-}): JSX.Element {
+}): ReactElement {
     const clickTrackedRef = useRef(false)
     const visibilityTrackedRef = useRef(false)
 

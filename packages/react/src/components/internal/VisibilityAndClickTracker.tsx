@@ -1,4 +1,4 @@
-import React, { MouseEventHandler, useEffect, useMemo, useRef, JSX } from 'react'
+import React, { MouseEventHandler, ReactElement, useEffect, useMemo, useRef } from 'react'
 import { isNull } from '../../utils/type-utils'
 
 /**
@@ -20,7 +20,7 @@ export function VisibilityAndClickTracker({
     onClick?: MouseEventHandler<HTMLDivElement>
     trackView: boolean
     options?: IntersectionObserverInit
-}): JSX.Element {
+}): ReactElement {
     const ref = useRef<HTMLDivElement>(null)
 
     const observerOptions = useMemo(

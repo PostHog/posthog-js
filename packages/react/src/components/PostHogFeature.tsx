@@ -1,5 +1,5 @@
 import { useFeatureFlagPayload, useFeatureFlagVariantKey, usePostHog } from '../hooks'
-import React, { JSX } from 'react'
+import React, { ReactElement } from 'react'
 import { PostHog } from '../context'
 import { isFunction, isUndefined } from '../utils/type-utils'
 import { VisibilityAndClickTrackers } from './internal/VisibilityAndClickTrackers'
@@ -23,7 +23,7 @@ export function PostHogFeature({
     trackInteraction,
     trackView,
     ...props
-}: PostHogFeatureProps): JSX.Element | null {
+}: PostHogFeatureProps): ReactElement | null {
     const payload = useFeatureFlagPayload(flag)
     const variant = useFeatureFlagVariantKey(flag)
     const posthog = usePostHog()
