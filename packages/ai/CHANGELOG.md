@@ -1,5 +1,15 @@
 # posthog-ai
 
+## 8.8.1
+
+### Patch Changes
+
+- [#4609](https://github.com/PostHog/posthog-js/pull/4609) [`da5d0ee`](https://github.com/PostHog/posthog-js/commit/da5d0ee5c948d4038a0d32470db35a3df02d69be) Thanks [@marandaneto](https://github.com/marandaneto)! - Share OpenAI-compatible telemetry reducers across OpenAI and Azure and align Azure usage, tools, stop reason, web search, background output, and sanitization telemetry.
+  (2026-08-25)
+- Updated dependencies [[`1faeb74`](https://github.com/PostHog/posthog-js/commit/1faeb749974a0c49ad86a6cb68ac4cd5f6414084), [`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+  - posthog-node@5.51.2
+  - @posthog/core@1.48.11
+
 ## 8.8.0
 
 ### Minor Changes
