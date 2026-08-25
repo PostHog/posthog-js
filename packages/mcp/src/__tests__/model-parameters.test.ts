@@ -190,6 +190,48 @@ describe('Model capture — integration with an instrumented server', () => {
     expect(virtualTool.inputSchema.required).toContain('context')
   })
 
+  it('captures llm_model on a get_more_tools report handled by an instance that never served tools/list', async () => {
+    // One instance advertises the virtual tool, a different one handles its call
+    // — the per-request-instance topology (`createMcpHandler`, `@rekog/mcp-nest`
+    // stateless) the README says `instrument(McpServer)` supports. The calling
+    // instance has an empty ownership cache, but `get_more_tools` is the SDK's
+    // own descriptor, so ownership is known statically rather than learned.
+    const advertising = await setupTestServerAndClient()
+    try {
+      instrument(advertising.server, fakePostHog(), { captureModel: true, reportMissing: true })
+      const listed = await advertising.client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      expect(listed.tools.find((t: any) => t.name === 'get_more_tools').inputSchema.properties.llm_model).toBeDefined()
+    } finally {
+      await advertising.cleanup()
+    }
+
+    const capture = new EventCapture()
+    await capture.start()
+    try {
+      instrument(server, fakePostHog(), { captureModel: true, reportMissing: true })
+
+      // No tools/list on this instance.
+      await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'get_more_tools',
+            arguments: { context: 'Need a SQL query tool', llm_model: 'claude-opus-4-8' },
+          },
+        },
+        CallToolResultSchema
+      )
+
+      const reports = capture.findCapturesByEvent('$mcp_missing_capability')
+      expect(reports).toHaveLength(1)
+      expect(reports[0].properties.$mcp_llm_model).toBe('claude-opus-4-8')
+      expect(reports[0].properties.$mcp_llm_model_source).toBe('self_reported')
+      expect((reports[0].properties.$mcp_parameters as any)?.llm_model).toBeUndefined()
+    } finally {
+      await capture.stop()
+    }
+  })
+
   it('captures llm_model on a get_more_tools report and strips it from the handler args', async () => {
     const capture = new EventCapture()
     await capture.start()

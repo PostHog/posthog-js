@@ -28,6 +28,7 @@ import {
   handleListToolsRequest,
   patchRequestHandlers,
   captureToolCall,
+  getVirtualToolParameterOwnership,
   isToolAdvertised,
   readToolMetaCategory,
   type HandlerPatch,
@@ -249,6 +250,7 @@ async function handleToolCallRequest(
       extra,
       eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
+      parameterOwnership: getVirtualToolParameterOwnership(data, toolName),
       execute: async () => handleReportMissing({ context }, data.logger),
     })
   }

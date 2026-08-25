@@ -163,13 +163,16 @@ control. An agent that answers `unknown` is recorded as nothing rather than as a
 Unlike `context`, this option degrades to **silence** rather than to a kept argument. Both the strip
 and the capture require the SDK to have confirmed the parameter is its own:
 
-- `instrument(server)` on a high-level `McpServer` resolves ownership per request from the live tool
-  registry, so it works even on a fresh instance.
-- Instrumenting a low-level `Server` learns ownership while serving `tools/list`. On a server that
-  builds a fresh instance per HTTP request — `createMcpHandler`, or `@rekog/mcp-nest` in its
-  stateless mode — the instance handling a `tools/call` never served one, so it neither strips
-  `llm_model` nor records `$mcp_llm_model`. Nothing breaks and no wrong value is stored; the property
-  is simply absent while agents still pay a token for the extra field.
+- `instrument(server)` on a high-level `McpServer` resolves ownership for your registered tools per
+  request from the live tool registry, so those work even on a fresh instance.
+- The `get_more_tools` virtual tool works on any instance and on either server type: the SDK writes
+  that descriptor itself, so what it declares is known without a listing.
+- Instrumenting a low-level `Server` learns ownership of **your** tools while serving `tools/list`.
+  On a server that builds a fresh instance per HTTP request — `createMcpHandler`, or
+  `@rekog/mcp-nest` in its stateless mode — the instance handling a `tools/call` never served one,
+  so for those tools it neither strips `llm_model` nor records `$mcp_llm_model`. Nothing breaks and
+  no wrong value is stored; the property is simply absent while agents still pay a token for the
+  extra field.
 
 As with `context`, what matters is instance lifetime rather than statelessness: a transport-stateless
 server (`sessionIdGenerator: undefined`) that keeps one long-lived server object learns ownership
