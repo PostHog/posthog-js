@@ -689,6 +689,11 @@ export interface SessionRecordingOptions {
     /**
      * Captures sanitized Schema.org JSON-LD as session replay custom events.
      * JSON-LD inside a text mask or blocked element is never captured.
+     * The recorder keeps `@id` values without changes.
+     * The event tag is `$json_ld`. The payload is a JSON-LD object or array.
+     * The recorder removes all script nodes from snapshots when this option is enabled.
+     * Supported types are Action, AggregateOffer, AggregateRating, Brand, CreativeWork, Offer, Organization, Person, Place, and Product.
+     * The JSON-LD observer starts only when this option is true at recording start.
      * @default false
      */
     captureJsonLd?: boolean

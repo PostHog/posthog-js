@@ -1,5 +1,5 @@
 import { test, expect } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page } from '@playwright/test'
 import { CaptureResult } from '@/types'
 
@@ -8,11 +8,12 @@ import { CaptureResult } from '@/types'
 
 const remoteMaskingTextSelector = '*'
 
-const startOptions = (masking: Record<string, any>) => ({
+const startOptions = (masking: Record<string, any>, captureJsonLd = false) => ({
     options: {
         session_recording: {
             // not the default but makes for easier test assertions
             compress_events: false,
+            captureJsonLd,
         },
     },
     flagsResponseOverrides: {
@@ -55,6 +56,123 @@ function assertTheConfigIsAsExpected(snapshotEvents: CaptureResult[], expectedMa
 }
 
 test.describe('Session recording - masking', () => {
+    test('emits only sanitized JSON-LD in recording bytes', async ({ page, context }) => {
+        await page.addInitScript(() => {
+            const appendJsonLd = (value: Record<string, unknown>, className = '') => {
+                const script = document.createElement('script')
+                script.type = 'application/ld+json'
+                script.className = className
+                script.setAttribute('data-private', 'PRIVATE_ATTRIBUTE')
+                script.textContent = JSON.stringify(value)
+                script.append(document.createComment('PRIVATE_COMMENT'))
+                document.head.append(script)
+            }
+            const appendInitialJsonLd = () => {
+                appendJsonLd({
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    '@id': 'ALLOWED_PRODUCT_ID',
+                    name: 'ALLOWED_INITIAL_PRODUCT',
+                    email: 'PRIVATE_UNAPPROVED_EMAIL',
+                    description: 'PRIVATE_DESCRIPTION',
+                    url: 'https://example.com/?token=PRIVATE_URL_TOKEN',
+                    brand: {
+                        '@type': 'Person',
+                        name: 'PRIVATE_NESTED_PERSON',
+                    },
+                    manufacturer: {
+                        '@type': 'Organization',
+                        name: 'ALLOWED_MANUFACTURER',
+                        legalName: 'ALLOWED_MANUFACTURER_LEGAL_NAME',
+                        email: 'PRIVATE_MANUFACTURER_EMAIL',
+                    },
+                })
+                appendJsonLd(
+                    {
+                        '@context': 'https://schema.org',
+                        '@type': 'Product',
+                        name: 'PRIVATE_MASKED_PRODUCT',
+                    },
+                    'json-ld-mask'
+                )
+            }
+            if (document.head) {
+                appendInitialJsonLd()
+            } else {
+                document.onreadystatechange = () => {
+                    if (document.head) {
+                        document.onreadystatechange = null
+                        appendInitialJsonLd()
+                    }
+                }
+            }
+        })
+        await start(
+            startOptions(
+                {
+                    maskAllInputs: true,
+                    maskTextSelector: '.json-ld-mask',
+                },
+                true
+            ),
+            page,
+            context
+        )
+        await waitForSessionRecordingToStart(page)
+
+        await page.evaluate(() => {
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            script.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'ALLOWED_DYNAMIC_PRODUCT',
+                email: 'PRIVATE_DYNAMIC_EMAIL',
+            })
+            document.head.append(script)
+
+            const maskedScript = document.createElement('script')
+            maskedScript.type = 'application/ld+json'
+            maskedScript.className = 'json-ld-mask'
+            maskedScript.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'PRIVATE_DYNAMIC_MASKED_PRODUCT',
+            })
+            document.head.append(maskedScript)
+        })
+        await page.locator('[data-cy-input]').type('flush recording')
+
+        const getEventBytes = async () =>
+            JSON.stringify(
+                (await page.capturedEvents())
+                    .filter((event) => event.event === '$snapshot')
+                    .flatMap((event) => event.properties['$snapshot_data'])
+            )
+        await expect.poll(getEventBytes).toContain('ALLOWED_DYNAMIC_PRODUCT')
+        const eventBytes = await getEventBytes()
+        expect(eventBytes).toContain('ALLOWED_PRODUCT_ID')
+        expect(eventBytes).toContain('ALLOWED_INITIAL_PRODUCT')
+        expect(eventBytes).toContain('ALLOWED_DYNAMIC_PRODUCT')
+        expect(eventBytes).toContain('ALLOWED_MANUFACTURER')
+        expect(eventBytes).toContain('ALLOWED_MANUFACTURER_LEGAL_NAME')
+        expect(eventBytes).not.toContain('"tagName":"script"')
+        for (const privateMarker of [
+            'PRIVATE_ATTRIBUTE',
+            'PRIVATE_COMMENT',
+            'PRIVATE_UNAPPROVED_EMAIL',
+            'PRIVATE_DESCRIPTION',
+            'PRIVATE_URL_TOKEN',
+            'PRIVATE_NESTED_PERSON',
+            'PRIVATE_MANUFACTURER_EMAIL',
+            'PRIVATE_MASKED_PRODUCT',
+            'PRIVATE_DYNAMIC_EMAIL',
+            'PRIVATE_DYNAMIC_MASKED_PRODUCT',
+        ]) {
+            expect(eventBytes).not.toContain(privateMarker)
+        }
+    })
+
     test('masks text', async ({ page, context }) => {
         await start(
             startOptions({

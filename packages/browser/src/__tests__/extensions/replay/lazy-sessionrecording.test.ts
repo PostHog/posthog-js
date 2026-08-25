@@ -3452,7 +3452,7 @@ describe('Lazy SessionRecording', () => {
                 maskInputFn: undefined,
                 maskAllElementAttributes: false,
                 maskAttributeFn: undefined,
-                slimDOMOptions: { script: true },
+                slimDOMOptions: {},
                 collectFonts: false,
                 plugins: [],
                 inlineStylesheet: true,
@@ -3461,8 +3461,9 @@ describe('Lazy SessionRecording', () => {
             })
         })
 
-        it('always removes scripts when user slim DOM options override defaults', () => {
+        it('removes scripts when JSON-LD capture is enabled', () => {
             posthog.config.session_recording.slimDOMOptions = { script: false, comment: true }
+            posthog.config.session_recording.captureJsonLd = true
 
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 
@@ -3473,7 +3474,7 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
-        it('emits sanitized JSON-LD when capture is enabled', () => {
+        it('emits sanitized JSON-LD only while capture is enabled', async () => {
             const script = document.createElement('script')
             script.type = 'application/ld+json'
             script.textContent = JSON.stringify({
@@ -3489,13 +3490,154 @@ describe('Lazy SessionRecording', () => {
             try {
                 sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 
+                expect(_addCustomEvent).not.toHaveBeenCalledWith('$json_ld', expect.anything())
+                _emit(createMetaSnapshot())
+                await Promise.resolve()
+
                 expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
                     '@context': 'https://schema.org',
                     '@type': 'Product',
                     '@id': 'https://example.com/products/123',
                     name: 'Camera',
                 })
+
+                posthog.config.session_recording.captureJsonLd = false
+                document.body.appendChild(
+                    Object.assign(document.createElement('script'), {
+                        type: 'application/ld+json',
+                        textContent: JSON.stringify({
+                            '@context': 'https://schema.org',
+                            '@type': 'Product',
+                            name: 'After disable',
+                        }),
+                    })
+                )
+                await Promise.resolve()
+                expect(_addCustomEvent).not.toHaveBeenCalledWith(
+                    '$json_ld',
+                    expect.objectContaining({ name: 'After disable' })
+                )
             } finally {
+                document.querySelectorAll('script[type="application/ld+json"]').forEach((element) => element.remove())
+            }
+        })
+
+        it('emits the latest JSON-LD after returning from idle', async () => {
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            script.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'Before idle',
+            })
+            document.body.appendChild(script)
+            posthog.config.session_recording.captureJsonLd = true
+
+            try {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                _emit(createMetaSnapshot())
+                await Promise.resolve()
+                _addCustomEvent.mockClear()
+
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                lazyRecorder['_isIdle'] = true
+                script.textContent = JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    name: 'After idle',
+                })
+                await Promise.resolve()
+                expect(_addCustomEvent).not.toHaveBeenCalledWith(
+                    '$json_ld',
+                    expect.objectContaining({ name: 'After idle' })
+                )
+
+                _emit(createIncrementalSnapshot({ timestamp: Date.now() + 1 }))
+                await Promise.resolve()
+                expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    name: 'After idle',
+                })
+            } finally {
+                script.remove()
+            }
+        })
+
+        it('does not queue JSON-LD before rrweb is ready', async () => {
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            script.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'Before disable',
+            })
+            document.body.appendChild(script)
+            posthog.config.session_recording.captureJsonLd = true
+
+            try {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                expect(_addCustomEvent).not.toHaveBeenCalledWith('$json_ld', expect.anything())
+
+                posthog.config.session_recording.captureJsonLd = false
+                _emit(createMetaSnapshot())
+                await Promise.resolve()
+
+                expect(_addCustomEvent).not.toHaveBeenCalledWith('$json_ld', expect.anything())
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_queuedRRWebEvents']).toEqual([])
+            } finally {
+                script.remove()
+            }
+        })
+
+        it('restores JSON-LD after a pending-trigger snapshot truncates the buffer', async () => {
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            script.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'Camera',
+            })
+            document.body.appendChild(script)
+            posthog.config.session_recording.captureJsonLd = true
+
+            try {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                _addCustomEvent.mockImplementation((tag: string, payload: unknown) => {
+                    _emit(createCustomSnapshot({}, payload as Record<string, unknown>, tag))
+                })
+                _emit(createMetaSnapshot({ data: { href: 'https://test.com/first' } }))
+                await Promise.resolve()
+
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                const pendingTrigger = jest
+                    .spyOn(lazyRecorder['_strategy']!, 'hasPendingTriggers')
+                    .mockReturnValue(true)
+                try {
+                    _emit(createMetaSnapshot({ data: { href: 'https://test.com/second' } }))
+                    _emit(createFullSnapshot())
+                    await Promise.resolve()
+
+                    const bufferedEvents = lazyRecorder['_buffer'].data
+                    const fullSnapshotIndex = bufferedEvents.findIndex((event: eventWithTime) => event.type === 2)
+                    const jsonLdIndexes = bufferedEvents
+                        .map((event: eventWithTime, index: number) => (event.data?.tag === '$json_ld' ? index : -1))
+                        .filter((index: number) => index >= 0)
+                    expect(bufferedEvents[0]).toEqual(createMetaSnapshot({ data: { href: 'https://test.com/second' } }))
+                    expect(jsonLdIndexes).toHaveLength(1)
+                    expect(jsonLdIndexes[0]).toBeGreaterThan(fullSnapshotIndex)
+                    expect(bufferedEvents[jsonLdIndexes[0]]).toEqual(
+                        createCustomSnapshot(
+                            {},
+                            { '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' },
+                            '$json_ld'
+                        )
+                    )
+                } finally {
+                    pendingTrigger.mockRestore()
+                }
+            } finally {
+                _addCustomEvent.mockReset()
                 script.remove()
             }
         })
@@ -3514,6 +3656,30 @@ describe('Lazy SessionRecording', () => {
                 sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 
                 expect(_addCustomEvent.mock.calls.some(([tag]) => tag === '$json_ld')).toBe(false)
+            } finally {
+                script.remove()
+            }
+        })
+
+        it('does not enable JSON-LD capture for a truthy non-boolean value', () => {
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            script.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'Camera',
+            })
+            document.body.appendChild(script)
+            posthog.config.session_recording.slimDOMOptions = { script: false }
+            posthog.config.session_recording.captureJsonLd = 'false' as unknown as boolean
+
+            try {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+                expect(_addCustomEvent.mock.calls.some(([tag]) => tag === '$json_ld')).toBe(false)
+                expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                    expect.objectContaining({ slimDOMOptions: { script: false } })
+                )
             } finally {
                 script.remove()
             }
@@ -4324,7 +4490,54 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('URL blocking', () => {
+        it('does not capture JSON-LD read on the initial blocked URL after navigation', async () => {
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            script.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'Blocked page product',
+            })
+            document.body.appendChild(script)
+            posthog.config.session_recording.captureJsonLd = true
+            fakeNavigateTo('https://test.com/blocked')
+
+            try {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            urlBlocklist: [{ matching: 'regex', url: '/blocked' }],
+                        },
+                    })
+                )
+
+                fakeNavigateTo('https://test.com/allowed')
+                _emit(createMetaSnapshot())
+                await Promise.resolve()
+                expect(_addCustomEvent).not.toHaveBeenCalledWith(
+                    '$json_ld',
+                    expect.objectContaining({ name: 'Blocked page product' })
+                )
+
+                script.textContent = JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    name: 'Allowed page product',
+                })
+                await Promise.resolve()
+                expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    name: 'Allowed page product',
+                })
+            } finally {
+                script.remove()
+            }
+        })
+
         it('does not flush buffer and includes pause event when hitting blocked URL', async () => {
+            posthog.config.session_recording.captureJsonLd = true
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
                     sessionRecording: {
@@ -4338,7 +4551,6 @@ describe('Lazy SessionRecording', () => {
                     },
                 })
             )
-
             // Emit some events before hitting blocked URL
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             _emit(createIncrementalSnapshot({ data: { source: 2 } }))
@@ -4351,6 +4563,20 @@ describe('Lazy SessionRecording', () => {
             // Verify subsequent events are not captured while on blocked URL
             _emit(createIncrementalSnapshot({ data: { source: 3 } }))
             _emit(createIncrementalSnapshot({ data: { source: 4 } }))
+
+            const blockedJsonLd = document.createElement('script')
+            blockedJsonLd.type = 'application/ld+json'
+            blockedJsonLd.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'Blocked page product',
+            })
+            document.body.appendChild(blockedJsonLd)
+            await Promise.resolve()
+            expect(_addCustomEvent).not.toHaveBeenCalledWith(
+                '$json_ld',
+                expect.objectContaining({ name: 'Blocked page product' })
+            )
 
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([
                 {
@@ -4372,6 +4598,24 @@ describe('Lazy SessionRecording', () => {
 
             // Verify recording resumes with resume event
             _emit(createIncrementalSnapshot({ data: { source: 5 } }))
+            await Promise.resolve()
+            expect(_addCustomEvent).not.toHaveBeenCalledWith(
+                '$json_ld',
+                expect.objectContaining({ name: 'Blocked page product' })
+            )
+
+            blockedJsonLd.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'Allowed page product',
+            })
+            await Promise.resolve()
+            expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'Allowed page product',
+            })
+            blockedJsonLd.remove()
 
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toStrictEqual([
                 {

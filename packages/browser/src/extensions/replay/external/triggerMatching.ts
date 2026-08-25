@@ -317,6 +317,18 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         return this._urlTriggerStatus(sessionId)
     }
 
+    isCurrentUrlBlocked(): boolean {
+        const url = getTargetingUrl(this._instance)
+        if (!url) {
+            return false
+        }
+        try {
+            return sessionRecordingUrlTriggerMatches(url, this._urlBlocklist, this._compiledBlocklistRegexes)
+        } catch {
+            return true
+        }
+    }
+
     /**
      * Check URL blocklist and pause/resume recording accordingly
      * This is separate from trigger checking and is used by both V1 and V2

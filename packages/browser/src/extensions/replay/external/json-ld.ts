@@ -1,10 +1,10 @@
-import { isArray, isNull, isUndefined } from '@posthog/core'
+import { hasOwnProperty, isArray, isNull, isUndefined } from '@posthog/core'
 
 type JsonLdScalar = string | number | boolean | null
 type JsonLdPropertyRule = true | readonly string[]
 type JsonLdEntityRules = Record<string, JsonLdPropertyRule>
 
-const MAX_JSON_LD_INPUT_LENGTH = 100_000
+const MAX_JSON_LD_LENGTH = 100_000
 const MAX_JSON_LD_OUTPUT_LENGTH = 20_000
 const SCHEMA_CONTEXT = 'https://schema.org'
 
@@ -106,6 +106,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && !isNull(value) && !isArray(value)
 }
 
+function getOwnProperty(value: Record<string, unknown>, property: string): unknown {
+    return hasOwnProperty.call(value, property) ? value[property] : undefined
+}
+
 function isScalar(value: unknown): value is JsonLdScalar {
     const type = typeof value
     return isNull(value) || type === 'string' || type === 'number' || type === 'boolean'
@@ -116,24 +120,27 @@ function sanitizeScalar(value: unknown): JsonLdScalar | JsonLdScalar[] | undefin
 }
 
 function sanitizeEntity(value: unknown, allowedTypes?: readonly string[]): Record<string, unknown> | null {
-    if (!isObject(value) || typeof value['@type'] !== 'string') {
+    if (!isObject(value)) {
+        return null
+    }
+    const type = getOwnProperty(value, '@type')
+    if (typeof type !== 'string') {
         return null
     }
 
-    const type = value['@type']
-    const rules = ENTITY_RULES[type]
-    if (isUndefined(rules) || (allowedTypes && !allowedTypes.includes(type))) {
+    if (!hasOwnProperty.call(ENTITY_RULES, type) || (allowedTypes && !allowedTypes.includes(type))) {
         return null
     }
+    const rules = ENTITY_RULES[type]
 
     const result: Record<string, unknown> = { '@type': type }
-    const id = sanitizeScalar(value['@id'])
+    const id = sanitizeScalar(getOwnProperty(value, '@id'))
     if (!isUndefined(id)) {
         result['@id'] = id
     }
 
     for (const property of Object.keys(rules)) {
-        const propertyValue = value[property]
+        const propertyValue = getOwnProperty(value, property)
         const rule = rules[property]
         if (rule === true) {
             const scalar = sanitizeScalar(propertyValue)
@@ -159,11 +166,11 @@ function sanitizeEntity(value: unknown, allowedTypes?: readonly string[]): Recor
 }
 
 function sanitizeRoot(value: unknown): Record<string, unknown> | null {
-    if (
-        !isObject(value) ||
-        typeof value['@context'] !== 'string' ||
-        value['@context'].replace(/^http:/, 'https:').replace(/\/$/, '') !== SCHEMA_CONTEXT
-    ) {
+    if (!isObject(value)) {
+        return null
+    }
+    const context = getOwnProperty(value, '@context')
+    if (typeof context !== 'string' || context.replace(/^http:/, 'https:').replace(/\/$/, '') !== SCHEMA_CONTEXT) {
         return null
     }
 
@@ -171,8 +178,8 @@ function sanitizeRoot(value: unknown): Record<string, unknown> | null {
     return entity ? { '@context': SCHEMA_CONTEXT, ...entity } : null
 }
 
-export function sanitizeJsonLd(text: string): string | null {
-    if (!text || text.length > MAX_JSON_LD_INPUT_LENGTH) {
+export function sanitizeJsonLd(text: string): [unknown, string] | null {
+    if (!text || text.length > MAX_JSON_LD_LENGTH) {
         return null
     }
 
@@ -186,8 +193,8 @@ export function sanitizeJsonLd(text: string): string | null {
             return null
         }
 
-        const output = JSON.stringify(sanitized).replace(/</g, '\\u003c')
-        return output.length <= MAX_JSON_LD_OUTPUT_LENGTH ? output : null
+        const output = JSON.stringify(sanitized)
+        return output.length <= MAX_JSON_LD_OUTPUT_LENGTH ? [sanitized, output] : null
     } catch {
         return null
     }
@@ -230,7 +237,7 @@ function selectorMatches(element: Element, selector?: string | null): boolean {
 }
 
 function isWithinPrivacyBoundary(element: Element, options: JsonLdPrivacyOptions): boolean {
-    for (let current: Element | null = element; current; current = current.parentElement) {
+    for (let current: Element | null = element; current; ) {
         if (
             classMatches(current, options.blockClass) ||
             classMatches(current, options.maskTextClass) ||
@@ -239,6 +246,12 @@ function isWithinPrivacyBoundary(element: Element, options: JsonLdPrivacyOptions
         ) {
             return true
         }
+        const parentNode: Node | null = current.parentNode
+        current =
+            current.parentElement ||
+            (parentNode && parentNode.nodeType === parentNode.DOCUMENT_FRAGMENT_NODE
+                ? (parentNode as ShadowRoot).host
+                : null)
     }
     return false
 }
@@ -256,23 +269,46 @@ function getJsonLdScripts(node: Node): HTMLScriptElement[] {
 export function startJsonLdCapture(
     doc: Document,
     MutationObserverClass: typeof MutationObserver,
-    options: JsonLdPrivacyOptions & { emit: (jsonLd: unknown) => void }
-): () => void {
+    options: JsonLdPrivacyOptions & {
+        emit: (jsonLd: unknown) => boolean
+        isEnabled?: () => boolean
+        shouldSuppress?: () => boolean
+    }
+): { scan: (force?: boolean) => void; stop: () => void } {
     const lastJsonByScript = new WeakMap<HTMLScriptElement, string>()
+    let remainingLength = MAX_JSON_LD_LENGTH
 
-    const captureScript = (script: HTMLScriptElement): void => {
+    const captureScript = (script: HTMLScriptElement, force = false): void => {
         try {
-            if (!script.isConnected || isWithinPrivacyBoundary(script, options)) {
+            const shouldSuppress = options.shouldSuppress?.() === true
+            if (
+                !remainingLength ||
+                (options.isEnabled?.() === false && !shouldSuppress) ||
+                !script.isConnected ||
+                script.ownerDocument !== doc ||
+                isWithinPrivacyBoundary(script, options)
+            ) {
                 return
             }
-            const json = sanitizeJsonLd(script.textContent || '')
-            if (!json) {
+            const sanitized = sanitizeJsonLd(script.textContent || '')
+            if (!sanitized) {
                 lastJsonByScript.delete(script)
                 return
             }
-            if (lastJsonByScript.get(script) !== json) {
+            const [jsonLd, json] = sanitized
+            if (shouldSuppress) {
                 lastJsonByScript.set(script, json)
-                options.emit(JSON.parse(json))
+                return
+            }
+            if (force || lastJsonByScript.get(script) !== json) {
+                if (json.length > remainingLength) {
+                    remainingLength = 0
+                    return
+                }
+                if (options.emit(jsonLd)) {
+                    lastJsonByScript.set(script, json)
+                    remainingLength -= json.length
+                }
             }
         } catch {
             return
@@ -282,6 +318,9 @@ export function startJsonLdCapture(
     try {
         const observer = new MutationObserverClass((mutations) => {
             try {
+                if (!remainingLength || (options.isEnabled?.() === false && options.shouldSuppress?.() !== true)) {
+                    return
+                }
                 const scripts = new Set<HTMLScriptElement>()
                 const addScripts = (node: Node): void => {
                     for (const script of getJsonLdScripts(node)) {
@@ -295,14 +334,17 @@ export function startJsonLdCapture(
                             scripts.add(mutation.target)
                         }
                         mutation.addedNodes.forEach(addScripts)
-                    } else if (mutation.type === 'characterData' && mutation.target.parentNode) {
-                        addScripts(mutation.target.parentNode)
-                    } else if (mutation.type === 'attributes') {
-                        addScripts(mutation.target)
+                    } else if (mutation.type === 'characterData') {
+                        const parent = mutation.target.parentNode
+                        if (parent && isJsonLdScript(parent)) {
+                            scripts.add(parent)
+                        }
+                    } else if (mutation.type === 'attributes' && isJsonLdScript(mutation.target)) {
+                        scripts.add(mutation.target)
                     }
                 }
 
-                scripts.forEach(captureScript)
+                scripts.forEach((script) => captureScript(script))
             } catch {
                 return
             }
@@ -315,14 +357,19 @@ export function startJsonLdCapture(
             childList: true,
             subtree: true,
         })
-        doc.querySelectorAll('script').forEach((script) => {
-            if (isJsonLdScript(script)) {
-                captureScript(script)
+        const scan = (force = false): void => {
+            if (!remainingLength || (options.isEnabled?.() === false && options.shouldSuppress?.() !== true)) {
+                return
             }
-        })
+            doc.querySelectorAll('script').forEach((script) => {
+                if (isJsonLdScript(script)) {
+                    captureScript(script, force)
+                }
+            })
+        }
 
-        return () => observer.disconnect()
+        return { scan, stop: () => observer.disconnect() }
     } catch {
-        return () => {}
+        return { scan: () => {}, stop: () => {} }
     }
 }
