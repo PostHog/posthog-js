@@ -1,5 +1,6 @@
 import packageInfo from '../../package.json'
 
+// Hooks are the newest React APIs used by this entrypoint and were introduced in React 16.8.0.
 const REACT_HOOKS_MINIMUM_VERSION = '>=16.8.0'
 
 // `posthog-js/react` is bundled with `react` external, so strict node_modules layouts
