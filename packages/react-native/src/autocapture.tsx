@@ -61,6 +61,34 @@ export const defaultPostHogLabelProp = 'ph-label'
 
 const captureAttributePrefix = 'data-ph-capture-attribute-'
 
+// react-native-web internals; skipped only on the fallback path so a same-named native component is kept.
+const frameworkInternalLabels = ['LocaleProvider']
+
+const reactFiberKeyPattern = /^__react(Fiber|InternalInstance)\$/
+
+// Fires per touch, so warn once: a persistent failure here silently disables touch autocapture.
+let warnedFallbackFailure = false
+
+// react-dom (RN Web) events have no _targetInst; the fiber sits on e.target under a randomised __reactFiber$ key.
+const getFallbackTargetInstance = (e: any): Element | undefined => {
+  try {
+    const target = e.target
+    if (!target || typeof target !== 'object') {
+      return undefined
+    }
+
+    const key = Object.getOwnPropertyNames(target).find((name) => reactFiberKeyPattern.test(name))
+
+    return key ? target[key] : undefined
+  } catch (error) {
+    if (!warnedFallbackFailure) {
+      warnedFallbackFailure = true
+      console.warn('PostHog touch autocapture: reading the React fiber from the touch target threw:', error)
+    }
+    return undefined
+  }
+}
+
 export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: PostHogAutocaptureOptions = {}): void => {
   const {
     noCaptureProp = 'ph-no-capture',
@@ -70,13 +98,16 @@ export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: Pos
     propsToCapture = ['style', 'testID', 'accessibilityLabel', customLabelProp, 'children'],
   } = options
 
-  if (!e._targetInst) {
+  const nativeInst = e._targetInst
+  const targetInst: Element | undefined = nativeInst || getFallbackTargetInstance(e)
+  if (!targetInst) {
     return
   }
+  const skippedLabels = nativeInst ? ignoreLabels : [...frameworkInternalLabels, ...ignoreLabels]
   const elements: PostHogAutocaptureElement[] = []
   const autocaptureProperties: Record<string, JsonType> = {}
 
-  let currentInst: Element | undefined = e._targetInst
+  let currentInst: Element | undefined = targetInst
 
   while (
     currentInst &&
@@ -137,7 +168,7 @@ export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: Pos
 
     Object.assign(autocaptureProperties, elAutocaptureProperties)
 
-    if (label && !ignoreLabels.includes(label)) {
+    if (label && !skippedLabels.includes(label)) {
       el.tag_name = sanitiseLabel(label)
       elements.push(el)
     }
@@ -166,8 +197,9 @@ export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: Pos
     }
     posthog.autocapture('touch', elements, {
       ...autocaptureProperties,
-      $touch_x: e.nativeEvent.pageX,
-      $touch_y: e.nativeEvent.pageY,
+      // DOM touch events (RN Web) carry pageX/pageY on changedTouches, not directly on nativeEvent.
+      $touch_x: e.nativeEvent?.pageX ?? e.nativeEvent?.changedTouches?.[0]?.pageX,
+      $touch_y: e.nativeEvent?.pageY ?? e.nativeEvent?.changedTouches?.[0]?.pageY,
     })
   }
 }
