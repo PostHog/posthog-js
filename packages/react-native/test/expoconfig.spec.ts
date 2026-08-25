@@ -262,7 +262,7 @@ describe('modifyExistingXcodeBuildScript', () => {
 const mockXcodeProjectForBuildPhase = (existingPhase: any = undefined, buildPhases: any[] = []) => ({
   pbxItemByComment: jest.fn(() => existingPhase),
   addBuildPhase: jest.fn(),
-  getFirstTarget: jest.fn(() => ({ target: { buildPhases } })),
+  getFirstTarget: jest.fn(() => ({ firstTarget: { buildPhases } })),
 })
 
 describe('buildDsymUploadShellScript', () => {

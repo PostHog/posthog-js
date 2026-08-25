@@ -314,7 +314,7 @@ export function addDsymUploadBuildPhase(xcodeProject: any, includeSource = false
         new Set([...(Array.isArray(existing.inputPaths) ? existing.inputPaths : []), POSTHOG_DSYM_INPUT_PATH])
       )
 
-      const buildPhases = xcodeProject.getFirstTarget?.().target?.buildPhases
+      const buildPhases = xcodeProject.getFirstTarget?.().firstTarget?.buildPhases
       if (Array.isArray(buildPhases)) {
         const phaseIndex = buildPhases.findIndex((phase: any) => phase.comment === POSTHOG_DSYM_BUILD_PHASE_NAME)
         if (phaseIndex !== -1 && phaseIndex !== buildPhases.length - 1) {
