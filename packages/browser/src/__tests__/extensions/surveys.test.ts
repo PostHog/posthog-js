@@ -97,13 +97,22 @@ describe('survey display logic', () => {
     test('callSurveysAndEvaluateDisplayLogic runs on interval irrespective of url change', () => {
         jest.useFakeTimers()
         jest.spyOn(global, 'setInterval')
-        generateSurveys(mockPostHog, true)
-        expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(1)
-        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
+        // generateSurveys constructs a real SurveyManager, which attaches a 'languagechange'
+        // window listener (see surveys.tsx). Left undisposed, that listener stays live for the
+        // rest of the suite and fires on any later test's window.dispatchEvent(new
+        // Event('languagechange')), even in an unrelated describe block.
+        const surveyManager = generateSurveys(mockPostHog, true)
+        try {
+            expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(1)
+            expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
 
-        jest.advanceTimersByTime(1000)
-        expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(2)
-        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
+            jest.advanceTimersByTime(1000)
+            expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(2)
+            expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
+        } finally {
+            surveyManager?.dispose()
+            jest.useRealTimers()
+        }
     })
 })
 
@@ -433,6 +442,18 @@ describe('SurveyManager', () => {
     let mockPostHog: PostHog
     let surveyManager: SurveyManager
     let mockSurveys: Survey[]
+    // Several nested describes/tests below construct their own SurveyManager and reassign
+    // `surveyManager`, overwriting the reference to any previous instance. Since SurveyManager
+    // attaches a 'languagechange' window listener on construction, an overwritten instance's
+    // listener stays attached unless disposed — createSurveyManager tracks every instance so
+    // the outer afterEach can dispose all of them, not just whichever one `surveyManager`
+    // currently points to.
+    let createdSurveyManagers: SurveyManager[] = []
+    const createSurveyManager = (instance: PostHog): SurveyManager => {
+        const manager = new SurveyManager(instance)
+        createdSurveyManagers.push(manager)
+        return manager
+    }
     const flagsResponse = {
         featureFlags: {
             'linked-flag-key': true,
@@ -497,7 +518,7 @@ describe('SurveyManager', () => {
             },
         })
 
-        surveyManager = new SurveyManager(mockPostHog)
+        surveyManager = createSurveyManager(mockPostHog)
     })
 
     it('resolves feature flags through the extension registry', () => {
@@ -528,11 +549,22 @@ describe('SurveyManager', () => {
     })
 
     afterEach(() => {
-        // SurveyManager attaches a 'languagechange' window listener on construction (see
-        // surveys.tsx). Without destroying it, listeners from earlier tests' instances stay
-        // attached and fire on later tests' window.dispatchEvent(new Event('languagechange')),
-        // hitting a stale mockPostHog whose mocks may no longer exist.
-        surveyManager.destroy()
+        // Dispose every SurveyManager constructed during the test (see createSurveyManager
+        // above), not just the current value of `surveyManager` — otherwise listeners from
+        // overwritten instances stay attached and fire on later tests'
+        // window.dispatchEvent(new Event('languagechange')), hitting a stale mockPostHog whose
+        // mocks may no longer exist. try/catch per instance so one throwing dispose() (e.g. a
+        // mocked-out dependency from that specific test) doesn't abort the forEach and skip
+        // disposing the rest.
+        createdSurveyManagers.forEach((manager) => {
+            try {
+                manager.dispose()
+            } catch {
+                // best-effort cleanup; a failure here shouldn't fail the test or block
+                // disposing the remaining tracked managers
+            }
+        })
+        createdSurveyManagers = []
     })
 
     test('callSurveysAndEvaluateDisplayLogic should handle a single popover survey correctly', () => {
@@ -1228,7 +1260,7 @@ describe('SurveyManager', () => {
         } as unknown as Survey
 
         beforeEach(() => {
-            surveyManager = new SurveyManager(mockPostHog)
+            surveyManager = createSurveyManager(mockPostHog)
         })
 
         it('can render survey', () => {
@@ -1400,7 +1432,7 @@ describe('SurveyManager', () => {
                 featureFlags: { isFeatureEnabled: jest.fn().mockReturnValue(true) },
             })
 
-            surveyManager = new SurveyManager(mockPH)
+            surveyManager = createSurveyManager(mockPH)
 
             const survey: Survey = {
                 id: 'prefill-render-survey',
@@ -1464,7 +1496,7 @@ describe('SurveyManager', () => {
                 capture: jest.fn(),
                 featureFlags: { isFeatureEnabled: jest.fn().mockReturnValue(true) },
             })
-            surveyManager = new SurveyManager(mockPH)
+            surveyManager = createSurveyManager(mockPH)
 
             const survey: Survey = {
                 id: 'prefill-merge-survey',
@@ -1537,7 +1569,7 @@ describe('SurveyManager', () => {
                 },
             })
 
-            surveyManager = new SurveyManager(mockPostHog)
+            surveyManager = createSurveyManager(mockPostHog)
 
             mockSurvey = {
                 id: 'delayed-survey',
@@ -1587,7 +1619,13 @@ describe('SurveyManager', () => {
 
         afterEach(() => {
             jest.useRealTimers()
-            jest.clearAllMocks()
+            // restoreAllMocks (not clearAllMocks) so spies installed via jest.spyOn(global,
+            // 'clearTimeout') below get their real implementation back. Left merely cleared,
+            // the spy stays wrapped around whatever clearTimeout fake timers had installed when
+            // the spy was created; once real timers are restored that reference is stale, and a
+            // later test's SurveyManager.dispose() (which calls clearTimeout on any pending
+            // timeout) throws "clearTimeout is not defined".
+            jest.restoreAllMocks()
         })
 
         test('should track timeouts when scheduling delayed surveys', () => {
@@ -1803,7 +1841,7 @@ describe('SurveyManager', () => {
                 },
             })
 
-            surveyManager = new SurveyManager(mockPostHog)
+            surveyManager = createSurveyManager(mockPostHog)
         })
 
         afterEach(() => {
