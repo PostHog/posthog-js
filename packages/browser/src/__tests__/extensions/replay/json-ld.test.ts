@@ -274,7 +274,7 @@ describe('JSON-LD replay capture', () => {
         )
         const capture = startJsonLdCapture(document, MutationObserver, {
             emit,
-            isEnabled: () => enabled,
+            getCaptureState: () => enabled,
         })
 
         expect(emit).not.toHaveBeenCalled()

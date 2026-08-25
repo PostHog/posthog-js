@@ -103,7 +103,7 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
 export const JSON_LD_EVENT_TAG = '$json_ld'
 
 function isObject(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && !isNull(value) && !isArray(value)
+    return typeof value === 'object' && !isNull(value)
 }
 
 function getOwnProperty(value: Record<string, unknown>, property: string): unknown {
@@ -148,9 +148,7 @@ function sanitizeEntity(value: unknown, allowedTypes?: readonly string[]): Recor
                 result[property] = scalar
             }
         } else if (isArray(propertyValue)) {
-            const items = propertyValue
-                .map((item) => sanitizeEntity(item, rule))
-                .filter((item): item is Record<string, unknown> => !isNull(item))
+            const items = propertyValue.map((item) => sanitizeEntity(item, rule)).filter(isObject)
             if (items.length) {
                 result[property] = items
             }
@@ -170,7 +168,7 @@ function sanitizeRoot(value: unknown): Record<string, unknown> | null {
         return null
     }
     const context = getOwnProperty(value, '@context')
-    if (typeof context !== 'string' || context.replace(/^http:/, 'https:').replace(/\/$/, '') !== SCHEMA_CONTEXT) {
+    if (typeof context !== 'string' || !/^https?:\/\/schema\.org\/?$/.test(context)) {
         return null
     }
 
@@ -186,10 +184,7 @@ export function sanitizeJsonLd(text: string): [unknown, string] | null {
     try {
         const value: unknown = JSON.parse(text)
         const sanitized = isArray(value) ? value.map(sanitizeRoot) : sanitizeRoot(value)
-        if (
-            isNull(sanitized) ||
-            (isArray(sanitized) && (!sanitized.length || sanitized.some((item) => isNull(item))))
-        ) {
+        if (isNull(sanitized) || (isArray(sanitized) && (!sanitized.length || sanitized.some(isNull)))) {
             return null
         }
 
@@ -202,8 +197,7 @@ export function sanitizeJsonLd(text: string): [unknown, string] | null {
 
 function isJsonLdScript(node: Node): node is HTMLScriptElement {
     return (
-        node.nodeType === node.ELEMENT_NODE &&
-        (node as Element).tagName === 'SCRIPT' &&
+        node.nodeName === 'SCRIPT' &&
         (node as Element).getAttribute('type')?.trim().toLowerCase() === 'application/ld+json'
     )
 }
@@ -215,20 +209,18 @@ type JsonLdPrivacyOptions = {
     maskTextSelector?: string | null
 }
 
-function classMatches(element: Element, rule?: string | RegExp): boolean {
-    if (!rule) {
-        return false
+function matchesPrivacyRule(element: Element, classRule?: string | RegExp, selector?: string | null): boolean {
+    if (
+        typeof classRule === 'string'
+            ? element.classList.contains(classRule)
+            : classRule &&
+              Array.from(element.classList).some((className) => {
+                  classRule.lastIndex = 0
+                  return classRule.test(className)
+              })
+    ) {
+        return true
     }
-    if (typeof rule === 'string') {
-        return element.classList.contains(rule)
-    }
-    return Array.from(element.classList).some((className) => {
-        rule.lastIndex = 0
-        return rule.test(className)
-    })
-}
-
-function selectorMatches(element: Element, selector?: string | null): boolean {
     try {
         return !!selector && element.matches(selector)
     } catch {
@@ -239,10 +231,8 @@ function selectorMatches(element: Element, selector?: string | null): boolean {
 function isWithinPrivacyBoundary(element: Element, options: JsonLdPrivacyOptions): boolean {
     for (let current: Element | null = element; current; ) {
         if (
-            classMatches(current, options.blockClass) ||
-            classMatches(current, options.maskTextClass) ||
-            selectorMatches(current, options.blockSelector) ||
-            selectorMatches(current, options.maskTextSelector)
+            matchesPrivacyRule(current, options.blockClass, options.blockSelector) ||
+            matchesPrivacyRule(current, options.maskTextClass, options.maskTextSelector)
         ) {
             return true
         }
@@ -271,8 +261,8 @@ export function startJsonLdCapture(
     MutationObserverClass: typeof MutationObserver,
     options: JsonLdPrivacyOptions & {
         emit: (jsonLd: unknown) => boolean
-        isEnabled?: () => boolean
-        shouldSuppress?: () => boolean
+        // Null updates the deduplication baseline without an event.
+        getCaptureState?: () => boolean | null
     }
 ): { scan: (force?: boolean) => void; stop: () => void } {
     const lastJsonByScript = new WeakMap<HTMLScriptElement, string>()
@@ -280,23 +270,23 @@ export function startJsonLdCapture(
 
     const captureScript = (script: HTMLScriptElement, force = false): void => {
         try {
-            const shouldSuppress = options.shouldSuppress?.() === true
+            const captureState = options.getCaptureState ? options.getCaptureState() : true
             if (
                 !remainingLength ||
-                (options.isEnabled?.() === false && !shouldSuppress) ||
+                captureState === false ||
                 !script.isConnected ||
                 script.ownerDocument !== doc ||
                 isWithinPrivacyBoundary(script, options)
             ) {
                 return
             }
-            const sanitized = sanitizeJsonLd(script.textContent || '')
+            const sanitized = sanitizeJsonLd(script.text)
             if (!sanitized) {
                 lastJsonByScript.delete(script)
                 return
             }
             const [jsonLd, json] = sanitized
-            if (shouldSuppress) {
+            if (isNull(captureState)) {
                 lastJsonByScript.set(script, json)
                 return
             }
@@ -318,7 +308,7 @@ export function startJsonLdCapture(
     try {
         const observer = new MutationObserverClass((mutations) => {
             try {
-                if (!remainingLength || (options.isEnabled?.() === false && options.shouldSuppress?.() !== true)) {
+                if (!remainingLength || options.getCaptureState?.() === false) {
                     return
                 }
                 const scripts = new Set<HTMLScriptElement>()
@@ -358,14 +348,10 @@ export function startJsonLdCapture(
             subtree: true,
         })
         const scan = (force = false): void => {
-            if (!remainingLength || (options.isEnabled?.() === false && options.shouldSuppress?.() !== true)) {
+            if (!remainingLength || options.getCaptureState?.() === false) {
                 return
             }
-            doc.querySelectorAll('script').forEach((script) => {
-                if (isJsonLdScript(script)) {
-                    captureScript(script, force)
-                }
-            })
+            getJsonLdScripts(doc.documentElement).forEach((script) => captureScript(script, force))
         }
 
         return { scan, stop: () => observer.disconnect() }

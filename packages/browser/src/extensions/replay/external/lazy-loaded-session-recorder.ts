@@ -2760,10 +2760,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 blockSelector: sessionRecordingOptions.blockSelector,
                 maskTextClass: sessionRecordingOptions.maskTextClass,
                 maskTextSelector: sessionRecordingOptions.maskTextSelector,
-                isEnabled: () => this._canCaptureJsonLd(),
-                shouldSuppress: () =>
+                getCaptureState: () =>
                     this._instance.config.session_recording?.captureJsonLd !== true ||
-                    this._urlTriggerMatching.isCurrentUrlBlocked(),
+                    this._urlTriggerMatching.isCurrentUrlBlocked()
+                        ? null
+                        : this._canCaptureJsonLd(),
                 emit: (jsonLd) => this._tryAddJsonLdEvent(jsonLd),
             })
             if (this._urlTriggerMatching.isCurrentUrlBlocked()) {
