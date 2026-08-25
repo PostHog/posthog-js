@@ -1,5 +1,6 @@
 import { assignableWindow } from '../utils/globals'
 import { PostHog } from '../posthog-core'
+import { markConsoleWrapper } from '@posthog/browser-common/utils/console-utils'
 import { isArray, isBoolean, isFunction, isNull, isNumber, isObject } from '@posthog/core'
 import type { LogSeverityLevel } from '@posthog/types'
 
@@ -343,13 +344,6 @@ const LEVEL_MAP: Record<ConsoleLevel, LogSeverityLevel> = {
     info: 'info',
 }
 
-const originalConsoleMethod = (method: any): any => {
-    while (method?.__rrweb_original__) {
-        method = method.__rrweb_original__
-    }
-    return method
-}
-
 const initializeLogs = (posthog: PostHog) => {
     // `host` is carried here because the core SDK context has no equivalent. Session
     // attributes (window.id, sessionStartTimestamp, lastActivityTimestamp) are added
@@ -407,12 +401,8 @@ const initializeLogs = (posthog: PostHog) => {
 
         const originalConsoleLog = assignableWindow.console[level]
         const wrapped = logWrapper(originalConsoleLog)
-        // Expose the original console method the same way rrweb's console plugin does, so
-        // PostHog's internal logger (utils/logger.ts) writes to the real console instead of
-        // re-entering this wrapper when it emits debug lines from inside the capture path.
-        // Flatten an existing marker if another console plugin already wrapped this method.
-        ;(wrapped as any).__rrweb_original__ = originalConsoleMethod(originalConsoleLog)
-        assignableWindow.console[level] = wrapped
+        // PostHog's logger uses the flattened original to bypass all PostHog console instrumentation.
+        assignableWindow.console[level] = markConsoleWrapper(wrapped, originalConsoleLog)
     }
 }
 

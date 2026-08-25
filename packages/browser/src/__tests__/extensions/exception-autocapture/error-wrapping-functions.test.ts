@@ -1,5 +1,6 @@
 import posthogErrorWrappingFunctions from '../../../entrypoints/exception-autocapture'
 import { ErrorTracking } from '@posthog/core'
+import { createLogger, logger } from '@posthog/browser-common/utils/logger'
 
 const { wrapOnError, wrapUnhandledRejection, wrapConsoleError } = posthogErrorWrappingFunctions
 
@@ -105,16 +106,60 @@ describe('error wrapping functions', () => {
             expect(captureFn).toHaveBeenCalled()
         })
 
-        it('still chains to a callable original handler', () => {
+        it('captures customer output that resembles a PostHog log and still chains to the original handler', () => {
             const con = console as any
             const original = jest.fn()
             con.error = original
             unwrap = wrapConsoleError(captureFn)
 
-            con.error('boom')
+            con.error('[PostHog.js]', 'customer error')
 
-            expect(original).toHaveBeenCalledWith('boom')
-            expect(captureFn).toHaveBeenCalled()
+            expect(original).toHaveBeenCalledWith('[PostHog.js]', 'customer error')
+            expect(captureFn).toHaveBeenCalledTimes(1)
+        })
+
+        it('does not capture PostHog logger output through stacked console wrappers', () => {
+            const con = console as any
+            const original = jest.fn()
+            const existingWrapper = jest.fn((...args: any[]) => original(...args))
+            ;(existingWrapper as any).__rrweb_original__ = original
+            con.error = existingWrapper
+            unwrap = wrapConsoleError(captureFn)
+
+            logger.critical('critical message')
+            createLogger('[Test]', { debugEnabled: true }).error('debug message')
+
+            expect(original).toHaveBeenNthCalledWith(1, '[PostHog.js]', 'critical message')
+            expect(original).toHaveBeenNthCalledWith(2, '[PostHog.js] [Test]', 'debug message')
+            expect(existingWrapper).not.toHaveBeenCalled()
+            expect(captureFn).not.toHaveBeenCalled()
+        })
+
+        it('does not re-enter capture when the capture path logs another console error', () => {
+            const con = console as any
+            const original = jest.fn()
+            con.error = original
+            captureFn.mockImplementationOnce(() => con.error('nested error'))
+            unwrap = wrapConsoleError(captureFn)
+
+            con.error('outer error')
+
+            expect(captureFn).toHaveBeenCalledTimes(1)
+            expect(original).toHaveBeenNthCalledWith(1, 'nested error')
+            expect(original).toHaveBeenNthCalledWith(2, 'outer error')
+        })
+
+        it('still logs when capture throws', () => {
+            const con = console as any
+            const original = jest.fn()
+            con.error = original
+            captureFn.mockImplementationOnce(() => {
+                throw new Error('capture failed')
+            })
+            unwrap = wrapConsoleError(captureFn)
+
+            expect(() => con.error('customer error')).not.toThrow()
+            expect(original).toHaveBeenCalledWith('customer error')
         })
     })
 })

@@ -1,6 +1,7 @@
 import Config from '../config'
-import { isUndefined } from '@posthog/core'
+import { isFunction, isUndefined } from '@posthog/core'
 import type { Logger } from '@posthog/types'
+import { getOriginalConsoleMethod } from './console-utils'
 import { window } from './globals'
 
 interface DebugWindow extends Window {
@@ -23,6 +24,14 @@ export type PosthogJsLogger = Omit<Logger, 'createLogger' | 'debug' | 'info' | '
 }
 
 const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {}): PosthogJsLogger => {
+    const writeToConsole = (level: 'debug' | 'log' | 'warn' | 'error', ...args: any[]): void => {
+        const targetConsole = window?.console ?? console
+        const consoleLog = getOriginalConsoleMethod(targetConsole[level] as any)
+        if (isFunction(consoleLog)) {
+            consoleLog(prefix, ...args)
+        }
+    }
+
     const logger: PosthogJsLogger = {
         _log: (level: 'debug' | 'log' | 'warn' | 'error', ...args: any[]) => {
             if (
@@ -31,12 +40,7 @@ const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {
                 !isUndefined(window.console) &&
                 window.console
             ) {
-                const consoleLog =
-                    '__rrweb_original__' in window.console[level]
-                        ? (window.console[level] as any)['__rrweb_original__']
-                        : window.console[level]
-
-                consoleLog(prefix, ...args)
+                writeToConsole(level, ...args)
             }
         },
 
@@ -58,8 +62,7 @@ const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {
 
         critical: (...args: any[]) => {
             // Critical errors are always logged to the console
-            // eslint-disable-next-line no-console
-            console.error(prefix, ...args)
+            writeToConsole('error', ...args)
         },
 
         uninitializedWarning: (methodName: string) => {

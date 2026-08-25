@@ -1,6 +1,7 @@
 import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
 import { ErrorEventArgs } from '../types'
+import { markConsoleWrapper } from '@posthog/browser-common/utils/console-utils'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isArray, isFunction, isNull, isString, type ErrorTracking } from '@posthog/core'
 import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
@@ -80,25 +81,37 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
     }
 
     const originalConsoleError = con.error
+    let isCapturingConsoleError = false
 
-    con.error = function (...args: any[]): void {
-        let event
-        if (args.length == 1) {
-            event = args[0]
-        } else {
-            event = args.join(' ')
-        }
-        const error = args.find((arg) => arg instanceof Error)
-        const errorProperties = errorPropertiesBuilder.buildFromUnknown(error || event, {
-            mechanism: { handled: false },
-            syntheticException: new Error('PostHog syntheticException'),
-            skipFirstLines: 2,
-        })
-        captureFn(errorProperties)
-        if (isFunction(originalConsoleError)) {
-            originalConsoleError(...args)
+    const wrappedConsoleError = function (...args: any[]): void {
+        let acquiredGuard = false
+        try {
+            if (!isCapturingConsoleError) {
+                isCapturingConsoleError = true
+                acquiredGuard = true
+
+                const event = args.length == 1 ? args[0] : args.join(' ')
+                const error = args.find((arg) => arg instanceof Error)
+                const errorProperties = errorPropertiesBuilder.buildFromUnknown(error || event, {
+                    mechanism: { handled: false },
+                    syntheticException: new Error('PostHog syntheticException'),
+                    skipFirstLines: 2,
+                })
+                captureFn(errorProperties)
+            }
+        } catch {
+            // Error capture must not break the page's console output.
+        } finally {
+            if (acquiredGuard) {
+                isCapturingConsoleError = false
+            }
+            if (isFunction(originalConsoleError)) {
+                originalConsoleError(...args)
+            }
         }
     }
+
+    con.error = markConsoleWrapper(wrappedConsoleError, originalConsoleError)
     con.error.__POSTHOG_INSTRUMENTED__ = true
 
     return () => {
