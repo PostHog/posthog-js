@@ -259,11 +259,10 @@ describe('modifyExistingXcodeBuildScript', () => {
   })
 })
 
-const mockXcodeProjectForBuildPhase = (
-  existingPhase: any = undefined
-): { pbxItemByComment: jest.Mock; addBuildPhase: jest.Mock } => ({
+const mockXcodeProjectForBuildPhase = (existingPhase: any = undefined, buildPhases: any[] = []) => ({
   pbxItemByComment: jest.fn(() => existingPhase),
   addBuildPhase: jest.fn(),
+  getFirstTarget: jest.fn(() => ({ target: { buildPhases } })),
 })
 
 describe('buildDsymUploadShellScript', () => {
@@ -311,6 +310,9 @@ describe('addDsymUploadBuildPhase', () => {
     expect(files).toEqual([])
     expect(isa).toBe('PBXShellScriptBuildPhase')
     expect(comment).toBe('Upload PostHog Debug Symbols')
+    expect(opts.inputPaths).toEqual([
+      '"$(DWARF_DSYM_FOLDER_PATH)/$(DWARF_DSYM_FILE_NAME)/Contents/Resources/DWARF/$(EXECUTABLE_NAME)"',
+    ])
     expect(opts.shellPath).toBe('/bin/sh')
     expect(opts.shellScript).toContain('upload-symbols.sh')
     expect(opts.shellScript).not.toContain('POSTHOG_INCLUDE_SOURCE')
@@ -341,15 +343,41 @@ describe('addDsymUploadBuildPhase', () => {
   const encodePbx = (script: string): string => '"' + script.replace(/"/g, '\\"') + '"'
 
   it('refreshes an existing plugin-generated phase script so option changes take effect', () => {
-    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: encodePbx(buildDsymUploadShellScript()) }
+    const existing: any = {
+      isa: 'PBXShellScriptBuildPhase',
+      shellScript: encodePbx(buildDsymUploadShellScript()),
+      inputPaths: ['"$(SRCROOT)/custom-input"'],
+    }
     const xp = mockXcodeProjectForBuildPhase(existing)
 
     addDsymUploadBuildPhase(xp, false, true)
     expect(xp.addBuildPhase).not.toHaveBeenCalled()
     expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, true)))
+    expect(existing.inputPaths).toEqual([
+      '"$(SRCROOT)/custom-input"',
+      '"$(DWARF_DSYM_FOLDER_PATH)/$(DWARF_DSYM_FILE_NAME)/Contents/Resources/DWARF/$(EXECUTABLE_NAME)"',
+    ])
 
     addDsymUploadBuildPhase(xp, false, false)
     expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript()))
+  })
+
+  it('moves an existing plugin-generated phase after extension embedding', () => {
+    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: encodePbx(buildDsymUploadShellScript()) }
+    const buildPhases = [
+      { value: 'SOURCES', comment: 'Sources' },
+      { value: 'POSTHOG', comment: 'Upload PostHog Debug Symbols' },
+      { value: 'EXTENSION', comment: 'Embed App Extensions' },
+    ]
+    const xp = mockXcodeProjectForBuildPhase(existing, buildPhases)
+
+    addDsymUploadBuildPhase(xp)
+
+    expect(buildPhases.map((phase) => phase.comment)).toEqual([
+      'Sources',
+      'Embed App Extensions',
+      'Upload PostHog Debug Symbols',
+    ])
   })
 
   it('refreshing with unchanged options preserves the stored pbxproj representation', () => {
@@ -379,12 +407,13 @@ describe('addDsymUploadBuildPhase', () => {
 
   it('leaves a user-customized phase script untouched', () => {
     const customized = encodePbx(`${buildDsymUploadShellScript()}\necho "my custom step"`)
-    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: customized }
+    const existing: any = { isa: 'PBXShellScriptBuildPhase', shellScript: customized }
     const xp = mockXcodeProjectForBuildPhase(existing)
 
     addDsymUploadBuildPhase(xp, false, true)
     expect(xp.addBuildPhase).not.toHaveBeenCalled()
     expect(existing.shellScript).toBe(customized)
+    expect(existing.inputPaths).toBeUndefined()
   })
 })
 

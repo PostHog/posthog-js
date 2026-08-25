@@ -238,6 +238,8 @@ export function addPostHogWithBundledScriptsToBundleShellScript(script: string, 
 }
 
 const POSTHOG_DSYM_BUILD_PHASE_NAME = 'Upload PostHog Debug Symbols'
+const POSTHOG_DSYM_INPUT_PATH =
+  '"$(DWARF_DSYM_FOLDER_PATH)/$(DWARF_DSYM_FILE_NAME)/Contents/Resources/DWARF/$(EXECUTABLE_NAME)"'
 
 // Shell script for the dSYM upload build phase. It locates and runs posthog-ios's
 // upload-symbols.sh (CocoaPods or SwiftPM) rather than re-implementing dSYM upload.
@@ -293,9 +295,10 @@ function decodePbxShellScript(stored: string): string {
   return stored.slice(1, -1).replace(/\\(.)/g, (_match, ch) => (ch === 'n' ? '\n' : ch === 't' ? '\t' : ch))
 }
 
-// Appends a Run Script build phase that uploads dSYMs; appended last so it runs after the
-// dSYM bundle is produced. Re-runs refresh a still-plugin-generated script so option
-// changes take effect without a clean prebuild.
+// Keeps the upload phase last and declares the main DWARF as an input, matching the native iOS
+// setup guide. Both are required: the input makes Xcode wait for dSYM generation, while placing
+// the phase after extension embedding avoids dependency cycles in apps with app extensions.
+// Re-runs refresh only a still-plugin-generated phase so user customizations remain untouched.
 export function addDsymUploadBuildPhase(xcodeProject: any, includeSource = false, skipOnConflict = false): void {
   const existing = xcodeProject.pbxItemByComment(POSTHOG_DSYM_BUILD_PHASE_NAME, 'PBXShellScriptBuildPhase')
   if (existing) {
@@ -307,11 +310,23 @@ export function addDsymUploadBuildPhase(xcodeProject: any, includeSource = false
       generatedVariants.includes(decodePbxShellScript(existing.shellScript))
     ) {
       existing.shellScript = encodePbxShellScript(buildDsymUploadShellScript(includeSource, skipOnConflict))
+      existing.inputPaths = Array.from(
+        new Set([...(Array.isArray(existing.inputPaths) ? existing.inputPaths : []), POSTHOG_DSYM_INPUT_PATH])
+      )
+
+      const buildPhases = xcodeProject.getFirstTarget?.().target?.buildPhases
+      if (Array.isArray(buildPhases)) {
+        const phaseIndex = buildPhases.findIndex((phase: any) => phase.comment === POSTHOG_DSYM_BUILD_PHASE_NAME)
+        if (phaseIndex !== -1 && phaseIndex !== buildPhases.length - 1) {
+          buildPhases.push(...buildPhases.splice(phaseIndex, 1))
+        }
+      }
     }
     return
   }
 
   xcodeProject.addBuildPhase([], 'PBXShellScriptBuildPhase', POSTHOG_DSYM_BUILD_PHASE_NAME, null, {
+    inputPaths: [POSTHOG_DSYM_INPUT_PATH],
     shellPath: '/bin/sh',
     shellScript: buildDsymUploadShellScript(includeSource, skipOnConflict),
   })
