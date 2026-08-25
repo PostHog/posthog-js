@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Fix `displaySurvey()` recording a `survey sent` event for an incomplete `initialResponses` prefill when partial responses are disabled
+Stop `displaySurvey()` recording a `survey sent` event for an `initialResponses` prefill that neither completes the survey nor auto-advances a question, and limit the partial event to the auto-advanced answers
