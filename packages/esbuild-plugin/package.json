@@ -1,0 +1,48 @@
+{
+    "name": "@posthog/esbuild-plugin",
+    "version": "0.0.1",
+    "bugs": {
+        "url": "https://github.com/PostHog/posthog-js/issues"
+    },
+    "description": "Inject PostHog error-tracking chunk IDs during esbuild builds",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/esbuild-plugin"
+    },
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
+    },
+    "scripts": {
+        "build": "rslib build",
+        "clean": "rimraf dist",
+        "lint": "eslint src",
+        "lint:fix": "eslint src --fix",
+        "test:unit": "jest",
+        "dev": "rslib build --watch",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+    },
+    "files": [
+        "src",
+        "dist",
+        "!src/**/*.spec.ts"
+    ],
+    "peerDependencies": {
+        "esbuild": ">=0.19.0"
+    },
+    "devDependencies": {
+        "@jridgewell/trace-mapping": "^0.3.31",
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@rslib/core": "catalog:",
+        "@types/jest": "catalog:",
+        "esbuild": "^0.25.0",
+        "jest": "catalog:"
+    }
+}

@@ -603,6 +603,27 @@ importers:
         specifier: 'catalog:'
         version: 29.7.0(@types/node@26.1.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@26.1.1)(typescript@5.9.3))
 
+  packages/esbuild-plugin:
+    devDependencies:
+      '@jridgewell/trace-mapping':
+        specifier: ^0.3.31
+        version: 0.3.31
+      '@posthog-tooling/tsconfig-base':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig-base
+      '@rslib/core':
+        specifier: 'catalog:'
+        version: 0.10.6(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(typescript@5.9.3)
+      '@types/jest':
+        specifier: 'catalog:'
+        version: 29.5.14
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.10
+      jest:
+        specifier: 'catalog:'
+        version: 29.7.0(@types/node@26.1.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@26.1.1)(typescript@5.9.3))
+
   packages/mcp:
     dependencies:
       '@posthog/core':
