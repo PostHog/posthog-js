@@ -75,9 +75,13 @@
         "web-vitals-soft-navs": "npm:web-vitals@6.0.0"
     },
     "peerDependencies": {
+        "@types/react": ">=16.8.0",
         "react": ">=16.8.0"
     },
     "peerDependenciesMeta": {
+        "@types/react": {
+            "optional": true
+        },
         "react": {
             "optional": true
         }
