@@ -3,6 +3,7 @@ import { hasOwnProperty, isArray, isNull, isUndefined } from '@posthog/core'
 type JsonLdScalar = string | number | boolean | null
 type JsonLdPropertyRule = true | readonly string[]
 type JsonLdEntityRules = Record<string, JsonLdPropertyRule>
+type JsonLdRuleGroup = readonly [readonly string[], JsonLdEntityRules]
 
 const MAX_JSON_LD_LENGTH = 100_000
 const MAX_JSON_LD_OUTPUT_LENGTH = 20_000
@@ -47,6 +48,17 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
         interactivityType: true,
         aggregateRating: ['AggregateRating'],
         publisher: ['Organization'],
+    },
+    Event: {
+        startDate: true,
+        endDate: true,
+        previousStartDate: true,
+        eventStatus: true,
+        eventAttendanceMode: true,
+        maximumAttendeeCapacity: true,
+        isAccessibleForFree: true,
+        aggregateRating: ['AggregateRating'],
+        offers: ['AggregateOffer', 'Offer'],
     },
     Offer: {
         price: true,
@@ -100,6 +112,31 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
     },
 }
 
+const EMPTY_ENTITY_RULES: JsonLdEntityRules = {}
+const INHERITED_RULE_GROUPS: readonly JsonLdRuleGroup[] = [
+    ['BorrowAction ReadAction SeekToAction SolveMathAction WatchAction'.split(' '), ENTITY_RULES.Action],
+    [
+        '3DModel Answer Article Blog BlogPosting Book Clip Comment Course CreativeWorkSeason CreativeWorkSeries DataCatalog DataDownload DataFeed Dataset DiscussionForumPosting Episode Game HowTo HowToDirection HowToSection HowToStep HowToTip ImageObject LearningResource MediaObject Message MobileApplication Movie MusicPlaylist MusicRecording NewsArticle ProfilePage QAPage Question Quiz Recipe Review SocialMediaPosting SoftwareApplication VacationRental VideoGame VideoObject WebApplication WebPage WebPageElement'.split(
+            ' '
+        ),
+        ENTITY_RULES.CreativeWork,
+    ],
+    [['BroadcastEvent'], ENTITY_RULES.Event],
+    [
+        'DaySpa Electrician HealthClub Hotel Library LibrarySystem LocalBusiness Locksmith LodgingBusiness OnlineStore PerformingGroup Pharmacy Plumber Restaurant Store'.split(
+            ' '
+        ),
+        ENTITY_RULES.Organization,
+    ],
+    ['Accommodation AdministrativeArea Country State'.split(' '), ENTITY_RULES.Place],
+    ['Car ProductGroup'.split(' '), ENTITY_RULES.Product],
+    ['EmployerAggregateRating Rating'.split(' '), ENTITY_RULES.AggregateRating],
+]
+const TYPES_WITHOUT_PROPERTIES =
+    'AlignmentObject BedDetails BreadcrumbList Certification ContactPoint CreditCard DefinedRegion EducationalOccupationalCredential EntryPoint GeoCoordinates GeoShape InteractionCounter ItemList JobPosting ListItem LocationFeatureSpecification MathSolver MemberProgram MemberProgramTier MerchantReturnPolicy MerchantReturnPolicySeasonalOverride MonetaryAmount NutritionInformation OccupationalExperienceRequirements OfferShippingDetails OpeningHoursSpecification PeopleAudience PostalAddress PriceSpecification PropertyValue QuantitativeValue ServicePeriod ShippingConditions ShippingDeliveryTime ShippingRateSettings ShippingService SpeakableSpecification Thing UnitPriceSpecification'.split(
+        ' '
+    )
+
 export const JSON_LD_EVENT_TAG = '$json_ld'
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -119,43 +156,62 @@ function sanitizeScalar(value: unknown): JsonLdScalar | JsonLdScalar[] | undefin
     return isScalar(value) || (isArray(value) && value.every(isScalar)) ? value : undefined
 }
 
+function getEntityRules(type: string): JsonLdEntityRules | undefined {
+    if (hasOwnProperty.call(ENTITY_RULES, type)) {
+        return ENTITY_RULES[type]
+    }
+    for (const [types, rules] of INHERITED_RULE_GROUPS) {
+        if (types.includes(type)) {
+            return rules
+        }
+    }
+    return TYPES_WITHOUT_PROPERTIES.includes(type) ? EMPTY_ENTITY_RULES : undefined
+}
+
+function getEntityTypes(value: unknown): string[] {
+    const values = typeof value === 'string' ? [value] : isArray(value) ? value : []
+    return values
+        .filter((type): type is string => typeof type === 'string')
+        .map((type) => type.replace(/^https?:\/\/schema\.org\//, ''))
+        .filter((type) => !!getEntityRules(type))
+}
+
 function sanitizeEntity(value: unknown, allowedTypes?: readonly string[]): Record<string, unknown> | null {
     if (!isObject(value)) {
         return null
     }
-    const type = getOwnProperty(value, '@type')
-    if (typeof type !== 'string') {
+    const typeValue = getOwnProperty(value, '@type')
+    const types = getEntityTypes(typeValue).filter((type) => !allowedTypes || allowedTypes.includes(type))
+    if (!types.length) {
         return null
     }
 
-    if (!hasOwnProperty.call(ENTITY_RULES, type) || (allowedTypes && !allowedTypes.includes(type))) {
-        return null
-    }
-    const rules = ENTITY_RULES[type]
-
-    const result: Record<string, unknown> = { '@type': type }
+    const result: Record<string, unknown> = { '@type': typeof typeValue === 'string' ? types[0] : types }
     const id = sanitizeScalar(getOwnProperty(value, '@id'))
     if (!isUndefined(id)) {
         result['@id'] = id
     }
 
-    for (const property of Object.keys(rules)) {
-        const propertyValue = getOwnProperty(value, property)
-        const rule = rules[property]
-        if (rule === true) {
-            const scalar = sanitizeScalar(propertyValue)
-            if (!isUndefined(scalar)) {
-                result[property] = scalar
-            }
-        } else if (isArray(propertyValue)) {
-            const items = propertyValue.map((item) => sanitizeEntity(item, rule)).filter(isObject)
-            if (items.length) {
-                result[property] = items
-            }
-        } else {
-            const nestedEntity = sanitizeEntity(propertyValue, rule)
-            if (nestedEntity) {
-                result[property] = nestedEntity
+    for (const type of types) {
+        const rules = getEntityRules(type)!
+        for (const property of Object.keys(rules)) {
+            const propertyValue = getOwnProperty(value, property)
+            const rule = rules[property]
+            if (rule === true) {
+                const scalar = sanitizeScalar(propertyValue)
+                if (!isUndefined(scalar)) {
+                    result[property] = scalar
+                }
+            } else if (isArray(propertyValue)) {
+                const items = propertyValue.map((item) => sanitizeEntity(item, rule)).filter(isObject)
+                if (items.length) {
+                    result[property] = items
+                }
+            } else {
+                const nestedEntity = sanitizeEntity(propertyValue, rule)
+                if (nestedEntity) {
+                    result[property] = nestedEntity
+                }
             }
         }
     }

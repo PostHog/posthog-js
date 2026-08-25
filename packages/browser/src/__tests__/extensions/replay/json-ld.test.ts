@@ -1,5 +1,10 @@
 import { sanitizeJsonLd, startJsonLdCapture } from '../../../extensions/replay/external/json-ld'
 
+const GOOGLE_SEARCH_TYPES =
+    '3DModel Accommodation Action AdministrativeArea AggregateOffer AggregateRating AlignmentObject Answer Article BedDetails Blog BlogPosting Book BorrowAction Brand BreadcrumbList BroadcastEvent Car Certification Clip Comment ContactPoint Country Course CreativeWork CreativeWorkSeason CreativeWorkSeries CreditCard DataCatalog DataDownload DataFeed Dataset DaySpa DefinedRegion DiscussionForumPosting EducationalOccupationalCredential Electrician EmployerAggregateRating EntryPoint Episode Event Game GeoCoordinates GeoShape HealthClub Hotel HowTo HowToDirection HowToSection HowToStep HowToTip ImageObject InteractionCounter ItemList JobPosting LearningResource Library LibrarySystem ListItem LocalBusiness LocationFeatureSpecification Locksmith LodgingBusiness MathSolver MediaObject MemberProgram MemberProgramTier MerchantReturnPolicy MerchantReturnPolicySeasonalOverride Message MobileApplication MonetaryAmount Movie MusicPlaylist MusicRecording NewsArticle NutritionInformation OccupationalExperienceRequirements Offer OfferShippingDetails OnlineStore OpeningHoursSpecification Organization PeopleAudience PerformingGroup Person Pharmacy Place Plumber PostalAddress PriceSpecification Product ProductGroup ProfilePage PropertyValue QAPage QuantitativeValue Question Quiz Rating ReadAction Recipe Restaurant Review SeekToAction ServicePeriod ShippingConditions ShippingDeliveryTime ShippingRateSettings ShippingService SocialMediaPosting SoftwareApplication SolveMathAction SpeakableSpecification State Store Thing UnitPriceSpecification VacationRental VideoGame VideoObject WatchAction WebApplication WebPage WebPageElement'.split(
+        ' '
+    )
+
 function jsonLdScript(value: unknown): HTMLScriptElement {
     const script = document.createElement('script')
     script.type = 'application/ld+json'
@@ -15,6 +20,46 @@ async function deliverMutations(): Promise<void> {
 describe('JSON-LD replay capture', () => {
     afterEach(() => {
         document.body.replaceChildren()
+    })
+
+    it('accepts every Google-listed type', () => {
+        for (const type of GOOGLE_SEARCH_TYPES) {
+            expect(sanitizeJsonLd(JSON.stringify({ '@context': 'https://schema.org', '@type': type }))?.[0]).toEqual({
+                '@context': 'https://schema.org',
+                '@type': type,
+            })
+        }
+    })
+
+    it('sanitizes type arrays and full Schema.org type URLs', () => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': ['https://schema.org/Product', 'Car', 'PrivateType', 42],
+                    name: 'Camera',
+                    email: 'private@example.com',
+                })
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@type': ['Product', 'Car'],
+            name: 'Camera',
+        })
+
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': 'https://schema.org/Organization',
+                    name: 'Acme',
+                })
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@type': 'Organization',
+            name: 'Acme',
+        })
     })
 
     it('keeps only path-allowed properties and @id values', () => {
@@ -109,33 +154,36 @@ describe('JSON-LD replay capture', () => {
     it.each([
         'not json',
         JSON.stringify({ '@context': 'https://example.com', '@type': 'Product' }),
-        JSON.stringify({ '@context': 'https://schema.org', '@type': 'Event' }),
+        JSON.stringify({ '@context': 'https://schema.org', '@type': 'PrivateType' }),
+        JSON.stringify({ '@context': 'https://schema.org', '@type': ['PrivateType', 'OtherPrivateType'] }),
         JSON.stringify({ '@context': 'https://schema.org', '@type': 'constructor', '@id': 'private@example.com' }),
         JSON.stringify({ '@context': 'https://schema.org', '@type': 'toString', '@id': 'private@example.com' }),
         JSON.stringify({ '@context': 'https://schema.org', '@type': '__proto__', '@id': 'private@example.com' }),
         JSON.stringify([
             { '@context': 'https://schema.org', '@type': 'Product' },
-            { '@context': 'https://schema.org', '@type': 'Event' },
+            { '@context': 'https://schema.org', '@type': 'PrivateType' },
         ]),
     ])('drops an invalid JSON-LD document', (value) => {
         expect(sanitizeJsonLd(value)).toBeNull()
     })
 
-    it('drops Person properties other than @id', () => {
+    it.each(['ContactPoint', 'Person', 'PostalAddress'])('drops all %s properties other than @id', (type) => {
         expect(
             sanitizeJsonLd(
                 JSON.stringify({
                     '@context': 'https://schema.org',
-                    '@type': 'Person',
-                    '@id': 'person-id',
+                    '@type': type,
+                    '@id': 'entity-id',
                     name: 'Private name',
                     email: 'private@example.com',
+                    telephone: '+44 0000 000000',
+                    streetAddress: 'Private address',
                 })
             )?.[0]
         ).toEqual({
             '@context': 'https://schema.org',
-            '@type': 'Person',
-            '@id': 'person-id',
+            '@type': type,
+            '@id': 'entity-id',
         })
     })
 
