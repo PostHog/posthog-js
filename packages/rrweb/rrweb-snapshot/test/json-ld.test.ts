@@ -134,6 +134,30 @@ describe('sanitizeJsonLd', () => {
     });
   });
 
+  it('keeps only scalar leaf values and scalar arrays', () => {
+    const sanitized = sanitizeJsonLd(
+      JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: { value: 'Private nested value' },
+        sku: null,
+        color: true,
+        size: 10,
+        category: ['Shoes', 2, false, null],
+        material: ['Cotton', { value: 'Private nested value' }],
+      }),
+    );
+
+    expect(JSON.parse(sanitized!)).toEqual({
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      sku: null,
+      color: true,
+      size: 10,
+      category: ['Shoes', 2, false, null],
+    });
+  });
+
   it('drops an array when any root has an unsupported type', () => {
     expect(
       sanitizeJsonLd(
