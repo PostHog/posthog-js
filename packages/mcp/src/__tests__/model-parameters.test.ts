@@ -174,6 +174,55 @@ describe('Model capture — integration with an instrumented server', () => {
     }
   })
 
+  it('injects llm_model into the get_more_tools virtual tool, keeping its own context parameter', async () => {
+    instrument(server, fakePostHog(), { captureModel: true, reportMissing: true })
+
+    const toolsResponse = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+    const virtualTool = toolsResponse.tools.find((t: any) => t.name === 'get_more_tools')
+
+    // The virtual tool is appended after the real ones, so it only advertises
+    // llm_model if injection runs after the append.
+    expect(virtualTool).toBeDefined()
+    expect(virtualTool.inputSchema.properties.llm_model).toBeDefined()
+    expect(virtualTool.inputSchema.required).toContain('llm_model')
+    // Its own context parameter is untouched — that argument is the report itself.
+    expect(virtualTool.inputSchema.properties.context).toBeDefined()
+    expect(virtualTool.inputSchema.required).toContain('context')
+  })
+
+  it('captures llm_model on a get_more_tools report and strips it from the handler args', async () => {
+    const capture = new EventCapture()
+    await capture.start()
+    try {
+      instrument(server, fakePostHog(), { captureModel: true, reportMissing: true })
+
+      await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+
+      const result = await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'get_more_tools',
+            arguments: { context: 'Need a SQL query tool', llm_model: 'claude-opus-4-8' },
+          },
+        },
+        CallToolResultSchema
+      )
+
+      expect(result.content[0].text).toContain('Unfortunately')
+
+      const reports = capture.findCapturesByEvent('$mcp_missing_capability')
+      expect(reports).toHaveLength(1)
+      expect(reports[0].properties.$mcp_llm_model).toBe('claude-opus-4-8')
+      expect(reports[0].properties.$mcp_llm_model_source).toBe('self_reported')
+      // The context argument is still the report; only llm_model is ours to take.
+      expect(reports[0].properties.$mcp_intent).toBe('Need a SQL query tool')
+      expect((reports[0].properties.$mcp_parameters as any)?.llm_model).toBeUndefined()
+    } finally {
+      await capture.stop()
+    }
+  })
+
   it('captures llm_model as $mcp_llm_model with source=self_reported and strips it from the tool args', async () => {
     const capture = new EventCapture()
     await capture.start()

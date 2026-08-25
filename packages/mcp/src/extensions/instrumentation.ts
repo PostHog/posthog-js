@@ -661,9 +661,6 @@ async function getTracedToolsList(
     if (data && isContextEnabled(data.options.context)) {
       tools = addContextParameterToTools(tools, getContextDescription(data.options.context), data.logger)
     }
-    if (data && isCaptureModelEnabled(data.options.captureModel)) {
-      tools = addModelParameterToTools(tools, getModelDescription(data.options.captureModel), data.logger)
-    }
 
     if (data) {
       const missingToolName = resolveMissingCapabilityToolName(data.options)
@@ -680,6 +677,17 @@ async function getTracedToolsList(
           // was cached, and its calls need ownership like any other tool's.
           cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, [virtualTool])
         }
+      }
+
+      // After the virtual tool is appended, so it advertises `llm_model` too.
+      // Its ownership was cached above from the un-injected descriptor, so the
+      // SDK already strips and captures the argument on its calls — without
+      // injecting here the agent would never be asked for one, and
+      // missing-capability reports would be the only calls with no model.
+      // `context` is deliberately not injected into it: the virtual tool
+      // declares its own, and that argument is the report itself.
+      if (isCaptureModelEnabled(data.options.captureModel)) {
+        tools = addModelParameterToTools(tools, getModelDescription(data.options.captureModel), data.logger)
       }
 
       if (data.options.enableConversationId) {

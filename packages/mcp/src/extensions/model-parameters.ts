@@ -1,9 +1,5 @@
 import type { MCPAnalyticsOptions, MCPRequestLike, McpEvent } from '../types'
-import {
-  canInjectAnalyticsParameter,
-  hasAnalyticsParameter,
-  type AnalyticsInjectableJsonSchema,
-} from './analytics-parameters'
+import { addAnalyticsParameterToTool, type AnalyticsInjectableJsonSchema } from './analytics-parameters'
 import { DEFAULT_MODEL_PARAMETER_DESCRIPTION } from './constants'
 import { log, type LoggerFn } from './logger'
 
@@ -45,9 +41,8 @@ export function getModelDescription(captureModel: MCPAnalyticsOptions['captureMo
 }
 
 /**
- * Adds an `llm_model` parameter to a tool's JSON Schema. Called AFTER the MCP
- * SDK has converted Zod schemas to JSON Schema, so only JSON Schema needs
- * handling. Skip rules match `addContextParameterToTool`: a tool that already
+ * Adds an `llm_model` parameter to a tool's JSON Schema, via the shared
+ * injector so schema handling stays identical to `context`: a tool that already
  * declares `llm_model` owns it, and complex schemas can't safely gain keys.
  */
 export function addModelParameterToTool<TTool extends ModelInjectableTool>(
@@ -55,58 +50,13 @@ export function addModelParameterToTool<TTool extends ModelInjectableTool>(
   modelDescriptionOverride?: string,
   logger: LoggerFn = log
 ): TTool {
-  const modifiedTool = { ...tool }
-  const toolName = tool.name || 'unknown'
-  const schema = modifiedTool.inputSchema as AnalyticsInjectableJsonSchema | undefined
-
-  if (!canInjectAnalyticsParameter(schema, 'llm_model')) {
-    if (hasAnalyticsParameter(schema, 'llm_model')) {
-      logger(`WARN: Tool "${toolName}" already has 'llm_model' parameter. Skipping model injection.`)
-    } else {
-      logger(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf/$ref). Skipping model injection.`)
-    }
-    return modifiedTool
-  }
-
-  if (!modifiedTool.inputSchema) {
-    modifiedTool.inputSchema = {
-      type: 'object',
-      properties: {},
-      required: [],
-    }
-  }
-
-  const modelDescription = modelDescriptionOverride || DEFAULT_MODEL_PARAMETER_DESCRIPTION
-
-  // Deep copy: the server may reuse or freeze the schema object it handed us.
-  modifiedTool.inputSchema = JSON.parse(JSON.stringify(modifiedTool.inputSchema)) as AnalyticsInjectableJsonSchema
-
-  const inputSchema = modifiedTool.inputSchema as AnalyticsInjectableJsonSchema
-
-  if (!inputSchema.properties) {
-    inputSchema.properties = {}
-  }
-
-  // The MCP SDK emits `additionalProperties: false` when converting Zod schemas;
-  // left in place it would make the injected `llm_model` key invalid.
-  if (inputSchema.additionalProperties === false) {
-    inputSchema.additionalProperties = undefined
-  }
-
-  inputSchema.properties.llm_model = {
-    type: 'string',
-    description: modelDescription,
-  }
-
-  if (Array.isArray(inputSchema.required)) {
-    if (!inputSchema.required.includes('llm_model')) {
-      inputSchema.required.push('llm_model')
-    }
-  } else {
-    inputSchema.required = ['llm_model']
-  }
-
-  return modifiedTool
+  return addAnalyticsParameterToTool(
+    tool,
+    'llm_model',
+    modelDescriptionOverride || DEFAULT_MODEL_PARAMETER_DESCRIPTION,
+    'model',
+    logger
+  )
 }
 
 export function addModelParameterToTools<TTool extends ModelInjectableTool>(
