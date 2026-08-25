@@ -657,7 +657,7 @@ describe('record', function (this: ISuite) {
       }
       return names;
     });
-    await ctx.page.waitForTimeout(20);
+    await waitForRAF(ctx.page);
 
     expect(exceptionNames).toEqual([
       'IndexSizeError',
@@ -672,6 +672,31 @@ describe('record', function (this: ISuite) {
           event.data.source === IncrementalSource.StyleSheetRule,
       ),
     ).toHaveLength(0);
+  });
+
+  it('does not expose recorder emission errors through CSSOM calls', async () => {
+    const threw = await ctx.page.evaluate(() => {
+      const sheet = new CSSStyleSheet();
+      document.adoptedStyleSheets = [sheet];
+
+      const { record } = (window as unknown as IWindow).rrweb;
+      let shouldThrow = false;
+      record({
+        emit() {
+          if (shouldThrow) throw new Error('emit failed');
+        },
+      });
+      shouldThrow = true;
+
+      try {
+        sheet.insertRule('body { color: blue; }');
+        return false;
+      } catch {
+        return true;
+      }
+    });
+
+    expect(threw).toBe(false);
   });
 
   it('captures consecutive stylesheet replacements', async () => {
@@ -728,26 +753,170 @@ describe('record', function (this: ISuite) {
     expect(operations).toEqual(['replace', 'insert']);
   });
 
-  it('preserves the promise returned by a patched stylesheet replacement', async () => {
-    const preservesPromiseIdentity = await ctx.page.evaluate(async () => {
-      const nativeReplace = CSSStyleSheet.prototype.replace;
-      let nativeResult: Promise<CSSStyleSheet> | undefined;
-      CSSStyleSheet.prototype.replace = function (text: string) {
-        nativeResult = nativeReplace.call(this, text);
-        return nativeResult;
-      };
+  it('releases queued mutations when a replacement does not settle', async () => {
+    const capturedTimeout = await ctx.page.evaluate(() => {
+      const originalReplace = CSSStyleSheet.prototype.replace;
+      const originalSetTimeout = window.setTimeout;
+      try {
+        CSSStyleSheet.prototype.replace = function () {
+          return new Promise<CSSStyleSheet>(() => undefined);
+        };
 
+        const sheet = new CSSStyleSheet();
+        document.adoptedStyleSheets = [sheet];
+
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({ emit: (window as unknown as IWindow).emit });
+
+        let timeoutHandler: (() => void) | undefined;
+        window.setTimeout = ((handler: TimerHandler) => {
+          if (typeof handler === 'function') timeoutHandler = handler;
+          return 1;
+        }) as typeof window.setTimeout;
+
+        void sheet.replace('body { color: blue; }');
+        sheet.insertRule('html { color: red; }');
+        timeoutHandler?.();
+        return Boolean(timeoutHandler);
+      } finally {
+        window.setTimeout = originalSetTimeout;
+        CSSStyleSheet.prototype.replace = originalReplace;
+      }
+    });
+    await waitForRAF(ctx.page);
+
+    expect(capturedTimeout).toBe(true);
+    expect(
+      ctx.events
+        .filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.StyleSheetRule,
+        )
+        .map((event) => {
+          const data = event.data as styleSheetRuleData;
+          return data.replace ? 'replace' : data.adds ? 'insert' : 'other';
+        }),
+    ).toEqual(['insert']);
+  });
+
+  it('captures the final stylesheet when a replacement settles after the queue timeout', async () => {
+    await ctx.page.evaluate(async () => {
+      const originalReplace = CSSStyleSheet.prototype.replace;
+      const originalInsertRule = CSSStyleSheet.prototype.insertRule;
+      const originalSetTimeout = window.setTimeout;
+      try {
+        let resolveReplacement: (() => void) | undefined;
+        CSSStyleSheet.prototype.replace = function () {
+          return new Promise<CSSStyleSheet>((resolve) => {
+            resolveReplacement = () => {
+              originalInsertRule.call(this, 'body { color: blue; }');
+              resolve(this);
+            };
+          });
+        };
+
+        const sheet = new CSSStyleSheet();
+        document.adoptedStyleSheets = [sheet];
+
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({ emit: (window as unknown as IWindow).emit });
+
+        let timeoutHandler: (() => void) | undefined;
+        window.setTimeout = ((handler: TimerHandler) => {
+          if (typeof handler === 'function') timeoutHandler = handler;
+          return 1;
+        }) as typeof window.setTimeout;
+
+        const replacement = sheet.replace('body { color: blue; }');
+        sheet.insertRule('html { color: red; }');
+        timeoutHandler?.();
+        resolveReplacement?.();
+        await replacement;
+      } finally {
+        window.setTimeout = originalSetTimeout;
+        CSSStyleSheet.prototype.replace = originalReplace;
+      }
+    });
+    await waitForRAF(ctx.page);
+
+    const mutations = ctx.events.filter(
+      (event) =>
+        event.type === EventType.IncrementalSnapshot &&
+        event.data.source === IncrementalSource.StyleSheetRule,
+    );
+    expect(
+      mutations.map((event) => {
+        const data = event.data as styleSheetRuleData;
+        return data.replace ? 'replace' : data.adds ? 'insert' : 'other';
+      }),
+    ).toEqual(['insert', 'replace']);
+    expect((mutations[1].data as styleSheetRuleData).replace).toContain(
+      'html { color: red; }',
+    );
+    expect((mutations[1].data as styleSheetRuleData).replace).toContain(
+      'body { color: blue; }',
+    );
+  });
+
+  it('orders stylesheet declarations behind pending replacements', async () => {
+    await ctx.page.evaluate(async () => {
       const sheet = new CSSStyleSheet();
       document.adoptedStyleSheets = [sheet];
 
       const { record } = (window as unknown as IWindow).rrweb;
       record({ emit: (window as unknown as IWindow).emit });
 
-      const result = sheet.replace('body { color: blue; }');
-      const isSamePromise = result === nativeResult;
-      sheet.insertRule('html { color: red; }');
-      await result;
-      return isSamePromise;
+      const replacement = sheet.replace('body { color: blue; }');
+      const index = sheet.insertRule('html { color: red; }');
+      (sheet.cssRules[index] as CSSStyleRule).style.setProperty(
+        'background',
+        'black',
+      );
+      await replacement;
+    });
+    await waitForRAF(ctx.page);
+
+    expect(
+      ctx.events
+        .filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            (event.data.source === IncrementalSource.StyleSheetRule ||
+              event.data.source === IncrementalSource.StyleDeclaration),
+        )
+        .map((event) => event.data.source),
+    ).toEqual([
+      IncrementalSource.StyleSheetRule,
+      IncrementalSource.StyleSheetRule,
+      IncrementalSource.StyleDeclaration,
+    ]);
+  });
+
+  it('preserves the promise returned by a patched stylesheet replacement', async () => {
+    const preservesPromiseIdentity = await ctx.page.evaluate(async () => {
+      const originalReplace = CSSStyleSheet.prototype.replace;
+      try {
+        let nativeResult: Promise<CSSStyleSheet> | undefined;
+        CSSStyleSheet.prototype.replace = function (text: string) {
+          nativeResult = originalReplace.call(this, text);
+          return nativeResult;
+        };
+
+        const sheet = new CSSStyleSheet();
+        document.adoptedStyleSheets = [sheet];
+
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({ emit: (window as unknown as IWindow).emit });
+
+        const result = sheet.replace('body { color: blue; }');
+        const isSamePromise = result === nativeResult;
+        sheet.insertRule('html { color: red; }');
+        await result;
+        return isSamePromise;
+      } finally {
+        CSSStyleSheet.prototype.replace = originalReplace;
+      }
     });
     await waitForRAF(ctx.page);
 
@@ -768,32 +937,37 @@ describe('record', function (this: ISuite) {
 
   it('does not emit when a proxied stylesheet replacement rejects', async () => {
     const result = await ctx.page.evaluate(async () => {
-      let patchedResult: Promise<CSSStyleSheet> | undefined;
-      const rejectReplacement = () => {
-        patchedResult = Promise.reject(
-          new DOMException('Replacement failed', 'NotAllowedError'),
-        );
-        return patchedResult;
-      };
-      CSSStyleSheet.prototype.replace = new Proxy(rejectReplacement, {});
-
-      const sheet = new CSSStyleSheet();
-      document.adoptedStyleSheets = [sheet];
-
-      const { record } = (window as unknown as IWindow).rrweb;
-      record({ emit: (window as unknown as IWindow).emit });
-
-      const returnedResult = sheet.replace('body { color: blue; }');
-      let exceptionName: string | undefined;
+      const originalReplace = CSSStyleSheet.prototype.replace;
       try {
-        await returnedResult;
-      } catch (error) {
-        exceptionName = (error as DOMException).name;
+        let patchedResult: Promise<CSSStyleSheet> | undefined;
+        const rejectReplacement = () => {
+          patchedResult = Promise.reject(
+            new DOMException('Replacement failed', 'NotAllowedError'),
+          );
+          return patchedResult;
+        };
+        CSSStyleSheet.prototype.replace = new Proxy(rejectReplacement, {});
+
+        const sheet = new CSSStyleSheet();
+        document.adoptedStyleSheets = [sheet];
+
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({ emit: (window as unknown as IWindow).emit });
+
+        const returnedResult = sheet.replace('body { color: blue; }');
+        let exceptionName: string | undefined;
+        try {
+          await returnedResult;
+        } catch (error) {
+          exceptionName = (error as DOMException).name;
+        }
+        return {
+          exceptionName,
+          preservesPromiseIdentity: returnedResult === patchedResult,
+        };
+      } finally {
+        CSSStyleSheet.prototype.replace = originalReplace;
       }
-      return {
-        exceptionName,
-        preservesPromiseIdentity: returnedResult === patchedResult,
-      };
     });
     await waitForRAF(ctx.page);
 
@@ -812,18 +986,28 @@ describe('record', function (this: ISuite) {
 
   it('preserves non-promise stylesheet replacement return values', async () => {
     const preservesReturnValue = await ctx.page.evaluate(() => {
-      const returnValue = {};
-      CSSStyleSheet.prototype.replace = function () {
-        return returnValue as Promise<CSSStyleSheet>;
-      };
+      const originalReplace = CSSStyleSheet.prototype.replace;
+      try {
+        const returnValue = {};
+        Object.defineProperty(returnValue, 'then', {
+          get() {
+            throw new Error('then getter failed');
+          },
+        });
+        CSSStyleSheet.prototype.replace = function () {
+          return returnValue as Promise<CSSStyleSheet>;
+        };
 
-      const sheet = new CSSStyleSheet();
-      document.adoptedStyleSheets = [sheet];
+        const sheet = new CSSStyleSheet();
+        document.adoptedStyleSheets = [sheet];
 
-      const { record } = (window as unknown as IWindow).rrweb;
-      record({ emit: (window as unknown as IWindow).emit });
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({ emit: (window as unknown as IWindow).emit });
 
-      return sheet.replace('body { color: blue; }') === returnValue;
+        return sheet.replace('body { color: blue; }') === returnValue;
+      } finally {
+        CSSStyleSheet.prototype.replace = originalReplace;
+      }
     });
 
     expect(preservesReturnValue).toBe(true);

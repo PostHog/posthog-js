@@ -3,6 +3,7 @@ import {
   maskInputValue,
   Mirror,
   getInputType,
+  stringifyStylesheet,
   toLowerCase,
 } from '@posthog/rrweb-snapshot';
 import type { FontFaceSet } from 'css-font-loading-module';
@@ -643,9 +644,121 @@ function getIdAndStyleId(
   };
 }
 
+type QueuedStyleSheetMutation = {
+  emit?: () => void;
+  ready: boolean;
+};
+
+type StyleSheetMutationQueue = ReturnType<
+  typeof createStyleSheetMutationQueue
+>;
+
+const STYLESHEET_REPLACE_TIMEOUT = 5_000;
+
+function createStyleSheetMutationQueue(win: IWindow) {
+  const queuedMutations = new Map<
+    CSSStyleSheet,
+    QueuedStyleSheetMutation[]
+  >();
+  const pendingTimeouts = new Set<number>();
+  let active = true;
+  const safeEmit = (emit: () => void) => {
+    if (!active) return;
+    try {
+      emit();
+    } catch {
+      // Recorder errors must not affect native CSSOM operations.
+    }
+  };
+  const flush = (sheet: CSSStyleSheet) => {
+    const queue = queuedMutations.get(sheet);
+    if (!queue) return;
+
+    while (queue[0]?.ready) {
+      const mutation = queue.shift();
+      if (mutation?.emit) safeEmit(mutation.emit);
+    }
+    if (queue.length === 0) queuedMutations.delete(sheet);
+  };
+  const queueMutation = (
+    sheet: CSSStyleSheet | null | undefined,
+    emit: () => void,
+  ) => {
+    if (!sheet) {
+      safeEmit(emit);
+      return;
+    }
+    const queue = queuedMutations.get(sheet);
+    if (!queue) {
+      safeEmit(emit);
+      return;
+    }
+    queue.push({ emit, ready: true });
+    flush(sheet);
+  };
+  const queuePendingMutation = (
+    sheet: CSSStyleSheet,
+    emit: () => void,
+    emitLate: () => void,
+  ) => {
+    if (!active) return () => undefined;
+    let queue = queuedMutations.get(sheet);
+    if (!queue) {
+      queue = [];
+      queuedMutations.set(sheet, queue);
+    }
+    const mutation: QueuedStyleSheetMutation = { emit, ready: false };
+    queue.push(mutation);
+    let expired = false;
+    let settled = false;
+    let timeoutId: number | undefined;
+    const expire = () => {
+      if (expired || settled) return;
+      expired = true;
+      if (timeoutId !== undefined) pendingTimeouts.delete(timeoutId);
+      mutation.ready = true;
+      mutation.emit = undefined;
+      flush(sheet);
+    };
+    const complete = (success: boolean) => {
+      if (settled || !active) return;
+      settled = true;
+      if (timeoutId !== undefined) {
+        win.clearTimeout(timeoutId);
+        pendingTimeouts.delete(timeoutId);
+      }
+      if (expired) {
+        if (success) safeEmit(emitLate);
+        return;
+      }
+      mutation.ready = true;
+      if (!success) mutation.emit = undefined;
+      flush(sheet);
+    };
+    try {
+      timeoutId = win.setTimeout(expire, STYLESHEET_REPLACE_TIMEOUT);
+      if (expired || settled) win.clearTimeout(timeoutId);
+      else pendingTimeouts.add(timeoutId);
+    } catch {
+      expire();
+    }
+    return complete;
+  };
+  const reset = () => {
+    active = false;
+    pendingTimeouts.forEach((timeoutId) => win.clearTimeout(timeoutId));
+    pendingTimeouts.clear();
+    queuedMutations.clear();
+  };
+  return { queueMutation, queuePendingMutation, reset };
+}
+
 function initStyleSheetObserver(
   { styleSheetRuleCb, mirror, stylesheetManager }: observerParam,
-  { win }: { win: IWindow },
+  {
+    win,
+    mutationQueue,
+  }: { win: IWindow; mutationQueue: StyleSheetMutationQueue },
 ): listenerHandler {
   if (!win.CSSStyleSheet || !win.CSSStyleSheet.prototype) {
     // If, for whatever reason, CSSStyleSheet is not available, we skip the observation of stylesheets.
@@ -653,63 +766,6 @@ function initStyleSheetObserver(
       // Do nothing
     };
   }
-
-  type QueuedStyleSheetMutation = {
-    emit?: () => void;
-    ready: boolean;
-  };
-  const queuedStyleSheetMutations = new WeakMap<
-    CSSStyleSheet,
-    QueuedStyleSheetMutation[]
-  >();
-  const flushStyleSheetMutations = (sheet: CSSStyleSheet) => {
-    const queue = queuedStyleSheetMutations.get(sheet);
-    if (!queue) return;
-
-    while (queue[0]?.ready) {
-      const mutation = queue.shift();
-      try {
-        mutation?.emit?.();
-      } catch {
-        // Recorder errors must not affect native CSSOM operations.
-      }
-    }
-    if (queue.length === 0) {
-      queuedStyleSheetMutations.delete(sheet);
-    }
-  };
-  const queueStyleSheetMutation = (
-    sheet: CSSStyleSheet,
-    emit: () => void,
-  ) => {
-    const queue = queuedStyleSheetMutations.get(sheet);
-    if (!queue) {
-      emit();
-      return;
-    }
-    queue.push({ emit, ready: true });
-    flushStyleSheetMutations(sheet);
-  };
-  const queuePendingStyleSheetMutation = (
-    sheet: CSSStyleSheet,
-    emit: () => void,
-  ) => {
-    let queue = queuedStyleSheetMutations.get(sheet);
-    if (!queue) {
-      queue = [];
-      queuedStyleSheetMutations.set(sheet, queue);
-    }
-    const mutation: QueuedStyleSheetMutation = { emit, ready: false };
-    queue.push(mutation);
-    let completed = false;
-    return (success: boolean) => {
-      if (completed) return;
-      completed = true;
-      mutation.ready = true;
-      if (!success) mutation.emit = undefined;
-      flushStyleSheetMutations(sheet);
-    };
-  };
 
   // eslint-disable-next-line @typescript-eslint/unbound-method
   const insertRule = win.CSSStyleSheet.prototype.insertRule;
@@ -735,7 +791,7 @@ function initStyleSheetObserver(
         );
 
         if ((id && id !== -1) || (styleId && styleId !== -1)) {
-          queueStyleSheetMutation(thisArg, () =>
+          mutationQueue.queueMutation(thisArg, () =>
             styleSheetRuleCb({
               id,
               styleId,
@@ -782,7 +838,7 @@ function initStyleSheetObserver(
         );
 
         if ((id && id !== -1) || (styleId && styleId !== -1)) {
-          queueStyleSheetMutation(thisArg, () =>
+          mutationQueue.queueMutation(thisArg, () =>
             styleSheetRuleCb({
               id,
               styleId,
@@ -819,15 +875,16 @@ function initStyleSheetObserver(
           const [text] = argumentsList;
           const result = target.apply(thisArg, argumentsList);
 
-          if (
-            thisArg.ownerNode ||
-            !result ||
-            typeof result.then !== 'function'
-          ) {
-            return result;
-          }
-
           try {
+            const then = result?.then;
+            if (
+              thisArg.ownerNode ||
+              !result ||
+              typeof then !== 'function'
+            ) {
+              return result;
+            }
+
             stylesheetManager.onCssomSheetMutation(thisArg);
             const { id, styleId } = getIdAndStyleId(
               thisArg,
@@ -838,7 +895,7 @@ function initStyleSheetObserver(
               return result;
             }
 
-            const completeMutation = queuePendingStyleSheetMutation(
+            const completeMutation = mutationQueue.queuePendingMutation(
               thisArg,
               () =>
                 styleSheetRuleCb({
@@ -846,9 +903,23 @@ function initStyleSheetObserver(
                   styleId,
                   replace: text,
                 }),
+              () => {
+                const lateStyleSheetText = stringifyStylesheet(thisArg);
+                if (lateStyleSheetText !== null) {
+                  styleSheetRuleCb({
+                    id,
+                    styleId,
+                    replace: lateStyleSheetText,
+                  });
+                }
+              },
             );
             try {
-              void result.then(
+              // Observing fulfillment requires a rejection handler; omitting it
+              // creates a second unhandled rejection even when the caller handles
+              // the original promise. Prefer not to introduce a new host error.
+              void then.call(
+                result,
                 () => completeMutation(true),
                 () => completeMutation(false),
               );
@@ -887,7 +958,7 @@ function initStyleSheetObserver(
           );
 
           if ((id && id !== -1) || (styleId && styleId !== -1)) {
-            queueStyleSheetMutation(thisArg, () =>
+            mutationQueue.queueMutation(thisArg, () =>
               styleSheetRuleCb({
                 id,
                 styleId,
@@ -967,7 +1038,7 @@ function initStyleSheetObserver(
                 ...getNestedCSSRulePositions(thisArg),
                 insertedIndex,
               ];
-              queueStyleSheetMutation(thisArg.parentStyleSheet, () =>
+              mutationQueue.queueMutation(thisArg.parentStyleSheet, () =>
                 styleSheetRuleCb({
                   id,
                   styleId,
@@ -1011,7 +1082,7 @@ function initStyleSheetObserver(
                 ...getNestedCSSRulePositions(thisArg),
                 index,
               ];
-              queueStyleSheetMutation(thisArg.parentStyleSheet, () =>
+              mutationQueue.queueMutation(thisArg.parentStyleSheet, () =>
                 styleSheetRuleCb({
                   id,
                   styleId,
@@ -1142,7 +1213,10 @@ function initStyleDeclarationObserver(
     ignoreCSSAttributes,
     stylesheetManager,
   }: observerParam,
-  { win }: { win: IWindow },
+  {
+    win,
+    mutationQueue,
+  }: { win: IWindow; mutationQueue: StyleSheetMutationQueue },
 ): listenerHandler {
   // eslint-disable-next-line @typescript-eslint/unbound-method
   const setProperty = win.CSSStyleDeclaration.prototype.setProperty;
@@ -1161,26 +1235,28 @@ function initStyleDeclarationObserver(
         if (ignoreCSSAttributes.has(property)) {
           return result;
         }
-        stylesheetManager.onCssomSheetMutation(
-          thisArg.parentRule?.parentStyleSheet,
-        );
+        const sheet = thisArg.parentRule?.parentStyleSheet;
+        stylesheetManager.onCssomSheetMutation(sheet);
         const { id, styleId } = getIdAndStyleId(
-          thisArg.parentRule?.parentStyleSheet,
+          sheet,
           mirror,
           stylesheetManager.styleMirror,
         );
         if ((id && id !== -1) || (styleId && styleId !== -1)) {
-          styleDeclarationCb({
-            id,
-            styleId,
-            set: {
-              property,
-              value,
-              priority,
-            },
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            index: getNestedCSSRulePositions(thisArg.parentRule!),
-          });
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          const index = getNestedCSSRulePositions(thisArg.parentRule!);
+          mutationQueue.queueMutation(sheet, () =>
+            styleDeclarationCb({
+              id,
+              styleId,
+              set: {
+                property,
+                value,
+                priority,
+              },
+              index,
+            }),
+          );
         }
         return result;
       },
@@ -1205,24 +1281,26 @@ function initStyleDeclarationObserver(
         if (ignoreCSSAttributes.has(property)) {
           return result;
         }
-        stylesheetManager.onCssomSheetMutation(
-          thisArg.parentRule?.parentStyleSheet,
-        );
+        const sheet = thisArg.parentRule?.parentStyleSheet;
+        stylesheetManager.onCssomSheetMutation(sheet);
         const { id, styleId } = getIdAndStyleId(
-          thisArg.parentRule?.parentStyleSheet,
+          sheet,
           mirror,
           stylesheetManager.styleMirror,
         );
         if ((id && id !== -1) || (styleId && styleId !== -1)) {
-          styleDeclarationCb({
-            id,
-            styleId,
-            remove: {
-              property,
-            },
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            index: getNestedCSSRulePositions(thisArg.parentRule!),
-          });
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          const index = getNestedCSSRulePositions(thisArg.parentRule!);
+          mutationQueue.queueMutation(sheet, () =>
+            styleDeclarationCb({
+              id,
+              styleId,
+              remove: {
+                property,
+              },
+              index,
+            }),
+          );
         }
         return result;
       },
@@ -1573,11 +1651,20 @@ export function initObservers(
     handlers.push(initMediaInteractionObserver(o));
 
     if (o.recordDOM) {
-      handlers.push(initStyleSheetObserver(o, { win: currentWindow }));
+      const styleSheetMutationQueue =
+        createStyleSheetMutationQueue(currentWindow);
+      handlers.push(styleSheetMutationQueue.reset);
+      handlers.push(
+        initStyleSheetObserver(o, {
+          win: currentWindow,
+          mutationQueue: styleSheetMutationQueue,
+        }),
+      );
       handlers.push(initAdoptedStyleSheetObserver(o, o.doc));
       handlers.push(
         initStyleDeclarationObserver(o, {
           win: currentWindow,
+          mutationQueue: styleSheetMutationQueue,
         }),
       );
       if (o.collectFonts) {

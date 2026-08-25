@@ -51,6 +51,7 @@ function patchGLPrototype(
             const result = original.apply(this, args);
             saveWebGLVar(result, win, this);
             if (
+              !!this.canvas &&
               'tagName' in this.canvas &&
               !isBlocked(this.canvas, blockClass, blockSelector, true)
             ) {
@@ -73,6 +74,7 @@ function patchGLPrototype(
       const hookHandler = hookSetter<typeof prototype>(prototype, prop, {
         set(v) {
           if (
+            !!this.canvas &&
             'tagName' in this.canvas &&
             !isBlocked(this.canvas, blockClass, blockSelector, true)
           ) {
