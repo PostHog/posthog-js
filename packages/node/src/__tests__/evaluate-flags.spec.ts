@@ -107,6 +107,16 @@ describe('evaluateFlags', () => {
       expect(url).toMatch(/\/flags\/\?v=2(?:&|$)/)
     })
 
+    it('treats a runtime null flagKeys value as evaluating all flags', async () => {
+      const flags = await posthog.evaluateFlags('user-1', { flagKeys: null } as any)
+
+      expect(flags.keys.sort()).toEqual(['boolean-flag', 'disabled-flag', 'variant-flag'])
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+      const [, init] = mockedFetch.mock.calls[0]
+      const body = JSON.parse((init as any).body as string)
+      expect(body.flag_keys_to_evaluate).toBeUndefined()
+    })
+
     it('does not fire $feature_flag_called events for flags that are not accessed', async () => {
       await posthog.evaluateFlags('user-1')
       await waitForPromises()
@@ -696,6 +706,29 @@ describe('evaluateFlags', () => {
 
       // No remote /flags request since local evaluation covered it.
       const remoteFlagCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=2'))
+      expect(remoteFlagCalls).toHaveLength(0)
+    })
+
+    it('returns an empty snapshot without property setup or local/remote work for an empty key list', async () => {
+      await posthog.reloadFeatureFlags()
+      const poller = (posthog as any).featureFlagsPoller
+      const propertySetupSpy = jest.spyOn(posthog as any, 'addLocalPersonAndGroupProperties')
+      const contextSetupSpy = jest.spyOn(posthog as any, 'createFeatureFlagEvaluationContext')
+      const localEvaluationSpy = jest.spyOn(poller, 'getAllFlagsAndPayloads')
+      const definitionsLoadSpy = jest.spyOn(poller, 'loadFeatureFlags')
+      const definitionsReadSpy = jest.spyOn(poller, 'getFlagDefinitionsLoadedAt')
+      mockedFetch.mockClear()
+
+      const flags = await posthog.evaluateFlags('user-1', { flagKeys: [] })
+
+      expect(flags).toBeInstanceOf(FeatureFlagEvaluations)
+      expect(flags.keys).toEqual([])
+      expect(propertySetupSpy).not.toHaveBeenCalled()
+      expect(contextSetupSpy).not.toHaveBeenCalled()
+      expect(localEvaluationSpy).not.toHaveBeenCalled()
+      expect(definitionsLoadSpy).not.toHaveBeenCalled()
+      expect(definitionsReadSpy).not.toHaveBeenCalled()
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
       expect(remoteFlagCalls).toHaveLength(0)
     })
 
