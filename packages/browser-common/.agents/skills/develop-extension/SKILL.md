@@ -79,6 +79,7 @@ so consumers do not pull its code into their bundles.
 | ----------------------------- | ---------------------------------------------------------- |
 | current identity              | `client.distinctId`, `client.anonymousId`, `client.groups` |
 | current session               | `client.session`                                           |
+| check capture permission      | `client.canCapture`                                        |
 | record an event               | `await client.capture(event, properties?, options?)`       |
 | add properties to every event | `client.registerDynamicEventProperties(() => ({ … }))`     |
 | react to finalized events     | `client.onEvent(({ event, properties }) => …)`             |
@@ -109,8 +110,8 @@ header, or path.
   mandatory startup cycles between extensions.
 - **Initialize KV, then use it synchronously.** `client.kv.initialize()` may be awaitable while a host hydrates its
   memory buffer. Once initialization completes, KV reads, writes, and removals are synchronous; the host owns ordered
-  durable flushing. Identity, session, and `projectToken` are also synchronous, while capture and requests are
-  awaitable and remote-config outcomes are delivered through `onRemoteConfig`.
+  durable flushing. Identity, session, `canCapture`, and `projectToken` are also synchronous, while capture and requests
+  are awaitable and remote-config outcomes are delivered through `onRemoteConfig`.
 - **Design for async readiness.** Setup may occur before remote config loads or after events have already been captured.
   Guard work after each `await` so disposal cannot be followed by late installation.
 - **Persist through `client.kv`, not globals.** Complete `client.kv.initialize()` during setup before using the
@@ -155,6 +156,7 @@ export class FeatureFlagsExtension implements Extension {
 | `instance.config.X` (static)                                  | constructor option                                      |
 | `instance.config.X` (server-driven)                           | `client.onRemoteConfig(...)`                            |
 | `instance.sessionManager.checkAndGetSessionAndWindowId(true)` | `client.session`                                        |
+| `instance.is_capturing()`                                     | `client.canCapture`                                     |
 | `_addCaptureHook` / observing events                          | `client.onEvent(...)`                                   |
 | registering an enricher                                       | `client.registerDynamicEventProperties(fn)`             |
 | accessing another installed extension                         | `client.getExtension(MyExtensionToken)`                 |

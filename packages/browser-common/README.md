@@ -56,14 +56,15 @@ What an extension is given in `setup` — the adapter shared by extensions on th
 
 - **identity and session**: `distinctId`, `anonymousId`, `deviceId`, `groups`, `session`, `initialPersonProperties`
 - **SDK metadata**: `library`
+- **capture permission**: `canCapture`
 - **events**: `capture(...)`, `registerDynamicEventProperties(...)`, `onEvent(...)`
 - **extensions**: `getExtension(token)`
 - **server config**: `onRemoteConfig(...)`
 - **transport**: `projectToken`, `sendRequest(path, init?)`, including `compression` and `sentAt` options
 - **storage and logging**: `kv`, `logger`
 
-Identity, session, SDK metadata, and the public project token are always-ready synchronous reads. `capture` and
-`sendRequest` are awaitable. For `sendRequest`, `sentAt` controls `sent_at` placement on POST requests; GET query mode
+Identity, session, SDK metadata, capture permission, and the public project token are always-ready synchronous reads.
+`capture` and `sendRequest` are awaitable. For `sendRequest`, `sentAt` controls `sent_at` placement on POST requests; GET query mode
 uses the cache-busting `_` parameter instead, and GET body mode has no effect. `onRemoteConfig` immediately replays the
 latest known success or failure and then reports subsequent outcomes. Extensions that want a named log prefix can
 create a child with `client.logger.createLogger('[myExtension]')`.
