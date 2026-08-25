@@ -359,7 +359,12 @@ export class PostHogFeatureFlags implements Extension {
     private _syncAutomaticRefresh(): void {
         const configuredIntervalMs = this._config.refreshIntervalMs
         const refreshIntervalMs =
-            !isUndefined(configuredIntervalMs) && configuredIntervalMs > 0 ? configuredIntervalMs : undefined
+            !this._config.remoteRequestsDisabled &&
+            document &&
+            !isUndefined(configuredIntervalMs) &&
+            configuredIntervalMs > 0
+                ? configuredIntervalMs
+                : undefined
         if (refreshIntervalMs === this._refreshIntervalMs) {
             return
         }
