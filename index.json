@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/4646": {
+    "key": "PostHog/posthog-js/issue/4646",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4646",
+    "url": "https://github.com/PostHog/posthog-js/issues/4646",
+    "conclusion": "Confirmed likely React Native Expo-plugin build-ordering bug affecting iOS native-symbol uploads with embedded extensions.",
+    "labels": [
+      "react-native",
+      "iOS",
+      "feature/error-tracking",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-25T18:15:29.495Z"
+  },
   "PostHog/posthog-js/issue/4637": {
     "key": "PostHog/posthog-js/issue/4637",
     "repo": "PostHog/posthog-js",
