@@ -523,6 +523,68 @@ describe('web vitals', () => {
             expect(withoutAttribution.onLCP).not.toHaveBeenCalled()
             expect(withoutAttribution.onINP).not.toHaveBeenCalled()
         })
+
+        it('opts out of processedEventEntries on the attributed onINP only', async () => {
+            const attributed = {
+                onLCP: jest.fn(),
+                onCLS: jest.fn(),
+                onFCP: jest.fn(),
+                onINP: jest.fn(),
+            }
+            const withoutAttribution = {
+                onLCP: jest.fn(),
+                onCLS: jest.fn(),
+                onFCP: jest.fn(),
+                onINP: jest.fn(),
+            }
+            const loadScriptMock = jest.fn().mockImplementation((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__ = {
+                    postHogWebVitalsCallbacksByFlavor: {
+                        [kind]: { ...attributed, withoutAttribution },
+                    },
+                }
+                callback()
+            })
+            assignableWindow.__PosthogExtensions__ = { loadExternalDependency: loadScriptMock }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true },
+                capture_pageview: false,
+            })
+
+            expect(attributed.onINP).toHaveBeenCalledWith(expect.any(Function), {
+                reportSoftNavs: false,
+                includeProcessedEventEntries: false,
+            })
+            // the other observers, attributed or not, only ever see the shared opts
+            for (const observer of [attributed.onLCP, withoutAttribution.onCLS, withoutAttribution.onFCP]) {
+                expect(observer).toHaveBeenCalledWith(expect.any(Function), { reportSoftNavs: false })
+            }
+        })
+
+        it('does not pass attribution-only opts to the default bundle', async () => {
+            const callbacks = {
+                onLCP: jest.fn(),
+                onCLS: jest.fn(),
+                onFCP: jest.fn(),
+                onINP: jest.fn(),
+            }
+            const loadScriptMock = jest.fn().mockImplementation((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__ = {
+                    postHogWebVitalsCallbacksByFlavor: { [kind]: callbacks },
+                }
+                callback()
+            })
+            assignableWindow.__PosthogExtensions__ = { loadExternalDependency: loadScriptMock }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true, web_vitals_attribution: false },
+                capture_pageview: false,
+            })
+
+            expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), 'web-vitals', expect.any(Function))
+            expect(callbacks.onINP).toHaveBeenCalledWith(expect.any(Function), { reportSoftNavs: false })
+        })
     })
 
     describe('captured metric payload', () => {

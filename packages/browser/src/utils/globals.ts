@@ -175,6 +175,14 @@ export interface WebVitalsReportOpts {
     reportSoftNavs?: boolean
 }
 
+/**
+ * Options only the attribution build understands, so they are passed to attributed
+ * observers and never to the observers in the default bundle.
+ */
+export interface WebVitalsAttributionReportOpts extends WebVitalsReportOpts {
+    includeProcessedEventEntries?: boolean
+}
+
 export type WebVitalsCallbackFlavor =
     | 'web-vitals'
     | 'web-vitals-with-attribution'

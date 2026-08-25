@@ -4,7 +4,12 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isArray, isBoolean, isNullish, isNumber, isUndefined, isObject, stripUrlHash } from '@posthog/core'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { window, location } from '@posthog/browser-common/utils/globals'
-import { assignableWindow, WebVitalsCallbackFlavor, WebVitalsReportOpts } from '../../utils/globals'
+import {
+    assignableWindow,
+    WebVitalsAttributionReportOpts,
+    WebVitalsCallbackFlavor,
+    WebVitalsReportOpts,
+} from '../../utils/globals'
 import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
 import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
 
@@ -362,6 +367,9 @@ export class WebVitalsAutocapture {
         let onCLS: WebVitalsMetricCallback | undefined
         let onFCP: WebVitalsMetricCallback | undefined
         let onINP: WebVitalsMetricCallback | undefined
+        // only the attribution bundle exposes unattributed observers alongside the attributed
+        // ones, so its presence tells us the attribution-only opts are understood
+        let isAttributionBundle = false
 
         const posthogExtensions = assignableWindow.__PosthogExtensions__
         const callbacksByFlavor = posthogExtensions?.postHogWebVitalsCallbacksByFlavor
@@ -373,6 +381,7 @@ export class WebVitalsAutocapture {
         if (!isUndefined(callbacks)) {
             const withoutAttribution = callbacks.withoutAttribution
             const attributionMetrics = this.attributionMetrics
+            isAttributionBundle = !isUndefined(withoutAttribution)
             onLCP =
                 attributionMetrics.indexOf('LCP') > -1 ? callbacks.onLCP : withoutAttribution?.onLCP || callbacks.onLCP
             onCLS =
@@ -392,6 +401,14 @@ export class WebVitalsAutocapture {
         // route changes don't keep inflating the metric against the original hard navigation.
         const reportOpts: WebVitalsReportOpts = { reportSoftNavs: this.useSoftNavs }
 
+        // `processedEventEntries` is an array of raw event-timing entries the attributed onINP
+        // retains but we never read, so we opt out of populating it. The option only exists in
+        // the attribution build, so keep it off the default bundle's observers.
+        const inpReportOpts: WebVitalsAttributionReportOpts =
+            isAttributionBundle && this.attributionMetrics.indexOf('INP') > -1
+                ? { ...reportOpts, includeProcessedEventEntries: false }
+                : reportOpts
+
         // register performance observers
         if (this.allowedMetrics.indexOf('LCP') > -1) {
             onLCP(this._addToBuffer.bind(this), reportOpts)
@@ -403,7 +420,7 @@ export class WebVitalsAutocapture {
             onFCP(this._addToBuffer.bind(this), reportOpts)
         }
         if (this.allowedMetrics.indexOf('INP') > -1) {
-            onINP(this._addToBuffer.bind(this), reportOpts)
+            onINP(this._addToBuffer.bind(this), inpReportOpts)
         }
 
         this._initialized = true
