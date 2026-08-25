@@ -2,16 +2,7 @@
 
 ...<older entries truncated>
 
- small, but the requested behavior is ambiguous: the report asks for an overall survey max height while the current 256px constraint belongs only to multiple-choice option lists. Choosing a public appearance field, defining whether it accepts CSS lengths or viewport-relative values, and keeping the shared frontend/core schema in sync are product/API decisions. Implementing one interpretation without that decision would be speculative.
-
-## 2026-08-22T16:23:15.160Z
-- Item: issue #3578 — JS SDK: reset() should work across subdomains
-- Conclusion: Already fixed and released in posthog-js 1.418.0.
-- Labels: feature/product-analytics, web, team/client-libraries
-- URL: https://github.com/PostHog/posthog-js/issues/3578
-- Relevant files: `packages/browser/src/storage.ts`, `packages/browser/src/posthog-persistence.ts`, `packages/browser/src/posthog-core.ts`, `packages/browser/src/__tests__/posthog-persistence.test.ts`, `packages/browser/CHANGELOG.md`
-- Findings: `createLocalPlusCookieStore._remove()` removes localStorage only through `window.localStorage.removeItem(name)`, which is necessarily limited to the active origin, while it removes the cookie at the requested cookie domain scope.; The former default localStorage+cookie merge lets localStorage override conflicting cookie values; stale sibling-subdomain storage could therefore restore a pre-reset identity.; `cookieWinsOnConflict` makes cookie values authoritative for conflicts and removes stale identity-bound and event-visible localStorage state when a shared cookie reflects a sibling reset.; Regression tests explicitly cover reopening after a sibling reset and assert that the new anonymous cookie identity wins and stale user, group, flag, alias, and custom persisted values are cleared.; `posthog-js` 1.418.0 changelog entry for PR #4496 states that `cookieWinsOnConflict` addresses stale per-origin localStorage against shared cross-subdomain identity/session state and enables it for `2026-08-29` defaults.
-- Fix assessment: No new PR is appropriate: the minimal safe approach has already been implemented, regression-tested, and released. Attempting to delete sibling-origin localStorage would not be possible with browser storage APIs.
+ has already been implemented, regression-tested, and released. Attempting to delete sibling-origin localStorage would not be possible with browser storage APIs.
 
 ## 2026-08-22T16:23:59.119Z
 - Item: issue #3582 — Feature Request: React Native surveys - respect customization settings
@@ -93,3 +84,13 @@
 - Relevant files: `packages/core/src/types.ts`, `packages/browser-common/src/types/surveys.ts`, `packages/browser/src/posthog-surveys-types.ts`, `packages/browser/src/extensions/surveys/components/BottomSection.tsx`, `packages/browser/src/extensions/surveys/components/QuestionTypes.tsx`, `packages/browser/src/extensions/surveys/surveys-extension-utils.tsx`, `packages/browser/src/extensions/surveys.tsx`, `packages/react-native/src/surveys/components/BottomSection.tsx`
 - Findings: `LinkSurveyQuestion` in both `packages/core/src/types.ts` and `packages/browser-common/src/types/surveys.ts` contains `link?: string | null` but no target field.; `packages/browser/src/posthog-surveys-types.ts` re-exports the browser-common survey types, so the browser renderer receives no typed target configuration.; `LinkQuestion` passes only `question.link` to `BottomSection`.; `BottomSection` calls `window?.open(link)` with no target argument, which uses the browser default new-tab behavior for this call.; The current browser click handler opens the link before calling `onSubmit`; `onSubmit` ultimately records the response through `sendSurveyEvent`, which calls `posthog.capture`.; React Native opens link-question URLs through `Linking.openURL`; the requested `_blank`/`_self` semantics are browser-specific and should not be added to React Native without a separate platform decision.
 - Fix assessment: The SDK renderer change is small, but the requested feature is not SDK-only: the survey backend/schema and editor must define and emit the public field. Same-tab navigation also needs focused regression coverage to ensure the survey response is captured before page navigation.
+
+## 2026-08-25T10:30:37.987Z
+- Item: issue #4637 — Declare React peer dependencies for posthog-js/react
+- Conclusion: Valid packaging bug: the embedded `posthog-js/react` entry point imports React, but `posthog-js` does not declare React as an optional peer dependency.
+- Labels: web, team/client-libraries
+- URL: https://github.com/PostHog/posthog-js/issues/4637
+- Relevant files: `packages/browser/package.json`, `packages/browser/react/package.json`, `packages/react/package.json`, `packages/react/rollup.config.mjs`, `packages/react/src/index.ts`, `packages/react/src/context/PostHogProvider.tsx`, `packages/react/src/components/PostHogCaptureOnViewed.tsx`
+- Findings: `packages/browser/package.json`, the manifest published as `posthog-js`, has no `peerDependencies` or `peerDependenciesMeta` entries for React.; `packages/browser/react/package.json` is the manifest included for the `posthog-js/react` subpath, but it also declares no dependencies or peers.; `packages/react/package.json` for the standalone `@posthog/react` package already declares `react: >=16.8.0` as a peer dependency and marks only `@types/react` optional.; The React source imports React throughout the public integration, and the Rollup configuration keeps `react` external, so the emitted React bundle requires the consumer's installed React package at runtime.; No inspected React integration source imports `react-dom`; adding it as a peer would not be evidence-backed for the reported missing-module failure.; Because Node-style resolution from `posthog-js/react/dist/umd/index.js` climbs to `posthog-js/node_modules`, declaring React as an optional peer on the published parent `posthog-js` package is the relevant installer metadata change for isolated layouts.
+- Fix assessment: The failure is explained by missing package metadata, and the standalone React package provides an existing compatible React peer range. An optional peer preserves the requested behavior for users who do not import the React subpath.
+- PR: https://github.com/PostHog/posthog-js/pull/4638
