@@ -61,6 +61,9 @@ export const defaultPostHogLabelProp = 'ph-label'
 
 const captureAttributePrefix = 'data-ph-capture-attribute-'
 
+// Fail-closed bound on the walk; unrelated to maxElementsCaptured, which caps the emitted payload.
+export const maxAncestorsTraversed = 1000
+
 export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: PostHogAutocaptureOptions = {}): void => {
   const {
     noCaptureProp = 'ph-no-capture',
@@ -77,33 +80,30 @@ export const autocaptureFromTouchEvent = (e: any, posthog: PostHog, options: Pos
   const autocaptureProperties: Record<string, JsonType> = {}
 
   let currentInst: Element | undefined = e._targetInst
+  let ancestorsTraversed = 0
 
-  // Check the full ancestor chain before applying the element capture limit.
   while (currentInst) {
-    if (currentInst.memoizedProps?.[noCaptureProp]) {
+    const props = currentInst.memoizedProps
+
+    if (ancestorsTraversed++ >= maxAncestorsTraversed) {
       return
     }
-    currentInst = currentInst.return
-  }
-
-  currentInst = e._targetInst
-
-  while (
-    currentInst &&
-    // maxComponentTreeSize will always be defined as we have a defaultProps. But ts needs a check so this is here.
-    elements.length < maxElementsCaptured
-  ) {
-    const el: PostHogAutocaptureElement = {
-      tag_name: '',
-    }
-    const elAutocaptureProperties: Record<string, JsonType> = {}
-
-    const props = currentInst.memoizedProps
 
     if (props?.[noCaptureProp]) {
       // Immediately ignore events if a no capture is in the chain
       return
     }
+
+    if (elements.length >= maxElementsCaptured) {
+      // keep walking so a no capture ancestor above the cap is still seen
+      currentInst = currentInst.return
+      continue
+    }
+
+    const el: PostHogAutocaptureElement = {
+      tag_name: '',
+    }
+    const elAutocaptureProperties: Record<string, JsonType> = {}
 
     if (props) {
       // Capture data-ph-capture-attribute props as event properties.
