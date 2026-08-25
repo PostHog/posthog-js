@@ -17,6 +17,37 @@ describe('patch', () => {
     // This module and rrweb's `patch` build the same layer under different markers,
     // and both wrap the same globals (console, fetch), so a restore has to reach past
     // the other library's wrapper.
+    it.each([
+        { first: 'rrweb', second: 'posthog' },
+        { first: 'posthog', second: 'rrweb' },
+    ])('restores cleanly when $first unpatches before $second', ({ first }) => {
+        const calls: string[] = []
+        const base = () => calls.push('base')
+        const target: any = { fn: base }
+
+        const removeRrweb = rrwebPatch(target, 'fn', (next: any) => () => {
+            calls.push('rrweb')
+            return next()
+        })
+        const removePosthog = patch(target, 'fn', (next: any) => () => {
+            calls.push('posthog')
+            return next()
+        })
+
+        const [removeFirst, removeSecond] =
+            first === 'rrweb' ? [removeRrweb, removePosthog] : [removePosthog, removeRrweb]
+
+        removeFirst()
+        calls.length = 0
+        target.fn()
+        expect(calls).toEqual([first === 'rrweb' ? 'posthog' : 'rrweb', 'base'])
+
+        removeSecond()
+        calls.length = 0
+        target.fn()
+        expect(calls).toEqual(['base'])
+    })
+
     it('splices itself out from under an rrweb wrapper', () => {
         const calls: string[] = []
         const base = () => calls.push('base')
