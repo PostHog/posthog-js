@@ -487,10 +487,8 @@ const initializeLogs = (host: PostHog | Client): (() => void) => {
         restoreConsoleMethods.push(
             patch(assignableWindow.console, level, (next: any) => {
                 const wrapped = logWrapper(next)
-                // Expose the original console method the same way rrweb's console plugin
-                // does, so PostHog's internal logger writes to the real console instead of
-                // re-entering this wrapper from inside the capture path. Flatten an
-                // existing marker if another console plugin already wrapped this method.
+                // Lets PostHog's internal logger reach the real console instead of
+                // re-entering this wrapper, and flattens a marker another plugin left.
                 ;(wrapped as any).__rrweb_original__ = originalConsoleMethod(originalConsoleLog)
                 return wrapped
             })

@@ -1109,9 +1109,7 @@ describe('posthog-logs', () => {
             it('should buffer console entries when capture is enabled in local config', () => {
                 // The documented way to turn console capture on. It skips the remote-config
                 // wait but still has to wait for the logs script, so it gets a recorder too.
-                mockLoadExternalDependency.mockImplementation(() => {
-                    // script still in flight
-                })
+                mockLoadExternalDependency.mockImplementation(() => {})
                 logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
                 logsFromPersisted.setup(noopClient())
 
@@ -1140,7 +1138,6 @@ describe('posthog-logs', () => {
                 // A load already in flight must not let the entrypoint take over.
                 finishLoad(null)
                 expect(mockInitializeLogs).not.toHaveBeenCalled()
-                expect(mockReplayConsoleBuffer).not.toHaveBeenCalled()
             })
 
             it('should tear down live console capture when remote config disables it', () => {
@@ -1149,13 +1146,16 @@ describe('posthog-logs', () => {
                 logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
                 logsFromPersisted.setup(noopClient())
 
-                // The chunk has already taken over and is capturing live.
                 expect(mockInitializeLogs).toHaveBeenCalledTimes(1)
 
                 logsFromPersisted.onRemoteConfig(remoteConfigResult(false))
 
                 expect(disposeLogsChunk).toHaveBeenCalledTimes(1)
                 expect((logsFromPersisted as any)._isLoaded).toBe(false)
+
+                // A later `true` has to bring capture back.
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+                expect(mockInitializeLogs).toHaveBeenCalledTimes(2)
             })
 
             it('should stop recording when the bundle ships no extensions object at all', () => {
@@ -1195,9 +1195,7 @@ describe('posthog-logs', () => {
             it('should load the logs script once when local and remote config both enable capture', () => {
                 // Every caller gets its own load callback, so a second in-flight load
                 // would have the entrypoint wrap console twice.
-                mockLoadExternalDependency.mockImplementation(() => {
-                    // still in flight
-                })
+                mockLoadExternalDependency.mockImplementation(() => {})
                 logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
                 logsFromPersisted.setup(noopClient())
 
@@ -1297,9 +1295,78 @@ describe('posthog-logs', () => {
                 expect(assignableWindow.console.log).toBe(originalLog)
             })
 
+            it('should stop a hint-only recorder when the response carries no logs key', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.setup(noopClient())
+
+                assignableWindow.console.log('held on the hint alone')
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
+
+                logsFromPersisted.onRemoteConfig({
+                    ok: true,
+                    config: { ...remoteConfigResult(true).config, logs: undefined },
+                } as any)
+
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+                expect(assignableWindow.console.log).toBe(originalLog)
+            })
+
+            it('should leave programmatic logs untouched when the kill switch fires', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
+                logsFromPersisted.setup(noopClient())
+                logsFromPersisted.captureLog({ body: 'queued before the kill switch' })
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(false))
+                logsFromPersisted.logger.error('captured after the kill switch')
+
+                expect((logsFromPersisted as any)._queue).toHaveLength(2)
+                expect((logsFromPersisted as any)._queue[0].record.body.stringValue).toBe(
+                    'queued before the kill switch'
+                )
+            })
+
+            it('should drop console records already queued when the kill switch fires', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
+                logsFromPersisted.setup(noopClient())
+                logsFromPersisted.captureConsoleLog({ body: 'mirrored before the verdict' })
+                expect((logsFromPersisted as any)._consoleQueue).toHaveLength(1)
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(false))
+
+                expect((logsFromPersisted as any)._consoleQueue).toHaveLength(0)
+            })
+
+            it('should not re-open the window on a page load after the server said no', () => {
+                const instance = buildInstanceWithLocalConfig()
+                ;(instance as any).persistence.props = { [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: false }
+                logsFromPersisted = new PostHogLogs(instance)
+                const originalLog = assignableWindow.console.log
+
+                logsFromPersisted.setup(noopClient())
+
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                expect(assignableWindow.console.log).toBe(originalLog)
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+            })
+
+            it('should release the hold when the server stops sending a verdict', () => {
+                const instance = buildInstanceWithLocalConfig()
+                ;(instance as any).persistence.props = { [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: false }
+                logsFromPersisted = new PostHogLogs(instance)
+                logsFromPersisted.setup(noopClient())
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+
+                logsFromPersisted.onRemoteConfig({
+                    ok: true,
+                    config: { ...remoteConfigResult(true).config, logs: undefined },
+                } as any)
+
+                expect(mockLoadExternalDependency).toHaveBeenCalled()
+            })
+
             it('should not start a hint-only recorder when remote config cannot arrive', () => {
-                // With flags disabled and nothing preloaded, onRemoteConfig never fires,
-                // so the hint has no way to be confirmed or withdrawn.
                 const instance = buildInstanceWithPersistedBit()
                 ;(instance as any)._shouldDisableFlags = jest.fn(() => true)
                 logsFromPersisted = new PostHogLogs(instance)

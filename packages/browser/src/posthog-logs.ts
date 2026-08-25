@@ -208,13 +208,17 @@ export class PostHogLogs implements Extension {
         if (this._instance?.config?.logs?.captureConsoleLogs) {
             this._isLogsEnabled = true
         }
+        // The server's last verdict outranks local config until it speaks again: a
+        // persisted `false` holds capture back rather than re-opening the window on
+        // every page load. A nullish response later releases it.
+        const verdict = this._persistedCaptureVerdict()
+        const heldByServer = verdict === false && this._remoteConfigWillArrive()
         // Both routes to console capture have a window before the logs script can run,
-        // so both get a recorder. They differ in authority: local config is the user's
-        // own opt-in for this page load, while a persisted "enabled" is only a hint
-        // that remote config may since have withdrawn. Neither emits anything here —
-        // the buffer replays or drops once the script loads or remote config settles.
-        // Started before subscribing: a replayed config calls back synchronously.
-        if (this._isLogsEnabled || (this._remoteConfigWillArrive() && this._persistedCaptureHint())) {
+        // so both get a recorder. Local config is the caller's own opt-in for this page
+        // load; a persisted `true` is only a hint remote config may since have withdrawn.
+        // Neither emits anything here. Started before subscribing, because a replayed
+        // config calls back synchronously.
+        if (!heldByServer && (this._isLogsEnabled || (this._remoteConfigWillArrive() && verdict === true))) {
             this._recorderStartedByHintOnly = !this._isLogsEnabled
             this._startConsoleRecorder()
         }
@@ -228,7 +232,7 @@ export class PostHogLogs implements Extension {
             return
         }
         this._remoteConfigSubscription = subscription
-        if (!replayedEnabledConfig) {
+        if (!replayedEnabledConfig && !heldByServer) {
             this.loadIfEnabled()
         }
     }
@@ -266,9 +270,10 @@ export class PostHogLogs implements Extension {
             this._instance.persistence.register({ [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: !!logCapture })
         }
         if (isNullish(logCapture)) {
-            // No opinion from the server, so local config stands — but a recorder started
-            // from the persisted hint has nothing left to confirm it.
+            // No opinion from the server, so local config stands: release any hold from
+            // an older verdict, and stand down a recorder that only the hint started.
             this._stopRecorderStartedByPersistedHint()
+            this.loadIfEnabled()
             return
         }
         if (!logCapture) {
@@ -321,8 +326,10 @@ export class PostHogLogs implements Extension {
         }
     }
 
-    private _persistedCaptureHint(): boolean {
-        return !!this._instance?.persistence?.props?.[LOGS_CAPTURE_ENABLED_SERVER_SIDE]
+    // `undefined` when the server has never given a verdict for this project.
+    private _persistedCaptureVerdict(): boolean | undefined {
+        const persisted = this._instance?.persistence?.props?.[LOGS_CAPTURE_ENABLED_SERVER_SIDE]
+        return isNullish(persisted) ? undefined : !!persisted
     }
 
     // A hint is only worth acting on if something can still confirm or withdraw it.
@@ -347,12 +354,16 @@ export class PostHogLogs implements Extension {
         this._stopConsoleRecorder()
     }
 
+    // Console autocapture only: `captureLog` and `logger` have their own queue and are
+    // not gated by the remote flag.
     private _disableConsoleCapture(): void {
         this._isLogsEnabled = false
         this._stopConsoleRecorder()
         this._consoleLogsDispose?.()
         this._consoleLogsDispose = undefined
         this._isLoaded = false
+        this._consoleQueue = []
+        this._consoleCore?.reset()
     }
 
     private _stopRecorderStartedByPersistedHint(): void {
