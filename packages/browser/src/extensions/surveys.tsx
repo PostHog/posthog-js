@@ -30,6 +30,8 @@ import {
 } from '../utils/survey-utils'
 import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
 import { Properties } from '../types'
+import { FeatureFlagsExtension } from '../extension-tokens'
+import type { PostHogFeatureFlags } from '../posthog-featureflags'
 import { SURVEYS } from '../constants'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
@@ -149,6 +151,11 @@ export class SurveyManager {
         this._posthog = posthog
         // This is used to track the survey that is currently in focus. We only show one survey at a time.
         this._surveyInFocus = null
+    }
+
+    private get _featureFlags(): PostHogFeatureFlags | undefined {
+        // A newly deployed surveys bundle can still be loaded by an older cached core.
+        return this._posthog.getExtension?.(FeatureFlagsExtension) ?? this._posthog.featureFlags
     }
 
     public handlePageUnload = (): void => {
@@ -661,12 +668,13 @@ export class SurveyManager {
         if (!flagKey) {
             return true
         }
-        const isFeatureEnabled = !!this._posthog.featureFlags?.isFeatureEnabled(flagKey, {
+        const featureFlags = this._featureFlags
+        const isFeatureEnabled = !!featureFlags?.isFeatureEnabled(flagKey, {
             send_event: !flagKey.startsWith(SURVEY_TARGETING_FLAG_PREFIX),
         })
         let flagVariantCheck = true
         if (flagVariant) {
-            const flagVariantValue = this._posthog.featureFlags?.getFeatureFlag(flagKey, { send_event: false })
+            const flagVariantValue = featureFlags?.getFeatureFlag(flagKey, { send_event: false })
             flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
         }
         return isFeatureEnabled && flagVariantCheck
@@ -709,7 +717,7 @@ export class SurveyManager {
         if (
             survey.internal_targeting_flag_key &&
             isSurveyIterationBased(survey) &&
-            !this._posthog.featureFlags?.hasLoadedFlags
+            !this._featureFlags?.hasLoadedFlags
         ) {
             return {
                 satisfied: false,

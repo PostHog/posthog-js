@@ -123,7 +123,7 @@ import {
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { BrowserClientAdapter } from './extensions/browser-client'
-import type { Extension as BrowserCommonExtension } from '@posthog/browser-common'
+import type { Extension as BrowserCommonExtension, ExtensionToken } from '@posthog/browser-common'
 import type { BrowserSurveys } from './browser-surveys'
 import type { BrowserAutocapture } from './browser-autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
@@ -1663,6 +1663,22 @@ export class PostHog implements PostHogInterface {
 
     _addCaptureHook(callback: (eventName: string, eventPayload?: CaptureResult) => void): () => void {
         return this.on('eventCaptured', (data) => callback(data.event, data))
+    }
+
+    /**
+     * Returns an installed browser extension by its typed stable name.
+     *
+     * @internal
+     */
+    getExtension<T extends BrowserCommonExtension>(token: ExtensionToken<T>): T | undefined
+    /**
+     * Returns an installed browser extension by its stable name.
+     *
+     * @internal
+     */
+    getExtension<T extends BrowserCommonExtension = BrowserCommonExtension>(name: string): T | undefined
+    getExtension<T extends BrowserCommonExtension = BrowserCommonExtension>(name: string): T | undefined {
+        return this._browserClientAdapter?.getExtension<T>(name)
     }
 
     _getBrowserClientAdapter(): BrowserClientAdapter {
