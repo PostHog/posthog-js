@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.406.0
+
+### Minor Changes
+
+- [#4598](https://github.com/PostHog/posthog-js/pull/4598) [`334159b`](https://github.com/PostHog/posthog-js/commit/334159bfd70cf78412d902b27bf27ae4107ecf91) Thanks [@posthog](https://github.com/apps/posthog)! - Web vitals now capture attribution by default for INP and LCP, so a slow interaction or paint arrives with the target element and phase breakdown that make it diagnosable. CLS stays without attribution by default, because its attribution holds detached DOM nodes and can leak memory in single-page apps. Set `capture_performance.web_vitals_attribution` to `false` to opt out, `true` for every metric, or an array to name the metrics. The captured metric also drops the empty `entries` array and bounds attribution to a small set of useful fields, and the attributed INP observer no longer collects the `processedEventEntries` we never read.
+  (2026-08-25)
+
 ## 1.405.3
 
 ### Patch Changes
