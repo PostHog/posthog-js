@@ -2,11 +2,11 @@ import type { ICrossOriginIframeMirror } from '@posthog/rrweb-types';
 export default class CrossOriginIframeMirror
   implements ICrossOriginIframeMirror
 {
-  private iframeIdToRemoteIdMap: WeakMap<
+  private iframeRemoteIdToLocalIdMap: WeakMap<
     HTMLIFrameElement,
     Map<number, number>
   > = new WeakMap();
-  private iframeRemoteIdToIdMap: WeakMap<
+  private iframeLocalIdToRemoteIdMap: WeakMap<
     HTMLIFrameElement,
     Map<number, number>
   > = new WeakMap();
@@ -16,74 +16,83 @@ export default class CrossOriginIframeMirror
   getId(
     iframe: HTMLIFrameElement,
     remoteId: number,
-    idToRemoteMap?: Map<number, number>,
-    remoteToIdMap?: Map<number, number>,
+    remoteToLocalMap?: Map<number, number>,
+    localToRemoteMap?: Map<number, number>,
   ): number {
-    const idToRemoteIdMap = idToRemoteMap || this.getIdToRemoteIdMap(iframe);
-    const remoteIdToIdMap = remoteToIdMap || this.getRemoteIdToIdMap(iframe);
+    if (remoteId < 0) return remoteId;
 
-    let id = idToRemoteIdMap.get(remoteId);
-    if (!id) {
-      id = this.generateIdFn();
-      idToRemoteIdMap.set(remoteId, id);
-      remoteIdToIdMap.set(id, remoteId);
+    const remoteIdToLocalIdMap =
+      remoteToLocalMap || this.getRemoteIdToLocalIdMap(iframe);
+    const localIdToRemoteIdMap =
+      localToRemoteMap || this.getLocalIdToRemoteIdMap(iframe);
+
+    let localId = remoteIdToLocalIdMap.get(remoteId);
+    if (localId === undefined) {
+      localId = this.generateIdFn();
+      remoteIdToLocalIdMap.set(remoteId, localId);
+      localIdToRemoteIdMap.set(localId, remoteId);
     }
-    return id;
+    return localId;
   }
 
-  getIds(iframe: HTMLIFrameElement, remoteId: number[]): number[] {
-    const idToRemoteIdMap = this.getIdToRemoteIdMap(iframe);
-    const remoteIdToIdMap = this.getRemoteIdToIdMap(iframe);
-    return remoteId.map((id) =>
-      this.getId(iframe, id, idToRemoteIdMap, remoteIdToIdMap),
+  getIds(iframe: HTMLIFrameElement, remoteIds: number[]): number[] {
+    const remoteIdToLocalIdMap = this.getRemoteIdToLocalIdMap(iframe);
+    const localIdToRemoteIdMap = this.getLocalIdToRemoteIdMap(iframe);
+    return remoteIds.map((remoteId) =>
+      this.getId(
+        iframe,
+        remoteId,
+        remoteIdToLocalIdMap,
+        localIdToRemoteIdMap,
+      ),
     );
   }
 
   getRemoteId(
     iframe: HTMLIFrameElement,
-    id: number,
+    localId: number,
     map?: Map<number, number>,
   ): number {
-    const remoteIdToIdMap = map || this.getRemoteIdToIdMap(iframe);
+    if (typeof localId !== 'number') return localId;
+    if (localId < 0) return localId;
 
-    if (typeof id !== 'number') return id;
-
-    const remoteId = remoteIdToIdMap.get(id);
-    if (!remoteId) return -1;
-    return remoteId;
+    const localIdToRemoteIdMap = map || this.getLocalIdToRemoteIdMap(iframe);
+    return localIdToRemoteIdMap.get(localId) ?? -1;
   }
 
-  getRemoteIds(iframe: HTMLIFrameElement, ids: number[]): number[] {
-    const remoteIdToIdMap = this.getRemoteIdToIdMap(iframe);
+  getRemoteIds(iframe: HTMLIFrameElement, localIds: number[]): number[] {
+    const localIdToRemoteIdMap = this.getLocalIdToRemoteIdMap(iframe);
 
-    return ids.map((id) => this.getRemoteId(iframe, id, remoteIdToIdMap));
+    return localIds.map((localId) =>
+      this.getRemoteId(iframe, localId, localIdToRemoteIdMap),
+    );
   }
 
   reset(iframe?: HTMLIFrameElement) {
     if (!iframe) {
-      this.iframeIdToRemoteIdMap = new WeakMap();
-      this.iframeRemoteIdToIdMap = new WeakMap();
+      this.iframeRemoteIdToLocalIdMap = new WeakMap();
+      this.iframeLocalIdToRemoteIdMap = new WeakMap();
       return;
     }
-    this.iframeIdToRemoteIdMap.delete(iframe);
-    this.iframeRemoteIdToIdMap.delete(iframe);
+    this.iframeRemoteIdToLocalIdMap.delete(iframe);
+    this.iframeLocalIdToRemoteIdMap.delete(iframe);
   }
 
-  private getIdToRemoteIdMap(iframe: HTMLIFrameElement) {
-    let idToRemoteIdMap = this.iframeIdToRemoteIdMap.get(iframe);
-    if (!idToRemoteIdMap) {
-      idToRemoteIdMap = new Map();
-      this.iframeIdToRemoteIdMap.set(iframe, idToRemoteIdMap);
+  private getRemoteIdToLocalIdMap(iframe: HTMLIFrameElement) {
+    let remoteIdToLocalIdMap = this.iframeRemoteIdToLocalIdMap.get(iframe);
+    if (!remoteIdToLocalIdMap) {
+      remoteIdToLocalIdMap = new Map();
+      this.iframeRemoteIdToLocalIdMap.set(iframe, remoteIdToLocalIdMap);
     }
-    return idToRemoteIdMap;
+    return remoteIdToLocalIdMap;
   }
 
-  private getRemoteIdToIdMap(iframe: HTMLIFrameElement) {
-    let remoteIdToIdMap = this.iframeRemoteIdToIdMap.get(iframe);
-    if (!remoteIdToIdMap) {
-      remoteIdToIdMap = new Map();
-      this.iframeRemoteIdToIdMap.set(iframe, remoteIdToIdMap);
+  private getLocalIdToRemoteIdMap(iframe: HTMLIFrameElement) {
+    let localIdToRemoteIdMap = this.iframeLocalIdToRemoteIdMap.get(iframe);
+    if (!localIdToRemoteIdMap) {
+      localIdToRemoteIdMap = new Map();
+      this.iframeLocalIdToRemoteIdMap.set(iframe, localIdToRemoteIdMap);
     }
-    return remoteIdToIdMap;
+    return localIdToRemoteIdMap;
   }
 }

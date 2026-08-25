@@ -2029,7 +2029,19 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       })
     }
 
-    const { groups, disableGeoip, flagKeys } = resolvedOptions || {}
+    const { groups, disableGeoip } = resolvedOptions || {}
+    const flagKeys = resolvedOptions?.flagKeys ?? undefined
+
+    if (flagKeys?.length === 0) {
+      return new FeatureFlagEvaluations({
+        host: this._getFeatureFlagEvaluationsHost(),
+        distinctId: resolvedDistinctId,
+        groups,
+        disableGeoip,
+        flags: {},
+      })
+    }
+
     let { onlyEvaluateLocally, personProperties, groupProperties } = resolvedOptions || {}
 
     const adjustedProperties = this.addLocalPersonAndGroupProperties(
