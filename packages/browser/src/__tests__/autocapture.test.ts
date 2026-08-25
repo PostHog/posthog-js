@@ -926,7 +926,7 @@ describe('Autocapture system', () => {
                 }
             })
 
-            it('does not capture paste from sensitive fields or ancestors', async () => {
+            it('captures paste from sensitive fields and ancestors without content', async () => {
                 const pasteBeforeSend = jest.fn().mockImplementation((event) => event)
                 const pastePosthog = await createPosthogInstance(uuidv7(), {
                     autocapture: { capture_copied_text: true },
@@ -946,7 +946,13 @@ describe('Autocapture system', () => {
                     passwordInput.dispatchEvent(new Event('paste', { bubbles: true, cancelable: true }))
                     sensitiveInput.dispatchEvent(new Event('paste', { bubbles: true, cancelable: true }))
 
-                    expect(pasteBeforeSend).not.toHaveBeenCalled()
+                    expect(pasteBeforeSend).toHaveBeenCalledTimes(2)
+                    for (const [captured] of pasteBeforeSend.mock.calls) {
+                        expect(captured.event).toEqual('$copy_autocapture')
+                        expect(captured.properties).toHaveProperty('$copy_type', 'paste')
+                        expect(captured.properties).not.toHaveProperty('$clipboard_text_length')
+                        expect(captured.properties).not.toHaveProperty('$selected_content')
+                    }
                 } finally {
                     container.remove()
                     await pastePosthog.shutdown()

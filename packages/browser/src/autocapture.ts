@@ -159,9 +159,9 @@ export function autocapturePropertiesForElement(
         elementsChainAsString: boolean
         disableCaptureUrlHashes: boolean
     }
-): { props: Properties; explicitNoCapture?: boolean; hasNonCapturableElement?: boolean } {
+): { props: Properties; explicitNoCapture?: boolean } {
     if (!isElementNode(target)) {
-        return { props: {}, hasNonCapturableElement: true }
+        return { props: {} }
     }
 
     const targetElementList: Element[] = [target]
@@ -197,11 +197,9 @@ export function autocapturePropertiesForElement(
     const autocaptureAugmentProperties: Properties = {}
     let href: string | false = false
     let explicitNoCapture = false
-    let hasNonCapturableElement = false
 
     each(targetElementList, (el) => {
         const shouldCaptureEl = shouldCaptureElement(el)
-        hasNonCapturableElement ||= !shouldCaptureEl
 
         // if the element or a parent element is an anchor tag
         // include the href as a property
@@ -236,7 +234,7 @@ export function autocapturePropertiesForElement(
     })
 
     if (explicitNoCapture) {
-        return { props: {}, explicitNoCapture, hasNonCapturableElement }
+        return { props: {}, explicitNoCapture }
     }
 
     if (!maskAllText) {
@@ -270,7 +268,7 @@ export function autocapturePropertiesForElement(
         autocaptureAugmentProperties
     )
 
-    return { props, hasNonCapturableElement }
+    return { props }
 }
 
 export class Autocapture implements Extension {
@@ -510,7 +508,7 @@ export class Autocapture implements Extension {
                 { config: { get_current_url: config.getCurrentUrl } }
             )
         ) {
-            const { props, explicitNoCapture, hasNonCapturableElement } = autocapturePropertiesForElement(target, {
+            const { props, explicitNoCapture } = autocapturePropertiesForElement(target, {
                 e,
                 maskAllElementAttributes: config.maskAllElementAttributes,
                 maskAllText: config.maskAllText,
@@ -531,11 +529,7 @@ export class Autocapture implements Extension {
             if (eventName === COPY_AUTOCAPTURE_EVENT) {
                 const clipType = e.type || 'clipboard'
 
-                if (clipType === 'paste') {
-                    if (hasNonCapturableElement) {
-                        return false
-                    }
-                } else {
+                if (clipType !== 'paste') {
                     const selectedText = window?.getSelection()?.toString()
                     const selectedContent = makeSafeText(selectedText)
                     if (!selectedContent) {
