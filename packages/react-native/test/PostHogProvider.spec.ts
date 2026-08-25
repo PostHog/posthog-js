@@ -55,6 +55,67 @@ describe('PostHogProvider web click capture', () => {
     expect(client.autocapture.mock.calls[0][0]).toEqual('click')
   })
 
+  it('should enqueue exactly one event when two providers share a client', () => {
+    const client = createClient()
+    Platform.OS = 'web'
+    render(
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(
+          PostHogProvider,
+          { client, autocapture: { captureTouches: true, captureScreens: false } },
+          React.createElement('button', { type: 'button' }, 'press me')
+        ),
+        React.createElement(
+          PostHogProvider,
+          { client, autocapture: { captureTouches: true, captureScreens: false } },
+          React.createElement('span', null, 'sibling')
+        )
+      )
+    )
+    ;(document.querySelector('button') as HTMLButtonElement).click()
+
+    expect(client.autocapture).toHaveBeenCalledTimes(1)
+  })
+
+  it('should detach the shared listener only when the last provider unmounts', () => {
+    const removeEventListener = jest.spyOn(document, 'removeEventListener')
+    const client = createClient()
+    Platform.OS = 'web'
+    const { rerender, unmount } = render(
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(PostHogProvider, {
+          client,
+          autocapture: { captureTouches: true, captureScreens: false },
+        }),
+        React.createElement(PostHogProvider, {
+          client,
+          autocapture: { captureTouches: true, captureScreens: false },
+        })
+      )
+    )
+
+    const before = removeEventListener.mock.calls.filter((c) => c[0] === 'click').length
+    rerender(
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(PostHogProvider, {
+          client,
+          autocapture: { captureTouches: true, captureScreens: false },
+        })
+      )
+    )
+    expect(removeEventListener.mock.calls.filter((c) => c[0] === 'click').length).toBe(before)
+
+    unmount()
+    expect(removeEventListener.mock.calls.filter((c) => c[0] === 'click').length).toBe(before + 1)
+    removeEventListener.mockRestore()
+  })
+
   it('should listen in the capture phase, since RNW Pressable stops propagation', () => {
     const addEventListener = jest.spyOn(document, 'addEventListener')
 

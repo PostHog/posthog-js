@@ -44,6 +44,11 @@ export interface PostHogProviderProps {
   style?: StyleProp<ViewStyle>
 }
 
+// One document click listener per client, however many providers mount it. Two sibling
+// providers must not enqueue two $autocapture events for a single interaction
+// (sdk-specs autocapture: "exactly one event ... should be enqueued for that interaction").
+const webClickListeners = new WeakMap<PostHog, { count: number; remove: () => void }>()
+
 function PostHogNavigationHook({
   options,
   client,
@@ -176,8 +181,10 @@ export const PostHogProvider = ({
 
   // Browsers fire touchend only for touch input, so a mouse never reaches onTouchEndCapture.
   // On web listen for click on the document in the CAPTURE phase, matching the browser SDK:
-  // RNW's Pressable calls stopPropagation so a bubble-phase handler never sees presses on a
-  // button, and RNW's Modal portals its content to document.body, outside this provider's subtree.
+  // react-native-web forwards `onClick` but not `onClickCapture`, and RNW's Pressable calls
+  // stopPropagation, so a bubble-phase React handler never sees presses on a button.
+  // The trade-off is that this is document-wide rather than scoped to the provider's subtree,
+  // so clicks outside it are captured too.
   // Read through a ref so an inline `autocapture` object prop doesn't re-attach on every render.
   const optionsRef = useRef(autocaptureOptions)
   useEffect(() => {
@@ -190,11 +197,35 @@ export const PostHogProvider = ({
     if (!isWeb() || !captureTouches || !doc?.addEventListener) {
       return
     }
-    const handler = (e: any): void => {
-      autocaptureFromTouchEvent({ target: e.target, nativeEvent: e }, posthog, optionsRef.current, 'click')
+
+    const existing = webClickListeners.get(posthog)
+    if (existing) {
+      existing.count += 1
+    } else {
+      // Options come from whichever provider installed the listener; sibling providers on one
+      // client are expected to be configured alike.
+      const optionsForClient = optionsRef
+      const handler = (e: any): void => {
+        autocaptureFromTouchEvent({ target: e.target, nativeEvent: e }, posthog, optionsForClient.current, 'click')
+      }
+      doc.addEventListener('click', handler, true)
+      webClickListeners.set(posthog, {
+        count: 1,
+        remove: () => doc.removeEventListener('click', handler, true),
+      })
     }
-    doc.addEventListener('click', handler, true)
-    return () => doc.removeEventListener('click', handler, true)
+
+    return () => {
+      const entry = webClickListeners.get(posthog)
+      if (!entry) {
+        return
+      }
+      entry.count -= 1
+      if (entry.count === 0) {
+        entry.remove()
+        webClickListeners.delete(posthog)
+      }
+    }
   }, [captureTouches, posthog])
 
   const captureProps = isWeb()
