@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/4637": {
+    "key": "PostHog/posthog-js/issue/4637",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4637",
+    "url": "https://github.com/PostHog/posthog-js/issues/4637",
+    "conclusion": "Valid packaging bug: the embedded `posthog-js/react` entry point imports React, but `posthog-js` does not declare React as an optional peer dependency.",
+    "labels": [
+      "web",
+      "team/client-libraries"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/4638",
+    "closed": false,
+    "updatedAt": "2026-08-25T10:30:34.814Z"
+  },
   "PostHog/posthog-js/issue/3981": {
     "key": "PostHog/posthog-js/issue/3981",
     "repo": "PostHog/posthog-js",
