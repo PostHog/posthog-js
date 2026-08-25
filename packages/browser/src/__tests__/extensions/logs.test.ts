@@ -166,7 +166,7 @@ describe('logs entrypoint', () => {
             expect(mockEmit).not.toHaveBeenCalled()
         })
 
-        it.each(['1.391.3', '1.410.5-canary', '1.410.11', '1.418.10-invalid', '1.418.11', '1.419.0'])(
+        it.each(['1.391.3', '1.410.5-canary', '1.410.11', '1.418.10-invalid', '1.418.18', '1.419.3', '1.420.0'])(
             'should not select a capture method for unsupported PostHog version %s',
             (version) => {
                 const captures = {
@@ -176,6 +176,8 @@ describe('logs entrypoint', () => {
                     de: jest.fn(),
                     he: jest.fn(),
                     ui: jest.fn(),
+                    ci: jest.fn(),
+                    vi: jest.fn(),
                 }
                 const legacyPostHog = {
                     ...mockPostHog,
@@ -632,6 +634,12 @@ describe('logs entrypoint', () => {
             ['1.418.3', 'he'],
             ['1.418.4', 'ui'],
             ['1.418.10', 'ui'],
+            ['1.418.11', 'ci'],
+            ['1.418.14', 'ci'],
+            ['1.418.15', 'vi'],
+            ['1.418.17', 'vi'],
+            ['1.419.0', 'vi'],
+            ['1.419.2', 'vi'],
         ] as const)('should route PostHog %s through the historical %s console method', (version, expectedName) => {
             const captureLog = jest.fn()
             const currentConsoleCapture = jest.fn()
@@ -640,6 +648,8 @@ describe('logs entrypoint', () => {
                 de: jest.fn(),
                 he: jest.fn(),
                 ui: jest.fn(),
+                ci: jest.fn(),
+                vi: jest.fn(),
             }
             mockPostHog.version = version
             mockPostHog.logs = {

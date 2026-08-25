@@ -18,6 +18,12 @@ const historicalCaptureMethod = (version: string): string | undefined => {
     if (minor === 418 && patch <= 10) {
         return 'ui'
     }
+    if (minor === 418 && patch <= 14) {
+        return 'ci'
+    }
+    if ((minor === 418 && patch <= 17) || (minor === 419 && patch <= 2)) {
+        return 'vi'
+    }
     return undefined
 }
 
@@ -48,7 +54,7 @@ test('current logs bundle captures through its host array bundle', async ({ page
         const usesClientHost = typeof logs.setup === 'function'
         const calls: Array<{ method: string; args: any[] }> = []
 
-        for (const method of ['le', 'de', 'he', 'ui', 'captureConsoleLog']) {
+        for (const method of ['le', 'de', 'he', 'ui', 'ci', 'vi', 'captureConsoleLog']) {
             const original = logs[method]
             if (typeof original === 'function') {
                 logs[method] = (...args: any[]) => {

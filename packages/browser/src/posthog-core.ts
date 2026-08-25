@@ -977,7 +977,9 @@ export class PostHog implements PostHogInterface {
                     void this._getBrowserClientAdapter()
                         .add(extension)
                         .catch(() => extension.dispose?.())
-                        .catch(__NOOP)
+                        .catch((error) => {
+                            logger.error(`Failed to dispose browser extension "${extension.name}"`, error)
+                        })
             )
         } else {
             this._extensions.push(extension)

@@ -13,6 +13,7 @@ import { SessionRecording } from '../extensions/replay/session-recording'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { assignableWindow } from '../utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
 
 describe('__extensionClasses enrollment', () => {
     let savedDefaults: PostHogConfig['__extensionClasses']
@@ -261,6 +262,25 @@ describe('__extensionClasses enrollment', () => {
         expect(constructorArgument).toBe(posthog)
         expect(setup).toHaveBeenCalledTimes(1)
         expect(initialize).not.toHaveBeenCalled()
+    })
+
+    it('logs cleanup errors when shared extension enrollment fails', async () => {
+        const posthog = new PostHog()
+        const disposeError = new Error('dispose failed')
+        const dispose = jest.fn(() => {
+            throw disposeError
+        })
+        const loggerError = jest.spyOn(logger, 'error').mockImplementation()
+        jest.spyOn(posthog._getBrowserClientAdapter(), 'add').mockRejectedValue(new Error('enrollment failed'))
+        const initTasks: Array<() => void> = []
+
+        posthog['_enrollExtension']({ name: 'logs', setup: jest.fn(), dispose } as any, initTasks)
+        initTasks[0]?.()
+        await Promise.resolve()
+        await Promise.resolve()
+
+        expect(dispose).toHaveBeenCalledTimes(1)
+        expect(loggerError).toHaveBeenCalledWith('Failed to dispose browser extension "logs"', disposeError)
     })
 
     it('bundles logs through the shared lifecycle', () => {

@@ -362,13 +362,13 @@ const getCapturingLogs = (host: PostHog | Client) => {
     return host.is_capturing() ? host.logs : undefined
 }
 
-type HistoricalCaptureConsoleLogName = 'le' | 'de' | 'he' | 'ui'
+type HistoricalCaptureConsoleLogName = 'le' | 'de' | 'he' | 'ui' | 'ci' | 'vi'
 type HistoricalLogs = Partial<Record<HistoricalCaptureConsoleLogName, (options: CaptureLogOptions) => void>>
 
 // Compatibility for a bug where `_captureConsoleLog` was inadvertently used across
-// independently built bundles and received different mangled names. Published cores
-// used `le` through 1.410.4, `de` through 1.410.10, `he` through 1.418.3, and `ui`
-// through 1.418.10.
+// independently built bundles and received different mangled names. Pre-stable-ABI
+// cores used `le` through 1.410.4, `de` through 1.410.10, `he` through 1.418.3, `ui`
+// through 1.418.10, `ci` through 1.418.14, and `vi` through 1.419.2.
 const historicalCaptureConsoleLogName = (version: string): HistoricalCaptureConsoleLogName | undefined => {
     const match = /^1\.(\d+)\.(\d+)$/.exec(version)
     if (!match) {
@@ -377,14 +377,17 @@ const historicalCaptureConsoleLogName = (version: string): HistoricalCaptureCons
 
     const minor = Number(match[1])
     const patch = Number(match[2])
-    if (minor < 392 || minor > 418) {
+    if (minor < 392 || minor > 419) {
         return undefined
     }
     if (minor === 410) {
         return patch <= 4 ? 'le' : patch <= 10 ? 'de' : undefined
     }
     if (minor === 418) {
-        return patch <= 3 ? 'he' : patch <= 10 ? 'ui' : undefined
+        return patch <= 3 ? 'he' : patch <= 10 ? 'ui' : patch <= 14 ? 'ci' : patch <= 17 ? 'vi' : undefined
+    }
+    if (minor === 419) {
+        return patch <= 2 ? 'vi' : undefined
     }
     return minor < 410 ? 'le' : 'he'
 }
@@ -399,8 +402,8 @@ const captureConsoleLogForHost = (
         return
     }
 
-    // `_captureConsoleLog` had four generated names across published core-backed
-    // releases. Select by the stable SDK version instead of probing generated names,
+    // `_captureConsoleLog` had six generated names across core-backed releases.
+    // Select by the stable SDK version instead of probing generated names,
     // because the same name can identify a different method in another release.
     // Keep this historical ABI isolated here. A `captureLog` fallback would change the
     // service name, scope, queue, and rate limits.
