@@ -141,6 +141,16 @@ describe('matchProperty — starts_with / ends_with', () => {
   )
 })
 
+describe('matchProperty — SemVer compatibility policy', () => {
+  test('preserves legacy leading-zero SemVer matching', () => {
+    expect(matchProperty(prop('semver_eq', '01.02.03'), { k: '1.2.3' })).toBe(true)
+  })
+
+  test('preserves legacy parseInt-compatible wildcard matching', () => {
+    expect(matchProperty(prop('semver_wildcard', '1x.*'), { k: '1.8.0' })).toBe(true)
+  })
+})
+
 describe('matchProperty — error cases', () => {
   test('throws InconclusiveMatchError when key is absent for non-is_not_set operators', () => {
     expect(() => matchProperty(prop('exact', 'x'), {})).toThrow(InconclusiveMatchError)
