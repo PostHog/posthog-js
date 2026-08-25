@@ -44,10 +44,10 @@ export interface PostHogProviderProps {
   style?: StyleProp<ViewStyle>
 }
 
-// One document click listener per client, however many providers mount it. Two sibling
-// providers must not enqueue two $autocapture events for a single interaction
-// (sdk-specs autocapture: "exactly one event ... should be enqueued for that interaction").
-const webClickListeners = new WeakMap<PostHog, { count: number; remove: () => void }>()
+// One document click listener per client, shared across sibling providers, so one interaction
+// enqueues exactly one $autocapture event (sdk-specs autocapture). `owners` holds every mounted
+// provider's host node: it scopes the shared listener, and its size doubles as the refcount.
+const webClickListeners = new WeakMap<PostHog, { owners: Set<unknown>; remove: () => void }>()
 
 function PostHogNavigationHook({
   options,
@@ -180,12 +180,11 @@ export const PostHogProvider = ({
   )
 
   // Browsers fire touchend only for touch input, so a mouse never reaches onTouchEndCapture.
-  // On web listen for click on the document in the CAPTURE phase, matching the browser SDK:
-  // react-native-web forwards `onClick` but not `onClickCapture`, and RNW's Pressable calls
-  // stopPropagation, so a bubble-phase React handler never sees presses on a button.
-  // The trade-off is that this is document-wide rather than scoped to the provider's subtree,
-  // so clicks outside it are captured too.
-  // Read through a ref so an inline `autocapture` object prop doesn't re-attach on every render.
+  // Listen on the document in the CAPTURE phase: RNW forwards `onClick` but not `onClickCapture`,
+  // and its Pressable stops propagation before any bubble-phase handler runs. Document-wide so it
+  // still sees Modal; subtree scoping happens in autocapture.tsx. Read options through a ref so an
+  // inline `autocapture` prop doesn't re-attach every render.
+  const hostRef = useRef<unknown>(null)
   const optionsRef = useRef(autocaptureOptions)
   useEffect(() => {
     optionsRef.current = autocaptureOptions
@@ -198,19 +197,27 @@ export const PostHogProvider = ({
       return
     }
 
+    const ownerNode = hostRef.current
     const existing = webClickListeners.get(posthog)
     if (existing) {
-      existing.count += 1
+      existing.owners.add(ownerNode)
     } else {
       // Options come from whichever provider installed the listener; sibling providers on one
       // client are expected to be configured alike.
       const optionsForClient = optionsRef
+      const owners = new Set<unknown>([ownerNode])
       const handler = (e: any): void => {
-        autocaptureFromTouchEvent({ target: e.target, nativeEvent: e }, posthog, optionsForClient.current, 'click')
+        autocaptureFromTouchEvent(
+          { target: e.target, nativeEvent: e },
+          posthog,
+          optionsForClient.current,
+          'click',
+          owners
+        )
       }
       doc.addEventListener('click', handler, true)
       webClickListeners.set(posthog, {
-        count: 1,
+        owners,
         remove: () => doc.removeEventListener('click', handler, true),
       })
     }
@@ -220,8 +227,8 @@ export const PostHogProvider = ({
       if (!entry) {
         return
       }
-      entry.count -= 1
-      if (entry.count === 0) {
+      entry.owners.delete(ownerNode)
+      if (entry.owners.size === 0) {
         entry.remove()
         webClickListeners.delete(posthog)
       }
@@ -234,6 +241,7 @@ export const PostHogProvider = ({
 
   return (
     <View
+      ref={hostRef as any}
       {...{ [phLabelProp]: 'PostHogProvider' }} // Dynamically setting customLabelProp (default: ph-label)
       style={style || { flex: 1 }}
       {...captureProps}

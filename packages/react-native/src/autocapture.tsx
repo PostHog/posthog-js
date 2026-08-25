@@ -9,6 +9,8 @@ interface Element {
   }
   memoizedProps?: Record<string, unknown>
   return?: Element
+  // Host fibers carry their DOM node here; used to scope web capture to a provider's subtree.
+  stateNode?: unknown
 }
 
 const isAnimatedValue = (value: any): boolean => {
@@ -90,6 +92,21 @@ const getFallbackTargetInstance = (e: any): Element | undefined => {
   return undefined
 }
 
+// Walks the fiber tree, not the DOM: RNW's Modal portals to document.body, so the DOM parent
+// chain leaves the subtree but fiber `.return` does not. Kept separate from the element walk
+// below, which stops at maxElementsCaptured and would falsely reject a deep target.
+const isOwnedBy = (inst: Element | undefined, ownerNodes: ReadonlySet<unknown>): boolean => {
+  let current = inst
+  for (let depth = 0; current && depth < maxFallbackAncestors; depth++) {
+    if (current.stateNode && ownerNodes.has(current.stateNode)) {
+      return true
+    }
+    current = current.return
+  }
+
+  return false
+}
+
 // Autocapture must never break the host app: a throw would escape into RN's touch dispatch on
 // native, or the DOM click handler on web. Matches the browser SDK, which guards its equivalent
 // document-level handler (packages/browser/src/autocapture.ts).
@@ -97,10 +114,11 @@ export const autocaptureFromTouchEvent = (
   e: any,
   posthog: PostHog,
   options: PostHogAutocaptureOptions = {},
-  eventType: 'touch' | 'click' = 'touch'
+  eventType: 'touch' | 'click' = 'touch',
+  ownerNodes?: ReadonlySet<unknown>
 ): void => {
   try {
-    captureFromEvent(e, posthog, options, eventType)
+    captureFromEvent(e, posthog, options, eventType, ownerNodes)
   } catch (error) {
     if (!warnedCaptureFailure) {
       warnedCaptureFailure = true
@@ -113,7 +131,8 @@ const captureFromEvent = (
   e: any,
   posthog: PostHog,
   options: PostHogAutocaptureOptions,
-  eventType: 'touch' | 'click'
+  eventType: 'touch' | 'click',
+  ownerNodes?: ReadonlySet<unknown>
 ): void => {
   const {
     noCaptureProp = 'ph-no-capture',
@@ -126,6 +145,9 @@ const captureFromEvent = (
   const nativeInst = e._targetInst
   const targetInst: Element | undefined = nativeInst || getFallbackTargetInstance(e)
   if (!targetInst) {
+    return
+  }
+  if (ownerNodes && !isOwnedBy(targetInst, ownerNodes)) {
     return
   }
   const elements: PostHogAutocaptureElement[] = []

@@ -23,6 +23,10 @@ const CaptureClient = ({ onClient }: { onClient: (client: PostHog) => void }) =>
 
 const createClient = (): any => ({ debug: jest.fn(), autocapture: jest.fn() })
 
+// Named so the element walk finds a label for it; a bare <button> yields no label at all,
+// which would make the outside-the-provider assertion pass for the wrong reason.
+const OutsideAppComponent = (): any => React.createElement('button', { type: 'button' }, 'outside')
+
 const renderOnWeb = (
   client: any,
   children: React.ReactNode = React.createElement('button', { type: 'button' }, 'press me')
@@ -33,6 +37,27 @@ const renderOnWeb = (
       PostHogProvider,
       { client, autocapture: { captureTouches: true, captureScreens: false } },
       children
+    )
+  )
+}
+
+const autocaptureProps = { captureTouches: true, captureScreens: false }
+
+// Two providers side by side; pass the same client twice to exercise the shared listener,
+// or two clients to exercise per-client scoping.
+const renderTwoProvidersOnWeb = (
+  clientA: any,
+  clientB: any,
+  childrenA: React.ReactNode = null,
+  childrenB: React.ReactNode = null
+): ReturnType<typeof render> => {
+  Platform.OS = 'web'
+  return render(
+    React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(PostHogProvider, { client: clientA, autocapture: autocaptureProps }, childrenA),
+      React.createElement(PostHogProvider, { client: clientB, autocapture: autocaptureProps }, childrenB)
     )
   )
 }
@@ -55,7 +80,7 @@ describe('PostHogProvider web click capture', () => {
     expect(client.autocapture.mock.calls[0][0]).toEqual('click')
   })
 
-  it('should enqueue exactly one event when two providers share a client', () => {
+  it('should not capture a click outside the provider', () => {
     const client = createClient()
     Platform.OS = 'web'
     render(
@@ -65,14 +90,43 @@ describe('PostHogProvider web click capture', () => {
         React.createElement(
           PostHogProvider,
           { client, autocapture: { captureTouches: true, captureScreens: false } },
-          React.createElement('button', { type: 'button' }, 'press me')
+          React.createElement('button', { type: 'button' }, 'inside')
         ),
-        React.createElement(
-          PostHogProvider,
-          { client, autocapture: { captureTouches: true, captureScreens: false } },
-          React.createElement('span', null, 'sibling')
-        )
+        React.createElement(OutsideAppComponent, null)
       )
+    )
+
+    const buttons = Array.from(document.querySelectorAll('button'))
+    ;(buttons.find((b) => b.textContent === 'outside') as HTMLButtonElement).click()
+    expect(client.autocapture).not.toHaveBeenCalled()
+    ;(buttons.find((b) => b.textContent === 'inside') as HTMLButtonElement).click()
+    expect(client.autocapture).toHaveBeenCalledTimes(1)
+  })
+
+  it('should route a click to the owning client when two clients are mounted', () => {
+    const clientA = createClient()
+    const clientB = createClient()
+    renderTwoProvidersOnWeb(
+      clientA,
+      clientB,
+      React.createElement('button', { type: 'button' }, 'in-a'),
+      React.createElement('button', { type: 'button' }, 'in-b')
+    )
+
+    const buttons = Array.from(document.querySelectorAll('button'))
+    ;(buttons.find((b) => b.textContent === 'in-b') as HTMLButtonElement).click()
+
+    expect(clientB.autocapture).toHaveBeenCalledTimes(1)
+    expect(clientA.autocapture).not.toHaveBeenCalled()
+  })
+
+  it('should enqueue exactly one event when two providers share a client', () => {
+    const client = createClient()
+    renderTwoProvidersOnWeb(
+      client,
+      client,
+      React.createElement('button', { type: 'button' }, 'press me'),
+      React.createElement('span', null, 'sibling')
     )
     ;(document.querySelector('button') as HTMLButtonElement).click()
 
@@ -82,31 +136,14 @@ describe('PostHogProvider web click capture', () => {
   it('should detach the shared listener only when the last provider unmounts', () => {
     const removeEventListener = jest.spyOn(document, 'removeEventListener')
     const client = createClient()
-    Platform.OS = 'web'
-    const { rerender, unmount } = render(
-      React.createElement(
-        React.Fragment,
-        null,
-        React.createElement(PostHogProvider, {
-          client,
-          autocapture: { captureTouches: true, captureScreens: false },
-        }),
-        React.createElement(PostHogProvider, {
-          client,
-          autocapture: { captureTouches: true, captureScreens: false },
-        })
-      )
-    )
+    const { rerender, unmount } = renderTwoProvidersOnWeb(client, client)
 
     const before = removeEventListener.mock.calls.filter((c) => c[0] === 'click').length
     rerender(
       React.createElement(
         React.Fragment,
         null,
-        React.createElement(PostHogProvider, {
-          client,
-          autocapture: { captureTouches: true, captureScreens: false },
-        })
+        React.createElement(PostHogProvider, { client, autocapture: autocaptureProps })
       )
     )
     expect(removeEventListener.mock.calls.filter((c) => c[0] === 'click').length).toBe(before)
