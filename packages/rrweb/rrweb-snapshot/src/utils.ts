@@ -38,6 +38,26 @@ export function isShadowRoot(n: Node): n is ShadowRoot {
 }
 
 /**
+ * Attach an open shadow root to a rebuilt element and report whether it worked.
+ * Two different things can refuse. A real element is only accepted when its tag
+ * is a valid shadow host name per the DOM spec, so a rebuilt host can be refused
+ * where the recorded one was not, and `attachShadow` raises a `NotSupportedError`
+ * that the full-snapshot rebuild does not catch, ending playback. Under the
+ * virtual DOM the element is an `RRElement`, and `RRMediaElement` refuses every
+ * time. Callers use the return value to skip that one subtree instead.
+ */
+export function attachShadowRootSafely(el: {
+  attachShadow(init: ShadowRootInit): unknown;
+}): boolean {
+  try {
+    el.attachShadow({ mode: 'open' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * To fix the issue https://github.com/rrweb-io/rrweb/issues/933.
  * Some websites use polyfilled shadow dom and this function is used to detect this situation.
  */
