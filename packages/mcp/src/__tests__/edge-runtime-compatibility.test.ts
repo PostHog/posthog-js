@@ -342,7 +342,8 @@ describe('Error Handling Robustness', () => {
     const captured = captureException(current)
 
     expect(captured.$exception_list[0].value).toBe('Level 19')
-    // Core caps the cause chain, so the list stays bounded.
-    expect(captured.$exception_list.length).toBeLessThanOrEqual(10)
+    // This chain is below core's 50-entry safety bound, so no runtime errors are lost.
+    expect(captured.$exception_list).toHaveLength(21)
+    expect(captured.$exception_list[20].value).toBe('Root')
   })
 })

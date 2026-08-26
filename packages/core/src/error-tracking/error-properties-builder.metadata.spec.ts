@@ -79,4 +79,23 @@ describe('exception event metadata', () => {
       $exception_fingerprint: 'user-fingerprint',
     })
   })
+
+  it('caps deeply nested cause chains at 50 linked exceptions', () => {
+    let current = new Error('root')
+    for (let index = 0; index < 60; index++) {
+      current = new Error(`level ${index}`, { cause: current })
+    }
+
+    const exceptions = builder.buildFromUnknown(current).$exception_list
+
+    expect(exceptions).toHaveLength(50)
+    expect(exceptions[0].value).toBe('level 59')
+    expect(exceptions[49].value).toBe('level 10')
+    expect(exceptions.map((exception) => exception.mechanism.exception_id)).toEqual(
+      Array.from({ length: 50 }, (_, index) => index)
+    )
+    expect(exceptions.slice(1).map((exception) => exception.mechanism.parent_id)).toEqual(
+      Array.from({ length: 49 }, (_, index) => index)
+    )
+  })
 })
