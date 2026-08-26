@@ -89,8 +89,7 @@ export class PostHogLogs {
   }
 
   /**
-   * Captures one log record: runs `beforeSend`, applies the rate cap, builds the
-   * OTLP record and enqueues it.
+   * Captures one log record.
    *
    * @param capturedAt State snapshotted when the event occurred, for a caller that
    * observes an event earlier than it can build the record. Defaults to the identity,

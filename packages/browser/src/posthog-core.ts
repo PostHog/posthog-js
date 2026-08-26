@@ -4262,10 +4262,8 @@ export class PostHog implements PostHogInterface {
     private _sync_opt_out_with_persistence(): boolean {
         const persistenceDisabled = this._is_persistence_disabled()
 
-        // Every route that turns capturing off funnels through here — `opt_out_capturing`,
-        // `set_config({ opt_out_capturing_by_default })` and `clear_opt_in_out_capturing`
-        // — so release the console arguments the logs recorder is holding at that moment
-        // rather than at the next console write.
+        // Release what console capture is holding as soon as capturing is off, rather
+        // than at the next console write.
         if (!this.is_capturing()) {
             this.logs?._onOptOut()
         }

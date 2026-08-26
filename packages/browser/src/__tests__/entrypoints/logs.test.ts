@@ -875,7 +875,6 @@ describe('logs entrypoint', () => {
 
             dispose()
 
-            // Our wrapper is out of the chain; the outer one now calls the real console.
             expect(outerLayer.next).toBe(realLog)
             realLog.mockClear()
             assignableWindow.console.log('after teardown')
@@ -962,7 +961,7 @@ describe('logs entrypoint', () => {
         })
 
         it.each(['debug', 'log', 'warn', 'error', 'info'] as const)(
-            'replays a buffered console.%s at its own level',
+            'maps a buffered console.%s to its log severity',
             (level) => {
                 logs.setup(noopClient())
                 ;(assignableWindow.console[level] as any)('early')

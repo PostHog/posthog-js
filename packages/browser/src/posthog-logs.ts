@@ -67,7 +67,6 @@ const isHandledLogsRequestError = (error: unknown): error is HandledLogsRequestE
 export class PostHogLogs implements Extension {
     readonly name = LogsExtension
     private _isLogsEnabled: boolean = false
-    // One-way: the chunk cannot be unloaded once it has taken over.
     private _isLoaded: boolean = false
     private _isLoading: boolean = false
     private readonly _logger = createLogger('[logs]')
@@ -118,7 +117,7 @@ export class PostHogLogs implements Extension {
     // session, persistence and feature flags; anything on that path that writes
     // through the global `console` would re-enter the recorder while the outer entry
     // is still being built. `logger._log` escapes via `__rrweb_original__`;
-    // `logger.critical` does not.
+    // `logger.critical` writes straight to the global `console`.
     private _isRecordingConsoleEntry = false
     private _recorderStartedByHintOnly = false
 
@@ -203,9 +202,7 @@ export class PostHogLogs implements Extension {
         }
         this._client = client
         // Non-slim bundles build this extension in the `PostHog` constructor, while
-        // `config` is still the defaults, so the opt-in is re-read here. The
-        // constructor's own read still covers the slim bundle, where `_initExtensions`
-        // builds it after `set_config`.
+        // `config` is still the defaults, so the opt-in is re-read here.
         if (this._instance?.config?.logs?.captureConsoleLogs) {
             this._isLogsEnabled = true
         }
@@ -329,20 +326,22 @@ export class PostHogLogs implements Extension {
         if (!this._instance?._shouldDisableFlags?.()) {
             return true
         }
-        return !!assignableWindow._POSTHOG_REMOTE_CONFIG?.[this._instance.config.token]
+        return !!assignableWindow._POSTHOG_REMOTE_CONFIG?.[this._instance.config.token]?.config
     }
 
     /**
-     * Drops the console buffer and unpatches `console`. Called whenever capturing is
-     * turned off, so the arguments already held are released at that moment rather than
-     * whenever the page next writes to the console.
+     * Releases everything console capture is holding when capturing is turned off: the
+     * pre-load buffer, the `console` patches, and console records already queued — at
+     * that moment rather than whenever the page next writes to the console.
      *
      * @internal
      */
     _onOptOut(): void {
         this._stopConsoleRecorder()
-        // Console records already mirrored before the opt-out go too. `captureLog` and
-        // `logger` keep their own queue: core re-checks `optedOut` when it enqueues.
+        // Console autocapture is passive mirroring the app never asked for, so records
+        // already queued go too. `captureLog`/`logger` records were captured explicitly
+        // while consent stood, so `_queue` is left alone and a flush already armed will
+        // still send them — the same as events queued before an opt-out.
         this._consoleQueue = []
         this._consoleCore?.reset()
     }
@@ -414,17 +413,14 @@ export class PostHogLogs implements Extension {
         }
         this._isRecordingConsoleEntry = true
         try {
-            // Snapshot here, not at replay: `identify`, a session roll, an SPA
-            // navigation and the flags response all land in the window this buffer
-            // exists to cover.
             this._consoleBuffer.push({ level, args, occurredAtMs: Date.now(), context: this._getSdkContext() })
         } finally {
             this._isRecordingConsoleEntry = false
         }
     }
 
-    // Stops recording and discards anything buffered. Every terminal path except a
-    // successful handover ends here, so the live argument references are released.
+    // Stops recording and drops anything buffered, releasing the live argument
+    // references. `_takeConsoleBuffer` takes the buffer before calling this.
     private _stopConsoleRecorder(): void {
         this._consoleBuffer = []
         if (!this._isRecordingConsole) {
@@ -441,7 +437,6 @@ export class PostHogLogs implements Extension {
         this._consoleRecorderUnpatchers = []
     }
 
-    // Stops recording and hands the buffer over instead of dropping it.
     private _takeConsoleBuffer(): BufferedConsoleEntry[] {
         const buffered = this._consoleBuffer
         this._stopConsoleRecorder()

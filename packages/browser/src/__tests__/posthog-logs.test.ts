@@ -1214,11 +1214,15 @@ describe('posthog-logs', () => {
                 logsFromPersisted.captureLog({ body: 'programmatic' })
                 logsFromPersisted.captureConsoleLog({ body: 'mirrored before the opt-out' })
                 expect((logsFromPersisted as any)._consoleQueue).toHaveLength(1)
+                ;(instance as any).is_capturing = jest.fn(() => false)
 
                 logsFromPersisted._onOptOut()
 
                 expect((logsFromPersisted as any)._consoleQueue).toHaveLength(0)
                 expect((logsFromPersisted as any)._queue).toHaveLength(1)
+
+                logsFromPersisted.captureConsoleLog({ body: 'after the opt-out' })
+                expect((logsFromPersisted as any)._consoleQueue).toHaveLength(0)
             })
 
             it('should drop the buffer as soon as the user opts out, not on the next log line', () => {
@@ -1465,7 +1469,7 @@ describe('posthog-logs', () => {
                 expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
             })
 
-            it('should not re-enter the recorder when snapshotting the context logs to the console', () => {
+            it('should not buffer a console call made while snapshotting the context', () => {
                 const instance = buildInstanceWithPersistedBit()
                 let nested = 0
                 ;(instance as any).sessionManager = {
@@ -1579,8 +1583,6 @@ describe('posthog-logs', () => {
                 jest.useFakeTimers()
             })
 
-            // The entrypoint asserts it passes the snapshot in, and core asserts it uses
-            // one; without this nothing checks the adapter between them forwards it.
             it('stamps a replayed console record from the buffered snapshot, not live state', () => {
                 logs.captureBufferedConsoleLog(
                     { body: 'early line' },

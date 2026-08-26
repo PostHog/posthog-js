@@ -1,6 +1,6 @@
 import { assignableWindow } from '../utils/globals'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
-import type { BufferedConsoleEntry } from '../logs-types'
+import type { BufferedConsoleEntry, BufferedConsoleLevel } from '../logs-types'
 import { LogsExtension } from '../extension-tokens'
 import type { PostHog } from '../posthog-core'
 import type { CaptureLogOptions } from '../types'
@@ -336,11 +336,9 @@ const stringifyArgsSafely = (
     }
 }
 
-type ConsoleLevel = 'debug' | 'log' | 'warn' | 'error' | 'info'
-
 // Console method → OTLP severity level. `log` and `info` both map to `info`;
 // the originating method is preserved separately via the `log.source` attribute.
-const LEVEL_MAP: Record<ConsoleLevel, LogSeverityLevel> = {
+const LEVEL_MAP: Record<BufferedConsoleLevel, LogSeverityLevel> = {
     debug: 'debug',
     log: 'info',
     warn: 'warn',
@@ -431,7 +429,7 @@ const initializeLogs = (host: PostHog | Client): (() => void) => {
     // re-enter capture and recurse until the stack overflows.
     let isCapturingLog = false
 
-    for (const level of Object.keys(LEVEL_MAP) as ConsoleLevel[]) {
+    for (const level of Object.keys(LEVEL_MAP) as BufferedConsoleLevel[]) {
         const logWrapper =
             (next: any) =>
             (...args: any[]) => {

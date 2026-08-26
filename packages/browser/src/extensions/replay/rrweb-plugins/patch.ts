@@ -26,8 +26,6 @@ const noop = () => {
     //
 }
 
-// Both this module and rrweb's `patch` install a `{ next }` layer; only the marker
-// name differs.
 const spliceableLayer = (method: unknown): PatchLayer | undefined => {
     if (!isFunction(method)) {
         return undefined

@@ -348,8 +348,8 @@ export function patch(
       // and re-point it past us, removing our wrapper from the call path without
       // disturbing the newer wrappers. posthog-js ships its own copy of this
       // function under `__posthog_layer__` and wraps the same console methods, so
-      // walk both markers — recognising only our own leaves its wrapper stranded
-      // and resurrects ours when it later restores.
+      // walk both markers — a walk that recognised only its own would give up here
+      // and leave our wrapper in the call path for the life of the page.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const layerOf = (method: unknown): PatchLayer | undefined =>
         isFunction(method)
