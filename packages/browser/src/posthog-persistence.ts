@@ -280,7 +280,7 @@ export class PostHogPersistence {
     }
 
     markCrossTabFeatureFlagChanges(changes: Record<string, readonly string[]>): void {
-        each(changes, (properties, key) => {
+        Object.entries(changes).forEach(([key, properties]) => {
             const existingPendingChanges = this._pendingCrossTabFeatureFlagChanges.get(key)
             if (!isCrossTabFeatureFlagKey(key) || existingPendingChanges === true) {
                 return
