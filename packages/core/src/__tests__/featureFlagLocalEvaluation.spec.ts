@@ -65,6 +65,14 @@ describe('feature flag local evaluation primitives', () => {
       expect(() => matchFeatureFlagProperty(property(operator, ''), {})).toThrow(InconclusiveMatchError)
     })
 
+    test('does not treat inherited object properties as present map entries', () => {
+      const inheritedPropertyValues = Object.create({ key: 'inherited' })
+
+      expect(() => matchFeatureFlagProperty(property('is_set', ''), inheritedPropertyValues)).toThrow(
+        InconclusiveMatchError
+      )
+    })
+
     test('preserves null and missing property behavior for exact matching', () => {
       expect(matchFeatureFlagProperty(property('exact', null as never), { key: null })).toBe(false)
       expect(() => matchFeatureFlagProperty(property('exact', 'x'), {})).toThrow(InconclusiveMatchError)

@@ -253,6 +253,44 @@ describe('local evaluation', () => {
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
     })
 
+    it.each(['is_set', 'is_not_set'])(
+      'preserves remote fallback after an inconclusive %s condition',
+      async (operator) => {
+        const flags: any = {
+          flags: [
+            {
+              id: 1,
+              name: 'Early Exit Presence Feature',
+              key: 'early-exit-presence-flag',
+              active: true,
+              filters: {
+                early_exit: true,
+                groups: [
+                  {
+                    properties: [{ key: 'plan', operator, value: '', type: 'person' }],
+                    rollout_percentage: 100,
+                  },
+                  { properties: [], rollout_percentage: 0 },
+                ],
+              },
+            },
+          ],
+        }
+        mockedFetch.mockImplementation(
+          apiImplementation({
+            localFlags: flags,
+            decideFlags: { 'early-exit-presence-flag': 'server-fallback' },
+          })
+        )
+        posthog = newPosthog()
+
+        expect(await posthog.getFeatureFlag('early-exit-presence-flag', 'some-distinct-id')).toEqual('server-fallback')
+
+        expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+        expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+      }
+    )
+
     it('does not early exit when a group fails on a property filter rather than rollout', async () => {
       // First group fails on its property (region mismatch), not rollout — so even with early_exit
       // enabled, evaluation must continue to the second group, which matches.
