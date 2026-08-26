@@ -1,8 +1,9 @@
 'use client'
 
 import { Suspense, useEffect } from 'react'
-import { usePathname, useSearchParams } from 'next/navigation.js'
+import { useParams, usePathname, useSearchParams } from 'next/navigation.js'
 import { usePostHog } from '@posthog/react'
+import { isArray } from '@posthog/core'
 import { getCurrentUrl } from '../shared/browser.js'
 
 /**
@@ -33,18 +34,82 @@ import { getCurrentUrl } from '../shared/browser.js'
  * }
  * ```
  */
-export function PostHogPageView() {
+export interface PostHogPageViewProps {
+    /**
+     * Set `$pathname` to the Next.js route template, such as `/posts/[id]`.
+     * The concrete URL remains available in `$current_url`.
+     *
+     * @default false
+     */
+    captureRouteTemplate?: boolean
+}
+
+export function PostHogPageView({ captureRouteTemplate = false }: PostHogPageViewProps = {}) {
     return (
         <Suspense fallback={null}>
-            <PageViewTracker />
+            {captureRouteTemplate ? <RouteTemplatePageViewTracker /> : <PageViewTracker />}
         </Suspense>
     )
 }
 
-function PageViewTracker() {
+type RouteParams = Record<string, string | string[] | undefined>
+
+function decodedSegmentMatches(segment: string, value: string): boolean {
+    if (segment === value) {
+        return true
+    }
+
+    try {
+        return decodeURIComponent(segment) === value
+    } catch {
+        return false
+    }
+}
+
+function computeRouteTemplate(pathname: string, params: RouteParams): string {
+    const segments = pathname.split('/')
+
+    for (const [paramName, paramValue] of Object.entries(params)) {
+        if (!isArray(paramValue) || paramValue.length === 0) {
+            continue
+        }
+
+        for (let index = 0; index + paramValue.length <= segments.length; index++) {
+            if (paramValue.every((value, offset) => decodedSegmentMatches(segments[index + offset], value))) {
+                segments.splice(index, paramValue.length, `[...${paramName}]`)
+                break
+            }
+        }
+    }
+
+    for (const [paramName, paramValue] of Object.entries(params)) {
+        if (typeof paramValue !== 'string' || !paramValue) {
+            continue
+        }
+
+        const index = segments.findIndex((segment) => decodedSegmentMatches(segment, paramValue))
+        if (index !== -1) {
+            segments[index] = `[${paramName}]`
+        }
+    }
+
+    return segments.join('/')
+}
+
+function RouteTemplatePageViewTracker() {
+    const params = useParams<RouteParams>()
+    return <PageViewTracker params={params} />
+}
+
+interface PageViewTrackerProps {
+    params?: RouteParams
+}
+
+function PageViewTracker({ params }: PageViewTrackerProps = {}) {
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const posthog = usePostHog()
+    const routeTemplate = params ? computeRouteTemplate(pathname, params) : undefined
 
     useEffect(() => {
         const search = searchParams.toString()
@@ -53,8 +118,11 @@ function PageViewTracker() {
             return
         }
 
-        posthog.capture('$pageview', { $current_url: currentUrl })
-    }, [pathname, searchParams, posthog])
+        posthog.capture('$pageview', {
+            $current_url: currentUrl,
+            ...(routeTemplate ? { $pathname: routeTemplate } : {}),
+        })
+    }, [pathname, searchParams, posthog, routeTemplate])
 
     return null
 }

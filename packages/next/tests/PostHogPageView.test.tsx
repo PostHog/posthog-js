@@ -10,9 +10,11 @@ jest.mock('@posthog/react', () => ({
 
 let mockPathname = '/initial'
 let mockSearchParams = new URLSearchParams()
+let mockParams: Record<string, string | string[] | undefined> = {}
 jest.mock('next/navigation.js', () => ({
     usePathname: () => mockPathname,
     useSearchParams: () => mockSearchParams,
+    useParams: () => mockParams,
 }))
 
 describe('PostHogPageView', () => {
@@ -21,6 +23,7 @@ describe('PostHogPageView', () => {
         mockUsePostHog.mockClear()
         mockPathname = '/initial'
         mockSearchParams = new URLSearchParams()
+        mockParams = {}
     })
 
     it('captures a $pageview event on mount', () => {
@@ -35,6 +38,29 @@ describe('PostHogPageView', () => {
         render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
             $current_url: 'http://localhost/initial?q=hello&page=2',
+        })
+    })
+
+    it.each([
+        ['a dynamic segment', '/users/123', { id: '123' }, '/users/[id]'],
+        [
+            'multiple dynamic segments',
+            '/users/123/posts/456',
+            { userId: '123', postId: '456' },
+            '/users/[userId]/posts/[postId]',
+        ],
+        ['a catch-all segment', '/docs/guides/setup', { slug: ['guides', 'setup'] }, '/docs/[...slug]'],
+        ['an encoded segment', '/users/Jane%20Doe', { name: 'Jane Doe' }, '/users/[name]'],
+    ])('captures the route template for %s', (_description, pathname, params, expectedTemplate) => {
+        mockPathname = pathname
+        mockParams = params
+        mockSearchParams = new URLSearchParams('ref=test')
+
+        render(<PostHogPageView captureRouteTemplate />)
+
+        expect(mockCapture).toHaveBeenCalledWith('$pageview', {
+            $current_url: `http://localhost${pathname}?ref=test`,
+            $pathname: expectedTemplate,
         })
     })
 

@@ -27,7 +27,17 @@ import { getCurrentUrl } from '../shared/browser.js'
  * }
  * ```
  */
-export function PostHogPageView() {
+export interface PostHogPageViewProps {
+    /**
+     * Set `$pathname` to the Next.js route template, such as `/posts/[id]`.
+     * The concrete URL remains available in `$current_url`.
+     *
+     * @default false
+     */
+    captureRouteTemplate?: boolean
+}
+
+export function PostHogPageView({ captureRouteTemplate = false }: PostHogPageViewProps = {}) {
     const router = useRouter()
     const posthog = usePostHog()
 
@@ -39,8 +49,11 @@ export function PostHogPageView() {
             return
         }
 
-        posthog.capture('$pageview', { $current_url: currentUrlWithoutHash })
-    }, [router.asPath, router.isReady, posthog])
+        posthog.capture('$pageview', {
+            $current_url: currentUrlWithoutHash,
+            ...(captureRouteTemplate ? { $pathname: router.pathname } : {}),
+        })
+    }, [router.asPath, router.pathname, router.isReady, posthog, captureRouteTemplate])
 
     return null
 }

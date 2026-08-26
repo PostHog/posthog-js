@@ -8,7 +8,7 @@ jest.mock('@posthog/react', () => ({
     usePostHog: () => mockUsePostHog(),
 }))
 
-let mockRouter = { asPath: '/initial', isReady: true }
+let mockRouter = { asPath: '/initial', pathname: '/initial', isReady: true }
 jest.mock('next/router.js', () => ({
     useRouter: () => mockRouter,
 }))
@@ -18,7 +18,7 @@ describe('Pages PostHogPageView', () => {
         mockCapture.mockClear()
         mockUsePostHog.mockReset()
         mockUsePostHog.mockReturnValue({ capture: mockCapture, config: { disable_capture_url_hashes: false } })
-        mockRouter = { asPath: '/initial', isReady: true }
+        mockRouter = { asPath: '/initial', pathname: '/initial', isReady: true }
     })
 
     it('captures a $pageview event on mount', () => {
@@ -30,17 +30,36 @@ describe('Pages PostHogPageView', () => {
 
     it.each([
         ['keeps hash fragments by default', undefined, 'http://localhost/search?q=hello&page=2#section'],
-        ['keeps hash fragments when disable_capture_url_hashes is false', false, 'http://localhost/search?q=hello&page=2#section'],
-        ['strips hash fragments when disable_capture_url_hashes is true', true, 'http://localhost/search?q=hello&page=2'],
+        [
+            'keeps hash fragments when disable_capture_url_hashes is false',
+            false,
+            'http://localhost/search?q=hello&page=2#section',
+        ],
+        [
+            'strips hash fragments when disable_capture_url_hashes is true',
+            true,
+            'http://localhost/search?q=hello&page=2',
+        ],
     ])('%s', (_description, disableCaptureUrlHashes, expectedUrl) => {
         mockUsePostHog.mockReturnValue({
             capture: mockCapture,
             config: { disable_capture_url_hashes: disableCaptureUrlHashes },
         })
-        mockRouter = { asPath: '/search?q=hello&page=2#section', isReady: true }
+        mockRouter = { asPath: '/search?q=hello&page=2#section', pathname: '/search', isReady: true }
         render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
             $current_url: expectedUrl,
+        })
+    })
+
+    it('captures the route template while preserving the concrete URL', () => {
+        mockRouter = { asPath: '/posts/123?ref=test#comments', pathname: '/posts/[id]', isReady: true }
+
+        render(<PostHogPageView captureRouteTemplate />)
+
+        expect(mockCapture).toHaveBeenCalledWith('$pageview', {
+            $current_url: 'http://localhost/posts/123?ref=test#comments',
+            $pathname: '/posts/[id]',
         })
     })
 
@@ -48,7 +67,7 @@ describe('Pages PostHogPageView', () => {
         const { rerender } = render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledTimes(1)
 
-        mockRouter = { asPath: '/new-page', isReady: true }
+        mockRouter = { asPath: '/new-page', pathname: '/new-page', isReady: true }
         rerender(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledTimes(2)
         expect(mockCapture).toHaveBeenLastCalledWith('$pageview', {
@@ -63,17 +82,17 @@ describe('Pages PostHogPageView', () => {
     })
 
     it('does not capture if router is not ready', () => {
-        mockRouter = { asPath: '/initial', isReady: false }
+        mockRouter = { asPath: '/initial', pathname: '/initial', isReady: false }
         render(<PostHogPageView />)
         expect(mockCapture).not.toHaveBeenCalled()
     })
 
     it('captures pageview once router becomes ready', () => {
-        mockRouter = { asPath: '/initial', isReady: false }
+        mockRouter = { asPath: '/initial', pathname: '/initial', isReady: false }
         const { rerender } = render(<PostHogPageView />)
         expect(mockCapture).not.toHaveBeenCalled()
 
-        mockRouter = { asPath: '/initial', isReady: true }
+        mockRouter = { asPath: '/initial', pathname: '/initial', isReady: true }
         rerender(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledTimes(1)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
