@@ -24,6 +24,10 @@ export class PostHogLogs {
   // Head records evicted (FIFO) while a batch is in flight; the queue-advance
   // subtracts these so it drops the sent records, not ones captured mid-send.
   private _evictedSinceAdvance = 0
+  // Bumped whenever the queue is emptied out from under a flush. A batch in flight
+  // captures the value it started with, so it can tell that the records it is holding
+  // no longer correspond to anything queued.
+  private _queueGeneration = 0
   // Consecutive failed flushes; drives exponential backoff on the retry timer.
   // A successful flush resets it to 0.
   private _consecutiveFlushFailures = 0
@@ -66,13 +70,12 @@ export class PostHogLogs {
   }
 
   /**
-   * Drops every queued record. Credits the in-flight advance the same way a FIFO
-   * eviction does, so a batch already awaiting its response cannot slice records
-   * captured after this call.
+   * Drops every queued record. A batch already in flight is retired with them, so it
+   * can neither re-send what was just purged nor advance past records captured after
+   * this call.
    */
   clearQueue(): void {
-    const queue = this._instance.getPersistedProperty<BufferedLogEntry[]>(PostHogPersistedProperty.LogsQueue) ?? []
-    this._evictedSinceAdvance += queue.length
+    this._queueGeneration++
     this._instance.setPersistedProperty(PostHogPersistedProperty.LogsQueue, [])
   }
 
@@ -82,13 +85,14 @@ export class PostHogLogs {
    */
   reset(): void {
     this._clearFlushTimer()
-    this._flushPromise = null
+    // `_flushPromise` is deliberately left alone: clearing it would let a second flush
+    // run alongside the in-flight one, and the two would fight over the shared
+    // per-batch bookkeeping. The in-flight batch settles and clears the promise in its
+    // own `finally`. Retiring it is `clearQueue`'s job, because the queue it holds
+    // belongs to the host, not to this state.
     this._intervalWindowStart = 0
     this._intervalLogCount = 0
     this._droppedWarned = false
-    // `_evictedSinceAdvance` is deliberately left alone: `_flushInner` zeroes it per
-    // batch, so the only value a reset could clear is one a batch in flight still
-    // needs to work out how much of the queue it already accounted for.
     this._consecutiveFlushFailures = 0
     this._maxBatchRecordsPerPost = this._config.maxBatchRecordsPerPost
   }
@@ -254,6 +258,7 @@ export class PostHogLogs {
       return
     }
 
+    const generation = this._queueGeneration
     const originalQueueLength = queue.length
     let sentCount = 0
 
@@ -276,6 +281,13 @@ export class PostHogLogs {
       )
 
       const outcome = await this._instance._sendLogsBatch(payload)
+
+      if (this._queueGeneration !== generation) {
+        // The queue was cleared while this batch was in flight. `queue` is a stale local
+        // copy, so retrying it would re-send purged records and advancing it would slice
+        // records captured since. Retire the batch instead.
+        return
+      }
 
       if (outcome.kind === 'too-large' && batch.length > 1) {
         this._maxBatchRecordsPerPost = Math.max(1, Math.floor(batch.length / 2))

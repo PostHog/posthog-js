@@ -197,6 +197,40 @@ describe('PostHogLogs', () => {
     })
   })
 
+  describe('a 413 retry that lands after the queue is cleared', () => {
+    it('does not re-send records the clear purged', async () => {
+      const sentBodies: string[][] = []
+      let releaseSend: (v: any) => void = () => {}
+      const mockInstance = createMockInstance({
+        _sendLogsBatch: jest.fn((payload: any) => {
+          sentBodies.push(payload.resourceLogs[0].scopeLogs[0].logRecords.map((r: any) => r.body.stringValue))
+          // Only the first send is held open; any retry resolves at once so a
+          // regression fails on the assertion rather than by hanging the test.
+          return sentBodies.length === 1
+            ? new Promise((resolve) => (releaseSend = resolve))
+            : Promise.resolve({ kind: 'ok' })
+        }),
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'purged one' })
+      logs.captureLog({ body: 'purged two' })
+
+      const flushing = logs.flush()
+      logs.clearQueue()
+      // A 413 makes `_flushInner` retry the same records with a smaller batch cap.
+      releaseSend({ kind: 'too-large' })
+      await flushing
+
+      expect(sentBodies).toEqual([['purged one', 'purged two']])
+    })
+  })
+
   describe('reset during an in-flight flush', () => {
     it('does not let an in-flight batch drop records captured after the reset', async () => {
       let releaseSend: (v: any) => void = () => {}
@@ -219,6 +253,35 @@ describe('PostHogLogs', () => {
 
       releaseSend({ kind: 'ok' })
       await flushing
+
+      expect(readQueue(mockInstance).map((e) => e.record.body)).toEqual([{ stringValue: 'captured after the reset' }])
+    })
+
+    it('does not let a flush started after the reset run alongside the in-flight one', async () => {
+      let releaseSend: (v: any) => void = () => {}
+      const mockInstance = createMockInstance({
+        _sendLogsBatch: jest.fn(() => new Promise((resolve) => (releaseSend = resolve))),
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'before the reset' })
+
+      const flushing = logs.flush()
+      logs.clearQueue()
+      logs.reset()
+      logs.captureLog({ body: 'captured after the reset' })
+      const second = logs.flush()
+
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      releaseSend({ kind: 'ok' })
+      await flushing
+      await second
 
       expect(readQueue(mockInstance).map((e) => e.record.body)).toEqual([{ stringValue: 'captured after the reset' }])
     })

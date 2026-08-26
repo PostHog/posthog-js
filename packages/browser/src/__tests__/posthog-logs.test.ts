@@ -1153,6 +1153,41 @@ describe('posthog-logs', () => {
                 ])
             })
 
+            it('should record console calls made while the script loads after a first remote enable', () => {
+                // First visit: nothing local, nothing persisted, so `setup` starts no
+                // recorder. The remote `true` is the first thing that enables capture, and
+                // the script it kicks off does not land in the same tick.
+                let finishLoad: (err: null) => void = () => {}
+                mockLoadExternalDependency.mockImplementation((_i: any, _n: any, cb: any) => {
+                    finishLoad = cb
+                })
+                logsFromPersisted = new PostHogLogs(mockPostHog)
+                logsFromPersisted.setup(noopClient())
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+                assignableWindow.console.log('during the load')
+
+                finishLoad(null)
+                expect(mockReplayConsoleBuffer).toHaveBeenCalledWith(expect.anything(), [
+                    expect.objectContaining({ args: ['during the load'] }),
+                ])
+            })
+
+            it('should not start a recorder once the script is capturing live', () => {
+                // A later remote-config callback must not re-patch `console` behind the
+                // entrypoint: `loadIfEnabled` is done, so nothing would ever collect that
+                // buffer and it would pin argument graphs until the max-age backstop.
+                logsFromPersisted = new PostHogLogs(buildInstanceWithLocalConfig())
+                logsFromPersisted.setup(noopClient())
+                expect((logsFromPersisted as any)._isLoaded).toBe(true)
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+            })
+
             it('should load the logs script once when local and remote config both enable capture', () => {
                 // Every caller gets its own load callback, so a second in-flight load
                 // would have the entrypoint wrap console twice.
