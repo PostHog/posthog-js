@@ -1,4 +1,4 @@
-import { buildCaptureV1Event, sendCaptureV1Batch, type CaptureV1Message } from '../src/capture-v1'
+import { buildCaptureV1Event, sendCaptureV1Batch, sendCaptureV1Batches, type CaptureV1Message } from '../src/capture-v1'
 import type { RequestRuntime } from '../src/request'
 import type { BrowserFetch } from '../src/types'
 
@@ -129,6 +129,458 @@ describe('Capture Analytics V1', () => {
         expect(body).not.toHaveProperty('api_key')
         expect(body).not.toHaveProperty('token')
         expect(body).not.toHaveProperty('sent_at')
+    })
+
+    describe('batch partitioning', () => {
+        const fixedNow = Date.parse('2026-01-02T03:04:05.000Z')
+        const requestBodies = (requests: RequestInit[]): string[] => requests.map(({ body }) => String(body))
+
+        it('partitions 101 events at the canonical 100-event boundary without reordering', async () => {
+            const requests: RequestInit[] = []
+            const fetch: BrowserFetch = async (_input, init = {}) => {
+                requests.push(init)
+                return new Response('{"results":{}}', { status: 200 })
+            }
+            const events = Array.from({ length: 101 }, (_, index) =>
+                message({ event: `event-${index}`, uuid: `uuid-${index}` })
+            )
+
+            const result = await sendCaptureV1Batches(runtime(fetch), events, '1.2.3', {
+                now: () => fixedNow,
+            })
+
+            expect(result).toMatchObject({ statusCode: 200, retry: [], drops: [] })
+            const batches = requestBodies(requests).map((body) => JSON.parse(body).batch as CaptureV1Message[])
+            expect(batches.map((batch) => batch.length)).toEqual([100, 1])
+            expect(batches.flat().map(({ uuid }) => uuid)).toEqual(events.map(({ uuid }) => uuid))
+        })
+
+        it.each([
+            ['ASCII', 'plain-text'],
+            ['multibyte', 'héllo 😀'],
+        ])('uses exact UTF-8 envelope bytes at the %s boundary', async (_label, value) => {
+            const events = [
+                message({ uuid: 'first', properties: { value } }),
+                message({ uuid: 'second', properties: { value } }),
+            ]
+            const baseline: RequestInit[] = []
+            await sendCaptureV1Batches(
+                runtime(async (_input, init = {}) => {
+                    baseline.push(init)
+                    return new Response('{"results":{}}', { status: 200 })
+                }),
+                events,
+                '1.2.3',
+                { now: () => fixedNow, targetBatchBytes: Number.MAX_SAFE_INTEGER }
+            )
+            const exactBytes = new TextEncoder().encode(String(baseline[0]?.body)).length
+
+            const atBoundary: RequestInit[] = []
+            await sendCaptureV1Batches(
+                runtime(async (_input, init = {}) => {
+                    atBoundary.push(init)
+                    return new Response('{"results":{}}', { status: 200 })
+                }),
+                events,
+                '1.2.3',
+                { now: () => fixedNow, targetBatchBytes: exactBytes }
+            )
+            const belowBoundary: RequestInit[] = []
+            await sendCaptureV1Batches(
+                runtime(async (_input, init = {}) => {
+                    belowBoundary.push(init)
+                    return new Response('{"results":{}}', { status: 200 })
+                }),
+                events,
+                '1.2.3',
+                { now: () => fixedNow, targetBatchBytes: exactBytes - 1 }
+            )
+
+            expect(atBoundary).toHaveLength(1)
+            expect(new TextEncoder().encode(String(atBoundary[0]?.body))).toHaveLength(exactBytes)
+            expect(belowBoundary).toHaveLength(2)
+        })
+
+        it('sends one event alone when it exceeds the soft byte target', async () => {
+            const requests: RequestInit[] = []
+            await sendCaptureV1Batches(
+                runtime(async (_input, init = {}) => {
+                    requests.push(init)
+                    return new Response('{"results":{}}', { status: 200 })
+                }),
+                [message({ properties: { value: 'é'.repeat(100) } })],
+                '1.2.3',
+                { now: () => fixedNow, targetBatchBytes: 1 }
+            )
+
+            expect(requests).toHaveLength(1)
+            expect(new TextEncoder().encode(String(requests[0]?.body)).length).toBeGreaterThan(1)
+        })
+
+        it('sends byte-partitioned requests sequentially', async () => {
+            const requests: RequestInit[] = []
+            let finishFirst: ((response: Response) => void) | undefined
+            const first = new Promise<Response>((resolve) => {
+                finishFirst = resolve
+            })
+            const fetch = jest
+                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .mockImplementationOnce(async (_input, init = {}) => {
+                    requests.push(init)
+                    return first
+                })
+                .mockImplementation(async (_input, init = {}) => {
+                    requests.push(init)
+                    return new Response('{"results":{}}', { status: 200 })
+                })
+
+            const delivery = sendCaptureV1Batches(
+                runtime(fetch),
+                [message({ uuid: 'first' }), message({ uuid: 'second' })],
+                '1.2.3',
+                { now: () => fixedNow, maxBatchEvents: 1 }
+            )
+            await Promise.resolve()
+            await Promise.resolve()
+            expect(fetch).toHaveBeenCalledTimes(1)
+
+            finishFirst?.(new Response('{"results":{}}', { status: 200 }))
+            await delivery
+            expect(fetch).toHaveBeenCalledTimes(2)
+            expect(requestBodies(requests).map((body) => JSON.parse(body).batch[0].uuid)).toEqual(['first', 'second'])
+        })
+
+        it('coordinates partial retries independently across multiple requests', async () => {
+            const requests: RequestInit[] = []
+            const fetch: BrowserFetch = async (_input, init = {}) => {
+                requests.push(init)
+                const uuids = (JSON.parse(String(init.body)).batch as CaptureV1Message[]).map(({ uuid }) => uuid)
+                return new Response(
+                    JSON.stringify({
+                        results:
+                            requests.length === 1
+                                ? { [uuids[1]!]: { result: 'retry' } }
+                                : Object.fromEntries(uuids.map((uuid) => [uuid, { result: 'ok' }])),
+                    }),
+                    { status: 200 }
+                )
+            }
+
+            const result = await sendCaptureV1Batches(
+                runtime(fetch),
+                ['a', 'b', 'c', 'd'].map((uuid) => message({ uuid })),
+                '1.2.3',
+                { now: () => fixedNow, maxBatchEvents: 2, sleep: async () => {}, random: () => 0.5 }
+            )
+
+            expect(
+                requestBodies(requests).map((body) => JSON.parse(body).batch.map(({ uuid }: CaptureV1Message) => uuid))
+            ).toEqual([['a', 'b'], ['b'], ['c', 'd']])
+            expect(result).toMatchObject({ statusCode: 200, retry: [], drops: [] })
+        })
+
+        it('treats a 413 as terminal for its request and continues later batches without splitting', async () => {
+            const requests: RequestInit[] = []
+            const fetch: BrowserFetch = async (_input, init = {}) => {
+                requests.push(init)
+                return requests.length === 1
+                    ? new Response('too large', { status: 413 })
+                    : new Response('{"results":{}}', { status: 200 })
+            }
+
+            const result = await sendCaptureV1Batches(
+                runtime(fetch),
+                ['a', 'b', 'c', 'd'].map((uuid) => message({ uuid })),
+                '1.2.3',
+                { now: () => fixedNow, maxBatchEvents: 2 }
+            )
+
+            expect(requests).toHaveLength(2)
+            expect(requestBodies(requests).map((body) => JSON.parse(body).batch.length)).toEqual([2, 2])
+            expect(result.retry).toEqual([])
+            expect(result.error).toBeInstanceOf(Error)
+        })
+
+        it('returns only never-attempted batches when delivery is cancelled between requests', async () => {
+            let canRetryChecks = 0
+            const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(
+                async () => new Response('{"results":{}}', { status: 200 })
+            )
+
+            const result = await sendCaptureV1Batches(
+                runtime(fetch),
+                ['accepted', 'unsent-1', 'unsent-2'].map((uuid) => message({ uuid })),
+                '1.2.3',
+                {
+                    now: () => fixedNow,
+                    maxBatchEvents: 1,
+                    canRetry: () => ++canRetryChecks <= 2,
+                }
+            )
+
+            expect(fetch).toHaveBeenCalledTimes(1)
+            expect(result.retry).toEqual(['unsent-1', 'unsent-2'])
+            expect(result.error).toHaveProperty('message', 'Capture V1 retry was cancelled')
+        })
+
+        it('preserves source identity for an unsent duplicate UUID after an accepted batch', async () => {
+            let canRetryChecks = 0
+            const accepted = message({ event: 'accepted', uuid: 'duplicate' })
+            const unsent = message({ event: 'unsent', uuid: 'duplicate' })
+
+            const result = await sendCaptureV1Batches(
+                runtime(async () => new Response('{"results":{}}', { status: 200 })),
+                [accepted, unsent],
+                '1.2.3',
+                {
+                    now: () => fixedNow,
+                    maxBatchEvents: 1,
+                    canRetry: () => ++canRetryChecks <= 2,
+                }
+            )
+
+            expect(result.retry).toEqual(['duplicate'])
+            expect(result.retryMessages).toEqual([unsent])
+            expect(result.retryMessages).not.toContain(accepted)
+        })
+    })
+
+    describe('compression', () => {
+        it('sends valid native gzip for an eligible exact V1 envelope', async () => {
+            let request: RequestInit | undefined
+            const result = await sendCaptureV1Batch(
+                runtime(async (_input, init = {}) => {
+                    request = init
+                    return new Response('{"results":{}}', { status: 200 })
+                }),
+                [message({ properties: { value: 'compressible'.repeat(200) } })],
+                '1.2.3',
+                { compressionEnabled: true, compressionThresholdBytes: 0 }
+            )
+
+            expect(result).toMatchObject({ statusCode: 200, retry: [], drops: [] })
+            expect(request?.headers).toMatchObject({ 'Content-Encoding': 'gzip', 'Content-Type': 'application/json' })
+            expect(request?.body).toBeInstanceOf(Blob)
+            const decompressed = await new Response(
+                (request?.body as Blob).stream().pipeThrough(new DecompressionStream('gzip'))
+            ).json()
+            expect(decompressed).toMatchObject({ batch: [{ uuid: 'event-uuid' }] })
+        })
+
+        it('does not compress a body below the configured threshold', async () => {
+            const compress = jest.fn(async () => new Blob(['gzip']))
+            let request: RequestInit | undefined
+            await sendCaptureV1Batch(
+                runtime(async (_input, init = {}) => {
+                    request = init
+                    return new Response('{"results":{}}', { status: 200 })
+                }),
+                [message()],
+                '1.2.3',
+                { compressionEnabled: true, compressionThresholdBytes: Number.MAX_SAFE_INTEGER, compress }
+            )
+
+            expect(compress).not.toHaveBeenCalled()
+            expect(request?.body).toEqual(expect.any(String))
+            expect(request?.headers).not.toHaveProperty('Content-Encoding')
+        })
+
+        it.each([
+            ['failure', () => Promise.reject(new Error('compression failed'))],
+            ['expansion', (payload: string) => Promise.resolve(new Blob([payload, payload]))],
+        ])('falls back to the unchanged JSON body on compression %s', async (_label, compress) => {
+            let request: RequestInit | undefined
+            await sendCaptureV1Batch(
+                runtime(async (_input, init = {}) => {
+                    request = init
+                    return new Response('{"results":{}}', { status: 200 })
+                }),
+                [message()],
+                '1.2.3',
+                { compressionEnabled: true, compressionThresholdBytes: 0, compress }
+            )
+
+            expect(request?.body).toEqual(expect.any(String))
+            expect(JSON.parse(String(request?.body)).batch).toHaveLength(1)
+            expect(request?.headers).not.toHaveProperty('Content-Encoding')
+            expect((request?.headers as Record<string, string>)['PostHog-Attempt']).toBe('1')
+        })
+
+        it('falls back when the native compression capability is hostile', async () => {
+            const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'CompressionStream')
+            let request: RequestInit | undefined
+            try {
+                Object.defineProperty(globalThis, 'CompressionStream', {
+                    configurable: true,
+                    get() {
+                        throw new Error('blocked capability')
+                    },
+                })
+                await sendCaptureV1Batch(
+                    runtime(async (_input, init = {}) => {
+                        request = init
+                        return new Response('{"results":{}}', { status: 200 })
+                    }),
+                    [message({ properties: { value: 'x'.repeat(2_000) } })],
+                    '1.2.3',
+                    { compressionEnabled: true, compressionThresholdBytes: 0 }
+                )
+            } finally {
+                if (descriptor) {
+                    Object.defineProperty(globalThis, 'CompressionStream', descriptor)
+                } else {
+                    delete (globalThis as { CompressionStream?: typeof CompressionStream }).CompressionStream
+                }
+            }
+
+            expect(request?.body).toEqual(expect.any(String))
+            expect(request?.headers).not.toHaveProperty('Content-Encoding')
+        })
+
+        it('stops before Fetch when continuation is revoked during compression without a signal', async () => {
+            let allowed = true
+            let startCompression: (() => void) | undefined
+            let finishCompression: ((body: Blob) => void) | undefined
+            const compressionStarted = new Promise<void>((resolve) => {
+                startCompression = resolve
+            })
+            const compression = new Promise<Blob>((resolve) => {
+                finishCompression = resolve
+            })
+            const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            const delivery = sendCaptureV1Batch(
+                runtime(fetch),
+                [message({ properties: { value: 'x'.repeat(2_000) } })],
+                '1.2.3',
+                {
+                    compressionEnabled: true,
+                    compressionThresholdBytes: 0,
+                    canRetry: () => allowed,
+                    compress: () => {
+                        startCompression?.()
+                        return compression
+                    },
+                }
+            )
+
+            await compressionStarted
+            allowed = false
+            finishCompression?.(new Blob([new Uint8Array([0])]))
+            const result = await delivery
+
+            expect(fetch).not.toHaveBeenCalled()
+            expect(result.retry).toEqual(['event-uuid'])
+            expect(result.error).toHaveProperty('message', 'Capture V1 retry was cancelled')
+        })
+
+        it('falls back when native compression returns malformed gzip', async () => {
+            const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'CompressionStream')
+            let request: RequestInit | undefined
+            try {
+                class MalformedCompressionStream {
+                    readonly readable = new ReadableStream<Uint8Array>({
+                        start(controller) {
+                            controller.enqueue(new Uint8Array([0x1f, 0x8b, 0x08]))
+                            controller.close()
+                        },
+                    })
+                    readonly writable = new WritableStream<Uint8Array>()
+                }
+                Object.defineProperty(globalThis, 'CompressionStream', {
+                    configurable: true,
+                    value: MalformedCompressionStream,
+                })
+                await sendCaptureV1Batch(
+                    runtime(async (_input, init = {}) => {
+                        request = init
+                        return new Response('{"results":{}}', { status: 200 })
+                    }),
+                    [message({ properties: { value: 'x'.repeat(2_000) } })],
+                    '1.2.3',
+                    { compressionEnabled: true, compressionThresholdBytes: 0 }
+                )
+            } finally {
+                if (descriptor) {
+                    Object.defineProperty(globalThis, 'CompressionStream', descriptor)
+                } else {
+                    delete (globalThis as { CompressionStream?: typeof CompressionStream }).CompressionStream
+                }
+            }
+
+            expect(request?.body).toEqual(expect.any(String))
+            expect(request?.headers).not.toHaveProperty('Content-Encoding')
+        })
+
+        it('bounds stalled compression and sends the original request without consuming an attempt', async () => {
+            jest.useFakeTimers()
+            try {
+                const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(
+                    async () => new Response('{"results":{}}', { status: 200 })
+                )
+                const delivery = sendCaptureV1Batch(
+                    runtime(fetch),
+                    [message({ properties: { value: 'x'.repeat(2_000) } })],
+                    '1.2.3',
+                    {
+                        compressionEnabled: true,
+                        compressionThresholdBytes: 0,
+                        compressionTimeoutMs: 10,
+                        compress: () => new Promise(() => {}),
+                    }
+                )
+                await jest.advanceTimersByTimeAsync(10)
+                const result = await delivery
+
+                expect(fetch).toHaveBeenCalledTimes(1)
+                expect(fetch.mock.calls[0]?.[1]?.body).toEqual(expect.any(String))
+                expect(fetch.mock.calls[0]?.[1]?.headers).not.toHaveProperty('Content-Encoding')
+                expect(result).toMatchObject({ statusCode: 200, retry: [], drops: [] })
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
+        it('recompresses only the pruned partial-retry envelope with stable logical metadata', async () => {
+            const payloads: string[] = []
+            const requests: RequestInit[] = []
+            const compress = jest.fn(async (payload: string) => {
+                payloads.push(payload)
+                return new Blob([new Uint8Array([0])])
+            })
+            const fetch: BrowserFetch = async (_input, init = {}) => {
+                requests.push(init)
+                return requests.length === 1
+                    ? new Response('{"results":{"retry":{"result":"retry"}}}', { status: 200 })
+                    : new Response('{"results":{}}', { status: 200 })
+            }
+
+            const result = await sendCaptureV1Batch(
+                runtime(fetch),
+                [message({ uuid: 'accepted' }), message({ uuid: 'retry' })],
+                '1.2.3',
+                {
+                    compressionEnabled: true,
+                    compressionThresholdBytes: 0,
+                    compress,
+                    sleep: async () => {},
+                    random: () => 0.5,
+                    generateRequestId: () => 'stable-request',
+                }
+            )
+
+            expect(
+                payloads.map((payload) => JSON.parse(payload).batch.map(({ uuid }: CaptureV1Message) => uuid))
+            ).toEqual([['accepted', 'retry'], ['retry']])
+            expect(requests.map(({ headers }) => (headers as Record<string, string>)['PostHog-Request-Id'])).toEqual([
+                'stable-request',
+                'stable-request',
+            ])
+            expect(payloads.map((payload) => JSON.parse(payload).created_at)).toEqual([
+                JSON.parse(payloads[0]!).created_at,
+                JSON.parse(payloads[0]!).created_at,
+            ])
+            expect(result).toMatchObject({ statusCode: 200, retry: [], drops: [] })
+        })
     })
 
     it.each(['ok', 'warning', 'future-result'])('accepts the %s result without retrying', async (code) => {

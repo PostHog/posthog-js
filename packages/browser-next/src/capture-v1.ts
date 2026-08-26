@@ -6,6 +6,11 @@ import type { RequestRuntime } from './request'
 
 const RETRYABLE_STATUSES = [408, 500, 502, 503, 504]
 
+export const CAPTURE_V1_MAX_BATCH_EVENTS = 100
+export const CAPTURE_V1_BATCH_TARGET_BYTES = 5 * 1024 * 1024
+export const CAPTURE_V1_COMPRESSION_THRESHOLD_BYTES = 1024
+const DEFAULT_COMPRESSION_TIMEOUT_MS = 1_000
+
 export type CaptureV1Message = AnalyticsMessage
 
 interface CaptureV1EventOptions {
@@ -37,6 +42,14 @@ export interface CaptureV1Result extends ApiResponse {
     drops: CaptureV1Drop[]
 }
 
+interface PreparedCaptureV1Event {
+    readonly source: CaptureV1Message
+    readonly event: CaptureV1Event
+    readonly uuid: string
+    readonly json: string
+    readonly bytes: number
+}
+
 interface CaptureV1SenderOptions {
     maxAttempts?: number
     initialRetryDelayMs?: number
@@ -49,11 +62,28 @@ interface CaptureV1SenderOptions {
     sleep?: (delayMs: number) => Promise<void>
     signal?: AbortSignal
     generateRequestId?: () => string
+    compressionEnabled?: boolean
+    compressionThresholdBytes?: number
+    compressionTimeoutMs?: number
+    compress?: (payload: string) => Promise<Blob | undefined>
     /** Re-checked before and after backoff so consent revocation or disposal stops retries. */
     canRetry?: () => boolean
+    /** Prepared input shared by the byte partitioner so transformed events serialize only once. */
+    prepared?: PreparedCaptureV1Event[]
+    createdAt?: string
 }
 
-type AttemptResult = [CaptureV1Result, CaptureV1Event[], Response | undefined]
+interface CaptureV1BatchesOptions extends CaptureV1SenderOptions {
+    maxBatchEvents?: number
+    targetBatchBytes?: number
+}
+
+interface CaptureV1BatchesResult extends CaptureV1Result {
+    /** Original admitted messages still undelivered, preserving identity across duplicate UUIDs. */
+    retryMessages: CaptureV1Message[]
+}
+
+type AttemptResult = [CaptureV1Result, PreparedCaptureV1Event[], Response | undefined]
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -64,6 +94,178 @@ const failedResult = (events: { uuid: string }[], error: unknown, statusCode = 0
     drops: [],
     error,
 })
+
+const utf8Bytes = (value: string): number => {
+    let bytes = 0
+    for (let index = 0; index < value.length; index++) {
+        const code = value.charCodeAt(index)
+        if (code < 0x80) {
+            bytes++
+        } else if (code < 0x800) {
+            bytes += 2
+        } else if (code >= 0xd800 && code <= 0xdbff && value.charCodeAt(index + 1) >= 0xdc00) {
+            bytes += 4
+            index++
+        } else {
+            bytes += 3
+        }
+    }
+    return bytes
+}
+
+const prepareEvents = (messages: CaptureV1Message[]): PreparedCaptureV1Event[] =>
+    messages.map((source) => {
+        const event = buildCaptureV1Event(source)
+        const json = JSON.stringify(event)
+        return { source, event, uuid: event.uuid, json, bytes: utf8Bytes(json) }
+    })
+
+const serializeEnvelope = (createdAt: string, events: PreparedCaptureV1Event[]): string =>
+    `{"created_at":${JSON.stringify(createdAt)},"batch":[${events.map(({ json }) => json).join(',')}]}`
+
+const partitionEvents = (
+    events: PreparedCaptureV1Event[],
+    createdAt: string,
+    maxBatchEvents: number,
+    targetBatchBytes: number
+): PreparedCaptureV1Event[][] => {
+    const batches: PreparedCaptureV1Event[][] = []
+    const emptyBytes = utf8Bytes(serializeEnvelope(createdAt, []))
+    let batch: PreparedCaptureV1Event[] = []
+    let bytes = emptyBytes
+
+    for (const event of events) {
+        const addedBytes = event.bytes + (batch.length ? 1 : 0)
+        if (batch.length && (batch.length >= maxBatchEvents || bytes + addedBytes > targetBatchBytes)) {
+            batches.push(batch)
+            batch = []
+            bytes = emptyBytes
+        }
+        batch.push(event)
+        bytes += event.bytes + (batch.length > 1 ? 1 : 0)
+    }
+    if (batch.length) {
+        batches.push(batch)
+    }
+    return batches
+}
+
+let gzipCrcTable: number[] | undefined
+const gzipCrc32 = (bytes: Uint8Array): number => {
+    if (!gzipCrcTable) {
+        gzipCrcTable = Array.from({ length: 256 }, (_, value) => {
+            let crc = value
+            for (let bit = 0; bit < 8; bit++) {
+                crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1
+            }
+            return crc >>> 0
+        })
+    }
+    let crc = 0xffffffff
+    for (const byte of bytes) {
+        crc = gzipCrcTable[(crc ^ byte) & 0xff]! ^ (crc >>> 8)
+    }
+    return (crc ^ 0xffffffff) >>> 0
+}
+
+const nativeGzip = async (payload: string): Promise<Blob | undefined> => {
+    try {
+        const CompressionStreamConstructor = globalThis.CompressionStream
+        const TextEncoderConstructor = globalThis.TextEncoder
+        const ResponseConstructor = globalThis.Response
+        if (
+            typeof CompressionStreamConstructor !== 'function' ||
+            typeof TextEncoderConstructor !== 'function' ||
+            typeof ResponseConstructor !== 'function'
+        ) {
+            return undefined
+        }
+
+        const input = new TextEncoderConstructor().encode(payload)
+        const stream = new CompressionStreamConstructor('gzip')
+        const writer = stream.writable.getWriter()
+        const write = writer
+            .write(input)
+            .then(() => writer.close())
+            .catch(async (error) => {
+                try {
+                    await writer.abort(error)
+                } catch {
+                    // Preserve the original compression failure.
+                }
+                throw error
+            })
+        const compressed = await Promise.all([new ResponseConstructor(stream.readable).blob(), write]).then(
+            ([blob]) => blob
+        )
+        if (compressed.size < 18) {
+            return undefined
+        }
+        const [headerBuffer, trailerBuffer] = await Promise.all([
+            compressed.slice(0, 3).arrayBuffer(),
+            compressed.slice(compressed.size - 8).arrayBuffer(),
+        ])
+        const header = new Uint8Array(headerBuffer)
+        const trailer = new DataView(trailerBuffer)
+        return header[0] === 0x1f &&
+            header[1] === 0x8b &&
+            header[2] === 0x08 &&
+            trailer.getUint32(0, true) === gzipCrc32(input) &&
+            trailer.getUint32(4, true) === input.length >>> 0
+            ? compressed
+            : undefined
+    } catch {
+        return undefined
+    }
+}
+
+const compressWithDeadline = async (
+    payload: string,
+    timeoutMs: number,
+    signal: AbortSignal | undefined,
+    compress: (payload: string) => Promise<Blob | undefined>
+): Promise<Blob | undefined> => {
+    let timer: number | undefined
+    let onAbort: (() => void) | undefined
+    const operation = Promise.resolve()
+        .then(() => compress(payload))
+        .catch(() => undefined)
+    const interrupted = new Promise<undefined>((resolve) => {
+        try {
+            timer = globalThis.setTimeout(resolve, timeoutMs)
+        } catch {
+            resolve(undefined)
+            return
+        }
+        if (signal) {
+            onAbort = () => resolve(undefined)
+            try {
+                // eslint-disable-next-line posthog-js/no-add-event-listener
+                signal.addEventListener('abort', onAbort, { once: true })
+                if (signal.aborted) {
+                    onAbort()
+                }
+            } catch {
+                onAbort = undefined
+            }
+        }
+    })
+    try {
+        return await Promise.race([operation, interrupted])
+    } finally {
+        if (timer !== undefined) {
+            globalThis.clearTimeout(timer)
+        }
+        if (onAbort) {
+            try {
+                signal?.removeEventListener('abort', onAbort)
+            } catch {
+                // Listener cleanup is best effort for injected signals.
+            }
+        }
+    }
+}
+
 const cancelResponseBody = (response: Response | undefined): void => {
     try {
         void response?.body?.cancel().catch(() => {})
@@ -193,6 +395,13 @@ const retryDelay = (
 }
 
 const cancellationError = (): Error => new Error('Capture V1 retry was cancelled')
+const canContinue = (check: (() => boolean) | undefined): boolean => {
+    try {
+        return check?.() ?? true
+    } catch {
+        return false
+    }
+}
 
 const waitForRetry = async (
     delayMs: number,
@@ -249,20 +458,48 @@ const waitForRetry = async (
 
 const attemptOnce = async (
     runtime: RequestRuntime,
-    events: CaptureV1Event[],
+    events: PreparedCaptureV1Event[],
     libraryVersion: string,
     createdAt: string,
     requestId: string,
     attempt: number,
     now: () => number,
     timeoutMs: number,
-    remainingTime: () => number
+    remainingTime: () => number,
+    compressionEnabled: boolean,
+    compressionThresholdBytes: number,
+    compressionTimeoutMs: number,
+    compress: (payload: string) => Promise<Blob | undefined>,
+    signal: AbortSignal | undefined,
+    continuationCheck: (() => boolean) | undefined
 ): Promise<AttemptResult> => {
-    let body: string
-    try {
-        body = JSON.stringify({ created_at: createdAt, batch: events })
-    } catch (error) {
-        return [failedResult(events, error), [], undefined]
+    if (!canContinue(continuationCheck)) {
+        return [failedResult(events, cancellationError()), events, undefined]
+    }
+    const body = serializeEnvelope(createdAt, events)
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${runtime[1]}`,
+        'PostHog-Sdk-Info': `posthog-js/${libraryVersion}`,
+        'PostHog-Attempt': String(attempt),
+        'PostHog-Request-Id': requestId,
+        'PostHog-Request-Timestamp': isoNow(now),
+    }
+    let requestBody: BodyInit = body
+    if (compressionEnabled && utf8Bytes(body) >= compressionThresholdBytes) {
+        const compressed = await compressWithDeadline(
+            body,
+            Math.max(1, Math.min(compressionTimeoutMs, remainingTime())),
+            signal,
+            compress
+        )
+        if (signal?.aborted || !canContinue(continuationCheck)) {
+            return [failedResult(events, cancellationError()), events, undefined]
+        }
+        if (compressed && compressed.size < utf8Bytes(body)) {
+            requestBody = compressed
+            headers['Content-Encoding'] = 'gzip'
+        }
     }
 
     let controller: AbortController | undefined
@@ -275,15 +512,8 @@ const attemptOnce = async (
     const requestInit: RequestInit = {
         method: 'POST',
         credentials: 'omit',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${runtime[1]}`,
-            'PostHog-Sdk-Info': `posthog-js/${libraryVersion}`,
-            'PostHog-Attempt': String(attempt),
-            'PostHog-Request-Id': requestId,
-            'PostHog-Request-Timestamp': isoNow(now),
-        },
-        body,
+        headers,
+        body: requestBody,
         ...(controller ? { signal: controller.signal } : {}),
     }
     const remainingAfterSetup = remainingTime()
@@ -367,18 +597,18 @@ const attemptOnce = async (
     }
 
     const results = isRecord(json.results) ? json.results : {}
-    const retryEvents: CaptureV1Event[] = []
+    const retryEvents: PreparedCaptureV1Event[] = []
     const drops: CaptureV1Drop[] = []
-    for (const event of events) {
-        const outcome = results[event.uuid]
+    for (const prepared of events) {
+        const outcome = results[prepared.uuid]
         if (!isRecord(outcome)) {
             continue
         }
         if (outcome.result === 'retry') {
-            retryEvents.push(event)
+            retryEvents.push(prepared)
         } else if (outcome.result === 'drop') {
             drops.push({
-                uuid: event.uuid,
+                uuid: prepared.uuid,
                 ...(typeof outcome.details === 'string' ? { details: outcome.details } : {}),
             })
         }
@@ -408,6 +638,12 @@ export const sendCaptureV1Batch = async (
     const maxBackoffMs = numberOption(options.maxBackoffMs, 30_000, 0)
     const requestTimeoutMs = Math.floor(numberOption(options.requestTimeoutMs, 10_000, 1))
     const maxElapsedMs = Math.floor(numberOption(options.maxElapsedMs, 60_000, 1))
+    const compressionThresholdBytes = Math.floor(
+        numberOption(options.compressionThresholdBytes, CAPTURE_V1_COMPRESSION_THRESHOLD_BYTES, 0)
+    )
+    const compressionTimeoutMs = Math.floor(
+        numberOption(options.compressionTimeoutMs, DEFAULT_COMPRESSION_TIMEOUT_MS, 1)
+    )
     const elapsedNow = options.elapsedNow ?? (() => globalThis.performance?.now() ?? Date.now())
     const startedAt = safeNow(elapsedNow)
     const remainingTime = (): number => maxElapsedMs - Math.max(0, safeNow(elapsedNow) - startedAt)
@@ -417,11 +653,11 @@ export const sendCaptureV1Batch = async (
     } catch {
         requestId = `capture-${isoNow(now)}`
     }
-    const createdAt = isoNow(now)
+    const createdAt = options.createdAt ?? isoNow(now)
 
-    let pending: CaptureV1Event[]
+    let pending: PreparedCaptureV1Event[]
     try {
-        pending = messages.map(buildCaptureV1Event)
+        pending = options.prepared ?? prepareEvents(messages)
     } catch (error) {
         return failedResult(messages, error)
     }
@@ -440,7 +676,7 @@ export const sendCaptureV1Batch = async (
             return finish(new Error('Capture V1 exhausted its elapsed retry budget'))
         }
 
-        let retryEvents: CaptureV1Event[]
+        let retryEvents: PreparedCaptureV1Event[]
         let response: Response | undefined
         try {
             ;[latest, retryEvents, response] = await attemptOnce(
@@ -452,7 +688,13 @@ export const sendCaptureV1Batch = async (
                 attempt,
                 now,
                 requestTimeoutMs,
-                remainingTime
+                remainingTime,
+                options.compressionEnabled ?? false,
+                compressionThresholdBytes,
+                compressionTimeoutMs,
+                options.compress ?? nativeGzip,
+                options.signal,
+                options.canRetry
             )
         } catch (error) {
             latest = failedResult(pending, error)
@@ -471,13 +713,7 @@ export const sendCaptureV1Batch = async (
             return finish(latest.error ?? new Error('Capture V1 exhausted its retry budget'))
         }
 
-        let allowed = true
-        try {
-            allowed = options.canRetry?.() ?? true
-        } catch {
-            allowed = false
-        }
-        if (!allowed) {
+        if (!canContinue(options.canRetry)) {
             return finish(new Error('Capture V1 retry was cancelled'))
         }
 
@@ -487,7 +723,7 @@ export const sendCaptureV1Batch = async (
         }
         try {
             await waitForRetry(delay, options.sleep, options.signal)
-            if (options.canRetry && !options.canRetry()) {
+            if (!canContinue(options.canRetry)) {
                 throw cancellationError()
             }
         } catch (error) {
@@ -498,4 +734,76 @@ export const sendCaptureV1Batch = async (
     latest.retry = eventIds(pending)
     latest.drops = drops
     return latest
+}
+
+/**
+ * Greedily partitions one admitted FIFO slice by event count and exact uncompressed
+ * Capture V1 envelope bytes, then sends each logical request in order. The byte
+ * target is soft: one admitted event is always allowed to form a request by itself.
+ */
+export const sendCaptureV1Batches = async (
+    runtime: RequestRuntime,
+    messages: CaptureV1Message[],
+    libraryVersion: string,
+    options: CaptureV1BatchesOptions = {}
+): Promise<CaptureV1BatchesResult> => {
+    if (messages.length === 0) {
+        return { statusCode: 204, retry: [], retryMessages: [], drops: [] }
+    }
+
+    const now = options.now ?? Date.now
+    const elapsedNow = options.elapsedNow ?? (() => globalThis.performance?.now() ?? Date.now())
+    const maxElapsedMs = Math.floor(numberOption(options.maxElapsedMs, 60_000, 1))
+    const startedAt = safeNow(elapsedNow)
+    const remainingTime = (): number => maxElapsedMs - Math.max(0, safeNow(elapsedNow) - startedAt)
+    const partitionCreatedAt = isoNow(now)
+    let events: PreparedCaptureV1Event[]
+    try {
+        events = prepareEvents(messages)
+    } catch (error) {
+        return { ...failedResult(messages, error), retryMessages: messages }
+    }
+
+    const maxBatchEvents = Math.floor(numberOption(options.maxBatchEvents, CAPTURE_V1_MAX_BATCH_EVENTS, 1))
+    const targetBatchBytes = Math.floor(numberOption(options.targetBatchBytes, CAPTURE_V1_BATCH_TARGET_BYTES, 1))
+    const batches = partitionEvents(events, partitionCreatedAt, maxBatchEvents, targetBatchBytes)
+    const aggregate: CaptureV1BatchesResult = { statusCode: 204, retry: [], retryMessages: [], drops: [] }
+
+    for (let index = 0; index < batches.length; index++) {
+        const remaining = remainingTime()
+        const cancelled = !canContinue(options.canRetry) || options.signal?.aborted
+        if (cancelled || remaining <= 0) {
+            const unsent = batches.slice(index).flat()
+            aggregate.retry.push(...eventIds(unsent))
+            aggregate.retryMessages.push(...unsent.map(({ source }) => source))
+            aggregate.error ??= new Error(
+                cancelled ? 'Capture V1 retry was cancelled' : 'Capture V1 exhausted its elapsed retry budget'
+            )
+            return aggregate
+        }
+
+        const batch = batches[index]!
+        const createdAt = isoNow(now)
+        const result = await sendCaptureV1Batch(
+            runtime,
+            batch.map(({ source }) => source),
+            libraryVersion,
+            {
+                ...options,
+                createdAt,
+                prepared: batch,
+                maxElapsedMs: remaining,
+            }
+        )
+        aggregate.statusCode = result.statusCode
+        aggregate.retry.push(...result.retry)
+        const retryIds = new Set(result.retry)
+        aggregate.retryMessages.push(...batch.filter(({ uuid }) => retryIds.has(uuid)).map(({ source }) => source))
+        aggregate.drops.push(...result.drops)
+        if (result.error !== undefined) {
+            aggregate.error ??= result.error
+        }
+    }
+
+    return aggregate
 }
