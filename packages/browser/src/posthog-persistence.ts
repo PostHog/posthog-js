@@ -299,23 +299,29 @@ export class PostHogPersistence {
         }
 
         let nextEntry: Properties
+        let storageValue: string | null
         try {
             // A queued storage event can be older than the value currently on disk.
             // Always reconcile against the latest snapshot instead of event.newValue.
-            nextEntry = parseStorageValue(localStore._get(storageKey))
+            storageValue = localStore._get(storageKey)
+            nextEntry = parseStorageValue(storageValue)
         } catch {
             return false
         }
 
-        this._rememberCrossTabStorageFingerprint(nextEntry, slot)
+        this._rememberCrossTabStorageFingerprint(nextEntry, slot, !isNull(storageValue))
         return this._mergeCrossTabFeatureFlagProperties(nextEntry, slot, notify)
     }
 
-    private _rememberCrossTabStorageFingerprint(entry: Properties, slot: StorageSlot): void {
+    private _rememberCrossTabStorageFingerprint(entry: Properties, slot: StorageSlot, materialized: boolean): void {
+        const state = this._slotWriteState(slot)
+        if (slot !== MAIN_STORAGE_SLOT) {
+            state.persisted = materialized
+        }
         try {
-            this._slotWriteState(slot).fingerprint = this._entryFingerprint(entry, slot)
+            state.fingerprint = this._entryFingerprint(entry, slot)
         } catch {
-            this._slotWriteState(slot).fingerprint = undefined
+            state.fingerprint = undefined
         }
     }
 
@@ -367,6 +373,7 @@ export class PostHogPersistence {
             if (this._splitStorage) {
                 PERSISTENCE_STORAGE_GROUPS.forEach((group) => {
                     const groupValue = localStore._get(this._groupEntryName(group))
+                    this._slotWriteState(group).persisted = !isNull(groupValue)
                     // Before the first split write, grouped keys can still live in
                     // the main blob. Use it as the migration fallback.
                     const groupEntry = isNull(groupValue) ? mainEntry : parseStorageValue(groupValue)
@@ -381,11 +388,15 @@ export class PostHogPersistence {
 
     private _setCrossTabFeatureFlagChangesPending(key: string, changes: Set<string> | true): void {
         this._pendingCrossTabFeatureFlagChanges.set(key, changes)
+        const group = this._splitStorage ? getPersistenceKeyPolicy(key)?.storageGroup : undefined
+        this._slotWriteState(group || MAIN_STORAGE_SLOT).fingerprint = undefined
         this._markGroupDirty(key)
     }
 
     private _markAllCrossTabFeatureFlagChangesPending(): void {
-        CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => this._setCrossTabFeatureFlagChangesPending(key, true))
+        // remove() either resets slot bookkeeping or deliberately retains group
+        // fingerprints. Do not invalidate retained groups just for the transaction.
+        CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => this._pendingCrossTabFeatureFlagChanges.set(key, true))
     }
 
     private _markLoadedCrossTabFeatureFlagChangesPending(): void {

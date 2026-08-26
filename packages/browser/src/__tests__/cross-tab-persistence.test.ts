@@ -694,6 +694,24 @@ describe('cross-tab persistence interactions', () => {
             tabB.destroy()
         })
 
+        it('persists a local reversion when an unseen sibling changed the durable value', () => {
+            const config = makeConfig(HARDENED_DEBOUNCE_MS)
+            const tabA = new PostHogPersistence(config)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            tabA.flush()
+            const tabB = new PostHogPersistence(config)
+
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: true } })
+            tabA.flush()
+            tabB.register({ [ENABLED_FEATURE_FLAGS]: { flag: 'temporary-local-value' } })
+            tabB.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            tabB.flush()
+
+            expect(readStorage()[ENABLED_FEATURE_FLAGS]).toEqual({ flag: false })
+            tabA.destroy()
+            tabB.destroy()
+        })
+
         it('does not mark an unseen sibling change as a pending local change', () => {
             const config = makeConfig(HARDENED_DEBOUNCE_MS)
             const initialFlags = { 'flag-a': false, 'flag-b': false }
@@ -774,6 +792,26 @@ describe('cross-tab persistence interactions', () => {
             expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ flag: true })
             expect(readStorage()[ENABLED_FEATURE_FLAGS]).toEqual({ flag: true })
             tabA.destroy()
+            tabB.destroy()
+        })
+
+        it('persists deletion from a split group first observed through a storage event', () => {
+            const config = makeConfig(0, { split_storage: true })
+            const flagsStorageKey = `${STORAGE_KEY}__flags`
+            const tabB = new PostHogPersistence(config)
+            const tabA = new PostHogPersistence(config)
+            const oldValue = window.localStorage.getItem(flagsStorageKey)
+
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: true } })
+            tabA.destroy()
+            dispatchStorageChange(flagsStorageKey, oldValue, window.localStorage.getItem(flagsStorageKey))
+            expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ flag: true })
+
+            tabB.unregister(ENABLED_FEATURE_FLAGS)
+
+            expect(
+                JSON.parse(window.localStorage.getItem(flagsStorageKey) || '{}')[ENABLED_FEATURE_FLAGS]
+            ).toBeUndefined()
             tabB.destroy()
         })
 
