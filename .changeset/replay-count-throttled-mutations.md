@@ -2,4 +2,4 @@
 'posthog-js': minor
 ---
 
-Session recordings now report `$sdk_debug_replay_throttled_mutations_dropped`, a per-session count of attribute mutations the replay mutation throttler discarded. A discarded `class` or `style` change never reaches the player, so the count measures how often a recording's DOM can drift from the live page.
+Report `$sdk_debug_replay_throttled_mutations_dropped` on captured events, counting the attribute changes the session recorder discarded during that session. The recorder throttles elements that change hundreds of times a second, and a discarded `class` or `style` change never reaches the player — so a recording can keep showing an element the live page had already hidden. Query this property to see whether your app is affected.
