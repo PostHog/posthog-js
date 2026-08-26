@@ -687,7 +687,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             expect.objectContaining({
                 target: 'flags',
                 method: 'POST',
-                compression: 'base64',
+                compression: 'best-available',
                 sentAt: 'body',
                 timeoutMs: 1234,
                 body: expect.objectContaining({
