@@ -200,6 +200,26 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
 // should only be true for Opera<12
 let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
+const getSessionRecordingDefaults = (defaults?: ConfigDefaults): PostHogConfig['session_recording'] => {
+    const sessionRecording: PostHogConfig['session_recording'] = {}
+    if (!defaults || defaults === 'unset') {
+        return sessionRecording
+    }
+    if (defaults >= '2025-11-30') {
+        sessionRecording.strictMinimumDuration = true
+    }
+    if (defaults >= '2026-05-30') {
+        sessionRecording.canvasCapture = { resolutionScale: 0.6 }
+    }
+    if (defaults >= '2026-06-25') {
+        sessionRecording.streamNetworkBody = true
+    }
+    if (defaults >= '2026-08-30') {
+        sessionRecording.captureJsonLd = true
+    }
+    return sessionRecording
+}
+
 const defaultsThatVaryByConfig = (
     defaults?: ConfigDefaults
 ): Pick<
@@ -222,14 +242,7 @@ const defaultsThatVaryByConfig = (
               ? { content_ignorelist: true }
               : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
-    session_recording:
-        defaults && defaults >= '2026-06-25'
-            ? { strictMinimumDuration: true, canvasCapture: { resolutionScale: 0.6 }, streamNetworkBody: true }
-            : defaults && defaults >= '2026-05-30'
-              ? { strictMinimumDuration: true, canvasCapture: { resolutionScale: 0.6 } }
-              : defaults && defaults >= '2025-11-30'
-                ? { strictMinimumDuration: true }
-                : {},
+    session_recording: getSessionRecordingDefaults(defaults),
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
     persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
