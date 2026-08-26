@@ -219,7 +219,7 @@ export function matchFeatureFlagProperty(
     case 'is_not':
       return !computeExactMatch(value, overrideValue)
     case 'is_set':
-      return hasProperty
+      return true
     case 'icontains':
       return String(overrideValue).toLowerCase().includes(String(value).toLowerCase())
     case 'not_icontains':
