@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "<version>",
+    "version": "1.421.0",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -4676,11 +4676,6 @@
         {
           "type": "Compression | 'best-available'",
           "name": "compression"
-        },
-        {
-          "description": "Used when best-available compression negotiation does not select a format.",
-          "type": "Compression",
-          "name": "compressionFallback"
         },
         {
           "type": "Record<string, any> | Record<string, any>[]",
