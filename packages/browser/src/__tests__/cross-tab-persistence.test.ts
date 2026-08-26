@@ -822,6 +822,25 @@ describe('cross-tab persistence interactions', () => {
             tabB.destroy()
         })
 
+        it('does not persist feature state from a tab with a stale identity', () => {
+            const config = makeConfig(0, { split_storage: true })
+            const flagsStorageKey = `${STORAGE_KEY}__flags`
+            const tabA = new PostHogPersistence(config)
+            tabA.register({ distinct_id: 'old-user', [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            const tabB = new PostHogPersistence(config)
+
+            tabA.register({ distinct_id: 'new-user', [ENABLED_FEATURE_FLAGS]: { flag: true } })
+            tabB.markCrossTabFeatureFlagChanges({ [ENABLED_FEATURE_FLAGS]: ['flag'] })
+            tabB.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
+
+            expect(readStorage().distinct_id).toBe('new-user')
+            expect(JSON.parse(window.localStorage.getItem(flagsStorageKey) || '{}')[ENABLED_FEATURE_FLAGS]).toEqual({
+                flag: true,
+            })
+            tabA.destroy()
+            tabB.destroy()
+        })
+
         it('persists deletion from a split group first observed through a storage event', () => {
             const config = makeConfig(0, { split_storage: true })
             const flagsStorageKey = `${STORAGE_KEY}__flags`

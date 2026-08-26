@@ -218,6 +218,8 @@ export class PostHogPersistence {
     // write. Sibling updates to other flags can still be merged while pending.
     private _pendingCrossTabFeatureFlagChanges = new Map<string, Set<string> | true>()
     private _storageMigrationInProgress = false
+    private _localIdentityChangePending = false
+    private _crossTabFeatureFlagIdentityMismatch = false
     private _crossTabFeatureFlagHandler?: () => void
     private _onStorage?: (event: StorageEvent) => void
 
@@ -324,8 +326,23 @@ export class PostHogPersistence {
             return false
         }
 
+        const identityEntry = slot === MAIN_STORAGE_SLOT ? nextEntry : localStore._parse(this._name)
+        if (identityEntry && this._hasCrossTabFeatureFlagIdentityMismatch(identityEntry)) {
+            return false
+        }
+
         this._rememberCrossTabStorageFingerprint(nextEntry, slot, !isNull(storageValue))
         return this._mergeCrossTabFeatureFlagProperties(nextEntry, slot, notify)
+    }
+
+    private _hasCrossTabFeatureFlagIdentityMismatch(entry: Properties): boolean {
+        const localDistinctId = this.props[DISTINCT_ID]
+        const persistedDistinctId = entry[DISTINCT_ID]
+        return (
+            !isUndefined(localDistinctId) &&
+            !isUndefined(persistedDistinctId) &&
+            localDistinctId !== persistedDistinctId
+        )
     }
 
     private _rememberCrossTabStorageFingerprint(entry: Properties, slot: StorageSlot, materialized: boolean): void {
@@ -384,6 +401,11 @@ export class PostHogPersistence {
 
         try {
             const mainEntry = parseStorageValue(localStore._get(this._name))
+            this._crossTabFeatureFlagIdentityMismatch =
+                !this._localIdentityChangePending && this._hasCrossTabFeatureFlagIdentityMismatch(mainEntry)
+            if (this._crossTabFeatureFlagIdentityMismatch) {
+                return false
+            }
             let changed = this._mergeCrossTabFeatureFlagProperties(mainEntry, MAIN_STORAGE_SLOT, false)
             if (this._splitStorage) {
                 PERSISTENCE_STORAGE_GROUPS.forEach((group) => {
@@ -699,6 +721,7 @@ export class PostHogPersistence {
         const nextDistinctId = this.props[DISTINCT_ID]
         const nextUserState = this.props[USER_STATE]
         if (hasValidCookieIdentity && (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState)) {
+            this._localIdentityChangePending = true
             this._cookieIdentityChangePending = true
             sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
             this._deleteProp(STORED_PERSON_PROPERTIES_KEY)
@@ -1135,12 +1158,18 @@ export class PostHogPersistence {
             this.syncCookieProperties()
         }
 
-        const crossTabPropertiesChanged =
-            !forceSuppressedSnapshot && !this._storageMigrationInProgress
-                ? this._reconcileCrossTabFeatureFlagPropertiesBeforeWrite()
-                : false
+        const shouldReconcileCrossTabProperties = !forceSuppressedSnapshot && !this._storageMigrationInProgress
+        if (!shouldReconcileCrossTabProperties) {
+            this._crossTabFeatureFlagIdentityMismatch = false
+        }
+        const crossTabPropertiesChanged = shouldReconcileCrossTabProperties
+            ? this._reconcileCrossTabFeatureFlagPropertiesBeforeWrite()
+            : false
+        if (this._crossTabFeatureFlagIdentityMismatch && !this._splitStorage) {
+            return
+        }
         if (this._splitStorage) {
-            this._writeNowSplit()
+            this._writeNowSplit(this._crossTabFeatureFlagIdentityMismatch)
             if (crossTabPropertiesChanged) {
                 this._crossTabFeatureFlagHandler?.()
             }
@@ -1153,6 +1182,7 @@ export class PostHogPersistence {
         }
         if (writeResult !== false) {
             this._pendingCrossTabFeatureFlagChanges.clear()
+            this._localIdentityChangePending = false
         }
         if (crossTabPropertiesChanged) {
             this._crossTabFeatureFlagHandler?.()
@@ -1170,13 +1200,14 @@ export class PostHogPersistence {
     // group fingerprints precisely because cookies can never carry a group entry;
     // routing one to a cookie store would make a cookie-option change silently
     // skip a needed rewrite.
-    private _writeNowSplit(): void {
+    private _writeNowSplit(skipFeatureFlagGroup: boolean = false): void {
         const { main, groups } = this._partitionProps()
         const mainWriteResult = this._writeEntry(this._storage, this._name, main, MAIN_STORAGE_SLOT)
         if (mainWriteResult) {
             this._rememberCurrentCookieProperties(main)
         }
         if (mainWriteResult !== false) {
+            this._localIdentityChangePending = false
             CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
                 if (!getPersistenceKeyPolicy(key)?.storageGroup) {
                     this._pendingCrossTabFeatureFlagChanges.delete(key)
@@ -1184,6 +1215,9 @@ export class PostHogPersistence {
             })
         }
         for (const group of PERSISTENCE_STORAGE_GROUPS) {
+            if (skipFeatureFlagGroup && group === 'flags') {
+                continue
+            }
             const groupProps = groups[group]
             // Don't materialize an entry just to hold `{}`: skip a group that is
             // empty and has never been persisted. Once a group has held content
@@ -1678,6 +1712,9 @@ export class PostHogPersistence {
     private _setProp(prop: string, to: any): void {
         const previousValue = this.props[prop]
         this.props[prop] = to
+        if ((prop === DISTINCT_ID || prop === USER_STATE) && previousValue !== to) {
+            this._localIdentityChangePending = true
+        }
         this._markPendingCrossTabFeatureFlagChanges(prop, previousValue, to)
         // A volatile value change never dirties its group — it changes on every
         // remote load and would otherwise force a rewrite of the large entry per
