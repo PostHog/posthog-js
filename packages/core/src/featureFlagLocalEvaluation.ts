@@ -186,7 +186,6 @@ export function matchFeatureFlagProperty(
   const parsingPolicy = options.semverParsingPolicy ?? 'strict'
 
   if (!(key in propertyValues)) {
-    if (operator === 'is_not_set') return true
     throw new InconclusiveMatchError(`Property ${key} not found in propertyValues`)
   } else if (operator === 'is_not_set') {
     return false
