@@ -3,14 +3,16 @@ import { Request } from '@playwright/test'
 import { start } from './utils/setup'
 import { PostHog } from '@/posthog-core'
 import { pollUntilCondition } from './utils/event-capture-utils'
+import { decompressSync, strFromU8 } from 'fflate'
 
-function getBase64EncodedPayloadFromBody(body: unknown): Record<string, any> {
-    if (typeof body !== 'string') {
-        throw new Error('Expected body to be a string')
+function getGzipEncodedPayload(request: Request): Record<string, any> {
+    const data = request.postDataBuffer()
+    if (!data) {
+        throw new Error('Expected body to be present')
     }
-    const dataElement = body.match(/data=(.*)/)?.[1]
-    const data = decodeURIComponent(dataElement!)
-    return JSON.parse(Buffer.from(data, 'base64').toString())
+    expect(data[0]).toBe(0x1f)
+    expect(data[1]).toBe(0x8b)
+    return JSON.parse(strFromU8(decompressSync(data)))
 }
 
 const startOptions = {
@@ -64,7 +66,7 @@ test.describe('flags', () => {
     test('makes flags request on start', async () => {
         expect(flagsRequests.length).toBe(1)
         const flagsRequest = flagsRequests[0]
-        const flagsPayload = getBase64EncodedPayloadFromBody(flagsRequest.postData())
+        const flagsPayload = getGzipEncodedPayload(flagsRequest)
         expect(flagsPayload).toEqual({
             token: 'test token',
             distinct_id: 'new-id',
