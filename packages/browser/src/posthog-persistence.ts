@@ -438,7 +438,8 @@ export class PostHogPersistence {
         if (!isCrossTabFeatureFlagKey(key)) {
             return
         }
-        if (this._pendingCrossTabFeatureFlagChanges.get(key) === true) {
+        const existingPendingChanges = this._pendingCrossTabFeatureFlagChanges.get(key)
+        if (existingPendingChanges === true) {
             return
         }
 
@@ -454,7 +455,6 @@ export class PostHogPersistence {
             } catch {}
         }
 
-        const existingPendingChanges = this._pendingCrossTabFeatureFlagChanges.get(key)
         const pendingChanges = new Set<string>(existingPendingChanges || [])
         if (key === PERSISTENCE_ACTIVE_FEATURE_FLAGS) {
             if (
