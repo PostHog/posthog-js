@@ -36,8 +36,11 @@ import { getCurrentUrl } from '../shared/browser.js'
  */
 export interface PostHogPageViewProps {
     /**
-     * Set `$pathname` to the Next.js route template, such as `/posts/[id]`.
+     * Set `$pathname` to a best-effort Next.js route template, such as `/posts/[id]`.
      * The concrete URL remains available in `$current_url`.
+     *
+     * App Router templates are inferred from `useParams()`. Ambiguous matches fall back to the concrete pathname,
+     * and optional catch-all parameters use the normalized `[...param]` form when populated.
      *
      * @default false
      */
@@ -66,7 +69,19 @@ function decodedSegmentMatches(segment: string, value: string): boolean {
     }
 }
 
-function computeRouteTemplate(pathname: string, params: RouteParams): string {
+function findMatchingIndexes(segments: string[], values: string[]): number[] {
+    const matches: number[] = []
+
+    for (let index = 0; index + values.length <= segments.length; index++) {
+        if (values.every((value, offset) => decodedSegmentMatches(segments[index + offset], value))) {
+            matches.push(index)
+        }
+    }
+
+    return matches
+}
+
+function computeRouteTemplate(pathname: string, params: RouteParams): string | undefined {
     const segments = pathname.split('/')
 
     for (const [paramName, paramValue] of Object.entries(params)) {
@@ -74,12 +89,11 @@ function computeRouteTemplate(pathname: string, params: RouteParams): string {
             continue
         }
 
-        for (let index = 0; index + paramValue.length <= segments.length; index++) {
-            if (paramValue.every((value, offset) => decodedSegmentMatches(segments[index + offset], value))) {
-                segments.splice(index, paramValue.length, `[...${paramName}]`)
-                break
-            }
+        const matches = findMatchingIndexes(segments, paramValue)
+        if (matches.length !== 1) {
+            return undefined
         }
+        segments.splice(matches[0], paramValue.length, `[...${paramName}]`)
     }
 
     for (const [paramName, paramValue] of Object.entries(params)) {
@@ -87,10 +101,11 @@ function computeRouteTemplate(pathname: string, params: RouteParams): string {
             continue
         }
 
-        const index = segments.findIndex((segment) => decodedSegmentMatches(segment, paramValue))
-        if (index !== -1) {
-            segments[index] = `[${paramName}]`
+        const matches = findMatchingIndexes(segments, [paramValue])
+        if (matches.length !== 1) {
+            return undefined
         }
+        segments[matches[0]] = `[${paramName}]`
     }
 
     return segments.join('/')

@@ -64,6 +64,17 @@ describe('PostHogPageView', () => {
         })
     })
 
+    it('keeps the concrete pathname when the route template is ambiguous', () => {
+        mockPathname = '/blog/blog'
+        mockParams = { slug: 'blog' }
+
+        render(<PostHogPageView captureRouteTemplate />)
+
+        expect(mockCapture).toHaveBeenCalledWith('$pageview', {
+            $current_url: 'http://localhost/blog/blog',
+        })
+    })
+
     it('captures a new $pageview when pathname changes', () => {
         const { rerender } = render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledTimes(1)
