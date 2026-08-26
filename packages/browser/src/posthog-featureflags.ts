@@ -919,7 +919,7 @@ export class PostHogFeatureFlags implements Extension {
                     target: 'flags',
                     method: 'POST',
                     body: data,
-                    compression: this._config.compression === 'best-available' ? 'best-available' : undefined,
+                    compression: this._config.compression,
                     sentAt: 'body',
                     timeoutMs: this._config.requestTimeoutMs,
                 })
@@ -1217,7 +1217,7 @@ export class PostHogFeatureFlags implements Extension {
                 target: 'flags',
                 method: 'POST',
                 body: data,
-                compression: this._config.compression === 'best-available' ? 'best-available' : undefined,
+                compression: this._config.compression,
                 sentAt: 'body',
                 timeoutMs: this._config.requestTimeoutMs,
             })

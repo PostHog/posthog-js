@@ -1,6 +1,6 @@
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isArray, isUndefined } from '@posthog/core'
-import type { JsonType, PostHogConfig } from './types'
+import type { Compression, JsonType, PostHogConfig } from './types'
 
 const logger = createLogger('[FeatureFlags]')
 const DEFAULT_REFRESH_INTERVAL_MS = 5 * 60 * 1000
@@ -17,7 +17,7 @@ export interface FeatureFlagsConfig {
     readonly cacheTtlMs?: number
     readonly refreshIntervalMs?: number
     readonly requestTimeoutMs: number
-    readonly compression: 'best-available' | 'none'
+    readonly compression?: Compression | 'best-available'
     readonly evaluationContexts: readonly string[]
     readonly flagKeys?: readonly string[]
 }
@@ -38,7 +38,7 @@ const snapshot = (config: PostHogConfig, remoteRequestsDisabled: boolean): Featu
     cacheTtlMs: config.feature_flag_cache_ttl_ms,
     refreshIntervalMs: config.remote_config_refresh_interval_ms ?? DEFAULT_REFRESH_INTERVAL_MS,
     requestTimeoutMs: config.feature_flag_request_timeout_ms,
-    compression: config.disable_compression ? 'none' : 'best-available',
+    compression: config.disable_compression ? undefined : 'best-available',
     evaluationContexts: config.evaluation_contexts ?? config.evaluation_environments ?? [],
     flagKeys: isArray(config.flag_keys) ? config.flag_keys : undefined,
 })
