@@ -15,6 +15,7 @@ import { gzipSync, strToU8 } from 'fflate'
 
 import { _base64Encode } from '@posthog/browser-common/utils/encode-utils'
 import {
+    createNamedError,
     gzipCompress,
     isArray,
     isGzipData,
@@ -233,9 +234,7 @@ const preEncodeAsync = async (options: RequestWithEncodedBody): Promise<RequestW
  * `signal is aborted without reason` exception.
  */
 const timeoutAbortReason = (timeout?: number): Error => {
-    const reason = new Error(`PostHog request timed out${timeout ? ` after ${timeout}ms` : ''}`)
-    reason.name = 'AbortError'
-    return reason
+    return createNamedError('AbortError', `PostHog request timed out${timeout ? ` after ${timeout}ms` : ''}`)
 }
 
 // A failed fetch at the network layer (ad blocker, dropped connection, CORS, page teardown)

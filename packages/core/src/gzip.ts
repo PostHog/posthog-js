@@ -1,4 +1,5 @@
 import { Compression } from './types'
+import { createNamedError } from './utils'
 
 /**
  * Older browsers and some runtimes don't support this yet
@@ -88,9 +89,7 @@ const crc32 = (bytes: Uint8Array): number => {
 }
 
 const throwNativeGzipValidationError = (reason: NativeGzipValidationReason): never => {
-  const error = new Error(`Native gzip produced invalid output: ${reason}`)
-  error.name = NATIVE_GZIP_VALIDATION_ERROR
-  throw error
+  throw createNamedError(NATIVE_GZIP_VALIDATION_ERROR, `Native gzip produced invalid output: ${reason}`)
 }
 
 const validateNativeGzip = async (compressed: Blob, inputBytes: Uint8Array): Promise<void> => {

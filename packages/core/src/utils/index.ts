@@ -25,6 +25,17 @@ export function getEventUuid(uuid: unknown, generateUuid: () => string): string 
   return isValidUUID(uuid) ? uuid : generateUuid()
 }
 
+// Some anti-fingerprinting browser extensions make `Error.prototype.name` non-writable.
+// A plain `error.name = ...` then throws a `TypeError`, which breaks timeout detection
+// by error name. Set the name through this guard so the write fails silently instead.
+export function createNamedError(name: string, message?: string): Error {
+  const error = new Error(message)
+  try {
+    error.name = name
+  } catch {}
+  return error
+}
+
 export function assert(truthyValue: any, message: string): void {
   if (!truthyValue || typeof truthyValue !== 'string' || isEmpty(truthyValue)) {
     throw new Error(message)
