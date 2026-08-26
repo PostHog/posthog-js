@@ -1600,6 +1600,53 @@ describe('Lazy SessionRecording', () => {
                 expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
             })
 
+            it('heals with a debounced full snapshot when the throttler drops an attribute while awake', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+                const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+                takeFullSnapshot.mockClear()
+
+                jest.useFakeTimers()
+                try {
+                    // a dense burst reports several drops; they coalesce into one heal snapshot
+                    lazyRecording['_onThrottledMutationsDropped'](3)
+                    lazyRecording['_onThrottledMutationsDropped'](2)
+                    expect(takeFullSnapshot).not.toHaveBeenCalled()
+
+                    jest.advanceTimersByTime(1000)
+                    expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+                    // the drops are counted so the throttler path is measurable
+                    expect(lazyRecording.sdkDebugProperties['$sdk_debug_replay_throttled_mutations_dropped']).toEqual(5)
+                } finally {
+                    jest.useRealTimers()
+                }
+            })
+
+            it('does not schedule a heal snapshot for throttler drops while idle', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+                const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+                _emit({
+                    ...createPluginSnapshot({}),
+                    timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000,
+                } as eventWithTime)
+                expect(lazyRecording['_isIdle']).toEqual(true)
+                takeFullSnapshot.mockClear()
+
+                jest.useFakeTimers()
+                try {
+                    // idle drops are healed on wake, so no snapshot is scheduled here
+                    lazyRecording['_onThrottledMutationsDropped'](4)
+                    jest.advanceTimersByTime(1000)
+                    expect(takeFullSnapshot).not.toHaveBeenCalled()
+                } finally {
+                    jest.useRealTimers()
+                }
+            })
+
             it('rotates session if idle for (MAX_SESSION_IDLE_TIMEOUT) 30 minutes', () => {
                 const firstActivityTimestamp = startingTimestamp + 100
                 const secondActivityTimestamp = startingTimestamp + 200

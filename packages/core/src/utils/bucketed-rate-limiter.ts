@@ -87,7 +87,9 @@ export class BucketedRateLimiter<T extends string | number> {
       this._onBucketRateLimited?.(key)
     }
 
-    return bucket.tokens === 0
+    // The call that spends the last token is served, not dropped. Returning
+    // `true` here would rate limit one request more than the bucket size.
+    return false
   }
 
   public stop(): void {

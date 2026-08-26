@@ -114,6 +114,11 @@ const MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = ONE_HOUR
 // visible freeze - no rendering, scrolling, or cursor movement - and worth a warning.
 const SLOW_FULL_SNAPSHOT_THRESHOLD_MS = 500
 
+// Delay before a throttle-drop heal snapshot fires. A trailing debounce, so a dense
+// mutation burst coalesces into one snapshot; a sustained animation keeps resetting the
+// timer and is left to the periodic snapshot rather than snapshotting on every frame.
+const THROTTLE_HEAL_DEBOUNCE_MS = 1000
+
 function roundOrUndefined(value: number | undefined): number | undefined {
     return isUndefined(value) ? undefined : Math.round(value)
 }
@@ -513,6 +518,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // Cleared only when a full snapshot actually passes the idle gate, so a failed
     // wake heal retries on the next wake instead of losing the signal
     private _eventsDroppedWhileIdle = 0
+    // attribute mutations the throttler dropped across this session. Reported on captured
+    // events so the throttler drop path (invisible until now) is measurable in our own data.
+    private _throttledMutationsDropped = 0
+    // trailing debounce for the throttle-drop heal snapshot, see THROTTLE_HEAL_DEBOUNCE_MS
+    private _throttleHealTimer?: ReturnType<typeof setTimeout>
     // true while the current epoch has had no user interaction; a held epoch is
     // discarded (not shipped) by stop or a subsequent rotation
     private _holdFlushUntilInteraction = false
@@ -1429,6 +1439,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         document?.removeEventListener('visibilitychange', this._onVisibilityChange)
 
         clearInterval(this._fullSnapshotTimer)
+        clearTimeout(this._throttleHealTimer)
+        this._throttleHealTimer = undefined
         this._clearFlushBufferTimer()
 
         this._removePageViewCaptureHook?.()
@@ -1654,6 +1666,28 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             sessionId: targetSessionId,
         })
         this._tryTakeFullSnapshot()
+    }
+
+    // The mutation throttler dropped an attribute change before it reached the player.
+    // Count it so the path is measurable, and schedule a full snapshot to re-sync the
+    // player's mirror with the live DOM. While idle the wake heal already covers this.
+    private _onThrottledMutationsDropped(count: number) {
+        this._throttledMutationsDropped += count
+
+        if (this._isIdle === true) {
+            return
+        }
+
+        if (this._throttleHealTimer) {
+            clearTimeout(this._throttleHealTimer)
+        }
+        this._throttleHealTimer = setTimeout(() => {
+            this._throttleHealTimer = undefined
+            // sampled-out and disabled recorders discard the buffer, so a heal is pure cost
+            if (['sampled', 'active'].includes(this.status)) {
+                this._tryTakeFullSnapshot()
+            }
+        }, THROTTLE_HEAL_DEBOUNCE_MS)
     }
 
     private _finishQueuedCompressionEvent(queuedEvent: QueuedCompressionEvent) {
@@ -2554,6 +2588,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // the plausibility cap (see rrweb-snapshot snapshot-cost.ts): the duration
             // gauges above stay alert-safe, and the discard itself stays observable
             $sdk_debug_replay_discarded_duration_samples: getRRWeb()?.getDiscardedDurationSamples?.(),
+            // cumulative across the session: attribute mutations the throttler dropped, each
+            // of which risks the player showing DOM that already left the live page
+            $sdk_debug_replay_throttled_mutations_dropped: this._throttledMutationsDropped,
             $sdk_debug_replay_rrweb_error: this._rrwebError,
             [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
@@ -2718,6 +2755,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
                     this.log(LOGGER_PREFIX + ' ' + message, 'warn')
                 },
+                onDroppedAttributeMutations: (count) => this._onThrottledMutationsDropped(count),
             })
 
         const activePlugins = this._gatherRRWebPlugins()
