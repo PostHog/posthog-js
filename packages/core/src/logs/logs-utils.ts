@@ -245,7 +245,7 @@ function encodeKeyValueList(
 // ============================================================================
 
 /**
- * Returns the current wall-clock time as a unix-nanos string.
+ * Returns `timestampMs` (default: now) as a unix-nanos string.
  *
  * OTLP requires nanoseconds as a string (uint64 doesn't fit in JS Number).
  * `Date.now() * 1_000_000` would exceed Number.MAX_SAFE_INTEGER, so we

@@ -1,5 +1,6 @@
 import { assignableWindow } from '../utils/globals'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
+import { originalConsoleMethod } from '../utils/console-original'
 import type { BufferedConsoleEntry, BufferedConsoleLevel } from '../logs-types'
 import { LogsExtension } from '../extension-tokens'
 import type { PostHog } from '../posthog-core'
@@ -344,13 +345,6 @@ const LEVEL_MAP: Record<BufferedConsoleLevel, LogSeverityLevel> = {
     warn: 'warn',
     error: 'error',
     info: 'info',
-}
-
-const originalConsoleMethod = (method: any): any => {
-    while (method?.__rrweb_original__) {
-        method = method.__rrweb_original__
-    }
-    return method
 }
 
 const isClient = (host: PostHog | Client): host is Client => 'canCapture' in host

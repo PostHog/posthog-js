@@ -102,6 +102,7 @@
         "@posthog/rrweb-plugin-console-record": "workspace:*",
         "@posthog/rrweb-record": "workspace:*",
         "@posthog/rrweb-types": "workspace:*",
+        "@posthog/rrweb-utils": "workspace:*",
         "@rollup/plugin-babel": "^6.0.4",
         "@rollup/plugin-commonjs": "^28.0.6",
         "@rollup/plugin-json": "^6.1.0",

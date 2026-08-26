@@ -2,4 +2,4 @@
 '@posthog/core': minor
 ---
 
-Add `PostHogLogs` APIs for hosts that buffer log records themselves: an optional `capturedAt` argument to `captureLog` for stamping a record with a caller-supplied event time and context, and `clearQueue` for dropping queued records without an in-flight batch discarding what was captured afterwards
+Add `capturedAt` to `PostHogLogs.captureLog()` for stamping a record with the time and context of when the event occurred, and `PostHogLogs.clearQueue()` for dropping every queued record
