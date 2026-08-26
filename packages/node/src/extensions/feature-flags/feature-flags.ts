@@ -641,6 +641,8 @@ class FeatureFlagsPoller {
    * contexts. A flag with no evaluation contexts is always kept. A flag with contexts is
    * kept only when it shares at least one with the configured list. Matching is exact, to
    * mirror the remote `/flags` evaluation path. Returns all flags when no contexts are set.
+   * Older servers report the flag's contexts under the legacy `evaluation_tags` key, which is
+   * read as a fallback.
    */
   private filterFlagsByEvaluationContexts(flags: PostHogFeatureFlag[]): PostHogFeatureFlag[] {
     if (!this.evaluationContexts || this.evaluationContexts.length === 0) {
@@ -649,7 +651,8 @@ class FeatureFlagsPoller {
 
     const contexts = new Set(this.evaluationContexts)
     return flags.filter((flag) => {
-      const tags = flag.evaluation_contexts
+      // Older servers (pre-2026-03-11) send the same list under the legacy `evaluation_tags` key.
+      const tags = flag.evaluation_contexts ?? flag.evaluation_tags
       if (!tags || tags.length === 0) {
         return true
       }

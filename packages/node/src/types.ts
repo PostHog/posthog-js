@@ -387,6 +387,12 @@ export type PostHogFeatureFlag = {
    * Absent when the server does not report it.
    */
   evaluation_contexts?: string[]
+  /**
+   * Legacy name for `evaluation_contexts`. Servers older than the field rename (PostHog,
+   * 2026-03-11) expose the same list under this key on `/flags/definitions`. Read as a
+   * fallback so local-evaluation context filtering still works against those servers.
+   */
+  evaluation_tags?: string[]
 }
 
 /**

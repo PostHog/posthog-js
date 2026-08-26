@@ -3013,6 +3013,52 @@ describe('local evaluation with evaluation contexts', () => {
       'frontend-flag': true,
     })
   })
+
+  it('reads the legacy evaluation_tags field from older servers', async () => {
+    // Servers older than the field rename report contexts under `evaluation_tags`.
+    const legacyFlags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Untagged Feature',
+          key: 'untagged-flag',
+          active: true,
+          evaluation_tags: [],
+          filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+        },
+        {
+          id: 2,
+          name: 'Backend Feature',
+          key: 'backend-flag',
+          active: true,
+          evaluation_tags: ['backend', 'api'],
+          filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+        },
+        {
+          id: 3,
+          name: 'Frontend Feature',
+          key: 'frontend-flag',
+          active: true,
+          evaluation_tags: ['frontend'],
+          filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: legacyFlags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      evaluationContexts: ['backend'],
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getAllFlags('distinct-id', { onlyEvaluateLocally: true })).toEqual({
+      'untagged-flag': true,
+      'backend-flag': true,
+    })
+  })
 })
 
 describe('getFeatureFlag', () => {
