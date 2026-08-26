@@ -788,6 +788,7 @@
         "_syncHostnamesForPatch",
         "_sync_opt_out_with_persistence",
         "_teardown",
+        "_throttledMutationsDropped",
         "_tickets",
         "_timestamp",
         "_totalBytes",
