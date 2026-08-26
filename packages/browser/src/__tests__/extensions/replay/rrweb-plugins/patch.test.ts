@@ -46,6 +46,35 @@ describe('patch', () => {
         calls.length = 0
         target.fn()
         expect(calls).toEqual(['base'])
+        // Not just behaving correctly — the chain is actually empty again.
+        expect(target.fn).toBe(base)
+    })
+
+    it('splices out from under a wrapper left by a build that only carries __posthog_layer__', () => {
+        // Lazy chunks load independently of the main bundle, so an older wrapper
+        // publishing a single marker can sit above a newer one.
+        const calls: string[] = []
+        const base = () => calls.push('base')
+        const target: any = { fn: base }
+
+        const removeOurs = patch(target, 'fn', (next: any) => () => {
+            calls.push('ours')
+            return next()
+        })
+
+        const legacyLayer = { next: target.fn }
+        const legacyWrapper: any = () => {
+            calls.push('legacy')
+            return legacyLayer.next()
+        }
+        Object.defineProperty(legacyWrapper, '__posthog_layer__', { enumerable: false, value: legacyLayer })
+        target.fn = legacyWrapper
+
+        removeOurs()
+        calls.length = 0
+        target.fn()
+
+        expect(calls).toEqual(['legacy', 'base'])
     })
 
     it('splices itself out from under an rrweb wrapper', () => {

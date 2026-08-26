@@ -257,25 +257,23 @@ export class PostHogLogs implements Extension {
     }
 
     onRemoteConfig(result: DeepReadonly<RemoteConfigResult>): void {
-        if (this._disposed || !result.ok) {
-            // Failure behaves like a response without a logs key.
-            this._stopRecorderStartedByPersistedHint()
+        if (this._disposed) {
             return
         }
 
-        const logCapture = result.config.logs?.captureConsoleLogs
-        // Only an explicit verdict is persisted: a response without a `logs` key must
-        // not overwrite what the server said last time.
-        if (!isNullish(logCapture) && this._instance?.persistence) {
-            this._instance.persistence.register({ [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: !!logCapture })
-        }
+        // A failed fetch and a response without a `logs` key behave the same: no fresh
+        // verdict arrived, so fall back to whatever the server last persisted.
+        const logCapture = result.ok ? result.config.logs?.captureConsoleLogs : undefined
         if (isNullish(logCapture)) {
-            // No opinion from the server, so local config stands: release any hold from
-            // an older verdict, and stand down a recorder that only the hint started.
+            // Nothing to persist — the last verdict stands — and it decides whether a
+            // local opt-in may still load.
             this._stopRecorderStartedByPersistedHint()
-            this.loadIfEnabled()
+            if (this._persistedCaptureVerdict() !== false) {
+                this.loadIfEnabled()
+            }
             return
         }
+        this._instance?.persistence?.register({ [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: logCapture })
         if (!logCapture) {
             // An explicit `false` is a kill switch: it turns console autocapture off even
             // when it was enabled in local config, and tears down a chunk that already

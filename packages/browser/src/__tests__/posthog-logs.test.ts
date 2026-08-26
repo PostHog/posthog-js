@@ -1351,18 +1351,34 @@ describe('posthog-logs', () => {
                 expect(mockLoadExternalDependency).not.toHaveBeenCalled()
             })
 
-            it('should release the hold when the server stops sending a verdict', () => {
+            it.each([
+                { label: 'the response carries no logs key', result: { ok: true, config: { logs: undefined } } },
+                { label: 'the remote config request fails', result: { ok: false } },
+            ])('should keep the hold when $label', ({ result }) => {
+                // Matches session replay: no fresh verdict means the persisted one stands.
                 const instance = buildInstanceWithLocalConfig()
                 ;(instance as any).persistence.props = { [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: false }
                 logsFromPersisted = new PostHogLogs(instance)
                 logsFromPersisted.setup(noopClient())
+
+                logsFromPersisted.onRemoteConfig(result as any)
+
                 expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+                expect((instance as any).persistence.register).not.toHaveBeenCalled()
+            })
 
-                logsFromPersisted.onRemoteConfig({
-                    ok: true,
-                    config: { ...remoteConfigResult(true).config, logs: undefined },
-                } as any)
+            it('should honour local config when a stale server false can never be withdrawn', () => {
+                // `advanced_disable_flags` means no response is coming, so a verdict that
+                // can never be withdrawn must not hold capture back forever.
+                mockLoadExternalDependency.mockImplementation(() => {})
+                const instance = buildInstanceWithLocalConfig()
+                ;(instance as any).persistence.props = { [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: false }
+                ;(instance as any)._shouldDisableFlags = jest.fn(() => true)
+                logsFromPersisted = new PostHogLogs(instance)
 
+                logsFromPersisted.setup(noopClient())
+
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(true)
                 expect(mockLoadExternalDependency).toHaveBeenCalled()
             })
 

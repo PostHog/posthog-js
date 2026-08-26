@@ -344,18 +344,28 @@ export function patch(
         return;
       }
 
-      // Otherwise newer wrappers sit on top of us. Find the rrweb layer directly
-      // above us and re-point it past us, removing our wrapper from the call path
-      // without disturbing the newer wrappers.
+      // Otherwise newer wrappers sit on top of us. Find the layer directly above us
+      // and re-point it past us, removing our wrapper from the call path without
+      // disturbing the newer wrappers. posthog-js ships its own copy of this
+      // function under `__posthog_layer__` and wraps the same console methods, so
+      // walk both markers — recognising only our own leaves its wrapper stranded
+      // and resurrects ours when it later restores.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const layerOf = (method: unknown): PatchLayer | undefined =>
+        isFunction(method)
+          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (((method as any).__rrweb_layer__ ?? (method as any).__posthog_layer__) as PatchLayer | undefined)
+          : undefined;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let current: any = source[name];
-      while (isFunction(current) && (current as any).__rrweb_layer__) {
-        const currentLayer = (current as any).__rrweb_layer__ as PatchLayer;
+      let currentLayer = layerOf(current);
+      while (currentLayer) {
         if (currentLayer.next === wrapped) {
           currentLayer.next = layer.next;
           return;
         }
         current = currentLayer.next;
+        currentLayer = layerOf(current);
       }
 
       // If we get here we're buried under a non-rrweb wrapper that closed over

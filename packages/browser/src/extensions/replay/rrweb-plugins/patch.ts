@@ -72,14 +72,6 @@ export function patch(
                     enumerable: false,
                     value: layer,
                 },
-                // rrweb ships its own copy of this function and walks only its own
-                // marker. Publishing the same layer under both names lets either
-                // copy's restore splice past a wrapper the other installed, without
-                // changing how either one walks.
-                __rrweb_layer__: {
-                    enumerable: false,
-                    value: layer,
-                },
             })
         }
 
