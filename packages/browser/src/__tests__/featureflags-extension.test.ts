@@ -12,7 +12,9 @@ import {
 import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { defaultConfig } from '../posthog-core'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
+import { PostHogPersistence } from '../posthog-persistence'
 import { createPosthogInstance } from './helpers/posthog-instance'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 describe('PostHogFeatureFlags extension lifecycle', () => {
     beforeEach(() => {
@@ -50,6 +52,40 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         expect(removeWindowListener).toHaveBeenCalledWith('online', expect.any(Function))
         expect(removeDocumentListener).toHaveBeenCalledTimes(1)
         expect(removeDocumentListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function))
+    })
+
+    it('notifies feature flag handlers when a sibling tab updates enrollment state', async () => {
+        const token = uuidv7()
+        const persistenceName = `cross-tab-flags-${token}`
+        const posthog = await createPosthogInstance(token, {
+            advanced_disable_feature_flags: true,
+            persistence: 'localStorage',
+            persistence_name: persistenceName,
+            persistence_save_debounce_ms: 0,
+        })
+        posthog.persistence?.register({ [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': false } })
+        const siblingPersistence = new PostHogPersistence(posthog.config)
+        const callback = jest.fn()
+        posthog.onFeatureFlags(callback)
+        const storageKey = `ph_${persistenceName}`
+        const oldValue = window.localStorage.getItem(storageKey)
+
+        siblingPersistence.register({
+            [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': true },
+            [STORED_PERSON_PROPERTIES_KEY]: { '$feature_enrollment/early-access-flag': true },
+        })
+        const newValue = window.localStorage.getItem(storageKey)
+        window.dispatchEvent(new StorageEvent('storage', { key: storageKey, oldValue, newValue }))
+
+        expect(posthog.isFeatureEnabled('early-access-flag', { send_event: false })).toBe(true)
+        expect(callback).toHaveBeenCalledWith(
+            ['early-access-flag'],
+            { 'early-access-flag': true },
+            { errorsLoading: undefined }
+        )
+
+        siblingPersistence.destroy()
+        await posthog.shutdown()
     })
 
     describe('automatic refresh', () => {

@@ -52,6 +52,16 @@ describe('shutdown()', () => {
         expect(featureFlagsDispose).toHaveBeenCalledTimes(1)
     })
 
+    it('destroys persistence storage listeners', async () => {
+        const persistenceDestroy = jest.spyOn(instance.persistence!, 'destroy')
+        const sessionPersistenceDestroy = jest.spyOn(instance.sessionPersistence!, 'destroy')
+
+        await instance.shutdown()
+
+        expect(persistenceDestroy).toHaveBeenCalledTimes(1)
+        expect(sessionPersistenceDestroy).toHaveBeenCalledTimes(1)
+    })
+
     it('isolates extension cleanup failures and continues queue flushing', async () => {
         const order: string[] = []
         const requestQueueUnload = jest.spyOn(instance._requestQueue!, 'unload')

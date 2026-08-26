@@ -3514,6 +3514,8 @@ export class PostHog implements PostHogInterface {
         } catch (error) {
             logger.error('Error while destroying feature flags', error)
         }
+        this.persistence?.destroy()
+        this.sessionPersistence?.destroy()
     }
 
     /**

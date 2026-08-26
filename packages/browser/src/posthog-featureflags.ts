@@ -259,6 +259,7 @@ export class PostHogFeatureFlags implements Extension {
     private _initializingClient?: Client
     private _logger: Client['logger'] = logger
     private _dynamicProperties?: Disposable
+    private _crossTabPersistenceUnsubscribe?: () => void
     private _baseEventProperties: Record<string, unknown> = {}
     private _eventPropertiesWithFlagValues: Record<string, unknown> = {}
     private _reloadingHandlers: Array<() => void> = []
@@ -276,6 +277,7 @@ export class PostHogFeatureFlags implements Extension {
     private _lastRefreshAt?: number
     private readonly _configSource: FeatureFlagsConfigSource
     private readonly _mutableConfigSource?: MutableFeatureFlagsConfigSource
+    private readonly _instance?: PostHog
 
     constructor(instance: PostHog)
     constructor(configSource: FeatureFlagsConfigSource)
@@ -283,6 +285,7 @@ export class PostHogFeatureFlags implements Extension {
         if ('get' in instanceOrConfigSource) {
             this._configSource = instanceOrConfigSource
         } else {
+            this._instance = instanceOrConfigSource
             this._mutableConfigSource = new MutableFeatureFlagsConfigSource(
                 instanceOrConfigSource.config,
                 instanceOrConfigSource._shouldDisableFlags()
@@ -322,6 +325,9 @@ export class PostHogFeatureFlags implements Extension {
         this._dynamicProperties = client.registerDynamicEventProperties(() =>
             this._isCacheStale() ? this._baseEventProperties : this._eventPropertiesWithFlagValues
         )
+        this._crossTabPersistenceUnsubscribe = this._instance?.persistence?.onCrossTabFeatureFlagChange(() => {
+            this._fireFeatureFlagsCallbacks()
+        })
         this._rebuildEventProperties()
         return this.initialize()
     }
@@ -421,6 +427,8 @@ export class PostHogFeatureFlags implements Extension {
         this._clearDebouncer()
         this._dynamicProperties?.dispose()
         this._dynamicProperties = undefined
+        this._crossTabPersistenceUnsubscribe?.()
+        this._crossTabPersistenceUnsubscribe = undefined
         this._reloadingHandlers = []
         window?.removeEventListener('online', this._onOnline)
         this._client = undefined

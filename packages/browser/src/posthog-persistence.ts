@@ -95,6 +95,34 @@ const parseName = (config: PostHogConfig): string => {
 // use their group name as the slot. See `_writeEntry`.
 const MAIN_STORAGE_SLOT = 'main'
 
+// Feature flag evaluation state is shared by every same-origin tab. Keep these
+// keys synchronized so a stale tab cannot overwrite an enrollment or cached
+// flag update when it next writes the persistence blob.
+const CROSS_TAB_FEATURE_FLAG_KEYS = [
+    ENABLED_FEATURE_FLAGS,
+    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    STORED_PERSON_PROPERTIES_KEY,
+] as const
+
+const isCrossTabFeatureFlagKey = (key: string): boolean =>
+    (CROSS_TAB_FEATURE_FLAG_KEYS as readonly string[]).indexOf(key) !== -1
+
+const isStorageValueEqual = (left: unknown, right: unknown): boolean => {
+    try {
+        return JSON.stringify(left) === JSON.stringify(right)
+    } catch {
+        return left === right
+    }
+}
+
+const parseStorageEventValue = (value: string | null): Properties => {
+    if (!value) {
+        return {}
+    }
+    const parsed = JSON.parse(value)
+    return isObject(parsed) ? parsed : {}
+}
+
 type StorageSlot = PersistenceStorageGroup | typeof MAIN_STORAGE_SLOT
 
 // Per-entry write bookkeeping (see `PostHogPersistence._slotState`).
@@ -185,6 +213,11 @@ export class PostHogPersistence {
     // A local reset or storage migration owns the next cookie snapshot. Ignore
     // sibling writes until the complete replacement has been published.
     private _cookieSyncSuppressed = false
+    // Locally changed feature-flag keys waiting for a durable write. A sibling
+    // storage event must not replace these pending values.
+    private _pendingCrossTabFeatureFlagChanges = new Set<string>()
+    private _crossTabFeatureFlagHandler?: () => void
+    private _onStorage?: (event: StorageEvent) => void
 
     /**
      * @param {PostHogConfig} config initial PostHog configuration
@@ -216,6 +249,85 @@ export class PostHogPersistence {
             const flush = (): void => this.flush()
             addEventListener(window, 'beforeunload', flush as EventListener, { capture: false })
             addEventListener(window, 'pagehide', flush as EventListener, { capture: false })
+            this._onStorage = (event: StorageEvent): void => {
+                if (!this._splitStorageEligible) {
+                    return
+                }
+                if (event.key === this._name) {
+                    this._syncCrossTabFeatureFlagProperties(event, MAIN_STORAGE_SLOT)
+                    return
+                }
+                if (this._splitStorage) {
+                    const group = PERSISTENCE_STORAGE_GROUPS.find((group) => event.key === this._groupEntryName(group))
+                    if (group) {
+                        this._syncCrossTabFeatureFlagProperties(event, group)
+                    }
+                }
+            }
+            addEventListener(window, 'storage', this._onStorage as EventListener)
+        }
+    }
+
+    onCrossTabFeatureFlagChange(handler: () => void): () => void {
+        this._crossTabFeatureFlagHandler = handler
+        return () => {
+            if (this._crossTabFeatureFlagHandler === handler) {
+                this._crossTabFeatureFlagHandler = undefined
+            }
+        }
+    }
+
+    destroy(): void {
+        if (this._onStorage && window) {
+            window.removeEventListener('storage', this._onStorage as EventListener)
+            this._onStorage = undefined
+        }
+        this._crossTabFeatureFlagHandler = undefined
+    }
+
+    private _syncCrossTabFeatureFlagProperties(event: StorageEvent, slot: StorageSlot): void {
+        if (this._disabled) {
+            return
+        }
+
+        let previousEntry: Properties
+        let nextEntry: Properties
+        try {
+            previousEntry = parseStorageEventValue(event.oldValue)
+            nextEntry = parseStorageEventValue(event.newValue)
+        } catch {
+            return
+        }
+
+        const changedKeys: string[] = []
+        CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
+            const group = getPersistenceKeyPolicy(key)?.storageGroup
+            if (
+                (slot === MAIN_STORAGE_SLOT && this._splitStorage && group) ||
+                (slot !== MAIN_STORAGE_SLOT && group !== slot)
+            ) {
+                return
+            }
+            if (!(key in previousEntry) && !(key in nextEntry)) {
+                return
+            }
+            if (this._pendingCrossTabFeatureFlagChanges.has(key)) {
+                return
+            }
+
+            const hasNextValue = key in nextEntry
+            if (hasNextValue === key in this.props && isStorageValueEqual(nextEntry[key], this.props[key])) {
+                return
+            }
+            if (hasNextValue) {
+                this.props[key] = nextEntry[key]
+            } else {
+                delete this.props[key]
+            }
+            changedKeys.push(key)
+        })
+        if (changedKeys.length) {
+            this._crossTabFeatureFlagHandler?.()
         }
     }
 
@@ -810,6 +922,7 @@ export class PostHogPersistence {
 
         if (this._writeEntry(this._storage, this._name, this.props, MAIN_STORAGE_SLOT)) {
             this._rememberCurrentCookieProperties(this.props)
+            this._pendingCrossTabFeatureFlagChanges.clear()
         }
     }
 
@@ -828,6 +941,11 @@ export class PostHogPersistence {
         const { main, groups } = this._partitionProps()
         if (this._writeEntry(this._storage, this._name, main, MAIN_STORAGE_SLOT)) {
             this._rememberCurrentCookieProperties(main)
+            CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
+                if (!getPersistenceKeyPolicy(key)?.storageGroup) {
+                    this._pendingCrossTabFeatureFlagChanges.delete(key)
+                }
+            })
         }
         for (const group of PERSISTENCE_STORAGE_GROUPS) {
             const groupProps = groups[group]
@@ -840,7 +958,13 @@ export class PostHogPersistence {
             // `_writeEntry` marks the slot `persisted` (on `_slotState`) only
             // after a confirmed-successful `_set`, so a failed (e.g. quota) write
             // does not falsely mark the group as materialized on disk.
-            this._writeEntry(localStore, this._groupEntryName(group), groupProps, group)
+            if (this._writeEntry(localStore, this._groupEntryName(group), groupProps, group)) {
+                CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
+                    if (getPersistenceKeyPolicy(key)?.storageGroup === group) {
+                        this._pendingCrossTabFeatureFlagChanges.delete(key)
+                    }
+                })
+            }
         }
     }
 
@@ -1298,6 +1422,9 @@ export class PostHogPersistence {
 
     private _setProp(prop: string, to: any): void {
         this.props[prop] = to
+        if (isCrossTabFeatureFlagKey(prop)) {
+            this._pendingCrossTabFeatureFlagChanges.add(prop)
+        }
         // A volatile value change never dirties its group — it changes on every
         // remote load and would otherwise force a rewrite of the large entry per
         // load. Deletions still dirty (see _deleteProp): presence is part of the
@@ -1309,6 +1436,9 @@ export class PostHogPersistence {
 
     private _deleteProp(prop: string): void {
         delete this.props[prop]
+        if (isCrossTabFeatureFlagKey(prop)) {
+            this._pendingCrossTabFeatureFlagChanges.add(prop)
+        }
         this._markGroupDirty(prop)
     }
 

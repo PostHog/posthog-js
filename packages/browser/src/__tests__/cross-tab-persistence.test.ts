@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
-import { SESSION_ID } from '../constants'
+import { ENABLED_FEATURE_FLAGS, SESSION_ID, STORED_PERSON_PROPERTIES_KEY } from '../constants'
 import { PostHogConfig, Properties } from '../types'
 import { resetLocalStorageSupported } from '../storage'
 import { createMockPostHog } from './helpers/posthog-instance'
@@ -553,6 +553,70 @@ describe('cross-tab persistence interactions', () => {
 
                 expect(result.sessionId).toBe('session-A')
             })
+        })
+    })
+
+    describe.each(CASES)('feature flag persistence synchronization — $label', ({ debounce }) => {
+        const dispatchStorageChange = (key: string, oldValue: string | null, newValue: string | null): void => {
+            window.dispatchEvent(new StorageEvent('storage', { key, oldValue, newValue }))
+        }
+
+        it('adopts sibling enrollment state and preserves it through an unrelated write', () => {
+            const config = makeConfig(debounce)
+            const tabA = new PostHogPersistence(config)
+            tabA.register({
+                [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': false },
+                [STORED_PERSON_PROPERTIES_KEY]: { '$feature_enrollment/early-access-flag': false },
+            })
+            tabA.flush()
+            const tabB = new PostHogPersistence(config)
+            const oldValue = window.localStorage.getItem(STORAGE_KEY)
+
+            tabA.register({
+                [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': true },
+                [STORED_PERSON_PROPERTIES_KEY]: { '$feature_enrollment/early-access-flag': true },
+            })
+            tabA.flush()
+            const newValue = window.localStorage.getItem(STORAGE_KEY)
+            dispatchStorageChange(STORAGE_KEY, oldValue, newValue)
+
+            expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'early-access-flag': true })
+            expect(tabB.get_property(STORED_PERSON_PROPERTIES_KEY)).toEqual({
+                '$feature_enrollment/early-access-flag': true,
+            })
+
+            tabB.register({ unrelated: 'tab-B-value' })
+            tabB.flush()
+
+            expect(readStorage()[ENABLED_FEATURE_FLAGS]).toEqual({ 'early-access-flag': true })
+            expect(readStorage()[STORED_PERSON_PROPERTIES_KEY]).toEqual({
+                '$feature_enrollment/early-access-flag': true,
+            })
+            tabA.destroy()
+            tabB.destroy()
+        })
+
+        it('keeps a pending local enrollment when a split-storage sibling event arrives', () => {
+            const config = makeConfig(HARDENED_DEBOUNCE_MS, { split_storage: true })
+            const flagsStorageKey = `${STORAGE_KEY}__flags`
+            const tabA = new PostHogPersistence(config)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': false } })
+            tabA.flush()
+            const tabB = new PostHogPersistence(config)
+
+            tabB.register({ [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': true } })
+            const oldValue = window.localStorage.getItem(flagsStorageKey)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': 'sibling-variant' } })
+            tabA.flush()
+            dispatchStorageChange(flagsStorageKey, oldValue, window.localStorage.getItem(flagsStorageKey))
+
+            expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'early-access-flag': true })
+            tabB.flush()
+            expect(JSON.parse(window.localStorage.getItem(flagsStorageKey) || '{}')[ENABLED_FEATURE_FLAGS]).toEqual({
+                'early-access-flag': true,
+            })
+            tabA.destroy()
+            tabB.destroy()
         })
     })
 
