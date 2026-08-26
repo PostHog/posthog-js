@@ -259,13 +259,13 @@ describe('PostHogLogs', () => {
       }
       logs.clearQueue()
       logs.captureLog({ body: 'c' })
-      const release = releasePersist as unknown as () => void
-      release()
-      for (let i = 0; i < 10; i++) {
+      // Each batch installs a fresh persist gate; release whichever is pending until
+      // the flush drains.
+      for (let i = 0; i < 20; i++) {
+        const pending = releasePersist
+        releasePersist = null
+        pending?.()
         await Promise.resolve()
-        if (releasePersist) {
-          ;(releasePersist as unknown as () => void)()
-        }
       }
       await flushing
 

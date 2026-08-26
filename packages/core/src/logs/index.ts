@@ -24,9 +24,8 @@ export class PostHogLogs {
   // Head records evicted (FIFO) while a batch is in flight; the queue-advance
   // subtracts these so it drops the sent records, not ones captured mid-send.
   private _evictedSinceAdvance = 0
-  // Bumped whenever the queue is emptied out from under a flush. A batch in flight
-  // captures the value it started with, so it can tell that the records it is holding
-  // no longer correspond to anything queued.
+  // A batch captures this when it is assembled, so it can tell that the records it is
+  // holding no longer correspond to anything queued.
   private _queueGeneration = 0
   // Consecutive failed flushes; drives exponential backoff on the retry timer.
   // A successful flush resets it to 0.
@@ -86,10 +85,8 @@ export class PostHogLogs {
   reset(): void {
     this._clearFlushTimer()
     // `_flushPromise` is deliberately left alone: clearing it would let a second flush
-    // run alongside the in-flight one, and the two would fight over the shared
-    // per-batch bookkeeping. The in-flight batch settles and clears the promise in its
-    // own `finally`. Retiring it is `clearQueue`'s job, because the queue it holds
-    // belongs to the host, not to this state.
+    // run alongside the in-flight one. Retiring that flush is `clearQueue`'s job,
+    // because the queue it holds belongs to the host, not to this state.
     this._intervalWindowStart = 0
     this._intervalLogCount = 0
     this._droppedWarned = false
