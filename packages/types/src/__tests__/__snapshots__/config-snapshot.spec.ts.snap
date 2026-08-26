@@ -500,6 +500,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "Partial<SlimDOMOptions>",
       "\\"all\\""
     ],
+    "captureJsonLd": [
+      "undefined",
+      "false",
+      "true"
+    ],
     "collectFonts": [
       "undefined",
       "false",

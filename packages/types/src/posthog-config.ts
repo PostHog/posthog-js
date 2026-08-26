@@ -687,6 +687,18 @@ export interface SessionRecordingOptions {
     slimDOMOptions?: true | Partial<SlimDOMOptions> | 'all'
 
     /**
+     * Captures sanitized Schema.org JSON-LD as session replay custom events.
+     * JSON-LD inside a text mask or blocked element is never captured.
+     * The recorder keeps `@id` values without changes.
+     * The event tag is `$json_ld`. The payload is a JSON-LD object or array.
+     * The recorder removes all script nodes from snapshots when this option is enabled.
+     * The JSON-LD observer starts only when this option is true at recording start.
+     * @see https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/extensions/replay/external/json-ld.ts
+     * @default false
+     */
+    captureJsonLd?: boolean
+
+    /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default false
