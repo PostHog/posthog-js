@@ -264,9 +264,21 @@ describe('createPostHogMiddleware', () => {
     await expect(agent.invoke({ messages: [new HumanMessage('Hello')] })).rejects.toThrow('model failed')
 
     expect(chainStart).not.toHaveBeenCalled()
-    expect((mockPostHogClient.capture as jest.Mock).mock.calls.map(([event]) => event.event)).toEqual([
-      '$ai_generation',
-    ])
+    const events = (mockPostHogClient.capture as jest.Mock).mock.calls.map(([event]) => event)
+    expect(events.map(({ event }) => event)).toEqual(['$ai_generation'])
+    expect(events[0].properties).not.toHaveProperty('$ai_parent_id')
+  })
+
+  it('uses the agent start time when capturing root latency', () => {
+    const middleware = createPostHogMiddleware({ client: mockPostHogClient }) as any
+    const state = middleware.beforeAgent({ messages: [] }, runtime)
+    state._posthogStartTime = 1_000
+    jest.spyOn(Date, 'now').mockReturnValue(4_000)
+
+    middleware.afterAgent(state, runtime)
+
+    const trace = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    expect(trace.properties.$ai_latency).toBe(3)
   })
 
   it('returns and throws the exact values produced by handlers', async () => {
@@ -291,6 +303,24 @@ describe('createPostHogMiddleware', () => {
       $ai_is_error: true,
       $ai_error: expect.stringContaining('tool failed'),
     })
+    expect(toolEvent.properties).not.toHaveProperty('$ai_parent_id')
+  })
+
+  it('links a recovered model call to the root after a parentless failed attempt', async () => {
+    const middleware = createPostHogMiddleware({ client: mockPostHogClient }) as any
+    const state = middleware.beforeAgent({ messages: [] }, runtime)
+
+    await expect(
+      middleware.wrapModelCall(modelRequest(state), () => Promise.reject(new Error('retryable failure')))
+    ).rejects.toThrow('retryable failure')
+    await middleware.wrapModelCall(modelRequest(state), () => Promise.resolve(new AIMessage('Recovered')))
+    middleware.afterAgent(state, runtime)
+
+    const events = (mockPostHogClient.capture as jest.Mock).mock.calls.map(([event]) => event)
+    const [failedGeneration, successfulGeneration, trace] = events
+    expect(failedGeneration.properties).not.toHaveProperty('$ai_parent_id')
+    expect(successfulGeneration.properties.$ai_parent_id).toBe(trace.properties.$ai_span_id)
+    expect(events.every(({ properties }) => properties.$ai_trace_id === trace.properties.$ai_trace_id)).toBe(true)
   })
 
   it('keeps concurrent agent invocations on separate traces', async () => {
@@ -369,6 +399,7 @@ describe('createPostHogMiddleware', () => {
     expect(event.properties).toMatchObject({
       $ai_is_error: true,
       $ai_error: expect.stringContaining('Invalid arguments'),
+      $ai_parent_id: state._posthogRunId,
     })
   })
 })

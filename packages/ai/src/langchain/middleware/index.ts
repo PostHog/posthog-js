@@ -208,7 +208,7 @@ export const createPostHogMiddleware = (options: PostHogLangChainMiddlewareOptio
         safely(() => callback.handleLLMEnd(toLLMResult(response), runId, parentRunId))
         return response
       } catch (error) {
-        safely(() => callback.handleLLMError(toError(error), runId, parentRunId))
+        safely(() => callback.handleLLMError(toError(error), runId))
         throw error
       }
     },
@@ -245,7 +245,7 @@ export const createPostHogMiddleware = (options: PostHogLangChainMiddlewareOptio
         }
         return result
       } catch (error) {
-        safely(() => callback.handleToolError(toError(error), runId, parentRunId))
+        safely(() => callback.handleToolError(toError(error), runId))
         throw error
       }
     },

@@ -407,6 +407,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     outputs: ChainValues | DocumentInterface[] | AgentFinish | Error | any
   ): void {
     const traceId = this._getTraceId(runId)
+    const isSpan = Boolean(parentRunId || this.parentTree[runId])
     this._popParentOfRun(runId)
     const run = this._popRunMetadata(runId)
     if (!run) {
@@ -417,7 +418,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       return
     }
     const actualParentRunId = this._getParentRunId(traceId, runId, parentRunId)
-    this._captureTraceOrSpan(traceId, runId, run as SpanMetadata, outputs, actualParentRunId)
+    this._captureTraceOrSpan(traceId, runId, run as SpanMetadata, outputs, isSpan, actualParentRunId)
   }
 
   private _captureTraceOrSpan(
@@ -425,9 +426,10 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     runId: string,
     run: SpanMetadata,
     outputs: ChainValues | DocumentInterface[] | AgentFinish | Error | any,
+    isSpan: boolean,
     parentRunId?: string
   ): void {
-    const eventName = parentRunId ? '$ai_span' : '$ai_trace'
+    const eventName = isSpan ? '$ai_span' : '$ai_trace'
     const latency = run.endTime ? (run.endTime - run.startTime) / 1000 : 0
     const eventProperties: Record<string, any> = {
       $ai_lib: 'posthog-ai',
@@ -510,7 +512,6 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_trace_id: traceId,
       $ai_span_id: runId,
       $ai_span_name: run.name,
-      $ai_parent_id: parentRunId,
       $ai_provider: run.provider,
       $ai_model: run.model,
       $ai_model_parameters: run.modelParams,
@@ -519,6 +520,9 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_latency: latency,
       $ai_base_url: run.baseUrl,
       $ai_framework: 'langchain',
+    }
+    if (parentRunId) {
+      eventProperties['$ai_parent_id'] = parentRunId
     }
 
     if (run.tools) {
