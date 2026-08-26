@@ -106,9 +106,7 @@ export class PostHogLogs implements Extension {
 
     // Console recorder: `console` is patched and the buffer fills until either the logs
     // script takes it over (`_takeConsoleBuffer`) or something drops it
-    // (`_stopConsoleRecorder`). `_recorderStartedByHintOnly` distinguishes a recorder
-    // started from the persisted hint — which remote config can withdraw — from one
-    // started by the caller's own `captureConsoleLogs` opt-in, which it cannot.
+    // (`_stopConsoleRecorder`).
     private _consoleBuffer: BufferedConsoleEntry[] = []
     private _consoleRecorderUnpatchers: (() => void)[] = []
     private _isRecordingConsole = false
@@ -119,7 +117,6 @@ export class PostHogLogs implements Extension {
     // is still being built. `logger._log` escapes via `__rrweb_original__`;
     // `logger.critical` writes straight to the global `console`.
     private _isRecordingConsoleEntry = false
-    private _recorderStartedByHintOnly = false
 
     constructor(private readonly _instance: PostHog) {
         if (this._instance && this._instance.config.logs?.captureConsoleLogs) {
@@ -212,7 +209,6 @@ export class PostHogLogs implements Extension {
         // Neither emits anything here. Started before subscribing, because a replayed
         // config calls back synchronously.
         if (this._isLogsEnabled || (this._remoteConfigWillArrive() && this._persistedCaptureHint())) {
-            this._recorderStartedByHintOnly = !this._isLogsEnabled
             this._startConsoleRecorder()
         }
         let replayedEnabledConfig = false
@@ -273,15 +269,12 @@ export class PostHogLogs implements Extension {
             return
         }
         this._isLogsEnabled = true
-        if (!this._isLoaded && !this._isRecordingConsole) {
+        if (!this._isLoaded) {
             // On a first visit there is no local option and no persisted hint, so `setup`
             // started no recorder and this is the first thing to enable capture. The
             // script it kicks off below does not land in the same tick, and console calls
-            // made in between would otherwise fall through the gap. A recorder already
-            // running keeps whatever started it — clearing the flag here would strand a
-            // hint-started one that a later remote `false` still has to withdraw. The
-            // recorder runs until `loadIfEnabled` hands its buffer to the script.
-            this._recorderStartedByHintOnly = false
+            // made in between would otherwise fall through the gap. The recorder runs
+            // until `loadIfEnabled` hands its buffer to the script.
             this._startConsoleRecorder()
         }
         this.loadIfEnabled()
@@ -358,8 +351,12 @@ export class PostHogLogs implements Extension {
         this._consoleQueue = []
     }
 
+    // Withdraws a recorder that nothing but the persisted hint ever granted. A running
+    // recorder with `_isLogsEnabled` unset can only have come from the hint, and once it
+    // is set capture has been granted for real and the handover is coming — so the hint
+    // is no longer the only thing holding the recorder up.
     private _stopRecorderStartedByPersistedHint(): void {
-        if (!this._recorderStartedByHintOnly) {
+        if (this._isLogsEnabled) {
             return
         }
         this._stopConsoleRecorder()

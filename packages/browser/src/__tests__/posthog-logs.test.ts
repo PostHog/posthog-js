@@ -1448,22 +1448,48 @@ describe('posthog-logs', () => {
                 expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
             })
 
-            it('should still withdraw a hint-started recorder when remote config flips to false', () => {
-                // The enable that arrives first does not adopt the recorder as its own:
-                // nothing but the hint has granted capture yet, so a later `false` still
-                // has to be able to withdraw it.
-                mockLoadExternalDependency.mockImplementation(() => {})
+            it('should keep a hint-started buffer once remote config has granted capture', () => {
+                // Session recording asks for a fresh remote config of its own when its
+                // persisted copy is stale, so a second result — including a failed fetch —
+                // can land while the logs script is still loading. The grant already
+                // happened and the handover is coming, so the buffer has to survive it.
+                let finish: (e: null) => void = () => {}
+                mockLoadExternalDependency.mockImplementation((_i: any, _n: any, cb: any) => {
+                    finish = cb
+                })
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
-                const originalInfo = assignableWindow.console.info
+                logsFromPersisted.setup(noopClient())
+                assignableWindow.console.info('early')
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+                logsFromPersisted.onRemoteConfig({ ok: false } as any)
+                finish(null)
+
+                expect(mockReplayConsoleBuffer).toHaveBeenCalledWith(expect.anything(), [
+                    expect.objectContaining({ args: ['early'] }),
+                ])
+            })
+
+            it('should replay the buffer when remote config flips to false after granting capture', () => {
+                // `false` does not stop the load it already started, so the entrypoint
+                // captures live either way. Dropping just the early lines would be the one
+                // inconsistent outcome.
+                let finish: (e: null) => void = () => {}
+                mockLoadExternalDependency.mockImplementation((_i: any, _n: any, cb: any) => {
+                    finish = cb
+                })
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                 logsFromPersisted.setup(noopClient())
                 assignableWindow.console.info('early')
 
                 logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
                 logsFromPersisted.onRemoteConfig(remoteConfigResult(false))
+                finish(null)
 
-                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
-                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
-                expect(assignableWindow.console.info).toBe(originalInfo)
+                expect(mockInitializeLogs).toHaveBeenCalled()
+                expect(mockReplayConsoleBuffer).toHaveBeenCalledWith(expect.anything(), [
+                    expect.objectContaining({ args: ['early'] }),
+                ])
             })
 
             it('should drop the buffer and restore console when remote config disables logs', () => {
