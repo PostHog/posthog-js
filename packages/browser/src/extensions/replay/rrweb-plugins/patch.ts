@@ -92,7 +92,6 @@ export function patch(
             // layer under a different marker and session replay's console plugin wraps
             // the same console methods this module does, so walk both markers — a walk
             // that recognised only its own would give up and leak the wrapper beneath.
-            // rrweb's copy walks `__rrweb_layer__` alone; this covers restores issued here.
             let current: any = source[name]
             let currentLayer = spliceableLayer(current)
             while (currentLayer) {

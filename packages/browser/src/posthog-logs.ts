@@ -67,6 +67,7 @@ const isHandledLogsRequestError = (error: unknown): error is HandledLogsRequestE
 export class PostHogLogs implements Extension {
     readonly name = LogsExtension
     private _isLogsEnabled: boolean = false
+    // One-way: the chunk cannot be unloaded once it has taken over.
     private _isLoaded: boolean = false
     private _isLoading: boolean = false
     private readonly _logger = createLogger('[logs]')
@@ -257,15 +258,15 @@ export class PostHogLogs implements Extension {
         }
 
         // A failed fetch and a response without a `logs` key behave the same: no fresh
-        // verdict arrived, so fall back to whatever the server last persisted.
+        // verdict arrived.
         const logCapture = result.ok ? result.config.logs?.captureConsoleLogs : undefined
         if (isNullish(logCapture)) {
-            // No fresh verdict, so nothing to persist and nothing to withdraw beyond a
-            // recorder the hint alone started.
+            // Nothing to persist, and a recorder the hint alone started stands down
+            // rather than holding console arguments for a handover that may never come.
             this._stopRecorderStartedByPersistedHint()
             return
         }
-        this._instance?.persistence?.register({ [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: logCapture })
+        this._instance?.persistence?.register({ [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: !!logCapture })
         if (!logCapture) {
             // The server reports `false` for every project that has not turned console
             // capture on, so it cannot distinguish "not enabled" from "turned off" and

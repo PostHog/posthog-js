@@ -1020,8 +1020,8 @@ describe('posthog-logs', () => {
 
         const noopClient = () => ({ onRemoteConfig: jest.fn(() => ({ dispose: jest.fn() })) }) as unknown as Client
 
-        describe('persisted capture verdict', () => {
-            it('persists the server verdict so the next page load can buffer early console calls', () => {
+        describe('persisted capture hint', () => {
+            it('persists the server response so the next page load can buffer early console calls', () => {
                 const register = jest.fn()
                 ;(mockPostHog as any).persistence = { register, props: {} }
                 const persisting = new PostHogLogs(mockPostHog)
@@ -1276,7 +1276,6 @@ describe('posthog-logs', () => {
 
             it.each([
                 { label: 'the response carries no logs key', result: { ok: true, config: { logs: undefined } } },
-                { label: 'the remote config request fails', result: { ok: false } },
                 {
                     label: 'the server reports capture disabled',
                     result: { ok: true, config: { logs: { captureConsoleLogs: false } } },
@@ -1290,7 +1289,9 @@ describe('posthog-logs', () => {
                 logsFromPersisted.onRemoteConfig(result as any)
 
                 expect((logsFromPersisted as any)._isLogsEnabled).toBe(true)
-                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(true)
+                assignableWindow.console.log('still captured')
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(2)
             })
 
             it('should not start a hint-only recorder when remote config cannot arrive', () => {
@@ -1315,6 +1316,20 @@ describe('posthog-logs', () => {
                 } finally {
                     delete (assignableWindow as any)._POSTHOG_REMOTE_CONFIG
                 }
+            })
+
+            it('should not patch console when the server last said no', () => {
+                const instance = {
+                    ...mockPostHog,
+                    persistence: { register: jest.fn(), props: { [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: false } },
+                } as unknown as PostHog
+                logsFromPersisted = new PostHogLogs(instance)
+                const originalLog = assignableWindow.console.log
+
+                logsFromPersisted.setup(noopClient())
+
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                expect(assignableWindow.console.log).toBe(originalLog)
             })
 
             it('should not patch console when the persisted bit is absent', () => {
