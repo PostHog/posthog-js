@@ -694,6 +694,24 @@ describe('cross-tab persistence interactions', () => {
             tabB.destroy()
         })
 
+        it('preserves an explicit same-value enrollment update over unseen sibling state', () => {
+            const config = makeConfig(HARDENED_DEBOUNCE_MS)
+            const tabA = new PostHogPersistence(config)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            tabA.flush()
+            const tabB = new PostHogPersistence(config)
+
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: true } })
+            tabA.flush()
+            tabB.markCrossTabFeatureFlagChanges({ [ENABLED_FEATURE_FLAGS]: ['flag'] })
+            tabB.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            tabB.flush()
+
+            expect(readStorage()[ENABLED_FEATURE_FLAGS]).toEqual({ flag: false })
+            tabA.destroy()
+            tabB.destroy()
+        })
+
         it('persists a local reversion when an unseen sibling changed the durable value', () => {
             const config = makeConfig(HARDENED_DEBOUNCE_MS)
             const tabA = new PostHogPersistence(config)

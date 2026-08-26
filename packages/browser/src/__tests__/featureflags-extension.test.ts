@@ -88,6 +88,29 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         await posthog.shutdown()
     })
 
+    it('preserves an explicit enrollment update when sibling state has not been observed yet', async () => {
+        const token = uuidv7()
+        const persistenceName = `cross-tab-enrollment-${token}`
+        const posthog = await createPosthogInstance(token, {
+            advanced_disable_feature_flags: true,
+            persistence: 'localStorage',
+            persistence_name: persistenceName,
+            persistence_save_debounce_ms: 0,
+        })
+        posthog.persistence?.register({ [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': false } })
+        const siblingPersistence = new PostHogPersistence(posthog.config)
+        siblingPersistence.register({ [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': true } })
+
+        posthog.updateEarlyAccessFeatureEnrollment('early-access-flag', false)
+
+        expect(posthog.isFeatureEnabled('early-access-flag', { send_event: false })).toBe(false)
+        expect(JSON.parse(window.localStorage.getItem(`ph_${persistenceName}`) || '{}')[ENABLED_FEATURE_FLAGS]).toEqual(
+            { 'early-access-flag': false }
+        )
+        siblingPersistence.destroy()
+        await posthog.shutdown()
+    })
+
     describe('automatic refresh', () => {
         const refreshIntervalMs = 60_000
         const defaultRefreshIntervalMs = 5 * 60_000

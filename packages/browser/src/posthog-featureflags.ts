@@ -1492,6 +1492,11 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
+        this._instance?.persistence?.markCrossTabFeatureFlagChanges({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: [key],
+            [ENABLED_FEATURE_FLAGS]: [key],
+            [STORED_PERSON_PROPERTIES_KEY]: Object.keys(enrollmentPersonProp),
+        })
         this._set({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFlags)),
             [ENABLED_FEATURE_FLAGS]: newFlags,

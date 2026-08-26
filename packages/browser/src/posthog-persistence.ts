@@ -276,6 +276,20 @@ export class PostHogPersistence {
         }
     }
 
+    markCrossTabFeatureFlagChanges(changes: Record<string, readonly string[]>): void {
+        each(changes, (properties, key) => {
+            const existingPendingChanges = this._pendingCrossTabFeatureFlagChanges.get(key)
+            if (!isCrossTabFeatureFlagKey(key) || existingPendingChanges === true) {
+                return
+            }
+            const pendingChanges = new Set(existingPendingChanges || [])
+            properties.forEach((property) => pendingChanges.add(property))
+            if (pendingChanges.size) {
+                this._setCrossTabFeatureFlagChangesPending(key, pendingChanges)
+            }
+        })
+    }
+
     onCrossTabFeatureFlagChange(handler: () => void): () => void {
         this._crossTabFeatureFlagHandler = handler
         return () => {
