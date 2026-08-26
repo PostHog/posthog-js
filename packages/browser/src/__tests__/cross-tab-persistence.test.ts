@@ -4,6 +4,7 @@ import { SessionIdManager } from '../sessionid'
 import {
     ENABLED_FEATURE_FLAGS,
     PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     SESSION_ID,
     STORED_PERSON_PROPERTIES_KEY,
 } from '../constants'
@@ -571,6 +572,7 @@ describe('cross-tab persistence interactions', () => {
             const tabA = new PostHogPersistence(config)
             tabA.register({
                 [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': false },
+                [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { 'early-access-flag': { version: 'old' } },
                 [STORED_PERSON_PROPERTIES_KEY]: { '$feature_enrollment/early-access-flag': false },
             })
             tabA.flush()
@@ -579,6 +581,7 @@ describe('cross-tab persistence interactions', () => {
 
             tabA.register({
                 [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': true },
+                [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { 'early-access-flag': { version: 'new' } },
                 [STORED_PERSON_PROPERTIES_KEY]: { '$feature_enrollment/early-access-flag': true },
             })
             tabA.flush()
@@ -586,6 +589,9 @@ describe('cross-tab persistence interactions', () => {
             dispatchStorageChange(STORAGE_KEY, oldValue, newValue)
 
             expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'early-access-flag': true })
+            expect(tabB.get_property(PERSISTENCE_FEATURE_FLAG_PAYLOADS)).toEqual({
+                'early-access-flag': { version: 'new' },
+            })
             expect(tabB.get_property(STORED_PERSON_PROPERTIES_KEY)).toEqual({
                 '$feature_enrollment/early-access-flag': true,
             })
@@ -594,6 +600,9 @@ describe('cross-tab persistence interactions', () => {
             tabB.flush()
 
             expect(readStorage()[ENABLED_FEATURE_FLAGS]).toEqual({ 'early-access-flag': true })
+            expect(readStorage()[PERSISTENCE_FEATURE_FLAG_PAYLOADS]).toEqual({
+                'early-access-flag': { version: 'new' },
+            })
             expect(readStorage()[STORED_PERSON_PROPERTIES_KEY]).toEqual({
                 '$feature_enrollment/early-access-flag': true,
             })
