@@ -216,7 +216,7 @@ export class PostHogPersistence {
     // Nested feature-flag entries changed locally and waiting for a durable
     // write. Sibling updates to other flags can still be merged while pending.
     private _pendingCrossTabFeatureFlagChanges = new Map<string, Set<string> | true>()
-    private _configUpdateInProgress = false
+    private _storageMigrationInProgress = false
     private _crossTabFeatureFlagHandler?: () => void
     private _onStorage?: (event: StorageEvent) => void
 
@@ -1052,7 +1052,7 @@ export class PostHogPersistence {
         }
 
         const crossTabPropertiesChanged =
-            !forceSuppressedSnapshot && !this._configUpdateInProgress
+            !forceSuppressedSnapshot && !this._storageMigrationInProgress
                 ? this._reconcileCrossTabFeatureFlagPropertiesBeforeWrite()
                 : false
         if (this._splitStorage) {
@@ -1105,6 +1105,11 @@ export class PostHogPersistence {
             // empty and has never been persisted. Once a group has held content
             // we keep writing it (even when empty) so a later clear actually lands.
             if (isEmptyObject(groupProps) && !this._slotState[group]?.persisted) {
+                CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
+                    if (getPersistenceKeyPolicy(key)?.storageGroup === group) {
+                        this._pendingCrossTabFeatureFlagChanges.delete(key)
+                    }
+                })
                 continue
             }
             // `_writeEntry` marks the slot `persisted` (on `_slotState`) only
@@ -1493,7 +1498,10 @@ export class PostHogPersistence {
 
         const cookieSyncSuppressionStarted =
             !disabled && (storageMigration || cookieOptionsChanged) && this._beginCookieSyncSuppression(reEnabling)
-        this._configUpdateInProgress = true
+        // _buildStorage has already resolved the new backend eligibility, while
+        // this._storage still points at the old backend until migration clears it.
+        // Keep that authoritative migration snapshot intact until the swap.
+        this._storageMigrationInProgress = storageMigration
         try {
             this._default_expiry = this._expire_days = config['cookie_expiration']
             this.set_disabled(disabled)
@@ -1521,7 +1529,7 @@ export class PostHogPersistence {
                 }
             }
         } finally {
-            this._configUpdateInProgress = false
+            this._storageMigrationInProgress = false
             if (cookieSyncSuppressionStarted) {
                 // Cookie option and storage migrations clear the shared cookie.
                 // Restore one complete authoritative snapshot before another

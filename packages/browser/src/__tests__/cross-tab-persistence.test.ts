@@ -714,6 +714,45 @@ describe('cross-tab persistence interactions', () => {
         })
     })
 
+    describe('feature flag synchronization lifecycle', () => {
+        const dispatchStorageChange = (key: string, oldValue: string | null, newValue: string | null): void => {
+            window.dispatchEvent(new StorageEvent('storage', { key, oldValue, newValue }))
+        }
+
+        it('reconciles sibling flags before a cookie option update rewrites persistence', () => {
+            const config = makeConfig(0, { cross_subdomain_cookie: false })
+            const tabA = new PostHogPersistence(config)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            const tabB = new PostHogPersistence(config)
+
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: true } })
+            tabB.update_config({ ...config, cross_subdomain_cookie: true }, config)
+
+            expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ flag: true })
+            expect(readStorage()[ENABLED_FEATURE_FLAGS]).toEqual({ flag: true })
+            tabA.destroy()
+            tabB.destroy()
+        })
+
+        it('accepts sibling flags after a split-storage reset publishes an empty group', () => {
+            const config = makeConfig(0, { split_storage: true })
+            const flagsStorageKey = `${STORAGE_KEY}__flags`
+            const tabA = new PostHogPersistence(config)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            const tabB = new PostHogPersistence(config)
+
+            tabB.clear()
+            tabB.register({ distinct_id: 'new-anonymous-id' })
+            const oldValue = window.localStorage.getItem(flagsStorageKey)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: true } })
+            dispatchStorageChange(flagsStorageKey, oldValue, window.localStorage.getItem(flagsStorageKey))
+
+            expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ flag: true })
+            tabA.destroy()
+            tabB.destroy()
+        })
+    })
+
     describe('pending local writes survive cross-tab refresh — hardened path only (debounce=250)', () => {
         // With debounce enabled, a local register is held in memory until the
         // debounce window elapses. The per-key SESSION_ID refresh lets tab B
