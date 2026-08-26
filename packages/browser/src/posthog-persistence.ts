@@ -331,8 +331,15 @@ export class PostHogPersistence {
             return false
         }
 
-        this._rememberCrossTabStorageFingerprint(nextEntry, slot, !isNull(storageValue))
-        return this._mergeCrossTabFeatureFlagProperties(nextEntry, slot, notify)
+        const changed = this._mergeCrossTabFeatureFlagProperties(nextEntry, slot, notify)
+        if (
+            slot !== MAIN_STORAGE_SLOT ||
+            !this._splitStorage ||
+            isStorageValueEqual(this._partitionProps().main, nextEntry)
+        ) {
+            this._rememberCrossTabStorageFingerprint(nextEntry, slot, !isNull(storageValue))
+        }
+        return changed
     }
 
     private _hasCrossTabFeatureFlagIdentityMismatch(entry: Properties): boolean {
