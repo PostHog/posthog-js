@@ -78,6 +78,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         window.dispatchEvent(new StorageEvent('storage', { key: storageKey, oldValue, newValue }))
 
         expect(posthog.isFeatureEnabled('early-access-flag', { send_event: false })).toBe(true)
+        expect(posthog.featureFlags?.['_eventPropertiesWithFlagValues']).toMatchObject({
+            '$feature/early-access-flag': true,
+        })
         expect(callback).toHaveBeenCalledWith(
             ['early-access-flag'],
             { 'early-access-flag': true },
