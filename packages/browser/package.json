@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.418.15",
+    "version": "1.421.0",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -73,6 +73,18 @@
         "query-selector-shadow-dom": "^1.0.1",
         "web-vitals": "^5.3.0",
         "web-vitals-soft-navs": "npm:web-vitals@6.0.0"
+    },
+    "peerDependencies": {
+        "@types/react": ">=16.8.0",
+        "react": ">=16.8.0"
+    },
+    "peerDependenciesMeta": {
+        "@types/react": {
+            "optional": true
+        },
+        "react": {
+            "optional": true
+        }
     },
     "devDependencies": {
         "@babel/core": "catalog:",

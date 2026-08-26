@@ -123,7 +123,7 @@ import {
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { BrowserClientAdapter } from './extensions/browser-client'
-import type { Extension as BrowserCommonExtension } from '@posthog/browser-common'
+import type { Extension as BrowserCommonExtension, ExtensionToken } from '@posthog/browser-common'
 import type { BrowserSurveys } from './browser-surveys'
 import type { BrowserAutocapture } from './browser-autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
@@ -200,6 +200,26 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
 // should only be true for Opera<12
 let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
+const getSessionRecordingDefaults = (defaults?: ConfigDefaults): PostHogConfig['session_recording'] => {
+    const sessionRecording: PostHogConfig['session_recording'] = {}
+    if (!defaults || defaults === 'unset') {
+        return sessionRecording
+    }
+    if (defaults >= '2025-11-30') {
+        sessionRecording.strictMinimumDuration = true
+    }
+    if (defaults >= '2026-05-30') {
+        sessionRecording.canvasCapture = { resolutionScale: 0.6 }
+    }
+    if (defaults >= '2026-06-25') {
+        sessionRecording.streamNetworkBody = true
+    }
+    if (defaults >= '2026-08-30') {
+        sessionRecording.captureJsonLd = true
+    }
+    return sessionRecording
+}
+
 const defaultsThatVaryByConfig = (
     defaults?: ConfigDefaults
 ): Pick<
@@ -222,14 +242,7 @@ const defaultsThatVaryByConfig = (
               ? { content_ignorelist: true }
               : true,
     capture_pageview: defaults && defaults >= '2025-05-24' ? 'history_change' : true,
-    session_recording:
-        defaults && defaults >= '2026-06-25'
-            ? { strictMinimumDuration: true, canvasCapture: { resolutionScale: 0.6 }, streamNetworkBody: true }
-            : defaults && defaults >= '2026-05-30'
-              ? { strictMinimumDuration: true, canvasCapture: { resolutionScale: 0.6 } }
-              : defaults && defaults >= '2025-11-30'
-                ? { strictMinimumDuration: true }
-                : {},
+    session_recording: getSessionRecordingDefaults(defaults),
     external_scripts_inject_target: defaults && defaults >= '2026-01-30' ? 'head' : 'body',
     internal_or_test_user_hostname: defaults && defaults >= '2026-01-30' ? /^(localhost|127\.0\.0\.1)$/ : undefined,
     persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
@@ -972,7 +985,15 @@ export class PostHog implements PostHogInterface {
 
     private _enrollExtension(extension: Extension | BrowserCommonExtension, initTasks: Array<() => void>): void {
         if (this._isSharedExtension(extension)) {
-            initTasks.push(() => void this._getBrowserClientAdapter().add(extension).catch(__NOOP))
+            initTasks.push(
+                () =>
+                    void this._getBrowserClientAdapter()
+                        .add(extension)
+                        .catch(() => extension.dispose?.())
+                        .catch((error) => {
+                            logger.error(`Failed to dispose browser extension "${extension.name}"`, error)
+                        })
+            )
         } else {
             this._extensions.push(extension)
         }
@@ -1037,7 +1058,7 @@ export class PostHog implements PostHogInterface {
             this._enrollExtension((this.surveys = this.surveys ?? new ext.surveys(this)), initTasks)
         }
         if (ext.logs) {
-            this._extensions.push((this.logs = this.logs ?? new ext.logs(this)))
+            this._enrollExtension((this.logs = this.logs ?? new ext.logs(this)), initTasks)
         }
         if (ext.metrics) {
             this._extensions.push((this.metrics = this.metrics ?? new ext.metrics(this)))
@@ -1663,6 +1684,22 @@ export class PostHog implements PostHogInterface {
 
     _addCaptureHook(callback: (eventName: string, eventPayload?: CaptureResult) => void): () => void {
         return this.on('eventCaptured', (data) => callback(data.event, data))
+    }
+
+    /**
+     * Returns an installed browser extension by its typed stable name.
+     *
+     * @internal
+     */
+    getExtension<T extends BrowserCommonExtension>(token: ExtensionToken<T>): T | undefined
+    /**
+     * Returns an installed browser extension by its stable name.
+     *
+     * @internal
+     */
+    getExtension<T extends BrowserCommonExtension = BrowserCommonExtension>(name: string): T | undefined
+    getExtension<T extends BrowserCommonExtension = BrowserCommonExtension>(name: string): T | undefined {
+        return this._browserClientAdapter?.getExtension<T>(name)
     }
 
     _getBrowserClientAdapter(): BrowserClientAdapter {
@@ -3366,9 +3403,6 @@ export class PostHog implements PostHogInterface {
                 this.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: recordingRemoteConfig })
             }
             this.surveys?.reset()
-            // Stop the refresh interval before resetting flags — featureFlags.reset() clears
-            // the debouncer, so if the order were reversed a pending refresh could fire after reset.
-            this._remoteConfigLoader?.stop()
             this.featureFlags?.reset()
             this.conversations?.reset()
             this.logs?.reset()
@@ -3479,7 +3513,6 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        this._remoteConfigLoader?.stop()
         this._getBrowserClientAdapter().dispose()
         this.sessionRecording?.dispose()
 

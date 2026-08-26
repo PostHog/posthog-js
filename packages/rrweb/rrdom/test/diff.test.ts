@@ -461,18 +461,29 @@ describe('diff algorithm for rrdom', () => {
       vi.restoreAllMocks();
     });
 
-    it('can diff properties for canvas', async () => {
-      const element = document.createElement('canvas');
+    it('hydrates canvas data URLs with images from the canvas owner document', () => {
+      const iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+      const ownerDocument = iframe.contentDocument!;
+      const element = ownerDocument.createElement('canvas');
       const rrDocument = new RRDocument();
       const rrCanvas = rrDocument.createElement('canvas');
       const sn = Object.assign({}, elementSn, { tagName: 'canvas' });
       rrDocument.mirror.add(rrCanvas, sn);
-      rrCanvas.attributes['rr_dataURL'] = 'data:image/png;base64,';
+      rrCanvas.rr_dataURL = 'data:image/png;base64,initial';
+      rrCanvas.attributes['rr_dataURL'] = 'data:image/png;base64,updated';
 
-      vi.spyOn(document, 'createElement');
+      const ownerCreateElement = vi.spyOn(ownerDocument, 'createElement');
+      const globalCreateElement = vi.spyOn(document, 'createElement');
 
       diff(element, rrCanvas, replayer);
-      expect(document.createElement).toHaveBeenCalledWith('img');
+
+      expect(ownerCreateElement).toHaveBeenCalledTimes(2);
+      expect(ownerCreateElement).toHaveBeenNthCalledWith(1, 'img');
+      expect(ownerCreateElement).toHaveBeenNthCalledWith(2, 'img');
+      expect(globalCreateElement).not.toHaveBeenCalledWith('img');
+
+      iframe.remove();
       vi.restoreAllMocks();
     });
 
@@ -1217,6 +1228,37 @@ describe('diff algorithm for rrdom', () => {
       const childElement = (node as Node as HTMLElement).shadowRoot!
         .childNodes[0] as HTMLElement;
       expect(childElement.tagName).toEqual('DIV');
+    });
+
+    it('should skip a shadow dom the real element refuses', () => {
+      const tagName = 'NOHYPHEN';
+      const node = document.createElement(tagName);
+      mirror.add(node, {
+        ...elementSn,
+        tagName,
+        id: 1,
+      } as serializedNodeWithId);
+
+      const rrDocument = new RRDocument();
+      const rrNode = rrDocument.createElement(tagName);
+      rrDocument.mirror.add(
+        rrNode,
+        Object.assign({}, elementSn, { tagName, id: 1 }),
+      );
+
+      rrNode.attachShadow({ mode: 'open' });
+      const child = rrDocument.createElement('div');
+      rrDocument.mirror.add(
+        child,
+        Object.assign({}, elementSn, { tagName: 'div', id: 2 }),
+      );
+      rrNode.shadowRoot!.appendChild(child);
+
+      expect(() =>
+        diff(node, rrNode, replayer, rrDocument.mirror),
+      ).not.toThrow();
+      expect((node as Node as HTMLElement).shadowRoot).toBeNull();
+      expect(node.childNodes.length).toBe(0);
     });
   });
 

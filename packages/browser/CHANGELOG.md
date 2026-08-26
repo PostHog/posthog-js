@@ -1,5 +1,112 @@
 # posthog-js
 
+## 1.421.0
+
+### Minor Changes
+
+- [#4655](https://github.com/PostHog/posthog-js/pull/4655) [`4f80973`](https://github.com/PostHog/posthog-js/commit/4f80973b5fe6aa0e34f84d751e0511abac4f9d33) Thanks [@robbie-c](https://github.com/robbie-c)! - Add the `2026-08-30` config defaults. These defaults enable sanitized JSON-LD replay events.
+  (2026-08-26)
+
+### Patch Changes
+
+- Updated dependencies [[`4f80973`](https://github.com/PostHog/posthog-js/commit/4f80973b5fe6aa0e34f84d751e0511abac4f9d33)]:
+    - @posthog/types@1.407.0
+
+## 1.420.0
+
+### Minor Changes
+
+- [#4640](https://github.com/PostHog/posthog-js/pull/4640) [`0d2cf49`](https://github.com/PostHog/posthog-js/commit/0d2cf4941d0e6306f51666305fbdaa8669a631d2) Thanks [@robbie-c](https://github.com/robbie-c)! - Add opt-in Schema.org JSON-LD capture to session replay through `session_recording.captureJsonLd`. When enabled, the recorder emits sanitized JSON-LD as custom replay events and excludes all script elements from replay snapshots.
+  (2026-08-26)
+
+### Patch Changes
+
+- [#4635](https://github.com/PostHog/posthog-js/pull/4635) [`ab1383a`](https://github.com/PostHog/posthog-js/commit/ab1383a8471b003124161c5839c15debacbc1e28) Thanks [@robbie-c](https://github.com/robbie-c)! - Capture paste interactions with clipboard autocapture without collecting pasted text.
+  (2026-08-26)
+
+- [#4594](https://github.com/PostHog/posthog-js/pull/4594) [`1d88b4e`](https://github.com/PostHog/posthog-js/commit/1d88b4ec30637833bbd0b851843f33913b94b169) Thanks [@posthog](https://github.com/apps/posthog)! - Fix session replay playback ending when a recording contains a shadow host the browser refuses. The player now skips that one subtree instead of aborting the rebuild.
+  (2026-08-26)
+- Updated dependencies [[`ab1383a`](https://github.com/PostHog/posthog-js/commit/ab1383a8471b003124161c5839c15debacbc1e28), [`0d2cf49`](https://github.com/PostHog/posthog-js/commit/0d2cf4941d0e6306f51666305fbdaa8669a631d2)]:
+    - @posthog/types@1.406.2
+
+## 1.419.4
+
+### Patch Changes
+
+- [#4592](https://github.com/PostHog/posthog-js/pull/4592) [`ca540f9`](https://github.com/PostHog/posthog-js/commit/ca540f94f2c301f4ea8f5273a250ac2516292613) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add typed stable-name lookup for installed browser extensions and use it when independently loaded survey code resolves feature flags.
+  (2026-08-25)
+
+- [#4533](https://github.com/PostHog/posthog-js/pull/4533) [`53fcb2d`](https://github.com/PostHog/posthog-js/commit/53fcb2d34eac1e83afbfa810ab7b9e9f691d6ce6) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix console log autocapture silently failing when an older `posthog-js` core loads a newer logs bundle.
+  (2026-08-25)
+
+- [#4476](https://github.com/PostHog/posthog-js/pull/4476) [`ed4dd97`](https://github.com/PostHog/posthog-js/commit/ed4dd97d461f9dd871507c8b929ab38cae376181) Thanks [@posthog](https://github.com/apps/posthog)! - fix(browser): refresh configured feature flags when a hidden tab becomes visible
+
+    Feature flags now own their automatic refresh timer and visibility listener.
+    Hidden tabs reload due flags when they become visible. The existing five-minute
+    default and `remote_config_refresh_interval_ms` behavior remain unchanged. (2026-08-25)
+
+- Updated dependencies [[`53fcb2d`](https://github.com/PostHog/posthog-js/commit/53fcb2d34eac1e83afbfa810ab7b9e9f691d6ce6), [`ca540f9`](https://github.com/PostHog/posthog-js/commit/ca540f94f2c301f4ea8f5273a250ac2516292613), [`ed4dd97`](https://github.com/PostHog/posthog-js/commit/ed4dd97d461f9dd871507c8b929ab38cae376181)]:
+    - @posthog/browser-common@0.6.0
+    - @posthog/types@1.406.1
+
+## 1.419.3
+
+### Patch Changes
+
+- [#4548](https://github.com/PostHog/posthog-js/pull/4548) [`fe933d8`](https://github.com/PostHog/posthog-js/commit/fe933d87f345d435d0e959f57163fe18eaa23794) Thanks [@posthog](https://github.com/apps/posthog)! - Fix surveys recording a response before the respondent finishes, and reordering questions for surveys that use branching, are prefilled, or are resumed
+
+    An `initialResponses` prefill passed to `posthog.displaySurvey()` that neither completes the survey nor auto-advances a question no longer sends `survey sent`, and a partial event carries only the auto-advanced answers. (2026-08-25)
+
+## 1.419.2
+
+### Patch Changes
+
+- [#4645](https://github.com/PostHog/posthog-js/pull/4645) [`cb7cc12`](https://github.com/PostHog/posthog-js/commit/cb7cc128d06913552bccd08c0b32f21df97537da) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Type declarations no longer import the `JSX` namespace from `react`, so they typecheck against `@types/react` back to the declared 16.8.0 floor. Component return types are now spelled `ReactElement<any, any>`, which is the definition of `JSX.Element` — the same type, so consuming code is unaffected.
+
+    `JSX` only became an exported member of the `react` types module in `@types/react@18.2.6`, so projects on older React types previously saw `TS2305: Module '"react"' has no exported member 'JSX'` when checking these declarations with `skipLibCheck: false`. (2026-08-25)
+
+## 1.419.1
+
+### Patch Changes
+
+- [#4638](https://github.com/PostHog/posthog-js/pull/4638) [`d166e54`](https://github.com/PostHog/posthog-js/commit/d166e54914a79f2e1b9c769aad8a2d26c8d0e329) Thanks [@github-actions](https://github.com/apps/github-actions)! - Declare `react` and `@types/react` as **optional** peer dependencies so the `posthog-js/react` entry point can resolve React on strict `node_modules` layouts — pnpm and bun isolated linkers backed by a global store, where the package is installed outside the project tree and Node's directory walk never reaches the app's React.
+
+    Projects that do not import `posthog-js/react` are unaffected: the peers are optional, so npm, pnpm, yarn, and bun install them only when React is already present and emit no unmet-peer warnings. (2026-08-25)
+
+## 1.419.0
+
+### Minor Changes
+
+- [#4598](https://github.com/PostHog/posthog-js/pull/4598) [`334159b`](https://github.com/PostHog/posthog-js/commit/334159bfd70cf78412d902b27bf27ae4107ecf91) Thanks [@posthog](https://github.com/apps/posthog)! - Web vitals now capture attribution by default for INP and LCP, so a slow interaction or paint arrives with the target element and phase breakdown that make it diagnosable. CLS stays without attribution by default, because its attribution holds detached DOM nodes and can leak memory in single-page apps. Set `capture_performance.web_vitals_attribution` to `false` to opt out, `true` for every metric, or an array to name the metrics. The captured metric also drops the empty `entries` array and bounds attribution to a small set of useful fields, and the attributed INP observer no longer collects the `processedEventEntries` we never read.
+  (2026-08-25)
+
+### Patch Changes
+
+- Updated dependencies [[`334159b`](https://github.com/PostHog/posthog-js/commit/334159bfd70cf78412d902b27bf27ae4107ecf91)]:
+    - @posthog/types@1.406.0
+
+## 1.418.17
+
+### Patch Changes
+
+- [#4612](https://github.com/PostHog/posthog-js/pull/4612) [`e8a2c2a`](https://github.com/PostHog/posthog-js/commit/e8a2c2af92d8c6f74744e4ec11a1d7f13a35188e) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent session recordings from emitting failed CSSOM changes and fix shadow DOM, cross-origin iframe, blocked and unsupported canvas, and deep DOM serialization edge cases.
+  (2026-08-25)
+
+- [#4611](https://github.com/PostHog/posthog-js/pull/4611) [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12) Thanks [@marandaneto](https://github.com/marandaneto)! - Share survey property matching between the browser and React Native SDKs while preserving their existing missing-value behavior.
+  (2026-08-25)
+- Updated dependencies [[`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+    - @posthog/core@1.48.11
+    - @posthog/browser-common@0.5.2
+
+## 1.418.16
+
+### Patch Changes
+
+- [#4607](https://github.com/PostHog/posthog-js/pull/4607) [`7ec4f0d`](https://github.com/PostHog/posthog-js/commit/7ec4f0dd2575aee0a5b664ccad0c59e9fac9c89e) Thanks [@posthog](https://github.com/apps/posthog)! - Drop exceptions thrown by user scripts the browser injects into every page (Firefox for iOS, Chrome for iOS) instead of reporting them as the page's own errors. Set `error_tracking.captureExtensionExceptions: true` to keep capturing them.
+  (2026-08-24)
+- Updated dependencies [[`7ec4f0d`](https://github.com/PostHog/posthog-js/commit/7ec4f0dd2575aee0a5b664ccad0c59e9fac9c89e)]:
+    - @posthog/types@1.405.3
+
 ## 1.418.15
 
 ### Patch Changes

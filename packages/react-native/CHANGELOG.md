@@ -1,5 +1,51 @@
 # posthog-react-native
 
+## 4.65.0
+
+### Minor Changes
+
+- [#4643](https://github.com/PostHog/posthog-js/pull/4643) [`35dcb94`](https://github.com/PostHog/posthog-js/commit/35dcb94877c086cd7a2f4a49f6d9c20a8b178ab1) Thanks [@ioannisj](https://github.com/ioannisj)! - Autocapture touches and clicks on React Native Web (including expo-router on web). Touch events there carry no `_targetInst` and every touch was silently dropped, so the element chain is now resolved by walking up from `e.target` to the nearest node carrying a React fiber. `captureTouches` also registers a capture-phase `click` listener on the document on web, emitted with `$event_type: 'click'`, since browsers fire `touchend` only for touch input (react-native-web's `Pressable` stops propagation, and `Modal` renders outside the provider's subtree). Autocapture no longer lets an exception escape into the host app's event dispatch.
+  (2026-08-26)
+
+### Patch Changes
+
+- [#4650](https://github.com/PostHog/posthog-js/pull/4650) [`e03f5d1`](https://github.com/PostHog/posthog-js/commit/e03f5d14a2e4938164aa40afb298c774ffa24b4c) Thanks [@marandaneto](https://github.com/marandaneto)! - Accept CSS-style survey positions such as `bottom-right` and align them with their canonical `SurveyPosition` values.
+  (2026-08-26)
+
+- [#4654](https://github.com/PostHog/posthog-js/pull/4654) [`aad1494`](https://github.com/PostHog/posthog-js/commit/aad14948feff3a62698d1e4321ba367b535ba448) Thanks [@marandaneto](https://github.com/marandaneto)! - Deduplicate unknown survey position warnings after normalizing equivalent position names.
+  (2026-08-26)
+
+- [#4649](https://github.com/PostHog/posthog-js/pull/4649) [`ec78dec`](https://github.com/PostHog/posthog-js/commit/ec78decc4aa982556566b31cb5ae1342f00cb05d) Thanks [@github-actions](https://github.com/apps/github-actions)! - Respect `ph-no-capture` on any ancestor of a touched or clicked element. Previously an interaction deep inside an opted-out subtree could still send an `$autocapture` event carrying that subtree's element text and props, so apps relying on a high-level `ph-no-capture` may see fewer `$autocapture` events after upgrading. Interactions more than 1000 elements deep in the view hierarchy now produce no `$autocapture` event rather than a truncated one. A non-numeric `maxElementsCaptured` now falls back to the default of 20 instead of being treated as no cap at all.
+  (2026-08-26)
+- Updated dependencies [[`ab1383a`](https://github.com/PostHog/posthog-js/commit/ab1383a8471b003124161c5839c15debacbc1e28), [`0d2cf49`](https://github.com/PostHog/posthog-js/commit/0d2cf4941d0e6306f51666305fbdaa8669a631d2)]:
+  - @posthog/types@1.406.2
+
+## 4.64.3
+
+### Patch Changes
+
+- [#4647](https://github.com/PostHog/posthog-js/pull/4647) [`3da18f9`](https://github.com/PostHog/posthog-js/commit/3da18f9a910eef497fb8141c05e7bed8ccbeb0fc) Thanks [@marandaneto](https://github.com/marandaneto)! - Ensure the Expo native-symbol upload phase runs last and declares the main app dSYM as an Xcode input, preventing EAS archives from uploading symbols before the dSYM is ready.
+  (2026-08-25)
+
+## 4.64.2
+
+### Patch Changes
+
+- [#4634](https://github.com/PostHog/posthog-js/pull/4634) [`e81d375`](https://github.com/PostHog/posthog-js/commit/e81d3755c019534b7d980106b5bad10a41e5f9fa) Thanks [@marandaneto](https://github.com/marandaneto)! - Use posthog-cli 0.15.1 and newer to read iOS release metadata directly from Info.plist during Hermes source map uploads.
+  (2026-08-25)
+
+- [#4611](https://github.com/PostHog/posthog-js/pull/4611) [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12) Thanks [@marandaneto](https://github.com/marandaneto)! - Share survey property matching between the browser and React Native SDKs while preserving their existing missing-value behavior.
+  (2026-08-25)
+- Updated dependencies [[`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+  - @posthog/core@1.48.11
+
+## 4.64.1
+
+### Patch Changes
+
+- [#4604](https://github.com/PostHog/posthog-js/pull/4604) [`42ffca6`](https://github.com/PostHog/posthog-js/commit/42ffca657f9056eaccdbaf8c6a7cbbb5af866709) Thanks [@AyobamiH](https://github.com/AyobamiH)! - Fix bare React Native Hermes sourcemap Chunk ID generation in the Metro serializer. Requires posthog-cli >= 0.14.1 to clone and upload the generated camel-case `chunkId` metadata.
+  (2026-08-24)
+
 ## 4.64.0
 
 ### Minor Changes

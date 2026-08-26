@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import { GestureResponderEvent, StyleProp, View, ViewStyle } from 'react-native'
 import { PostHog, PostHogOptions } from './posthog-rn'
-import { autocaptureFromTouchEvent } from './autocapture'
+import { autocaptureFromTouchEvent, findOwningNode } from './autocapture'
 import { useNavigationTracker } from './hooks/useNavigationTracker'
 import { PostHogContext } from './PostHogContext'
 import { PostHogAutocaptureOptions } from './types'
+import { isWeb } from './utils'
 import { defaultPostHogLabelProp } from './autocapture'
 
 /**
@@ -42,6 +43,13 @@ export interface PostHogProviderProps {
   /** Custom styles for the provider wrapper View */
   style?: StyleProp<ViewStyle>
 }
+
+// One document click listener per client, shared across sibling providers, so one interaction
+// enqueues exactly one $autocapture event (sdk-specs autocapture). `owners` maps each mounted
+// provider's host node to its own options, so a click is scoped to the owning subtree AND
+// captured with that provider's config; its size doubles as the refcount.
+type WebClickOwners = Map<unknown, React.MutableRefObject<PostHogAutocaptureOptions>>
+const webClickListeners = new WeakMap<PostHog, { owners: WebClickOwners; remove: () => void }>()
 
 function PostHogNavigationHook({
   options,
@@ -173,11 +181,77 @@ export const PostHogProvider = ({
     [captureTouches, posthog, autocaptureOptions]
   )
 
+  // Browsers fire touchend only for touch input, so a mouse never reaches onTouchEndCapture.
+  // Listen on the document in the CAPTURE phase: RNW forwards `onClick` but not `onClickCapture`,
+  // and its Pressable stops propagation before any bubble-phase handler runs. Document-wide so it
+  // still sees Modal; subtree scoping happens in autocapture.tsx. Read options through a ref so an
+  // inline `autocapture` prop doesn't re-attach every render.
+  const hostRef = useRef<unknown>(null)
+  const optionsRef = useRef(autocaptureOptions)
+  useEffect(() => {
+    optionsRef.current = autocaptureOptions
+  }, [autocaptureOptions])
+
+  useEffect(() => {
+    // The package targets ESNext without the DOM lib, so reach the document off the global.
+    const doc = (globalThis as any)?.document
+    if (!isWeb() || !captureTouches || !doc?.addEventListener) {
+      return
+    }
+
+    const ownerNode = hostRef.current
+    if (!ownerNode) {
+      // Without a host node nothing can be scoped to this provider, and a null key would collide
+      // with any sibling in the same state.
+      return
+    }
+
+    const existing = webClickListeners.get(posthog)
+    if (existing) {
+      existing.owners.set(ownerNode, optionsRef)
+    } else {
+      const owners: WebClickOwners = new Map([[ownerNode, optionsRef]])
+      const handler = (e: any): void => {
+        const owner = findOwningNode(e, owners)
+        if (!owner) {
+          return
+        }
+        const options = owners.get(owner)?.current
+        if (!options) {
+          return
+        }
+        autocaptureFromTouchEvent({ target: e.target, nativeEvent: e }, posthog, options, 'click')
+      }
+      doc.addEventListener('click', handler, true)
+      webClickListeners.set(posthog, {
+        owners,
+        remove: () => doc.removeEventListener('click', handler, true),
+      })
+    }
+
+    return () => {
+      const entry = webClickListeners.get(posthog)
+      if (!entry) {
+        return
+      }
+      entry.owners.delete(ownerNode)
+      if (entry.owners.size === 0) {
+        entry.remove()
+        webClickListeners.delete(posthog)
+      }
+    }
+  }, [captureTouches, posthog])
+
+  const captureProps = isWeb()
+    ? {}
+    : { onTouchEndCapture: captureTouches ? (e: GestureResponderEvent) => onTouch('end', e) : undefined }
+
   return (
     <View
+      ref={hostRef as any}
       {...{ [phLabelProp]: 'PostHogProvider' }} // Dynamically setting customLabelProp (default: ph-label)
       style={style || { flex: 1 }}
-      onTouchEndCapture={captureTouches ? (e) => onTouch('end', e) : undefined}
+      {...captureProps}
     >
       <PostHogContext.Provider value={{ client: posthog }}>
         {captureScreens && <PostHogNavigationHook options={autocaptureOptions} client={posthog} />}

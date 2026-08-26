@@ -1,4 +1,4 @@
-import type { Client, Extension } from '@posthog/browser-common'
+import type { Client, Extension, ExtensionToken } from '@posthog/browser-common'
 
 import { logger } from '@posthog/browser-common/utils/logger'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
@@ -6,7 +6,7 @@ import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-e
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE, DEVICE_ID, HEATMAPS_ENABLED_SERVER_SIDE } from '../../constants'
 import { BrowserClientAdapter } from '../../extensions/browser-client'
 import { request } from '../../request'
-import type { PostHog } from '../../posthog-core'
+import { PostHog } from '../../posthog-core'
 import type { PostHogPersistence } from '../../posthog-persistence'
 import type { CaptureOptions, Properties, Property, QueuedRequestWithOptions, RemoteConfigResult } from '../../types'
 import { createPosthogInstance } from '../helpers/posthog-instance'
@@ -50,6 +50,7 @@ function createMockPostHog(
         get_distinct_id: jest.fn(() => props.distinct_id as string),
         get_property: jest.fn((key: string) => props[key]),
         getGroups: jest.fn(() => props.$groups),
+        is_capturing: jest.fn(() => true),
         sessionManager: {
             checkAndGetSessionAndWindowId: jest.fn(() => currentSession),
         },
@@ -104,6 +105,9 @@ describe('BrowserClientAdapter', () => {
             windowId: 'window-id',
             sessionStartTimestamp: 123,
         })
+        expect(client?.canCapture).toBe(true)
+        ;(instance.is_capturing as jest.Mock).mockReturnValue(false)
+        expect(client?.canCapture).toBe(false)
         expect(instance.sessionManager?.checkAndGetSessionAndWindowId).toHaveBeenCalledWith(true)
         expect(client?.logger).toBeDefined()
 
@@ -121,6 +125,60 @@ describe('BrowserClientAdapter', () => {
         } satisfies CaptureOptions)
 
         await host.dispose()
+    })
+
+    it('resolves registered extensions through typed stable names during setup', async () => {
+        interface LogsExtension extends Extension {
+            captureLog(): void
+        }
+        const LogsExtension = 'logs' as ExtensionToken<LogsExtension>
+        const MissingExtension = 'missing' as ExtensionToken<LogsExtension>
+        const host = new BrowserClientAdapter(createMockPostHog())
+        const captureLog = jest.fn()
+        let client: Client | undefined
+        let resolvedDuringSetup: LogsExtension | undefined
+        const extension: LogsExtension = {
+            name: LogsExtension,
+            setup: (value) => {
+                client = value
+                resolvedDuringSetup = value.getExtension(LogsExtension)
+                resolvedDuringSetup?.captureLog()
+            },
+            captureLog,
+        }
+
+        expect(client).toBeUndefined()
+        await host.add(extension)
+
+        expect(resolvedDuringSetup).toBe(extension)
+        expect(captureLog).toHaveBeenCalledTimes(1)
+        expect(client?.getExtension(LogsExtension)).toBe(extension)
+        expect(client?.getExtension<LogsExtension>('logs')).toBe(extension)
+        expect(client?.getExtension(MissingExtension)).toBeUndefined()
+
+        host.dispose()
+        expect(client?.getExtension(LogsExtension)).toBeUndefined()
+    })
+
+    it('exposes extension lookup on PostHog for independently loaded bundles', async () => {
+        interface LogsExtension extends Extension {
+            captureLog(): void
+        }
+        const LogsExtension = 'logs' as ExtensionToken<LogsExtension>
+        const posthog = new PostHog()
+        const host = posthog._getBrowserClientAdapter()
+        const extension: LogsExtension = {
+            name: LogsExtension,
+            setup: jest.fn(),
+            captureLog: jest.fn(),
+        }
+
+        await host.add(extension)
+
+        expect(posthog.getExtension(LogsExtension)).toBe(extension)
+
+        host.dispose()
+        expect(posthog.getExtension(LogsExtension)).toBeUndefined()
     })
 
     it('falls back to the distinct id and an empty session in limited environments', async () => {

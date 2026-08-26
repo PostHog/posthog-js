@@ -3295,7 +3295,7 @@
           "name": "properties_string_max_length"
         },
         {
-          "description": "Configuration defaults for breaking changes. When set to a specific date,\nenables new default behaviors that were introduced on that date.\n\n- `'unset'`: Use legacy default behaviors\n- `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')\n- `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)\n- `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)\n- `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces\n- `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)\n- `'2026-08-29'`: Defaults from '2026-06-25' plus `cookieWinsOnConflict` defaults to `true` (the shared cross-subdomain cookie wins over stale per-origin localStorage)",
+          "description": "Configuration defaults for breaking changes. When set to a specific date,\nenables new default behaviors that were introduced on that date.\n\n- `'unset'`: Use legacy default behaviors\n- `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')\n- `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)\n- `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)\n- `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces\n- `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)\n- `'2026-08-29'`: Defaults from '2026-06-25' plus `cookieWinsOnConflict` defaults to `true` (the shared cross-subdomain cookie wins over stale per-origin localStorage)\n- `'2026-08-30'`: Defaults from '2026-08-29' plus `session_recording.captureJsonLd` defaults to `true`",
           "type": "ConfigDefaults",
           "name": "defaults"
         },
@@ -3418,7 +3418,7 @@
           "name": "surveys_request_timeout_ms"
         },
         {
-          "description": "Controls how often feature flags are automatically refreshed in long-running sessions after remote configuration has loaded.\n\nBy default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side\nflag changes without requiring a page reload. This is useful for SPAs and long-running tabs.\n\n**Tradeoffs:**\n- **Shorter intervals**: Feature flag changes propagate faster, but increases network requests and server load.\n- **Longer intervals**: Reduces network traffic (better for mobile/battery), but flag changes take longer to propagate.\n- **Disabled (0)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.\n  Use this if you control flag updates manually or have infrequent flag changes.\n\nNote: Refreshes are automatically skipped when the browser tab is hidden or no document is available.",
+          "description": "Controls how often feature flags are automatically refreshed in long-running sessions.\n\nBy default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side\nflag changes without requiring a page reload. This is useful for SPAs and long-running tabs.\n\n**Tradeoffs:**\n- **Shorter intervals**: Feature flag changes propagate faster, but increases network requests and server load.\n- **Longer intervals**: Reduces network traffic (better for mobile/battery), but flag changes take longer to propagate.\n- **Disabled (0 or any negative value)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.\n  Use this if you control flag updates manually or have infrequent flag changes.\n\nHidden pages skip scheduled refreshes and reload due flags when they become visible.\nThis option does not reload remote config.",
           "type": "number",
           "name": "remote_config_refresh_interval_ms"
         },
@@ -4483,27 +4483,6 @@
       "path": "lib/src/posthog-product-tours-types.d.ts"
     },
     {
-      "id": "PropertyFilters",
-      "name": "PropertyFilters",
-      "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
-      "example": "{\n    [propertyName: string]: {\n        values: string[];\n        operator: PropertyOperator;\n    };\n}"
-    },
-    {
-      "id": "PropertyMatchType",
-      "name": "PropertyMatchType",
-      "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
-      "example": "\"regex\" | \"not_regex\" | \"exact\" | \"is_not\" | \"icontains\" | \"not_icontains\""
-    },
-    {
-      "id": "PropertyOperator",
-      "name": "PropertyOperator",
-      "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
-      "example": "\"gt\" | \"lt\""
-    },
-    {
       "id": "QueuedRequestWithOptions",
       "name": "QueuedRequestWithOptions",
       "properties": [
@@ -5525,21 +5504,6 @@
       "properties": [],
       "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(typeof SurveyEventType)[keyof typeof SurveyEventType]"
-    },
-    {
-      "id": "SurveyEventWithFilters",
-      "name": "SurveyEventWithFilters",
-      "properties": [
-        {
-          "type": "string",
-          "name": "name"
-        },
-        {
-          "type": "PropertyFilters",
-          "name": "propertyFilters"
-        }
-      ],
-      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveyPosition",

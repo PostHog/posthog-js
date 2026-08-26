@@ -9,92 +9,14 @@ import {
   SurveyAppearance,
   SurveyPosition,
   SurveyQuestionDescriptionContentType,
-  SurveyMatchType,
 } from '@posthog/core'
 
-// Extended operator type to include numeric operators not in core SurveyMatchType
-export type PropertyOperator = SurveyMatchType | 'gt' | 'lt'
-
-export type PropertyFilters = {
-  [propertyName: string]: {
-    values: string[]
-    operator: PropertyOperator
-  }
-}
-
-export interface SurveyEventWithFilters {
-  name: string
-  propertyFilters?: PropertyFilters
-}
-
-const isValidRegex = (str: string): boolean => {
-  try {
-    new RegExp(str)
-    return true
-  } catch {
-    return false
-  }
-}
-
-export const isMatchingRegex = (value: string, pattern: string): boolean => {
-  if (!isValidRegex(pattern)) {
-    return false
-  }
-  try {
-    return new RegExp(pattern).test(value)
-  } catch {
-    return false
-  }
-}
-
-export const surveyValidationMap: Record<PropertyOperator, (targets: string[], values: string[]) => boolean> = {
-  [SurveyMatchType.Icontains]: (targets, values) =>
-    values.some((value) => targets.some((target) => value.toLowerCase().includes(target.toLowerCase()))),
-  [SurveyMatchType.NotIcontains]: (targets, values) =>
-    values.every((value) => targets.every((target) => !value.toLowerCase().includes(target.toLowerCase()))),
-  [SurveyMatchType.Regex]: (targets, values) =>
-    values.some((value) => targets.some((target) => isMatchingRegex(value, target))),
-  [SurveyMatchType.NotRegex]: (targets, values) =>
-    values.every((value) => targets.every((target) => !isMatchingRegex(value, target))),
-  [SurveyMatchType.Exact]: (targets, values) => values.some((value) => targets.some((target) => value === target)),
-  [SurveyMatchType.IsNot]: (targets, values) => values.every((value) => targets.every((target) => value !== target)),
-  gt: (targets, values) =>
-    values.some((value) => {
-      const numValue = parseFloat(value)
-      return !isNaN(numValue) && targets.some((t) => numValue > parseFloat(t))
-    }),
-  lt: (targets, values) =>
-    values.some((value) => {
-      const numValue = parseFloat(value)
-      return !isNaN(numValue) && targets.some((t) => numValue < parseFloat(t))
-    }),
-}
-
-export function matchPropertyFilters(
-  propertyFilters: PropertyFilters | undefined,
-  eventProperties: Record<string, unknown> | undefined
-): boolean {
-  if (!propertyFilters) {
-    return true
-  }
-
-  return Object.entries(propertyFilters).every(([propertyName, filter]) => {
-    const eventPropertyValue = eventProperties?.[propertyName]
-
-    if (eventPropertyValue === undefined || eventPropertyValue === null) {
-      return false
-    }
-
-    const values = [String(eventPropertyValue)]
-
-    const comparisonFunction = surveyValidationMap[filter.operator]
-    if (!comparisonFunction) {
-      return false
-    }
-
-    return comparisonFunction(filter.values, values)
-  })
-}
+export type { PropertyFilters, PropertyOperator, SurveyEventWithFilters } from '@posthog/core'
+export {
+  isMatchingRegex,
+  matchPropertyFilters,
+  propertyComparisons as surveyValidationMap,
+} from '@posthog/core/surveys'
 
 function isInteger(value: unknown): boolean {
   return typeof value === 'number' && Number.isInteger(value)
@@ -160,6 +82,12 @@ export type SurveyFlexAlign = 'flex-start' | 'center' | 'flex-end'
 const KNOWN_SURVEY_POSITIONS: ReadonlySet<string> = new Set(Object.values(SurveyPosition))
 const warnedUnknownPositions = new Set<string>()
 
+// Some survey API clients use CSS-style names such as `bottom-right`, while
+// SurveyPosition represents the bottom row as `left`, `center`, and `right`.
+function normalizeSurveyPosition(position: string): string {
+  return position.replace(/-/g, '_').replace(/^bottom_/, '')
+}
+
 // Mirrors web SDK semantics: `.ph-survey` is bottom-anchored by default and
 // getPopoverPosition only overrides `top` for top_* / middle_* variants. So
 // `left` / `right` / `center` (no prefix) anchor to the bottom edge — they
@@ -170,10 +98,11 @@ export function resolveSurveyAlignment(position: string | undefined): {
 } {
   let resolvedPosition: SurveyPosition = defaultSurveyAppearance.position
   if (position) {
-    if (KNOWN_SURVEY_POSITIONS.has(position)) {
-      resolvedPosition = position as SurveyPosition
-    } else if (!warnedUnknownPositions.has(position)) {
-      warnedUnknownPositions.add(position)
+    const normalizedPosition = typeof position === 'string' ? normalizeSurveyPosition(position) : ''
+    if (KNOWN_SURVEY_POSITIONS.has(normalizedPosition)) {
+      resolvedPosition = normalizedPosition as SurveyPosition
+    } else if (!warnedUnknownPositions.has(normalizedPosition)) {
+      warnedUnknownPositions.add(normalizedPosition)
       console.warn(
         `[PostHog.surveys] Unknown survey position ${JSON.stringify(position)} — falling back to ${defaultSurveyAppearance.position}. Expected one of: ${Object.values(SurveyPosition).join(', ')}.`
       )

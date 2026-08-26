@@ -1,5 +1,46 @@
 # @posthog/types
 
+## 1.407.0
+
+### Minor Changes
+
+- [#4655](https://github.com/PostHog/posthog-js/pull/4655) [`4f80973`](https://github.com/PostHog/posthog-js/commit/4f80973b5fe6aa0e34f84d751e0511abac4f9d33) Thanks [@robbie-c](https://github.com/robbie-c)! - Add the `2026-08-30` config defaults. These defaults enable sanitized JSON-LD replay events.
+  (2026-08-26)
+
+## 1.406.2
+
+### Patch Changes
+
+- [#4635](https://github.com/PostHog/posthog-js/pull/4635) [`ab1383a`](https://github.com/PostHog/posthog-js/commit/ab1383a8471b003124161c5839c15debacbc1e28) Thanks [@robbie-c](https://github.com/robbie-c)! - Capture paste interactions with clipboard autocapture without collecting pasted text.
+  (2026-08-26)
+
+- [#4640](https://github.com/PostHog/posthog-js/pull/4640) [`0d2cf49`](https://github.com/PostHog/posthog-js/commit/0d2cf4941d0e6306f51666305fbdaa8669a631d2) Thanks [@robbie-c](https://github.com/robbie-c)! - Add opt-in Schema.org JSON-LD capture to session replay through `session_recording.captureJsonLd`. When enabled, the recorder emits sanitized JSON-LD as custom replay events and excludes all script elements from replay snapshots.
+  (2026-08-26)
+
+## 1.406.1
+
+### Patch Changes
+
+- [#4476](https://github.com/PostHog/posthog-js/pull/4476) [`ed4dd97`](https://github.com/PostHog/posthog-js/commit/ed4dd97d461f9dd871507c8b929ab38cae376181) Thanks [@posthog](https://github.com/apps/posthog)! - fix(browser): refresh configured feature flags when a hidden tab becomes visible
+
+    Feature flags now own their automatic refresh timer and visibility listener.
+    Hidden tabs reload due flags when they become visible. The existing five-minute
+    default and `remote_config_refresh_interval_ms` behavior remain unchanged. (2026-08-25)
+
+## 1.406.0
+
+### Minor Changes
+
+- [#4598](https://github.com/PostHog/posthog-js/pull/4598) [`334159b`](https://github.com/PostHog/posthog-js/commit/334159bfd70cf78412d902b27bf27ae4107ecf91) Thanks [@posthog](https://github.com/apps/posthog)! - Web vitals now capture attribution by default for INP and LCP, so a slow interaction or paint arrives with the target element and phase breakdown that make it diagnosable. CLS stays without attribution by default, because its attribution holds detached DOM nodes and can leak memory in single-page apps. Set `capture_performance.web_vitals_attribution` to `false` to opt out, `true` for every metric, or an array to name the metrics. The captured metric also drops the empty `entries` array and bounds attribution to a small set of useful fields, and the attributed INP observer no longer collects the `processedEventEntries` we never read.
+  (2026-08-25)
+
+## 1.405.3
+
+### Patch Changes
+
+- [#4607](https://github.com/PostHog/posthog-js/pull/4607) [`7ec4f0d`](https://github.com/PostHog/posthog-js/commit/7ec4f0dd2575aee0a5b664ccad0c59e9fac9c89e) Thanks [@posthog](https://github.com/apps/posthog)! - Drop exceptions thrown by user scripts the browser injects into every page (Firefox for iOS, Chrome for iOS) instead of reporting them as the page's own errors. Set `error_tracking.captureExtensionExceptions: true` to keep capturing them.
+  (2026-08-24)
+
 ## 1.405.2
 
 ### Patch Changes

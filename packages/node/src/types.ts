@@ -121,9 +121,10 @@ export type FlagEvaluationOptions = BaseFlagEvaluationOptions & {
 export type AllFlagsOptions = BaseFlagEvaluationOptions & {
   /**
    * Restrict local evaluation, the `/flags` request, and the returned snapshot to these keys.
-   * `evaluateFlags()` falls back remotely when a requested key is missing from local definitions
-   * unless `onlyEvaluateLocally` is true. Remote evaluation responses are not cached, so a key
-   * missing both locally and remotely costs one `/flags` request per `evaluateFlags()` call.
+   * An empty array returns an empty snapshot without evaluating flags; omitting this option
+   * evaluates all flags. `evaluateFlags()` falls back remotely when a requested key is missing
+   * from local definitions unless `onlyEvaluateLocally` is true. Remote evaluation responses are
+   * not cached, so a key missing both locally and remotely costs one `/flags` request per call.
    */
   flagKeys?: string[]
 }

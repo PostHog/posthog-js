@@ -1722,7 +1722,7 @@
           "name": "disableGeoip"
         },
         {
-          "description": "Restrict local evaluation, the `/flags` request, and the returned snapshot to these keys.\n`evaluateFlags()` falls back remotely when a requested key is missing from local definitions\nunless `onlyEvaluateLocally` is true. Remote evaluation responses are not cached, so a key\nmissing both locally and remotely costs one `/flags` request per `evaluateFlags()` call.",
+          "description": "Restrict local evaluation, the `/flags` request, and the returned snapshot to these keys.\nAn empty array returns an empty snapshot without evaluating flags; omitting this option\nevaluates all flags. `evaluateFlags()` falls back remotely when a requested key is missing\nfrom local definitions unless `onlyEvaluateLocally` is true. Remote evaluation responses are\nnot cached, so a key missing both locally and remotely costs one `/flags` request per call.",
           "type": "string[]",
           "name": "flagKeys"
         }
@@ -3795,6 +3795,13 @@
       "path": "../core/src/error-tracking/coercers/promise-rejection-event.ts"
     },
     {
+      "id": "PropertyFilters",
+      "name": "PropertyFilters",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "Record<string, {\n    values: string[];\n    operator: PropertyOperator;\n}>"
+    },
+    {
       "id": "PropertyGroup",
       "name": "PropertyGroup",
       "properties": [
@@ -3808,6 +3815,19 @@
         }
       ],
       "path": "src/types.ts"
+    },
+    {
+      "id": "PropertyMatchType",
+      "name": "PropertyMatchType",
+      "properties": [],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "PropertyOperator",
+      "name": "PropertyOperator",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "\"gt\" | \"lt\""
     },
     {
       "id": "RatingSurveyQuestion",
@@ -4178,7 +4198,7 @@
           "name": "appearance"
         },
         {
-          "type": "{ url?: string; selector?: string; seenSurveyWaitPeriodInDays?: number; urlMatchType?: SurveyMatchType; events?: { repeatedActivation?: boolean; values?: { name: string; }[]; }; actions?: { values: SurveyActionType[]; }; deviceTypes?: string[]; deviceTypesMatchType?: SurveyMatchType; linkedFlagVariant?: string; }",
+          "type": "{ url?: string; selector?: string; seenSurveyWaitPeriodInDays?: number; urlMatchType?: SurveyMatchType; events?: { repeatedActivation?: boolean; values?: SurveyEventWithFilters[]; }; actions?: { values: SurveyActionType[]; }; deviceTypes?: string[]; deviceTypesMatchType?: SurveyMatchType; linkedFlagVariant?: string; }",
           "name": "conditions"
         },
         {
@@ -4350,6 +4370,21 @@
         {
           "type": "string",
           "name": "widgetColor"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "SurveyEventWithFilters",
+      "name": "SurveyEventWithFilters",
+      "properties": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "PropertyFilters",
+          "name": "propertyFilters"
         }
       ],
       "path": "../core/src/types.ts"

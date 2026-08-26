@@ -21,12 +21,14 @@ port easier to review and keeps future fixes comparable with v1.
 ```ts
 import type { Client, Extension } from '@posthog/browser-common'
 
+import { MyExtensionToken } from './my-extension-contract'
+
 export interface MyExtensionOptions {
     enabled?: boolean
 }
 
 export class MyExtension implements Extension {
-    readonly name = 'myExtension'
+    readonly name = MyExtensionToken
     private _client: Client | undefined
 
     constructor(private readonly _options: MyExtensionOptions = {}) {}
@@ -56,15 +58,32 @@ export class MyExtension implements Extension {
 - `dispose()` is optional, synchronous, idempotent, and best-effort.
 - Static SDK configuration belongs in explicit constructor options, not in `Client`.
 
+When other extensions need its controls, export an implementation-free typed token from a small contract module:
+
+```ts
+import type { Extension, ExtensionToken } from '@posthog/browser-common'
+
+export interface MyExtensionApi extends Extension {
+    stop(): void
+}
+
+export const MyExtensionToken = 'myExtension' as ExtensionToken<MyExtensionApi>
+```
+
+The token string must match the implementation's `name`. Keep the interface and token separate from the implementation
+so consumers do not pull its code into their bundles.
+
 ## Client capabilities
 
 | Need                          | Use                                                        |
 | ----------------------------- | ---------------------------------------------------------- |
 | current identity              | `client.distinctId`, `client.anonymousId`, `client.groups` |
 | current session               | `client.session`                                           |
+| check capture permission      | `client.canCapture`                                        |
 | record an event               | `await client.capture(event, properties?, options?)`       |
 | add properties to every event | `client.registerDynamicEventProperties(() => ({ … }))`     |
 | react to finalized events     | `client.onEvent(({ event, properties }) => …)`             |
+| access an installed extension | `client.getExtension(MyExtensionToken)`                    |
 | call a PostHog endpoint       | `await client.sendRequest(path, init?)`                    |
 | react to server config        | `client.onRemoteConfig(…)`                                 |
 | persist small state           | `client.kv`                                                |
@@ -86,10 +105,13 @@ header, or path.
   cannot mutate them.
 - **Keep disposables.** Store and release values returned by listeners, dynamic-property registration, and timer or
   patch wrappers. Use `createDisposable(teardown)` for idempotent synchronous cleanup.
+- **Treat extension lookup as optional.** `getExtension(token)` returns `undefined` when the named extension is absent
+  or has been removed. A resolved extension may still be running `setup`; use typed stable-name tokens and avoid
+  mandatory startup cycles between extensions.
 - **Initialize KV, then use it synchronously.** `client.kv.initialize()` may be awaitable while a host hydrates its
   memory buffer. Once initialization completes, KV reads, writes, and removals are synchronous; the host owns ordered
-  durable flushing. Identity, session, and `projectToken` are also synchronous, while capture and requests are
-  awaitable and remote-config outcomes are delivered through `onRemoteConfig`.
+  durable flushing. Identity, session, `canCapture`, and `projectToken` are also synchronous, while capture and requests
+  are awaitable and remote-config outcomes are delivered through `onRemoteConfig`.
 - **Design for async readiness.** Setup may occur before remote config loads or after events have already been captured.
   Guard work after each `await` so disposal cannot be followed by late installation.
 - **Persist through `client.kv`, not globals.** Complete `client.kv.initialize()` during setup before using the
@@ -134,8 +156,10 @@ export class FeatureFlagsExtension implements Extension {
 | `instance.config.X` (static)                                  | constructor option                                      |
 | `instance.config.X` (server-driven)                           | `client.onRemoteConfig(...)`                            |
 | `instance.sessionManager.checkAndGetSessionAndWindowId(true)` | `client.session`                                        |
+| `instance.is_capturing()`                                     | `client.canCapture`                                     |
 | `_addCaptureHook` / observing events                          | `client.onEvent(...)`                                   |
 | registering an enricher                                       | `client.registerDynamicEventProperties(fn)`             |
+| accessing another installed extension                         | `client.getExtension(MyExtensionToken)`                 |
 | `requestRouter.endpointFor(...)` + `_send_request`            | `client.sendRequest(path, init?)`                       |
 | snapshot/keepalive send on unload                             | `client.sendRequest(path, { transport: 'sendBeacon' })` |
 
