@@ -142,6 +142,18 @@ plugins.withId('com.android.application') {
 
                         doFirst {
                             def cliPackage = PostHogCli.resolveCliPackagePath(rootDirFile, reactRoot)
+                            if (!posthogReleaseModeArgs.isEmpty() && System.getenv("POSTHOG_SKIP_CLI_VERSION_CHECK") != "1") {
+                                if (PostHogCli.MIN_RELEASE_MODE_VERSION == "TODO:PLACEHOLDER") {
+                                    throw new GradleException("posthog.releaseMode '${posthogReleaseMode}' needs a posthog-cli that carries --release-mode on the hermes commands. No release carries it yet (PostHog/posthog#87660).")
+                                }
+                                def cliVersion = PostHogCli.resolveVersion([*osCompatibility, cliPackage])
+                                if (cliVersion == null) {
+                                    throw new GradleException("Could not determine the posthog-cli version, which posthog.releaseMode '${posthogReleaseMode}' needs. Upgrade: npm install -g @posthog/cli@latest")
+                                }
+                                if (!PostHogCli.meetsMinimumVersion(cliVersion, PostHogCli.MIN_RELEASE_MODE_VERSION)) {
+                                    throw new GradleException("posthog.releaseMode '${posthogReleaseMode}' needs posthog-cli >= ${PostHogCli.MIN_RELEASE_MODE_VERSION} (found ${cliVersion}). Upgrade: npm install -g @posthog/cli@latest")
+                                }
+                            }
                             def args = [cliPackage]
                             args.addAll(["hermes", "clone",
                                 "--minified-map-path", packagerSourcemapOutput, // The path to a sourcemap
@@ -294,6 +306,49 @@ abstract class PostHogCli {
         // Finally, fallback to global install
         logger.info("falling back to global posthog-cli")
         return "posthog-cli"
+    }
+
+    /**
+     * The CLI is whatever the machine has, not a pinned version, so an older one rejects
+     * --release-mode with a bare argument-parser error. Mirrors the floor check in posthog-ios
+     * build-tools/upload-symbols.sh. POSTHOG_SKIP_CLI_VERSION_CHECK=1 allows a posthog-cli built
+     * from source, which reports its Cargo manifest version rather than the version it ships as.
+     *
+     * TODO: replace the placeholder with the real floor once PostHog/posthog#87660 releases. Until
+     * then no posthog-cli carries the flag, so event mode cannot work and the build says so.
+     */
+    static final String MIN_RELEASE_MODE_VERSION = "TODO:PLACEHOLDER"
+
+    /** Null when the version cannot be read. */
+    static String resolveVersion(List command) {
+        try {
+            def process = (command + ["--version"]).execute()
+            def stdout = new StringBuffer()
+            def stderr = new StringBuffer()
+            process.waitForProcessOutput(stdout, stderr)
+            if (process.exitValue() != 0) {
+                return null
+            }
+            return (stdout.toString() + stderr.toString()).find(/\d+(\.\d+)+/)
+        } catch (Throwable ignored) {
+            return null
+        }
+    }
+
+    /** Compares numeric fields left to right, so 0.9.0 stays below 0.16.0. */
+    static boolean meetsMinimumVersion(String found, String minimum) {
+        def fields = { String version -> version.tokenize(".").collect { (it.find(/^\d+/) ?: "0") as int } }
+        def a = fields(found)
+        def b = fields(minimum)
+        // Pad the shorter one so 0.16 and 0.16.0 compare equal.
+        while (a.size() < b.size()) a << 0
+        while (b.size() < a.size()) b << 0
+        for (int i = 0; i < a.size(); i++) {
+            if (a[i] != b[i]) {
+                return a[i] > b[i]
+            }
+        }
+        return true
     }
 }
 

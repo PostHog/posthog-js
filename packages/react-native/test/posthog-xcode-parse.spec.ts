@@ -3,6 +3,8 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 
+import { POSTHOG_RELEASE_MODES, buildDsymUploadShellScript } from '../src/tooling/expoconfig'
+
 /**
  * These tests validate the sed expressions used in tooling/posthog-xcode.sh
  * to parse a git remote URL into {host, owner/repo}. Rather than re-declare
@@ -408,12 +410,30 @@ print_command_error "posthog-cli hermes upload" "42" "$CLI_OUTPUT"`
 })
 
 describe('posthog-xcode.sh posthog-cli invocation', () => {
+  // The wrapper reads `posthog-cli --version` once, to choose the release arguments and to check
+  // the --release-mode floor. These stubs answer that without recording it, so the trace holds only
+  // the clone and upload calls. The versions sit far either side of the real floor, so the tests
+  // survive it being set.
+  const cliStub = (version: string): string =>
+    [
+      '#!/bin/sh',
+      `case " $* " in *" --version "*) echo "posthog-cli ${version}"; exit 0;; esac`,
+      'echo "$@" >> "$CLI_TRACE_PATH"',
+      '',
+    ].join('\n')
+  const CLI_NEW_ENOUGH = cliStub('9.9.9')
+  const CLI_TOO_OLD = cliStub('0.0.1')
+  // Reports no version, and records every call, the version probe included.
+  const CLI_WITHOUT_VERSION = ['#!/bin/sh', 'echo "$@" >> "$CLI_TRACE_PATH"', ''].join('\n')
+
   // Runs the wrapper against a posthog-cli stub that records its arguments, so the assertions
   // are on what the CLI was actually asked to do rather than on the shell source.
   const runWrapper = (
     args: string[],
     extraEnv: Record<string, string>,
-    infoPlist?: Record<string, string>
+    infoPlist?: Record<string, string>,
+    cli: string = CLI_NEW_ENOUGH,
+    minVersion?: string
   ): { status: number; invocations: string[]; output: string } => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-release-mode-'))
     try {
@@ -428,7 +448,7 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
       for (const directory of [derivedDir, configurationDir, iosDir, path.dirname(cliPath)]) {
         fs.mkdirSync(directory, { recursive: true })
       }
-      fs.writeFileSync(cliPath, '#!/bin/sh\necho "$@" >> "$CLI_TRACE_PATH"\n', { mode: 0o755 })
+      fs.writeFileSync(cliPath, cli, { mode: 0o755 })
       fs.writeFileSync(reactNativePath, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
 
       const plistEnv: Record<string, string> = {}
@@ -445,7 +465,18 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
         plistEnv.INFOPLIST_FILE = 'App/Info.plist'
       }
 
-      const result = spawnSync(SCRIPT_PATH, [...args, '/bin/sh', reactNativePath], {
+      // The shipped floor is a placeholder that blocks event mode outright. Substituting a real
+      // one exercises the version comparison that goes live once the floor is filled in.
+      let scriptPath = SCRIPT_PATH
+      if (minVersion) {
+        scriptPath = path.join(tempDir, 'posthog-xcode.sh')
+        const patched = fs
+          .readFileSync(SCRIPT_PATH, 'utf8')
+          .replace('MIN_RELEASE_MODE_CLI_VERSION="TODO:PLACEHOLDER"', `MIN_RELEASE_MODE_CLI_VERSION="${minVersion}"`)
+        fs.writeFileSync(scriptPath, patched, { mode: 0o755 })
+      }
+
+      const result = spawnSync(scriptPath, [...args, '/bin/sh', reactNativePath], {
         cwd: iosDir,
         env: {
           ...process.env,
@@ -476,7 +507,7 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
     ['the POSTHOG_RELEASE_MODE env var', [] as string[], { POSTHOG_RELEASE_MODE: 'event' }],
     ['the --posthog-release-mode argument', ['--posthog-release-mode', 'event', '--'], {}],
   ])('passes --release-mode event to clone and upload from %s', (_source, args, env) => {
-    const { status, invocations } = runWrapper(args, env)
+    const { status, invocations } = runWrapper(args, env, undefined, CLI_NEW_ENOUGH, '0.1.0')
 
     expect(status).toBe(0)
     expect(invocations).toHaveLength(2)
@@ -486,12 +517,54 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
     expect(invocations[1]).toContain('--release-mode event')
   })
 
-  it('omits the flag by default so an older posthog-cli keeps working', () => {
-    const { status, invocations } = runWrapper([], { POSTHOG_RELEASE_MODE: '' })
+  it('refuses event mode while the minimum version is still a placeholder', () => {
+    const { status, invocations, output } = runWrapper([], { POSTHOG_RELEASE_MODE: 'event' })
+
+    expect(status).not.toBe(0)
+    expect(output).toContain('No release carries it yet')
+    expect(output).toContain('PostHog/posthog#87660')
+    expect(invocations.join('\n')).not.toContain('hermes')
+  })
+
+  it.each([
+    ['is below the minimum', CLI_TOO_OLD, 'needs posthog-cli >='],
+    ['reports no version at all', CLI_WITHOUT_VERSION, 'could not determine the posthog-cli version'],
+  ])('names the upgrade when the posthog-cli on the box %s', (_case, cli, message) => {
+    const { status, invocations, output } = runWrapper([], { POSTHOG_RELEASE_MODE: 'event' }, undefined, cli, '9.0.0')
+
+    expect(status).not.toBe(0)
+    expect(output).toContain(message)
+    expect(output).toContain('npm install -g @posthog/cli@latest')
+    // It fails before uploading anything, rather than part way through.
+    expect(invocations.join('\n')).not.toContain('hermes')
+  })
+
+  it('reports the version it found so the message is actionable', () => {
+    const { output } = runWrapper([], { POSTHOG_RELEASE_MODE: 'event' }, undefined, CLI_TOO_OLD, '9.0.0')
+
+    expect(output).toContain('found 0.0.1')
+  })
+
+  it('skips the version check for a posthog-cli built from source', () => {
+    const { status, invocations } = runWrapper(
+      [],
+      { POSTHOG_RELEASE_MODE: 'event', POSTHOG_SKIP_CLI_VERSION_CHECK: '1' },
+      undefined,
+      CLI_TOO_OLD
+    )
 
     expect(status).toBe(0)
     expect(invocations).toHaveLength(2)
-    expect(invocations.join('\n')).not.toContain('--release-mode')
+    expect(invocations[0]).toContain('--release-mode event')
+  })
+
+  it('omits the flag by default so an older posthog-cli keeps working', () => {
+    const { status, invocations } = runWrapper([], { POSTHOG_RELEASE_MODE: '' }, undefined, CLI_WITHOUT_VERSION)
+
+    expect(status).toBe(0)
+    const uploads = invocations.filter((line) => line.includes('hermes'))
+    expect(uploads).toHaveLength(2)
+    expect(uploads.join('\n')).not.toContain('--release-mode')
   })
 
   it('fails the build on an unrecognized mode instead of binding the maps anyway', () => {
@@ -549,5 +622,60 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
     expect(status).toBe(0)
     expect(invocations[1]).toContain('--release-version 3.1.4')
     expect(invocations[1]).toContain('--build 9')
+  })
+})
+
+/**
+ * The accepted release modes are written out four times: POSTHOG_RELEASE_MODES, the case in
+ * posthog-xcode.sh, the list in posthog.gradle, and the case in the generated dSYM phase. A third
+ * mode would be accepted at prebuild and then rejected at build time by whichever copy was missed.
+ */
+describe('release mode lists stay in sync', () => {
+  const GRADLE_PATH = path.resolve(__dirname, '..', 'tooling', 'posthog.gradle')
+
+  // Reads `  symbol-set|event) ;;` out of the case on $POSTHOG_RELEASE_MODE_VALUE.
+  const shellModes = (): string[] => {
+    const contents = fs.readFileSync(SCRIPT_PATH, 'utf8')
+    const match = contents.match(/case "\$POSTHOG_RELEASE_MODE_VALUE" in\s*\n\s*([^)]+)\)/)
+    if (!match) throw new Error('Could not locate the release mode case in posthog-xcode.sh')
+    return match[1].split('|').map((mode) => mode.trim())
+  }
+
+  // Reads `["symbol-set", "event"]` out of resolvePostHogReleaseMode.
+  const gradleModes = (): string[] => {
+    const contents = fs.readFileSync(GRADLE_PATH, 'utf8')
+    const match = contents.match(/value in \[([^\]]+)\]/)
+    if (!match) throw new Error('Could not locate the release mode list in posthog.gradle')
+    return match[1].split(',').map((mode) => mode.trim().replace(/"/g, ''))
+  }
+
+  // Reads the case labels out of the generated dSYM phase, dropping the `""` unset arm.
+  const dsymModes = (): string[] => {
+    const script = buildDsymUploadShellScript(false, false, undefined)
+    const start = script.indexOf('case "$POSTHOG_RESOLVED_RELEASE_MODE" in')
+    const end = script.indexOf('\n  *)', start)
+    if (start === -1 || end === -1) throw new Error('Could not locate the release mode case in the dSYM phase')
+    return [...script.slice(start, end).matchAll(/^ {2}([^)]+)\)/gm)]
+      .flatMap((match) => match[1].split('|'))
+      .map((mode) => mode.replace(/"/g, '').trim())
+      .filter(Boolean)
+  }
+
+  it.each([
+    ['posthog-xcode.sh', shellModes],
+    ['posthog.gradle', gradleModes],
+    ['the generated dSYM phase', dsymModes],
+  ])('%s accepts exactly the modes the plugin does', (_name, extract) => {
+    expect((extract as () => string[])().sort()).toEqual([...POSTHOG_RELEASE_MODES].sort())
+  })
+
+  // Both platforms gate event mode on the same posthog-cli, so raising one floor and forgetting
+  // the other would leave one platform accepting a CLI the other rejects.
+  it('gates both platforms on the same posthog-cli version', () => {
+    const shell = fs.readFileSync(SCRIPT_PATH, 'utf8').match(/MIN_RELEASE_MODE_CLI_VERSION="([^"]+)"/)
+    const gradle = fs.readFileSync(GRADLE_PATH, 'utf8').match(/MIN_RELEASE_MODE_VERSION = "([^"]+)"/)
+    if (!shell || !gradle) throw new Error('Could not locate the release mode version floors')
+
+    expect(shell[1]).toBe(gradle[1])
   })
 })

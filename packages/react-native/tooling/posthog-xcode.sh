@@ -41,6 +41,11 @@ while [ "$#" -gt 0 ]; do
       shift
       ;;
     --posthog-release-mode)
+      # `shift 2` past the end of the argument list makes `set -e` abort the wrapper silently.
+      if [ "$#" -lt 2 ]; then
+        echo "error: --posthog-release-mode needs a value ('symbol-set' or 'event')"
+        exit 1
+      fi
       POSTHOG_RELEASE_MODE_VALUE="$2"
       shift 2
       ;;
@@ -166,6 +171,31 @@ if [ -n "$PH_CLI_VERSION" ]; then
   LOWEST_POSTHOG_CLI_VERSION=$(printf '%s\n%s\n' "$INFO_PLIST_MIN_POSTHOG_CLI_VERSION" "$PH_CLI_VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)
   if [ "$LOWEST_POSTHOG_CLI_VERSION" = "$INFO_PLIST_MIN_POSTHOG_CLI_VERSION" ]; then
     POSTHOG_CLI_SUPPORTS_INFO_PLIST=1
+  fi
+fi
+
+# The CLI is whatever the machine has, not a pinned version, so an older one rejects --release-mode
+# with a bare argument-parser error. Checks the version read above, and mirrors the floor check in
+# posthog-ios build-tools/upload-symbols.sh. POSTHOG_SKIP_CLI_VERSION_CHECK=1 allows a posthog-cli
+# built from source, which reports its Cargo manifest version rather than the version it ships as.
+#
+# TODO: replace the placeholder with the real floor once PostHog/posthog#87660 releases. Until
+# then no posthog-cli carries the flag, so event mode cannot work and the build says so.
+MIN_RELEASE_MODE_CLI_VERSION="TODO:PLACEHOLDER"
+if [ ${#POSTHOG_RELEASE_MODE_ARGS[@]} -gt 0 ] && [ "${POSTHOG_SKIP_CLI_VERSION_CHECK:-}" != "1" ]; then
+  if [ "$MIN_RELEASE_MODE_CLI_VERSION" = "TODO:PLACEHOLDER" ]; then
+    echo "error: release mode '$POSTHOG_RELEASE_MODE_VALUE' needs a posthog-cli that carries --release-mode on the hermes commands. No release carries it yet (PostHog/posthog#87660)."
+    exit 1
+  fi
+  if [ -z "$PH_CLI_VERSION" ]; then
+    echo "error: could not determine the posthog-cli version, which release mode '$POSTHOG_RELEASE_MODE_VALUE' needs. Upgrade: npm install -g @posthog/cli@latest"
+    exit 1
+  fi
+  # If the minimum sorts first, the installed version is at or above it.
+  PH_CLI_LOWEST=$(printf '%s\n%s\n' "$MIN_RELEASE_MODE_CLI_VERSION" "$PH_CLI_VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)
+  if [ "$PH_CLI_LOWEST" != "$MIN_RELEASE_MODE_CLI_VERSION" ]; then
+    echo "error: release mode '$POSTHOG_RELEASE_MODE_VALUE' needs posthog-cli >= ${MIN_RELEASE_MODE_CLI_VERSION} (found ${PH_CLI_VERSION}). Upgrade: npm install -g @posthog/cli@latest"
+    exit 1
   fi
 fi
 

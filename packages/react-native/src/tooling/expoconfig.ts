@@ -23,7 +23,9 @@ const POSTHOG_ANDROID_SKIP_ON_CONFLICT_PROPERTY = 'posthogReactNativeSkipOnConfl
  */
 export type PostHogReleaseMode = 'symbol-set' | 'event'
 
-const POSTHOG_RELEASE_MODES: PostHogReleaseMode[] = ['symbol-set', 'event']
+// Exported so a test can hold the copies in posthog-xcode.sh, posthog.gradle and the generated
+// dSYM phase to this list, because nothing else fails when they drift.
+export const POSTHOG_RELEASE_MODES: PostHogReleaseMode[] = ['symbol-set', 'event']
 
 // Empty/whitespace-only values (easy to produce from templated app.config values) count as unset.
 // An unrecognized value stops the prebuild rather than falling back, so a typo cannot silently
@@ -643,9 +645,13 @@ type PostHogPluginProps = {
    * `POSTHOG_NO_RELEASE_BIND` in the dSYM phase when `uploadNativeSymbols` is on), Android as a
    * `posthog.releaseMode` entry in android/gradle.properties.
    *
-   * Requires posthog-cli >= 0.15.0 for the Hermes upload and >= 0.12.0 for the Android mapping
-   * upload. The dSYM half needs posthog-cli >= 0.10.0 and a posthog-ios whose
-   * `upload-symbols.sh` reads `POSTHOG_NO_RELEASE_BIND`; older ones ignore it and keep binding.
+   * Requires posthog-cli >= 0.13.0 for the Android mapping upload. The dSYM half needs
+   * posthog-cli >= 0.10.0 and posthog-ios >= 3.69.1; older ones ignore `POSTHOG_NO_RELEASE_BIND`
+   * and keep binding.
+   *
+   * TODO: state the Hermes minimum once PostHog/posthog#87660 releases. Until then the floors in
+   * posthog-xcode.sh and posthog.gradle are placeholders. Update them, this line, and the
+   * changeset together.
    */
   releaseMode?: PostHogReleaseMode
 }
@@ -770,5 +776,6 @@ module.exports.applyDotenvFileBuildSetting = applyDotenvFileBuildSetting
 module.exports.resolveDotenvFileProp = resolveDotenvFileProp
 module.exports.buildAndroidDotenvFileGradleValue = buildAndroidDotenvFileGradleValue
 module.exports.updateDotenvFileGradleProperties = updateDotenvFileGradleProperties
+module.exports.POSTHOG_RELEASE_MODES = POSTHOG_RELEASE_MODES
 module.exports.resolveReleaseModeProp = resolveReleaseModeProp
 module.exports.updateReleaseModeGradleProperties = updateReleaseModeGradleProperties
