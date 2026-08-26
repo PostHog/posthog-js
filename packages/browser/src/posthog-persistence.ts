@@ -366,8 +366,13 @@ export class PostHogPersistence {
         }
     }
 
+    private _setCrossTabFeatureFlagChangesPending(key: string, changes: Set<string> | true): void {
+        this._pendingCrossTabFeatureFlagChanges.set(key, changes)
+        this._markGroupDirty(key)
+    }
+
     private _markAllCrossTabFeatureFlagChangesPending(): void {
-        CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => this._pendingCrossTabFeatureFlagChanges.set(key, true))
+        CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => this._setCrossTabFeatureFlagChangesPending(key, true))
     }
 
     private _markLoadedCrossTabFeatureFlagChangesPending(): void {
@@ -382,7 +387,7 @@ export class PostHogPersistence {
                 if (key in this.props) {
                     this._markPendingCrossTabFeatureFlagChanges(key, storedEntry[key], this.props[key])
                 } else if (key in storedEntry) {
-                    this._pendingCrossTabFeatureFlagChanges.set(key, true)
+                    this._setCrossTabFeatureFlagChangesPending(key, true)
                 }
             })
         } catch {}
@@ -444,7 +449,7 @@ export class PostHogPersistence {
                 (!isUndefined(durableValue) && !isArray(durableValue)) ||
                 !isArray(nextValue)
             ) {
-                this._pendingCrossTabFeatureFlagChanges.set(key, true)
+                this._setCrossTabFeatureFlagChangesPending(key, true)
                 return
             }
             const previous = new Set<string>(previousValue || [])
@@ -462,7 +467,7 @@ export class PostHogPersistence {
             })
         } else if (isObject(nextValue)) {
             if (!isUndefined(previousValue) && !isObject(previousValue)) {
-                this._pendingCrossTabFeatureFlagChanges.set(key, true)
+                this._setCrossTabFeatureFlagChangesPending(key, true)
                 return
             }
             const previous: Properties = isObject(previousValue) ? previousValue : {}
@@ -484,12 +489,12 @@ export class PostHogPersistence {
                 }
             })
         } else {
-            this._pendingCrossTabFeatureFlagChanges.set(key, true)
+            this._setCrossTabFeatureFlagChangesPending(key, true)
             return
         }
 
         if (pendingChanges.size) {
-            this._pendingCrossTabFeatureFlagChanges.set(key, pendingChanges)
+            this._setCrossTabFeatureFlagChangesPending(key, pendingChanges)
         } else {
             this._pendingCrossTabFeatureFlagChanges.delete(key)
         }
@@ -642,7 +647,7 @@ export class PostHogPersistence {
                 if (hasNextValue) {
                     this._markPendingCrossTabFeatureFlagChanges(key, previousProps[key], this.props[key])
                 } else {
-                    this._pendingCrossTabFeatureFlagChanges.set(key, true)
+                    this._setCrossTabFeatureFlagChangesPending(key, true)
                 }
             }
         })
@@ -1647,7 +1652,7 @@ export class PostHogPersistence {
     private _deleteProp(prop: string): void {
         delete this.props[prop]
         if (isCrossTabFeatureFlagKey(prop)) {
-            this._pendingCrossTabFeatureFlagChanges.set(prop, true)
+            this._setCrossTabFeatureFlagChangesPending(prop, true)
         }
         this._markGroupDirty(prop)
     }

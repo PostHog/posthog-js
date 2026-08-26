@@ -1069,6 +1069,7 @@ describe('persistence', () => {
                 const lib = new PostHogPersistence({
                     ...makeConfig('localStorage+cookie', true),
                     cookie_persisted_properties: [ENABLED_FEATURE_FLAGS],
+                    split_storage: true,
                 })
 
                 // Another subdomain updates only the shared cookie. This origin's
@@ -1080,9 +1081,9 @@ describe('persistence', () => {
                 lib.register({ local_only_property: 'preserved' })
 
                 expect(lib.props[ENABLED_FEATURE_FLAGS]).toEqual({ 'early-access-flag': true })
-                expect(JSON.parse(localStorage.getItem(persistenceName) || '{}')[ENABLED_FEATURE_FLAGS]).toEqual({
-                    'early-access-flag': true,
-                })
+                expect(
+                    JSON.parse(localStorage.getItem(`${persistenceName}__flags`) || '{}')[ENABLED_FEATURE_FLAGS]
+                ).toEqual({ 'early-access-flag': true })
             })
 
             it('flag on: does not mark a failed cookie mirror as observed', () => {
