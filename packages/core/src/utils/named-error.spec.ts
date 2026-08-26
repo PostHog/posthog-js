@@ -18,7 +18,12 @@ describe('createNamedError', () => {
   })
 
   it('preserves the name when Error.prototype.name is non-writable', () => {
-    const descriptor = Object.getOwnPropertyDescriptor(Error.prototype, 'name')!
+    const descriptor = Object.getOwnPropertyDescriptor(Error.prototype, 'name') ?? {
+      value: 'Error',
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    }
     Object.defineProperty(Error.prototype, 'name', { value: 'Error', writable: false, configurable: true })
     try {
       const error = createNamedError('AbortError', 'timed out')
