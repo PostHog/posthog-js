@@ -601,6 +601,27 @@ describe('cross-tab persistence interactions', () => {
             tabB.destroy()
         })
 
+        it('persists a local reversion after adopting a sibling flag update', () => {
+            const config = makeConfig(debounce)
+            const tabA = new PostHogPersistence(config)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            tabA.flush()
+            const tabB = new PostHogPersistence(config)
+            const oldValue = window.localStorage.getItem(STORAGE_KEY)
+
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: true } })
+            tabA.flush()
+            dispatchStorageChange(STORAGE_KEY, oldValue, window.localStorage.getItem(STORAGE_KEY))
+            expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ flag: true })
+
+            tabB.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            tabB.flush()
+
+            expect(readStorage()[ENABLED_FEATURE_FLAGS]).toEqual({ flag: false })
+            tabA.destroy()
+            tabB.destroy()
+        })
+
         it('keeps a pending local enrollment when a split-storage sibling event arrives', () => {
             const config = makeConfig(HARDENED_DEBOUNCE_MS, { split_storage: true })
             const flagsStorageKey = `${STORAGE_KEY}__flags`

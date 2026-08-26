@@ -307,7 +307,16 @@ export class PostHogPersistence {
             return false
         }
 
+        this._rememberCrossTabStorageFingerprint(nextEntry, slot)
         return this._mergeCrossTabFeatureFlagProperties(nextEntry, slot, notify)
+    }
+
+    private _rememberCrossTabStorageFingerprint(entry: Properties, slot: StorageSlot): void {
+        try {
+            this._slotWriteState(slot).fingerprint = this._entryFingerprint(entry, slot)
+        } catch {
+            this._slotWriteState(slot).fingerprint = undefined
+        }
     }
 
     private _mergeCrossTabFeatureFlagProperties(nextEntry: Properties, slot: StorageSlot, notify: boolean): boolean {
