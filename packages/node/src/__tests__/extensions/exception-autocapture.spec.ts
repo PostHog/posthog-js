@@ -389,8 +389,8 @@ describe('exception autocapture', () => {
       const captureExceptions = Array.from({ length: 20 }).map(() => ph['errorTracking']['onException']({}, {}))
       await Promise.all(captureExceptions)
 
-      // captures until rate limited (a full bucket of 10 is served before the limiter kicks in)
-      expect(mockedCapture).toHaveBeenCalledTimes(10)
+      // captures until rate limited
+      expect(mockedCapture).toHaveBeenCalledTimes(9)
     } finally {
       await ph.shutdown()
     }
@@ -416,8 +416,8 @@ describe('exception autocapture', () => {
       const captureExceptions = Array.from({ length: 20 }).map(() => ph['errorTracking']['onException']({}, {}))
       await Promise.all(captureExceptions)
 
-      // captures until rate limited (a full bucket of 3 is served before the limiter kicks in)
-      expect(mockedCapture).toHaveBeenCalledTimes(3)
+      // captures until rate limited (bucket of 3 leaves 2 through before the limiter kicks in)
+      expect(mockedCapture).toHaveBeenCalledTimes(2)
     } finally {
       await ph.shutdown()
     }

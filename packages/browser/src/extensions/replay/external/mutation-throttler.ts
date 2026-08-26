@@ -88,7 +88,7 @@ export class MutationThrottler {
 
             // A dropped attribute mutation (e.g. the class or style that hides an outgoing
             // subtree) never reaches the player, which then shows DOM that left the live page.
-            // Report the drop so the recorder can heal the mirror with a full snapshot.
+            // Report the drop so the recorder can count how often that happens.
             const droppedCount = beforeCount - data.attributes.length
             if (droppedCount > 0) {
                 this._options.onDroppedAttributeMutations?.(droppedCount)

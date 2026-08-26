@@ -1600,131 +1600,6 @@ describe('Lazy SessionRecording', () => {
                 expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
             })
 
-            it('heals with a debounced full snapshot when the throttler drops an attribute while awake', () => {
-                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
-                const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
-
-                emitActiveEvent(startingTimestamp + 100)
-                takeFullSnapshot.mockClear()
-
-                jest.useFakeTimers()
-                try {
-                    // a dense burst reports several drops; they coalesce into one heal snapshot
-                    lazyRecording['_onThrottledMutationsDropped'](3)
-                    lazyRecording['_onThrottledMutationsDropped'](2)
-                    expect(takeFullSnapshot).not.toHaveBeenCalled()
-
-                    jest.advanceTimersByTime(1000)
-                    expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
-
-                    // the drops are counted so the throttler path is measurable
-                    expect(lazyRecording.sdkDebugProperties['$sdk_debug_replay_throttled_mutations_dropped']).toEqual(5)
-                } finally {
-                    jest.useRealTimers()
-                }
-            })
-
-            it.each([
-                // a trigger-pending buffer ships on activation, so the awake heal must cover it too
-                ['a recording trigger is pending', true, 1],
-                // sampled-out buffering discards the buffer, so the heal is pure cost
-                ['no trigger is pending', false, 0],
-            ] as [string, boolean, number][])(
-                'heals an awake throttle drop while buffering when %s: %i snapshot(s)',
-                (_name: string, hasPendingTriggers: boolean, expectedSnapshots: number) => {
-                    const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record
-                        .takeFullSnapshot as Mock
-                    const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
-
-                    emitActiveEvent(startingTimestamp + 100)
-                    takeFullSnapshot.mockClear()
-
-                    Object.defineProperty(lazyRecording, 'status', { get: () => 'buffering', configurable: true })
-                    const pendingSpy = jest
-                        .spyOn(lazyRecording['_strategy']!, 'hasPendingTriggers')
-                        .mockReturnValue(hasPendingTriggers)
-                    jest.useFakeTimers()
-                    try {
-                        lazyRecording['_onThrottledMutationsDropped'](3)
-                        jest.advanceTimersByTime(1000)
-                        expect(takeFullSnapshot).toHaveBeenCalledTimes(expectedSnapshots)
-                    } finally {
-                        jest.useRealTimers()
-                        pendingSpy.mockRestore()
-                        delete (lazyRecording as any).status
-                    }
-                }
-            )
-
-            it('does not schedule a heal snapshot for throttler drops while idle', () => {
-                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
-                const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
-
-                emitActiveEvent(startingTimestamp + 100)
-                _emit({
-                    ...createPluginSnapshot({}),
-                    timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000,
-                } as eventWithTime)
-                expect(lazyRecording['_isIdle']).toEqual(true)
-                takeFullSnapshot.mockClear()
-
-                jest.useFakeTimers()
-                try {
-                    // idle drops are healed on wake, so no snapshot is scheduled here
-                    lazyRecording['_onThrottledMutationsDropped'](4)
-                    jest.advanceTimersByTime(1000)
-                    expect(takeFullSnapshot).not.toHaveBeenCalled()
-                } finally {
-                    jest.useRealTimers()
-                }
-            })
-
-            it('cancels a pending throttle heal timer when the recorder goes idle before it fires', () => {
-                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
-                const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
-
-                emitActiveEvent(startingTimestamp + 100)
-                takeFullSnapshot.mockClear()
-
-                jest.useFakeTimers()
-                try {
-                    // a drop while awake schedules the heal
-                    lazyRecording['_onThrottledMutationsDropped'](3)
-                    expect(lazyRecording['_throttleHealTimer']).toBeDefined()
-
-                    // the recorder flips to idle before the debounce elapses — reachable because
-                    // the same emit that reports a drop runs the idle check right after
-                    emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
-
-                    // the pending heal is cancelled, so no full snapshot the idle gate discards
-                    expect(lazyRecording['_throttleHealTimer']).toBeUndefined()
-                    jest.advanceTimersByTime(2000)
-                    expect(takeFullSnapshot).not.toHaveBeenCalled()
-                } finally {
-                    jest.useRealTimers()
-                }
-            })
-
-            it('skips the throttle heal snapshot when the recorder is idle at debounce time', () => {
-                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
-                const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
-
-                emitActiveEvent(startingTimestamp + 100)
-                takeFullSnapshot.mockClear()
-
-                jest.useFakeTimers()
-                try {
-                    lazyRecording['_onThrottledMutationsDropped'](3)
-                    // flip to idle without going through the clear-on-idle path, so the timer
-                    // survives and the callback's own idle guard is what prevents the snapshot
-                    lazyRecording['_isIdle'] = true
-                    jest.advanceTimersByTime(2000)
-                    expect(takeFullSnapshot).not.toHaveBeenCalled()
-                } finally {
-                    jest.useRealTimers()
-                }
-            })
-
             it('rotates session if idle for (MAX_SESSION_IDLE_TIMEOUT) 30 minutes', () => {
                 const firstActivityTimestamp = startingTimestamp + 100
                 const secondActivityTimestamp = startingTimestamp + 200
@@ -4111,6 +3986,17 @@ describe('Lazy SessionRecording', () => {
 
             expect(sessionRecording['_lazyLoadedSessionRecording']['_slowestFullSnapshot']).toBeUndefined()
             expect(assignableWindow.__PosthogExtensions__.rrweb.resetSnapshotCostState).toHaveBeenCalled()
+        })
+
+        it('accumulates throttler-dropped attribute mutations onto the debug property', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+            const onDropped = lazyRecording['_mutationThrottler']!['_options'].onDroppedAttributeMutations!
+
+            onDropped(3)
+            onDropped(2)
+
+            expect(lazyRecording.sdkDebugProperties['$sdk_debug_replay_throttled_mutations_dropped']).toEqual(5)
         })
 
         it('resets the throttled mutation drop count on session change', () => {

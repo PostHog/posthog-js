@@ -111,7 +111,7 @@ describe('MutationThrottler', () => {
         )
     })
 
-    test('reports dropped attribute mutations so the recorder can heal', () => {
+    test('reports dropped attribute mutations so the recorder can count them', () => {
         const event = makeEvent({ attributes: [{ id: 1, attributes: { a: 'ttribute' } }] })
 
         mutationThrottler['_rateLimiter']['_buckets']['1'] = { tokens: 0, lastAccess: Date.now() }

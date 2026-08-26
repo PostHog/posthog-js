@@ -114,11 +114,6 @@ const MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = ONE_HOUR
 // visible freeze - no rendering, scrolling, or cursor movement - and worth a warning.
 const SLOW_FULL_SNAPSHOT_THRESHOLD_MS = 500
 
-// Delay before a throttle-drop heal snapshot fires. A trailing debounce, so a dense
-// mutation burst coalesces into one snapshot; a sustained animation keeps resetting the
-// timer and is left to the periodic snapshot rather than snapshotting on every frame.
-const THROTTLE_HEAL_DEBOUNCE_MS = 1000
-
 function roundOrUndefined(value: number | undefined): number | undefined {
     return isUndefined(value) ? undefined : Math.round(value)
 }
@@ -518,11 +513,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // Cleared only when a full snapshot actually passes the idle gate, so a failed
     // wake heal retries on the next wake instead of losing the signal
     private _eventsDroppedWhileIdle = 0
-    // attribute mutations the throttler dropped across this session. Reported on captured
-    // events so the throttler drop path (invisible until now) is measurable in our own data.
+    // attribute mutations the throttler dropped across this session, reported on captured
+    // events so the drop path is measurable in our own data
     private _throttledMutationsDropped = 0
-    // trailing debounce for the throttle-drop heal snapshot, see THROTTLE_HEAL_DEBOUNCE_MS
-    private _throttleHealTimer?: ReturnType<typeof setTimeout>
     // true while the current epoch has had no user interaction; a held epoch is
     // discarded (not shipped) by stop or a subsequent rotation
     private _holdFlushUntilInteraction = false
@@ -1439,8 +1432,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         document?.removeEventListener('visibilitychange', this._onVisibilityChange)
 
         clearInterval(this._fullSnapshotTimer)
-        clearTimeout(this._throttleHealTimer)
-        this._throttleHealTimer = undefined
         this._clearFlushBufferTimer()
 
         this._removePageViewCaptureHook?.()
@@ -1551,9 +1542,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // belongs to the old session) and before the new one takes its first snapshot
         this._slowestFullSnapshot = undefined
         this._lastSeenSnapshotCost = undefined
-        // the throttler drop count is per-session too — its sdkDebugProperties comment
-        // promises a count "cumulative across the session", so reset it here or the new
-        // session inherits the old one's drops and reports duplicate-DOM risk it never had
+        // the throttler drop count is per-session too, so the new session starts at zero
         this._throttledMutationsDropped = 0
         getRRWeb()?.resetSnapshotCostState?.()
         this.start('session_id_changed')
@@ -1670,38 +1659,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             sessionId: targetSessionId,
         })
         this._tryTakeFullSnapshot()
-    }
-
-    // The mutation throttler dropped an attribute change before it reached the player.
-    // Count it so the path is measurable, and schedule a full snapshot to re-sync the
-    // player's mirror with the live DOM. While idle the wake heal already covers this.
-    private _onThrottledMutationsDropped(count: number) {
-        this._throttledMutationsDropped += count
-
-        if (this._isIdle === true) {
-            return
-        }
-
-        if (this._throttleHealTimer) {
-            clearTimeout(this._throttleHealTimer)
-        }
-        this._throttleHealTimer = setTimeout(() => {
-            this._throttleHealTimer = undefined
-            // the recorder can flip to idle after this timer was scheduled — the same emit that
-            // reports the drop runs the idle check just afterwards — and a full snapshot taken
-            // now is discarded by the idle gate. Skip it; the wake heal restores the mirror.
-            if (this._isIdle === true) {
-                return
-            }
-            // a trigger-pending buffer ships on activation, so it needs the heal as much as
-            // a live recording; only sampled-out and disabled states discard the buffer,
-            // making a heal there pure cost (matches the idle-wake heal's bufferCanShip)
-            const bufferCanShip =
-                ['sampled', 'active'].includes(this.status) || this._strategy?.hasPendingTriggers(this.sessionId)
-            if (bufferCanShip) {
-                this._tryTakeFullSnapshot()
-            }
-        }, THROTTLE_HEAL_DEBOUNCE_MS)
     }
 
     private _finishQueuedCompressionEvent(queuedEvent: QueuedCompressionEvent) {
@@ -2465,11 +2422,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
                 // don't take full snapshots while idle
                 clearInterval(this._fullSnapshotTimer)
-                // a throttle-drop heal may have been scheduled by this very emit (the drop
-                // callback runs just before this idle check); cancel it so it doesn't fire a
-                // snapshot the idle gate would only discard
-                clearTimeout(this._throttleHealTimer)
-                this._throttleHealTimer = undefined
 
                 this._tryAddCustomEvent('sessionIdle', {
                     eventTimestamp: event.timestamp,
@@ -2774,7 +2726,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
                     this.log(LOGGER_PREFIX + ' ' + message, 'warn')
                 },
-                onDroppedAttributeMutations: (count) => this._onThrottledMutationsDropped(count),
+                onDroppedAttributeMutations: (count) => (this._throttledMutationsDropped += count),
             })
 
         const activePlugins = this._gatherRRWebPlugins()

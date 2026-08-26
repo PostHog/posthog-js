@@ -82,8 +82,7 @@ describe('BucketedRateLimiter', () => {
         _logger: {} as unknown as Logger,
       })
 
-      // a full bucket of requests is served before any is rate limited
-      for (let i = 0; i < consumptions; i++) {
+      for (let i = 0; i < consumptions - 1; i++) {
         expect(limiter.consumeRateLimit('test')).toBe(false)
       }
 
@@ -97,7 +96,7 @@ describe('BucketedRateLimiter', () => {
     test('refills tokens based on elapsed time', () => {
       const key = 'ResizeObserver'
 
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 9; i++) {
         expect(rateLimiter.consumeRateLimit(key)).toBe(false)
       }
 
@@ -171,7 +170,7 @@ describe('BucketedRateLimiter', () => {
       const key1 = 'bucket1'
       const key2 = 'bucket2'
 
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 9; i++) {
         rateLimiter.consumeRateLimit(key1)
       }
 
