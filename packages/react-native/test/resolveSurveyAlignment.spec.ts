@@ -16,6 +16,16 @@ describe('resolveSurveyAlignment', () => {
     expect(resolveSurveyAlignment(position)).toEqual({ vertical, horizontal })
   })
 
+  it.each([
+    ['bottom-left', 'flex-end', 'flex-start'],
+    ['bottom-center', 'flex-end', 'center'],
+    ['bottom-right', 'flex-end', 'flex-end'],
+    ['top-right', 'flex-start', 'flex-end'],
+    ['middle-left', 'center', 'flex-start'],
+  ])('maps compatible position %s to vertical=%s, horizontal=%s', (position, vertical, horizontal) => {
+    expect(resolveSurveyAlignment(position)).toEqual({ vertical, horizontal })
+  })
+
   it('falls back to the Center default when position is undefined', () => {
     expect(resolveSurveyAlignment(undefined)).toEqual({ vertical: 'flex-end', horizontal: 'center' })
   })

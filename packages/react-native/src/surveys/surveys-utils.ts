@@ -82,6 +82,12 @@ export type SurveyFlexAlign = 'flex-start' | 'center' | 'flex-end'
 const KNOWN_SURVEY_POSITIONS: ReadonlySet<string> = new Set(Object.values(SurveyPosition))
 const warnedUnknownPositions = new Set<string>()
 
+// Some survey API clients use CSS-style names such as `bottom-right`, while
+// SurveyPosition represents the bottom row as `left`, `center`, and `right`.
+function normalizeSurveyPosition(position: string): string {
+  return position.replace(/-/g, '_').replace(/^bottom_/, '')
+}
+
 // Mirrors web SDK semantics: `.ph-survey` is bottom-anchored by default and
 // getPopoverPosition only overrides `top` for top_* / middle_* variants. So
 // `left` / `right` / `center` (no prefix) anchor to the bottom edge — they
@@ -92,8 +98,9 @@ export function resolveSurveyAlignment(position: string | undefined): {
 } {
   let resolvedPosition: SurveyPosition = defaultSurveyAppearance.position
   if (position) {
-    if (KNOWN_SURVEY_POSITIONS.has(position)) {
-      resolvedPosition = position as SurveyPosition
+    const normalizedPosition = normalizeSurveyPosition(position)
+    if (KNOWN_SURVEY_POSITIONS.has(normalizedPosition)) {
+      resolvedPosition = normalizedPosition as SurveyPosition
     } else if (!warnedUnknownPositions.has(position)) {
       warnedUnknownPositions.add(position)
       console.warn(
