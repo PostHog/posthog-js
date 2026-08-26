@@ -5,14 +5,20 @@ import { PostHog } from '@/posthog-core'
 import { pollUntilCondition } from './utils/event-capture-utils'
 import { decompressSync, strFromU8 } from 'fflate'
 
-function getGzipEncodedPayload(request: Request): Record<string, any> {
+function getFlagsPayload(request: Request): Record<string, any> {
     const data = request.postDataBuffer()
     if (!data) {
         throw new Error('Expected body to be present')
     }
-    expect(data[0]).toBe(0x1f)
-    expect(data[1]).toBe(0x8b)
-    return JSON.parse(strFromU8(decompressSync(data)))
+    if (data[0] === 0x1f && data[1] === 0x8b) {
+        return JSON.parse(strFromU8(decompressSync(data)))
+    }
+
+    const encodedData = new URLSearchParams(data.toString()).get('data')
+    if (!encodedData) {
+        throw new Error('Expected a gzip or Base64 encoded flags payload')
+    }
+    return JSON.parse(Buffer.from(encodedData, 'base64').toString())
 }
 
 const startOptions = {
@@ -66,7 +72,7 @@ test.describe('flags', () => {
     test('makes flags request on start', async () => {
         expect(flagsRequests.length).toBe(1)
         const flagsRequest = flagsRequests[0]
-        const flagsPayload = getGzipEncodedPayload(flagsRequest)
+        const flagsPayload = getFlagsPayload(flagsRequest)
         expect(flagsPayload).toEqual({
             token: 'test token',
             distinct_id: 'new-id',

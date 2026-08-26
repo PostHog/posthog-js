@@ -44,9 +44,15 @@ function getFlagsPayload(request: Request): Record<string, any> {
     if (!data) {
         throw new Error('Expected flags request body')
     }
-    expect(data[0]).toBe(0x1f)
-    expect(data[1]).toBe(0x8b)
-    return JSON.parse(strFromU8(decompressSync(data)))
+    if (data[0] === 0x1f && data[1] === 0x8b) {
+        return JSON.parse(strFromU8(decompressSync(data)))
+    }
+
+    const encodedData = new URLSearchParams(data.toString()).get('data')
+    if (!encodedData) {
+        throw new Error('Expected a gzip or Base64 encoded flags payload')
+    }
+    return JSON.parse(Buffer.from(encodedData, 'base64').toString())
 }
 
 async function distinctId(page: Page): Promise<string | undefined> {
