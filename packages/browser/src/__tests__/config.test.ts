@@ -63,10 +63,12 @@ describe('config', () => {
 
         it('keeps date-gated session_recording defaults when the user sets a partial session_recording', () => {
             const posthog = new PostHog()
-            posthog._init('test-token', { defaults: '2026-05-30', session_recording: { maskAllInputs: false } })
+            posthog._init('test-token', { defaults: '2026-08-30', session_recording: { maskAllInputs: false } })
             expect(posthog.config.session_recording).toStrictEqual({
                 strictMinimumDuration: true,
                 canvasCapture: { resolutionScale: 0.6 },
+                streamNetworkBody: true,
+                captureJsonLd: true,
                 maskAllInputs: false,
             })
         })
@@ -74,14 +76,36 @@ describe('config', () => {
         it('lets a user-supplied session_recording sub-option override the date-gated default', () => {
             const posthog = new PostHog()
             posthog._init('test-token', {
-                defaults: '2026-06-25',
-                session_recording: { canvasCapture: { resolutionScale: 0.8 } },
+                defaults: '2026-08-30',
+                session_recording: { canvasCapture: { resolutionScale: 0.8 }, captureJsonLd: false },
             })
             expect(posthog.config.session_recording).toStrictEqual({
                 strictMinimumDuration: true,
                 canvasCapture: { resolutionScale: 0.8 },
                 streamNetworkBody: true,
+                captureJsonLd: false,
             })
+        })
+
+        it('keeps date-gated autocapture defaults when the user sets a partial autocapture config', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                defaults: '2026-08-30',
+                autocapture: { dom_event_allowlist: ['click'] },
+            })
+            expect(posthog.config.autocapture).toStrictEqual({
+                capture_copied_text: true,
+                dom_event_allowlist: ['click'],
+            })
+        })
+
+        it('lets a user-supplied autocapture sub-option override the date-gated default', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                defaults: '2026-08-30',
+                autocapture: { capture_copied_text: false },
+            })
+            expect(posthog.config.autocapture).toStrictEqual({ capture_copied_text: false })
         })
 
         it.each([
@@ -92,6 +116,7 @@ describe('config', () => {
             ['2026-05-30', '2026-05-30' as const, 250],
             ['2026-06-25', '2026-06-25' as const, 250],
             ['2026-08-29', '2026-08-29' as const, 250],
+            ['2026-08-30', '2026-08-30' as const, 250],
         ])('persistence_save_debounce_ms with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
@@ -106,6 +131,7 @@ describe('config', () => {
             ['2026-05-30', '2026-05-30' as const, true],
             ['2026-06-25', '2026-06-25' as const, true],
             ['2026-08-29', '2026-08-29' as const, true],
+            ['2026-08-30', '2026-08-30' as const, true],
         ])('split_storage with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
@@ -120,6 +146,7 @@ describe('config', () => {
             ['2026-05-30', '2026-05-30' as const, true],
             ['2026-06-25', '2026-06-25' as const, true],
             ['2026-08-29', '2026-08-29' as const, true],
+            ['2026-08-30', '2026-08-30' as const, true],
         ])('detect_google_search_app with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
@@ -134,6 +161,7 @@ describe('config', () => {
             ['2026-05-30', '2026-05-30' as const, false],
             ['2026-06-25', '2026-06-25' as const, true],
             ['2026-08-29', '2026-08-29' as const, true],
+            ['2026-08-30', '2026-08-30' as const, true],
         ])('disable_capture_url_hashes with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
@@ -148,6 +176,7 @@ describe('config', () => {
             ['2026-05-30', '2026-05-30' as const, undefined],
             ['2026-06-25', '2026-06-25' as const, true],
             ['2026-08-29', '2026-08-29' as const, true],
+            ['2026-08-30', '2026-08-30' as const, true],
         ])('session_recording.streamNetworkBody with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
@@ -163,10 +192,36 @@ describe('config', () => {
             ['2026-05-30', '2026-05-30' as const, false],
             ['2026-06-25', '2026-06-25' as const, false],
             ['2026-08-29', '2026-08-29' as const, true],
+            ['2026-08-30', '2026-08-30' as const, true],
         ])('cookieWinsOnConflict with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
             expect(posthog.config.cookieWinsOnConflict).toBe(expected)
+        })
+
+        it.each([
+            ['unset', undefined, undefined],
+            ['explicit unset', 'unset' as const, undefined],
+            ['2026-08-29', '2026-08-29' as const, undefined],
+            ['2026-08-30', '2026-08-30' as const, true],
+        ])('session_recording.captureJsonLd with defaults %s', (_label, defaults, expected) => {
+            const posthog = new PostHog()
+            posthog._init('test-token', defaults ? { defaults } : undefined)
+            expect(posthog.config.session_recording.captureJsonLd).toBe(expected)
+        })
+
+        it.each([
+            ['unset', undefined, false],
+            ['explicit unset', 'unset' as const, false],
+            ['2026-08-29', '2026-08-29' as const, false],
+            ['2026-08-30', '2026-08-30' as const, true],
+        ])('autocapture.capture_copied_text with defaults %s', (_label, defaults, expected) => {
+            const posthog = new PostHog()
+            posthog._init('test-token', defaults ? { defaults } : undefined)
+            expect(
+                typeof posthog.config.autocapture === 'object' &&
+                    posthog.config.autocapture.capture_copied_text === true
+            ).toBe(expected)
         })
 
         it('maps the deprecated preview option to cookieWinsOnConflict', () => {
