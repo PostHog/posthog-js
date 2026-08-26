@@ -202,7 +202,7 @@ let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 &&
 
 const getSessionRecordingDefaults = (defaults?: ConfigDefaults): PostHogConfig['session_recording'] => {
     const sessionRecording: PostHogConfig['session_recording'] = {}
-    if (!defaults) {
+    if (!defaults || defaults === 'unset') {
         return sessionRecording
     }
     if (defaults >= '2025-11-30') {
@@ -214,7 +214,7 @@ const getSessionRecordingDefaults = (defaults?: ConfigDefaults): PostHogConfig['
     if (defaults >= '2026-06-25') {
         sessionRecording.streamNetworkBody = true
     }
-    if (defaults !== 'unset' && defaults >= '2026-08-30') {
+    if (defaults >= '2026-08-30') {
         sessionRecording.captureJsonLd = true
     }
     return sessionRecording

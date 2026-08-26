@@ -11,6 +11,12 @@ describe('config', () => {
             expect(posthog.config.capture_pageview).toBe(true)
         })
 
+        it('does not apply date-gated session_recording defaults when defaults is explicitly unset', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { defaults: 'unset' })
+            expect(posthog.config.session_recording).toStrictEqual({})
+        })
+
         it('should set expected values when defaults is 2025-05-24', () => {
             const posthog = new PostHog()
             posthog._init('test-token', { defaults: '2025-05-24' })
