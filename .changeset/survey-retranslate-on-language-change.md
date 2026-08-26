@@ -3,4 +3,4 @@
 '@posthog/core': patch
 ---
 
-fix(surveys): re-translate displayed surveys when the user's language changes mid-session — handles both browser `languagechange` events and `posthog.identify()` calls that update the `language` person property. Also snapshots each question's displayed text and language at answer time (`questionSnapshots`), so `$survey_questions` and `$survey_language` reflect what the user actually saw rather than the language active when the event was sent.
+Re-translate popover surveys when the display language changes while the survey is on screen, either from a browser `languagechange` event or from `identify()` updating the `language` person property. In-progress answers are preserved. `$survey_questions[].question` and `$survey_language` on `survey sent` / `survey dismissed` now report the text and language the user saw when they answered, not the language active when the event fired. Feedback-button (widget) surveys are unchanged.

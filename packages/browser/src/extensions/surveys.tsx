@@ -150,7 +150,11 @@ export class SurveyManager {
     private _surveyIsRendered: boolean = false
     private _languageChangeListener: (() => void) | null = null
     private _unsubscribeFeatureFlags: (() => void) | null = null
-    private _surveyPopupProps: Pick<SurveyPopupProps, 'style' | 'properties' | 'isSurveyCompleted'> | null = null
+    private _surveyPopupProps: SurveyPopupProps | null = null
+    // Preserved so a language change can re-derive the survey from the fresh translation and
+    // re-apply the same display overrides, rather than reusing the overridden survey from the
+    // original render (which would go stale if the underlying survey definition changes).
+    private _displayOptions: DisplaySurveyPopoverOptions | undefined
 
     constructor(posthog: PostHog) {
         this._posthog = posthog
@@ -179,16 +183,19 @@ export class SurveyManager {
             return
         }
         this._currentLanguage = newLanguage
-        const { shadow } = retrieveSurveyShadow(translatedSurvey, this._posthog)
+        // Translate from the raw survey (so a language with no translation still falls back to
+        // the original), then re-apply the same display overrides handlePopoverSurvey used —
+        // otherwise a survey shown via displaySurvey(id, { position, selector }) would snap back
+        // to its configured appearance on the first language change.
+        const overriddenSurvey = this._applyDisplayOverrides(translatedSurvey, this._displayOptions)
+        const { shadow } = retrieveSurveyShadow(overriddenSurvey, this._posthog)
         render(
             <SurveyPopup
+                {...this._surveyPopupProps}
                 posthog={this._posthog}
-                survey={translatedSurvey}
+                survey={overriddenSurvey}
                 removeSurveyFromFocus={this._removeSurveyFromFocus}
                 surveyLanguage={newLanguage}
-                style={this._surveyPopupProps?.style}
-                properties={this._surveyPopupProps?.properties}
-                isSurveyCompleted={this._surveyPopupProps?.isSurveyCompleted}
             />,
             shadow
         )
@@ -197,6 +204,20 @@ export class SurveyManager {
     private get _featureFlags(): PostHogFeatureFlags | undefined {
         // A newly deployed surveys bundle can still be loaded by an older cached core.
         return this._posthog.getExtension?.(FeatureFlagsExtension) ?? this._posthog.featureFlags
+    }
+
+    // apply overrides for position / selector (needed for thumb surveys)
+    private _applyDisplayOverrides(survey: Survey, options?: DisplaySurveyPopoverOptions): Survey {
+        return options?.position || options?.selector
+            ? {
+                  ...survey,
+                  appearance: {
+                      ...survey.appearance,
+                      ...(options.position && { position: options.position }),
+                      ...(options.selector && { widgetSelector: options.selector }),
+                  },
+              }
+            : survey
     }
 
     public handlePageUnload = (): void => {
@@ -280,19 +301,9 @@ export class SurveyManager {
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(surveyParam)
         this._currentLanguage = surveyLanguage
         this._surveyPopupProps = null
+        this._displayOptions = options
 
-        // apply overrides for position / selector (needed for thumb surveys)
-        const survey =
-            options?.position || options?.selector
-                ? {
-                      ...translatedSurvey,
-                      appearance: {
-                          ...translatedSurvey.appearance,
-                          ...(options.position && { position: options.position }),
-                          ...(options.selector && { widgetSelector: options.selector }),
-                      },
-                  }
-                : translatedSurvey
+        const survey = this._applyDisplayOverrides(translatedSurvey, options)
 
         this._clearSurveyTimeout(survey.id)
 
@@ -326,8 +337,6 @@ export class SurveyManager {
         const { shadow } = retrieveSurveyShadow(survey, this._posthog)
         this._renderedTargets.set(shadow, shadow.host)
 
-        this._surveyPopupProps = { style: positionStyle, properties, isSurveyCompleted }
-
         const surveyPopupProps: SurveyPopupProps = {
             posthog: this._posthog,
             survey: survey,
@@ -338,6 +347,7 @@ export class SurveyManager {
             skipShownEvent: options?.skipShownEvent,
             surveyLanguage,
         }
+        this._surveyPopupProps = surveyPopupProps
 
         if (delaySeconds <= 0) {
             this._surveyIsRendered = true
@@ -998,6 +1008,7 @@ export class SurveyManager {
         this._currentLanguage = null
         this._surveyIsRendered = false
         this._surveyPopupProps = null
+        this._displayOptions = undefined
         this._removeSurveyFromDom(survey)
     }
 

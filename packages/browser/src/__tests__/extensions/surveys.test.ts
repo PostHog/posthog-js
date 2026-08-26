@@ -14,7 +14,9 @@ import {
     setInProgressSurveyState,
 } from '../../extensions/surveys/surveys-extension-utils'
 import {
+    DisplaySurveyType,
     Survey,
+    SurveyPosition,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
     SurveySchedule,
@@ -1757,6 +1759,32 @@ describe('SurveyManager', () => {
             expect(within(shadow as unknown as HTMLElement).getByText('Bonjour?')).toBeInTheDocument()
             const textareaAfter = within(shadow as unknown as HTMLElement).getByRole('textbox') as HTMLTextAreaElement
             expect(textareaAfter.value).toBe('my in-progress answer')
+        })
+
+        it('keeps display overrides (position) applied after a language change', () => {
+            setNavigatorLanguage('en')
+            mockPostHog.get_property = jest.fn().mockReturnValue([langSurvey])
+
+            surveyManager.handlePopoverSurvey(langSurvey, {
+                ignoreConditions: false,
+                ignoreDelay: false,
+                displayType: DisplaySurveyType.Popover,
+                position: SurveyPosition.TopLeft,
+            })
+
+            const { shadow } = retrieveSurveyShadow(langSurvey, mockPostHog)
+            const container = (shadow as unknown as HTMLElement).querySelector('.ph-survey') as HTMLElement
+            expect(container.style.left).toBe('0px')
+            expect(container.style.right).toBe('')
+
+            setNavigatorLanguage('fr')
+            act(() => {
+                window.dispatchEvent(new Event('languagechange'))
+            })
+
+            const containerAfter = (shadow as unknown as HTMLElement).querySelector('.ph-survey') as HTMLElement
+            expect(containerAfter.style.left).toBe('0px')
+            expect(containerAfter.style.right).toBe('')
         })
     })
 

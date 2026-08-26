@@ -46,7 +46,7 @@ export function buildSurveyResponseProperties(
   return {
     $survey_questions: survey.questions.map((question: SurveyQuestionForResponses) => ({
       id: question.id,
-      question: (question.id && questionSnapshots?.[question.id]) ?? question.question,
+      question: questionSnapshots?.[question.id ?? ''] ?? question.question,
       response: getSurveyResponseValue(responses, question.id),
     })),
     ...responses,
