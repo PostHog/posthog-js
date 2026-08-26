@@ -15,7 +15,7 @@ import type {
 } from '@posthog/browser-common'
 import { ExtensionRuntime } from '@posthog/browser-common/extension-runtime'
 import { logger } from '@posthog/browser-common/utils/logger'
-import { isUndefined, type Logger } from '@posthog/core'
+import { Compression, isUndefined, type Logger } from '@posthog/core'
 
 import Config from '../config'
 import { DEVICE_ID } from '../constants'
@@ -208,6 +208,8 @@ export class BrowserClientAdapter implements Client, Disposable {
             fireCallbackOnDrop: true,
             transport: init.transport,
             compression: init.compression,
+            compressionFallback:
+                init.target === 'flags' && init.compression === 'best-available' ? Compression.Base64 : undefined,
             timestampMode: init.sentAt,
         }
 

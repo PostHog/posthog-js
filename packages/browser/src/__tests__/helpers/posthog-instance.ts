@@ -6,6 +6,7 @@ import { PostHogConfig } from '../../types'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { assignableWindow } from '../../utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { Compression } from '@posthog/core'
 
 export const createPosthogInstance = async (
     // Use a random UUID for the token, such that we don't have to worry
@@ -22,7 +23,7 @@ export const createPosthogInstance = async (
     // NOTE: Temporary change whilst testing remote config
     assignableWindow._POSTHOG_REMOTE_CONFIG = {
         [token]: {
-            config: { autocapture_opt_out: false },
+            config: { autocapture_opt_out: false, supportedCompression: [Compression.GZipJS] },
             siteApps: [],
         },
     } as any

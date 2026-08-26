@@ -246,6 +246,8 @@ export interface RequestWithOptions {
     noRetries?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
     compression?: Compression | 'best-available'
+    /** Used when best-available compression negotiation does not select a format. */
+    compressionFallback?: Compression
     /**
      * Controls where the request dispatch time is sent.
      * - `body` adds ISO `sent_at` to the request object, or every object in an array (for example, flags and recordings).
