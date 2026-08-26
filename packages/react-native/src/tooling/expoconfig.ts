@@ -2,13 +2,8 @@
 // Copyright (c) 2017 Sentry
 // Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 
-const {
-  withAppBuildGradle,
-  withBaseMod,
-  withGradleProperties,
-  withProjectBuildGradle,
-  withXcodeProject,
-} = require('@expo/config-plugins')
+const { withAppBuildGradle, withBaseMod, withGradleProperties, withProjectBuildGradle, withXcodeProject } =
+  require('@expo/config-plugins')
 
 // com.posthog.android uploads R8 mapping files and injects a matching map-id so native
 // crash stack traces can be deobfuscated.
