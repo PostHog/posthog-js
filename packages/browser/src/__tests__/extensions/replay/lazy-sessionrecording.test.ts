@@ -4035,6 +4035,28 @@ describe('Lazy SessionRecording', () => {
             expect(assignableWindow.__PosthogExtensions__.rrweb.resetSnapshotCostState).toHaveBeenCalled()
         })
 
+        it('resets the throttled mutation drop count on session change', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            sessionRecording['_lazyLoadedSessionRecording']['_throttledMutationsDropped'] = 5
+            expect(
+                sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties[
+                    '$sdk_debug_replay_throttled_mutations_dropped'
+                ]
+            ).toEqual(5)
+
+            sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdCallback']('new-session-id', 'new-window-id', {
+                activityTimeout: true,
+            })
+
+            // the count is cumulative across the session, so the new session starts at zero
+            expect(
+                sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties[
+                    '$sdk_debug_replay_throttled_mutations_dropped'
+                ]
+            ).toEqual(0)
+        })
+
         it('resets $snapshot_max_depth_exceeded on session change', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({

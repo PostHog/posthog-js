@@ -1551,6 +1551,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // belongs to the old session) and before the new one takes its first snapshot
         this._slowestFullSnapshot = undefined
         this._lastSeenSnapshotCost = undefined
+        // the throttler drop count is per-session too — its sdkDebugProperties comment
+        // promises a count "cumulative across the session", so reset it here or the new
+        // session inherits the old one's drops and reports duplicate-DOM risk it never had
+        this._throttledMutationsDropped = 0
         getRRWeb()?.resetSnapshotCostState?.()
         this.start('session_id_changed')
         this._holdFlushUntilInteraction = holdNextEpoch
