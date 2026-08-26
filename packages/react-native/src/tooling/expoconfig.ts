@@ -454,7 +454,9 @@ export function addDsymUploadBuildPhase(
   const existing = xcodeProject.pbxItemByComment(POSTHOG_DSYM_BUILD_PHASE_NAME, 'PBXShellScriptBuildPhase')
   if (existing) {
     if (isPluginGeneratedDsymUploadBuildPhase(existing)) {
-      existing.shellScript = encodePbxShellScript(buildDsymUploadShellScript(includeSource, skipOnConflict, releaseMode))
+      existing.shellScript = encodePbxShellScript(
+        buildDsymUploadShellScript(includeSource, skipOnConflict, releaseMode)
+      )
       existing.inputPaths = Array.from(
         new Set([...(Array.isArray(existing.inputPaths) ? existing.inputPaths : []), POSTHOG_DSYM_INPUT_PATH])
       )

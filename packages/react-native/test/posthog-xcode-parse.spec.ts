@@ -425,6 +425,9 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
   const CLI_TOO_OLD = cliStub('0.0.1')
   // Reports no version, and records every call, the version probe included.
   const CLI_WITHOUT_VERSION = ['#!/bin/sh', 'echo "$@" >> "$CLI_TRACE_PATH"', ''].join('\n')
+  // Below the version at which the wrapper hands Info.plist to posthog-cli as --info-plist, so the
+  // wrapper resolves the release from the plist itself. The hand-over has its own tests above.
+  const CLI_WITHOUT_INFO_PLIST = cliStub('0.15.0')
 
   // Runs the wrapper against a posthog-cli stub that records its arguments, so the assertions
   // are on what the CLI was actually asked to do rather than on the shell source.
@@ -461,6 +464,21 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
           path.join(iosDir, 'App', 'Info.plist'),
           `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n${entries}\n</dict>\n</plist>\n`
         )
+        // Stands in for /usr/libexec/PlistBuddy, which Linux CI does not have. Answers with the
+        // values written above, so the assertions see the wrapper's own plist resolution.
+        const plistBuddyPath = path.join(tempDir, 'plist-buddy')
+        fs.writeFileSync(
+          plistBuddyPath,
+          [
+            '#!/bin/sh',
+            'case "$2" in',
+            ...Object.entries(infoPlist).map(([key, value]) => `  *${key}*) printf %s '${value}' ;;`),
+            'esac',
+            '',
+          ].join('\n'),
+          { mode: 0o755 }
+        )
+        plistEnv.POSTHOG_PLIST_BUDDY = plistBuddyPath
         plistEnv.SRCROOT = iosDir
         plistEnv.INFOPLIST_FILE = 'App/Info.plist'
       }
@@ -578,7 +596,8 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
   // The SDK reports $app_version and $app_build from Info.plist, and event release mode resolves
   // an exception's release from exactly those. Expo writes literal versions there and leaves
   // MARKETING_VERSION at the Xcode template default of 1.0, so a release keyed on the build
-  // setting never matches an event and the exception silently reports no release.
+  // setting never matches an event and the exception silently reports no release. posthog-cli
+  // 0.15.1 and newer read the plist themselves; older ones get the wrapper's resolution below.
   it('keys the release on Info.plist rather than the build settings', () => {
     const { status, invocations } = runWrapper(
       [],
@@ -587,7 +606,8 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
         MARKETING_VERSION: '1.0',
         CURRENT_PROJECT_VERSION: '1',
       },
-      { CFBundleShortVersionString: '1.0.0', CFBundleVersion: '42' }
+      { CFBundleShortVersionString: '1.0.0', CFBundleVersion: '42' },
+      CLI_WITHOUT_INFO_PLIST
     )
 
     expect(status).toBe(0)
@@ -604,7 +624,8 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
         MARKETING_VERSION: '2.5.0',
         CURRENT_PROJECT_VERSION: '7',
       },
-      { CFBundleShortVersionString: '$(MARKETING_VERSION)', CFBundleVersion: '$(CURRENT_PROJECT_VERSION)' }
+      { CFBundleShortVersionString: '$(MARKETING_VERSION)', CFBundleVersion: '$(CURRENT_PROJECT_VERSION)' },
+      CLI_WITHOUT_INFO_PLIST
     )
 
     expect(status).toBe(0)
