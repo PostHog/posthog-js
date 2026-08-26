@@ -63,12 +63,10 @@ describe('config', () => {
 
         it('keeps date-gated session_recording defaults when the user sets a partial session_recording', () => {
             const posthog = new PostHog()
-            posthog._init('test-token', { defaults: '2026-08-30', session_recording: { maskAllInputs: false } })
+            posthog._init('test-token', { defaults: '2026-05-30', session_recording: { maskAllInputs: false } })
             expect(posthog.config.session_recording).toStrictEqual({
                 strictMinimumDuration: true,
                 canvasCapture: { resolutionScale: 0.6 },
-                streamNetworkBody: true,
-                captureJsonLd: true,
                 maskAllInputs: false,
             })
         })
@@ -76,15 +74,33 @@ describe('config', () => {
         it('lets a user-supplied session_recording sub-option override the date-gated default', () => {
             const posthog = new PostHog()
             posthog._init('test-token', {
-                defaults: '2026-08-30',
-                session_recording: { canvasCapture: { resolutionScale: 0.8 }, captureJsonLd: false },
+                defaults: '2026-06-25',
+                session_recording: { canvasCapture: { resolutionScale: 0.8 } },
             })
             expect(posthog.config.session_recording).toStrictEqual({
                 strictMinimumDuration: true,
                 canvasCapture: { resolutionScale: 0.8 },
                 streamNetworkBody: true,
-                captureJsonLd: false,
             })
+        })
+
+        it('keeps the date-gated captureJsonLd default with a partial session_recording config', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                defaults: '2026-08-30',
+                session_recording: { maskAllInputs: false },
+            })
+            expect(posthog.config.session_recording.captureJsonLd).toBe(true)
+            expect(posthog.config.session_recording.maskAllInputs).toBe(false)
+        })
+
+        it('lets the user disable the date-gated captureJsonLd default', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                defaults: '2026-08-30',
+                session_recording: { captureJsonLd: false },
+            })
+            expect(posthog.config.session_recording.captureJsonLd).toBe(false)
         })
 
         it('keeps date-gated autocapture defaults when the user sets a partial autocapture config', () => {
