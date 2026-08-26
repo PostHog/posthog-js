@@ -66,6 +66,17 @@ export class PostHogLogs {
   }
 
   /**
+   * Drops every queued record. Credits the in-flight advance the same way a FIFO
+   * eviction does, so a batch already awaiting its response cannot slice records
+   * captured after this call.
+   */
+  clearQueue(): void {
+    const queue = this._instance.getPersistedProperty<BufferedLogEntry[]>(PostHogPersistedProperty.LogsQueue) ?? []
+    this._evictedSinceAdvance += queue.length
+    this._instance.setPersistedProperty(PostHogPersistedProperty.LogsQueue, [])
+  }
+
+  /**
    * Clears the flush timer and rate-cap state. The host owns the record queue
    * and clears it separately (the browser empties its in-memory store).
    */

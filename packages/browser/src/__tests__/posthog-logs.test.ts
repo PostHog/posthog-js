@@ -1583,6 +1583,27 @@ describe('posthog-logs', () => {
                 jest.useFakeTimers()
             })
 
+            it('does not drop records captured after opting back in mid-flush', async () => {
+                let releaseSend: (r: any) => void = () => {}
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }: any) => {
+                    releaseSend = callback
+                })
+                logs.captureConsoleLog({ body: 'before the opt-out' })
+                jest.advanceTimersByTime(3000)
+                expect(mockPostHog._send_request).toHaveBeenCalled()
+
+                logs._onOptOut()
+                logs.captureConsoleLog({ body: 'after opting back in' })
+
+                releaseSend({ statusCode: 200 })
+                await Promise.resolve()
+                await Promise.resolve()
+
+                expect((logs as any)._consoleQueue.map((e: any) => e.record.body.stringValue)).toEqual([
+                    'after opting back in',
+                ])
+            })
+
             it('stamps a replayed console record from the buffered snapshot, not live state', () => {
                 logs.captureBufferedConsoleLog(
                     { body: 'early line' },

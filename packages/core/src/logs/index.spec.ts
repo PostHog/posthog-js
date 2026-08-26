@@ -171,6 +171,32 @@ describe('PostHogLogs', () => {
     expect(logs).toBeDefined()
   })
 
+  describe('clearQueue', () => {
+    it('does not let an in-flight batch drop records captured after the clear', async () => {
+      let releaseSend: (v: any) => void = () => {}
+      const mockInstance = createMockInstance({
+        _sendLogsBatch: jest.fn(() => new Promise((resolve) => (releaseSend = resolve))),
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'before the clear' })
+
+      const flushing = logs.flush()
+      logs.clearQueue()
+      logs.captureLog({ body: 'captured after the clear' })
+
+      releaseSend({ kind: 'ok' })
+      await flushing
+
+      expect(readQueue(mockInstance).map((e) => e.record.body)).toEqual([{ stringValue: 'captured after the clear' }])
+    })
+  })
+
   describe('captureLog', () => {
     it('writes a record to the logs queue via setPersistedProperty', () => {
       const logs = new PostHogLogs(

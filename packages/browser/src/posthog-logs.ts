@@ -342,8 +342,8 @@ export class PostHogLogs implements Extension {
         // already queued go too. `captureLog`/`logger` records were captured explicitly
         // while consent stood, so `_queue` is left alone and a flush already armed will
         // still send them — the same as events queued before an opt-out.
+        this._consoleCore?.clearQueue()
         this._consoleQueue = []
-        this._consoleCore?.reset()
     }
 
     private _stopRecorderStartedByPersistedHint(): void {
