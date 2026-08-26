@@ -4595,13 +4595,18 @@ describe('Lazy SessionRecording', () => {
 
             // Simulate URL change to allowed URL
             fakeNavigateTo('https://test.com/allowed')
+            blockedJsonLd.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'Product changed before resume',
+            })
 
             // Verify recording resumes with resume event
             _emit(createIncrementalSnapshot({ data: { source: 5 } }))
             await Promise.resolve()
             expect(_addCustomEvent).not.toHaveBeenCalledWith(
                 '$json_ld',
-                expect.objectContaining({ name: 'Blocked page product' })
+                expect.objectContaining({ name: 'Product changed before resume' })
             )
 
             blockedJsonLd.textContent = JSON.stringify({

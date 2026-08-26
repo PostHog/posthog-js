@@ -1046,6 +1046,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        // Baseline JSON-LD while capture is suppressed so blocked-page mutations cannot emit after resume.
+        this._jsonLdCapture?.scan()
         this._urlTriggerMatching.urlBlocked = false
 
         this._tryTakeFullSnapshot()
@@ -2763,6 +2765,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 maskTextSelector: sessionRecordingOptions.maskTextSelector,
                 getCaptureState: () =>
                     this._instance.config.session_recording?.captureJsonLd !== true ||
+                    this._urlTriggerMatching.urlBlocked ||
                     this._urlTriggerMatching.isCurrentUrlBlocked()
                         ? null
                         : this._canCaptureJsonLd(),
