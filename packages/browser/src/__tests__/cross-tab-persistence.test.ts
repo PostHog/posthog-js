@@ -673,6 +673,27 @@ describe('cross-tab persistence interactions', () => {
             tabB.destroy()
         })
 
+        it('does not mark an unseen sibling change as a pending local change', () => {
+            const config = makeConfig(HARDENED_DEBOUNCE_MS)
+            const initialFlags = { 'flag-a': false, 'flag-b': false }
+            const tabA = new PostHogPersistence(config)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: initialFlags })
+            tabA.flush()
+            const tabB = new PostHogPersistence(config)
+
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { ...initialFlags, 'flag-a': true } })
+            tabA.flush()
+            // The sibling event has not run, so this map still contains stale
+            // flag-a state while tab B explicitly changes only flag-b.
+            tabB.register({ [ENABLED_FEATURE_FLAGS]: { ...initialFlags, 'flag-b': true } })
+            tabB.flush()
+
+            expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'flag-a': true, 'flag-b': true })
+            expect(readStorage()[ENABLED_FEATURE_FLAGS]).toEqual({ 'flag-a': true, 'flag-b': true })
+            tabA.destroy()
+            tabB.destroy()
+        })
+
         it('clears a reverted pending change after a no-op write', () => {
             const config = makeConfig(HARDENED_DEBOUNCE_MS)
             const tabA = new PostHogPersistence(config)
@@ -682,13 +703,14 @@ describe('cross-tab persistence interactions', () => {
 
             tabB.register({ [ENABLED_FEATURE_FLAGS]: { flag: true } })
             tabB.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
-            tabB.flush()
             const oldValue = window.localStorage.getItem(STORAGE_KEY)
             tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: true } })
             tabA.flush()
             dispatchStorageChange(STORAGE_KEY, oldValue, window.localStorage.getItem(STORAGE_KEY))
 
             expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ flag: true })
+            tabB.flush()
+            expect(readStorage()[ENABLED_FEATURE_FLAGS]).toEqual({ flag: true })
             tabA.destroy()
             tabB.destroy()
         })

@@ -420,29 +420,67 @@ export class PostHogPersistence {
         if (!isCrossTabFeatureFlagKey(key)) {
             return
         }
-
-        const existingPendingChanges = this._pendingCrossTabFeatureFlagChanges.get(key)
-        if (existingPendingChanges === true) {
+        if (this._pendingCrossTabFeatureFlagChanges.get(key) === true) {
             return
         }
-        const pendingChanges = existingPendingChanges || new Set<string>()
+
+        // Recompute against the latest durable value instead of accumulating
+        // mutations. A local false -> true -> false sequence is no longer pending
+        // when storage still contains false, so a later sibling update can win.
+        let durableValue = previousValue
+        if (this._splitStorageEligible) {
+            try {
+                const group = this._splitStorage ? getPersistenceKeyPolicy(key)?.storageGroup : undefined
+                const storageKey = group ? this._groupEntryName(group) : this._name
+                durableValue = parseStorageValue(localStore._get(storageKey))[key]
+            } catch {}
+        }
+
+        const existingPendingChanges = this._pendingCrossTabFeatureFlagChanges.get(key)
+        const pendingChanges = new Set<string>(existingPendingChanges || [])
         if (key === PERSISTENCE_ACTIVE_FEATURE_FLAGS) {
-            if ((!isUndefined(previousValue) && !isArray(previousValue)) || !isArray(nextValue)) {
+            if (
+                (!isUndefined(previousValue) && !isArray(previousValue)) ||
+                (!isUndefined(durableValue) && !isArray(durableValue)) ||
+                !isArray(nextValue)
+            ) {
                 this._pendingCrossTabFeatureFlagChanges.set(key, true)
                 return
             }
             const previous = new Set<string>(previousValue || [])
+            const durable = new Set<string>(durableValue || [])
             const next = new Set<string>(nextValue)
             new Set([...previous, ...next]).forEach((flag) => {
                 if (previous.has(flag) !== next.has(flag)) {
                     pendingChanges.add(flag)
                 }
             })
+            pendingChanges.forEach((flag) => {
+                if (durable.has(flag) === next.has(flag)) {
+                    pendingChanges.delete(flag)
+                }
+            })
         } else if (isObject(nextValue)) {
+            if (!isUndefined(previousValue) && !isObject(previousValue)) {
+                this._pendingCrossTabFeatureFlagChanges.set(key, true)
+                return
+            }
             const previous: Properties = isObject(previousValue) ? previousValue : {}
+            const durable: Properties = isObject(durableValue) ? durableValue : {}
             new Set([...Object.keys(previous), ...Object.keys(nextValue)]).forEach((property) => {
-                if (!isStorageValueEqual(previous[property], nextValue[property])) {
+                if (
+                    property in previous !== property in nextValue ||
+                    !isStorageValueEqual(previous[property], nextValue[property])
+                ) {
                     pendingChanges.add(property)
+                }
+            })
+            pendingChanges.forEach((property) => {
+                if (
+                    property in durable === property in nextValue &&
+                    isStorageValueEqual(durable[property], nextValue[property])
+                ) {
+                    pendingChanges.delete(property)
                 }
             })
         } else {
@@ -452,6 +490,8 @@ export class PostHogPersistence {
 
         if (pendingChanges.size) {
             this._pendingCrossTabFeatureFlagChanges.set(key, pendingChanges)
+        } else {
+            this._pendingCrossTabFeatureFlagChanges.delete(key)
         }
     }
 
