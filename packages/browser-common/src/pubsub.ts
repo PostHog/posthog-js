@@ -58,11 +58,14 @@ export class Publisher<T> implements Disposable {
     }
 
     /** Notify every currently registered listener with the provided payload. */
-    publish(payload: T): void {
+    publish(payload: T, canContinue?: () => boolean): void {
         const subscriptions = this._subscriptions.slice()
 
-        subscriptions.forEach((subscription) => {
+        for (const subscription of subscriptions) {
             if (!subscription[1]) {
+                continue
+            }
+            if (canContinue && !canContinue()) {
                 return
             }
 
@@ -74,7 +77,7 @@ export class Publisher<T> implements Disposable {
                 }
                 this._onError(error)
             }
-        })
+        }
     }
 
     /** Drop all registered listeners. Safe to call more than once. */

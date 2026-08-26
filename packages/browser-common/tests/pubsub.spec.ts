@@ -118,4 +118,19 @@ describe('Publisher', () => {
 
         expect(calls).toEqual(['first:one', 'first:two'])
     })
+
+    it('stops the current fanout when its continuation guard changes', () => {
+        const publisher = new Publisher<string>()
+        const calls: string[] = []
+        let allowed = true
+        publisher.listener((payload) => {
+            calls.push(`first:${payload}`)
+            allowed = false
+        })
+        publisher.listener((payload) => calls.push(`second:${payload}`))
+
+        publisher.publish('payload', () => allowed)
+
+        expect(calls).toEqual(['first:payload'])
+    })
 })
