@@ -26,12 +26,17 @@ export function getEventUuid(uuid: unknown, generateUuid: () => string): string 
 }
 
 // Some anti-fingerprinting browser extensions make `Error.prototype.name` non-writable.
-// A plain `error.name = ...` then throws a `TypeError`, which breaks timeout detection
-// by error name. Set the name through this guard so the write fails silently instead.
+// A plain `error.name = ...` then throws a `TypeError`, and even when caught the write is a
+// no-op that walks the prototype chain, so the name silently stays `Error` and timeout
+// detection by error name still breaks. Define an own property on the instance instead: it
+// shadows the non-writable prototype property, so the name survives on hardened pages. The
+// descriptor matches a plain assignment (writable + enumerable + configurable), so there is
+// no behavior change in normal browsers. The try/catch guards the exotic case of a
+// non-extensible instance.
 export function createNamedError(name: string, message?: string): Error {
   const error = new Error(message)
   try {
-    error.name = name
+    Object.defineProperty(error, 'name', { value: name, writable: true, enumerable: true, configurable: true })
   } catch {}
   return error
 }

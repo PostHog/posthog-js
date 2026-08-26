@@ -7,13 +7,15 @@ describe('createNamedError', () => {
     expect(error.message).toBe('timed out')
   })
 
-  it('does not throw when Error.prototype.name is non-writable', () => {
-    // Anti-fingerprinting extensions can make `Error.prototype.name` read-only.
+  it('preserves the name when Error.prototype.name is non-writable', () => {
+    // Anti-fingerprinting extensions can make `Error.prototype.name` read-only. A plain
+    // assignment is a no-op there, so the helper defines an own property on the instance
+    // to keep the requested name and let callers still detect timeouts by error name.
     const descriptor = Object.getOwnPropertyDescriptor(Error.prototype, 'name')
     Object.defineProperty(Error.prototype, 'name', { value: 'Error', writable: false, configurable: true })
     try {
       const error = createNamedError('AbortError', 'timed out')
-      expect(error.name).toBe('Error')
+      expect(error.name).toBe('AbortError')
       expect(error.message).toBe('timed out')
     } finally {
       if (descriptor) {
