@@ -113,7 +113,7 @@ describe('@posthog/browser core', () => {
         expect(normalizeIds(lazy.event)).toEqual(normalizeIds(eager.event))
     })
 
-    it('drains a lazy backlog in FIFO requests capped at one event', async () => {
+    it('drains a lazy backlog in one FIFO batch', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -128,9 +128,50 @@ describe('@posthog/browser core', () => {
         await posthog.installExtension(analytics())
         await posthog.flush()
 
-        expect(requests).toHaveLength(3)
-        expect(requests.map((request) => (request.body?.batch as Record<string, unknown>[]).length)).toEqual([1, 1, 1])
-        expect(requests.map((request) => captureEvent(request)?.event)).toEqual(['first', 'second', 'third'])
+        expect(requests).toHaveLength(1)
+        expect((requests[0]?.body?.batch as Record<string, unknown>[]).map(({ event }) => event)).toEqual([
+            'first',
+            'second',
+            'third',
+        ])
+    })
+
+    it('does not wait for compression remote config and enables gzip after it arrives', async () => {
+        const requests: RequestInit[] = []
+        let resolveRemoteConfig: ((config: RemoteConfig) => void) | undefined
+        const remoteConfig = new Promise<RemoteConfig>((resolve) => {
+            resolveRemoteConfig = resolve
+        })
+        const posthog = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            fetch: async (_input, init = {}) => {
+                requests.push(init)
+                return new Response('{"results":{}}', { status: 200 })
+            },
+            remoteConfigLoader: () => remoteConfig,
+        })
+
+        await posthog.capture('before_config', { value: 'x'.repeat(2_000) })
+        await posthog.flush()
+        expect(requests).toHaveLength(1)
+        expect(requests[0]?.body).toEqual(expect.any(String))
+        expect(requests[0]?.headers).not.toHaveProperty('Content-Encoding')
+
+        resolveRemoteConfig?.(createRemoteConfig({ supportedCompression: ['gzip-js'] }))
+        await posthog.getRemoteConfig()
+        await posthog.capture('after_config', { value: 'x'.repeat(2_000) })
+        await posthog.flush()
+
+        expect(requests).toHaveLength(2)
+        expect(requests[1]?.body).toBeInstanceOf(Blob)
+        expect(requests[1]?.headers).toMatchObject({ 'Content-Encoding': 'gzip' })
+        const body = await new Response(
+            (requests[1]?.body as Blob).stream().pipeThrough(new DecompressionStream('gzip'))
+        ).json()
+        expect(body).toMatchObject({ batch: [{ event: 'after_config' }] })
     })
 
     it('purges buffered capture when consent is revoked before delivery attaches', async () => {
@@ -1123,7 +1164,7 @@ describe('@posthog/browser core', () => {
         expect(reloaded.kv.get('before_dispose')).toBe(true)
         expect(reloaded.kv.get('after_dispose')).toBeUndefined()
         expect(requests).toHaveLength(0)
-        expect(remoteConfigLoader).not.toHaveBeenCalled()
+        expect(remoteConfigLoader).toHaveBeenCalledTimes(1)
         expect(events).toHaveLength(0)
     })
 
