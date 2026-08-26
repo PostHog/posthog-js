@@ -103,27 +103,6 @@ describe('config', () => {
             expect(posthog.config.session_recording.captureJsonLd).toBe(false)
         })
 
-        it('keeps date-gated autocapture defaults when the user sets a partial autocapture config', () => {
-            const posthog = new PostHog()
-            posthog._init('test-token', {
-                defaults: '2026-08-30',
-                autocapture: { dom_event_allowlist: ['click'] },
-            })
-            expect(posthog.config.autocapture).toStrictEqual({
-                capture_copied_text: true,
-                dom_event_allowlist: ['click'],
-            })
-        })
-
-        it('lets a user-supplied autocapture sub-option override the date-gated default', () => {
-            const posthog = new PostHog()
-            posthog._init('test-token', {
-                defaults: '2026-08-30',
-                autocapture: { capture_copied_text: false },
-            })
-            expect(posthog.config.autocapture).toStrictEqual({ capture_copied_text: false })
-        })
-
         it.each([
             ['unset', undefined, 0],
             ['2025-05-24', '2025-05-24' as const, 0],
@@ -226,18 +205,10 @@ describe('config', () => {
             expect(posthog.config.session_recording.captureJsonLd).toBe(expected)
         })
 
-        it.each([
-            ['unset', undefined, false],
-            ['explicit unset', 'unset' as const, false],
-            ['2026-08-29', '2026-08-29' as const, false],
-            ['2026-08-30', '2026-08-30' as const, true],
-        ])('autocapture.capture_copied_text with defaults %s', (_label, defaults, expected) => {
+        it('keeps capture_copied_text opt-in with the 2026-08-30 defaults', () => {
             const posthog = new PostHog()
-            posthog._init('test-token', defaults ? { defaults } : undefined)
-            expect(
-                typeof posthog.config.autocapture === 'object' &&
-                    posthog.config.autocapture.capture_copied_text === true
-            ).toBe(expected)
+            posthog._init('test-token', { defaults: '2026-08-30' })
+            expect(posthog.config.autocapture).toBe(true)
         })
 
         it('maps the deprecated preview option to cookieWinsOnConflict', () => {

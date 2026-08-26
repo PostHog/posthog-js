@@ -255,7 +255,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     ui_host: null,
     asset_host: null,
     token: '',
-    autocapture: defaults && defaults !== 'unset' && defaults >= '2026-08-30' ? { capture_copied_text: true } : true,
+    autocapture: true,
     cross_subdomain_cookie: isCrossDomainCookie(document?.location),
     persistence: 'localStorage+cookie', // up to 1.92.0 this was 'cookie'. It's easy to migrate as 'localStorage+cookie' will migrate data from cookie storage
     persistence_name: '',
@@ -746,9 +746,6 @@ export class PostHog implements PostHogInterface {
         // (e.g. content_ignorelist, ignore_text_selection) rather than replacing them wholesale
         if (isObject(baseConfig.rageclick) && isObject(userConfig.rageclick)) {
             mergedConfig.rageclick = extend({}, baseConfig.rageclick, userConfig.rageclick)
-        }
-        if (isObject(baseConfig.autocapture) && isObject(userConfig.autocapture)) {
-            mergedConfig.autocapture = extend({}, baseConfig.autocapture, userConfig.autocapture)
         }
         // likewise a partial user-supplied session_recording keeps the date-gated top-level
         // defaults (e.g. strictMinimumDuration, canvasCapture) it doesn't set. this is a shallow

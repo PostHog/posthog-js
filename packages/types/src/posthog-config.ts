@@ -97,8 +97,6 @@ export interface AutocaptureConfig {
 
     /**
      * When true, autocapture captures cut, copy, and paste interactions. Paste events do not contain pasted text.
-     *
-     * @default false before the `2026-08-30` defaults, otherwise true
      */
     capture_copied_text?: boolean
 }
@@ -1726,7 +1724,7 @@ export interface PostHogConfig {
      * - `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces
      * - `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)
      * - `'2026-08-29'`: Defaults from '2026-06-25' plus `cookieWinsOnConflict` defaults to `true` (the shared cross-subdomain cookie wins over stale per-origin localStorage)
-     * - `'2026-08-30'`: Defaults from '2026-08-29' plus `session_recording.captureJsonLd` and `autocapture.capture_copied_text` default to `true`
+     * - `'2026-08-30'`: Defaults from '2026-08-29' plus `session_recording.captureJsonLd` defaults to `true`
      *
      * @default 'unset'
      */
