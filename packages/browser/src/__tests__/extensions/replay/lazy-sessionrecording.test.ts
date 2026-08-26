@@ -1624,6 +1624,38 @@ describe('Lazy SessionRecording', () => {
                 }
             })
 
+            it.each([
+                // a trigger-pending buffer ships on activation, so the awake heal must cover it too
+                ['a recording trigger is pending', true, 1],
+                // sampled-out buffering discards the buffer, so the heal is pure cost
+                ['no trigger is pending', false, 0],
+            ] as [string, boolean, number][])(
+                'heals an awake throttle drop while buffering when %s: %i snapshot(s)',
+                (_name: string, hasPendingTriggers: boolean, expectedSnapshots: number) => {
+                    const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record
+                        .takeFullSnapshot as Mock
+                    const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+
+                    emitActiveEvent(startingTimestamp + 100)
+                    takeFullSnapshot.mockClear()
+
+                    Object.defineProperty(lazyRecording, 'status', { get: () => 'buffering', configurable: true })
+                    const pendingSpy = jest
+                        .spyOn(lazyRecording['_strategy']!, 'hasPendingTriggers')
+                        .mockReturnValue(hasPendingTriggers)
+                    jest.useFakeTimers()
+                    try {
+                        lazyRecording['_onThrottledMutationsDropped'](3)
+                        jest.advanceTimersByTime(1000)
+                        expect(takeFullSnapshot).toHaveBeenCalledTimes(expectedSnapshots)
+                    } finally {
+                        jest.useRealTimers()
+                        pendingSpy.mockRestore()
+                        delete (lazyRecording as any).status
+                    }
+                }
+            )
+
             it('does not schedule a heal snapshot for throttler drops while idle', () => {
                 const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
                 const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']

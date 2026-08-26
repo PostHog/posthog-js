@@ -1687,8 +1687,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
         this._throttleHealTimer = setTimeout(() => {
             this._throttleHealTimer = undefined
-            // sampled-out and disabled recorders discard the buffer, so a heal is pure cost
-            if (['sampled', 'active'].includes(this.status)) {
+            // a trigger-pending buffer ships on activation, so it needs the heal as much as
+            // a live recording; only sampled-out and disabled states discard the buffer,
+            // making a heal there pure cost (matches the idle-wake heal's bufferCanShip)
+            const bufferCanShip =
+                ['sampled', 'active'].includes(this.status) || this._strategy?.hasPendingTriggers(this.sessionId)
+            if (bufferCanShip) {
                 this._tryTakeFullSnapshot()
             }
         }, THROTTLE_HEAL_DEBOUNCE_MS)
