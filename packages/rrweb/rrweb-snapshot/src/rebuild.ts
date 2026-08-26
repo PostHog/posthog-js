@@ -527,10 +527,15 @@ export function buildNodeWithSN(
     !skipChild
   ) {
     for (const childN of n.childNodes) {
-      if (childN.isShadow && isElement(node) && !node.shadowRoot) {
-        // The host has no shadow root to receive this subtree. Appending it to
-        // the light DOM instead would put shadow-scoped <style> nodes in the
-        // document, where their rules apply to the whole replayed page.
+      if (
+        childN.isShadow &&
+        n.isShadowHost &&
+        isElement(node) &&
+        !node.shadowRoot
+      ) {
+        // The browser refused a shadow root on this host, so there is nowhere for this
+        // subtree to go. Appending it to the light DOM instead would put shadow-scoped
+        // <style> nodes in the document, where their rules apply to the whole page.
         continue;
       }
       const childNode = buildNodeWithSN(childN, {

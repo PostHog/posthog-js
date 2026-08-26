@@ -452,6 +452,34 @@ describe('rebuild', function () {
       expect((node as HTMLElement).shadowRoot).toBeNull();
       expect((node as HTMLElement).outerHTML).toBe('<nohyphen></nohyphen>');
     });
+
+    it('keeps shadow-marked children when the parent is not a shadow host', function () {
+      const node = buildNodeWithSN(
+        {
+          id: 1,
+          tagName: 'div',
+          type: NodeType.Element,
+          attributes: {},
+          childNodes: [
+            {
+              id: 2,
+              tagName: 'span',
+              type: NodeType.Element,
+              attributes: {},
+              childNodes: [],
+              isShadow: true,
+            },
+          ],
+        },
+        {
+          doc: document,
+          mirror,
+          hackCss: false,
+          cache,
+        },
+      ) as HTMLDivElement;
+      expect(node.outerHTML).toBe('<div><span></span></div>');
+    });
   });
 
   describe('add hover class to hover selector related rules', function () {
