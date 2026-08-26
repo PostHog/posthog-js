@@ -98,7 +98,7 @@ export function resolveSurveyAlignment(position: string | undefined): {
 } {
   let resolvedPosition: SurveyPosition = defaultSurveyAppearance.position
   if (position) {
-    const normalizedPosition = normalizeSurveyPosition(position)
+    const normalizedPosition = typeof position === 'string' ? normalizeSurveyPosition(position) : ''
     if (KNOWN_SURVEY_POSITIONS.has(normalizedPosition)) {
       resolvedPosition = normalizedPosition as SurveyPosition
     } else if (!warnedUnknownPositions.has(position)) {

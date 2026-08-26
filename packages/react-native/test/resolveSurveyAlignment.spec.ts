@@ -30,6 +30,17 @@ describe('resolveSurveyAlignment', () => {
     expect(resolveSurveyAlignment(undefined)).toEqual({ vertical: 'flex-end', horizontal: 'center' })
   })
 
+  it('warns and falls back to the default for non-string positions', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const result = resolveSurveyAlignment(42 as unknown as string)
+      expect(result).toEqual({ vertical: 'flex-end', horizontal: 'center' })
+      expect(warn).toHaveBeenCalledTimes(1)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   it('warns once and falls back to the default for unknown position strings', () => {
     // Module-scope dedup of warned positions persists across tests, so use a
     // unique unknown string per run to avoid coupling to other tests' state.
