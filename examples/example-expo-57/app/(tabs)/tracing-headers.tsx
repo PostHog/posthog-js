@@ -11,7 +11,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol'
 const LISTED_URL = 'https://httpbin.org/headers'
 
 // postman-echo.com/headers also echoes headers but is NOT in the `addTracingHeaders`
-// list in app/posthog.tsx, so the PostHog headers should NOT appear on this response.
+// list in posthog.ts, so the PostHog headers should NOT appear on this response.
 const UNLISTED_URL = 'https://postman-echo.com/headers'
 
 type Result = {

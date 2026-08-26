@@ -6,7 +6,7 @@ import ParallaxScrollView from '@/components/ParallaxScrollView'
 import { ThemedText } from '@/components/ThemedText'
 import { ThemedView } from '@/components/ThemedView'
 import { IconSymbol } from '@/components/ui/IconSymbol'
-import { beforeSendMode, posthog } from '../posthog'
+import { beforeSendMode, posthog } from '@/posthog'
 
 type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'
 type BeforeSendMode = 'pass' | 'drop' | 'throw'
@@ -28,7 +28,7 @@ export default function LogsScreen() {
     const [counter, setCounter] = useState(0)
     const [devStatus, setDevStatus] = useState<DevStatus>(getDevStatus)
     // Mirror of `beforeSendMode.current` for UI display. The actual filter
-    // reads from the module-level ref in posthog.tsx.
+    // reads from the module-level ref in posthog.ts.
     const [beforeSendModeUI, setBeforeSendModeUI] = useState<BeforeSendMode>(beforeSendMode.current)
     const [queueDump, setQueueDump] = useState<string>('')
 
@@ -137,7 +137,7 @@ export default function LogsScreen() {
     // `flushLogs`).
 
     const setBefore = (mode: BeforeSendMode): void => {
-        // Update the shared ref in posthog.tsx — the `beforeSend` closure
+        // Update the shared ref in posthog.ts — the `beforeSend` closure
         // reads it on every capture, so behavior switches at runtime
         // without touching SDK internals. This is the public-API-only
         // pattern customers should follow for runtime-tunable filters.
