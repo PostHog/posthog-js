@@ -534,7 +534,10 @@ export class PostHogPersistence {
                 }
             })
         } else if (isObject(nextValue)) {
-            if (!isUndefined(previousValue) && !isObject(previousValue)) {
+            if (
+                (!isUndefined(previousValue) && !isObject(previousValue)) ||
+                (isUndefined(previousValue) && isEmptyObject(nextValue) && isUndefined(durableValue))
+            ) {
                 this._setCrossTabFeatureFlagChangesPending(key, true)
                 return
             }
