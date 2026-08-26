@@ -101,8 +101,8 @@ export function resolveSurveyAlignment(position: string | undefined): {
     const normalizedPosition = typeof position === 'string' ? normalizeSurveyPosition(position) : ''
     if (KNOWN_SURVEY_POSITIONS.has(normalizedPosition)) {
       resolvedPosition = normalizedPosition as SurveyPosition
-    } else if (!warnedUnknownPositions.has(position)) {
-      warnedUnknownPositions.add(position)
+    } else if (!warnedUnknownPositions.has(normalizedPosition)) {
+      warnedUnknownPositions.add(normalizedPosition)
       console.warn(
         `[PostHog.surveys] Unknown survey position ${JSON.stringify(position)} — falling back to ${defaultSurveyAppearance.position}. Expected one of: ${Object.values(SurveyPosition).join(', ')}.`
       )

@@ -41,18 +41,19 @@ describe('resolveSurveyAlignment', () => {
     }
   })
 
-  it('warns once and falls back to the default for unknown position strings', () => {
+  it('warns once for unknown positions that normalize to the same value', () => {
     // Module-scope dedup of warned positions persists across tests, so use a
     // unique unknown string per run to avoid coupling to other tests' state.
-    const unknown = `unknown-${Math.random().toString(36).slice(2)}`
+    const suffix = Math.random().toString(36).slice(2)
+    const unknownWithHyphen = `unknown-${suffix}`
+    const unknownWithUnderscore = `unknown_${suffix}`
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
     try {
-      const result = resolveSurveyAlignment(unknown)
+      const result = resolveSurveyAlignment(unknownWithHyphen)
       expect(result).toEqual({ vertical: 'flex-end', horizontal: 'center' })
       expect(warn).toHaveBeenCalledTimes(1)
-      expect(warn.mock.calls[0][0]).toContain(unknown)
-      // Calling again with the same unknown string does not re-warn.
-      resolveSurveyAlignment(unknown)
+      expect(warn.mock.calls[0][0]).toContain(unknownWithHyphen)
+      resolveSurveyAlignment(unknownWithUnderscore)
       expect(warn).toHaveBeenCalledTimes(1)
     } finally {
       warn.mockRestore()
