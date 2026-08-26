@@ -86,7 +86,9 @@ export class PostHogLogs {
     this._intervalWindowStart = 0
     this._intervalLogCount = 0
     this._droppedWarned = false
-    this._evictedSinceAdvance = 0
+    // `_evictedSinceAdvance` is deliberately left alone: `_flushInner` zeroes it per
+    // batch, so the only value a reset could clear is one a batch in flight still
+    // needs to work out how much of the queue it already accounted for.
     this._consecutiveFlushFailures = 0
     this._maxBatchRecordsPerPost = this._config.maxBatchRecordsPerPost
   }

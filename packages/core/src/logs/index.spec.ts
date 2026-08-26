@@ -197,6 +197,33 @@ describe('PostHogLogs', () => {
     })
   })
 
+  describe('reset during an in-flight flush', () => {
+    it('does not let an in-flight batch drop records captured after the reset', async () => {
+      let releaseSend: (v: any) => void = () => {}
+      const mockInstance = createMockInstance({
+        _sendLogsBatch: jest.fn(() => new Promise((resolve) => (releaseSend = resolve))),
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'before the reset' })
+
+      const flushing = logs.flush()
+      logs.clearQueue()
+      logs.reset()
+      logs.captureLog({ body: 'captured after the reset' })
+
+      releaseSend({ kind: 'ok' })
+      await flushing
+
+      expect(readQueue(mockInstance).map((e) => e.record.body)).toEqual([{ stringValue: 'captured after the reset' }])
+    })
+  })
+
   describe('captureLog', () => {
     it('writes a record to the logs queue via setPersistedProperty', () => {
       const logs = new PostHogLogs(

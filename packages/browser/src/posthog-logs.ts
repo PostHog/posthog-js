@@ -281,8 +281,10 @@ export class PostHogLogs implements Extension {
         // Buffered entries carry the pre-reset identity, so they are dropped rather
         // than replayed under whoever the SDK is told to be next.
         this._stopConsoleRecorder()
+        this._core?.clearQueue()
         this._queue = []
         this._core?.reset()
+        this._consoleCore?.clearQueue()
         this._consoleQueue = []
         this._consoleCore?.reset()
         this._consecutiveStatusZeroFailures = 0
