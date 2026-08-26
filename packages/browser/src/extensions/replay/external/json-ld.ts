@@ -1,4 +1,4 @@
-import { hasOwnProperty, isArray, isNull, isUndefined } from '@posthog/core'
+import { hasOwnProperty, isArray, isNull, isObject, isUndefined } from '@posthog/core'
 
 type JsonLdScalar = string | number | boolean | null
 type JsonLdPropertyRule = true | readonly string[]
@@ -136,10 +136,6 @@ const TYPES_WITHOUT_PROPERTIES =
     )
 
 export const JSON_LD_EVENT_TAG = '$json_ld'
-
-function isObject(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && !isNull(value)
-}
 
 function getOwnProperty(value: Record<string, unknown>, property: string): unknown {
     return hasOwnProperty.call(value, property) ? value[property] : undefined

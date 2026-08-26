@@ -692,8 +692,8 @@ export interface SessionRecordingOptions {
      * The recorder keeps `@id` values without changes.
      * The event tag is `$json_ld`. The payload is a JSON-LD object or array.
      * The recorder removes all script nodes from snapshots when this option is enabled.
-     * Supported types are Action, AggregateOffer, AggregateRating, Brand, CreativeWork, Offer, Organization, Person, Place, and Product.
      * The JSON-LD observer starts only when this option is true at recording start.
+     * @see https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/extensions/replay/external/json-ld.ts
      * @default false
      */
     captureJsonLd?: boolean

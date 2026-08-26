@@ -924,6 +924,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _scheduleJsonLdScan(force = false): void {
+        // Run the scan after the current rrweb event updates the JSON-LD capture state.
         // eslint-disable-next-line compat/compat
         Promise.resolve().then(() => this._jsonLdCapture?.scan(force))
     }
