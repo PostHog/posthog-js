@@ -447,6 +447,35 @@ export class PostHogFeatureFlags implements Extension {
         this._persist(() => this._client?.kv.set(properties))
     }
 
+    private _markCrossTabFeatureFlagSnapshot(
+        statePatch: FeatureFlagsState,
+        response: Partial<FlagsResponse>,
+        partialResponse: boolean
+    ): void {
+        if (!this._instance?.persistence || !statePatch[ENABLED_FEATURE_FLAGS]) {
+            return
+        }
+
+        const previousFlags = this._prop(ENABLED_FEATURE_FLAGS) || {}
+        const nextFlags = statePatch[ENABLED_FEATURE_FLAGS] || {}
+        const responseFlags = response.flags || response.featureFlags
+        const ownedFlagKeys =
+            partialResponse && !isArray(responseFlags)
+                ? Object.keys(responseFlags || {})
+                : Array.from(new Set([...Object.keys(previousFlags), ...Object.keys(nextFlags)]))
+        const previousPayloads = this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) || {}
+        const nextPayloads = statePatch[PERSISTENCE_FEATURE_FLAG_PAYLOADS] || {}
+        const ownedPayloadKeys = partialResponse
+            ? Array.from(new Set([...ownedFlagKeys, ...Object.keys(response.featureFlagPayloads || {})]))
+            : Array.from(new Set([...Object.keys(previousPayloads), ...Object.keys(nextPayloads)]))
+
+        this._instance.persistence.markCrossTabFeatureFlagChanges({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ownedFlagKeys,
+            [ENABLED_FEATURE_FLAGS]: ownedFlagKeys,
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: ownedPayloadKeys,
+        })
+    }
+
     private _remove(keys: keyof FeatureFlagsState | readonly (keyof FeatureFlagsState)[]): void {
         this._persist(() => this._client?.kv.remove(keys))
     }
@@ -1319,6 +1348,7 @@ export class PostHogFeatureFlags implements Extension {
             this._logger
         )
         if (statePatch) {
+            this._markCrossTabFeatureFlagSnapshot(statePatch, response, !!options?.partialResponse)
             this._set(statePatch)
         }
         // Reset stale refresh flag when we successfully receive fresh flags
