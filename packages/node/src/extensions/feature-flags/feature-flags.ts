@@ -729,7 +729,9 @@ class FeatureFlagsPoller {
         this.updateFlagState(cached)
         this.logMsgIfDebug(() => console.debug(`[FEATURE FLAGS] ${debugMessage} (${cached.flags.length} flags)`))
         this.onLoad?.(this.featureFlags.length)
-        this.warnAboutExperienceContinuityFlags(cached.flags)
+        // Warn only about flags this instance actually evaluates locally; context-filtered flags
+        // are absent from the kept set and never take the server-fallback path.
+        this.warnAboutExperienceContinuityFlags(this.featureFlags)
         return true
       }
       return false
@@ -958,7 +960,8 @@ class FeatureFlagsPoller {
           }
 
           this.onLoad?.(this.featureFlags.length)
-          this.warnAboutExperienceContinuityFlags(flagData.flags)
+          // Warn only about the kept (context-filtered) flags, not the full payload.
+          this.warnAboutExperienceContinuityFlags(this.featureFlags)
           break
         }
 

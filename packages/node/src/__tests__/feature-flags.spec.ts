@@ -7695,6 +7695,51 @@ describe('experience continuity warning', () => {
     // Warning should NOT be emitted because strictLocalEvaluation prevents server fallback
     expect(warnSpy).not.toHaveBeenCalled()
   })
+
+  it('does not warn about continuity flags excluded by evaluation context', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Included Continuity Flag',
+          key: 'included-cont-flag',
+          active: true,
+          ensure_experience_continuity: true,
+          evaluation_contexts: ['backend'],
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+        {
+          id: 2,
+          name: 'Excluded Continuity Flag',
+          key: 'excluded-cont-flag',
+          active: true,
+          ensure_experience_continuity: true,
+          evaluation_contexts: ['frontend'],
+          filters: {
+            groups: [{ properties: [], rollout_percentage: 100 }],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      evaluationContexts: ['backend'],
+      ...posthogImmediateResolveOptions,
+    })
+
+    await jest.runOnlyPendingTimersAsync()
+
+    // Only the kept flag is evaluated locally, so only it should appear in the warning.
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('included-cont-flag'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('1 flag(s)'))
+    // The context-excluded flag never takes the server-fallback path here, so it must not be named.
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('excluded-cont-flag'))
+  })
 })
 
 describe('strictLocalEvaluation option', () => {
