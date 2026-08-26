@@ -32,11 +32,12 @@
     },
     "scripts": {
         "clean": "rimraf dist",
-        "lint": "eslint src tests fixtures scripts/*.mjs",
-        "lint:fix": "eslint src tests fixtures scripts/*.mjs --fix",
+        "lint": "eslint src tests fixtures playwright playwright.config.ts scripts/*.mjs",
+        "lint:fix": "eslint src tests fixtures playwright playwright.config.ts scripts/*.mjs --fix",
         "build": "rslib build",
         "dev": "rslib build -w",
         "test:unit": "jest -c jest.config.cjs && rslib build && node scripts/check-mixed-module-delivery.mjs",
+        "test:browser": "playwright test --config playwright.config.ts",
         "test:capture-v1-live": "pnpm build && node scripts/check-capture-v1-live.mjs",
         "test:mixed-modules": "rslib build && node scripts/check-mixed-module-delivery.mjs",
         "check-types": "tsc --noEmit --project tsconfig.json",
@@ -47,6 +48,7 @@
         "@posthog/browser-common": "workspace:^"
     },
     "devDependencies": {
+        "@playwright/test": "1.52.0",
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
         "@types/jest": "catalog:",

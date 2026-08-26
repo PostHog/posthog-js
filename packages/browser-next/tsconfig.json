@@ -5,7 +5,7 @@
         "noEmit": true,
         "target": "ES2024",
         "lib": ["ES2024", "DOM", "DOM.Iterable"],
-        "types": ["node", "jest"],
+        "types": ["node", "jest", "@playwright/test"],
         "module": "preserve",
         "moduleResolution": "bundler",
         "moduleDetection": "force",
@@ -20,5 +20,5 @@
             ]
         }
     },
-    "include": ["src/**/*", "tests/**/*", "fixtures/**/*"]
+    "include": ["src/**/*", "tests/**/*", "fixtures/**/*", "playwright/**/*", "playwright.config.ts"]
 }
