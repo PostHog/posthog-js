@@ -1,8 +1,5 @@
 ---
-'@posthog/rrweb-plugin-console-record': patch
 '@posthog/rrweb-utils': patch
-'@posthog/rrweb': patch
-'@posthog/rrweb-record': patch
 'posthog-js': patch
 ---
 
