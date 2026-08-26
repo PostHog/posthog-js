@@ -480,16 +480,16 @@ const initializeLogs = (host: PostHog | Client): (() => void) => {
             }
 
         // Install as a `patch` layer rather than a bare assignment: session replay's
-        // console plugin and the main bundle's pre-load recorder wrap these same
-        // methods, and a top-of-stack-only restore leaks whichever wrapper ends up
-        // underneath — and resurrects a lower one that has since been removed.
-        const originalConsoleLog = assignableWindow.console[level]
+        // console plugin wraps these same methods and can arrive after this one, and a
+        // top-of-stack-only restore leaks whichever wrapper ends up underneath — and
+        // resurrects a lower one that has since been removed.
+        const consoleBeforePatch = assignableWindow.console[level]
         restoreConsoleMethods.push(
             patch(assignableWindow.console, level, (next: any) => {
                 const wrapped = logWrapper(next)
                 // Lets PostHog's internal logger reach the real console instead of
                 // re-entering this wrapper, and flattens a marker another plugin left.
-                ;(wrapped as any).__rrweb_original__ = originalConsoleMethod(originalConsoleLog)
+                ;(wrapped as any).__rrweb_original__ = originalConsoleMethod(consoleBeforePatch)
                 return wrapped
             })
         )

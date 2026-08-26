@@ -1207,6 +1207,20 @@ describe('posthog-logs', () => {
                 expect(assignableWindow.console.log).toBe(originalLog)
             })
 
+            it('should drop console records already captured when the user opts out', () => {
+                const instance = buildInstanceWithLocalConfig()
+                logsFromPersisted = new PostHogLogs(instance)
+                logsFromPersisted.setup(noopClient())
+                logsFromPersisted.captureLog({ body: 'programmatic' })
+                logsFromPersisted.captureConsoleLog({ body: 'mirrored before the opt-out' })
+                expect((logsFromPersisted as any)._consoleQueue).toHaveLength(1)
+
+                logsFromPersisted._onOptOut()
+
+                expect((logsFromPersisted as any)._consoleQueue).toHaveLength(0)
+                expect((logsFromPersisted as any)._queue).toHaveLength(1)
+            })
+
             it('should drop the buffer as soon as the user opts out, not on the next log line', () => {
                 const instance = buildInstanceWithPersistedBit()
                 logsFromPersisted = new PostHogLogs(instance)

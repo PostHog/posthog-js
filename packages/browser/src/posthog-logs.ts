@@ -341,6 +341,10 @@ export class PostHogLogs implements Extension {
      */
     _onOptOut(): void {
         this._stopConsoleRecorder()
+        // Console records already mirrored before the opt-out go too. `captureLog` and
+        // `logger` keep their own queue: core re-checks `optedOut` when it enqueues.
+        this._consoleQueue = []
+        this._consoleCore?.reset()
     }
 
     private _stopRecorderStartedByPersistedHint(): void {

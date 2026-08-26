@@ -50,9 +50,7 @@ describe('patch', () => {
         expect(target.fn).toBe(base)
     })
 
-    it('splices out from under a wrapper left by a build that only carries __posthog_layer__', () => {
-        // Lazy chunks load independently of the main bundle, so an older wrapper
-        // publishing a single marker can sit above a newer one.
+    it('splices out from under a wrapper carrying only the rrweb marker', () => {
         const calls: string[] = []
         const base = () => calls.push('base')
         const target: any = { fn: base }
@@ -62,19 +60,19 @@ describe('patch', () => {
             return next()
         })
 
-        const legacyLayer = { next: target.fn }
-        const legacyWrapper: any = () => {
-            calls.push('legacy')
-            return legacyLayer.next()
+        const foreignLayer = { next: target.fn }
+        const foreignWrapper: any = () => {
+            calls.push('foreign')
+            return foreignLayer.next()
         }
-        Object.defineProperty(legacyWrapper, '__posthog_layer__', { enumerable: false, value: legacyLayer })
-        target.fn = legacyWrapper
+        Object.defineProperty(foreignWrapper, '__rrweb_layer__', { enumerable: false, value: foreignLayer })
+        target.fn = foreignWrapper
 
         removeOurs()
         calls.length = 0
         target.fn()
 
-        expect(calls).toEqual(['legacy', 'base'])
+        expect(calls).toEqual(['foreign', 'base'])
     })
 
     it('splices itself out from under an rrweb wrapper', () => {
