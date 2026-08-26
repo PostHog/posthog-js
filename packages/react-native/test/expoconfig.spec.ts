@@ -380,6 +380,61 @@ describe('addDsymUploadBuildPhase', () => {
     expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, false, 'symbol-set')))
   })
 
+  // Verbatim text of the phase as posthog-react-native 4.63 wrote it. The plugin refreshes a phase
+  // only when its text matches something the plugin generated, so a project prebuilt by that SDK
+  // depends on this exact text staying in the list. Kept as literals on purpose: deriving it from
+  // the current generator would hide a change to the shared lines.
+  const LEGACY_DSYM_SCRIPT_TAIL = [
+    'PODS_SCRIPT="${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh"',
+    'SPM_SCRIPT="${BUILD_DIR%/Build/*}/SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh"',
+    'if [ -f "$PODS_SCRIPT" ]; then',
+    '  /bin/sh "$PODS_SCRIPT"',
+    'elif [ -f "$SPM_SCRIPT" ]; then',
+    '  /bin/sh "$SPM_SCRIPT"',
+    'else',
+    '  echo "warning: PostHog upload-symbols.sh not found in Pods or SwiftPM checkouts; skipping dSYM upload."',
+    'fi',
+  ]
+  const legacyDsymPhases: Array<[string, boolean, boolean, string[]]> = [
+    [
+      'no options',
+      false,
+      false,
+      [
+        '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
+        '# upload-symbols.sh ships inside the posthog-ios dependency.',
+        ...LEGACY_DSYM_SCRIPT_TAIL,
+      ],
+    ],
+    [
+      'includeSource and skipOnConflict',
+      true,
+      true,
+      [
+        '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
+        '# upload-symbols.sh ships inside the posthog-ios dependency.',
+        '# Also upload native source files for source-code context around crashes.',
+        'export POSTHOG_INCLUDE_SOURCE=1',
+        '# Skip dSYMs that already exist in PostHog with different content instead of failing the build.',
+        'export POSTHOG_SKIP_ON_CONFLICT=1',
+        ...LEGACY_DSYM_SCRIPT_TAIL,
+      ],
+    ],
+  ]
+
+  it.each(legacyDsymPhases)(
+    'refreshes a phase written by an SDK without release-mode support (%s)',
+    (_case, includeSource, skipOnConflict, legacyLines) => {
+      const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: encodePbx(legacyLines.join('\n')) }
+      const xp = mockXcodeProjectForBuildPhase(existing)
+
+      addDsymUploadBuildPhase(xp, includeSource, skipOnConflict, 'event')
+
+      expect(xp.addBuildPhase).not.toHaveBeenCalled()
+      expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(includeSource, skipOnConflict, 'event')))
+    }
+  )
+
   // Runs the generated phase against a stub upload-symbols.sh, so the assertions are on what
   // posthog-ios actually receives rather than on the shell source.
   const runDsymPhase = (script: string, env: Record<string, string>): { status: number; output: string } => {

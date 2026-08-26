@@ -6,8 +6,10 @@ const { withAppBuildGradle, withBaseMod, withGradleProperties, withProjectBuildG
   require('@expo/config-plugins')
 
 // com.posthog.android uploads R8 mapping files and injects a matching map-id so native
-// crash stack traces can be deobfuscated.
-const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.4.0'
+// crash stack traces can be deobfuscated. The injected version has to read every gradle
+// property the plugin writes, or that half of the build ignores the option: 1.4.0 is the first
+// version that reads posthog.dotenvFile, and 1.5.0 the first that reads posthog.releaseMode.
+const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.5.1'
 
 const resolvePostHogReactNativePackageJsonPath =
   "[\"node\", \"--print\", \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')\"].execute().text.trim()"
@@ -313,6 +315,24 @@ export function buildDsymUploadShellScript(
   skipOnConflict = false,
   releaseMode?: PostHogReleaseMode
 ): string {
+  return composeDsymUploadShellScript(includeSource, skipOnConflict, buildDsymReleaseModeLines(releaseMode))
+}
+
+// The phase as SDKs without release-mode support wrote it: the same script with no release-mode
+// block. isPluginGeneratedDsymUploadBuildPhase recognizes only text the plugin wrote, so this text
+// has to stay among its variants. Without it a project prebuilt by such an SDK keeps its old phase,
+// and event mode unbinds its Hermes maps but not its dSYMs. That makes the shared lines in
+// composeDsymUploadShellScript a compatibility contract: a change to them needs the old text kept
+// as a variant too.
+function buildLegacyDsymUploadShellScript(includeSource: boolean, skipOnConflict: boolean): string {
+  return composeDsymUploadShellScript(includeSource, skipOnConflict, [])
+}
+
+function composeDsymUploadShellScript(
+  includeSource: boolean,
+  skipOnConflict: boolean,
+  releaseModeLines: string[]
+): string {
   const lines = [
     '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
     '# upload-symbols.sh ships inside the posthog-ios dependency.',
@@ -332,12 +352,30 @@ export function buildDsymUploadShellScript(
     )
   }
 
-  // Resolved when the phase runs, not when it is generated. The bundle phase reads
-  // POSTHOG_RELEASE_MODE out of the environment, so a build configured that way rather than
-  // through the plugin prop would otherwise upload its maps release-independent and keep binding
-  // its dSYMs. posthog-ios reads only POSTHOG_NO_RELEASE_BIND, and posthog-cli's `dsym upload`
-  // binds no environment variable of its own, so the translation has to happen here.
+  lines.push(...releaseModeLines)
+
   lines.push(
+    'PODS_SCRIPT="${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh"',
+    'SPM_SCRIPT="${BUILD_DIR%/Build/*}/SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh"',
+    'if [ -f "$PODS_SCRIPT" ]; then',
+    '  /bin/sh "$PODS_SCRIPT"',
+    'elif [ -f "$SPM_SCRIPT" ]; then',
+    '  /bin/sh "$SPM_SCRIPT"',
+    'else',
+    '  echo "warning: PostHog upload-symbols.sh not found in Pods or SwiftPM checkouts; skipping dSYM upload."',
+    'fi'
+  )
+
+  return lines.join('\n')
+}
+
+// Resolved when the phase runs, not when it is generated. The bundle phase reads
+// POSTHOG_RELEASE_MODE out of the environment, so a build configured that way rather than
+// through the plugin prop would otherwise upload its maps release-independent and keep binding
+// its dSYMs. posthog-ios reads only POSTHOG_NO_RELEASE_BIND, and posthog-cli's `dsym upload`
+// binds no environment variable of its own, so the translation has to happen here.
+function buildDsymReleaseModeLines(releaseMode?: PostHogReleaseMode): string[] {
+  return [
     releaseMode
       ? `POSTHOG_RESOLVED_RELEASE_MODE="${releaseMode}"`
       : 'POSTHOG_RESOLVED_RELEASE_MODE="${POSTHOG_RELEASE_MODE:-}"',
@@ -353,22 +391,8 @@ export function buildDsymUploadShellScript(
     "    echo \"error: posthog release mode must be 'symbol-set' or 'event', was '$POSTHOG_RESOLVED_RELEASE_MODE'\"",
     '    exit 1',
     '    ;;',
-    'esac'
-  )
-
-  lines.push(
-    'PODS_SCRIPT="${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh"',
-    'SPM_SCRIPT="${BUILD_DIR%/Build/*}/SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh"',
-    'if [ -f "$PODS_SCRIPT" ]; then',
-    '  /bin/sh "$PODS_SCRIPT"',
-    'elif [ -f "$SPM_SCRIPT" ]; then',
-    '  /bin/sh "$SPM_SCRIPT"',
-    'else',
-    '  echo "warning: PostHog upload-symbols.sh not found in Pods or SwiftPM checkouts; skipping dSYM upload."',
-    'fi'
-  )
-
-  return lines.join('\n')
+    'esac',
+  ]
 }
 
 // xcode's addBuildPhase stores shellScript quote-escaped with literal newlines; in-place
@@ -393,8 +417,10 @@ function isPluginGeneratedDsymUploadBuildPhase(phase: any): boolean {
   }
   const stored = decodePbxShellScript(phase.shellScript)
   return [false, true].some((source) =>
-    [false, true].some((skip) =>
-      [undefined, ...POSTHOG_RELEASE_MODES].some((mode) => stored === buildDsymUploadShellScript(source, skip, mode))
+    [false, true].some(
+      (skip) =>
+        stored === buildLegacyDsymUploadShellScript(source, skip) ||
+        [undefined, ...POSTHOG_RELEASE_MODES].some((mode) => stored === buildDsymUploadShellScript(source, skip, mode))
     )
   )
 }
@@ -417,7 +443,8 @@ export function moveDsymUploadBuildPhaseToEnd(xcodeProject: any): void {
 // Keeps the upload phase last and declares the main DWARF as an input, matching the native iOS
 // setup guide. Both are required: the input makes Xcode wait for dSYM generation, while placing
 // the phase after extension embedding avoids dependency cycles in apps with app extensions.
-// Re-runs refresh only a still-plugin-generated phase so user customizations remain untouched.
+// Re-runs refresh only a still-plugin-generated phase, also one an older SDK wrote, so user
+// customizations remain untouched.
 export function addDsymUploadBuildPhase(
   xcodeProject: any,
   includeSource = false,
@@ -616,10 +643,9 @@ type PostHogPluginProps = {
    * The path reaches every upload hook as POSTHOG_CLI_DOTENV_FILE: on iOS as a
    * build setting (Xcode exports it to the bundle and dSYM script phases), on
    * Android as a `posthog.dotenvFile` entry in android/gradle.properties read
-   * by the SDK's `posthog.gradle` hermes upload and, on gradle plugin >= 1.4.0
-   * (the version this plugin injects), by the `com.posthog.android` mapping
-   * upload. Process env always wins inside the CLI; a missing file is a
-   * warning, not a build failure.
+   * by the SDK's `posthog.gradle` hermes upload and, on gradle plugin >= 1.4.0,
+   * by the `com.posthog.android` mapping upload. Process env always wins inside
+   * the CLI; a missing file is a warning, not a build failure.
    *
    * Requires posthog-cli >= 0.8.4 — older CLIs ignore the variable and fall
    * back to their other credential sources. With `disableSandboxing: false`,
@@ -645,9 +671,12 @@ type PostHogPluginProps = {
    * `POSTHOG_NO_RELEASE_BIND` in the dSYM phase when `uploadNativeSymbols` is on), Android as a
    * `posthog.releaseMode` entry in android/gradle.properties.
    *
-   * Requires posthog-cli >= 0.13.0 for the Android mapping upload. The dSYM half needs
-   * posthog-cli >= 0.10.0 and posthog-ios >= 3.69.1; older ones ignore `POSTHOG_NO_RELEASE_BIND`
-   * and keep binding.
+   * Requires posthog-cli >= 0.13.0 and the `com.posthog.android` gradle plugin >= 1.5.0 for the
+   * Android mapping upload. Plugin 1.4.0 ignores `posthog.releaseMode` and keeps binding the
+   * mapping. A fresh prebuild injects a version that reads it, but a project whose
+   * android/build.gradle already carries the classpath line keeps its version: bump that line by
+   * hand or prebuild with `--clean`. The dSYM half needs posthog-cli >= 0.10.0 and
+   * posthog-ios >= 3.69.1; older ones ignore `POSTHOG_NO_RELEASE_BIND` and keep binding.
    *
    * TODO: state the Hermes minimum once PostHog/posthog#87660 releases. Until then the floors in
    * posthog-xcode.sh and posthog.gradle are placeholders. Update them, this line, and the
