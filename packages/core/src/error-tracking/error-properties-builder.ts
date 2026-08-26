@@ -17,7 +17,51 @@ import {
   Exception,
 } from './types'
 
-const MAX_CAUSE_RECURSION = 4
+const MAX_EXCEPTION_ENTRIES = 50
+const RESERVED_EXCEPTION_PROPERTIES = new Set([
+  '$exception_list',
+  '$exception_level',
+  '$exception_source',
+  '$debug_images',
+  '$exception_handled',
+  '$exception_types',
+  '$exception_values',
+  '$exception_sources',
+  '$exception_functions',
+  '$exception_fingerprint_version',
+  '$exception_fingerprint_record',
+  '$exception_issue_id',
+  '$exception_release',
+  '$cymbal_errors',
+])
+
+export function sanitizeAdditionalExceptionProperties(
+  properties?: Record<string | number, any>
+): Record<string | number, any> {
+  if (!properties) {
+    return {}
+  }
+  return Object.fromEntries(Object.entries(properties).filter(([key]) => !RESERVED_EXCEPTION_PROPERTIES.has(key)))
+}
+
+const SEVERITY_ALIASES: Record<string, ErrorProperties['$exception_level']> = {
+  fatal: 'fatal',
+  critical: 'fatal',
+  alert: 'fatal',
+  emergency: 'fatal',
+  error: 'error',
+  warning: 'warning',
+  warn: 'warning',
+  log: 'log',
+  notice: 'info',
+  info: 'info',
+  trace: 'debug',
+  debug: 'debug',
+}
+
+export function normalizeExceptionLevel(level: unknown): ErrorProperties['$exception_level'] | undefined {
+  return typeof level === 'string' ? SEVERITY_ALIASES[level.toLowerCase()] : undefined
+}
 
 export class ErrorPropertiesBuilder {
   constructor(
@@ -27,20 +71,20 @@ export class ErrorPropertiesBuilder {
   ) {}
 
   buildFromUnknown(input: unknown, hint: EventHint = {}): ErrorProperties {
-    const providedMechanism = hint && hint.mechanism
-    const mechanism = providedMechanism || {
-      handled: true,
-      type: 'generic',
-    }
-    const coercingContext: CoercingContext = this.buildCoercingContext(mechanism, hint, 0)
+    const mechanism = this.resolveOutermostMechanism(hint.mechanism)
+    const coercingContext: CoercingContext = this.buildCoercingContext(mechanism, hint, 0, new WeakSet())
     const exceptionWithCause = coercingContext.apply(input)
     const parsingContext: ParsingContext = this.buildParsingContext(hint)
     const exceptionWithStack = this.parseStacktrace(exceptionWithCause, parsingContext)
-    const exceptionList = this.convertToExceptionList(exceptionWithStack, mechanism)
-    return {
+    const exceptionList = this.convertToExceptionList(exceptionWithStack, mechanism, 0, undefined, { value: 0 })
+    const properties: ErrorProperties = {
       $exception_list: exceptionList,
-      $exception_level: 'error',
+      $exception_level: normalizeExceptionLevel(hint.level) ?? 'error',
     }
+    if (typeof hint.source === 'string' && hint.source.length > 0) {
+      properties.$exception_source = hint.source
+    }
+    return properties
   }
 
   async modifyFrames(exceptionList: ErrorProperties['$exception_list']): Promise<ErrorProperties['$exception_list']> {
@@ -99,15 +143,31 @@ export class ErrorPropertiesBuilder {
     return newFrames
   }
 
-  private convertToExceptionList(exceptionWithStack: ParsedException, mechanism: Mechanism): ExceptionList {
+  private convertToExceptionList(
+    exceptionWithStack: ParsedException,
+    mechanism: Mechanism,
+    exceptionId: number,
+    parentId: number | undefined,
+    nextId: { value: number }
+  ): ExceptionList {
+    const isNested = parentId !== undefined
+    const resolvedMechanism: Mechanism = isNested
+      ? {
+          type: 'chained',
+          source: 'cause',
+          synthetic: exceptionWithStack.synthetic,
+          exception_id: exceptionId,
+          parent_id: parentId,
+        }
+      : {
+          ...mechanism,
+          synthetic: exceptionWithStack.synthetic,
+          exception_id: exceptionId,
+        }
     const currentException: Exception = {
       type: exceptionWithStack.type,
       value: exceptionWithStack.value,
-      mechanism: {
-        type: mechanism.type ?? 'generic',
-        handled: mechanism.handled ?? true,
-        synthetic: exceptionWithStack.synthetic ?? false,
-      },
+      mechanism: resolvedMechanism,
     }
     if (exceptionWithStack.stack) {
       currentException.stacktrace = {
@@ -116,16 +176,28 @@ export class ErrorPropertiesBuilder {
       }
     }
     const exceptionList: ExceptionList = [currentException]
-    if (exceptionWithStack.cause != null) {
-      // Cause errors are necessarily handled
+    if (exceptionWithStack.cause != null && nextId.value + 1 < MAX_EXCEPTION_ENTRIES) {
+      const childId = ++nextId.value
       exceptionList.push(
-        ...this.convertToExceptionList(exceptionWithStack.cause, {
-          ...mechanism,
-          handled: true,
-        })
+        ...this.convertToExceptionList(exceptionWithStack.cause, mechanism, childId, exceptionId, nextId)
       )
     }
     return exceptionList
+  }
+
+  private resolveOutermostMechanism(provided?: Partial<Mechanism>): Mechanism {
+    const mechanism: Mechanism = {}
+    if (provided) {
+      for (const [key, value] of Object.entries(provided)) {
+        if (!['type', 'handled', 'source', 'synthetic', 'exception_id', 'parent_id'].includes(key)) {
+          mechanism[key] = value
+        }
+      }
+    }
+
+    mechanism.type = typeof provided?.type === 'string' && provided.type.length > 0 ? provided.type : 'generic'
+    mechanism.handled = typeof provided?.handled === 'boolean' ? provided.handled : true
+    return mechanism
   }
 
   private buildParsingContext(hint: EventHint): ParsingContext {
@@ -136,10 +208,21 @@ export class ErrorPropertiesBuilder {
     return context
   }
 
-  public buildCoercingContext(mechanism: Mechanism, hint: EventHint, depth: number = 0): CoercingContext {
+  public buildCoercingContext(
+    mechanism: Mechanism,
+    hint: EventHint,
+    depth: number = 0,
+    seen: WeakSet<object> = new WeakSet()
+  ): CoercingContext {
     const coerce = (input: unknown, depth: number) => {
-      if (depth <= MAX_CAUSE_RECURSION) {
-        const ctx = this.buildCoercingContext(mechanism, hint, depth)
+      if (depth < MAX_EXCEPTION_ENTRIES) {
+        if ((typeof input === 'object' && input !== null) || typeof input === 'function') {
+          if (seen.has(input)) {
+            return undefined
+          }
+          seen.add(input)
+        }
+        const ctx = this.buildCoercingContext(mechanism, hint, depth, seen)
         return this.applyCoercers(input, ctx)
       } else {
         return undefined

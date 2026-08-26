@@ -87,12 +87,15 @@ export class PostHogExceptions implements Extension {
 
     buildProperties(
         input: unknown,
-        metadata?: { handled?: boolean; syntheticException?: Error }
+        metadata?: { handled?: boolean; type?: string; level?: string; source?: string; syntheticException?: Error }
     ): ErrorTracking.ErrorProperties {
         return this._errorPropertiesBuilder.buildFromUnknown(input, {
             syntheticException: metadata?.syntheticException,
+            level: metadata?.level,
+            source: metadata?.source,
             mechanism: {
                 handled: metadata?.handled,
+                type: metadata?.type,
             },
         })
     }

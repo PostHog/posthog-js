@@ -88,7 +88,12 @@ function posthogErrorHandler(posthog: PostHogBackendClient): ExpressErrorMiddlew
 
     const contextData = buildRequestContextData(posthog, req)
     const syntheticException = new Error('Synthetic exception')
-    const hint: CoreErrorTracking.EventHint = { mechanism: { type: 'middleware', handled: false }, syntheticException }
+    const hint: CoreErrorTracking.EventHint = {
+      level: 'error',
+      source: 'express.middleware',
+      mechanism: { type: 'middleware', handled: false },
+      syntheticException,
+    }
     const additionalProperties: Record<string, any> = {
       ...(contextData.sessionId !== undefined ? { $session_id: contextData.sessionId } : {}),
       ...(contextData.properties || {}),

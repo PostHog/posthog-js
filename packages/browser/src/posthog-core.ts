@@ -119,6 +119,7 @@ import {
     isBoolean,
     getEventUuid,
     minimizeFlagCalledEventProperties,
+    ErrorTracking,
 } from '@posthog/core'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
@@ -3929,11 +3930,14 @@ export class PostHog implements PostHogInterface {
         const syntheticException = new Error('PostHog syntheticException')
         const errorToProperties = this.exceptions.buildProperties(error, {
             handled: true,
+            type: 'generic',
+            level: 'error',
             syntheticException,
         })
+        const safeAdditionalProperties = ErrorTracking.sanitizeAdditionalExceptionProperties(additionalProperties)
         return this.exceptions.sendExceptionEvent({
+            ...safeAdditionalProperties,
             ...errorToProperties,
-            ...additionalProperties,
         })
     }
 

@@ -83,11 +83,15 @@ const STARTUP_UNHANDLED_REJECTION_MODE = getUnhandledRejectionMode()
 function captureUncaughtException(
   captureFn: (exception: Error, hint: CoreErrorTracking.EventHint) => void,
   error: Error,
-  origin: NodeJS.UncaughtExceptionOrigin
+  origin: NodeJS.UncaughtExceptionOrigin,
+  expectedToTerminate: boolean
 ): void {
+  const isUnhandledRejection = origin === 'unhandledRejection'
   captureFn(error, {
+    level: expectedToTerminate ? 'fatal' : 'error',
+    source: isUnhandledRejection ? 'node.process_unhandled_rejection' : 'node.process_uncaught_exception',
     mechanism: {
-      type: origin === 'unhandledRejection' ? 'onunhandledrejection' : 'onuncaughtexception',
+      type: isUnhandledRejection ? 'onunhandledrejection' : 'onuncaughtexception',
       handled: false,
     },
   })
@@ -110,7 +114,7 @@ function makeUncaughtExceptionHandler(
         )
       }).length
 
-      captureUncaughtException(captureFn, error, origin)
+      captureUncaughtException(captureFn, error, origin, userProvidedListenersCount === 0)
 
       if (!calledFatalError && userProvidedListenersCount === 0) {
         calledFatalError = true
@@ -132,7 +136,7 @@ export function addUncaughtExceptionListener(
   }
 
   if (mode === 'strict') {
-    process.on('uncaughtExceptionMonitor', (error, origin) => captureUncaughtException(captureFn, error, origin))
+    process.on('uncaughtExceptionMonitor', (error, origin) => captureUncaughtException(captureFn, error, origin, true))
     return
   }
 
@@ -153,6 +157,8 @@ export function addUnhandledRejectionListener(
 
   process.on('unhandledRejection', (reason: unknown) => {
     captureFn(reason, {
+      level: 'error',
+      source: 'node.process_unhandled_rejection',
       mechanism: {
         type: 'onunhandledrejection',
         handled: false,

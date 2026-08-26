@@ -128,6 +128,8 @@ describe('exception autocapture', () => {
     handler?.(reason, 'unhandledRejection')
 
     expect(capture).toHaveBeenCalledWith(reason, {
+      level: 'fatal',
+      source: 'node.process_unhandled_rejection',
       mechanism: {
         type: 'onunhandledrejection',
         handled: false,
@@ -187,6 +189,8 @@ describe('exception autocapture', () => {
     handler?.(reason, 'unhandledRejection')
 
     expect(capture).toHaveBeenCalledWith(reason, {
+      level: 'fatal',
+      source: 'node.process_unhandled_rejection',
       mechanism: {
         type: 'onunhandledrejection',
         handled: false,

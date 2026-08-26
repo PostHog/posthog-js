@@ -49,7 +49,7 @@ describe('Error conversion', () => {
                 {
                     type: 'InternalError',
                     value: 'but somehow still a string',
-                    mechanism: { synthetic: true, handled: true, type: 'generic' },
+                    mechanism: { synthetic: true, handled: true, type: 'generic', exception_id: 0 },
                 },
             ],
         }
@@ -65,7 +65,7 @@ describe('Error conversion', () => {
                 {
                     type: 'Error',
                     value: 'Object captured as exception with keys: foo, string',
-                    mechanism: { synthetic: true, handled: true, type: 'generic' },
+                    mechanism: { synthetic: true, handled: true, type: 'generic', exception_id: 0 },
                 },
             ],
         }
@@ -79,7 +79,7 @@ describe('Error conversion', () => {
                 {
                     type: 'MouseEvent',
                     value: 'MouseEvent captured as exception with keys: isTrusted',
-                    mechanism: { synthetic: true, handled: true, type: 'generic' },
+                    mechanism: { synthetic: true, handled: true, type: 'generic', exception_id: 0 },
                 },
             ],
         }
@@ -122,7 +122,7 @@ describe('Error conversion', () => {
                 {
                     type: 'DOMError',
                     value: 'click: foo',
-                    mechanism: { synthetic: false, handled: true, type: 'generic' },
+                    mechanism: { synthetic: false, handled: true, type: 'generic', exception_id: 0 },
                 },
             ],
         }
@@ -243,6 +243,6 @@ describe('Error conversion', () => {
         expect(errorProperties.$exception_list[0].mechanism.synthetic).toEqual(false)
         expect(errorProperties.$exception_list[0].mechanism.handled).toEqual(false)
         expect(errorProperties.$exception_list[1].mechanism.synthetic).toEqual(false)
-        expect(errorProperties.$exception_list[1].mechanism.handled).toEqual(true)
+        expect(errorProperties.$exception_list[1].mechanism.handled).toBeUndefined()
     })
 })
