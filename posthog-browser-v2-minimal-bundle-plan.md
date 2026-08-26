@@ -587,21 +587,20 @@ const posthog = await createPostHog({
 
 `projectToken` is required at the type and runtime boundaries. The package has no default singleton. The current unit suite, lint, formatting, and diff checks pass.
 
-The current buffer-only core is 19,913 B minified, 6,375 B gzip, and 5,780 B Brotli. The eager core-plus-analytics composition is 25,679 B minified, 8,591 B gzip, and 7,785 B Brotli. A real dynamic-import fixture is 20,112 B minified and 6,592 B gzip initially, and 25,845 B minified and 9,289 B gzip across all loaded chunks. Neither is a compliant baseline because byte/time queue limits, automatic `$pageview`, compression, teardown, and other required behavior remain incomplete. Compared with the preceding statically integrated sender fixture, the split removes 1,253 B minified, 926 B gzip, and 808 B Brotli from the core initial graph while adding 4,513 B minified, 1,290 B gzip, and 1,197 B Brotli to the eager total for the bounded lane, private attachment seam, capture-time copying, flush barriers, cancellation safety, and retryable ownership across delivery replacement. The Capture V1 module is absent from core and lazy-initial attribution and contributes 5,243 B minified to the eager composition. Re-evaluate CommonJS publication before release.
+The current buffer-only core is 35,264 B minified, 10,196 B gzip, and 9,253 B Brotli. The eager core-plus-analytics composition is 41,033 B minified, 12,395 B gzip, and 11,256 B Brotli. A real dynamic-import fixture is 35,463 B minified, 10,418 B gzip, and 9,448 B Brotli initially, and 41,196 B minified, 13,115 B gzip, and 11,848 B Brotli across all loaded chunks. Neither is a compliant release baseline because compression, teardown, rate limiting, general conflict-safe persistence, and other required behavior remain incomplete. P2.6 added 5,967 B minified, 1,555 B gzip, and 1,398 B Brotli to core for exact finalized-message UTF-8 measurement, a 1,000 queued-event bound, an 8 MiB active-plus-queued byte bound, one-hour lazy expiry, retry accounting and multiplicity, aggregate loss reporting, transactional admitted-event session state, and consent-safe initial `$pageview` admission. The same implementation added 5,965 B minified, 1,568 B gzip, and 1,419 B Brotli to eager composition, and 5,967 B minified, 1,554 B gzip, and 1,406 B Brotli to lazy initial and total composition. The Capture V1 module remains absent from core and lazy-initial attribution and contributes 5,251 B minified to the eager composition. Re-evaluate CommonJS publication before release.
 
 Known blockers and gaps:
 
 - Browser-next satisfies the current `@posthog/browser-common` `Client` and `KeyValueStore` type contracts. The shared conformance suite now runs against the legacy browser adapter, browser-next, and `TestClient`.
 - Browser-next type checking, declaration generation, build, and bundle measurement pass when run directly. The filtered pnpm command can still trigger unrelated workspace dependency repair in this checkout.
-- Core capture now admits finalized events to a private 1,000-event FIFO queue, drops the oldest event on count overflow, resolves `capture()` on admission, and retains queued events when `flush()` runs without delivery. A byte bound and maximum queue age remain open.
+- Core capture admits finalized events to a private FIFO lane retaining at most 1,000 queued events and 8 MiB across active and queued work. It drops the oldest queued prefix on count or reclaimable byte pressure, rejects new work when active delivery consumes the available byte bound, rejects a finalized message larger than 8 MiB without evicting valid work, and expires queue residence strictly after one hour on the next lane interaction. Session/window context is previewed during finalization but committed only after admission and authority revalidation; rejected or stale work does not create, rotate, or advance it. These package-private values are browser resource policy, not V1 server-limit claims. `capture()` resolves on admission, and `flush()` without delivery prunes expiry then retains unexpired work.
 - The separately imported `@posthog/browser/analytics` extension uses the Capture Analytics V1 endpoint, event/batch transform, required normal-Fetch headers, result classification, bounded selective retry, actively cancelable backoff, per-attempt timeout, and an aggregate elapsed budget. Explicit delivery detachment preserves sender-reported retryable events for a replacement policy with their original event identity, while opt-out and disposal remain terminal. It temporarily sends one event per request so a lazy backlog cannot create one unbounded batch; byte-aware batching and splitting remain open alongside compression, teardown delivery, and rate limiting.
 - An opt-in live check sends synthetic events through both the direct regional host and a path-preserving local reverse proxy to the real Capture V1 backend. Direct browser Fetch also passed CORS preflight, and the resulting events were query-visible. Deployed managed-proxy verification remains open.
 - The Capture V1 RFC defines browser Beacon query fallbacks, but the current deployed-source backend still requires headers and has not implemented its V1 query type.
-- The private lane isolates core admission from Capture V1 delivery. Automatic `$pageview`, byte/time queue limits, compression, teardown, and optional product lanes remain unimplemented.
-- Consent can be bypassed by extension requests and can become stale across active clients.
-- The agreed shared default/custom consent-key contract and interoperable value encoding are not yet implemented.
-- Persistence uses stale whole-record snapshots and is not safe across tabs.
-- Identity, reset, session/window, batching, retry, unload, rate-limit, and serialization behavior are incomplete.
+- The private lane isolates core admission from Capture V1 delivery. One enabled initial `$pageview` uses ordinary bounded admission after configured extensions install; navigation tracking and browser-context enrichment remain optional product behavior. Compression, teardown, rate limiting, and optional product lanes remain unimplemented.
+- Portable consent uses the shared default or verbatim custom key, interoperable reads and `0`/`1` writes, fresh operation gates, same-document and native storage observation, and optional adapter subscriptions. Deprecated prefixes, cookie/backend migration, DNT, and cookieless policy remain outside root.
+- Persistence still uses stale whole-record snapshots for identity, groups, and extension data and is not generally conflict-safe across tabs. Consent is stored separately. Session decisions use monotonic revisions and explicit reset tombstones; sequential whole-record writes preserve the newest session authority and guarded unload activity cannot restore a sibling rotation. Perfectly simultaneous equal-revision writers remain a documented last-writer limitation.
+- Identity/reset policy decisions, batching, retry, teardown, rate-limit, and serialization behavior remain incomplete. Core session/window behavior now matches the retained `posthog-js` analytics semantics without adding replay's proactive idle timer.
 - The minimal fixture can fail before a successful declaration build because it imports the package through its public self-reference.
 
 Decisions that still need an explicit answer:
@@ -612,7 +611,7 @@ Decisions that still need an explicit answer:
 - [x] **D4**: Use `__ph_opt_in_out_<project-token>` by default, preserve custom consent names through `consentPersistenceName`, and use interoperable `0`/`1` values. Keep deprecated prefix-derived keys and backend migration in a compatibility entry point.
 - [ ] **D5**: Decide whether DNT and cookieless modes are root contracts, standard-preset contracts, or unsupported alpha behavior.
 - [ ] **D6**: Decide the final ESM and CommonJS publication policy.
-- [ ] **D7**: Decide whether a new session also creates a new window ID. Legacy `posthog-js` rotates both after reset, idle timeout, and maximum length. The current browser-next state rotates only the session ID.
+- [x] **D7**: Match `posthog-js` wire semantics: creating a session after reset, idle timeout, or maximum length also creates a new window ID. Reset clears the current session/window and defers replacement until the next eligible session check. Keep replay's proactive idle-stop timer outside core; core performs activity-driven rotation, while a replay extension owns recorder shutdown and buffering.
 
 ## Implementation phases
 
@@ -629,6 +628,9 @@ Decisions that still need an explicit answer:
         - [x] Add selective partial-retry, attempt-metadata, status/transport retry, backoff, `Retry-After`, consent/disposal cancellation, and retry-exhaustion cases to the sender harness.
         - [ ] Run the sender through the future bounded analytics queue and its admission/flush lifecycle.
 - [ ] **P0.4**: Add same-origin multi-client storage interleavings.
+    - [x] Add consent revocation, queue purge, retry cancellation, identity erasure, SDK event, observable-adapter, and fresh-read cases, plus real multi-tab native storage coverage in Chromium, Firefox, and WebKit.
+    - [x] Add session activity, rotation, reset, unload, reload, copied-tab, and adoption interleavings.
+    - [ ] Add conflict-safe identity, group, extension-data, and perfectly simultaneous session interleavings.
 - [ ] **P0.5**: Add PR #4496 cookie cases to the cookie-adapter corpus.
 - [ ] **P0.6**: Add transport and storage fault injection.
 - [ ] **P0.7**: Verify Capture V1 Fetch, partial-retry, proxy-path, compression, and payload-limit behavior against a real PostHog test project.
@@ -652,13 +654,17 @@ Do not freeze more generic runtime contracts until this phase identifies the req
 ### Phase 2: Implement the compact compliant core
 
 - [ ] **P2.1**: Implement consent and legacy-denial recognition.
+    - [x] Implement the portable root key/value contract, including raw boolean/numeric compatibility reads, prior-denial ordering, fresh gates, prompt same-origin observation, queue cancellation, and storage/listener fault containment.
+    - [ ] Add legacy denial recognition to the explicit compatibility composition without importing deprecated prefixes or backend migration into root.
 - [ ] **P2.2**: Implement separate device, anonymous, and identified state.
 - [ ] **P2.3**: Implement conflict-safe local-storage persistence.
-- [ ] **P2.4**: Implement idle, maximum-length, window, and cross-tab session behavior.
+- [x] **P2.4**: Implement lazy idle/maximum-length rotation, paired session/window IDs, reset deferral, same-origin adoption, reload preservation, copied-tab separation, guarded unload activity, and no-timer behavior.
+    - [x] Preserve monotonic session/reset authority across sequential stale identity, group, and extension-data writes.
+    - [ ] Perfectly simultaneous equal-revision session writes remain deferred with general whole-record conflict safety.
 - [x] **P2.5**: Implement the Capture V1 event transform, batch envelope, required Fetch headers, and result parser.
-- [ ] **P2.6**: Implement the bounded core analytics buffer, synchronous capture admission, and core `$pageview` admission without requiring analytics delivery to be attached.
-    - [x] Add the count-bounded FIFO admission queue, oldest-event overflow, consent purge, unattached flush, and explicit delivery installation.
-    - [ ] Add the byte/time bounds and core `$pageview` admission.
+- [x] **P2.6**: Implement the bounded core analytics buffer, synchronous capture admission, and core `$pageview` admission without requiring analytics delivery to be attached.
+    - [x] Add the queued-count-bounded FIFO admission lane, oldest-queued overflow, consent purge, unattached flush, and explicit delivery installation.
+    - [x] Add exact UTF-8 byte accounting, 8 MiB total/per-message local bounds, one-hour lazy expiry, active/retry accounting, and consent-safe initial `$pageview` admission.
 - [ ] **P2.7**: Implement the separately imported Capture V1 delivery policy and install it on the private core capture lane, with batching and native compression.
     - [x] Extract Capture V1 delivery to `@posthog/browser/analytics` and keep it out of the root graph.
     - [ ] Add native compression and measured batch thresholds.
@@ -758,7 +764,7 @@ The alpha must meet these conditions:
 - [ ] **A4**: The shared browser-client and key-value-store conformance suites pass.
 - [ ] **A5**: Package import performs no storage, DOM, timer, or network work.
 - [ ] **A6**: The root imports no optional product or heavy fallback implementation.
-- [ ] **A7**: `createPostHog` enforces consent before analytics persistence or transmission.
+- [x] **A7**: `createPostHog` enforces consent before analytics persistence or transmission.
 - [ ] **A8**: Capture and extension failures do not break the host application.
 - [ ] **A9**: Stale clients cannot restore revoked consent, old identity, or an obsolete session.
 - [ ] **A10**: Extension cleanup is safe after partial setup.
