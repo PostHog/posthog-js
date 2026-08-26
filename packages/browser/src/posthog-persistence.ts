@@ -344,6 +344,10 @@ export class PostHogPersistence {
     }
 
     private _reconcileCrossTabFeatureFlagPropertiesBeforeWrite(): boolean {
+        // localStorage has no atomic read/merge/write operation. This reconciliation
+        // closes normal event and debounce windows, but two tabs that flush at the
+        // same instant can still race and leave the last complete blob on disk.
+        // Solving that requires a separate cross-tab locking or versioning protocol.
         if (!this._splitStorageEligible) {
             return false
         }
