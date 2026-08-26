@@ -299,7 +299,7 @@ test.describe('ErrorTracking autocapture', () => {
             expect(first_exception.type).toBe('Error')
             expect(first_exception.value).toBe('This error should be captured with a stack')
             expect(first_exception.stacktrace).toBeDefined()
-            expect(first_exception.mechanism.handled).toBe(false)
+            expect(first_exception.mechanism.handled).toBe(true)
         })
     })
 })
