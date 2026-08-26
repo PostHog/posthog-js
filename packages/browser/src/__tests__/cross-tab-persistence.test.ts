@@ -848,9 +848,10 @@ describe('cross-tab persistence interactions', () => {
 
             tabA.register({ distinct_id: 'new-user', [ENABLED_FEATURE_FLAGS]: { flag: true } })
             tabB.markCrossTabFeatureFlagChanges({ [ENABLED_FEATURE_FLAGS]: ['flag'] })
-            tabB.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            tabB.register({ stale_user_property: 'not-persisted', [ENABLED_FEATURE_FLAGS]: { flag: false } })
 
             expect(readStorage().distinct_id).toBe('new-user')
+            expect(readStorage().stale_user_property).toBeUndefined()
             expect(JSON.parse(window.localStorage.getItem(flagsStorageKey) || '{}')[ENABLED_FEATURE_FLAGS]).toEqual({
                 flag: true,
             })

@@ -1175,11 +1175,11 @@ export class PostHogPersistence {
         const crossTabPropertiesChanged = shouldReconcileCrossTabProperties
             ? this._reconcileCrossTabFeatureFlagPropertiesBeforeWrite()
             : false
-        if (this._crossTabFeatureFlagIdentityMismatch && !this._splitStorage) {
+        if (this._crossTabFeatureFlagIdentityMismatch) {
             return
         }
         if (this._splitStorage) {
-            this._writeNowSplit(this._crossTabFeatureFlagIdentityMismatch)
+            this._writeNowSplit()
             if (crossTabPropertiesChanged) {
                 this._crossTabFeatureFlagHandler?.()
             }
@@ -1210,7 +1210,7 @@ export class PostHogPersistence {
     // group fingerprints precisely because cookies can never carry a group entry;
     // routing one to a cookie store would make a cookie-option change silently
     // skip a needed rewrite.
-    private _writeNowSplit(skipFeatureFlagGroup: boolean = false): void {
+    private _writeNowSplit(): void {
         const { main, groups } = this._partitionProps()
         const mainWriteResult = this._writeEntry(this._storage, this._name, main, MAIN_STORAGE_SLOT)
         if (mainWriteResult) {
@@ -1225,9 +1225,6 @@ export class PostHogPersistence {
             })
         }
         for (const group of PERSISTENCE_STORAGE_GROUPS) {
-            if (skipFeatureFlagGroup && group === 'flags') {
-                continue
-            }
             const groupProps = groups[group]
             // Don't materialize an entry just to hold `{}`: skip a group that is
             // empty and has never been persisted. Once a group has held content
