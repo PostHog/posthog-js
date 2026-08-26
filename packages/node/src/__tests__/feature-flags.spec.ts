@@ -2924,6 +2924,97 @@ describe('local evaluation', () => {
   })
 })
 
+describe('local evaluation with evaluation contexts', () => {
+  let posthog: PostHog
+
+  jest.useFakeTimers()
+
+  afterEach(async () => {
+    await posthog.shutdown()
+  })
+
+  const flags = {
+    flags: [
+      {
+        id: 1,
+        name: 'Untagged Feature',
+        key: 'untagged-flag',
+        active: true,
+        evaluation_contexts: [],
+        filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+      },
+      {
+        id: 2,
+        name: 'Backend Feature',
+        key: 'backend-flag',
+        active: true,
+        evaluation_contexts: ['backend', 'api'],
+        filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+      },
+      {
+        id: 3,
+        name: 'Frontend Feature',
+        key: 'frontend-flag',
+        active: true,
+        evaluation_contexts: ['frontend'],
+        filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+      },
+    ],
+  }
+
+  it('keeps untagged and matching flags, drops non-matching flags', async () => {
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      evaluationContexts: ['backend'],
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getAllFlags('distinct-id', { onlyEvaluateLocally: true })).toEqual({
+      'untagged-flag': true,
+      'backend-flag': true,
+    })
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+  })
+
+  it('evaluates every flag when no evaluation contexts are set', async () => {
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getAllFlags('distinct-id', { onlyEvaluateLocally: true })).toEqual({
+      'untagged-flag': true,
+      'backend-flag': true,
+      'frontend-flag': true,
+    })
+  })
+
+  it('supports the deprecated evaluationEnvironments option', async () => {
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      evaluationEnvironments: ['frontend'],
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(await posthog.getAllFlags('distinct-id', { onlyEvaluateLocally: true })).toEqual({
+      'untagged-flag': true,
+      'frontend-flag': true,
+    })
+  })
+})
+
 describe('getFeatureFlag', () => {
   it('should capture $feature_flag_called when called, but not add all cached flags', async () => {
     const flags = {

@@ -66,6 +66,11 @@ type FeatureFlagsPollerOptions = {
   customHeaders?: { [key: string]: string }
   cacheProvider?: FlagDefinitionCacheProvider
   strictLocalEvaluation?: boolean
+  /**
+   * When set, the poller keeps only flags whose evaluation contexts are empty or share at
+   * least one entry with this list. Flags with no evaluation contexts are always kept.
+   */
+  evaluationContexts?: readonly string[]
 }
 
 export type FeatureFlagEvaluationContext = {
@@ -108,6 +113,7 @@ class FeatureFlagsPoller {
   private strictLocalEvaluation: boolean
   private flagDefinitionsLoadedAt?: number
   private onMinimalFlagCalledEvents?: (enabled: boolean) => void
+  private evaluationContexts?: readonly string[]
 
   constructor({
     pollingInterval,
@@ -136,6 +142,7 @@ class FeatureFlagsPoller {
     this.onMinimalFlagCalledEvents = options.onMinimalFlagCalledEvents
     this.cacheProvider = options.cacheProvider
     this.strictLocalEvaluation = options.strictLocalEvaluation ?? false
+    this.evaluationContexts = options.evaluationContexts
     void this.loadFeatureFlags()
   }
 
@@ -629,9 +636,31 @@ class FeatureFlagsPoller {
   /**
    * Updates the internal flag state with the provided flag data.
    */
+  /**
+   * Keeps only the flags this SDK instance should evaluate for its configured evaluation
+   * contexts. A flag with no evaluation contexts is always kept. A flag with contexts is
+   * kept only when it shares at least one with the configured list. Matching is exact, to
+   * mirror the remote `/flags` evaluation path. Returns all flags when no contexts are set.
+   */
+  private filterFlagsByEvaluationContexts(flags: PostHogFeatureFlag[]): PostHogFeatureFlag[] {
+    if (!this.evaluationContexts || this.evaluationContexts.length === 0) {
+      return flags
+    }
+
+    const contexts = new Set(this.evaluationContexts)
+    return flags.filter((flag) => {
+      const tags = flag.evaluation_contexts
+      if (!tags || tags.length === 0) {
+        return true
+      }
+      return tags.some((tag) => contexts.has(tag))
+    })
+  }
+
   private updateFlagState(flagData: FlagDefinitionCacheData): void {
-    this.featureFlags = flagData.flags
-    this.featureFlagsByKey = flagData.flags.reduce<Record<string, PostHogFeatureFlag>>(
+    const flags = this.filterFlagsByEvaluationContexts(flagData.flags)
+    this.featureFlags = flags
+    this.featureFlagsByKey = flags.reduce<Record<string, PostHogFeatureFlag>>(
       (acc, curr) => ((acc[curr.key] = curr), acc),
       {}
     )
