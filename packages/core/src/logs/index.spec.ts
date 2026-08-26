@@ -231,6 +231,51 @@ describe('PostHogLogs', () => {
     })
   })
 
+  describe('a clear that lands between two batches of one flush', () => {
+    it('still advances the batch assembled after the clear', async () => {
+      const sent: string[][] = []
+      let releasePersist: (() => void) | null = null
+      const mockInstance = createMockInstance({
+        _sendLogsBatch: jest.fn((payload: any) => {
+          sent.push(payload.resourceLogs[0].scopeLogs[0].logRecords.map((r: any) => r.body.stringValue))
+          return Promise.resolve({ kind: 'ok' })
+        }),
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ maxBatchRecordsPerPost: 1 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady,
+        () => new Promise<void>((resolve) => (releasePersist = resolve))
+      )
+      logs.captureLog({ body: 'a' })
+      logs.captureLog({ body: 'b' })
+
+      const flushing = logs.flush()
+      // Let batch ['a'] send and park inside the persist await between batches.
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve()
+      }
+      logs.clearQueue()
+      logs.captureLog({ body: 'c' })
+      const release = releasePersist as unknown as () => void
+      release()
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve()
+        if (releasePersist) {
+          ;(releasePersist as unknown as () => void)()
+        }
+      }
+      await flushing
+
+      expect({ sent, queue: readQueue(mockInstance).map((e) => e.record.body.stringValue) }).toEqual({
+        sent: [['a'], ['c']],
+        queue: [],
+      })
+    })
+  })
+
   describe('reset during an in-flight flush', () => {
     it('does not let an in-flight batch drop records captured after the reset', async () => {
       let releaseSend: (v: any) => void = () => {}

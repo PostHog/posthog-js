@@ -70,9 +70,9 @@ export class PostHogLogs {
   }
 
   /**
-   * Drops every queued record. A batch already in flight is retired with them, so it
-   * can neither re-send what was just purged nor advance past records captured after
-   * this call.
+   * Drops every queued record. A batch this instance has in flight is retired with
+   * them, so it can neither re-send what was just purged nor advance past records
+   * captured after this call.
    */
   clearQueue(): void {
     this._queueGeneration++
@@ -258,11 +258,14 @@ export class PostHogLogs {
       return
     }
 
-    const generation = this._queueGeneration
     const originalQueueLength = queue.length
     let sentCount = 0
 
     while (queue.length > 0 && sentCount < originalQueueLength) {
+      // Captured per batch, not per flush: a clear that lands between batches leaves
+      // the next one assembled from an already-fresh queue, so that batch advances
+      // normally instead of being retired for a purge it never held.
+      const generation = this._queueGeneration
       // Reset per batch so the advance below counts only evictions during THIS
       // batch's send. Evictions during the persist await or between iterations
       // are already reflected in the next iteration's queue read, so they must

@@ -1448,6 +1448,24 @@ describe('posthog-logs', () => {
                 expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
             })
 
+            it('should still withdraw a hint-started recorder when remote config flips to false', () => {
+                // The enable that arrives first does not adopt the recorder as its own:
+                // nothing but the hint has granted capture yet, so a later `false` still
+                // has to be able to withdraw it.
+                mockLoadExternalDependency.mockImplementation(() => {})
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalInfo = assignableWindow.console.info
+                logsFromPersisted.setup(noopClient())
+                assignableWindow.console.info('early')
+
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(false))
+
+                expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+                expect(assignableWindow.console.info).toBe(originalInfo)
+            })
+
             it('should drop the buffer and restore console when remote config disables logs', () => {
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                 const originalInfo = assignableWindow.console.info

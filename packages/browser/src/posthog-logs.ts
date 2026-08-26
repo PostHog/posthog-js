@@ -273,13 +273,14 @@ export class PostHogLogs implements Extension {
             return
         }
         this._isLogsEnabled = true
-        if (!this._isLoaded) {
+        if (!this._isLoaded && !this._isRecordingConsole) {
             // On a first visit there is no local option and no persisted hint, so `setup`
             // started no recorder and this is the first thing to enable capture. The
             // script it kicks off below does not land in the same tick, and console calls
-            // made in between would otherwise fall through the gap. Already-running
-            // recorders no-op here. The recorder keeps running until `loadIfEnabled`
-            // hands its buffer to the script.
+            // made in between would otherwise fall through the gap. A recorder already
+            // running keeps whatever started it — clearing the flag here would strand a
+            // hint-started one that a later remote `false` still has to withdraw. The
+            // recorder runs until `loadIfEnabled` hands its buffer to the script.
             this._recorderStartedByHintOnly = false
             this._startConsoleRecorder()
         }
