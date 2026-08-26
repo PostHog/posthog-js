@@ -1,5 +1,22 @@
 # posthog-js
 
+## 1.420.0
+
+### Minor Changes
+
+- [#4640](https://github.com/PostHog/posthog-js/pull/4640) [`0d2cf49`](https://github.com/PostHog/posthog-js/commit/0d2cf4941d0e6306f51666305fbdaa8669a631d2) Thanks [@robbie-c](https://github.com/robbie-c)! - Add opt-in Schema.org JSON-LD capture to session replay through `session_recording.captureJsonLd`. When enabled, the recorder emits sanitized JSON-LD as custom replay events and excludes all script elements from replay snapshots.
+  (2026-08-26)
+
+### Patch Changes
+
+- [#4635](https://github.com/PostHog/posthog-js/pull/4635) [`ab1383a`](https://github.com/PostHog/posthog-js/commit/ab1383a8471b003124161c5839c15debacbc1e28) Thanks [@robbie-c](https://github.com/robbie-c)! - Capture paste interactions with clipboard autocapture without collecting pasted text.
+  (2026-08-26)
+
+- [#4594](https://github.com/PostHog/posthog-js/pull/4594) [`1d88b4e`](https://github.com/PostHog/posthog-js/commit/1d88b4ec30637833bbd0b851843f33913b94b169) Thanks [@posthog](https://github.com/apps/posthog)! - Fix session replay playback ending when a recording contains a shadow host the browser refuses. The player now skips that one subtree instead of aborting the rebuild.
+  (2026-08-26)
+- Updated dependencies [[`ab1383a`](https://github.com/PostHog/posthog-js/commit/ab1383a8471b003124161c5839c15debacbc1e28), [`0d2cf49`](https://github.com/PostHog/posthog-js/commit/0d2cf4941d0e6306f51666305fbdaa8669a631d2)]:
+    - @posthog/types@1.406.2
+
 ## 1.419.4
 
 ### Patch Changes
