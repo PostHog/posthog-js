@@ -3059,6 +3059,108 @@ describe('local evaluation with evaluation contexts', () => {
       'backend-flag': true,
     })
   })
+
+  // A kept flag can depend on one dropped by context filtering. The remote evaluator pre-seeds
+  // filtered-out flags as false, so a dependency must resolve to a definite value here too rather
+  // than throw "Missing flag dependency" (which would strand the flag at undefined in strict mode).
+  const dependencyFlags = {
+    flags: [
+      {
+        id: 1,
+        name: 'Frontend Feature',
+        key: 'frontend-flag',
+        active: true,
+        evaluation_contexts: ['frontend'],
+        filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+      },
+      {
+        id: 2,
+        name: 'Depends on frontend flag being false',
+        key: 'depends-expects-false',
+        active: true,
+        evaluation_contexts: ['backend'],
+        filters: {
+          groups: [
+            {
+              properties: [{ key: 'frontend-flag', value: false, type: 'flag', dependency_chain: ['frontend-flag'] }],
+              rollout_percentage: 100,
+            },
+          ],
+        },
+      },
+      {
+        id: 3,
+        name: 'Depends on frontend flag being true',
+        key: 'depends-expects-true',
+        active: true,
+        evaluation_contexts: ['backend'],
+        filters: {
+          groups: [
+            {
+              properties: [{ key: 'frontend-flag', value: true, type: 'flag', dependency_chain: ['frontend-flag'] }],
+              rollout_percentage: 100,
+            },
+          ],
+        },
+      },
+    ],
+  }
+
+  it('treats a context-filtered dependency as false in strict local evaluation', async () => {
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: dependencyFlags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      evaluationContexts: ['backend'],
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    // frontend-flag is dropped, so its dependents resolve against a seeded `false` value.
+    expect(await posthog.getFeatureFlag('depends-expects-false', 'distinct-id', { onlyEvaluateLocally: true })).toBe(
+      true
+    )
+    expect(await posthog.getFeatureFlag('depends-expects-true', 'distinct-id', { onlyEvaluateLocally: true })).toBe(
+      false
+    )
+  })
+
+  it('still throws for a dependency that was never in the definitions payload', async () => {
+    const flagsMissingDep = {
+      flags: [
+        {
+          id: 1,
+          name: 'Depends on an absent flag',
+          key: 'depends-on-missing',
+          active: true,
+          evaluation_contexts: ['backend'],
+          filters: {
+            groups: [
+              {
+                properties: [{ key: 'never-sent', value: true, type: 'flag', dependency_chain: ['never-sent'] }],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flagsMissingDep }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      evaluationContexts: ['backend'],
+      strictLocalEvaluation: true,
+      ...posthogImmediateResolveOptions,
+    })
+
+    // A genuinely absent dependency stays inconclusive, so the flag resolves to undefined.
+    expect(
+      await posthog.getFeatureFlag('depends-on-missing', 'distinct-id', { onlyEvaluateLocally: true })
+    ).toBeUndefined()
+  })
 })
 
 describe('getFeatureFlag', () => {

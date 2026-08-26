@@ -114,6 +114,10 @@ class FeatureFlagsPoller {
   private flagDefinitionsLoadedAt?: number
   private onMinimalFlagCalledEvents?: (enabled: boolean) => void
   private evaluationContexts?: readonly string[]
+  // Keys present in the definitions payload but dropped by evaluation-context filtering. A kept
+  // flag may still depend on one of these; the remote evaluator pre-seeds such flags as false,
+  // so dependency evaluation mirrors that instead of throwing "Missing flag dependency".
+  private filteredOutFlagKeys: Set<string> = new Set()
 
   constructor({
     pollingInterval,
@@ -424,8 +428,15 @@ class FeatureFlagsPoller {
         // Need to evaluate this dependency first
         const depFlag = this.featureFlagsByKey[depFlagKey]
         if (!depFlag) {
-          // Missing flag dependency - cannot evaluate locally
-          throw new InconclusiveMatchError(`Missing flag dependency '${depFlagKey}' for flag '${targetFlagKey}'`)
+          if (this.filteredOutFlagKeys.has(depFlagKey)) {
+            // Dependency was dropped by evaluation-context filtering, not genuinely missing. The
+            // remote evaluator pre-seeds context-filtered flags as false so conditions like
+            // `flag_evaluates_to=false` still match; do the same here instead of throwing.
+            evaluationCache[depFlagKey] = false
+          } else {
+            // Missing flag dependency - cannot evaluate locally
+            throw new InconclusiveMatchError(`Missing flag dependency '${depFlagKey}' for flag '${targetFlagKey}'`)
+          }
         } else if (!depFlag.active) {
           // Inactive flag evaluates to false
           evaluationCache[depFlagKey] = false
@@ -667,6 +678,10 @@ class FeatureFlagsPoller {
       (acc, curr) => ((acc[curr.key] = curr), acc),
       {}
     )
+    // Remember which definitions were dropped by context filtering so dependency evaluation can
+    // treat them as false (mirroring the remote path) rather than as genuinely missing.
+    const keptKeys = new Set(flags.map((flag) => flag.key))
+    this.filteredOutFlagKeys = new Set(flagData.flags.filter((flag) => !keptKeys.has(flag.key)).map((flag) => flag.key))
     this.groupTypeMapping = flagData.groupTypeMapping
     this.cohorts = flagData.cohorts
     this.loadedSuccessfullyOnce = true
@@ -885,6 +900,7 @@ class FeatureFlagsPoller {
           )
           this.featureFlags = []
           this.featureFlagsByKey = {}
+          this.filteredOutFlagKeys = new Set()
           this.groupTypeMapping = {}
           this.cohorts = {}
           this.onMinimalFlagCalledEvents?.(false)
