@@ -1,7 +1,12 @@
 /// <reference lib="dom" />
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
-import { ENABLED_FEATURE_FLAGS, SESSION_ID, STORED_PERSON_PROPERTIES_KEY } from '../constants'
+import {
+    ENABLED_FEATURE_FLAGS,
+    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    SESSION_ID,
+    STORED_PERSON_PROPERTIES_KEY,
+} from '../constants'
 import { PostHogConfig, Properties } from '../types'
 import { resetLocalStorageSupported } from '../storage'
 import { createMockPostHog } from './helpers/posthog-instance'
@@ -615,6 +620,95 @@ describe('cross-tab persistence interactions', () => {
             expect(JSON.parse(window.localStorage.getItem(flagsStorageKey) || '{}')[ENABLED_FEATURE_FLAGS]).toEqual({
                 'early-access-flag': true,
             })
+            tabA.destroy()
+            tabB.destroy()
+        })
+
+        it('merges independent pending flag and enrollment changes', () => {
+            const config = makeConfig(HARDENED_DEBOUNCE_MS)
+            const initialFlags = { 'flag-a': false, 'flag-b': false }
+            const initialProperties = {
+                '$feature_enrollment/flag-a': false,
+                '$feature_enrollment/flag-b': false,
+            }
+            const tabA = new PostHogPersistence(config)
+            tabA.register({
+                [ENABLED_FEATURE_FLAGS]: initialFlags,
+                [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: [],
+                [STORED_PERSON_PROPERTIES_KEY]: initialProperties,
+            })
+            tabA.flush()
+            const tabB = new PostHogPersistence(config)
+
+            tabB.register({
+                [ENABLED_FEATURE_FLAGS]: { ...initialFlags, 'flag-b': true },
+                [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['flag-b'],
+                [STORED_PERSON_PROPERTIES_KEY]: {
+                    ...initialProperties,
+                    '$feature_enrollment/flag-b': true,
+                },
+            })
+            const oldValue = window.localStorage.getItem(STORAGE_KEY)
+            tabA.register({
+                [ENABLED_FEATURE_FLAGS]: { ...initialFlags, 'flag-a': true },
+                [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['flag-a'],
+                [STORED_PERSON_PROPERTIES_KEY]: {
+                    ...initialProperties,
+                    '$feature_enrollment/flag-a': true,
+                },
+            })
+            tabA.flush()
+            const siblingEventValue = window.localStorage.getItem(STORAGE_KEY)
+            tabB.flush()
+            dispatchStorageChange(STORAGE_KEY, oldValue, siblingEventValue)
+
+            expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'flag-a': true, 'flag-b': true })
+            expect(tabB.get_property(PERSISTENCE_ACTIVE_FEATURE_FLAGS)).toEqual(['flag-a', 'flag-b'])
+            expect(tabB.get_property(STORED_PERSON_PROPERTIES_KEY)).toEqual({
+                '$feature_enrollment/flag-a': true,
+                '$feature_enrollment/flag-b': true,
+            })
+            expect(readStorage()[ENABLED_FEATURE_FLAGS]).toEqual({ 'flag-a': true, 'flag-b': true })
+            tabA.destroy()
+            tabB.destroy()
+        })
+
+        it('clears a reverted pending change after a no-op write', () => {
+            const config = makeConfig(HARDENED_DEBOUNCE_MS)
+            const tabA = new PostHogPersistence(config)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            tabA.flush()
+            const tabB = new PostHogPersistence(config)
+
+            tabB.register({ [ENABLED_FEATURE_FLAGS]: { flag: true } })
+            tabB.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            tabB.flush()
+            const oldValue = window.localStorage.getItem(STORAGE_KEY)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: true } })
+            tabA.flush()
+            dispatchStorageChange(STORAGE_KEY, oldValue, window.localStorage.getItem(STORAGE_KEY))
+
+            expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ flag: true })
+            tabA.destroy()
+            tabB.destroy()
+        })
+
+        it('does not apply a stale event after a newer local write', () => {
+            const config = makeConfig(debounce)
+            const tabA = new PostHogPersistence(config)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: 'initial' } })
+            tabA.flush()
+            const tabB = new PostHogPersistence(config)
+            const oldValue = window.localStorage.getItem(STORAGE_KEY)
+
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: 'stale-sibling-value' } })
+            tabA.flush()
+            const staleEventValue = window.localStorage.getItem(STORAGE_KEY)
+            tabB.register({ [ENABLED_FEATURE_FLAGS]: { flag: 'newer-local-value' } })
+            tabB.flush()
+            dispatchStorageChange(STORAGE_KEY, oldValue, staleEventValue)
+
+            expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ flag: 'newer-local-value' })
             tabA.destroy()
             tabB.destroy()
         })

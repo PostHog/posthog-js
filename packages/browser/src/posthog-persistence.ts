@@ -115,7 +115,7 @@ const isStorageValueEqual = (left: unknown, right: unknown): boolean => {
     }
 }
 
-const parseStorageEventValue = (value: string | null): Properties => {
+const parseStorageValue = (value: string | null): Properties => {
     if (!value) {
         return {}
     }
@@ -213,9 +213,10 @@ export class PostHogPersistence {
     // A local reset or storage migration owns the next cookie snapshot. Ignore
     // sibling writes until the complete replacement has been published.
     private _cookieSyncSuppressed = false
-    // Locally changed feature-flag keys waiting for a durable write. A sibling
-    // storage event must not replace these pending values.
-    private _pendingCrossTabFeatureFlagChanges = new Set<string>()
+    // Nested feature-flag entries changed locally and waiting for a durable
+    // write. Sibling updates to other flags can still be merged while pending.
+    private _pendingCrossTabFeatureFlagChanges = new Map<string, Set<string> | true>()
+    private _configUpdateInProgress = false
     private _crossTabFeatureFlagHandler?: () => void
     private _onStorage?: (event: StorageEvent) => void
 
@@ -232,6 +233,9 @@ export class PostHogPersistence {
         this._storage = this._buildStorage(config)
         this._splitStorage = this._resolveSplitStorage(config)
         this.load()
+        // Preserve only values for which load() selected a fresher source than
+        // the current storage entry. Ordinary loaded values remain mergeable.
+        this._markLoadedCrossTabFeatureFlagChangesPending()
         if (config.debug) {
             logger.info('Persistence loaded', config['persistence'], { ...this.props })
         }
@@ -250,17 +254,21 @@ export class PostHogPersistence {
             addEventListener(window, 'beforeunload', flush as EventListener, { capture: false })
             addEventListener(window, 'pagehide', flush as EventListener, { capture: false })
             this._onStorage = (event: StorageEvent): void => {
-                if (!this._splitStorageEligible) {
+                if (
+                    !this._splitStorageEligible ||
+                    (event.storageArea && event.storageArea !== window?.localStorage) ||
+                    !event.key
+                ) {
                     return
                 }
                 if (event.key === this._name) {
-                    this._syncCrossTabFeatureFlagProperties(event, MAIN_STORAGE_SLOT)
+                    this._syncCrossTabFeatureFlagProperties(event.key, MAIN_STORAGE_SLOT)
                     return
                 }
                 if (this._splitStorage) {
                     const group = PERSISTENCE_STORAGE_GROUPS.find((group) => event.key === this._groupEntryName(group))
                     if (group) {
-                        this._syncCrossTabFeatureFlagProperties(event, group)
+                        this._syncCrossTabFeatureFlagProperties(event.key, group)
                     }
                 }
             }
@@ -285,21 +293,25 @@ export class PostHogPersistence {
         this._crossTabFeatureFlagHandler = undefined
     }
 
-    private _syncCrossTabFeatureFlagProperties(event: StorageEvent, slot: StorageSlot): void {
+    private _syncCrossTabFeatureFlagProperties(storageKey: string, slot: StorageSlot, notify: boolean = true): boolean {
         if (this._disabled) {
-            return
+            return false
         }
 
-        let previousEntry: Properties
         let nextEntry: Properties
         try {
-            previousEntry = parseStorageEventValue(event.oldValue)
-            nextEntry = parseStorageEventValue(event.newValue)
+            // A queued storage event can be older than the value currently on disk.
+            // Always reconcile against the latest snapshot instead of event.newValue.
+            nextEntry = parseStorageValue(localStore._get(storageKey))
         } catch {
-            return
+            return false
         }
 
-        const changedKeys: string[] = []
+        return this._mergeCrossTabFeatureFlagProperties(nextEntry, slot, notify)
+    }
+
+    private _mergeCrossTabFeatureFlagProperties(nextEntry: Properties, slot: StorageSlot, notify: boolean): boolean {
+        let changed = false
         CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
             const group = getPersistenceKeyPolicy(key)?.storageGroup
             if (
@@ -308,26 +320,138 @@ export class PostHogPersistence {
             ) {
                 return
             }
-            if (!(key in previousEntry) && !(key in nextEntry)) {
-                return
-            }
-            if (this._pendingCrossTabFeatureFlagChanges.has(key)) {
-                return
-            }
 
             const hasNextValue = key in nextEntry
-            if (hasNextValue === key in this.props && isStorageValueEqual(nextEntry[key], this.props[key])) {
+            const nextValue = this._mergePendingCrossTabFeatureFlagChanges(
+                key,
+                hasNextValue ? nextEntry[key] : undefined
+            )
+            const keepKey = this._pendingCrossTabFeatureFlagChanges.has(key) ? key in this.props : hasNextValue
+            if (keepKey === key in this.props && isStorageValueEqual(nextValue, this.props[key])) {
                 return
             }
-            if (hasNextValue) {
-                this.props[key] = nextEntry[key]
+            if (keepKey) {
+                this.props[key] = nextValue
             } else {
                 delete this.props[key]
             }
-            changedKeys.push(key)
+            changed = true
         })
-        if (changedKeys.length) {
+        if (changed && notify) {
             this._crossTabFeatureFlagHandler?.()
+        }
+        return changed
+    }
+
+    private _reconcileCrossTabFeatureFlagPropertiesBeforeWrite(): boolean {
+        if (!this._splitStorageEligible) {
+            return false
+        }
+
+        try {
+            const mainEntry = parseStorageValue(localStore._get(this._name))
+            let changed = this._mergeCrossTabFeatureFlagProperties(mainEntry, MAIN_STORAGE_SLOT, false)
+            if (this._splitStorage) {
+                PERSISTENCE_STORAGE_GROUPS.forEach((group) => {
+                    const groupValue = localStore._get(this._groupEntryName(group))
+                    // Before the first split write, grouped keys can still live in
+                    // the main blob. Use it as the migration fallback.
+                    const groupEntry = isNull(groupValue) ? mainEntry : parseStorageValue(groupValue)
+                    changed = this._mergeCrossTabFeatureFlagProperties(groupEntry, group, false) || changed
+                })
+            }
+            return changed
+        } catch {
+            return false
+        }
+    }
+
+    private _markAllCrossTabFeatureFlagChangesPending(): void {
+        CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => this._pendingCrossTabFeatureFlagChanges.set(key, true))
+    }
+
+    private _markLoadedCrossTabFeatureFlagChangesPending(): void {
+        if (!this._splitStorageEligible) {
+            return
+        }
+        try {
+            const mainEntry = parseStorageValue(localStore._get(this._name))
+            CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
+                const group = this._splitStorage ? getPersistenceKeyPolicy(key)?.storageGroup : undefined
+                const storedEntry = group ? parseStorageValue(localStore._get(this._groupEntryName(group))) : mainEntry
+                if (key in this.props) {
+                    this._markPendingCrossTabFeatureFlagChanges(key, storedEntry[key], this.props[key])
+                } else if (key in storedEntry) {
+                    this._pendingCrossTabFeatureFlagChanges.set(key, true)
+                }
+            })
+        } catch {}
+    }
+
+    private _mergePendingCrossTabFeatureFlagChanges(key: string, nextValue: unknown): unknown {
+        const pendingChanges = this._pendingCrossTabFeatureFlagChanges.get(key)
+        if (!pendingChanges) {
+            return nextValue
+        }
+        if (pendingChanges === true) {
+            return this.props[key]
+        }
+
+        if (key === PERSISTENCE_ACTIVE_FEATURE_FLAGS) {
+            const merged = new Set<string>(isArray(nextValue) ? nextValue : [])
+            const local = new Set<string>(isArray(this.props[key]) ? this.props[key] : [])
+            pendingChanges.forEach((flag) => (local.has(flag) ? merged.add(flag) : merged.delete(flag)))
+            return Array.from(merged)
+        }
+
+        const merged: Properties = isObject(nextValue) ? { ...nextValue } : {}
+        const local: Properties = isObject(this.props[key]) ? this.props[key] : {}
+        pendingChanges.forEach((property) => {
+            if (property in local) {
+                merged[property] = local[property]
+            } else {
+                delete merged[property]
+            }
+        })
+        return merged
+    }
+
+    private _markPendingCrossTabFeatureFlagChanges(key: string, previousValue: unknown, nextValue: unknown): void {
+        if (!isCrossTabFeatureFlagKey(key)) {
+            return
+        }
+
+        const existingPendingChanges = this._pendingCrossTabFeatureFlagChanges.get(key)
+        if (existingPendingChanges === true) {
+            return
+        }
+        const pendingChanges = existingPendingChanges || new Set<string>()
+        if (key === PERSISTENCE_ACTIVE_FEATURE_FLAGS) {
+            if ((!isUndefined(previousValue) && !isArray(previousValue)) || !isArray(nextValue)) {
+                this._pendingCrossTabFeatureFlagChanges.set(key, true)
+                return
+            }
+            const previous = new Set<string>(previousValue || [])
+            const next = new Set<string>(nextValue)
+            new Set([...previous, ...next]).forEach((flag) => {
+                if (previous.has(flag) !== next.has(flag)) {
+                    pendingChanges.add(flag)
+                }
+            })
+        } else if (isObject(nextValue)) {
+            const previous: Properties = isObject(previousValue) ? previousValue : {}
+            new Set([...Object.keys(previous), ...Object.keys(nextValue)]).forEach((property) => {
+                if (!isStorageValueEqual(previous[property], nextValue[property])) {
+                    pendingChanges.add(property)
+                }
+            })
+        } else {
+            this._pendingCrossTabFeatureFlagChanges.set(key, true)
+            return
+        }
+
+        if (pendingChanges.size) {
+            this._pendingCrossTabFeatureFlagChanges.set(key, pendingChanges)
         }
     }
 
@@ -445,9 +569,10 @@ export class PostHogPersistence {
             cookieProperties[USER_STATE] === USER_STATE_ANONYMOUS ||
             cookieProperties[USER_STATE] === USER_STATE_IDENTIFIED
 
-        const previousDistinctId = this.props[DISTINCT_ID]
-        const previousUserState = this.props[USER_STATE]
-        const nextProps = extend({}, this.props)
+        const previousProps = this.props
+        const previousDistinctId = previousProps[DISTINCT_ID]
+        const previousUserState = previousProps[USER_STATE]
+        const nextProps = extend({}, previousProps)
         const cookiePersistedProperties = [
             ...COOKIE_PERSISTED_PROPERTIES,
             ...(config.cookie_persisted_properties || []),
@@ -470,6 +595,17 @@ export class PostHogPersistence {
             }
         })
         this.props = extend(nextProps, cookieProperties)
+        CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
+            const hadPreviousValue = key in previousProps
+            const hasNextValue = key in this.props
+            if (hadPreviousValue !== hasNextValue || !isStorageValueEqual(previousProps[key], this.props[key])) {
+                if (hasNextValue) {
+                    this._markPendingCrossTabFeatureFlagChanges(key, previousProps[key], this.props[key])
+                } else {
+                    this._pendingCrossTabFeatureFlagChanges.set(key, true)
+                }
+            }
+        })
         // Older writers can omit $user_state entirely. Once that authoritative
         // omission removes a prior identified state, represent it explicitly as
         // anonymous so reset cleanup (including $groups) runs consistently.
@@ -915,14 +1051,27 @@ export class PostHogPersistence {
             this.syncCookieProperties()
         }
 
+        const crossTabPropertiesChanged =
+            !forceSuppressedSnapshot && !this._configUpdateInProgress
+                ? this._reconcileCrossTabFeatureFlagPropertiesBeforeWrite()
+                : false
         if (this._splitStorage) {
             this._writeNowSplit()
+            if (crossTabPropertiesChanged) {
+                this._crossTabFeatureFlagHandler?.()
+            }
             return
         }
 
-        if (this._writeEntry(this._storage, this._name, this.props, MAIN_STORAGE_SLOT)) {
+        const writeResult = this._writeEntry(this._storage, this._name, this.props, MAIN_STORAGE_SLOT)
+        if (writeResult) {
             this._rememberCurrentCookieProperties(this.props)
+        }
+        if (writeResult !== false) {
             this._pendingCrossTabFeatureFlagChanges.clear()
+        }
+        if (crossTabPropertiesChanged) {
+            this._crossTabFeatureFlagHandler?.()
         }
     }
 
@@ -939,8 +1088,11 @@ export class PostHogPersistence {
     // skip a needed rewrite.
     private _writeNowSplit(): void {
         const { main, groups } = this._partitionProps()
-        if (this._writeEntry(this._storage, this._name, main, MAIN_STORAGE_SLOT)) {
+        const mainWriteResult = this._writeEntry(this._storage, this._name, main, MAIN_STORAGE_SLOT)
+        if (mainWriteResult) {
             this._rememberCurrentCookieProperties(main)
+        }
+        if (mainWriteResult !== false) {
             CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
                 if (!getPersistenceKeyPolicy(key)?.storageGroup) {
                     this._pendingCrossTabFeatureFlagChanges.delete(key)
@@ -958,7 +1110,8 @@ export class PostHogPersistence {
             // `_writeEntry` marks the slot `persisted` (on `_slotState`) only
             // after a confirmed-successful `_set`, so a failed (e.g. quota) write
             // does not falsely mark the group as materialized on disk.
-            if (this._writeEntry(localStore, this._groupEntryName(group), groupProps, group)) {
+            const groupWriteResult = this._writeEntry(localStore, this._groupEntryName(group), groupProps, group)
+            if (groupWriteResult !== false) {
                 CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
                     if (getPersistenceKeyPolicy(key)?.storageGroup === group) {
                         this._pendingCrossTabFeatureFlagChanges.delete(key)
@@ -1017,7 +1170,12 @@ export class PostHogPersistence {
     // JSON.stringify can throw on BigInt / circular refs. We let the
     // underlying storage layer keep its existing try/catch behaviour
     // (log and drop) by falling through on serialization errors.
-    private _writeEntry(storage: PersistentStore, name: string, props: Properties, slot: StorageSlot): boolean {
+    private _writeEntry(
+        storage: PersistentStore,
+        name: string,
+        props: Properties,
+        slot: StorageSlot
+    ): boolean | undefined {
         const state = this._slotWriteState(slot)
         // Fast path for group slots (localStorage-only): when nothing in the
         // group changed since its last successful write, skip the JSON.stringify
@@ -1025,7 +1183,7 @@ export class PostHogPersistence {
         // it is small, changes on nearly every write, and carries cookie options
         // in its fingerprint, so it always serializes.
         if (slot !== MAIN_STORAGE_SLOT && !state.dirty && !isUndefined(state.fingerprint)) {
-            return false
+            return undefined
         }
 
         let fingerprint: string | undefined
@@ -1033,7 +1191,7 @@ export class PostHogPersistence {
             fingerprint = this._entryFingerprint(props, slot)
             if (fingerprint === state.fingerprint) {
                 state.dirty = false
-                return false
+                return undefined
             }
         } catch {
             // serialization failed (BigInt / circular ref); fall through to
@@ -1085,6 +1243,9 @@ export class PostHogPersistence {
     // would leave the retained fingerprint describing stale on-disk content and
     // skip the corrective write.
     remove({ keepGroupEntries = false }: { keepGroupEntries?: boolean } = {}): void {
+        // Any write following this removal owns its complete feature-flag
+        // snapshot and must not adopt the entry that was just removed.
+        this._markAllCrossTabFeatureFlagChangesPending()
         // Cancel any pending debounced write — the storage entry is going
         // away so there is nothing useful to flush.
         if (!isUndefined(this._pendingSaveTimer)) {
@@ -1332,6 +1493,7 @@ export class PostHogPersistence {
 
         const cookieSyncSuppressionStarted =
             !disabled && (storageMigration || cookieOptionsChanged) && this._beginCookieSyncSuppression(reEnabling)
+        this._configUpdateInProgress = true
         try {
             this._default_expiry = this._expire_days = config['cookie_expiration']
             this.set_disabled(disabled)
@@ -1359,6 +1521,7 @@ export class PostHogPersistence {
                 }
             }
         } finally {
+            this._configUpdateInProgress = false
             if (cookieSyncSuppressionStarted) {
                 // Cookie option and storage migrations clear the shared cookie.
                 // Restore one complete authoritative snapshot before another
@@ -1421,10 +1584,9 @@ export class PostHogPersistence {
     }
 
     private _setProp(prop: string, to: any): void {
+        const previousValue = this.props[prop]
         this.props[prop] = to
-        if (isCrossTabFeatureFlagKey(prop)) {
-            this._pendingCrossTabFeatureFlagChanges.add(prop)
-        }
+        this._markPendingCrossTabFeatureFlagChanges(prop, previousValue, to)
         // A volatile value change never dirties its group — it changes on every
         // remote load and would otherwise force a rewrite of the large entry per
         // load. Deletions still dirty (see _deleteProp): presence is part of the
@@ -1437,7 +1599,7 @@ export class PostHogPersistence {
     private _deleteProp(prop: string): void {
         delete this.props[prop]
         if (isCrossTabFeatureFlagKey(prop)) {
-            this._pendingCrossTabFeatureFlagChanges.add(prop)
+            this._pendingCrossTabFeatureFlagChanges.set(prop, true)
         }
         this._markGroupDirty(prop)
     }

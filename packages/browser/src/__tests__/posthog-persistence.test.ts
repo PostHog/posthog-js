@@ -1059,6 +1059,32 @@ describe('persistence', () => {
                 expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
             })
 
+            it('flag on: preserves a cookie-backed flag update while reconciling localStorage', () => {
+                const initialFlags = { 'early-access-flag': false }
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', [ENABLED_FEATURE_FLAGS]: initialFlags })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'anonymous', [ENABLED_FEATURE_FLAGS]: initialFlags })
+                )
+                const lib = new PostHogPersistence({
+                    ...makeConfig('localStorage+cookie', true),
+                    cookie_persisted_properties: [ENABLED_FEATURE_FLAGS],
+                })
+
+                // Another subdomain updates only the shared cookie. This origin's
+                // localStorage remains stale until the next local write.
+                document.cookie = encodeCookie({
+                    distinct_id: 'anonymous',
+                    [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': true },
+                })
+                lib.register({ local_only_property: 'preserved' })
+
+                expect(lib.props[ENABLED_FEATURE_FLAGS]).toEqual({ 'early-access-flag': true })
+                expect(JSON.parse(localStorage.getItem(persistenceName) || '{}')[ENABLED_FEATURE_FLAGS]).toEqual({
+                    'early-access-flag': true,
+                })
+            })
+
             it('flag on: does not mark a failed cookie mirror as observed', () => {
                 document.cookie = encodeCookie({ distinct_id: 'anonymous', $user_state: 'anonymous' })
                 localStorage.setItem(
