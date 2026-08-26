@@ -172,6 +172,7 @@ exports[`PostHog React Native event and request snapshots snapshots complete enr
           "$exception_list": [
             {
               "mechanism": {
+                "exception_id": 0,
                 "handled": true,
                 "synthetic": false,
                 "type": "generic",
