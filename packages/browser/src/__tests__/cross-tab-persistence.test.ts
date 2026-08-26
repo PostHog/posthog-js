@@ -822,6 +822,26 @@ describe('cross-tab persistence interactions', () => {
             tabB.destroy()
         })
 
+        it('adopts a split-group update while migrating flags from the main entry', () => {
+            const config = makeConfig(HARDENED_DEBOUNCE_MS, { split_storage: true })
+            const flagsStorageKey = `${STORAGE_KEY}__flags`
+            window.localStorage.setItem(
+                STORAGE_KEY,
+                JSON.stringify({ distinct_id: 'shared-user', [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            )
+            const tabB = new PostHogPersistence(config)
+
+            window.localStorage.setItem(flagsStorageKey, JSON.stringify({ [ENABLED_FEATURE_FLAGS]: { flag: true } }))
+            dispatchStorageChange(flagsStorageKey, null, window.localStorage.getItem(flagsStorageKey))
+
+            expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ flag: true })
+            tabB.flush()
+            expect(JSON.parse(window.localStorage.getItem(flagsStorageKey) || '{}')[ENABLED_FEATURE_FLAGS]).toEqual({
+                flag: true,
+            })
+            tabB.destroy()
+        })
+
         it('does not rewrite sibling main properties during a split-group flag update', () => {
             const config = makeConfig(0, { split_storage: true })
             const tabA = new PostHogPersistence(config)

@@ -451,7 +451,8 @@ export class PostHogPersistence {
             const mainEntry = parseStorageValue(localStore._get(this._name))
             CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
                 const group = this._splitStorage ? getPersistenceKeyPolicy(key)?.storageGroup : undefined
-                const storedEntry = group ? parseStorageValue(localStore._get(this._groupEntryName(group))) : mainEntry
+                const groupValue = group ? localStore._get(this._groupEntryName(group)) : null
+                const storedEntry = group && !isNull(groupValue) ? parseStorageValue(groupValue) : mainEntry
                 if (key in this.props) {
                     this._markPendingCrossTabFeatureFlagChanges(key, storedEntry[key], this.props[key])
                 } else if (key in storedEntry) {
