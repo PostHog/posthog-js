@@ -14,6 +14,8 @@ export interface StorageLike {
     getItem(key: string): string | null
     setItem(key: string, value: string): void
     removeItem(key: string): void
+    /** Observe external changes when the adapter can provide prompt notification. */
+    subscribe?(key: string, listener: () => void): Disposable
 }
 
 export interface BrowserNavigator {
@@ -43,12 +45,16 @@ export interface PostHogOptions {
     storage?: StorageLike | false
     /** Override the storage key. */
     persistenceKey?: string
+    /** Override the consent key verbatim. Defaults to `__ph_opt_in_out_<projectToken>`. */
+    consentPersistenceName?: string
     /** Fetch implementation. Pass `false` to disable network requests. */
     fetch?: BrowserFetch | false
     /** Navigator implementation. Pass `false` to disable navigator capabilities. */
     navigator?: BrowserNavigator | false
     /** Start with capture disabled until `optIn()` runs. */
     optOutByDefault?: boolean
+    /** Capture one initial `$pageview` after configured extensions install. Defaults to `true`. */
+    capturePageview?: boolean
     /** Initial person properties exposed to feature-evaluation extensions. */
     initialPersonProperties?: Record<string, unknown>
     /** Disable the default user-agent bot filter. */

@@ -2,11 +2,15 @@
 import { createRequire } from 'node:module'
 
 const guardedGlobals = [
+    'addEventListener',
     'document',
     'fetch',
     'localStorage',
     'location',
     'navigator',
+    'performance',
+    'removeEventListener',
+    'sessionStorage',
     'setInterval',
     'setTimeout',
     'window',

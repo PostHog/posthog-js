@@ -128,13 +128,13 @@ export const defaultOptOutScenario: BehaviorScenario<unknown> = {
     setup: { optOutByDefault: true },
     expected: {
         before: {
-            anonymousId: '<anonymous-id-1>',
-            distinctId: '<anonymous-id-1>',
+            anonymousId: '',
+            distinctId: '',
             isIdentified: false,
         },
         afterDeniedIdentify: {
-            anonymousId: '<anonymous-id-1>',
-            distinctId: '<anonymous-id-1>',
+            anonymousId: '',
+            distinctId: '',
             isIdentified: false,
         },
         optedOutAfterGrant: false,
@@ -294,29 +294,8 @@ export const identifiedSwitchScenario: BehaviorScenario<unknown> = {
 }
 
 export const resetScenario: BehaviorScenario<unknown> = {
-    name: 'reset clears identified state and groups and starts a new session (D7 provisional window behavior)',
+    name: 'reset clears identified state and groups and starts a new session',
     expected: {
-        identity: {
-            anonymousId: '<anonymous-id-2>',
-            distinctId: '<anonymous-id-2>',
-            isIdentified: false,
-        },
-        groups: {},
-        before: {
-            distinctId: '<anonymous-id-1>',
-            sessionId: '<session-id-1>',
-            windowId: '<window-id-1>',
-            groups: {},
-        },
-        after: {
-            distinctId: '<anonymous-id-2>',
-            sessionId: '<session-id-2>',
-            windowId: '<window-id-1>',
-            groups: {},
-        },
-        deliveredEventNames: ['before_reset', '$identify', '$groupidentify', 'after_reset'],
-    },
-    legacyExpected: {
         identity: {
             anonymousId: '<anonymous-id-2>',
             distinctId: '<anonymous-id-2>',
@@ -381,22 +360,8 @@ export const activeSessionScenario: BehaviorScenario<unknown> = {
 }
 
 export const idleSessionScenario: BehaviorScenario<unknown> = {
-    name: 'activity after the idle timeout rotates the session (D7 provisional window behavior)',
+    name: 'activity after the idle timeout rotates the session and window',
     expected: {
-        first: {
-            distinctId: '<anonymous-id-1>',
-            sessionId: '<session-id-1>',
-            windowId: '<window-id-1>',
-            groups: {},
-        },
-        second: {
-            distinctId: '<anonymous-id-1>',
-            sessionId: '<session-id-2>',
-            windowId: '<window-id-1>',
-            groups: {},
-        },
-    },
-    legacyExpected: {
         first: {
             distinctId: '<anonymous-id-1>',
             sessionId: '<session-id-1>',
@@ -535,28 +500,8 @@ export const groupIdempotenceScenario: BehaviorScenario<unknown> = {
 }
 
 export const maxLengthSessionScenario: BehaviorScenario<unknown> = {
-    name: 'continuous activity rotates a session after its maximum length (D7 provisional window behavior)',
+    name: 'continuous activity rotates a session and window after its maximum length',
     expected: {
-        first: {
-            distinctId: '<anonymous-id-1>',
-            sessionId: '<session-id-1>',
-            windowId: '<window-id-1>',
-            groups: {},
-        },
-        atLimit: {
-            distinctId: '<anonymous-id-1>',
-            sessionId: '<session-id-1>',
-            windowId: '<window-id-1>',
-            groups: {},
-        },
-        afterLimit: {
-            distinctId: '<anonymous-id-1>',
-            sessionId: '<session-id-2>',
-            windowId: '<window-id-1>',
-            groups: {},
-        },
-    },
-    legacyExpected: {
         first: {
             distinctId: '<anonymous-id-1>',
             sessionId: '<session-id-1>',

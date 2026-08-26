@@ -36,10 +36,13 @@ export type RequestRuntime = [
 export const sendRequest = async (
     runtime: RequestRuntime,
     path: string,
-    init: SendRequestInit = {}
+    init: SendRequestInit = {},
+    canContinue: () => boolean = () => true
 ): Promise<ApiResponse> => {
     let url: URL
     let body: string | undefined
+    let method: string
+    let headers: Record<string, string>
 
     try {
         if (!path.startsWith('/') || path.startsWith('//')) {
@@ -57,24 +60,42 @@ export const sendRequest = async (
         // Extensions cannot replace the host client's authentication token.
         url.searchParams.set('token', runtime[1])
         body = init.body === undefined ? undefined : JSON.stringify(init.body)
+        method = init.method ?? (body === undefined ? 'GET' : 'POST')
+        headers = { ...init.headers }
     } catch (error) {
         return createFailedResponse(error)
     }
 
-    const method = init.method ?? (body === undefined ? 'GET' : 'POST')
-    if (init.transport === 'sendBeacon' && method === 'POST' && runtime[3]?.sendBeacon) {
+    if (!canContinue()) {
+        return createFailedResponse(new Error('PostHog requests are disabled'))
+    }
+
+    const navigator = runtime[3]
+    let beacon: BrowserNavigator['sendBeacon']
+    try {
+        beacon = navigator?.sendBeacon
+    } catch {
+        // Fall back to Fetch.
+    }
+    if (init.transport === 'sendBeacon' && method === 'POST' && beacon) {
         try {
             const data =
                 body === undefined || typeof Blob !== 'function' ? body : new Blob([body], { type: 'application/json' })
-            if (runtime[3].sendBeacon(url.toString(), data)) {
-                return { statusCode: 202 }
+            if (!canContinue()) {
+                return createFailedResponse(new Error('PostHog requests are disabled'))
+            }
+            if (beacon.call(navigator, url.toString(), data)) {
+                return canContinue()
+                    ? { statusCode: 202 }
+                    : createFailedResponse(new Error('PostHog requests are disabled'))
             }
         } catch {
             // Fall back to Fetch with keepalive.
         }
     }
 
-    if (!runtime[2]) {
+    const fetch = runtime[2]
+    if (!fetch) {
         return createFailedResponse(new Error('Fetch is not available'))
     }
 
@@ -83,7 +104,6 @@ export const sendRequest = async (
         controller && init.timeoutMs ? globalThis.setTimeout(() => controller.abort(), init.timeoutMs) : undefined
 
     try {
-        const headers: Record<string, string> = { ...init.headers }
         const requestInit: RequestInit = { method, credentials: 'omit', headers }
         if (body !== undefined) {
             requestInit.body = body
@@ -95,10 +115,16 @@ export const sendRequest = async (
         if (controller) {
             requestInit.signal = controller.signal
         }
+        if (!canContinue()) {
+            return createFailedResponse(new Error('PostHog requests are disabled'))
+        }
 
-        return await toApiResponse(await runtime[2](url, requestInit))
+        const response = await toApiResponse(await fetch(url, requestInit))
+        return canContinue() ? response : createFailedResponse(new Error('PostHog requests are disabled'))
     } catch (error) {
-        return createFailedResponse(error)
+        return canContinue()
+            ? createFailedResponse(error)
+            : createFailedResponse(new Error('PostHog requests are disabled'))
     } finally {
         if (timeout !== undefined) {
             globalThis.clearTimeout(timeout)

@@ -369,6 +369,46 @@ describe('@posthog/browser extensions', () => {
         await replacementInstallation.dispose()
     })
 
+    it('purges analytics before waiting for unrelated extension disposal', async () => {
+        let releaseFetch: ((response: Response) => void) | undefined
+        let releaseExtension: (() => void) | undefined
+        const response = new Promise<Response>((resolve) => {
+            releaseFetch = resolve
+        })
+        const extensionDisposal = new Promise<void>((resolve) => {
+            releaseExtension = resolve
+        })
+        const blocker: Extension = {
+            name: 'blocking-disposal',
+            setup() {},
+            async dispose() {
+                await extensionDisposal
+            },
+        }
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            fetch: () => response,
+            extensions: [analytics(), blocker],
+        })
+        await posthog.capture('active', { value: 'a'.repeat(1_000) })
+        await Promise.resolve()
+        const lane = posthog as unknown as {
+            _analyticsLane: { _activeBytes: number; _queuedBytes: number }
+        }
+        expect(lane._analyticsLane._activeBytes).toBeGreaterThan(0)
+
+        const disposal = posthog.dispose()
+
+        expect(lane._analyticsLane._activeBytes).toBe(0)
+        expect(lane._analyticsLane._queuedBytes).toBe(0)
+        releaseExtension?.()
+        releaseFetch?.(new Response('{}', { status: 200 }))
+        await disposal
+    })
+
     it('disposes extensions in reverse installation order', async () => {
         const events: string[] = []
         const createExtension = (name: string): Extension => ({

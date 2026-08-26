@@ -40,7 +40,7 @@ export const createGeneratedIdNormalizer = (): GeneratedIdNormalizer => {
     }
     const label = (role: GeneratedIdRole, index: number): string => `<${role}-id-${index}>`
     const remember = (role: GeneratedIdRole, value: unknown): void => {
-        if (!isUndefined(value) && !isNull(value) && !ids[role].has(value)) {
+        if (!isUndefined(value) && !isNull(value) && value !== '' && !ids[role].has(value)) {
             ids[role].set(value, label(role, ids[role].size + 1))
         }
     }

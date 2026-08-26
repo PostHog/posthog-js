@@ -24,6 +24,7 @@ export const browserNextAdapter: BehaviorAdapter = {
             storage: localStorage,
             navigator: runtime.navigator,
             fetch: runtime.fetch,
+            capturePageview: false,
             optOutByDefault: setup.optOutByDefault,
             extensions: [analyticsExtension],
         })

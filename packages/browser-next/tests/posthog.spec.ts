@@ -394,7 +394,7 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
             optOutByDefault: true,
         })
-        const anonymousId = posthog.anonymousId
+        expect(posthog.anonymousId).toBe('')
 
         await posthog.identify('user-before-consent')
         await posthog.group('organization', 'group-before-consent')
@@ -403,6 +403,7 @@ describe('@posthog/browser core', () => {
         expect(storage.values.size).toBe(0)
 
         posthog.optIn()
+        const anonymousId = posthog.anonymousId
         await posthog.installExtension(analytics())
         await posthog.capture('after_consent')
         await posthog.flush()
@@ -586,7 +587,7 @@ describe('@posthog/browser core', () => {
         first.optOut()
         await first.capture('blocked')
         expect(requests).toHaveLength(0)
-        expect([...storage.values.keys()]).toEqual(['ph_ph_test_posthog_browser_v2_consent'])
+        expect([...storage.values.keys()]).toEqual(['__ph_opt_in_out_ph_test'])
 
         const second = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
@@ -1164,6 +1165,8 @@ describe('@posthog/browser core', () => {
             navigator: false,
             fetch: false,
         })
+        await first.capture('first')
+        await second.capture('second')
 
         expect(second.session.sessionId).toBe(first.session.sessionId)
         expect(second.session.windowId).not.toBe(first.session.windowId)
@@ -1180,6 +1183,7 @@ describe('@posthog/browser core', () => {
         })
         const sessions: string[] = []
         posthog.onNewSession((session) => sessions.push(session.reason))
+        await posthog.capture('before_idle')
 
         clock.mockReturnValue(now + 31 * 60 * 1000)
         await posthog.capture('after_idle')
@@ -1203,13 +1207,14 @@ describe('@posthog/browser core', () => {
         expect(posthog.anonymousId).not.toBe(deviceId)
     })
 
-    it('rotates identity and publishes reset session details', async () => {
+    it('rotates identity and publishes reset session details on the next capture', async () => {
         const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
             fetch: false,
         })
+        await posthog.capture('before_reset')
         const originalId = posthog.anonymousId
         const sessions: string[] = []
         posthog.onNewSession((session) => sessions.push(`${session.reason}:${session.sessionId}`))
@@ -1218,6 +1223,10 @@ describe('@posthog/browser core', () => {
 
         expect(posthog.anonymousId).not.toBe(originalId)
         expect(posthog.distinctId).toBe(posthog.anonymousId)
+        expect(posthog.session.sessionId).toBe('')
+        expect(sessions).toEqual([])
+
+        await posthog.capture('after_reset')
         expect(sessions).toEqual([`reset:${posthog.session.sessionId}`])
     })
 })
