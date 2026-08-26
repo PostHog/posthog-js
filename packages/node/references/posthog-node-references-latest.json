@@ -3033,6 +3033,11 @@
           "description": "Whether the flag is linked to an experiment. Absent when the server does not report it.",
           "type": "boolean",
           "name": "has_experiment"
+        },
+        {
+          "description": "Evaluation context tags set on the flag. The local evaluation poller keeps a flag only\nwhen this list is empty or shares at least one entry with the SDK's `evaluationContexts`.\nAbsent when the server does not report it.",
+          "type": "string[]",
+          "name": "evaluation_contexts"
         }
       ],
       "path": "src/types.ts"
