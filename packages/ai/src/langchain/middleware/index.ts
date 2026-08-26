@@ -1,9 +1,12 @@
-import { AIMessage, BaseMessage, ToolMessage } from '@langchain/core/messages'
+import { AIMessage, ToolMessage } from '@langchain/core/messages'
 import type { ChatGeneration, LLMResult } from '@langchain/core/outputs'
 import type { Serialized } from '@langchain/core/load/serializable'
+import { convertToOpenAITool } from '@langchain/core/utils/function_calling'
+import { extendInteropZodObject, type InteropZodObject } from '@langchain/core/utils/types'
 import { createMiddleware } from 'langchain'
 import { v7 as uuidv7 } from 'uuid'
 import { z } from 'zod'
+import { isObject } from '../../typeGuards'
 import { toContentString } from '../../utils'
 import { LangChainCallbackHandler, LangChainCallbackHandlerOptions } from '../callbacks'
 
@@ -62,15 +65,56 @@ const serializeModel = (model: unknown): Serialized => {
   return { lc: 1, type: 'constructor', id: ['langchain', 'chat_models', 'unknown'], kwargs: {} }
 }
 
+const toModelOptions = (modelSettings: unknown): Record<string, unknown> => {
+  if (!isObject(modelSettings)) {
+    return {}
+  }
+  try {
+    return { ...modelSettings }
+  } catch {
+    return {}
+  }
+}
+
 const getModelMetadata = (model: unknown, modelSettings: unknown): Record<string, unknown> | undefined => {
   if (model && typeof model === 'object' && 'getLsParams' in model && typeof model.getLsParams === 'function') {
     try {
-      return model.getLsParams(modelSettings) as Record<string, unknown>
+      return model.getLsParams(toModelOptions(modelSettings)) as Record<string, unknown>
     } catch {
       return undefined
     }
   }
   return undefined
+}
+
+const getModelInvocationParams = (model: unknown, modelSettings: unknown): Record<string, unknown> => {
+  const options = toModelOptions(modelSettings)
+  if (
+    model &&
+    typeof model === 'object' &&
+    'invocationParams' in model &&
+    typeof model.invocationParams === 'function'
+  ) {
+    try {
+      const params = model.invocationParams(options)
+      if (isObject(params)) {
+        return { ...options, ...params }
+      }
+    } catch {
+      // Preserve the bind-time settings when the model cannot expose invocation parameters.
+    }
+  }
+  return options
+}
+
+const normalizeTools = (tools: readonly unknown[]): unknown[] => {
+  return tools.map((tool) => {
+    try {
+      return convertToOpenAITool(tool as Parameters<typeof convertToOpenAITool>[0])
+    } catch {
+      return tool
+    }
+  })
 }
 
 const toLLMResult = (response: unknown): LLMResult => {
@@ -86,7 +130,10 @@ const toLLMResult = (response: unknown): LLMResult => {
 }
 
 /** Options shared with the LangChain callback integration. */
-export type PostHogLangChainMiddlewareOptions = LangChainCallbackHandlerOptions
+export type PostHogLangChainMiddlewareOptions = LangChainCallbackHandlerOptions & {
+  /** The custom Zod state schema supplied to `createAgent`, included in captured trace state. */
+  stateSchema?: InteropZodObject
+}
 
 /**
  * Creates PostHog AI observability middleware for LangChain v1 agents.
@@ -98,11 +145,15 @@ export type PostHogLangChainMiddlewareOptions = LangChainCallbackHandlerOptions
  * failure still captures the failed model or tool call, but not a root trace.
  */
 export const createPostHogMiddleware = (options: PostHogLangChainMiddlewareOptions) => {
-  const callback = new LangChainMiddlewareCallbackHandler(options)
+  const { stateSchema, ...callbackOptions } = options
+  const callback = new LangChainMiddlewareCallbackHandler(callbackOptions)
+  const middlewareStateSchema = stateSchema
+    ? extendInteropZodObject(stateSchema, postHogStateSchema.shape)
+    : postHogStateSchema
 
   return createMiddleware({
     name: 'PostHogMiddleware',
-    stateSchema: postHogStateSchema,
+    stateSchema: middlewareStateSchema,
 
     beforeAgent: (state) => {
       return {
@@ -133,12 +184,11 @@ export const createPostHogMiddleware = (options: PostHogLangChainMiddlewareOptio
     wrapModelCall: async (request, handler) => {
       const runId = uuidv7()
       const parentRunId = getRunId(request.state)
-      const messages = [request.systemMessage, ...request.messages].filter(
-        (message): message is BaseMessage => message !== undefined
-      )
+      const messages =
+        request.systemMessage.text === '' ? request.messages : [request.systemMessage, ...request.messages]
       const invocationParams = {
-        ...request.modelSettings,
-        tools: request.tools,
+        ...getModelInvocationParams(request.model, request.modelSettings),
+        tools: normalizeTools(request.tools),
       }
 
       safely(() =>

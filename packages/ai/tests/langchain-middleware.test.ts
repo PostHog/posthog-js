@@ -1,4 +1,4 @@
-import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages'
+import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages'
 import type { PostHog } from 'posthog-node'
 import { createAgent, FakeToolCallingModel, tool } from 'langchain'
 import { z } from 'zod'
@@ -16,9 +16,28 @@ const model = {
 
 const runtime = {}
 
+class MetadataModel extends FakeToolCallingModel {
+  override getLsParams(options: Parameters<FakeToolCallingModel['getLsParams']>[0]) {
+    return {
+      ...super.getLsParams(options),
+      ls_model_name: 'test-model',
+      ls_provider: 'test-provider',
+    }
+  }
+
+  override invocationParams(options?: Parameters<FakeToolCallingModel['invocationParams']>[0]) {
+    return {
+      ...super.invocationParams(options),
+      model: 'test-model',
+      temperature: 0.25,
+    }
+  }
+}
+
 const modelRequest = (state: Record<string, unknown>) => ({
   model,
   messages: [new HumanMessage('Hello')],
+  systemMessage: new SystemMessage(''),
   tools: [],
   state,
   runtime,
@@ -113,6 +132,113 @@ describe('createPostHogMiddleware', () => {
       '$ai_span',
       '$ai_generation',
       '$ai_trace',
+    ])
+  })
+
+  it('preserves custom agent state in trace input and output', async () => {
+    const stateSchema = z.object({
+      tenantId: z.string(),
+      workflow: z.string(),
+    })
+    const agent = createAgent({
+      model: new MetadataModel(),
+      tools: [],
+      stateSchema,
+      middleware: [createPostHogMiddleware({ client: mockPostHogClient, stateSchema })],
+    })
+
+    await agent.invoke({
+      messages: [new HumanMessage('Hello')],
+      tenantId: 'tenant-123',
+      workflow: 'support',
+    })
+
+    const trace = (mockPostHogClient.capture as jest.Mock).mock.calls
+      .map(([event]) => event)
+      .find(({ event }) => event === '$ai_trace')
+    expect(trace.properties).toMatchObject({
+      $ai_input_state: { tenantId: 'tenant-123', workflow: 'support' },
+      $ai_output_state: { tenantId: 'tenant-123', workflow: 'support' },
+    })
+  })
+
+  it('captures model metadata and invocation parameters from a real agent request', async () => {
+    const agent = createAgent({
+      model: new MetadataModel(),
+      tools: [],
+      middleware: [createPostHogMiddleware({ client: mockPostHogClient })],
+    })
+
+    await agent.invoke({ messages: [new HumanMessage('Hello')] })
+
+    const generation = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    expect(generation.properties).toMatchObject({
+      $ai_model: 'test-model',
+      $ai_provider: 'test-provider',
+      $ai_model_parameters: { temperature: 0.25 },
+    })
+  })
+
+  it('captures real tool definitions instead of LangChain serialization placeholders', async () => {
+    const weather = tool(async ({ city }) => `Sunny in ${city}`, {
+      name: 'weather',
+      description: 'Get the weather for a city',
+      schema: z.object({ city: z.string() }),
+    })
+    const agent = createAgent({
+      model: new MetadataModel({
+        toolCalls: [[{ id: 'weather-call', name: 'weather', args: { city: 'London' } }], []],
+      }),
+      tools: [weather],
+      middleware: [createPostHogMiddleware({ client: mockPostHogClient })],
+    })
+
+    await agent.invoke({ messages: [new HumanMessage('Hello')] })
+
+    const generation = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    expect(generation.properties.$ai_tools).toEqual([
+      {
+        type: 'function',
+        function: {
+          name: 'weather',
+          description: 'Get the weather for a city',
+          parameters: expect.objectContaining({
+            type: 'object',
+            properties: { city: { type: 'string' } },
+            required: ['city'],
+          }),
+        },
+      },
+    ])
+  })
+
+  it('captures only the messages that LangChain sends to the model', async () => {
+    const agent = createAgent({
+      model: new MetadataModel(),
+      tools: [],
+      middleware: [createPostHogMiddleware({ client: mockPostHogClient })],
+    })
+
+    await agent.invoke({ messages: [new HumanMessage('Hello')] })
+
+    const generation = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    expect(generation.properties.$ai_input).toEqual([{ role: 'user', content: 'Hello' }])
+  })
+
+  it('keeps a non-empty system message in captured model input', async () => {
+    const agent = createAgent({
+      model: new MetadataModel(),
+      tools: [],
+      systemPrompt: 'Be concise',
+      middleware: [createPostHogMiddleware({ client: mockPostHogClient })],
+    })
+
+    await agent.invoke({ messages: [new HumanMessage('Hello')] })
+
+    const generation = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    expect(generation.properties.$ai_input).toEqual([
+      { role: 'system', content: [{ type: 'text', text: 'Be concise' }] },
+      { role: 'user', content: 'Hello' },
     ])
   })
 
