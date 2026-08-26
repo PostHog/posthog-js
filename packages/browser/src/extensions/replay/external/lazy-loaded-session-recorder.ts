@@ -1687,6 +1687,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
         this._throttleHealTimer = setTimeout(() => {
             this._throttleHealTimer = undefined
+            // the recorder can flip to idle after this timer was scheduled — the same emit that
+            // reports the drop runs the idle check just afterwards — and a full snapshot taken
+            // now is discarded by the idle gate. Skip it; the wake heal restores the mirror.
+            if (this._isIdle === true) {
+                return
+            }
             // a trigger-pending buffer ships on activation, so it needs the heal as much as
             // a live recording; only sampled-out and disabled states discard the buffer,
             // making a heal there pure cost (matches the idle-wake heal's bufferCanShip)
@@ -2459,6 +2465,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
                 // don't take full snapshots while idle
                 clearInterval(this._fullSnapshotTimer)
+                // a throttle-drop heal may have been scheduled by this very emit (the drop
+                // callback runs just before this idle check); cancel it so it doesn't fire a
+                // snapshot the idle gate would only discard
+                clearTimeout(this._throttleHealTimer)
+                this._throttleHealTimer = undefined
 
                 this._tryAddCustomEvent('sessionIdle', {
                     eventTimestamp: event.timestamp,

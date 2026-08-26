@@ -1679,6 +1679,52 @@ describe('Lazy SessionRecording', () => {
                 }
             })
 
+            it('cancels a pending throttle heal timer when the recorder goes idle before it fires', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+                const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+                takeFullSnapshot.mockClear()
+
+                jest.useFakeTimers()
+                try {
+                    // a drop while awake schedules the heal
+                    lazyRecording['_onThrottledMutationsDropped'](3)
+                    expect(lazyRecording['_throttleHealTimer']).toBeDefined()
+
+                    // the recorder flips to idle before the debounce elapses — reachable because
+                    // the same emit that reports a drop runs the idle check right after
+                    emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+
+                    // the pending heal is cancelled, so no full snapshot the idle gate discards
+                    expect(lazyRecording['_throttleHealTimer']).toBeUndefined()
+                    jest.advanceTimersByTime(2000)
+                    expect(takeFullSnapshot).not.toHaveBeenCalled()
+                } finally {
+                    jest.useRealTimers()
+                }
+            })
+
+            it('skips the throttle heal snapshot when the recorder is idle at debounce time', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+                const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+                takeFullSnapshot.mockClear()
+
+                jest.useFakeTimers()
+                try {
+                    lazyRecording['_onThrottledMutationsDropped'](3)
+                    // flip to idle without going through the clear-on-idle path, so the timer
+                    // survives and the callback's own idle guard is what prevents the snapshot
+                    lazyRecording['_isIdle'] = true
+                    jest.advanceTimersByTime(2000)
+                    expect(takeFullSnapshot).not.toHaveBeenCalled()
+                } finally {
+                    jest.useRealTimers()
+                }
+            })
+
             it('rotates session if idle for (MAX_SESSION_IDLE_TIMEOUT) 30 minutes', () => {
                 const firstActivityTimestamp = startingTimestamp + 100
                 const secondActivityTimestamp = startingTimestamp + 200
