@@ -212,6 +212,26 @@ describe('PostHog React Native', () => {
       expect(mockPostHog.autocapture.mock.calls[0][1]).toHaveLength(20)
     })
 
+    it('should fall back to the default cap when maxElementsCaptured is not a number', () => {
+      const mockPostHog = { autocapture: jest.fn() } as any
+      let targetInst: any = null
+
+      for (let i = 0; i < 25; i++) {
+        targetInst = {
+          elementType: { name: `View${i}` },
+          memoizedProps: {},
+          return: targetInst,
+        }
+      }
+
+      autocaptureFromTouchEvent({ _targetInst: targetInst, nativeEvent }, mockPostHog, {
+        maxElementsCaptured: NaN,
+      })
+
+      expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
+      expect(mockPostHog.autocapture.mock.calls[0][1]).toHaveLength(20)
+    })
+
     it('should still capture on an ordinarily deep component tree', () => {
       const mockPostHog = { autocapture: jest.fn() } as any
       let targetInst: any = null

@@ -115,6 +115,8 @@ export const findOwningNode = (e: any, owners: { has(node: unknown): boolean }):
 // Fail-closed bound on the walk; unrelated to maxElementsCaptured, which caps the emitted payload.
 export const maxAncestorsTraversed = 1000
 
+const defaultMaxElementsCaptured = 20
+
 // Autocapture must never break the host app: a throw would escape into RN's touch dispatch on
 // native, or the DOM click handler on web. Matches the browser SDK, which guards its equivalent
 // document-level handler (packages/browser/src/autocapture.ts).
@@ -143,10 +145,16 @@ const captureFromEvent = (
   const {
     noCaptureProp = 'ph-no-capture',
     customLabelProp = defaultPostHogLabelProp,
-    maxElementsCaptured = 20,
+    maxElementsCaptured: maxElementsCapturedOption = defaultMaxElementsCaptured,
     ignoreLabels = [],
     propsToCapture = ['style', 'testID', 'accessibilityLabel', customLabelProp, 'children'],
   } = options
+
+  // The destructure default only covers `undefined`; a NaN would make every comparison against it
+  // false, silently uncapping the payload instead of capping it.
+  const maxElementsCaptured = Number.isFinite(maxElementsCapturedOption)
+    ? maxElementsCapturedOption
+    : defaultMaxElementsCaptured
 
   const nativeInst = e._targetInst
   const targetInst: Element | undefined = nativeInst || getFallbackTargetInstance(e)
