@@ -1,5 +1,13 @@
 # posthog-react-native
 
+## 4.66.0
+
+### Minor Changes
+
+- [#4617](https://github.com/PostHog/posthog-js/pull/4617) [`b73d15e`](https://github.com/PostHog/posthog-js/commit/b73d15e80fbbf80a078b0fa7226541dea7c1b7e2) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Add experimental event release mode to React Native builds. Set `releaseMode: 'event'` on the `posthog-react-native/expo` config plugin (or export `POSTHOG_RELEASE_MODE=event`, or set `posthog.releaseMode=event` in `android/gradle.properties`) and the build uploads its Hermes source maps, iOS dSYMs and Android R8 mappings without binding them to a release. Each exception then resolves its own release from the `$app_namespace` / `$app_version` / `$app_build` the SDK already sends, instead of inheriting the release of the symbols its frames resolved against. Use it when two releases can ship identical JavaScript or identical native code: symbol ids are derived from content, so the default `symbol-set` mode makes both releases report whichever one uploaded first. An unrecognized mode fails the build rather than falling back. The Hermes upload needs posthog-cli 0.16.0 or newer, which carries `--release-mode` on its `hermes` commands; an older one fails the build and names the upgrade.
+
+  The Android mapping upload needs the `com.posthog.android` gradle plugin 1.5.0 or newer, which reads `posthog.releaseMode`. A fresh prebuild now injects 1.5.1. A project whose `android/build.gradle` already has the classpath line keeps its version, so bump that line to 1.5.0 or newer by hand, or prebuild with `--clean`. On 1.4.0 the mapping stays bound to a release while the Hermes maps do not. (2026-08-27)
+
 ## 4.65.1
 
 ### Patch Changes
