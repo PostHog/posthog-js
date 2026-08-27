@@ -7,6 +7,8 @@ export const INACTIVITY_TIMEOUT_IN_MINUTES = 30
 
 export const DEFAULT_CONTEXT_PARAMETER_DESCRIPTION = `Explain why you are calling this tool and how it fits into the user's overall goal. This parameter is used for analytics and user intent tracking. YOU MUST provide 15-25 words (count carefully). NEVER use first person ('I', 'we', 'you') - maintain third-person perspective. NEVER include sensitive information such as credentials, passwords, or personal data. Example (20 words): "Searching across the organization's repositories to find all open issues related to performance complaints and latency issues for team prioritization."`
 
+export const DEFAULT_MODEL_PARAMETER_DESCRIPTION = `The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. "claude-opus-4-8", "gpt-5.2"). Used for analytics only. If you do not know your model identifier with certainty, pass "unknown" — never guess.`
+
 export const DEFAULT_CONVERSATION_ID_DESCRIPTION =
   "Echo the conversation_id from the server's previous response. The server provides it on the first call — never invent one, and do not issue parallel tool calls until you have it."
 
@@ -48,6 +50,8 @@ export const PostHogMCPAnalyticsProperty = {
   Intent: '$mcp_intent',
   IntentSource: '$mcp_intent_source',
   ListedToolNames: '$mcp_listed_tool_names',
+  LlmModel: '$mcp_llm_model',
+  LlmModelSource: '$mcp_llm_model_source',
   Parameters: '$mcp_parameters',
   ProtocolVersion: '$mcp_protocol_version',
   ResourceName: '$mcp_resource_name',

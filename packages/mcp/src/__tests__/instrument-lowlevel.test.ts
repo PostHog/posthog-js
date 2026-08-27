@@ -227,6 +227,40 @@ describe('Low-level Server reportMissing ownership (e2e)', () => {
     }
   })
 
+  it('captures llm_model on a virtual call handled by a pod that never advertised it', async () => {
+    const podA = await setupLowLevelServer()
+    const podB = await setupLowLevelServer()
+    try {
+      instrument(podA.server, fakePostHog(), { reportMissing: true, captureModel: true })
+      instrument(podB.server, fakePostHog(), { reportMissing: true, captureModel: true })
+      await Promise.all([podA.connect(), podB.connect()])
+
+      const { tools } = await podA.client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      const advertised = tools.find((tool) => tool.name === 'get_more_tools')
+      expect(advertised?.inputSchema?.properties?.llm_model).toBeDefined()
+
+      await podB.client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'get_more_tools',
+            arguments: { context: 'Need a database tool', llm_model: 'claude-opus-4-8' },
+          },
+        },
+        CallToolResultSchema
+      )
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const captures = eventCapture.findCapturesByEvent('$mcp_missing_capability')
+      expect(captures).toHaveLength(1)
+      expect(captures[0].properties.$mcp_llm_model).toBe('claude-opus-4-8')
+      expect(captures[0].properties.$mcp_llm_model_source).toBe('self_reported')
+      expect((captures[0].properties.$mcp_parameters as any)?.llm_model).toBeUndefined()
+    } finally {
+      await Promise.all([podA.cleanup(), podB.cleanup()])
+    }
+  })
+
   it('handles a custom-named virtual tool on a fresh instance', async () => {
     const customName = 'posthog_find_tools'
     const { server, client, connect, cleanup } = await setupLowLevelServer()

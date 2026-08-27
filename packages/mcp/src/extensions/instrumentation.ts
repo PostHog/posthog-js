@@ -17,6 +17,13 @@ import type {
 import { getAnalyticsParameterOwnership, stripOwnedAnalyticsArguments } from './analytics-parameters'
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
 import {
+  addModelParameterToTools,
+  getModelArgument,
+  getModelDescription,
+  isCaptureModelEnabled,
+  setEventModel,
+} from './model-parameters'
+import {
   addConversationIdToTools,
   type ConversationIdResolution,
   canInjectConversationIdPromptBack,
@@ -179,6 +186,7 @@ function getActiveAnalyticsParameterOwnership(
     contextOwnershipKnown: ownership !== undefined,
     context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
     conversationId: data.options.enableConversationId === true && ownership?.conversationId === true,
+    llmModel: isCaptureModelEnabled(data.options.captureModel) && ownership?.llmModel === true,
     // Deliberately read off `listed`, never the override: only the advertised
     // JSON Schema can say whether `tools/list` declared `_mcp_instructions` (an
     // override is built from the live registry, which holds Zod on the
@@ -263,6 +271,13 @@ async function prepareToolCallEvent(
 
     await applyResolvedMetadata(event, data, request, extra)
     setEventIntent(event, await resolveToolCallIntent(data, request, canCaptureContextIntent, extra))
+    // Unlike intent, the model is only read under positive ownership: with
+    // ownership unresolved, `llm_model` may be the application's own argument,
+    // and recording a customer value as the calling agent's model is worse
+    // than a gap in coverage.
+    if (ownership.llmModel) {
+      setEventModel(event, getModelArgument(request))
+    }
     return { event, requestAttribution }
   } catch (error) {
     data.logger(
@@ -494,6 +509,31 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
 }
 
 /**
+ * Ownership for the `get_more_tools` virtual tool, resolved without the
+ * `tools/list` cache.
+ *
+ * The missing-capability branch is only entered when the application does not
+ * advertise a tool by this name, so the descriptor is the SDK's own and what it
+ * declares is known statically. An instance that never served a listing — a
+ * per-request `McpServer`/`Server`, the topology in ADR-0011 — would otherwise
+ * read every injected parameter as not-ours and neither capture nor strip it.
+ *
+ * `conversation_id` still comes from the cache on purpose: resolving it here too
+ * would start minting a handle, and appending its prompt-back block, on
+ * instances that today mint none. That changes session anchoring (ADR-0004)
+ * rather than closing this gap.
+ */
+export function getVirtualToolParameterOwnership(
+  data: MCPAnalyticsData,
+  toolName: string
+): AnalyticsParameterOwnership {
+  return {
+    ...getAnalyticsParameterOwnership(getReportMissingToolDescriptor(toolName).inputSchema),
+    conversationId: data.toolAnalyticsParameterOwnership.get(toolName)?.conversationId === true,
+  }
+}
+
+/**
  * Checks the server's raw listing for a real owner of a candidate virtual tool.
  * This does not depend on a previous client request and does not call the
  * instrumented list wrapper, so it neither injects PostHog tools nor captures a
@@ -662,6 +702,17 @@ async function getTracedToolsList(
           // was cached, and its calls need ownership like any other tool's.
           cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, [virtualTool])
         }
+      }
+
+      // After the virtual tool is appended, so it advertises `llm_model` too.
+      // Its ownership was cached above from the un-injected descriptor, so the
+      // SDK already strips and captures the argument on its calls — without
+      // injecting here the agent would never be asked for one, and
+      // missing-capability reports would be the only calls with no model.
+      // `context` is deliberately not injected into it: the virtual tool
+      // declares its own, and that argument is the report itself.
+      if (isCaptureModelEnabled(data.options.captureModel)) {
+        tools = addModelParameterToTools(tools, getModelDescription(data.options.captureModel), data.logger)
       }
 
       if (data.options.enableConversationId) {
