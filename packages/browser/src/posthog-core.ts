@@ -506,6 +506,58 @@ export class PostHog implements PostHogInterface {
         )
     }
 
+    // memory, sessionStorage, and disable_persistence all drop durable identity: the distinct ID lives in
+    // memory for a single page, so each load mints a fresh one that identify() then merges onto the person,
+    // eventually pushing it past the distinct-ID display limit and hiding its events from person pages and the
+    // session tab. Warn (visibly, unlike logger.warn) unless a stable ID is supplied. Called at init and again
+    // from set_config() when persistence is switched to a volatile mode after init. Cookieless mode registers a
+    // stable sentinel instead of a new uuid, so it is excluded.
+    private _warnIfVolatileIdentityWithoutStableId(): void {
+        if (this._inCookielessMode()) {
+            return
+        }
+        const volatileIdentityPersistence =
+            this.config.persistence === 'memory' || this.config.persistence === 'sessionStorage'
+        if (!volatileIdentityPersistence && !this.config.disable_persistence) {
+            return
+        }
+        // Treat an empty, whitespace-only, or missing id as not-provided — the same rule identify() applies
+        // (_validateIdentifyId). identity_distinct_id is folded in because _init copies it into
+        // bootstrap.distinctID, so it is an equally stable source of a durable ID. These values are type-legal
+        // for JS callers, but the no-distinct-id branch then mints a fresh uuid per load (the failure this warns
+        // about), whereas isUndefined() alone stayed silent for '' and null.
+        const stableId = this.config.bootstrap?.distinctID || this.config.identity_distinct_id
+        if (stableId && !isEmptyString(stableId)) {
+            return
+        }
+        let cause: string
+        let lifetime: string
+        let fix: string
+        if (volatileIdentityPersistence) {
+            cause = `persistence is set to '${this.config.persistence}'`
+            // sessionStorage survives same-tab reloads and navigation, so it mints a fresh ID per
+            // tab/window; memory is dropped on every load.
+            lifetime =
+                this.config.persistence === 'memory' ? 'on every page load' : 'for every new browser tab or window'
+            fix =
+                "Either set persistence to 'localStorage+cookie', or keep this persistence and pass a stable ID through bootstrap.distinctID."
+        } else {
+            cause = 'persistence is disabled (disable_persistence is true)'
+            lifetime = 'on every page load'
+            fix =
+                'Either set disable_persistence to false, or keep persistence disabled and pass a stable ID through bootstrap.distinctID.'
+        }
+        // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
+        // eslint-disable-next-line no-console
+        console.warn(
+            '[PostHog.js]',
+            `${cause} but no bootstrap.distinctID was provided. ` +
+                `PostHog will mint a new distinct ID ${lifetime}, so calling identify() merges a new ` +
+                'ID onto the person each time. A person can then pass the distinct-ID limit and its events stop ' +
+                `appearing on person pages and the session tab. ${fix}`
+        )
+    }
+
     /**
      * Replace a stale cookieless sentinel distinct_id with an anonymous device id.
      *
@@ -958,48 +1010,10 @@ export class PostHog implements PostHogInterface {
             this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
         }
 
-        const volatileIdentityPersistence =
-            this.config.persistence === 'memory' || this.config.persistence === 'sessionStorage'
-        // Treat an empty, whitespace-only, or missing bootstrap.distinctID as not-provided — the same rule
-        // identify() applies (_validateIdentifyId) and the identity_distinct_id check above use. These values
-        // are type-legal for JS callers, but the bootstrap branch then mints a fresh uuid per load (the exact
-        // failure this warns about), whereas isUndefined() alone stayed silent for '' and null.
-        const noStableBootstrapId = !config.bootstrap?.distinctID || isEmptyString(config.bootstrap?.distinctID)
-        if (
-            !startInCookielessMode &&
-            (volatileIdentityPersistence || this.config.disable_persistence) &&
-            noStableBootstrapId
-        ) {
-            // memory, sessionStorage, and disable_persistence all drop durable identity, so the ID lives in
-            // memory for a single page and each load mints a fresh one that identify() then merges onto the
-            // person. Cookieless mode registers a stable sentinel instead of a new uuid, so it is excluded.
-            let cause: string
-            let lifetime: string
-            let fix: string
-            if (volatileIdentityPersistence) {
-                cause = `persistence is set to '${this.config.persistence}'`
-                // sessionStorage survives same-tab reloads and navigation, so it mints a fresh ID per
-                // tab/window; memory is dropped on every load.
-                lifetime =
-                    this.config.persistence === 'memory' ? 'on every page load' : 'for every new browser tab or window'
-                fix =
-                    "Either set persistence to 'localStorage+cookie', or keep this persistence and pass a stable ID through bootstrap.distinctID."
-            } else {
-                cause = 'persistence is disabled (disable_persistence is true)'
-                lifetime = 'on every page load'
-                fix =
-                    'Either set disable_persistence to false, or keep persistence disabled and pass a stable ID through bootstrap.distinctID.'
-            }
-            // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
-            // eslint-disable-next-line no-console
-            console.warn(
-                '[PostHog.js]',
-                `${cause} but no bootstrap.distinctID was provided. ` +
-                    `PostHog will mint a new distinct ID ${lifetime}, so calling identify() merges a new ` +
-                    'ID onto the person each time. A person can then pass the distinct-ID limit and its events stop ' +
-                    `appearing on person pages and the session tab. ${fix}`
-            )
-        }
+        // memory, sessionStorage, and disable_persistence all drop durable identity, so each load mints a
+        // fresh ID that identify() then merges onto the person. set_config() re-runs this same check when it
+        // switches persistence to one of those modes after init.
+        this._warnIfVolatileIdentityWithoutStableId()
 
         if (this.config.ip) {
             logger.warn(
@@ -3812,6 +3826,15 @@ export class PostHog implements PostHogInterface {
                           isPersistenceDisabled,
                           false
                       )
+
+            // A runtime switch to memory/sessionStorage drops durable identity the same way an init with that
+            // persistence does, so the next load mints a fresh ID that identify() then merges onto the person.
+            // The init-time check has already run, so re-run it here on a persistence change. Guarded on
+            // `this.persistence` so the init-time set_config (which runs before persistence exists) does not
+            // double-warn with the init check.
+            if (this.persistence && this.config.persistence !== oldConfig.persistence) {
+                this._warnIfVolatileIdentityWithoutStableId()
+            }
 
             const debugConfigFromLocalStorage = this._checkLocalStorageForDebug(this.config.debug)
             if (isBoolean(debugConfigFromLocalStorage)) {

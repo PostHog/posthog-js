@@ -213,7 +213,13 @@ describe('posthog.set_config', () => {
             'should keep session persistence same as persistence for $persistenceType',
             ({ persistenceType }) => {
                 const token = uuidv7()
-                const posthog = defaultPostHog().init(token, { persistence: 'cookie' }, token)!
+                // A stable bootstrap.distinctID suppresses the volatile-persistence warning that switching to
+                // sessionStorage/memory now emits, keeping this test focused on the sessionPersistence identity.
+                const posthog = defaultPostHog().init(
+                    token,
+                    { persistence: 'cookie', bootstrap: { distinctID: token } },
+                    token
+                )!
 
                 posthog.set_config({ persistence: persistenceType })
 

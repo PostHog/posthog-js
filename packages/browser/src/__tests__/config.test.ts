@@ -75,6 +75,58 @@ describe('config', () => {
             new PostHog()._init('test-token')
             expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         })
+
+        // Count only the distinct-ID warnings so unrelated console.warn calls (deprecations, etc.) don't skew it.
+        const bootstrapWarnings = () =>
+            warnSpy.mock.calls.filter((args) => typeof args[1] === 'string' && args[1].includes('bootstrap.distinctID'))
+
+        // _init() calls set_config() internally before persistence exists; that internal call must not
+        // re-trigger the warning on top of the init check.
+        it('warns exactly once at init for volatile persistence', () => {
+            new PostHog()._init('test-token', { persistence: 'memory' })
+            expect(bootstrapWarnings()).toHaveLength(1)
+        })
+
+        // set_config() can move persistence to a volatile mode after init. The migration drops durable
+        // identity, so the next load mints a fresh ID — the same failure the init check warns about, which by
+        // then has already run and cannot see the switch.
+        it.each(['memory', 'sessionStorage'] as const)(
+            "warns once when set_config switches persistence to '%s' after init",
+            (persistence) => {
+                const posthog = new PostHog()
+                posthog._init('test-token', { persistence: 'localStorage+cookie' })
+                warnSpy.mockClear()
+
+                posthog.set_config({ persistence })
+
+                expect(bootstrapWarnings()).toHaveLength(1)
+            }
+        )
+
+        it('does not warn when set_config switches persistence but a bootstrap.distinctID is set', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                persistence: 'localStorage+cookie',
+                bootstrap: { distinctID: 'stable-id' },
+            })
+            warnSpy.mockClear()
+
+            posthog.set_config({ persistence: 'memory' })
+
+            expect(bootstrapWarnings()).toHaveLength(0)
+        })
+
+        // Only a persistence change re-runs the check, so repeatedly calling set_config for other reasons
+        // under volatile persistence must not re-warn.
+        it('does not re-warn when set_config changes an unrelated option under volatile persistence', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { persistence: 'memory' })
+            warnSpy.mockClear()
+
+            posthog.set_config({ debug: false })
+
+            expect(bootstrapWarnings()).toHaveLength(0)
+        })
     })
 
     describe('compatibilityDate', () => {
