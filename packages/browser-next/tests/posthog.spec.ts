@@ -816,6 +816,7 @@ describe('@posthog/browser core', () => {
             apiHost: 'https://api.example.com/',
             flagsHost: 'https://flags.example.com//',
             assetsHost: 'https://assets.example.com///',
+            capturePageview: false,
             storage: false,
             navigator: false,
             fetch: createFetch(requests),
@@ -823,10 +824,13 @@ describe('@posthog/browser core', () => {
 
         await posthog.sendRequest('/decide/', { target: 'flags' })
         await posthog.sendRequest('/static/extension.js', { target: 'assets' })
+        await posthog.capture('host-normalization')
+        await posthog.flush()
 
-        expect(requests.map(({ url }) => url.origin)).toEqual([
-            'https://flags.example.com',
-            'https://assets.example.com',
+        expect(requests.map(({ url }) => url.toString())).toEqual([
+            'https://flags.example.com/decide/?token=ph_test',
+            'https://assets.example.com/static/extension.js?token=ph_test',
+            'https://api.example.com/i/v1/analytics/events',
         ])
     })
 
