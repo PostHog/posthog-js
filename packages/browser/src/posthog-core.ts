@@ -475,6 +475,9 @@ export class PostHog implements PostHogInterface {
 
     private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
         if (oldExt) {
+            // the replaced instance can still hold capture hooks and DOM listeners, which would
+            // otherwise stay subscribed for the life of the page alongside the new instance's
+            oldExt.dispose?.()
             const idx = this._extensions.indexOf(oldExt)
             if (idx !== -1) {
                 this._extensions.splice(idx, 1)
@@ -4374,8 +4377,10 @@ export class PostHog implements PostHogInterface {
                 distinct_id: COOKIELESS_SENTINEL_VALUE,
                 $device_id: null,
             })
-            // tear down rrweb observers before sessionManager goes away — late events would throw
-            this.sessionRecording?.stopRecording()
+            // tear down rrweb observers before sessionManager goes away — late events would throw.
+            // dispose rather than stopRecording: the instance is dropped here, so its capture hooks
+            // and DOM listeners have to go with it
+            this.sessionRecording?.dispose()
             this.sessionRecording = undefined
             this.sessionManager?.destroy()
             this.pageViewManager?.destroy()

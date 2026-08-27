@@ -249,6 +249,37 @@ describe('consentManager', () => {
             }
         )
 
+        it('does not leak a session recording listener per on_reject consent flip', async () => {
+            // each flip replaces or drops the session recording instance, but the listeners it
+            // registered in its constructor outlive it unless dispose() runs
+            let added = 0
+            let removed = 0
+            const originalAdd = document.addEventListener.bind(document)
+            const originalRemove = document.removeEventListener.bind(document)
+            document.addEventListener = ((type: string, listener: any, options: any) => {
+                if (type === 'visibilitychange') added++
+                return originalAdd(type, listener, options)
+            }) as typeof document.addEventListener
+            document.removeEventListener = ((type: string, listener: any, options: any) => {
+                if (type === 'visibilitychange') removed++
+                return originalRemove(type, listener, options)
+            }) as typeof document.removeEventListener
+
+            try {
+                posthog = await createPostHog({ cookieless_mode: 'on_reject' })
+                for (let i = 0; i < 3; i++) {
+                    posthog.opt_out_capturing()
+                    posthog.opt_in_capturing({ captureEventName: false })
+                }
+
+                // only the live recorder's listener remains, not one per flip
+                expect(added - removed).toEqual(1)
+            } finally {
+                document.addEventListener = originalAdd
+                document.removeEventListener = originalRemove
+            }
+        })
+
         it('keeps capturing when reset() is called before opting in', async () => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
             posthog = await createPostHog({ opt_out_capturing_by_default: true, before_send: beforeSendMock })

@@ -4426,6 +4426,85 @@ describe('Lazy SessionRecording', () => {
                 expect(sessionRecording.status).toBe('active')
             })
 
+            describe('the fresh-start interaction hold', () => {
+                const activateFromPreLoadPageview = () => {
+                    const completeScriptLoad = deferScriptLoad()
+                    sessionRecording.onRemoteConfig(
+                        makeFlagsResponse({
+                            sessionRecording: {
+                                endpoint: '/s/',
+                                eventTriggers: ['$pageview'],
+                            },
+                        })
+                    )
+                    simpleEventEmitter.emit('eventCaptured', {
+                        event: '$pageview',
+                        properties: currentSessionProperties(),
+                    })
+                    completeScriptLoad()
+                    return sessionRecording['_lazyLoadedSessionRecording']
+                }
+
+                it('is not released by a replayed pre-load event, so an untouched tab does not ship', () => {
+                    jest.useFakeTimers()
+                    const lazyRecorder = activateFromPreLoadPageview()
+
+                    // the trigger still matched and scoped the session
+                    expect(sessionRecording.status).toBe('active')
+                    // but the $pageview fired before the recorder existed, so it is not interaction
+                    // evidence: a prefetched or background tab must not become a billable recording
+                    expect(lazyRecorder['_holdFlushUntilInteraction']).toEqual(true)
+                    ;(posthog.capture as Mock).mockClear()
+
+                    const snapshot = createIncrementalMutationEvent()
+                    _emit(snapshot)
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                    expect(lazyRecorder['_buffer'].data).toContain(snapshot)
+                })
+
+                it('is released by a real interaction after the replayed pre-load event', () => {
+                    jest.useFakeTimers()
+                    const lazyRecorder = activateFromPreLoadPageview()
+                    ;(posthog.capture as Mock).mockClear()
+
+                    const snapshot = createIncrementalMutationEvent()
+                    _emit(snapshot)
+                    _emit(createIncrementalMouseEvent())
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                    expect(lazyRecorder['_holdFlushUntilInteraction']).toEqual(false)
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({ $snapshot_data: expect.arrayContaining([snapshot]) }),
+                        expect.any(Object)
+                    )
+                })
+
+                it('is still released by an event trigger that matches after the recorder started', () => {
+                    jest.useFakeTimers()
+                    sessionRecording.onRemoteConfig(
+                        makeFlagsResponse({
+                            sessionRecording: {
+                                endpoint: '/s/',
+                                eventTriggers: ['$pageview'],
+                            },
+                        })
+                    )
+                    const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                    expect(lazyRecorder['_holdFlushUntilInteraction']).toEqual(true)
+
+                    // a live match is real evidence the session matters, so it still releases
+                    simpleEventEmitter.emit('eventCaptured', {
+                        event: '$pageview',
+                        properties: currentSessionProperties(),
+                    })
+
+                    expect(lazyRecorder['_holdFlushUntilInteraction']).toEqual(false)
+                })
+            })
+
             it('does not activate when pre-load events do not match the trigger', () => {
                 const completeScriptLoad = deferScriptLoad()
 

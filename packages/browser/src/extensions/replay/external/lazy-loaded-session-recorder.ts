@@ -504,6 +504,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
     private _isIdle: boolean | 'unknown' = 'unknown'
+    // true only while replaying events captured before the recorder loaded, so trigger
+    // activation can scope the session without treating them as interaction evidence
+    private _isReplayingPreStartEvents = false
     // events rrweb observed while confirmed idle are dropped, not buffered, so the
     // player's mirror no longer matches the live DOM; when > 0 only a fresh full
     // snapshot stops later incrementals referencing state the player never saw.
@@ -1026,7 +1029,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Must run before the pending-trigger short-circuit below: with triggerMatchType
         // 'any' a URL trigger may already have satisfied the combined status, making this
         // activation a no-op — the hold release must still happen.
-        if (triggerType === 'event') {
+        //
+        // Replayed pre-start events are the exception: they prove the trigger matched, so the
+        // session is still scoped and activated below, but they were captured before the recorder
+        // existed and so are not interaction evidence. Releasing on them would ship a billable
+        // recording for a prefetched or background tab whose only event is the initial $pageview.
+        // A later real interaction releases the hold through the usual path.
+        if (triggerType === 'event' && !this._isReplayingPreStartEvents) {
             this._releaseHoldAndFlush()
         }
 
@@ -1316,8 +1325,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // events captured while this chunk was loading never reached the live listener above, so a trigger
         // on the initial $pageview could otherwise never match; replay them now that the recorder is running
         if (eventTriggerCallback) {
-            for (const event of preStartEvents) {
-                eventTriggerCallback(event)
+            this._isReplayingPreStartEvents = true
+            try {
+                for (const event of preStartEvents) {
+                    eventTriggerCallback(event)
+                }
+            } finally {
+                this._isReplayingPreStartEvents = false
             }
         }
     }
