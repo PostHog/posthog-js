@@ -224,14 +224,12 @@ interface BrowserClient {
     group(type, key, properties?): Promise<void>
     reset(): void
     flush(): Promise<void>
-    installExtension(extension): Promise<Disposable>
-    loadExtension(loader): Promise<Disposable>
     getExtension(name): Extension | undefined
     dispose(): Promise<void>
 }
 ```
 
-`capture()` will resolve after the core queue accepts the event. `flush()` will wait for currently attached delivery work; it must not wait indefinitely for an analytics delivery capability that may never load. The core queues an enabled initial `$pageview` through the same admission path without waiting for remote configuration or delivery attachment.
+`capture()` will resolve after the core queue accepts the event. On the default entrypoint, the first admitted event starts one shared analytics dynamic import; `flush()` waits for an in-progress load and explicitly retries a failed first load once without discarding retained work. `analytics: false` and `@posthog/browser/core` retain manual buffer-only behavior. The core queues an enabled initial `$pageview` through the same admission path without waiting for remote configuration; on the default entrypoint that admission can trigger analytics loading.
 
 ## Capture pipeline
 
@@ -309,7 +307,7 @@ A lane is the smallest delivery unit with independent failure and backpressure b
 
 Do not put events with different endpoints, wire shapes, payload limits, or retry semantics in one batch. A failure in one lane must not requeue or resend events already accepted in another lane.
 
-Keep the framework small. A browser lane is a policy bundle, not a worker pool or general scheduling framework. The root owns analytics admission and one bounded in-memory analytics buffer, but it must not statically import the analytics delivery implementation. The composition root retains that first generic lane handle so Capture V1 delivery can attach eagerly or lazily and atomically drain the buffer without changing event UUIDs, timestamps, identity, session, ordering, or consent decisions. Optional products install their lanes from explicit entry points; the root must not contain a catalog or implementation for AI, replay, logs, metrics, or traces.
+Keep the framework small. A browser lane is a policy bundle, not a worker pool or general scheduling framework. The root owns analytics admission and one bounded in-memory analytics buffer, but it must not statically import the analytics delivery implementation. The default entrypoint may reference that implementation only through one literal dynamic import; the core entrypoint must not reference it. The composition root retains that first generic lane handle so Capture V1 delivery can attach eagerly or lazily and atomically drain the buffer without changing event UUIDs, timestamps, identity, session, ordering, or consent decisions. Optional products install their lanes from explicit entry points; the root must not contain a catalog or implementation for AI, replay, logs, metrics, or traces.
 
 Use an explicit product API to select a non-analytics lane. Do not infer the lane from an event-name prefix, and do not add a caller-selected lane string to general `capture()`. For example, an optional AI module can own `captureAi()` and a private AI lane sink. A call to `capture('$ai_generation')` still uses the analytics lane. A call to `captureAi({ event: '$ai_generation', ... })` uses the AI lane because the API selected it. The method can warn about an unexpected event name, but the name must not override the selected lane.
 
@@ -330,7 +328,7 @@ interface LaneSink<E> {
 }
 
 interface Lane<E> extends LaneSink<E> {
-    install(delivery: LaneDelivery<E>): Disposable
+    attach(delivery: LaneDelivery<E>): void
     flush(): Promise<void>
     dispose(): Promise<void>
 }
@@ -342,7 +340,7 @@ interface LaneCoordinator {
 }
 ```
 
-The composition root creates the first generic lane and privately gives its sink to general `capture()` and core-generated `$pageview`. Installing Capture V1 delivery on that retained lane handle transfers buffered work while preserving ordering; no coordinator exposes a named analytics property or understands endpoints. Optional products create their lanes only when imported and receive only their own typed sink. Lane creation and installation are internal extension-host capabilities, not a public arbitrary-endpoint registry or caller-selected lane string. Omit a delivery or product import and its implementation must be absent from the bundle.
+The composition root creates the first generic lane and privately gives its sink to general `capture()` and core-generated `$pageview`. Installing Capture V1 delivery on that retained lane handle transfers buffered work while preserving ordering; no coordinator exposes a public analytics lane or understands endpoints. The default root dynamically selects first-party analytics after admission, while a preinstalled marked analytics extension already satisfies delivery. Optional products create their lanes only when imported and receive only their own typed sink. Lane creation and installation are internal extension-host capabilities, not a public arbitrary-endpoint registry or caller-selected lane string. Omit a product import and its implementation must be absent; use the core entrypoint when analytics must also have no chunk reference.
 
 The root implementation will use:
 
@@ -357,12 +355,12 @@ The optional analytics delivery capability will use normal Fetch, Capture V1 bat
 
 Normal and teardown delivery have different guarantees:
 
-- `flush()` flushes every active lane with its normal transport. For the analytics lane, this is Fetch. It can observe the V1 results map, apply timeouts, honor rate limits, and partially retry eligible failures.
-- `flush({ unload: true })` asks each lane to hand off its pending batches synchronously. A page lifecycle handler cannot wait for asynchronous delivery work.
+- `flush()` flushes every active lane with its normal transport. For the analytics lane, this is Fetch. It bypasses configurable `flushAt` and `flushInterval` thresholds, observes the V1 results map, applies timeouts, honors rate limits, and partially retries eligible failures. Retry-exhausted messages remain bounded and queued after that flush drive resolves.
+- An internal page-lifecycle hook asks each lane to hand off its pending batches synchronously. A page lifecycle handler cannot wait for asynchronous delivery work.
 - The analytics lane prefers `navigator.sendBeacon()` for teardown only after the Capture V1 header-less contract is available on the target ingestion path. Encode the required token, SDK metadata, attempt, request ID, request timestamp, and compression metadata through the approved V1 Beacon query parameters. A `true` result means only that the browser accepted the handoff. It is not a delivery response.
-- If the V1 Beacon contract is unavailable, or Beacon is unavailable, throws, or rejects a batch, attempt Fetch with `keepalive: true` and the normal V1 headers immediately. Do not send a knowingly invalid header-less V1 request.
+- If the V1 Beacon contract is unavailable, use Fetch with `keepalive: true` and the normal V1 headers immediately. After Beacon support exists, an unavailable or throwing Beacon can fall back within the remaining aggregate budget; a `false` Beacon result must not blindly retry through keepalive because both transports share the same browser quota. Do not send a knowingly invalid header-less V1 request.
 - Beacon sends do not parse per-event results, use response-based retries, or start new retry timers. Pending retries get one best-effort teardown attempt using their existing logical request metadata where the protocol requires it.
-- Enforce one aggregate teardown-byte budget across Beacon and keepalive Fetch attempts. The browser's shared in-flight keepalive quota is not reset for each split request. Prioritize smaller analytics batches, attempt only work that fits the remaining budget, and make local overflow observable. Splitting can help an individual batch fit but cannot increase the total quota.
+- Enforce one aggregate teardown-byte budget across Beacon and keepalive Fetch attempts. The browser's shared in-flight keepalive quota is not reset for each split request. Walk analytics work FIFO, stop when the next candidate cannot fit the remaining budget, and make the unattempted suffix observable as local overflow. Splitting can help an individual batch fit but cannot increase the total quota.
 - Do not start asynchronous `CompressionStream` work during teardown. Use an already encoded body or a synchronous, server-approved representation.
 - Use `pagehide` as the primary teardown signal and `unload` only as a compatibility fallback. Register the listener during client initialization, not module import, and remove it during disposal.
 - Direct `request()` calls use Fetch unless the caller explicitly requests Beacon. Beacon is valid only for requests whose method, body, authentication, metadata, and response needs are compatible with its fire-and-forget POST semantics.
@@ -416,16 +414,14 @@ Dispose extensions in reverse installation order.
 
 The root must not contain a list of extension implementations.
 
-Callers can load an extension explicitly:
+Callers can select a dynamically imported extension before client creation:
 
 ```ts
-await posthog.loadExtension(async () => {
-    const module = await import('@posthog/browser/extensions/feature-flags')
-    return module.featureFlags()
-})
+const { featureFlags } = await import('@posthog/browser/extensions/feature-flags')
+const posthog = await createPostHog({ projectToken, extensions: [featureFlags()] })
 ```
 
-The `standard` entrypoint can provide a loader map. Each loader must create a separate dynamic chunk.
+Product-specific package APIs and the `standard` entrypoint can load internal client-owned extensions. Each literal loader must create a separate dynamic chunk; runtime installation, removal, and replacement are not public extension contracts.
 
 ## Standard entrypoint
 
@@ -587,14 +583,14 @@ const posthog = await createPostHog({
 
 `projectToken` is required at the type and runtime boundaries. The package has no default singleton. The current unit suite, lint, formatting, and diff checks pass.
 
-The current buffer-only core is 35,264 B minified, 10,196 B gzip, and 9,253 B Brotli. The eager core-plus-analytics composition is 44,516 B minified, 13,592 B gzip, and 12,342 B Brotli. A real dynamic-import fixture is 35,463 B minified, 10,417 B gzip, and 9,449 B Brotli initially, and 44,646 B minified, 14,433 B gzip, and 13,081 B Brotli across all loaded chunks. Neither is a compliant release baseline because teardown, rate limiting, general conflict-safe persistence, and other required behavior remain incomplete. P2.6 added 5,967 B minified, 1,555 B gzip, and 1,398 B Brotli to core for exact finalized-message UTF-8 measurement, a 1,000 queued-event bound, an 8 MiB active-plus-queued byte bound, one-hour lazy expiry, retry accounting and multiplicity, aggregate loss reporting, transactional admitted-event session state, and consent-safe initial `$pageview` admission. The same implementation added 5,965 B minified, 1,568 B gzip, and 1,419 B Brotli to eager composition, and 5,967 B minified, 1,554 B gzip, and 1,406 B Brotli to lazy initial and total composition. P2.7 left the core and lazy-initial minified graphs unchanged while adding 3,483 B minified, 1,197 B gzip, and 1,086 B Brotli to eager composition and 3,450 B minified, 1,318 B gzip, and 1,233 B Brotli to lazy total. Its Capture V1 attribution is 8,531 B minified in eager composition; the ±1 B compressed lazy-initial variation comes from the changed dynamic-chunk hash, with unchanged modules and minified bytes. Re-evaluate CommonJS publication before release.
+The current buffer-only core is 35,264 B minified, 10,196 B gzip, and 9,253 B Brotli. The eager core-plus-analytics composition is 44,516 B minified, 13,592 B gzip, and 12,342 B Brotli. A real dynamic-import fixture is 35,463 B minified, 10,417 B gzip, and 9,449 B Brotli initially, and 44,646 B minified, 14,433 B gzip, and 13,081 B Brotli across all loaded chunks. Neither is a compliant release baseline because teardown, rate limiting, general conflict-safe persistence, and other required behavior remain incomplete. P2.6 added 5,967 B minified, 1,555 B gzip, and 1,398 B Brotli to core for exact finalized-message UTF-8 measurement, a 1,000 queued-event bound, an 8 MiB active-plus-queued byte bound, one-hour lazy expiry, retry accounting and multiplicity, aggregate loss reporting, transactional admitted-event session state, and consent-safe initial `$pageview` admission. The same implementation added 5,965 B minified, 1,568 B gzip, and 1,419 B Brotli to eager composition, and 5,967 B minified, 1,554 B gzip, and 1,406 B Brotli to lazy initial and total composition. P2.7 left the core and lazy-initial minified graphs unchanged while adding 3,483 B minified, 1,197 B gzip, and 1,086 B Brotli to eager composition and 3,450 B minified, 1,318 B gzip, and 1,233 B Brotli to lazy total. Its Capture V1 attribution is 8,531 B minified in eager composition; the ±1 B compressed lazy-initial variation comes from the changed dynamic-chunk hash, with unchanged modules and minified bytes. P2.8 measures 41,421 B minified / 11,764 B gzip / 10,630 B Brotli for core, 53,244 B / 15,906 B / 14,379 B for eager analytics, 41,620 B / 11,988 B / 10,832 B for lazy initial, and 53,366 B / 16,843 B / 15,219 B for lazy total. Relative to P2.7, that is +6,157 B / +1,568 B / +1,377 B in core, +8,728 B / +2,314 B / +2,037 B eager, +6,157 B / +1,571 B / +1,383 B lazy initial, and +8,720 B / +2,410 B / +2,138 B lazy total. The lazy-initial attribution contains generic lane scheduling, shutdown, and the client limiter but no Capture V1 sender or analytics lifecycle module. Default automatic analytics loading now measures 43,812 B minified / 12,326 B gzip / 11,135 B Brotli for the manual core entry, 56,383 B / 16,926 B / 15,228 B for eager explicit analytics, 44,297 B / 12,658 B / 11,433 B for the default lazy initial chunk, and 56,010 B / 17,508 B / 15,810 B across its loaded chunks. Relative to the completed P2.8 measurements, automatic coordination adds 2,391 B / 562 B / 505 B to manual core, 3,139 B / 1,020 B / 849 B eager, 2,677 B / 670 B / 601 B to lazy initial, and 2,644 B / 665 B / 591 B to lazy total; the lazy initial and core graphs still contain no Capture V1 sender or analytics lifecycle implementation. Re-evaluate CommonJS publication before release.
 
 Known blockers and gaps:
 
 - Browser-next satisfies the current `@posthog/browser-common` `Client` and `KeyValueStore` type contracts. The shared conformance suite now runs against the legacy browser adapter, browser-next, and `TestClient`.
 - Browser-next type checking, declaration generation, build, and bundle measurement pass when run directly. The filtered pnpm command can still trigger unrelated workspace dependency repair in this checkout.
 - Core capture admits finalized events to a private FIFO lane retaining at most 1,000 queued events and 8 MiB across active and queued work. It drops the oldest queued prefix on count or reclaimable byte pressure, rejects new work when active delivery consumes the available byte bound, rejects a finalized message larger than 8 MiB without evicting valid work, and expires queue residence strictly after one hour on the next lane interaction. Session/window context is previewed during finalization but committed only after admission and authority revalidation; rejected or stale work does not create, rotate, or advance it. These package-private values are browser resource policy, not V1 server-limit claims. `capture()` resolves on admission, and `flush()` without delivery prunes expiry then retains unexpired work.
-- The separately imported `@posthog/browser/analytics` extension uses the Capture Analytics V1 endpoint, event/batch transform, required normal-Fetch headers, result classification, bounded selective retry, actively cancelable backoff, per-attempt timeout, and an aggregate elapsed budget. It selects at most 100 FIFO events, serializes each transformed event once, and greedily partitions exact uncompressed V1 envelopes at a soft 5 MiB target before sending sequentially. A larger admitted event is sent alone, and V1 `413` remains terminal. Explicit delivery detachment preserves retryable and unsent message identity, including duplicate caller UUIDs, without requeueing accepted sub-batches; opt-out and disposal remain terminal.
+- The separately imported `@posthog/browser/analytics` extension uses the Capture Analytics V1 endpoint, event/batch transform, required normal-Fetch headers, result classification, bounded selective retry, actively cancelable backoff, per-attempt timeout, and an aggregate elapsed budget. It selects at most 100 FIFO events, serializes each transformed event once, and greedily partitions exact uncompressed V1 envelopes at a soft 5 MiB target before sending sequentially. A larger admitted event is sent alone, and V1 `413` remains terminal. Retryable and unsent messages preserve identity, including duplicate caller UUIDs, without requeueing accepted sub-batches; opt-out and disposal remain terminal.
 - Analytics listens for compression remote configuration without blocking delivery. Advertised gzip applies through native `CompressionStream` at an exact-envelope threshold of 1 KiB only when the validated result is smaller; unavailable, hostile, malformed, stalled, or expanding compression falls back to unchanged JSON without consuming an attempt. Representative 216 B–4,403 B envelopes were measured in Chromium, Firefox, and WebKit: gzip ratios ranged from 0.043–0.830 above the threshold and compression completed within the browsers' 0–1 ms timer resolution. JavaScript gzip fallback remains deferred.
 - An opt-in live check sends synthetic events through both the direct regional host and a path-preserving local reverse proxy to the real Capture V1 backend. Direct browser Fetch also passed CORS preflight, and the resulting events were query-visible. Deployed managed-proxy verification remains open.
 - The Capture V1 RFC defines browser Beacon query fallbacks, but the current deployed-source backend still requires headers and has not implemented its V1 query type.
@@ -613,6 +609,7 @@ Decisions that still need an explicit answer:
 - [ ] **D5**: Decide whether DNT and cookieless modes are root contracts, standard-preset contracts, or unsupported alpha behavior.
 - [ ] **D6**: Decide the final ESM and CommonJS publication policy.
 - [x] **D7**: Match `posthog-js` wire semantics: creating a session after reset, idle timeout, or maximum length also creates a new window ID. Reset clears the current session/window and defers replacement until the next eligible session check. Keep replay's proactive idle-stop timer outside core; core performs activity-driven rotation, while a replay extension owns recorder shutdown and buffering.
+- [x] **D8**: Make the accessible root load analytics automatically after the first admitted event, while `analytics: false` and `@posthog/browser/core` preserve intentional manual composition. Preinstalled marked analytics extensions satisfy delivery without requiring a second disable option.
 
 ## Implementation phases
 
@@ -667,11 +664,18 @@ Do not freeze more generic runtime contracts until this phase identifies the req
     - [x] Add the queued-count-bounded FIFO admission lane, oldest-queued overflow, consent purge, unattached flush, and explicit delivery installation.
     - [x] Add exact UTF-8 byte accounting, 8 MiB total/per-message local bounds, one-hour lazy expiry, active/retry accounting, and consent-safe initial `$pageview` admission.
 - [x] **P2.7**: Implement the separately imported Capture V1 delivery policy and install it on the private core capture lane, with batching and native compression.
-    - [x] Extract Capture V1 delivery to `@posthog/browser/analytics` and keep it out of the root graph.
+    - [x] Extract Capture V1 delivery to `@posthog/browser/analytics`; keep it out of the root initial graph and entirely absent from `@posthog/browser/core`.
     - [x] Add exact-envelope FIFO partitioning with a 100-event bound and soft 5 MiB byte target; keep V1 `413` terminal.
     - [x] Add non-blocking negotiated native gzip at a measured 1 KiB threshold with validation, bounded fallback, and three-browser coverage.
-- [ ] **P2.8**: Complete delivery lifecycle behavior with synchronous best-effort teardown delivery, V1 Beacon mode when supported, keepalive Fetch fallback, aggregate teardown quotas, client rate limiting, offline/online handling, and lifecycle listeners. Preserve the existing normal Fetch timeout, bounded partial retry, backoff, jitter, and flush behavior.
-- [ ] **P2.9**: Add `capture`, `identify`, `group`, `reset`, `flush`, and `dispose` state-machine coverage.
+- [x] **P2.8**: Complete bounded analytics scheduling and delivery lifecycle behavior. Beacon enablement remains separately blocked on P0.8.
+    - [x] Add configurable `analytics({ flushAt, flushInterval })` count and timer triggers with 20-event/3-second defaults, a 100-event clamp, explicit-flush bypass, and timer cleanup.
+    - [x] Retain retry-exhausted V1 source identities in the bounded FIFO lane without hot-looping; redrive on the next interval, count trigger, explicit flush, or reconnect.
+    - [x] Add in-memory 10-event-per-second/100-event-burst client limiting before event construction with a non-recursive aggregate warning.
+    - [x] Pause avoidable delivery while offline and redrive promptly on `online`, without using a polling loop.
+    - [x] Add `pagehide` with `unload` fallback, synchronous uncompressed headered keepalive Fetch, FIFO active-plus-queued handoff, and one conservative aggregate teardown budget.
+    - [x] Add idempotent `shutdown(timeoutMs)` and route `dispose()` through bounded normal flush, cancellation, listener/timer cleanup, and permanent capture disablement.
+    - [x] Add default first-admission analytics loading with shared concurrent imports, root configuration forwarding, preinstalled-extension detection, failure retention, flush retry, bounded shutdown coordination, and an analytics-free core entrypoint.
+- [ ] **P2.9**: Add `capture`, `identify`, `group`, `reset`, `flush`, `shutdown`, and `dispose` state-machine coverage.
 
 After each invariant passes, measure its marginal cost and inspect module attribution. Simplify the mechanism when it is too large. Do not weaken the invariant.
 

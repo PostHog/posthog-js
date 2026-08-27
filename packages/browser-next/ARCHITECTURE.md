@@ -6,9 +6,9 @@ This document defines the bundle architecture for `@posthog/browser`.
 
 The goal is a behavior-complete core in the smallest practical bundle. Core behavior is a fixed constraint. Bundle size is the optimization objective.
 
-The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. It owns a bounded in-memory analytics buffer but does not statically import analytics delivery. A separately imported analytics capability supplies Capture V1 batching and transmission eagerly or lazily. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
+The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. It owns a bounded in-memory analytics buffer but does not statically import analytics delivery. The first admitted event loads Capture V1 delivery through a literal dynamic import by default; a preinstalled analytics extension already satisfies delivery. The `@posthog/browser/core` entrypoint omits that dynamic-import reference for deliberate manual composition. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
 
-Optional features must stay outside the root import graph. Each public optional feature must be removable when an application does not import it. Application bundlers must be able to remove each unused module.
+Optional feature implementations must stay outside the initial root graph. Each public optional feature must remain in a removable chunk or explicit entrypoint, and the core entrypoint must not reference it. Application bundlers must be able to remove each unused module.
 
 These rules apply to source files, package exports, dependencies, build output, and tests. Use the Capture Analytics V1 harness for exact analytics wire behavior.
 
@@ -18,7 +18,7 @@ This document uses these terms:
 
 - **Core**: The minimum code for a useful capture client.
 - **Root entry point**: The `@posthog/browser` export.
-- **Root graph**: All runtime modules that the root entry point imports.
+- **Root graph**: Runtime modules statically reachable from the root entry point before a dynamic-import boundary.
 - **Optional feature**: Behavior that is not necessary for basic capture.
 - **Import side effect**: Work that starts when JavaScript evaluates a module.
 - **Initial chunk**: JavaScript that an application loads before optional dynamic imports.
@@ -36,7 +36,7 @@ The word **should** identifies a strong recommendation.
 5. Use explicit exports and exact runtime imports.
 6. Preserve ES module boundaries in the published output.
 7. Measure bundles from a package consumer.
-8. Reject optional code when it enters the root graph.
+8. Reject optional implementations when they enter the initial root graph.
 
 An API boundary is also a size boundary. A runtime option is not a size boundary.
 A minifier cannot correct a bad package boundary. An automatic dynamic import does not make required behavior optional.
@@ -98,21 +98,21 @@ Keep the capture pipeline fixed and direct. Use compact explicit state machines.
 
 Review each core mechanism with compliance tests, bundle measurements, and module attribution. Move optional implementations out of core. Do not move a required invariant out only because it has a measurable cost.
 
-Consent uses `__ph_opt_in_out_<project-token>` by default and accepts a verbatim `consentPersistenceName` override. Store interoperable `0`/`1` values and accept trimmed, case-insensitive `1`/`true`/`yes` and `0`/`false`/`no` forms, including raw boolean and numeric values from compatibility adapters. Keep this logical key independent of identity persistence and consistent across consent storage adapters. Resolve denial before identity state, persistence, extension setup, or requests. Re-read consent at every host gate and persistence boundary. Default local storage uses native `storage` events plus a same-document SDK event; adapters can provide an optional keyed subscription for prompt external revocation. All listeners start during client initialization and stop during disposal. Deprecated prefix-derived keys and migration between storage backends belong in a compatibility entry point.
+Consent uses `__ph_opt_in_out_<project-token>` by default and accepts a verbatim `consentPersistenceName` override. Store interoperable `0`/`1` values and accept trimmed, case-insensitive `1`/`true`/`yes` and `0`/`false`/`no` forms, including raw boolean and numeric values from compatibility adapters. Keep this logical key independent of identity persistence and consistent across consent storage adapters. Resolve denial before identity state, persistence, or requests. Configured extensions still run setup, but every host-provided capture, persistence, remote-configuration, identity, and request capability remains consent-gated and resumes through the host after opt-in. Re-read consent at every host gate and persistence boundary. Default local storage uses native `storage` events plus a same-document SDK event; adapters can provide an optional keyed subscription for prompt external revocation. All listeners start during client initialization and stop during disposal. Deprecated prefix-derived keys and migration between storage backends belong in a compatibility entry point.
 
 Create session and window IDs lazily on the first successfully admitted capture. Preview session context while finalizing an event, but do not expose, persist, or install tab lifecycle state until bounded admission succeeds; rejected work must not create, rotate, or advance session state. Match `posthog-js` analytics semantics by rotating both IDs after reset, idle timeout, or maximum session length, and by adopting a sibling tab's active session while retaining the receiving tab's current window ID. Persist monotonic session revisions and explicit reset tombstones so sequential stale identity, group, or extension-data writes preserve the newest session authority; revalidate authority around admission commit, and discard stale finalized work rather than overwrite a newer session or reset. Missing or malformed optional session data is not a reset. With default storage, preserve ordinary reload windows and separate copied tab storage through tab-scoped storage; lifecycle cleanup and a no-throw navigation-type fallback cover browser reload differences. Core must not run a background timer solely to rotate sessions. Replay owns proactive recorder shutdown, interaction state, snapshot buffering, and recording-age limits; session rotation or notification alone must not start or flush a product. The alpha still documents perfectly simultaneous equal-revision whole-record writers after the final authoritative read as last-writer-wins.
 
-The analytics delivery capability must use Capture Analytics V1 at `POST /i/v1/analytics/events`. It must not use the legacy `/e/` envelope. Normal analytics delivery must use Fetch so it can send required headers, observe the UUID-keyed result map, time out, rate limit, and retry only server-marked retry events. It receives the core's bound Fetch capability but owns analytics-specific batching, authentication, compression, response, retry, and teardown policy. It selects at most 100 FIFO events at a time, serializes transformed events once, and greedily partitions exact uncompressed V1 envelopes at a package-private soft 5 MiB target. A larger admitted event is sent alone, and `413` remains terminal rather than triggering response-driven splitting. Remote configuration uses the small core control-plane request path and must not wait for analytics delivery to load.
+The analytics delivery capability must use Capture Analytics V1 at `POST /i/v1/analytics/events`. It must not use the legacy `/e/` envelope. Normal analytics delivery must use Fetch so it can send required headers, observe the UUID-keyed result map, time out, rate limit, and retry only server-marked retry events. It receives the core's bound Fetch capability but owns analytics-specific batching, authentication, compression, response, retry, and teardown policy. `analytics({ flushAt, flushInterval })` configures count and timer triggers with defaults of 20 events and 3,000 milliseconds; `flushInterval: 0` disables the timer, while explicit flush and shutdown bypass both thresholds. It selects at most 100 FIFO events at a time, serializes transformed events once, and greedily partitions exact uncompressed V1 envelopes at a package-private soft 5 MiB target. A larger admitted event is sent alone, and `413` remains terminal rather than triggering response-driven splitting. Remote configuration uses the small core control-plane request path and must not wait for analytics delivery to load.
 
 When remote configuration advertises `gzip-js`, analytics compresses exact request envelopes of at least 1 KiB through native `CompressionStream('gzip')`. It sends gzip only when the result is smaller and has a valid header, CRC, and input-size trailer. Missing, hostile, malformed, stalled, or expanding compression falls back to the unchanged JSON body without consuming a delivery attempt. Delivery proceeds uncompressed while remote configuration is unresolved, so the initial pageview and queued work do not wait for negotiation. These thresholds are measured browser policy, not Capture V1 server limits.
 
-A lane has a stable typed sink and bounded queue plus an attachable delivery policy. The core analytics lane retains at most 1,000 queued events and 8 MiB across active and queued UTF-8 serialized finalized messages. An individual finalized core message has the same 8 MiB local limit. Queue pressure evicts the oldest queued prefix when enough queued work is reclaimable; active work cannot be recalled, so active bytes can reject a new event without evicting valid queued work. Queue residence expires strictly after one hour at the next admission, installation, drain, flush, or retry handoff; expiry uses monotonic local admission time and starts no timer. These package-private values bound browser memory and stale delivery and do not claim the deployed V1 event or batch limits. The policy owns one endpoint, event/batch serializer, server payload limits, compression, transport, response classification, retry policy, and teardown policy. Events with different policies must not share a batch. A failure in one lane must not requeue or resend events accepted in another lane. The composition root creates the first generic lane and privately gives its sink to general `capture()` before delivery attaches. No coordinator exposes a named analytics lane or understands endpoints. The root statically includes only that lane, admission, and bounded buffer, not the analytics delivery policy. Attaching a policy must preserve queued event UUIDs, timestamps, identity, session, ordering, consent decisions, measured bytes, admission time, and retry multiplicity. Optional product entry points create their lanes only when imported; the root must not contain their implementations or a product catalog.
+A lane has a stable typed sink and bounded queue plus an attachable delivery policy. The core analytics lane retains at most 1,000 queued events and 8 MiB across active and queued UTF-8 serialized finalized messages. An individual finalized core message has the same 8 MiB local limit. Queue pressure evicts the oldest queued prefix when enough queued work is reclaimable; active work cannot be recalled, so active bytes can reject a new event without evicting valid queued work. Queue residence expires strictly after one hour at the next admission, installation, drain, flush, or retry handoff; expiry uses monotonic local admission time and starts no expiry timer. Retry-exhausted transient messages remain byte- and count-accounted at their original FIFO position, become ineligible for the current drive, and can be redriven by the next interval, reconnect, count trigger, or explicit flush. A flush barrier resolves after its admitted snapshot receives one delivery drive; it does not hot-loop retained failures or wait indefinitely for server acceptance. These package-private values bound browser memory and stale delivery and do not claim the deployed V1 event or batch limits. The policy owns one endpoint, event/batch serializer, server payload limits, compression, transport, response classification, retry policy, and teardown policy. Events with different policies must not share a batch. A failure in one lane must not requeue or resend events accepted in another lane. The composition root creates the first generic lane and privately gives its sink to general `capture()` before delivery attaches. No coordinator exposes a public analytics lane or understands endpoints. The default entrypoint includes only the small automatic-load coordinator and a literal dynamic-import reference; its initial chunk and the core entrypoint exclude the analytics delivery policy. Attaching a policy must preserve queued event UUIDs, timestamps, identity, session, ordering, consent decisions, measured bytes, admission time, and retry multiplicity. Optional product entry points create their lanes only when imported; the root must not contain their implementations or a product catalog.
 
 After configured extensions install, core admits one enabled initial `$pageview` through ordinary capture before the factory resolves. `capturePageview: false` disables it. Explicit denial and bot filtering prevent document access; hidden documents wait on one disposable visibility listener, and a later explicit opt-in can admit a pageview that prior denial held pending. The core event has no title, URL, referrer, page-view identifier, history patching, or page-leave behavior; those remain in an optional page-view/browser-context product.
 
 Select an optional lane through an explicit product API, such as `captureAi()`, not an event-name prefix or a caller-supplied lane string on general `capture()`. General `capture()` always uses analytics. The product module receives only its private lane sink. Install the lane lazily, then include it in client `flush()` and `dispose()`. Lane sinks, lane state, delivery policies, and the coordinator are package-private implementation details; do not export them from the package root or add them to the shared `Client` contract. This follows Python's `_capture_ai` lane and the unmerged Node `captureAi` design while keeping product code removable from the browser root.
 
-Teardown delivery must use the Capture V1 header-less Beacon contract only after the target backend and proxy paths support it. Otherwise, use Fetch with `keepalive: true` and the normal V1 headers. Treat a successful Beacon call as browser acceptance, not confirmed delivery. Enforce one aggregate teardown-byte budget across all Beacon and keepalive Fetch attempts; splitting a batch does not increase the browser's shared in-flight quota. Do not parse per-event responses, start asynchronous compression, or start retry timers during teardown. Register page lifecycle listeners during client initialization and remove them during disposal.
+Teardown delivery must use the Capture V1 header-less Beacon contract only after the target backend and proxy paths support it. Until then, use Fetch with `keepalive: true` and the normal V1 headers. The current conservative aggregate body budget is 80% of 64 KiB across the entire analytics handoff; requests walk active and queued source identities in FIFO order, and splitting does not replenish the browser's shared quota. Teardown does not mutate retained work because keepalive acceptance is not server acceptance. It does not parse responses, start asynchronous compression, or start retry timers. Register `pagehide`, or `unload` only when `pagehide` is unavailable, when analytics installs and remove the listener during disposal. Online/offline listeners are scoped to the same installation: offline is a scheduling hint that pauses avoidable sends, while online promptly redrives retained work. A compact in-memory token bucket runs before event construction with a default 10-event-per-second refill and 100-event burst; its aggregate warning bypasses the limiter without weakening consent or bounded admission. Explicit shutdown stops new work, makes one timeout-bounded normal flush drive, aborts remaining transport, and shares the idempotent disposal path.
 
 ### 4.4 Optional adapters and extensions
 
@@ -145,16 +145,18 @@ Cross-context conflict safety is also a core invariant. Same-origin local-storag
 
 ## 5. Root entry point
 
-The root entry point must provide a useful capture host with bounded analytics admission. It must not statically include analytics transmission or every PostHog product. A standard preset can attach analytics delivery eagerly or start a literal dynamic import immediately while core remote configuration proceeds in parallel.
+The root entry point must provide a useful capture host with bounded analytics admission. It must not statically include analytics transmission or every PostHog product. By default, its first successfully admitted event starts one shared literal dynamic import of analytics delivery. `analytics.load: 'eager'` starts the same import during initialization, `analytics: false` disables automatic loading, and a preinstalled first-party analytics extension satisfies delivery without loading a duplicate. The `@posthog/browser/core` entrypoint retains manual buffer-only composition without an analytics chunk reference.
 
 The root entry point must use named exports. It must not create a default client singleton.
 
-Use this form:
+Use a narrow root wrapper with a literal dynamic loader and a separate core entry:
 
 ```ts
-export { createPostHog } from './posthog'
-export { version } from './version'
-export type { PostHog, PostHogOptions } from './types'
+// @posthog/browser
+const load = () => import('./analytics').then(({ analytics }) => analytics(options))
+
+// @posthog/browser/core
+export { createPostHog } from './core'
 ```
 
 Do not use this form:
@@ -164,8 +166,7 @@ export * from './products'
 export { default } from './singleton'
 ```
 
-The root entry point must not re-export optional runtime features.
-You can re-export types when the compiler produces no JavaScript import.
+The root entry point must not re-export optional runtime features. Its automatic analytics loader imports the implementation only after runtime admission or explicit eager selection. You can re-export types when the compiler produces no JavaScript import.
 
 Treat `createPostHog` and its static imports as one size unit.
 A bundler cannot remove an internal module when the factory always needs that module.
@@ -254,7 +255,7 @@ If an import side effect is unavoidable, prefer a separate package. Otherwise, c
 
 ### 8.1 Use an import boundary
 
-Use a separate export subpath for each substantial optional feature.
+Use a separate export subpath for each substantial optional feature. Default analytics is the narrow exception: the root references its subpath through one literal dynamic import, while the core entrypoint does not.
 
 Example:
 
@@ -284,12 +285,15 @@ if (options.enableLargeFeature) {
 }
 ```
 
-Use an explicit import or an extension:
+Use an explicit import or a client-owned extension:
 
 ```ts
 import { largeFeature } from '@posthog/browser/extensions/large-feature'
 
-await posthog.installExtension(largeFeature())
+const posthog = await createPostHog({
+    projectToken,
+    extensions: [largeFeature()],
+})
 ```
 
 A small branch can stay in core when a separate boundary adds more bytes.
@@ -297,10 +301,9 @@ The change must include measurements that support this decision.
 
 ### 8.3 Keep the registry empty
 
-The extension registry must store only supplied instances and supplied loaders.
+The extension registry must store only supplied instances and the single first-party analytics instance produced by the root's literal loader.
 
-Do not add a static catalog of product implementations to the core.
-Do not auto-register all known extensions.
+Do not add a static catalog of product implementations to the core. Do not auto-register replay, surveys, flags, or other known extensions. Automatic analytics is selected by the root API contract, not a general product-name registry.
 
 Do not put this code in the root graph:
 
@@ -315,21 +318,19 @@ A product-name catalog can exist in a separate preset entry point.
 
 ### 8.4 Use real dynamic imports
 
-`loadExtension()` does not create a chunk by itself. The loader must contain a dynamic `import()`.
+A generic loader function does not create a chunk by itself. The owner or a product-specific package API must contain a literal dynamic `import()`.
 
-Use this form:
+Use this form when the application selects an extension before client creation:
 
 ```ts
-await posthog.loadExtension(async () => {
-    const module = await import('@posthog/browser/extensions/feature-flags')
-    return module.featureFlags()
+const { featureFlags } = await import('@posthog/browser/extensions/feature-flags')
+const posthog = await createPostHog({
+    projectToken,
+    extensions: [featureFlags()],
 })
 ```
 
-Use a literal module path. This lets the bundler create a stable chunk.
-
-Do not pass a statically imported extension to `loadExtension()` and expect code splitting.
-Do not use a computed import path for a known product list.
+Use a literal module path. This lets the bundler create a stable chunk. Do not use a computed import path for a known product list.
 
 ## 9. Extension design
 
@@ -337,9 +338,9 @@ An extension must be a factory result or an application-supplied instance.
 It must not be a shared mutable singleton.
 
 An extension must start external work only in `setup()`.
-An extension must release owned resources in `dispose()`.
+The client owns every configured or internally loaded extension for its lifetime. Runtime installation, removal, and replacement are not public extension contracts; feature-level start and stop remain extension-owned controls.
+An extension must release owned resources in its final `dispose()`.
 Cleanup must be safe after partial setup.
-Cleanup must be safe when code calls it more than once.
 
 The host must give each extension a narrow `Client` view.
 The view must expose capabilities, not the concrete host implementation.

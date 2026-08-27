@@ -65,9 +65,10 @@ What an extension is given in `setup` — the adapter shared by extensions on th
 
 Identity, session, SDK metadata, capture permission, and the public project token are always-ready synchronous reads.
 `capture` and `sendRequest` are awaitable. For `sendRequest`, `sentAt` controls `sent_at` placement on POST requests; GET query mode
-uses the cache-busting `_` parameter instead, and GET body mode has no effect. `onRemoteConfig` immediately replays the
-latest known success or failure and then reports subsequent outcomes. Extensions that want a named log prefix can
-create a child with `client.logger.createLogger('[myExtension]')`.
+uses the cache-busting `_` parameter instead, and GET body mode has no effect. `onRemoteConfig` replays the latest
+available success or failure and then reports subsequent outcomes. Configuration timing is host-owned, and the
+subscription remains active until disposed. Extensions that want a named log prefix can create a child with
+`client.logger.createLogger('[myExtension]')`.
 
 Extensions that expose controls to other extensions should export a typed stable-name token:
 
