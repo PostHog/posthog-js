@@ -1,5 +1,17 @@
 # @posthog/core
 
+## 1.49.0
+
+### Minor Changes
+
+- [#4036](https://github.com/PostHog/posthog-js/pull/4036) [`718beee`](https://github.com/PostHog/posthog-js/commit/718beee86aa31026beef9af2c13b049e9b847721) Thanks [@emmayusufu](https://github.com/emmayusufu)! - Add `capturedAt` to `PostHogLogs.captureLog()` for stamping a record with the time and context of when the event occurred, and `PostHogLogs.clearQueue()` for dropping every queued record
+  (2026-08-27)
+
+### Patch Changes
+
+- [#4653](https://github.com/PostHog/posthog-js/pull/4653) [`712223a`](https://github.com/PostHog/posthog-js/commit/712223a8ffb43dd28cc78059301ff607021bc6be) Thanks [@posthog](https://github.com/apps/posthog)! - Fix request timeouts never firing on pages where a browser extension makes `Error.prototype.name` non-writable
+  (2026-08-27)
+
 ## 1.48.12
 
 ### Patch Changes
