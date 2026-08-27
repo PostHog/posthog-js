@@ -55,6 +55,30 @@ describe('config', () => {
             expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         })
 
+        // With person_profiles: 'never', identify()/alias() bail before touching identity, so no distinct IDs
+        // merge onto a person and the warned-about failure cannot occur — the warning would be a false positive.
+        it.each(['memory', 'sessionStorage'] as const)(
+            "does not warn under person_profiles: 'never' with volatile persistence '%s'",
+            (persistence) => {
+                new PostHog()._init('test-token', { persistence, person_profiles: 'never' })
+                expect(warnSpy).not.toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining('bootstrap.distinctID')
+                )
+            }
+        )
+
+        it("does not warn under person_profiles: 'never' when disable_persistence is true", () => {
+            new PostHog()._init('test-token', { disable_persistence: true, person_profiles: 'never' })
+            expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
+        })
+
+        // The exclusion is specific to 'never'; the default 'identified_only' can still merge IDs, so it warns.
+        it('still warns under the default person_profiles with volatile persistence', () => {
+            new PostHog()._init('test-token', { persistence: 'memory', person_profiles: 'identified_only' })
+            expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
+        })
+
         // Empty, whitespace-only, and null distinctIDs are type-legal for JS callers but not a usable stable
         // id (identify() rejects them the same way), so the warning must still fire.
         it.each([

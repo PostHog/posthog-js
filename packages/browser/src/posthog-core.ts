@@ -516,6 +516,12 @@ export class PostHog implements PostHogInterface {
         if (this._inCookielessMode()) {
             return
         }
+        // With person_profiles: 'never', identify() and alias() both bail in _requirePersonProcessing()
+        // before they touch identity or capture $identify/$create_alias, so no distinct IDs ever merge onto a
+        // person and the failure this warns about cannot happen. Exclude it the same way cookieless mode is.
+        if (this.config.person_profiles === 'never') {
+            return
+        }
         const volatileIdentityPersistence =
             this.config.persistence === 'memory' || this.config.persistence === 'sessionStorage'
         if (!volatileIdentityPersistence && !this.config.disable_persistence) {
