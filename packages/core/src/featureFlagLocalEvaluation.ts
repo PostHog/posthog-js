@@ -185,8 +185,8 @@ export function matchFeatureFlagProperty(
   const operator = property.operator || 'exact'
   const parsingPolicy = options.semverParsingPolicy ?? 'strict'
 
-  if (!(key in propertyValues)) {
-    if (operator === 'is_not_set') return true
+  const hasProperty = Object.prototype.hasOwnProperty.call(propertyValues, key)
+  if (!hasProperty) {
     throw new InconclusiveMatchError(`Property ${key} not found in propertyValues`)
   } else if (operator === 'is_not_set') {
     return false
@@ -219,7 +219,7 @@ export function matchFeatureFlagProperty(
     case 'is_not':
       return !computeExactMatch(value, overrideValue)
     case 'is_set':
-      return key in propertyValues
+      return true
     case 'icontains':
       return String(overrideValue).toLowerCase().includes(String(value).toLowerCase())
     case 'not_icontains':

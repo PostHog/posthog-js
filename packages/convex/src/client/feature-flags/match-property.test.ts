@@ -37,34 +37,22 @@ describe('matchProperty — numeric comparisons', () => {
   })
 })
 
-describe('matchProperty — is_not_set', () => {
-  test('returns true when the property is absent', () => {
-    expect(matchProperty({ key: 'missing', value: 'whatever', operator: 'is_not_set' }, {})).toBe(true)
+describe('matchProperty — presence operators', () => {
+  test.each([
+    ['null', null],
+    ['undefined', undefined],
+    ['false', false],
+    ['zero', 0],
+    ['empty string', ''],
+    ['empty array', []],
+    ['empty object', {}],
+  ])('treats present %s as set', (_, value) => {
+    expect(matchProperty({ key: 'key', value: '', operator: 'is_set' }, { key: value })).toBe(true)
+    expect(matchProperty({ key: 'key', value: '', operator: 'is_not_set' }, { key: value })).toBe(false)
   })
 
-  test('returns false when the property is present', () => {
-    expect(matchProperty({ key: 'plan', value: 'whatever', operator: 'is_not_set' }, { plan: 'pro' })).toBe(false)
-  })
-
-  test('treats null-valued property as still set (returns false)', () => {
-    // `null` counts as present in propertyValues; only genuinely missing keys read as "not set".
-    expect(matchProperty({ key: 'plan', value: 'whatever', operator: 'is_not_set' }, { plan: null })).toBe(false)
-  })
-})
-
-describe('matchProperty — is_set', () => {
-  test('returns true when the property is present with a non-null value', () => {
-    expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: 'pro' })).toBe(true)
-  })
-
-  test('returns true when the property is present with a null value', () => {
-    // `is_set` is about key presence, not value. Pre-fix, the null guard short-circuited and
-    // returned false here.
-    expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: null })).toBe(true)
-  })
-
-  test('throws InconclusiveMatchError when the property is absent', () => {
-    expect(() => matchProperty({ key: 'plan', value: '', operator: 'is_set' }, {})).toThrow(InconclusiveMatchError)
+  test.each(['is_set', 'is_not_set'])('%s is inconclusive when the property is omitted', (operator) => {
+    expect(() => matchProperty({ key: 'key', value: '', operator }, {})).toThrow(InconclusiveMatchError)
   })
 })
 
@@ -152,7 +140,7 @@ describe('matchProperty — SemVer compatibility policy', () => {
 })
 
 describe('matchProperty — error cases', () => {
-  test('throws InconclusiveMatchError when key is absent for non-is_not_set operators', () => {
+  test('throws InconclusiveMatchError when key is absent for other operators', () => {
     expect(() => matchProperty(prop('exact', 'x'), {})).toThrow(InconclusiveMatchError)
   })
 })
