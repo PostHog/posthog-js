@@ -21,6 +21,10 @@ async function deliverMutations(): Promise<void> {
     await Promise.resolve()
 }
 
+function capturedDomIds(...ids: string[]): (id: string) => boolean {
+    return (id) => ids.includes(id)
+}
+
 describe('JSON-LD replay capture', () => {
     afterEach(() => {
         document.body.replaceChildren()
@@ -44,7 +48,7 @@ describe('JSON-LD replay capture', () => {
         }
     })
 
-    it('sanitizes root graphs and drops unsupported graph entities', () => {
+    it('sanitizes root graphs and keeps unsupported graph entity types', () => {
         expect(
             sanitizeJsonLd(
                 JSON.stringify({
@@ -76,7 +80,8 @@ describe('JSON-LD replay capture', () => {
                         },
                         'private@example.com',
                     ],
-                })
+                }),
+                capturedDomIds('person-id')
             )?.[0]
         ).toEqual({
             '@context': 'https://schema.org',
@@ -96,6 +101,9 @@ describe('JSON-LD replay capture', () => {
                 {
                     '@type': 'Person',
                     '@id': 'person-id',
+                },
+                {
+                    '@type': 'PrivateType',
                 },
             ],
         })
@@ -123,7 +131,8 @@ describe('JSON-LD replay capture', () => {
                             '@id': 'private-person',
                         },
                     ],
-                })
+                }),
+                capturedDomIds('private-person')
             )?.[0]
         ).toEqual({
             '@context': 'https://schema.org',
@@ -136,6 +145,10 @@ describe('JSON-LD replay capture', () => {
                         '@type': 'Product',
                         name: 'Camera',
                     },
+                },
+                {
+                    '@type': 'Person',
+                    '@id': 'private-person',
                 },
             ],
         })
@@ -204,7 +217,7 @@ describe('JSON-LD replay capture', () => {
             )?.[0]
         ).toEqual({
             '@context': 'https://schema.org',
-            '@type': ['Product', 'Car'],
+            '@type': ['Product', 'Car', 'PrivateType'],
             name: 'Camera',
         })
 
@@ -223,45 +236,83 @@ describe('JSON-LD replay capture', () => {
         })
     })
 
-    it('keeps only path-allowed properties and @id values', () => {
+    it('keeps DOM-backed @id fragments and path-allowed properties', () => {
         const sanitized = sanitizeJsonLd(
             JSON.stringify({
                 '@context': 'http://schema.org/',
                 '@type': 'Product',
-                '@id': 'https://example.com/products/123',
+                '@id': 'https://example.com/products/123#product-id',
                 name: 'Camera',
                 email: 'private@example.com',
                 manufacturer: {
                     '@type': 'Organization',
-                    '@id': 'https://example.com/organizations/acme',
+                    '@id': 'https://example.com/organizations/acme#organization-id',
                     name: 'Acme',
                     email: 'private@example.com',
                 },
                 offers: {
                     '@type': 'Offer',
+                    '@id': 'https://example.com/offers/1',
                     price: 100,
                     seller: {
                         '@type': 'Person',
+                        '@id': '#missing-id',
                         name: 'Private name',
                     },
                 },
-            })
+            }),
+            capturedDomIds('product-id', 'organization-id')
         )
 
         expect(sanitized?.[0]).toEqual({
             '@context': 'https://schema.org',
             '@type': 'Product',
-            '@id': 'https://example.com/products/123',
+            '@id': 'product-id',
             name: 'Camera',
             manufacturer: {
                 '@type': 'Organization',
-                '@id': 'https://example.com/organizations/acme',
+                '@id': 'organization-id',
                 name: 'Acme',
             },
             offers: {
                 '@type': 'Offer',
                 price: 100,
+                seller: {
+                    '@type': 'Person',
+                },
             },
+        })
+    })
+
+    it('drops @id values that have no fragment or no captured DOM match', () => {
+        const isCapturedDomId = jest.fn(() => true)
+
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    '@id': 'https://example.com/products/123',
+                }),
+                isCapturedDomId
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+        })
+        expect(isCapturedDomId).not.toHaveBeenCalled()
+
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    '@id': '#missing-id',
+                })
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
         })
     })
 
@@ -285,28 +336,38 @@ describe('JSON-LD replay capture', () => {
         })
     })
 
-    it('keeps non-PII leaf properties without a type-specific path', () => {
+    it('keeps universally allowed properties on unknown types and paths', () => {
         expect(
             sanitizeJsonLd(
                 JSON.stringify({
                     '@context': 'https://schema.org',
-                    '@type': 'Thing',
-                    availability: 'https://schema.org/InStock',
-                    isAccessibleForFree: true,
-                    name: 'Private name',
-                    numberOfItems: 2,
-                    priceCurrency: 'GBP',
-                    ratingValue: 4.5,
+                    '@type': 'CustomType',
+                    privateRootValue: 'private',
+                    customMetadata: {
+                        availability: 'https://schema.org/InStock',
+                        isAccessibleForFree: true,
+                        name: 'Private name',
+                        numberOfItems: 2,
+                        priceCurrency: 'GBP',
+                        nestedMetadata: {
+                            ratingValue: 4.5,
+                            privateNestedValue: 'private',
+                        },
+                    },
                 })
             )?.[0]
         ).toEqual({
             '@context': 'https://schema.org',
-            '@type': 'Thing',
-            availability: 'https://schema.org/InStock',
-            isAccessibleForFree: true,
-            numberOfItems: 2,
-            priceCurrency: 'GBP',
-            ratingValue: 4.5,
+            '@type': 'CustomType',
+            customMetadata: {
+                availability: 'https://schema.org/InStock',
+                isAccessibleForFree: true,
+                numberOfItems: 2,
+                priceCurrency: 'GBP',
+                nestedMetadata: {
+                    ratingValue: 4.5,
+                },
+            },
         })
     })
 
@@ -324,34 +385,94 @@ describe('JSON-LD replay capture', () => {
                         ],
                     },
                     { '@context': 'https://schema.org', '@type': 'Organization', name: 'Acme' },
-                ])
+                ]),
+                capturedDomIds('private-person')
             )?.[0]
         ).toEqual([
             {
                 '@context': 'https://schema.org',
                 '@type': 'Product',
                 name: 'Camera',
-                offers: [{ '@type': 'Offer', price: 100 }],
+                offers: [
+                    { '@type': 'Offer', price: 100 },
+                    { '@type': 'Person', '@id': 'private-person' },
+                ],
             },
             { '@context': 'https://schema.org', '@type': 'Organization', name: 'Acme' },
         ])
     })
 
+    it('keeps the full entity tree when its types and paths are not allowlisted', () => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    '@id': 'root-id',
+                    name: 'Camera',
+                    privateRootValue: 'private',
+                    customChild: {
+                        '@type': 'CustomChild',
+                        '@id': 'child-id',
+                        privateChildValue: 'private',
+                        nestedEntity: {
+                            '@type': 'Product',
+                            '@id': 'product-id',
+                            name: 'Private product name',
+                            ratingValue: 4.5,
+                        },
+                        idOnlyNode: {
+                            '@id': 'reference-id',
+                            privateReferenceValue: 'private',
+                        },
+                    },
+                }),
+                capturedDomIds('root-id', 'child-id', 'product-id', 'reference-id')
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            '@id': 'root-id',
+            name: 'Camera',
+            customChild: {
+                '@type': 'CustomChild',
+                '@id': 'child-id',
+                nestedEntity: {
+                    '@type': 'Product',
+                    '@id': 'product-id',
+                    ratingValue: 4.5,
+                },
+                idOnlyNode: {
+                    '@id': 'reference-id',
+                },
+            },
+        })
+    })
+
     it.each([
         'not json',
         JSON.stringify({ '@context': 'https://example.com', '@type': 'Product' }),
-        JSON.stringify({ '@context': 'https://schema.org', '@type': 'PrivateType' }),
-        JSON.stringify({ '@context': 'https://schema.org', '@type': ['PrivateType', 'OtherPrivateType'] }),
-        JSON.stringify({ '@context': 'https://schema.org', '@graph': [{ '@type': 'PrivateType' }] }),
-        JSON.stringify({ '@context': 'https://schema.org', '@type': 'constructor', '@id': 'private@example.com' }),
-        JSON.stringify({ '@context': 'https://schema.org', '@type': 'toString', '@id': 'private@example.com' }),
-        JSON.stringify({ '@context': 'https://schema.org', '@type': '__proto__', '@id': 'private@example.com' }),
-        JSON.stringify([
-            { '@context': 'https://schema.org', '@type': 'Product' },
-            { '@context': 'https://schema.org', '@type': 'PrivateType' },
-        ]),
+        JSON.stringify({ '@context': 'https://schema.org', privateValue: 'private' }),
     ])('drops an invalid JSON-LD document', (value) => {
         expect(sanitizeJsonLd(value)).toBeNull()
+    })
+
+    it.each(['PrivateType', 'constructor', 'toString', '__proto__'])('keeps the unsupported %s type', (type) => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': type,
+                    '@id': 'entity-id',
+                    privateValue: 'private',
+                }),
+                capturedDomIds('entity-id')
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@type': type,
+            '@id': 'entity-id',
+        })
     })
 
     it.each(['ContactPoint', 'Person', 'PostalAddress'])('drops PII-bearing %s properties', (type) => {
@@ -365,7 +486,8 @@ describe('JSON-LD replay capture', () => {
                     email: 'private@example.com',
                     telephone: '+44 0000 000000',
                     streetAddress: 'Private address',
-                })
+                }),
+                capturedDomIds('entity-id')
             )?.[0]
         ).toEqual({
             '@context': 'https://schema.org',
@@ -410,6 +532,76 @@ describe('JSON-LD replay capture', () => {
             '@type': 'Product',
         })
     })
+
+    it('keeps @id only when replay captures the matching DOM id', () => {
+        document.body.innerHTML = `
+            <div id="product-id"></div>
+            <div class="ph-mask"><div id="masked-text-id"></div></div>
+            <div class="ph-no-capture"><div id="blocked-id"></div></div>
+        `
+        const script = jsonLdScript({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            '@id': 'https://example.com/products/123#product-id',
+            customChildren: [
+                { '@type': 'PrivateType', '@id': '#masked-text-id' },
+                { '@type': 'PrivateType', '@id': '#blocked-id' },
+                { '@type': 'PrivateType', '@id': '#missing-id' },
+                { '@type': 'PrivateType', '@id': '#json-ld-script' },
+            ],
+        })
+        script.id = 'json-ld-script'
+        document.body.append(script)
+        const emit = jest.fn(() => true)
+        const capture = startJsonLdCapture(document, MutationObserver, {
+            blockClass: 'ph-no-capture',
+            maskTextClass: 'ph-mask',
+            emit,
+        })
+
+        capture.scan()
+
+        expect(emit).toHaveBeenCalledWith({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            '@id': 'product-id',
+            customChildren: [
+                { '@type': 'PrivateType', '@id': 'masked-text-id' },
+                { '@type': 'PrivateType' },
+                { '@type': 'PrivateType' },
+                { '@type': 'PrivateType' },
+            ],
+        })
+        capture.stop()
+    })
+
+    it.each(['maskAllElementAttributes', 'maskAttributeFn'] as const)(
+        'drops @id when %s can hide the matching DOM id',
+        (maskingOption) => {
+            document.body.innerHTML = '<div id="product-id"></div>'
+            document.body.append(
+                jsonLdScript({
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    '@id': '#product-id',
+                })
+            )
+            const emit = jest.fn(() => true)
+            const masking =
+                maskingOption === 'maskAllElementAttributes'
+                    ? { maskAllElementAttributes: true }
+                    : { maskAttributeFn: () => 'masked' }
+            const capture = startJsonLdCapture(document, MutationObserver, { ...masking, emit })
+
+            capture.scan()
+
+            expect(emit).toHaveBeenCalledWith({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+            })
+            capture.stop()
+        }
+    )
 
     it('emits initial, added, and changed JSON-LD without duplicates', async () => {
         const emit = jest.fn(() => true)

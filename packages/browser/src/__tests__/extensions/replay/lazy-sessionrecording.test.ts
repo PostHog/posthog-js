@@ -3475,12 +3475,15 @@ describe('Lazy SessionRecording', () => {
         })
 
         it('emits sanitized JSON-LD only while capture is enabled', async () => {
+            const target = document.createElement('div')
+            target.id = 'product-123'
+            document.body.appendChild(target)
             const script = document.createElement('script')
             script.type = 'application/ld+json'
             script.textContent = JSON.stringify({
                 '@context': 'https://schema.org',
                 '@type': 'Product',
-                '@id': 'https://example.com/products/123',
+                '@id': 'https://example.com/products/123#product-123',
                 name: 'Camera',
                 email: 'private@example.com',
             })
@@ -3497,7 +3500,7 @@ describe('Lazy SessionRecording', () => {
                 expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
                     '@context': 'https://schema.org',
                     '@type': 'Product',
-                    '@id': 'https://example.com/products/123',
+                    '@id': 'product-123',
                     name: 'Camera',
                 })
 
@@ -3518,6 +3521,7 @@ describe('Lazy SessionRecording', () => {
                     expect.objectContaining({ name: 'After disable' })
                 )
             } finally {
+                target.remove()
                 document.querySelectorAll('script[type="application/ld+json"]').forEach((element) => element.remove())
             }
         })
