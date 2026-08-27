@@ -148,15 +148,14 @@ describe('browser-next initial pageview', () => {
         const observed: string[] = []
         posthog.onEvent(({ event }) => observed.push(event))
 
-        expect(documentRead).not.toHaveBeenCalled()
         expect(posthog.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
+        expect(observed).toEqual([])
         posthog.optIn()
 
-        expect(documentRead).toHaveBeenCalledTimes(1)
         expect(observed).toEqual(['$pageview'])
     })
 
-    it('removes a hidden listener on explicit denial and retries only after opt-in', async () => {
+    it('keeps a hidden listener through denial and retries capture only after opt-in', async () => {
         const document = new TestDocument('hidden')
         const remove = jest.spyOn(document, 'removeEventListener')
         setDocument(document)
@@ -170,6 +169,7 @@ describe('browser-next initial pageview', () => {
         posthog.onEvent(({ event }) => observed.push(event))
 
         posthog.optOut()
+        expect(remove.mock.calls.filter(([event]) => event === 'visibilitychange')).toHaveLength(0)
         document.visibilityState = 'visible'
         document.dispatchEvent(new Event('visibilitychange'))
         expect(observed).toEqual([])
@@ -179,7 +179,7 @@ describe('browser-next initial pageview', () => {
         expect(observed).toEqual(['$pageview'])
     })
 
-    it('does not admit under a new consent generation after denial and regrant during DOM access', async () => {
+    it('admits when consent is granted at the capture boundary after changing during DOM access', async () => {
         const storage = new ObservableStorage()
         const controller = await createPostHog({
             projectToken: 'ph_test',
@@ -214,9 +214,6 @@ describe('browser-next initial pageview', () => {
         })
 
         expect(posthog.hasOptedOut()).toBe(false)
-        expect(observed).toEqual([])
-        setDocument(document)
-        posthog.optIn()
         expect(observed).toEqual(['$pageview'])
     })
 
@@ -243,7 +240,7 @@ describe('browser-next initial pageview', () => {
         expect(observed).toEqual(['$pageview'])
     })
 
-    it('does not admit an automatic pageview across a consent-generation change', async () => {
+    it('does not admit when DOM access revokes consent before capture begins', async () => {
         const storage = new MemoryStorage()
         const controller = await createPostHog({
             projectToken: 'ph_test',
@@ -274,20 +271,25 @@ describe('browser-next initial pageview', () => {
         expect(posthog.hasOptedOut()).toBe(true)
     })
 
-    it('does not read the document for a bot-blocked client', async () => {
-        const document = jest.fn(() => {
-            throw new Error('document should not be read')
-        })
-        Object.defineProperty(globalThis, 'document', { configurable: true, get: document })
-
+    it('does not admit an automatic pageview for a bot-blocked client', async () => {
+        setDocument(new TestDocument('visible'))
+        const observed: string[] = []
         const posthog = await createPostHog({
             projectToken: 'ph_test',
             storage: false,
             navigator: { webdriver: true },
             fetch: false,
+            extensions: [
+                {
+                    name: 'observer',
+                    setup(client) {
+                        client.onEvent(({ event }) => observed.push(event))
+                    },
+                },
+            ],
         })
 
-        expect(document).not.toHaveBeenCalled()
+        expect(observed).toEqual([])
         expect(posthog.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
     })
 

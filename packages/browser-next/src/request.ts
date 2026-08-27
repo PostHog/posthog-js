@@ -37,7 +37,7 @@ export const sendRequest = async (
     runtime: RequestRuntime,
     path: string,
     init: SendRequestInit = {},
-    canContinue: () => boolean = () => true
+    canSend: () => boolean = () => true
 ): Promise<ApiResponse> => {
     let url: URL
     let body: string | undefined
@@ -66,7 +66,7 @@ export const sendRequest = async (
         return createFailedResponse(error)
     }
 
-    if (!canContinue()) {
+    if (!canSend()) {
         return createFailedResponse(new Error('PostHog requests are disabled'))
     }
 
@@ -81,13 +81,11 @@ export const sendRequest = async (
         try {
             const data =
                 body === undefined || typeof Blob !== 'function' ? body : new Blob([body], { type: 'application/json' })
-            if (!canContinue()) {
+            if (!canSend()) {
                 return createFailedResponse(new Error('PostHog requests are disabled'))
             }
             if (beacon.call(navigator, url.toString(), data)) {
-                return canContinue()
-                    ? { statusCode: 202 }
-                    : createFailedResponse(new Error('PostHog requests are disabled'))
+                return { statusCode: 202 }
             }
         } catch {
             // Fall back to Fetch with keepalive.
@@ -115,16 +113,13 @@ export const sendRequest = async (
         if (controller) {
             requestInit.signal = controller.signal
         }
-        if (!canContinue()) {
+        if (!canSend()) {
             return createFailedResponse(new Error('PostHog requests are disabled'))
         }
 
-        const response = await toApiResponse(await fetch(url, requestInit))
-        return canContinue() ? response : createFailedResponse(new Error('PostHog requests are disabled'))
+        return await toApiResponse(await fetch(url, requestInit))
     } catch (error) {
-        return canContinue()
-            ? createFailedResponse(error)
-            : createFailedResponse(new Error('PostHog requests are disabled'))
+        return createFailedResponse(error)
     } finally {
         if (timeout !== undefined) {
             globalThis.clearTimeout(timeout)

@@ -38,7 +38,7 @@ describe('legacy browser and browser-next differential harness', () => {
         await assertScenario(optOutScenario)
     })
 
-    it('blocks identity and capture by default until explicit opt-in', async () => {
+    it('retains identity state while blocking capture by default until explicit opt-in', async () => {
         await assertScenario(defaultOptOutScenario)
     })
 

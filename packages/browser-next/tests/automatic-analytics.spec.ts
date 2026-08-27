@@ -150,8 +150,9 @@ describe('@posthog/browser automatic analytics', () => {
         await posthog.shutdown()
     })
 
-    it('does not load analytics for denied, bot-filtered, or rejected capture', async () => {
-        const load = jest.fn(async () => analytics())
+    it('loads eager analytics under denial but does not lazy-load for rejected capture', async () => {
+        const eagerLoad = jest.fn(async () => analytics())
+        const lazyLoad = jest.fn(async () => analytics())
         const denied = await createPostHogCore(
             {
                 projectToken: 'ph_test_denied',
@@ -161,7 +162,7 @@ describe('@posthog/browser automatic analytics', () => {
                 fetch: false,
                 optOutByDefault: true,
             },
-            automaticSetup(load, {}, 'eager')
+            automaticSetup(eagerLoad, {}, 'eager')
         )
         await denied.capture('denied')
 
@@ -173,7 +174,7 @@ describe('@posthog/browser automatic analytics', () => {
                 navigator: { webdriver: true },
                 fetch: false,
             },
-            automaticSetup(load)
+            automaticSetup(lazyLoad)
         )
         await bot.capture('bot')
 
@@ -185,13 +186,14 @@ describe('@posthog/browser automatic analytics', () => {
                 navigator: false,
                 fetch: false,
             },
-            automaticSetup(load)
+            automaticSetup(lazyLoad)
         )
         const circular: Record<string, unknown> = {}
         circular.circular = circular
         await rejected.capture('rejected', circular)
 
-        expect(load).not.toHaveBeenCalled()
+        expect(eagerLoad).toHaveBeenCalledTimes(1)
+        expect(lazyLoad).not.toHaveBeenCalled()
         await Promise.all([denied.shutdown(), bot.shutdown(), rejected.shutdown()])
     })
 
@@ -291,7 +293,7 @@ describe('@posthog/browser automatic analytics', () => {
         await posthog.shutdown()
     })
 
-    it('does not install or send after consent is revoked during loading', async () => {
+    it('installs an in-flight analytics extension after revocation without sending purged work', async () => {
         const requests: SentRequest[] = []
         const extension = deferred<Extension>()
         const load = jest.fn(() => extension.promise)
@@ -315,7 +317,13 @@ describe('@posthog/browser automatic analytics', () => {
         await posthog.flush()
 
         expect(requests).toHaveLength(0)
-        expect(posthog.getExtension('analytics')).toBeUndefined()
+        expect(posthog.getExtension('analytics')).toBeDefined()
+
+        posthog.optIn()
+        await posthog.capture('after-grant')
+        await posthog.flush()
+        expect(requests).toHaveLength(1)
+        expect((requests[0]?.body?.batch as Array<{ event: string }>)[0]?.event).toBe('after-grant')
         await posthog.shutdown()
     })
 

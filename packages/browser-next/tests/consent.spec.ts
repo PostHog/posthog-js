@@ -176,31 +176,15 @@ describe('portable consent persistence', () => {
         expect(storage.values.get(DEFAULT_KEY)).toBe('0')
     })
 
-    it('resolves prior denial before extension outputs access state, persistence, or fetch', async () => {
-        const calls: string[] = []
+    it('keeps extension state and persistence available under prior denial while blocking transmission', async () => {
         const extensionSetup = jest.fn(async (client: Client) => {
             client.kv.set('private', true)
             await client.capture('extension-blocked')
             await client.sendRequest('/flags/')
         })
         const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
-        const stateKey = 'ph_ph_test_posthog_browser_v2'
-        const storage: StorageLike = {
-            getItem(key) {
-                calls.push(`get:${key}`)
-                if (key === DEFAULT_KEY) {
-                    return '0'
-                }
-                throw new Error('state must not be read')
-            },
-            setItem(key) {
-                calls.push(`set:${key}`)
-                throw new Error('state must not be written')
-            },
-            removeItem(key) {
-                calls.push(`remove:${key}`)
-            },
-        }
+        const storage = new MemoryStorage()
+        storage.values.set(DEFAULT_KEY, '0')
 
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -212,15 +196,12 @@ describe('portable consent persistence', () => {
         await posthog.capture('blocked')
         await posthog.sendRequest('/flags/')
 
-        expect(calls[0]).toBe(`get:${DEFAULT_KEY}`)
-        expect(calls).toContain(`remove:${stateKey}`)
-        expect(calls).not.toContain(`get:${stateKey}`)
-        expect(calls.some((call) => call.startsWith(`set:${stateKey}`))).toBe(false)
         expect(extensionSetup).toHaveBeenCalledTimes(1)
         expect(posthog.getExtension('blocked-by-consent')).toBeDefined()
         expect(fetch).not.toHaveBeenCalled()
-        expect(posthog.anonymousId).toBe('')
+        expect(posthog.anonymousId).not.toBe('')
         expect(posthog.session.sessionId).toBe('')
+        expect(storage.values.has('ph_ph_test_posthog_browser_v2')).toBe(true)
     })
 
     it('contains storage read, write, remove, subscribe, and cleanup failures', async () => {
@@ -297,13 +278,14 @@ describe('portable consent persistence', () => {
         }
         storage.setItem(DEFAULT_KEY, '1')
         const posthog = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
+        const distinctId = posthog.distinctId
 
         storage.failWrites = true
         posthog.optOut()
         storage.externalSet(DEFAULT_KEY, '1')
         dispatchConsentChange()
         expect(posthog.hasOptedOut()).toBe(true)
-        expect(posthog.distinctId).toBe('')
+        expect(posthog.distinctId).toBe(distinctId)
 
         storage.externalSet(DEFAULT_KEY, 'yes')
         expect(posthog.hasOptedOut()).toBe(false)
@@ -339,7 +321,7 @@ describe('portable consent persistence', () => {
         expect(requests).toHaveLength(0)
     })
 
-    it('removes sibling identity, session, and KV state and grants a fresh identity', async () => {
+    it('retains sibling identity, session, and KV state across denial and grant', async () => {
         const storage = new MemoryStorage()
         const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
@@ -350,15 +332,15 @@ describe('portable consent persistence', () => {
 
         second.optOut()
         expect(first.hasOptedOut()).toBe(true)
-        expect(first.anonymousId).toBe('')
-        expect(first.session.sessionId).toBe('')
-        expect(first.kv.get('private')).toBeUndefined()
+        expect(first.anonymousId).toBe(oldAnonymousId)
+        expect(first.session.sessionId).toBe(oldSessionId)
+        expect(first.kv.get('private')).toEqual({ value: true })
 
         second.optIn()
         expect(first.hasOptedOut()).toBe(false)
-        expect(first.anonymousId).not.toBe(oldAnonymousId)
-        expect(first.session.sessionId).not.toBe(oldSessionId)
-        expect(first.kv.get('private')).toBeUndefined()
+        expect(first.anonymousId).toBe(oldAnonymousId)
+        expect(first.session.sessionId).toBe(oldSessionId)
+        expect(first.kv.get('private')).toEqual({ value: true })
     })
 
     it('cancels a sibling retry backoff even when consent is granted again', async () => {
@@ -554,7 +536,7 @@ describe('portable consent persistence', () => {
         expect(plainRequests).toHaveLength(0)
     })
 
-    it('fresh-gates public and extension identity getters', async () => {
+    it('retains public and extension identity state after observing external denial', async () => {
         const storage = new MemoryStorage()
         let extensionClient: Client | undefined
         const posthog = await createPostHog({
@@ -566,20 +548,25 @@ describe('portable consent persistence', () => {
         })
         await posthog.identify('private-person')
         await posthog.group('company', 'private-company')
+        const anonymousId = posthog.anonymousId
+        const deviceId = posthog.deviceId
+        const groups = posthog.groups
+        const session = posthog.session
         storage.values.set(DEFAULT_KEY, '0')
 
-        expect(extensionClient?.distinctId).toBe('')
-        expect(extensionClient?.anonymousId).toBe('')
-        expect(extensionClient?.deviceId).toBeUndefined()
-        expect(extensionClient?.groups).toEqual({})
-        expect(extensionClient?.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
-        expect(posthog.distinctId).toBe('')
-        expect(posthog.anonymousId).toBe('')
-        expect(posthog.groups).toEqual({})
-        expect(posthog.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
+        expect(posthog.hasOptedOut()).toBe(true)
+        expect(extensionClient?.distinctId).toBe('private-person')
+        expect(extensionClient?.anonymousId).toBe(anonymousId)
+        expect(extensionClient?.deviceId).toBe(deviceId)
+        expect(extensionClient?.groups).toEqual(groups)
+        expect(extensionClient?.session).toEqual(session)
+        expect(posthog.distinctId).toBe('private-person')
+        expect(posthog.anonymousId).toBe(anonymousId)
+        expect(posthog.groups).toEqual(groups)
+        expect(posthog.session).toEqual(session)
     })
 
-    it('does not admit capture when caller serialization crosses denial and grant', async () => {
+    it('completes capture authorized before serialization crosses denial and grant', async () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
         const observed = jest.fn()
@@ -604,11 +591,13 @@ describe('portable consent persistence', () => {
         })
         await first.flush()
 
-        expect(observed).not.toHaveBeenCalled()
-        expect(requests).toHaveLength(0)
+        expect(observed).toHaveBeenCalledWith(
+            expect.objectContaining({ event: 'private', properties: expect.objectContaining({ value: 'serialized' }) })
+        )
+        expect(requests).toHaveLength(1)
     })
 
-    it('does not admit capture when a dynamic producer crosses denial and grant', async () => {
+    it('completes capture authorized before a dynamic producer crosses denial and grant', async () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
         const observed = jest.fn()
@@ -629,11 +618,13 @@ describe('portable consent persistence', () => {
 
         await first.capture('private')
         await first.flush()
-        expect(observed).not.toHaveBeenCalled()
-        expect(requests).toHaveLength(0)
+        expect(observed).toHaveBeenCalledWith(
+            expect.objectContaining({ event: 'private', properties: expect.objectContaining({ private: true }) })
+        )
+        expect(requests).toHaveLength(1)
     })
 
-    it('stops event fanout and enqueue after an observer crosses denial and grant', async () => {
+    it('completes event fanout while denial from an observer purges queued delivery', async () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
         const laterObserver = jest.fn()
@@ -653,11 +644,11 @@ describe('portable consent persistence', () => {
 
         await first.capture('private')
         await first.flush()
-        expect(laterObserver).not.toHaveBeenCalled()
+        expect(laterObserver).toHaveBeenCalledTimes(1)
         expect(requests).toHaveLength(0)
     })
 
-    it('purges an admission when overflow reporting crosses denial and grant', async () => {
+    it('purges queued work when denial occurs during overflow reporting', async () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
         const startedAt = Date.now()
@@ -693,7 +684,7 @@ describe('portable consent persistence', () => {
         expect(requests).toEqual([])
     })
 
-    it('stops capture after a new-session observer crosses denial and grant', async () => {
+    it('completes capture fanout while denial from a new-session observer purges queued delivery', async () => {
         jest.useFakeTimers()
         try {
             jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
@@ -723,15 +714,15 @@ describe('portable consent persistence', () => {
 
             await first.capture('private')
             await first.flush()
-            expect(laterSessionObserver).not.toHaveBeenCalled()
-            expect(observed).not.toHaveBeenCalled()
+            expect(laterSessionObserver).toHaveBeenCalledTimes(1)
+            expect(observed).toHaveBeenCalledTimes(1)
             expect(requests).toHaveLength(0)
         } finally {
             jest.useRealTimers()
         }
     })
 
-    it('does not publish reset when its persistence write crosses denial and grant', async () => {
+    it('publishes reset when its persistence write crosses denial and grant', async () => {
         const stateKey = 'ph_ph_test_posthog_browser_v2'
         const storage = new MemoryStorage() as MemoryStorage & { onStateWrite?: () => void }
         const originalSet = storage.setItem.bind(storage)
@@ -754,10 +745,10 @@ describe('portable consent persistence', () => {
         }
 
         await first.capture('after-reset')
-        expect(observed).not.toHaveBeenCalled()
+        expect(observed).toHaveBeenCalledWith(expect.objectContaining({ reason: 'reset' }))
     })
 
-    it('keeps a configured extension whose asynchronous setup crosses denial and grant', async () => {
+    it('keeps ownership of an extension whose asynchronous setup crosses denial and grant', async () => {
         const storage = new MemoryStorage()
         let finishSetup: (() => void) | undefined
         let markSetupStarted: (() => void) | undefined
@@ -797,9 +788,11 @@ describe('portable consent persistence', () => {
         expect(dispose).toHaveBeenCalledTimes(1)
     })
 
-    it('does not invoke transport when request preparation crosses denial and grant', async () => {
+    it('invokes transport when consent is granted at dispatch after request preparation', async () => {
         const storage = new MemoryStorage()
-        const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        const fetch = jest
+            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .mockResolvedValue(new Response('{}', { status: 200 }))
         const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
         const init = Object.defineProperty({}, 'headers', {
@@ -810,11 +803,30 @@ describe('portable consent persistence', () => {
             },
         }) as SendRequestInit
 
+        await expect(first.sendRequest('/flags/', init)).resolves.toMatchObject({ statusCode: 200 })
+        expect(fetch).toHaveBeenCalledTimes(1)
+        expect(fetch.mock.calls[0]?.[1]?.headers).toEqual({ 'X-Test': 'value' })
+    })
+
+    it('does not invoke transport when request preparation ends with denied consent', async () => {
+        const storage = new MemoryStorage()
+        const fetch = jest
+            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .mockResolvedValue(new Response('{}', { status: 200 }))
+        const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch })
+        const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
+        const init = Object.defineProperty({}, 'headers', {
+            get() {
+                second.optOut()
+                return { 'X-Test': 'value' }
+            },
+        }) as SendRequestInit
+
         await expect(first.sendRequest('/flags/', init)).resolves.toMatchObject({ statusCode: 0 })
         expect(fetch).not.toHaveBeenCalled()
     })
 
-    it('discards a Fetch response received after denial and grant', async () => {
+    it('returns a Fetch response received after denial and grant', async () => {
         const storage = new MemoryStorage()
         let finishFetch: ((response: Response) => void) | undefined
         const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(
@@ -831,11 +843,11 @@ describe('portable consent persistence', () => {
         second.optIn()
         finishFetch?.(new Response('{}', { status: 200 }))
 
-        await expect(response).resolves.toMatchObject({ statusCode: 0 })
+        await expect(response).resolves.toMatchObject({ statusCode: 200 })
         expect(fetch).toHaveBeenCalledTimes(1)
     })
 
-    it('discards a Fetch failure received after denial and grant', async () => {
+    it('returns a Fetch failure received after denial and grant', async () => {
         const storage = new MemoryStorage()
         let failFetch: ((error: Error) => void) | undefined
         const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(
@@ -854,11 +866,11 @@ describe('portable consent persistence', () => {
 
         await expect(response).resolves.toMatchObject({
             statusCode: 0,
-            error: expect.objectContaining({ message: 'PostHog requests are disabled' }),
+            error: expect.objectContaining({ message: 'private transport failure' }),
         })
     })
 
-    it('discards Beacon acceptance that crosses denial and grant', async () => {
+    it('returns Beacon acceptance that crosses denial and grant', async () => {
         const storage = new MemoryStorage()
         let revoke = (): void => {}
         const first = await createPostHog({
@@ -880,10 +892,10 @@ describe('portable consent persistence', () => {
 
         await expect(
             first.sendRequest('/flags/', { body: {}, method: 'POST', transport: 'sendBeacon' })
-        ).resolves.toMatchObject({ statusCode: 0 })
+        ).resolves.toMatchObject({ statusCode: 202 })
     })
 
-    it('resumes a retained remote-config subscription after a sibling grants consent', async () => {
+    it('loads and publishes remote config while analytics consent is denied', async () => {
         const storage = new MemoryStorage()
         storage.setItem(DEFAULT_KEY, '0')
         const config = { supportedCompression: ['gzip-js'] } as RemoteConfig
@@ -897,18 +909,14 @@ describe('portable consent persistence', () => {
             remoteConfigLoader: loader,
             extensions: [{ name: 'subscriber', setup: (client) => void client.onRemoteConfig(observed) }],
         })
-        const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-
-        expect(loader).not.toHaveBeenCalled()
-        second.optIn()
-        await Promise.resolve()
+        expect(first.hasOptedOut()).toBe(true)
         await first.getRemoteConfig()
 
         expect(loader).toHaveBeenCalledTimes(1)
         expect(observed).toHaveBeenCalledWith({ ok: true, config })
     })
 
-    it('tracks denied remote-config subscriptions independently for the same callback', async () => {
+    it('publishes cached remote config once for each subscription regardless of consent', async () => {
         const storage = new MemoryStorage()
         storage.setItem(DEFAULT_KEY, '0')
         const config = { supportedCompression: ['gzip-js'] } as RemoteConfig
@@ -927,75 +935,17 @@ describe('portable consent persistence', () => {
         posthog.optIn()
         await Promise.resolve()
 
-        expect(observer).toHaveBeenCalledTimes(1)
+        expect(observer).toHaveBeenCalledTimes(2)
         expect(observer).toHaveBeenCalledWith({ ok: true, config })
     })
 
-    it('honors subscription disposal during opt-in replay', async () => {
-        const storage = new MemoryStorage()
-        storage.setItem(DEFAULT_KEY, '0')
-        const posthog = await createPostHog({
-            projectToken: 'ph_test',
-            storage,
-            navigator: false,
-            fetch: false,
-            remoteConfig: { supportedCompression: ['gzip-js'] } as RemoteConfig,
-        })
-        const laterObserver = jest.fn()
-        const later: { subscription?: Disposable } = {}
-        posthog.onRemoteConfig(() => later.subscription?.dispose())
-        later.subscription = posthog.onRemoteConfig(laterObserver)
-
-        posthog.optIn()
-        await Promise.resolve()
-
-        expect(laterObserver).not.toHaveBeenCalled()
-    })
-
-    it('stops opt-in replay across a nested denial and grant', async () => {
-        const storage = new MemoryStorage()
-        storage.setItem(DEFAULT_KEY, '0')
-        const config = { supportedCompression: ['gzip-js'] } as RemoteConfig
-        const first = await createPostHog({
-            projectToken: 'ph_test',
-            storage,
-            navigator: false,
-            fetch: false,
-            remoteConfig: config,
-        })
-        const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-        const firstObserver = jest.fn(() => {
-            second.optOut()
-            second.optIn()
-        })
-        const laterObserver = jest.fn()
-        first.onRemoteConfig(firstObserver)
-        first.onRemoteConfig(laterObserver)
-
-        second.optIn()
-        await Promise.resolve()
-
-        expect(firstObserver).toHaveBeenCalledTimes(1)
-        expect(laterObserver).not.toHaveBeenCalled()
-
-        second.optOut()
-        second.optIn()
-        await Promise.resolve()
-        expect(firstObserver).toHaveBeenCalledTimes(1)
-        expect(laterObserver).toHaveBeenCalledTimes(1)
-    })
-
-    it('discards and retries remote config whose loader crosses denial and grant', async () => {
+    it('retains remote config whose loader crosses denial and grant', async () => {
         const storage = new MemoryStorage()
         let finishLoad: ((config: RemoteConfig) => void) | undefined
         const loaded = new Promise<RemoteConfig>((resolve) => {
             finishLoad = resolve
         })
-        const replacement = { supportedCompression: ['gzip-js'] } as RemoteConfig
-        const loader = jest
-            .fn()
-            .mockImplementationOnce(() => loaded)
-            .mockResolvedValue(replacement)
+        const loader = jest.fn(() => loaded)
         const first = await createPostHog({
             projectToken: 'ph_test',
             storage,
@@ -1008,14 +958,15 @@ describe('portable consent persistence', () => {
         await Promise.resolve()
         second.optOut()
         second.optIn()
-        finishLoad?.({} as RemoteConfig)
+        const config = {} as RemoteConfig
+        finishLoad?.(config)
 
-        await expect(result).resolves.toBeUndefined()
-        await expect(first.getRemoteConfig()).resolves.toBe(replacement)
-        expect(loader).toHaveBeenCalledTimes(2)
+        await expect(result).resolves.toBe(config)
+        await expect(first.getRemoteConfig()).resolves.toBe(config)
+        expect(loader).toHaveBeenCalledTimes(1)
     })
 
-    it('stops remote-config fanout after a listener crosses denial and grant', async () => {
+    it('completes remote-config fanout after a listener crosses denial and grant', async () => {
         const storage = new MemoryStorage()
         const config = { supportedCompression: ['gzip-js'] } as RemoteConfig
         const first = await createPostHog({
@@ -1035,10 +986,10 @@ describe('portable consent persistence', () => {
 
         await first.getRemoteConfig()
 
-        expect(laterObserver).not.toHaveBeenCalled()
+        expect(laterObserver).toHaveBeenCalledWith({ ok: true, config })
     })
 
-    it('does not start a deferred remote-config loader after denial and grant', async () => {
+    it('starts a deferred remote-config loader across denial and grant', async () => {
         const storage = new MemoryStorage()
         const loader = jest.fn(async () => ({}) as RemoteConfig)
         const first = await createPostHog({
@@ -1054,8 +1005,8 @@ describe('portable consent persistence', () => {
         second.optOut()
         second.optIn()
 
-        await expect(result).resolves.toBeUndefined()
-        expect(loader).not.toHaveBeenCalled()
+        await expect(result).resolves.toEqual({})
+        expect(loader).toHaveBeenCalledTimes(1)
     })
 
     it('contains browser listener registration and cleanup failures', async () => {

@@ -195,16 +195,6 @@ const createInitialState = (deviceId = createId(), anonymousId = deviceId): Pers
     extensionData: emptyRecord<Record<string, unknown>>(),
 })
 
-const createDeniedState = (): PersistedState => ({
-    version: 1,
-    deviceId: '',
-    anonymousId: '',
-    distinctId: '',
-    isIdentified: false,
-    groups: emptyRecord<string>(),
-    extensionData: emptyRecord<Record<string, unknown>>(),
-})
-
 const decodeConsent = (value: unknown): ConsentState | undefined => {
     const normalized = typeof value === 'string' ? value.trim().toLowerCase() : value
     return normalized === true ||
@@ -300,7 +290,6 @@ export class BrowserState {
     private _lastConsentValue: unknown = null
     private _ignoredConsentValue: unknown
     private _hasIgnoredConsentValue = false
-    private _consentWriteFailed = false
 
     private readonly _storage: StorageLike | undefined
     private readonly _windowStorageFactory: (() => StorageLike | undefined) | undefined
@@ -337,17 +326,12 @@ export class BrowserState {
             this._lastConsentValue = storedConsent
             this._consent = decodeConsent(storedConsent) ?? this._defaultConsent
         }
-        if (this._consent === 'denied') {
-            this._state = createDeniedState()
-            this._remove(this._stateKey)
-        } else {
-            const [stateRead, storedState] = this._read(this._stateKey)
-            this._state = parseState(typeof storedState === 'string' ? storedState : null) ?? createInitialState()
-            this._lastActivityWriteTimestamp = this._state.session?.lastActivityTimestamp ?? 0
-            this._stateReadPending = !stateRead
-            if (stateRead) {
-                this._save()
-            }
+        const [stateRead, storedState] = this._read(this._stateKey)
+        this._state = parseState(typeof storedState === 'string' ? storedState : null) ?? createInitialState()
+        this._lastActivityWriteTimestamp = this._state.session?.lastActivityTimestamp ?? 0
+        this._stateReadPending = !stateRead
+        if (stateRead) {
+            this._save()
         }
     }
 
@@ -415,7 +399,6 @@ export class BrowserState {
             return this._consent
         }
         this._hasIgnoredConsentValue = false
-        this._consentWriteFailed = false
         this._lastConsentValue = value
         this._applyConsent(decodeConsent(value) ?? this._defaultConsent)
         return this._consent
@@ -492,10 +475,6 @@ export class BrowserState {
         this._pendingSessionReason = undefined
         this._windowId = prepared.context.windowId
         this._initializeWindowStorage(prepared.windowStorage, prepared.windowStorageResolved)
-        if (this._consent === 'denied') {
-            this._clearWindow(true)
-            return false
-        }
         this._setWindowId(prepared.context.windowId)
 
         if (prepared.rotated) {
@@ -506,9 +485,6 @@ export class BrowserState {
             this._save()
         } else {
             this._lastActivityWriteTimestamp = prepared.lastActivityWriteTimestamp
-        }
-        if (this.refreshConsent() === 'denied') {
-            return false
         }
 
         const [, committed] = this._readPersistedState()
@@ -800,20 +776,7 @@ export class BrowserState {
             return
         }
         const previousConsent = this._consent
-        const wasDenied = previousConsent === 'denied'
         this._consent = consent
-        if (consent === 'denied') {
-            this._state = createDeniedState()
-            this._stateReadPending = false
-            this._lastActivityWriteTimestamp = 0
-            this._pendingSessionReason = undefined
-            this._clearWindow(true)
-            this._remove(this._stateKey)
-        } else if (wasDenied) {
-            this._state = createInitialState()
-            this._stateReadPending = false
-            this._lastActivityWriteTimestamp = 0
-        }
         try {
             this._onConsentChange(consent, previousConsent)
         } catch {
@@ -822,7 +785,7 @@ export class BrowserState {
     }
 
     private _save(preserveSession = true): void {
-        if (!this.prepare() || this.refreshConsent() === 'denied' || this._consentWriteFailed) {
+        if (!this.prepare()) {
             return
         }
 
@@ -845,19 +808,16 @@ export class BrowserState {
         if (!this._storage) {
             this._ignoredConsentValue = this._lastConsentValue
             this._hasIgnoredConsentValue = true
-            this._consentWriteFailed = true
             return false
         }
         try {
             this._storage.setItem(this.consentKey, value)
             this._lastConsentValue = value
             this._hasIgnoredConsentValue = false
-            this._consentWriteFailed = false
             return true
         } catch {
             this._ignoredConsentValue = this._lastConsentValue
             this._hasIgnoredConsentValue = true
-            this._consentWriteFailed = true
             return false
         }
     }

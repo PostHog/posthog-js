@@ -101,7 +101,7 @@ describe('@posthog/browser extensions', () => {
         await posthog.dispose()
     })
 
-    it('blocks extension key-value access after denial and disposal without changing persistence', async () => {
+    it('keeps extension key-value access independent of capture consent and blocks it after disposal', async () => {
         const storage = new MemoryStorage()
         let client: Client | undefined
         const extension: Extension = {
@@ -121,12 +121,15 @@ describe('@posthog/browser extensions', () => {
         client?.kv.set('retained', true)
 
         posthog.optOut()
+        posthog.kv.set('core-denied', true)
         client?.kv.set('denied', true)
         client?.kv.remove('retained')
+        expect(posthog.kv.get('core-denied')).toBe(true)
         expect(client?.kv.get('retained')).toBeUndefined()
+        expect(client?.kv.get('denied')).toBe(true)
         posthog.optIn()
         expect(client?.kv.get('retained')).toBeUndefined()
-        expect(client?.kv.get('denied')).toBeUndefined()
+        expect(client?.kv.get('denied')).toBe(true)
         client?.kv.set('after_grant', true)
 
         await posthog.dispose()
@@ -141,6 +144,7 @@ describe('@posthog/browser extensions', () => {
                 {
                     name: 'stateful',
                     setup(nextClient) {
+                        expect(nextClient.kv.get('denied')).toBe(true)
                         expect(nextClient.kv.get('after_grant')).toBe(true)
                         expect(nextClient.kv.get('disposed')).toBeUndefined()
                     },
@@ -148,6 +152,7 @@ describe('@posthog/browser extensions', () => {
                 },
             ],
         })
+        expect(reloaded.kv.get('core-denied')).toBe(true)
         await reloaded.dispose()
     })
 
@@ -180,7 +185,7 @@ describe('@posthog/browser extensions', () => {
         expect(Object.isFrozen(client?.initialPersonProperties.initial)).toBe(true)
 
         posthog.optOut()
-        expect(client?.deviceId).toBeUndefined()
+        expect(client?.deviceId).toBe(initialAnonymousId)
         posthog.optIn()
         const postConsentAnonymousId = posthog.anonymousId
         expect(client?.deviceId).toBe(postConsentAnonymousId)
@@ -190,7 +195,7 @@ describe('@posthog/browser extensions', () => {
         expect(client?.deviceId).toBe(postConsentAnonymousId)
     })
 
-    it('runs extensions while gating their outputs with consent and bot filtering', async () => {
+    it('runs extensions and remote config while gating analytics outputs', async () => {
         const deniedRequests: SentRequest[] = []
         let deniedClient: Client | undefined
         const deniedSetup = jest.fn(async (client: Client) => {
@@ -213,7 +218,8 @@ describe('@posthog/browser extensions', () => {
         await expect(denied.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         expect(deniedSetup).toHaveBeenCalledTimes(1)
         expect(denied.getExtension('denied')).toBeDefined()
-        expect(remoteConfigLoader).not.toHaveBeenCalled()
+        expect(remoteConfigLoader).toHaveBeenCalledTimes(1)
+        expect(deniedClient?.kv.get('private')).toBe(true)
         expect(deniedRequests).toHaveLength(0)
 
         expect(denied.hasOptedOut()).toBe(true)
@@ -239,13 +245,13 @@ describe('@posthog/browser extensions', () => {
             extensions: [{ name: 'blocked', setup: blockedSetup }],
         })
         await expect(blocked.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
-        await expect(blocked.getRemoteConfig()).resolves.toBeUndefined()
+        await expect(blocked.getRemoteConfig()).resolves.toEqual({ supportedCompression: [] })
         expect(blockedSetup).toHaveBeenCalledTimes(1)
         expect(blocked.getExtension('blocked')).toBeDefined()
         expect(blockedRequests).toHaveLength(0)
     })
 
-    it('drops remote configuration completed after denial', async () => {
+    it('returns remote configuration completed after denial', async () => {
         let finishConfig: ((value: RemoteConfig) => void) | undefined
         const remoteConfig = new Promise<RemoteConfig>((resolve) => {
             finishConfig = resolve
@@ -262,7 +268,7 @@ describe('@posthog/browser extensions', () => {
         posthog.optOut()
         finishConfig?.(createRemoteConfig({ hasFeatureFlags: true }))
 
-        await expect(configResult).resolves.toBeUndefined()
+        await expect(configResult).resolves.toMatchObject({ hasFeatureFlags: true })
     })
 
     it('provides the shared project token and request transport', async () => {

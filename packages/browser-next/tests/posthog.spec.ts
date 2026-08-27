@@ -391,7 +391,7 @@ describe('@posthog/browser core', () => {
         expect(second.hasOptedOut()).toBe(true)
     })
 
-    it('ignores identity changes and analytics persistence before explicit opt-in', async () => {
+    it('retains identity changes before explicit opt-in while blocking analytics', async () => {
         const requests: SentRequest[] = []
         const storage = new MemoryStorage()
         const posthog = await createAutomaticPostHog({
@@ -402,22 +402,25 @@ describe('@posthog/browser core', () => {
             optOutByDefault: true,
             analytics: { flushAt: 1, flushInterval: 0 },
         })
-        expect(posthog.anonymousId).toBe('')
+        const anonymousId = posthog.anonymousId
+        expect(anonymousId).not.toBe('')
 
         await posthog.identify('user-before-consent')
         await posthog.group('organization', 'group-before-consent')
         await posthog.capture('before_consent')
         expect(requests).toHaveLength(0)
-        expect(storage.values.size).toBe(0)
+        expect(posthog.distinctId).toBe('user-before-consent')
+        expect(posthog.anonymousId).toBe(anonymousId)
+        expect(posthog.groups).toEqual({ organization: 'group-before-consent' })
+        expect(storage.values.has('ph_ph_test_posthog_browser_v2')).toBe(true)
 
         posthog.optIn()
-        const anonymousId = posthog.anonymousId
         await posthog.capture('after_consent')
         await posthog.flush()
 
         expect(captureEvent(requests[0])).toMatchObject({
-            distinct_id: anonymousId,
-            properties: { $groups: {} },
+            distinct_id: 'user-before-consent',
+            properties: { $groups: { organization: 'group-before-consent' } },
         })
     })
 
@@ -718,7 +721,7 @@ describe('@posthog/browser core', () => {
         await posthog.dispose()
     })
 
-    it('persists opt-out without retaining identity state', async () => {
+    it('persists opt-out without clearing identity state', async () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
         const first = await createPostHogWithAnalytics({
@@ -732,7 +735,9 @@ describe('@posthog/browser core', () => {
         first.optOut()
         await first.capture('blocked')
         expect(requests).toHaveLength(0)
-        expect([...storage.values.keys()]).toEqual(['__ph_opt_in_out_ph_test'])
+        expect(new Set(storage.values.keys())).toEqual(
+            new Set(['ph_ph_test_posthog_browser_v2', '__ph_opt_in_out_ph_test'])
+        )
 
         const second = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
@@ -741,10 +746,10 @@ describe('@posthog/browser core', () => {
             fetch: createFetch(requests),
         })
         expect(second.hasOptedOut()).toBe(true)
-        expect(second.anonymousId).not.toBe(firstAnonymousId)
+        expect(second.anonymousId).toBe(firstAnonymousId)
     })
 
-    it('drops capture for a blocked user agent without writing persistence', async () => {
+    it('drops capture for a blocked user agent while keeping state usable only in memory', async () => {
         const requests: SentRequest[] = []
         const storage = new MemoryStorage()
         const posthog = await createPostHogWithAnalytics({
@@ -763,10 +768,10 @@ describe('@posthog/browser core', () => {
         posthog.kv.set('blocked', true)
 
         expect(requests).toHaveLength(0)
-        expect(posthog.distinctId).toBe(distinctId)
+        expect(posthog.distinctId).not.toBe(distinctId)
         expect(posthog.groups).toEqual({})
         expect(posthog.session).toEqual(session)
-        expect(posthog.kv.get('blocked')).toBeUndefined()
+        expect(posthog.kv.get('blocked')).toBe(true)
         expect(storage.values.size).toBe(0)
     })
 
@@ -1247,7 +1252,12 @@ describe('@posthog/browser core', () => {
         })
         const events: string[] = []
         posthog.kv.set('before_dispose', true)
-        await posthog.dispose()
+        const disposal = posthog.dispose()
+        posthog.kv.set('while_closing', true)
+        posthog.kv.remove('before_dispose')
+        expect(posthog.kv.get('before_dispose')).toBeUndefined()
+        expect(posthog.kv.get('while_closing')).toBeUndefined()
+        await disposal
 
         posthog.onEvent(({ event }) => events.push(event))
         posthog.registerDynamicEventProperties(() => ({ after_dispose: true }))
@@ -1266,6 +1276,7 @@ describe('@posthog/browser core', () => {
             fetch: false,
         })
         expect(reloaded.kv.get('before_dispose')).toBe(true)
+        expect(reloaded.kv.get('while_closing')).toBeUndefined()
         expect(reloaded.kv.get('after_dispose')).toBeUndefined()
         expect(requests).toHaveLength(0)
         expect(remoteConfigLoader).toHaveBeenCalledTimes(1)

@@ -124,31 +124,9 @@ export const optOutScenario: BehaviorScenario<unknown> = {
 }
 
 export const defaultOptOutScenario: BehaviorScenario<unknown> = {
-    name: 'default opt-out blocks identity and capture until explicit opt-in',
+    name: 'default opt-out retains identity state while blocking capture until explicit opt-in',
     setup: { optOutByDefault: true },
     expected: {
-        before: {
-            anonymousId: '',
-            distinctId: '',
-            isIdentified: false,
-        },
-        afterDeniedIdentify: {
-            anonymousId: '',
-            distinctId: '',
-            isIdentified: false,
-        },
-        optedOutAfterGrant: false,
-        events: [
-            {
-                event: 'after_consent',
-                distinctId: '<anonymous-id-1>',
-                anonymousId: undefined,
-                plan: undefined,
-            },
-        ],
-        deliveredEventNames: ['after_consent'],
-    },
-    legacyExpected: {
         before: {
             anonymousId: '<anonymous-id-1>',
             distinctId: '<anonymous-id-1>',

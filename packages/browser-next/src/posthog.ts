@@ -19,7 +19,7 @@ import { createId } from './id'
 import { Lane } from './lane'
 import { createLogger } from './logger'
 import { ClientRateLimiter } from './rate-limiter'
-import { createFailedResponse, sendRequest, type RequestRuntime } from './request'
+import { sendRequest, type RequestRuntime } from './request'
 import { BrowserState, getDefaultSessionStorage, getDefaultStorage } from './state'
 import type {
     AnalyticsOptions,
@@ -38,10 +38,8 @@ const MAX_ANALYTICS_BYTES = 8 * 1024 * 1024
 const MAX_ANALYTICS_AGE_MS = 60 * 60 * 1000
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000
 const CLIENT_RATE_LIMIT_WARNING = '$$client_ingestion_warning'
-const EMPTY_SESSION: SessionContext = Object.freeze({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
 
 type AutomaticAnalyticsReason = 'capture' | 'flush' | 'shutdown' | 'eager'
-type PendingRemoteConfigSubscription = [handler: (result: RemoteConfigResult) => void, active: boolean]
 
 export interface AutomaticAnalyticsSetup {
     strategy: LoadStrategy
@@ -118,7 +116,6 @@ class PostHogBrowserClient implements PostHog {
     readonly projectToken: string
 
     private readonly _remoteConfigPublisher: Publisher<RemoteConfigResult>
-    private readonly _pendingRemoteConfigSubscriptions: PendingRemoteConfigSubscription[] = []
     private readonly _eventPublisher: Publisher<CapturedEventInfo>
     private readonly _newSessionPublisher: Publisher<NewSessionInfo>
     private readonly _registry: ExtensionRegistry
@@ -136,9 +133,7 @@ class PostHogBrowserClient implements PostHog {
     private _remoteConfig: RemoteConfig | undefined
     private _latestRemoteConfigResult: RemoteConfigResult | undefined
     private _remoteConfigPromise: Promise<RemoteConfig | undefined> | undefined
-    private _remoteConfigReplayActive = false
     private _cancelRemoteConfigWait: (() => void) | undefined
-    private _consentGeneration = 0
     private _automaticAnalyticsLoad: Promise<void> | undefined
     private _automaticAnalyticsFailed = false
     private _automaticAnalyticsFailures = 0
@@ -216,13 +211,9 @@ class PostHogBrowserClient implements PostHog {
             !this._blocked && options.storage === undefined && requestedStorage !== undefined
                 ? getDefaultSessionStorage
                 : undefined,
-            (consent, previousConsent) => {
+            (consent) => {
                 if (consent === 'denied') {
-                    this._consentGeneration++
                     this._analyticsLane.purge()
-                    this._removePageviewListener()
-                } else if (previousConsent === 'denied' && !this._remoteConfigReplayActive) {
-                    void Promise.resolve().then(() => this._resumeRemoteConfig())
                 }
             }
         )
@@ -248,40 +239,20 @@ class PostHogBrowserClient implements PostHog {
                 ? 10_000
                 : Math.max(0, options.remoteConfigTimeoutMs)
 
-        this.kv = this._state.keyValueStore('core', () => this._canUseState())
+        this.kv = this._state.keyValueStore('core', () => !this._closing && !this._disposed && this._state.prepare())
         this._latestRemoteConfigResult = this._remoteConfig ? { ok: true, config: this._remoteConfig } : undefined
         this.onRemoteConfig = (handler) => {
             const subscription = this._remoteConfigPublisher.listener(handler)
-            const pending: PendingRemoteConfigSubscription = [handler, true]
-            const disposable: Disposable = {
-                dispose: () => {
-                    if (pending[1]) {
-                        pending[1] = false
-                        const index = this._pendingRemoteConfigSubscriptions.indexOf(pending)
-                        if (index !== -1) {
-                            this._pendingRemoteConfigSubscriptions.splice(index, 1)
-                        }
-                        subscription.dispose()
-                    }
-                },
-            }
-            if (!this._canUseState()) {
-                if (this.hasOptedOut()) {
-                    this._pendingRemoteConfigSubscriptions.push(pending)
-                }
-                return disposable
-            }
-
             if (this._latestRemoteConfigResult) {
                 try {
                     handler(this._latestRemoteConfigResult)
                 } catch (error) {
                     this.logger.error('A remote configuration listener failed', error)
                 }
-            } else {
+            } else if (!this._closing && !this._disposed) {
                 void this.getRemoteConfig()
             }
-            return disposable
+            return subscription
         }
         this.onEvent = this._eventPublisher.listener
         this.onNewSession = this._newSessionPublisher.listener
@@ -292,23 +263,28 @@ class PostHogBrowserClient implements PostHog {
     }
 
     get distinctId(): string {
-        return this._canUseState() ? this._state.distinctId : ''
+        this._state.prepare()
+        return this._state.distinctId
     }
 
     get anonymousId(): string {
-        return this._canUseState() ? this._state.anonymousId : ''
+        this._state.prepare()
+        return this._state.anonymousId
     }
 
     get deviceId(): string | undefined {
-        return this._canUseState() ? this._state.deviceId : undefined
+        this._state.prepare()
+        return this._state.deviceId
     }
 
     get groups(): Record<string, string> {
-        return this._canUseState() ? this._state.groups : {}
+        this._state.prepare()
+        return this._state.groups
     }
 
     get session(): SessionContext {
-        return this._canUseState() ? this._state.session : EMPTY_SESSION
+        this._state.prepare()
+        return this._state.session
     }
 
     async capture(
@@ -323,10 +299,16 @@ class PostHogBrowserClient implements PostHog {
         event: string,
         properties: Record<string, unknown> | null = null,
         options: CaptureOptions = {},
-        consentGeneration = this._consentGeneration,
         skipRateLimit = false
     ): boolean {
-        if (!isNonEmptyString(event) || !this._canContinue(consentGeneration)) {
+        if (
+            !isNonEmptyString(event) ||
+            this._closing ||
+            this._disposed ||
+            this._blocked ||
+            this.hasOptedOut() ||
+            !this._state.prepare()
+        ) {
             return false
         }
         if (!skipRateLimit) {
@@ -340,7 +322,6 @@ class PostHogBrowserClient implements PostHog {
                             CLIENT_RATE_LIMIT_WARNING,
                             { $$client_ingestion_warning_message: `posthog-js client rate limited: ${warning}` },
                             {},
-                            consentGeneration,
                             true
                         )
                     ) {
@@ -392,20 +373,15 @@ class PostHogBrowserClient implements PostHog {
             return false
         }
 
-        if (!this._canContinue(consentGeneration)) {
-            return false
-        }
         const preparedSession = this._state.prepareSessionForEvent()
         const session = preparedSession.context
-        if (!this._canContinue(consentGeneration)) {
-            return false
-        }
-        const distinctId = this.distinctId
-        const groups = this.groups
+        const distinctId = this._state.distinctId
+        const deviceId = this._state.deviceId
+        const groups = this._state.groups
         Object.assign(messageProperties, {
             token: this.projectToken,
             distinct_id: distinctId,
-            $device_id: this.deviceId,
+            $device_id: deviceId,
             $groups: groups,
             $session_id: session.sessionId,
             $window_id: session.windowId,
@@ -415,7 +391,7 @@ class PostHogBrowserClient implements PostHog {
         Object.assign(observedProperties, {
             token: this.projectToken,
             distinct_id: distinctId,
-            $device_id: this.deviceId,
+            $device_id: deviceId,
             $groups: { ...groups },
             $session_id: session.sessionId,
             $window_id: session.windowId,
@@ -437,9 +413,6 @@ class PostHogBrowserClient implements PostHog {
             this.logger.error('The finalized event could not be measured', error)
             return false
         }
-        if (!this._canContinue(consentGeneration)) {
-            return false
-        }
         const admitted = this._analyticsLane.enqueue(message, bytes)
         if (!admitted) {
             if (bytes > MAX_ANALYTICS_BYTES) {
@@ -447,34 +420,16 @@ class PostHogBrowserClient implements PostHog {
             }
             return false
         }
-        if (!this._canContinue(consentGeneration)) {
-            this._analyticsLane.purge()
-            return false
-        }
         if (!this._state.sessionAdmitted(preparedSession)) {
             this._analyticsLane.discardQueued(message)
             return false
         }
-        if (!this._canContinue(consentGeneration)) {
-            this._analyticsLane.purge()
-            return false
-        }
         if (preparedSession.reason) {
-            this._newSessionPublisher.publish({ ...session, reason: preparedSession.reason }, () =>
-                this._canContinue(consentGeneration)
-            )
-            if (!this._canContinue(consentGeneration)) {
-                return false
-            }
+            this._newSessionPublisher.publish({ ...session, reason: preparedSession.reason })
         }
-        this._eventPublisher.publish(deepFreeze({ event, properties: observedProperties }), () =>
-            this._canContinue(consentGeneration)
-        )
-        const continues = this._canContinue(consentGeneration)
-        if (continues) {
-            void this._ensureAutomaticAnalytics('capture')
-        }
-        return continues
+        this._eventPublisher.publish(deepFreeze({ event, properties: observedProperties }))
+        void this._ensureAutomaticAnalytics('capture')
+        return true
     }
 
     async identify(
@@ -482,16 +437,13 @@ class PostHogBrowserClient implements PostHog {
         set?: Record<string, unknown>,
         setOnce?: Record<string, unknown>
     ): Promise<void> {
-        const consentGeneration = this._consentGeneration
-        if (!isValidDistinctId(distinctId) || !this._canContinue(consentGeneration)) {
+        if (!isValidDistinctId(distinctId) || this._closing || this._disposed) {
             return
         }
 
-        const previousDistinctId = this.distinctId
+        this._state.prepare()
+        const previousDistinctId = this._state.distinctId
         const wasIdentified = this._state.isIdentified
-        if (!this._canContinue(consentGeneration)) {
-            return
-        }
         const captureOptions: CaptureOptions = {}
         if (set) {
             captureOptions.set = set
@@ -504,9 +456,6 @@ class PostHogBrowserClient implements PostHog {
         if (distinctId === previousDistinctId) {
             if (!wasIdentified) {
                 this._state.identify(distinctId)
-                if (!this._canContinue(consentGeneration)) {
-                    return
-                }
                 await this.capture('$set', null, { set: set ?? {}, setOnce: setOnce ?? {} })
             } else if (hasPersonProperties) {
                 await this.capture('$set', null, captureOptions)
@@ -515,9 +464,6 @@ class PostHogBrowserClient implements PostHog {
         }
 
         this._state.identify(distinctId)
-        if (!this._canContinue(consentGeneration)) {
-            return
-        }
         if (!wasIdentified) {
             await this.capture('$identify', { $anon_distinct_id: previousDistinctId }, captureOptions)
         } else if (hasPersonProperties) {
@@ -526,15 +472,12 @@ class PostHogBrowserClient implements PostHog {
     }
 
     async group(type: string, key: string, properties?: Record<string, unknown>): Promise<void> {
-        const consentGeneration = this._consentGeneration
-        if (!isNonEmptyString(type) || !isNonEmptyString(key) || !this._canContinue(consentGeneration)) {
+        if (!isNonEmptyString(type) || !isNonEmptyString(key) || this._closing || this._disposed) {
             return
         }
 
+        this._state.prepare()
         const changed = this._state.group(type, key)
-        if (!this._canContinue(consentGeneration)) {
-            return
-        }
         if (!changed && !properties) {
             return
         }
@@ -546,10 +489,10 @@ class PostHogBrowserClient implements PostHog {
     }
 
     reset(): void {
-        const consentGeneration = this._consentGeneration
-        if (!this._canContinue(consentGeneration)) {
+        if (this._closing || this._disposed) {
             return
         }
+        this._state.prepare()
         this._state.reset()
     }
 
@@ -603,52 +546,16 @@ class PostHogBrowserClient implements PostHog {
     }
 
     sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
-        const consentGeneration = this._consentGeneration
-        if (!this._canContinue(consentGeneration)) {
-            return Promise.resolve(createFailedResponse(new Error('PostHog requests are disabled')))
-        }
-        return sendRequest(this._requestRuntime, path, init, () => this._canContinue(consentGeneration))
-    }
-
-    private _resumeRemoteConfig(): void {
-        if (!this._canUseState()) {
-            return
-        }
-        const result = this._latestRemoteConfigResult
-        if (!result) {
-            if (this._remoteConfigPublisher.hasSubscribers()) {
-                void this.getRemoteConfig()
-            }
-            return
-        }
-
-        const consentGeneration = this._consentGeneration
-        const pending = this._pendingRemoteConfigSubscriptions.splice(0)
-        this._remoteConfigReplayActive = true
-        try {
-            for (let index = 0; index < pending.length; index++) {
-                const subscription = pending[index]!
-                if (!this._canContinue(consentGeneration)) {
-                    this._pendingRemoteConfigSubscriptions.push(...pending.slice(index).filter((entry) => entry[1]))
-                    return
-                }
-                if (!subscription[1]) {
-                    continue
-                }
-                try {
-                    subscription[0](result)
-                } catch (error) {
-                    this.logger.error('A remote configuration listener failed', error)
-                }
-            }
-        } finally {
-            this._remoteConfigReplayActive = false
-        }
+        return sendRequest(
+            this._requestRuntime,
+            path,
+            init,
+            () => !this._closing && !this._disposed && !this._blocked && !this.hasOptedOut()
+        )
     }
 
     async getRemoteConfig(): Promise<RemoteConfig | undefined> {
-        const consentGeneration = this._consentGeneration
-        if (!this._canContinue(consentGeneration)) {
+        if (this._closing || this._disposed) {
             return undefined
         }
         const loader = this._remoteConfigLoader
@@ -681,7 +588,7 @@ class PostHogBrowserClient implements PostHog {
             })
             this._remoteConfigPromise = Promise.race([
                 Promise.resolve().then(() => {
-                    if (!this._canContinue(consentGeneration)) {
+                    if (this._closing || this._disposed) {
                         invalidated = true
                         return undefined
                     }
@@ -690,32 +597,25 @@ class PostHogBrowserClient implements PostHog {
                 timeoutResult,
             ])
                 .then((remoteConfig) => {
-                    if (!this._canContinue(consentGeneration)) {
+                    if (this._closing || this._disposed) {
                         invalidated = true
                         return undefined
                     }
-
                     this._latestRemoteConfigResult = remoteConfig ? { ok: true, config: remoteConfig } : { ok: false }
-                    this._pendingRemoteConfigSubscriptions.splice(0)
                     if (remoteConfig) {
                         this._remoteConfig = remoteConfig
                     }
-                    this._remoteConfigPublisher.publish(this._latestRemoteConfigResult, () =>
-                        this._canContinue(consentGeneration)
-                    )
+                    this._remoteConfigPublisher.publish(this._latestRemoteConfigResult)
                     return remoteConfig
                 })
                 .catch((error: unknown) => {
-                    if (!this._canContinue(consentGeneration)) {
+                    if (this._closing || this._disposed) {
                         invalidated = true
                         return undefined
                     }
                     this.logger.error('Remote configuration failed', error)
                     this._latestRemoteConfigResult = { ok: false }
-                    this._pendingRemoteConfigSubscriptions.splice(0)
-                    this._remoteConfigPublisher.publish(this._latestRemoteConfigResult, () =>
-                        this._canContinue(consentGeneration)
-                    )
+                    this._remoteConfigPublisher.publish(this._latestRemoteConfigResult)
                     return undefined
                 })
                 .finally(() => {
@@ -743,9 +643,7 @@ class PostHogBrowserClient implements PostHog {
     }
 
     private async _installExtension(extension: Extension, automatic: boolean): Promise<void> {
-        const consentGeneration = this._consentGeneration
-        const canInstall = (): boolean =>
-            automatic ? this._canFinishAutomaticAnalytics(consentGeneration) : !this._closing && !this._disposed
+        const canInstall = (): boolean => !this._disposed && (automatic || !this._closing)
         if (!canInstall()) {
             throw new Error('PostHog extensions are disabled')
         }
@@ -789,7 +687,7 @@ class PostHogBrowserClient implements PostHog {
 
     private _ensureAutomaticAnalytics(reason: AutomaticAnalyticsReason, retryAfterPending = true): Promise<void> {
         const setup = this._automaticAnalytics
-        if (!setup || this._analyticsLane.hasDelivery()) {
+        if (!setup || this._disposed || this._analyticsLane.hasDelivery()) {
             return Promise.resolve()
         }
         if (this._automaticAnalyticsLoad) {
@@ -807,16 +705,11 @@ class PostHogBrowserClient implements PostHog {
         if (reason === 'capture' && this._automaticAnalyticsFailed) {
             return Promise.resolve()
         }
-        const consentGeneration = this._consentGeneration
-        if (!this._canFinishAutomaticAnalytics(consentGeneration)) {
-            return Promise.resolve()
-        }
-
         this._automaticAnalyticsFailed = false
         const loading = Promise.resolve()
             .then(() => setup.load(setup.options))
             .then(async (extension) => {
-                if (this._analyticsLane.hasDelivery() || !this._canFinishAutomaticAnalytics(consentGeneration)) {
+                if (this._analyticsLane.hasDelivery() || this._disposed) {
                     try {
                         await extension.dispose?.()
                     } catch (error) {
@@ -909,7 +802,6 @@ class PostHogBrowserClient implements PostHog {
                 this._registry.dispose().catch((error) => this.logger.error('Failed to dispose extensions', error)),
             ]).then(() => undefined)
             this._remoteConfigPublisher.dispose()
-            this._pendingRemoteConfigSubscriptions.splice(0)
             this._eventPublisher.dispose()
             this._newSessionPublisher.dispose()
             this._dynamicEventProperties.splice(0)
@@ -931,14 +823,7 @@ class PostHogBrowserClient implements PostHog {
     }
 
     private _startInitialPageview(): void {
-        const consentGeneration = this._consentGeneration
-        if (
-            !this._capturePageview ||
-            !this._initialPageviewPending ||
-            this._disposed ||
-            this._blocked ||
-            !this._canContinue(consentGeneration)
-        ) {
+        if (!this._capturePageview || !this._initialPageviewPending || this._closing || this._disposed) {
             return
         }
 
@@ -950,10 +835,6 @@ class PostHogBrowserClient implements PostHog {
         } catch {
             this._removePageviewListener()
             this._initialPageviewPending = false
-            return
-        }
-        if (!this._canContinue(consentGeneration)) {
-            this._removePageviewListener()
             return
         }
         if (!document || visibility === undefined) {
@@ -976,19 +857,13 @@ class PostHogBrowserClient implements PostHog {
                     this._initialPageviewPending = false
                     return
                 }
-                if (!this._canContinue(consentGeneration)) {
-                    this._removePageviewListener()
-                }
             }
             return
         }
 
         this._removePageviewListener()
-        if (!this._canContinue(consentGeneration)) {
-            return
-        }
         this._initialPageviewPending = false
-        if (!this._capture('$pageview', {}, {}, consentGeneration)) {
+        if (!this._capture('$pageview')) {
             this._initialPageviewPending = !this._disposed && !this._blocked
         }
     }
@@ -1100,7 +975,10 @@ class PostHogBrowserClient implements PostHog {
     private _createExtensionClient(extensionName: string): Client {
         const host = this
         const logger = this.logger.createLogger(extensionName)
-        const kv = this._state.keyValueStore(extensionName, () => this._canUseState())
+        const kv = this._state.keyValueStore(
+            extensionName,
+            () => !this._closing && !this._disposed && this._state.prepare()
+        )
 
         return {
             get distinctId() {
@@ -1137,23 +1015,8 @@ class PostHogBrowserClient implements PostHog {
         }
     }
 
-    private _canContinue(consentGeneration: number): boolean {
-        return this._canUseState() && consentGeneration === this._consentGeneration
-    }
-
-    private _canFinishAutomaticAnalytics(consentGeneration: number): boolean {
-        return consentGeneration === this._consentGeneration && !this._disposed && this._canDeliver()
-    }
-
     private _canDeliver(): boolean {
-        if (this._disposed || this._blocked || this.hasOptedOut()) {
-            return false
-        }
-        return this._state.prepare() && !this.hasOptedOut()
-    }
-
-    private _canUseState(): boolean {
-        return !this._closing && this._canDeliver()
+        return !this._disposed && !this._blocked && !this.hasOptedOut()
     }
 }
 

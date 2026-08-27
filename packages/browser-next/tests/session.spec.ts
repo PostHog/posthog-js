@@ -625,7 +625,7 @@ describe('browser-next session state', () => {
         expect(posthog.session).toEqual(first)
     })
 
-    it('clears session state on denial and creates fresh IDs after regrant', async () => {
+    it('retains session state across denial and regrant', async () => {
         const local = new MemoryStorage()
         const tab = new MemoryStorage()
         setDefaultStorage(local, tab)
@@ -637,15 +637,14 @@ describe('browser-next session state', () => {
         expect(tab.values.has(WINDOW_KEY)).toBe(true)
 
         posthog.optOut()
-        expect(posthog.session).toEqual(EMPTY_SESSION)
-        expect(tab.values.has(WINDOW_KEY)).toBe(false)
-        expect(tab.values.has(PRIMARY_WINDOW_KEY)).toBe(false)
+        expect(posthog.session).toEqual(before)
+        expect(tab.values.has(WINDOW_KEY)).toBe(true)
+        expect(tab.values.has(PRIMARY_WINDOW_KEY)).toBe(true)
         posthog.optIn()
-        expect(posthog.session).toEqual(EMPTY_SESSION)
+        expect(posthog.session).toEqual(before)
         await posthog.capture('after-grant')
 
-        expect(posthog.session.sessionId).not.toBe(before.sessionId)
-        expect(posthog.session.windowId).not.toBe(before.windowId)
+        expect(posthog.session).toEqual(before)
         expect(changes).not.toHaveBeenCalled()
     })
 

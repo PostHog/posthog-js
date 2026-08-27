@@ -126,7 +126,7 @@ export interface Client {
     /** Fires for every captured event through a deeply readonly view. */
     readonly onEvent: Listener<CapturedEventInfo>
 
-    /** Replays the latest available remote-config outcome and fires subsequent outcomes; a host may defer both while consent gates its capabilities. */
+    /** Replays the latest available remote-config outcome and fires subsequent outcomes when the host makes them available. */
     readonly onRemoteConfig: Listener<DeepReadonly<RemoteConfigResult>>
 
     /** Public project token used to authenticate endpoint-specific requests. */
