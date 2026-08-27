@@ -15,7 +15,11 @@ export interface AnalyticsDeliveryContext {
     runtime: RequestRuntime
     libraryVersion: string
     canRetry(): boolean
+    retryNow(): void
+    pause(): void
+    teardown(maxBytes: number): void
     reportFailure(error: unknown): void
+    reportWarning(message: string): void
 }
 
 export const createAnalyticsDelivery = '__posthog_browser_create_analytics_delivery__' as const

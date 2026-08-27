@@ -1,5 +1,6 @@
-import { analytics } from '../src/analytics'
-import { createPostHog, type BrowserFetch, type PostHogOptions, type RemoteConfig } from '../src'
+import { createPostHog as createAutomaticPostHog } from '../src'
+import { analytics as createAnalytics } from '../src/analytics'
+import { createPostHog, type BrowserFetch, type CorePostHogOptions, type RemoteConfig } from '../src/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
 const createRemoteConfig = (overrides: Partial<RemoteConfig> = {}): RemoteConfig =>
@@ -15,8 +16,10 @@ const createRemoteConfig = (overrides: Partial<RemoteConfig> = {}): RemoteConfig
 const captureEvent = (request: SentRequest | undefined): Record<string, unknown> | undefined =>
     (request?.body?.batch as Record<string, unknown>[] | undefined)?.[0]
 
-const createPostHogWithAnalytics = (options: PostHogOptions) =>
-    createPostHog({ ...options, extensions: [analytics(), ...(options.extensions ?? [])] })
+const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })
+const immediateAnalytics = analytics
+const createPostHogWithAnalytics = (options: CorePostHogOptions) =>
+    createPostHog({ ...options, extensions: [immediateAnalytics(), ...(options.extensions ?? [])] })
 
 describe('@posthog/browser core', () => {
     it('requires a project token in options', async () => {
@@ -27,7 +30,7 @@ describe('@posthog/browser core', () => {
         await expect(createPostHog({ projectToken: '' })).rejects.toThrow('A PostHog project token is required')
     })
 
-    it('buffers capture until analytics delivery is installed', async () => {
+    it('buffers capture without configured analytics delivery', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -41,99 +44,63 @@ describe('@posthog/browser core', () => {
             timestamp: new Date('2026-01-02T03:04:05.000Z'),
         })
         await posthog.flush()
+
         expect(requests).toHaveLength(0)
-
-        await posthog.loadExtension(async () => (await import('../src/analytics')).analytics())
-        await posthog.flush()
-
-        expect(requests).toHaveLength(1)
-        expect(captureEvent(requests[0])).toMatchObject({
-            event: 'queued',
-            uuid: 'queued-uuid',
-            timestamp: '2026-01-02T03:04:05.000Z',
-        })
+        expect(posthog.getExtension('analytics')).toBeUndefined()
+        await posthog.dispose()
     })
 
-    it('produces the same wire event for eager and lazy analytics delivery', async () => {
-        const run = async (
-            eager: boolean
-        ): Promise<{
-            event: Record<string, unknown> | undefined
-            identity: { distinctId: string; sessionId: string; windowId: string }
-        }> => {
+    it('supports configurable analytics count and interval thresholds', async () => {
+        jest.useFakeTimers()
+        try {
             const requests: SentRequest[] = []
             const posthog = await createPostHog({
                 projectToken: 'ph_test',
+                capturePageview: false,
                 storage: false,
                 navigator: false,
                 fetch: createFetch(requests),
-                extensions: eager ? [analytics()] : [],
+                extensions: [createAnalytics({ flushAt: 3, flushInterval: 100 })],
             })
-            await posthog.capture(
-                'equivalent',
-                { value: 1 },
-                {
-                    uuid: 'equivalent-uuid',
-                    timestamp: new Date('2026-01-02T03:04:05.000Z'),
-                }
-            )
-            const session = posthog.session
-            const identity = {
-                distinctId: posthog.distinctId,
-                sessionId: session.sessionId,
-                windowId: session.windowId,
-            }
-            if (!eager) {
-                await posthog.installExtension(analytics())
-            }
-            await posthog.flush()
-            return { event: captureEvent(requests[0]), identity }
-        }
-        const normalizeIds = (event: Record<string, unknown> | undefined): unknown => {
-            const copy = JSON.parse(JSON.stringify(event)) as Record<string, unknown>
-            const properties = copy.properties as Record<string, unknown>
-            copy.distinct_id = '<distinct-id>'
-            copy.session_id = '<session-id>'
-            copy.window_id = '<window-id>'
-            properties.$device_id = '<device-id>'
-            return copy
-        }
-        const eager = await run(true)
-        const lazy = await run(false)
-        for (const result of [eager, lazy]) {
-            expect(result.event).toMatchObject({
-                distinct_id: result.identity.distinctId,
-                session_id: result.identity.sessionId,
-                window_id: result.identity.windowId,
-                uuid: 'equivalent-uuid',
-                timestamp: '2026-01-02T03:04:05.000Z',
-            })
-        }
 
-        expect(normalizeIds(lazy.event)).toEqual(normalizeIds(eager.event))
+            await posthog.capture('first')
+            await posthog.capture('second')
+            await jest.advanceTimersByTimeAsync(99)
+            expect(requests).toHaveLength(0)
+
+            await posthog.capture('third')
+            await jest.advanceTimersByTimeAsync(0)
+            expect(requests).toHaveLength(1)
+            expect((requests[0]?.body?.batch as Array<{ event: string }>).map(({ event }) => event)).toEqual([
+                'first',
+                'second',
+                'third',
+            ])
+
+            await posthog.capture('interval')
+            await jest.advanceTimersByTimeAsync(99)
+            expect(requests).toHaveLength(1)
+            await jest.advanceTimersByTimeAsync(1)
+            expect(requests).toHaveLength(2)
+            await posthog.shutdown(0)
+        } finally {
+            jest.useRealTimers()
+        }
     })
 
-    it('drains a lazy backlog in one FIFO batch', async () => {
-        const requests: SentRequest[] = []
-        const posthog = await createPostHog({
-            projectToken: 'ph_test',
-            storage: false,
-            navigator: false,
-            fetch: createFetch(requests),
-        })
-        await posthog.capture('first')
-        await posthog.capture('second')
-        await posthog.capture('third')
-
-        await posthog.installExtension(analytics())
-        await posthog.flush()
-
-        expect(requests).toHaveLength(1)
-        expect((requests[0]?.body?.batch as Record<string, unknown>[]).map(({ event }) => event)).toEqual([
-            'first',
-            'second',
-            'third',
-        ])
+    it('normalizes hostile analytics scheduling options without throwing', async () => {
+        const options = Object.defineProperties(
+            {},
+            {
+                flushAt: {
+                    get() {
+                        throw new Error('flushAt failed')
+                    },
+                },
+                flushInterval: { value: Number.NaN },
+            }
+        )
+        expect(() => createAnalytics(options)).not.toThrow()
     })
 
     it('does not wait for compression remote config and enables gzip after it arrives', async () => {
@@ -174,7 +141,7 @@ describe('@posthog/browser core', () => {
         expect(body).toMatchObject({ batch: [{ event: 'after_config' }] })
     })
 
-    it('purges buffered capture when consent is revoked before delivery attaches', async () => {
+    it('purges buffered capture when consent is revoked', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -186,7 +153,6 @@ describe('@posthog/browser core', () => {
         await posthog.capture('private')
         posthog.optOut()
         posthog.optIn()
-        await posthog.installExtension(analytics())
         await posthog.flush()
 
         expect(requests).toHaveLength(0)
@@ -428,12 +394,13 @@ describe('@posthog/browser core', () => {
     it('ignores identity changes and analytics persistence before explicit opt-in', async () => {
         const requests: SentRequest[] = []
         const storage = new MemoryStorage()
-        const posthog = await createPostHogWithAnalytics({
+        const posthog = await createAutomaticPostHog({
             projectToken: 'ph_test',
             storage,
             navigator: false,
             fetch: createFetch(requests),
             optOutByDefault: true,
+            analytics: { flushAt: 1, flushInterval: 0 },
         })
         expect(posthog.anonymousId).toBe('')
 
@@ -445,7 +412,6 @@ describe('@posthog/browser core', () => {
 
         posthog.optIn()
         const anonymousId = posthog.anonymousId
-        await posthog.installExtension(analytics())
         await posthog.capture('after_consent')
         await posthog.flush()
 
@@ -543,44 +509,49 @@ describe('@posthog/browser core', () => {
         }
     })
 
-    it('requeues retryable work when analytics delivery is detached during backoff', async () => {
+    it('retains retry-exhausted events for a later explicit flush without hot-looping', async () => {
         jest.useFakeTimers()
         try {
             const fetch = jest
                 .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
-                .mockResolvedValueOnce(new Response('{}', { status: 503 }))
-                .mockResolvedValue(new Response('{}', { status: 200 }))
+                .mockResolvedValue(new Response('{}', { status: 503 }))
             const posthog = await createPostHog({
                 projectToken: 'ph_test',
+                capturePageview: false,
                 storage: false,
                 navigator: false,
                 fetch,
+                extensions: [createAnalytics({ flushAt: 1, flushInterval: 0 })],
             })
-            const delivery = await posthog.installExtension(analytics())
 
-            await posthog.capture('detached_during_backoff', undefined, { uuid: 'stable-retry-uuid' })
-            await jest.advanceTimersByTimeAsync(0)
-            expect(fetch).toHaveBeenCalledTimes(1)
-            expect(jest.getTimerCount()).toBe(1)
-
-            await delivery.dispose()
-            await posthog.installExtension(analytics())
-            await posthog.flush()
-
-            expect(fetch).toHaveBeenCalledTimes(2)
+            await posthog.capture('retained', undefined, { uuid: 'retained-uuid' })
+            const firstFlush = posthog.flush()
+            await jest.runAllTimersAsync()
+            await firstFlush
+            expect(fetch).toHaveBeenCalledTimes(4)
             expect(jest.getTimerCount()).toBe(0)
+
+            await jest.advanceTimersByTimeAsync(60_000)
+            expect(fetch).toHaveBeenCalledTimes(4)
+
+            const secondFlush = posthog.flush()
+            await jest.runAllTimersAsync()
+            await secondFlush
+            expect(fetch).toHaveBeenCalledTimes(8)
             expect(
                 fetch.mock.calls.map(([, init]) => {
                     const body = JSON.parse(String(init?.body)) as { batch: Array<{ uuid: string }> }
                     return body.batch[0]?.uuid
                 })
-            ).toEqual(['stable-retry-uuid', 'stable-retry-uuid'])
+            ).toEqual(Array(8).fill('retained-uuid'))
+            posthog.optOut()
+            await posthog.dispose()
         } finally {
             jest.useRealTimers()
         }
     })
 
-    it('settles disposal without retrying when disposed during real backoff', async () => {
+    it('uses the bounded sender retry budget before disposal purges undelivered work', async () => {
         jest.useFakeTimers()
         try {
             const fetch = jest
@@ -607,11 +578,144 @@ describe('@posthog/browser core', () => {
             await jest.runOnlyPendingTimersAsync()
             await Promise.all([capture, disposal])
 
-            expect(fetch).toHaveBeenCalledTimes(1)
+            expect(fetch).toHaveBeenCalledTimes(4)
             expect(disposalSettled).toBe(true)
         } finally {
             jest.useRealTimers()
         }
+    })
+
+    it('flushes below-threshold work before shutdown and disables future capture', async () => {
+        const requests: SentRequest[] = []
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            fetch: createFetch(requests),
+            extensions: [createAnalytics({ flushAt: 20, flushInterval: 0 })],
+        })
+        await posthog.capture('before_shutdown')
+        expect(requests).toHaveLength(0)
+
+        const first = posthog.shutdown()
+        const second = posthog.shutdown()
+        expect(second).toBe(first)
+        await first
+
+        expect(requests).toHaveLength(1)
+        expect(captureEvent(requests[0])).toMatchObject({ event: 'before_shutdown' })
+        await posthog.capture('after_shutdown')
+        expect(requests).toHaveLength(1)
+    })
+
+    it('bounds shutdown and aborts a stalled active request', async () => {
+        jest.useFakeTimers()
+        try {
+            const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(() => new Promise(() => {}))
+            const posthog = await createPostHog({
+                projectToken: 'ph_test',
+                capturePageview: false,
+                storage: false,
+                navigator: false,
+                fetch,
+                extensions: [immediateAnalytics()],
+            })
+            await posthog.capture('stalled')
+            await jest.advanceTimersByTimeAsync(0)
+            expect(fetch).toHaveBeenCalledTimes(1)
+
+            let settled = false
+            const shutdown = posthog.shutdown(5).then(() => {
+                settled = true
+            })
+            await jest.advanceTimersByTimeAsync(5)
+            await shutdown
+
+            expect(settled).toBe(true)
+            expect(jest.getTimerCount()).toBe(0)
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it('cancels a pending remote-config wait during shutdown', async () => {
+        jest.useFakeTimers()
+        try {
+            const loader = jest.fn(() => new Promise<RemoteConfig>(() => {}))
+            const posthog = await createPostHog({
+                projectToken: 'ph_test',
+                capturePageview: false,
+                storage: false,
+                navigator: false,
+                fetch: false,
+                remoteConfigLoader: loader,
+            })
+            posthog.onRemoteConfig(() => {})
+            await Promise.resolve()
+            expect(loader).toHaveBeenCalledTimes(1)
+            expect(jest.getTimerCount()).toBe(1)
+
+            await posthog.shutdown()
+
+            expect(jest.getTimerCount()).toBe(0)
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it('bounds shutdown when an extension cleanup never settles', async () => {
+        jest.useFakeTimers()
+        try {
+            const posthog = await createPostHog({
+                projectToken: 'ph_test',
+                capturePageview: false,
+                storage: false,
+                navigator: false,
+                fetch: false,
+                extensions: [{ name: 'stalled-cleanup', setup() {}, dispose: () => new Promise(() => {}) }],
+            })
+
+            let settled = false
+            const shutdown = posthog.shutdown(5).then(() => {
+                settled = true
+            })
+            await jest.advanceTimersByTimeAsync(5)
+            await shutdown
+
+            expect(settled).toBe(true)
+            await posthog.capture('after_shutdown')
+            expect(posthog.session.sessionId).toBe('')
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it('rate limits a runaway capture loop and emits one bypassed aggregate warning', async () => {
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+        const now = jest.spyOn(Date, 'now').mockReturnValue(1_000)
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            fetch: false,
+            debug: true,
+        })
+        const observed: string[] = []
+        posthog.onEvent(({ event }) => observed.push(event))
+
+        for (let index = 0; index < 102; index++) {
+            await posthog.capture(`event-${index}`)
+        }
+        expect(observed.slice(0, 100)).toEqual(Array.from({ length: 100 }, (_, index) => `event-${index}`))
+        expect(observed.slice(100)).toEqual(['$$client_ingestion_warning'])
+        expect(warn).toHaveBeenCalledTimes(1)
+
+        now.mockReturnValue(1_100)
+        await posthog.capture('after_refill')
+        expect(observed.at(-1)).toBe('after_refill')
+        await posthog.dispose()
     })
 
     it('persists opt-out without retaining identity state', async () => {

@@ -1,8 +1,10 @@
 import type { Client } from '@posthog/browser-common'
 
-import { analytics } from '../src/analytics'
-import { createPostHog, type Extension, type RemoteConfig } from '../src'
+import { analytics as createAnalytics } from '../src/analytics'
+import { createPostHog, type Extension, type RemoteConfig } from '../src/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
+
+const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })
 
 const createRemoteConfig = (overrides: Partial<RemoteConfig> = {}): RemoteConfig =>
     ({ supportedCompression: [], ...overrides }) as RemoteConfig
@@ -130,16 +132,23 @@ describe('@posthog/browser extensions', () => {
         await posthog.dispose()
         client?.kv.set('disposed', true)
         client?.kv.remove('after_grant')
-        const reloaded = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-        const reloadedClient = await reloaded.installExtension({
-            name: 'stateful',
-            setup(nextClient) {
-                expect(nextClient.kv.get('after_grant')).toBe(true)
-                expect(nextClient.kv.get('disposed')).toBeUndefined()
-            },
-            dispose() {},
+        const reloaded = await createPostHog({
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch: false,
+            extensions: [
+                {
+                    name: 'stateful',
+                    setup(nextClient) {
+                        expect(nextClient.kv.get('after_grant')).toBe(true)
+                        expect(nextClient.kv.get('disposed')).toBeUndefined()
+                    },
+                    dispose() {},
+                },
+            ],
         })
-        reloadedClient.dispose()
+        await reloaded.dispose()
     })
 
     it('provides live client identity and stable SDK metadata', async () => {
@@ -181,43 +190,66 @@ describe('@posthog/browser extensions', () => {
         expect(client?.deviceId).toBe(postConsentAnonymousId)
     })
 
-    it('gates extension transport and remote configuration with consent and bot filtering', async () => {
-        const requests: SentRequest[] = []
+    it('runs extensions while gating their outputs with consent and bot filtering', async () => {
+        const deniedRequests: SentRequest[] = []
+        let deniedClient: Client | undefined
+        const deniedSetup = jest.fn(async (client: Client) => {
+            deniedClient = client
+            client.kv.set('private', true)
+            await client.capture('denied-output')
+            await client.sendRequest('/flags/')
+        })
+        const remoteConfigLoader = jest.fn(async () => createRemoteConfig())
         const denied = await createPostHog({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: createFetch(requests),
+            fetch: createFetch(deniedRequests),
             optOutByDefault: true,
-            remoteConfigLoader: async () => ({ supportedCompression: [] }) as never,
+            remoteConfigLoader,
+            extensions: [analytics(), { name: 'denied', setup: deniedSetup }],
         })
 
         await expect(denied.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
-        await expect(denied.getRemoteConfig()).resolves.toBeUndefined()
-        await expect(denied.installExtension({ name: 'denied', setup() {}, dispose() {} })).rejects.toThrow('disabled')
+        expect(deniedSetup).toHaveBeenCalledTimes(1)
+        expect(denied.getExtension('denied')).toBeDefined()
+        expect(remoteConfigLoader).not.toHaveBeenCalled()
+        expect(deniedRequests).toHaveLength(0)
 
+        expect(denied.hasOptedOut()).toBe(true)
+        denied.optIn()
+        expect(denied.hasOptedOut()).toBe(false)
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 0))
+        expect(remoteConfigLoader).toHaveBeenCalledTimes(1)
+        await deniedClient?.capture('allowed-output')
+        await denied.flush()
+        expect(deniedRequests).toHaveLength(1)
+
+        const blockedRequests: SentRequest[] = []
+        const blockedSetup = jest.fn(async (client: Client) => {
+            await client.capture('bot-output')
+            await client.sendRequest('/flags/')
+        })
         const blocked = await createPostHog({
             projectToken: 'ph_test',
             storage: false,
             navigator: { userAgent: 'Googlebot/2.1' },
-            fetch: createFetch(requests),
+            fetch: createFetch(blockedRequests),
             remoteConfigLoader: async () => ({ supportedCompression: [] }) as never,
+            extensions: [{ name: 'blocked', setup: blockedSetup }],
         })
         await expect(blocked.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         await expect(blocked.getRemoteConfig()).resolves.toBeUndefined()
-        expect(requests).toHaveLength(0)
+        expect(blockedSetup).toHaveBeenCalledTimes(1)
+        expect(blocked.getExtension('blocked')).toBeDefined()
+        expect(blockedRequests).toHaveLength(0)
     })
 
-    it('drops remote configuration and extension loading completed after denial', async () => {
+    it('drops remote configuration completed after denial', async () => {
         let finishConfig: ((value: RemoteConfig) => void) | undefined
         const remoteConfig = new Promise<RemoteConfig>((resolve) => {
             finishConfig = resolve
         })
-        let finishExtension: ((value: Extension) => void) | undefined
-        const extension = new Promise<Extension>((resolve) => {
-            finishExtension = resolve
-        })
-        const dispose = jest.fn()
         const posthog = await createPostHog({
             projectToken: 'ph_test',
             storage: false,
@@ -226,16 +258,11 @@ describe('@posthog/browser extensions', () => {
             remoteConfigLoader: () => remoteConfig,
         })
         const configResult = posthog.getRemoteConfig()
-        const extensionResult = posthog.loadExtension(() => extension)
 
         posthog.optOut()
         finishConfig?.(createRemoteConfig({ hasFeatureFlags: true }))
-        finishExtension?.({ name: 'late', setup: jest.fn(), dispose })
 
         await expect(configResult).resolves.toBeUndefined()
-        await expect(extensionResult).rejects.toThrow('disabled')
-        expect(dispose).toHaveBeenCalledTimes(1)
-        expect(posthog.getExtension('late')).toBeUndefined()
     })
 
     it('provides the shared project token and request transport', async () => {
@@ -264,14 +291,23 @@ describe('@posthog/browser extensions', () => {
         await posthog.dispose()
     })
 
-    it('rejects duplicate names', async () => {
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
-        await posthog.installExtension(flagExtension([]))
+    it('keeps the first configured extension when names are duplicated', async () => {
+        const first = flagExtension([])
+        const duplicateSetup = jest.fn()
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: false,
+            extensions: [first, { name: 'flags', setup: duplicateSetup }],
+        })
 
-        await expect(posthog.installExtension(flagExtension([]))).rejects.toThrow('already installed')
+        expect(posthog.getExtension('flags')).toBe(first)
+        expect(duplicateSetup).not.toHaveBeenCalled()
+        await posthog.dispose()
     })
 
-    it('disposes a failed extension and rolls back its reservation', async () => {
+    it('disposes a configured extension whose setup fails', async () => {
         const dispose = jest.fn()
         const failed: Extension = {
             name: 'failed',
@@ -280,34 +316,17 @@ describe('@posthog/browser extensions', () => {
             },
             dispose,
         }
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
-
-        await expect(posthog.installExtension(failed)).rejects.toThrow('setup failed')
-        expect(dispose).toHaveBeenCalledTimes(1)
-        await expect(posthog.installExtension({ name: 'failed', setup() {}, dispose() {} })).resolves.toBeDefined()
-    })
-
-    it('disposes an extension that finishes setup after client disposal', async () => {
-        let finishSetup: (() => void) | undefined
-        const setupGate = new Promise<void>((resolve) => {
-            finishSetup = resolve
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: false,
+            extensions: [failed],
         })
-        const dispose = jest.fn()
-        const extension: Extension = {
-            name: 'pending',
-            async setup() {
-                await setupGate
-            },
-            dispose,
-        }
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
 
-        const installation = posthog.installExtension(extension)
-        await posthog.dispose()
         expect(dispose).toHaveBeenCalledTimes(1)
-
-        finishSetup?.()
-        await expect(installation).rejects.toThrow('disposed during setup')
+        expect(posthog.getExtension('failed')).toBeUndefined()
+        await posthog.dispose()
         expect(dispose).toHaveBeenCalledTimes(1)
     })
 
@@ -341,35 +360,22 @@ describe('@posthog/browser extensions', () => {
         expect(firstDispose).toHaveBeenCalledTimes(1)
     })
 
-    it('disposes an installed extension once across repeated handles and client disposal', async () => {
+    it('disposes a configured extension once across repeated client disposal', async () => {
         const dispose = jest.fn(async () => {})
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
-        const installation = await posthog.installExtension({ name: 'once', setup() {}, dispose })
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: false,
+            extensions: [{ name: 'once', setup() {}, dispose }],
+        })
 
-        await Promise.all([installation.dispose(), installation.dispose()])
-        await posthog.dispose()
+        await Promise.all([posthog.dispose(), posthog.dispose()])
 
         expect(dispose).toHaveBeenCalledTimes(1)
     })
 
-    it('does not let a stale handle dispose a replacement with the same name', async () => {
-        const oldDispose = jest.fn()
-        const replacementDispose = jest.fn()
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
-        const oldInstallation = await posthog.installExtension({ name: 'reused', setup() {}, dispose: oldDispose })
-        await oldInstallation.dispose()
-        const replacement: Extension = { name: 'reused', setup() {}, dispose: replacementDispose }
-        const replacementInstallation = await posthog.installExtension(replacement)
-
-        await oldInstallation.dispose()
-
-        expect(posthog.getExtension('reused')).toBe(replacement)
-        expect(oldDispose).toHaveBeenCalledTimes(1)
-        expect(replacementDispose).not.toHaveBeenCalled()
-        await replacementInstallation.dispose()
-    })
-
-    it('purges analytics before waiting for unrelated extension disposal', async () => {
+    it('flushes analytics before waiting for unrelated extension disposal', async () => {
         let releaseFetch: ((response: Response) => void) | undefined
         let releaseExtension: (() => void) | undefined
         const response = new Promise<Response>((resolve) => {
@@ -402,11 +408,13 @@ describe('@posthog/browser extensions', () => {
 
         const disposal = posthog.dispose()
 
+        expect(lane._analyticsLane._activeBytes).toBeGreaterThan(0)
+        releaseFetch?.(new Response('{}', { status: 200 }))
+        await Promise.resolve()
+        releaseExtension?.()
+        await disposal
         expect(lane._analyticsLane._activeBytes).toBe(0)
         expect(lane._analyticsLane._queuedBytes).toBe(0)
-        releaseExtension?.()
-        releaseFetch?.(new Response('{}', { status: 200 }))
-        await disposal
     })
 
     it('disposes extensions in reverse installation order', async () => {

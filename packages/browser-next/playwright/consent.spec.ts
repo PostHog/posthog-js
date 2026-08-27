@@ -75,6 +75,6 @@ test('a rapid cross-tab denial purges queued work before a later grant', async (
     await expect.poll(() => first.evaluate(() => window.consentHarness.anonymousId())).not.toBe(originalAnonymousId)
     expect(await first.evaluate(() => window.consentHarness.consentValue())).toBe('1')
 
-    await first.evaluate(() => window.consentHarness.installAnalyticsAndFlush())
+    await first.evaluate(() => window.consentHarness.flush())
     expect(await first.evaluate(() => window.consentHarness.requests())).toBe(0)
 })

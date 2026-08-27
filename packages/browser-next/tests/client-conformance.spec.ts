@@ -1,7 +1,7 @@
 import type { Client, RemoteConfig, RemoteConfigResult } from '@posthog/browser-common'
 import { runClientConformanceSuite } from '@posthog/browser-common/tests/client-conformance'
 
-import { createPostHog, type Extension } from '../src'
+import { createPostHog, type Extension } from '../src/core'
 import { createFetch, type SentRequest } from './helpers'
 
 runClientConformanceSuite('browser-next', async () => {

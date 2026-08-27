@@ -1,4 +1,11 @@
 import type {
+    AnalyticsConfiguration,
+    AnalyticsOptions,
+    AutomaticAnalyticsOptions,
+    LoadStrategy,
+} from './analytics-options'
+
+import type {
     ApiResponse,
     CaptureOptions,
     Client,
@@ -21,6 +28,7 @@ export interface StorageLike {
 export interface BrowserNavigator {
     readonly userAgent?: string
     readonly webdriver?: boolean
+    readonly onLine?: boolean
     sendBeacon?(url: string, data?: BodyInit | null): boolean
 }
 
@@ -69,9 +77,17 @@ export interface PostHogOptions {
     remoteConfigLoader?: () => Promise<RemoteConfig | undefined>
     /** Stop waiting for remote configuration after this duration. */
     remoteConfigTimeoutMs?: number
-    /** Install extensions before the factory resolves. */
+    /**
+     * Automatic first-party analytics delivery. Defaults to lazy loading after the first admitted event.
+     * Pass `false` to retain events without automatically loading delivery.
+     */
+    analytics?: AnalyticsConfiguration
+    /** Install extensions before the factory resolves. A preinstalled analytics extension satisfies delivery. */
     extensions?: readonly Extension[]
 }
+
+/** Options for the analytics-free `@posthog/browser/core` entrypoint. */
+export type CorePostHogOptions = Omit<PostHogOptions, 'analytics'>
 
 export interface PostHog extends Client, Disposable {
     readonly onNewSession: Listener<NewSessionInfo>
@@ -79,13 +95,24 @@ export interface PostHog extends Client, Disposable {
     group(type: string, key: string, properties?: Record<string, unknown>): Promise<void>
     reset(): void
     flush(): Promise<void>
+    shutdown(shutdownTimeoutMs?: number): Promise<void>
     optIn(): void
     optOut(): void
     hasOptedOut(): boolean
-    installExtension(extension: Extension): Promise<Disposable>
-    loadExtension(loader: () => Promise<Extension>): Promise<Disposable>
     getExtension<T extends Extension = Extension>(name: string): T | undefined
     getRemoteConfig(): Promise<RemoteConfig | undefined>
 }
 
-export type { ApiResponse, CaptureOptions, Disposable, Extension, RemoteConfig, SendRequestInit, SessionContext }
+export type {
+    AnalyticsConfiguration,
+    AnalyticsOptions,
+    AutomaticAnalyticsOptions,
+    LoadStrategy,
+    ApiResponse,
+    CaptureOptions,
+    Disposable,
+    Extension,
+    RemoteConfig,
+    SendRequestInit,
+    SessionContext,
+}

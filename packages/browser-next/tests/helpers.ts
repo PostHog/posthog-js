@@ -1,4 +1,4 @@
-import type { BrowserFetch, StorageLike } from '../src'
+import type { BrowserFetch, StorageLike } from '../src/core'
 
 export class MemoryStorage implements StorageLike {
     readonly values = new Map<string, string>()

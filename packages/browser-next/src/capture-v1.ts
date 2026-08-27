@@ -9,6 +9,8 @@ const RETRYABLE_STATUSES = [408, 500, 502, 503, 504]
 export const CAPTURE_V1_MAX_BATCH_EVENTS = 100
 export const CAPTURE_V1_BATCH_TARGET_BYTES = 5 * 1024 * 1024
 export const CAPTURE_V1_COMPRESSION_THRESHOLD_BYTES = 1024
+/** Conservative share of the browser's aggregate 64 KiB keepalive body quota. */
+export const CAPTURE_V1_TEARDOWN_BUDGET_BYTES = Math.floor(64 * 1024 * 0.8)
 const DEFAULT_COMPRESSION_TIMEOUT_MS = 1_000
 
 export type CaptureV1Message = AnalyticsMessage
@@ -81,6 +83,20 @@ interface CaptureV1BatchesOptions extends CaptureV1SenderOptions {
 interface CaptureV1BatchesResult extends CaptureV1Result {
     /** Original admitted messages still undelivered, preserving identity across duplicate UUIDs. */
     retryMessages: CaptureV1Message[]
+}
+
+interface CaptureV1TeardownOptions {
+    maxBytes?: number
+    now?: () => number
+    generateRequestId?: () => string
+    canContinue?: () => boolean
+    onError?: (error: unknown) => void
+}
+
+export interface CaptureV1TeardownResult {
+    attempted: CaptureV1Message[]
+    overflow: CaptureV1Message[]
+    bytes: number
 }
 
 type AttemptResult = [CaptureV1Result, PreparedCaptureV1Event[], Response | undefined]
@@ -473,7 +489,7 @@ const attemptOnce = async (
     signal: AbortSignal | undefined,
     continuationCheck: (() => boolean) | undefined
 ): Promise<AttemptResult> => {
-    if (!canContinue(continuationCheck)) {
+    if (signal?.aborted || !canContinue(continuationCheck)) {
         return [failedResult(events, cancellationError()), events, undefined]
     }
     const body = serializeEnvelope(createdAt, events)
@@ -524,6 +540,8 @@ const attemptOnce = async (
 
     let response: Response | undefined
     let timer: ReturnType<typeof globalThis.setTimeout> | undefined
+    let onAbort: (() => void) | undefined
+    let interrupted = false
     let timedOut = false
     let timeoutPhase = 'waiting for response headers'
     const deadline = new Promise<never>((_resolve, reject) => {
@@ -542,20 +560,46 @@ const attemptOnce = async (
         }, attemptTimeoutMs)
     })
 
+    const cancelled = new Promise<never>((_resolve, reject) => {
+        if (!signal) {
+            return
+        }
+        onAbort = () => {
+            interrupted = true
+            const error = cancellationError()
+            reject(error)
+            try {
+                controller?.abort(error)
+            } catch {
+                // The cancellation race remains authoritative when abort throws.
+            }
+            cancelResponseBody(response)
+        }
+        try {
+            // eslint-disable-next-line posthog-js/no-add-event-listener
+            signal.addEventListener('abort', onAbort, { once: true })
+            if (signal.aborted) {
+                onAbort()
+            }
+        } catch {
+            onAbort = undefined
+        }
+    })
+
     let text: string
     try {
         const fetchPromise = runtime[2]!(`${runtime[0].api}/i/v1/analytics/events`, requestInit)
         void fetchPromise.then(
             (lateResponse) => {
-                if (timedOut && !response) {
+                if ((timedOut || interrupted) && !response) {
                     cancelResponseBody(lateResponse)
                 }
             },
             () => {}
         )
-        response = await Promise.race([fetchPromise, deadline])
+        response = await Promise.race([fetchPromise, deadline, cancelled])
         timeoutPhase = 'while reading the response body'
-        text = await Promise.race([response.text(), deadline])
+        text = await Promise.race([response.text(), deadline, cancelled])
     } catch (error) {
         const status = response?.status ?? 0
         const retryEvents =
@@ -564,6 +608,13 @@ const attemptOnce = async (
     } finally {
         if (timer !== undefined) {
             globalThis.clearTimeout(timer)
+        }
+        if (onAbort) {
+            try {
+                signal?.removeEventListener('abort', onAbort)
+            } catch {
+                // Listener cleanup is best effort for injected signals.
+            }
         }
     }
 
@@ -741,6 +792,111 @@ export const sendCaptureV1Batch = async (
  * Capture V1 envelope bytes, then sends each logical request in order. The byte
  * target is soft: one admitted event is always allowed to form a request by itself.
  */
+export const sendCaptureV1TeardownBatches = (
+    runtime: RequestRuntime,
+    messages: CaptureV1Message[],
+    libraryVersion: string,
+    options: CaptureV1TeardownOptions = {}
+): CaptureV1TeardownResult => {
+    const result: CaptureV1TeardownResult = { attempted: [], overflow: [], bytes: 0 }
+    if (messages.length === 0 || !canContinue(options.canContinue)) {
+        return result
+    }
+    const fetch = runtime[2]
+    if (!fetch) {
+        try {
+            options.onError?.(new Error('Fetch is not available'))
+        } catch {
+            // Reporting must not affect teardown.
+        }
+        return result
+    }
+
+    const now = options.now ?? Date.now
+    let remaining = Math.max(
+        0,
+        Math.floor(Number.isFinite(options.maxBytes) ? options.maxBytes! : CAPTURE_V1_TEARDOWN_BUDGET_BYTES)
+    )
+    let prepared: PreparedCaptureV1Event[]
+    try {
+        prepared = prepareEvents(messages)
+    } catch (error) {
+        try {
+            options.onError?.(error)
+        } catch {
+            // Reporting must not affect teardown.
+        }
+        return result
+    }
+
+    for (let index = 0; index < prepared.length && canContinue(options.canContinue); ) {
+        const createdAt = isoNow(now)
+        const batch: PreparedCaptureV1Event[] = []
+        let body = serializeEnvelope(createdAt, batch)
+        let bodyBytes = utf8Bytes(body)
+
+        while (index + batch.length < prepared.length && batch.length < CAPTURE_V1_MAX_BATCH_EVENTS) {
+            const candidate = prepared[index + batch.length]!
+            const candidateBody = serializeEnvelope(createdAt, [...batch, candidate])
+            const candidateBytes = utf8Bytes(candidateBody)
+            if (candidateBytes > remaining || (batch.length > 0 && candidateBytes > CAPTURE_V1_BATCH_TARGET_BYTES)) {
+                break
+            }
+            batch.push(candidate)
+            body = candidateBody
+            bodyBytes = candidateBytes
+        }
+
+        if (batch.length === 0) {
+            result.overflow.push(...prepared.slice(index).map(({ source }) => source))
+            break
+        }
+
+        remaining -= bodyBytes
+        result.bytes += bodyBytes
+        result.attempted.push(...batch.map(({ source }) => source))
+        index += batch.length
+        let requestId: string
+        try {
+            requestId = (options.generateRequestId ?? createId)()
+        } catch {
+            requestId = `capture-${createdAt}`
+        }
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${runtime[1]}`,
+            'PostHog-Sdk-Info': `posthog-js/${libraryVersion}`,
+            'PostHog-Attempt': '1',
+            'PostHog-Request-Id': requestId,
+            'PostHog-Request-Timestamp': isoNow(now),
+        }
+        try {
+            const request = fetch(`${runtime[0].api}/i/v1/analytics/events`, {
+                method: 'POST',
+                credentials: 'omit',
+                headers,
+                body,
+                keepalive: true,
+            })
+            void Promise.resolve(request).then(cancelResponseBody, (error) => {
+                try {
+                    options.onError?.(error)
+                } catch {
+                    // Reporting must not affect teardown.
+                }
+            })
+        } catch (error) {
+            try {
+                options.onError?.(error)
+            } catch {
+                // Reporting must not affect teardown.
+            }
+        }
+    }
+
+    return result
+}
+
 export const sendCaptureV1Batches = async (
     runtime: RequestRuntime,
     messages: CaptureV1Message[],

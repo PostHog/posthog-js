@@ -24,6 +24,11 @@
             "require": "./dist/index.js",
             "import": "./dist/index.mjs"
         },
+        "./core": {
+            "types": "./dist/core.d.ts",
+            "require": "./dist/core.js",
+            "import": "./dist/core.mjs"
+        },
         "./analytics": {
             "types": "./dist/analytics.d.ts",
             "require": "./dist/analytics.js",

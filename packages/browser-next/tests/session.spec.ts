@@ -1,7 +1,8 @@
-import { analytics } from '../src/analytics'
-import { createPostHog, type NewSessionInfo, type StorageLike } from '../src'
+import { analytics as createAnalytics } from '../src/analytics'
+import { createPostHog, type NewSessionInfo, type StorageLike } from '../src/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
+const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })
 const EMPTY_SESSION = { sessionId: '', windowId: '', sessionStartTimestamp: 0 }
 const STATE_KEY = 'ph_ph_test_posthog_browser_v2'
 const WINDOW_KEY = 'ph_ph_test_window_id'
@@ -441,6 +442,7 @@ describe('browser-next session state', () => {
             capturePageview: false,
             navigator: false,
             fetch: createFetch(requests),
+            extensions: [analytics()],
         })
         const observed: string[] = []
         posthog.onEvent(({ event }) => observed.push(event))
@@ -466,7 +468,6 @@ describe('browser-next session state', () => {
         expect(tab.values.has(PRIMARY_WINDOW_KEY)).toBe(false)
 
         await posthog.capture('after-race')
-        await posthog.installExtension(analytics())
         await posthog.flush()
         const delivered = requests.flatMap(
             ({ body }) => (body?.batch as Array<{ event: string }> | undefined)?.map(({ event }) => event) ?? []
@@ -489,6 +490,7 @@ describe('browser-next session state', () => {
         await posthog.capture('first')
         await sibling.capture('adopt')
         for (let index = 0; index < 999; index++) {
+            jest.setSystemTime(START + (index + 1) * 100)
             await posthog.capture(`queued-${index}`)
         }
         const observed: string[] = []

@@ -1,4 +1,4 @@
-import type { Client, Disposable, Extension } from '@posthog/browser-common'
+import type { Client, Extension } from '@posthog/browser-common'
 
 type ExtensionRecord = [extension: Extension, disposed: boolean, ready: boolean]
 
@@ -19,7 +19,7 @@ export class ExtensionRegistry {
         return record?.[2] ? (record[0] as T) : undefined
     }
 
-    async install(extension: Extension): Promise<Disposable> {
+    async install(extension: Extension): Promise<void> {
         if (this._disposed) {
             throw new Error('The extension registry is disposed')
         }
@@ -47,14 +47,13 @@ export class ExtensionRegistry {
             }
             throw error
         }
+    }
 
-        return {
-            dispose: async () => {
-                if (this._records.get(name) === record) {
-                    this._records.delete(name)
-                    await this._disposeRecord(record)
-                }
-            },
+    async rollback(extension: Extension): Promise<void> {
+        const record = this._records.get(extension.name)
+        if (record?.[0] === extension) {
+            this._records.delete(extension.name)
+            await this._disposeRecord(record)
         }
     }
 
@@ -65,13 +64,15 @@ export class ExtensionRegistry {
         this._disposed = true
         const records = Array.from(this._records.values()).reverse()
         this._records.clear()
-        for (const record of records) {
-            try {
-                await this._disposeRecord(record)
-            } catch (error) {
-                this._logger.error(`Extension "${record[0].name}" cleanup failed`, error)
-            }
-        }
+        await Promise.all(
+            records.map(async (record) => {
+                try {
+                    await this._disposeRecord(record)
+                } catch (error) {
+                    this._logger.error(`Extension "${record[0].name}" cleanup failed`, error)
+                }
+            })
+        )
     }
 
     private async _disposeRecord(record: ExtensionRecord): Promise<void> {

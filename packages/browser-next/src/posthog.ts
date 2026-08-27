@@ -18,15 +18,36 @@ import { ExtensionRegistry } from './extensions/registry'
 import { createId } from './id'
 import { Lane } from './lane'
 import { createLogger } from './logger'
+import { ClientRateLimiter } from './rate-limiter'
 import { createFailedResponse, sendRequest, type RequestRuntime } from './request'
 import { BrowserState, getDefaultSessionStorage, getDefaultStorage } from './state'
-import type { BrowserFetch, BrowserNavigator, NewSessionInfo, PostHog, PostHogOptions, StorageLike } from './types'
+import type {
+    AnalyticsOptions,
+    BrowserFetch,
+    LoadStrategy,
+    BrowserNavigator,
+    CorePostHogOptions,
+    NewSessionInfo,
+    PostHog,
+    StorageLike,
+} from './types'
 import { version } from './version'
 
 const CONSENT_CHANGE_EVENT = '__posthog_browser_consent_change__'
 const MAX_ANALYTICS_BYTES = 8 * 1024 * 1024
 const MAX_ANALYTICS_AGE_MS = 60 * 60 * 1000
+const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000
+const CLIENT_RATE_LIMIT_WARNING = '$$client_ingestion_warning'
 const EMPTY_SESSION: SessionContext = Object.freeze({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
+
+type AutomaticAnalyticsReason = 'capture' | 'flush' | 'shutdown' | 'eager'
+type PendingRemoteConfigSubscription = [handler: (result: RemoteConfigResult) => void, active: boolean]
+
+export interface AutomaticAnalyticsSetup {
+    strategy: LoadStrategy
+    options: AnalyticsOptions
+    load(options: AnalyticsOptions): Promise<Extension>
+}
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -97,30 +118,58 @@ class PostHogBrowserClient implements PostHog {
     readonly projectToken: string
 
     private readonly _remoteConfigPublisher: Publisher<RemoteConfigResult>
+    private readonly _pendingRemoteConfigSubscriptions: PendingRemoteConfigSubscription[] = []
     private readonly _eventPublisher: Publisher<CapturedEventInfo>
     private readonly _newSessionPublisher: Publisher<NewSessionInfo>
     private readonly _registry: ExtensionRegistry
     private readonly _dynamicEventProperties: Array<() => Record<string, unknown>> = []
     private readonly _analyticsLane: Lane<AnalyticsMessage>
     private readonly _requestRuntime: RequestRuntime
+    private readonly _rateLimiter = new ClientRateLimiter()
     private readonly _state: BrowserState
     private readonly _consentObservation: Disposable
     private readonly _blocked: boolean
     private readonly _capturePageview: boolean
+    private readonly _automaticAnalytics: AutomaticAnalyticsSetup | undefined
     private readonly _remoteConfigLoader: (() => Promise<RemoteConfig | undefined>) | undefined
     private readonly _remoteConfigTimeoutMs: number
     private _remoteConfig: RemoteConfig | undefined
     private _latestRemoteConfigResult: RemoteConfigResult | undefined
     private _remoteConfigPromise: Promise<RemoteConfig | undefined> | undefined
+    private _remoteConfigReplayActive = false
+    private _cancelRemoteConfigWait: (() => void) | undefined
     private _consentGeneration = 0
+    private _automaticAnalyticsLoad: Promise<void> | undefined
+    private _automaticAnalyticsFailed = false
+    private _automaticAnalyticsFailures = 0
+    private _closing = false
     private _disposed = false
+    private _shutdownPromise: Promise<void> | undefined
     private _initialPageviewPending = true
     private _pageviewListener: [Document, EventListener] | undefined
 
-    constructor(options: PostHogOptions) {
+    static async create(
+        options: CorePostHogOptions,
+        automaticAnalytics?: AutomaticAnalyticsSetup
+    ): Promise<PostHogBrowserClient> {
+        const client = new PostHogBrowserClient(options, automaticAnalytics)
+        for (const extension of options.extensions ?? []) {
+            try {
+                await client._installExtension(extension, false)
+            } catch (error) {
+                client.logger.error(`Failed to install configured extension "${extension.name}"`, error)
+            }
+        }
+        await client._initializeAutomaticAnalytics()
+        client._startInitialPageview()
+        return client
+    }
+
+    private constructor(options: CorePostHogOptions, automaticAnalytics?: AutomaticAnalyticsSetup) {
         const { projectToken } = options
         this.projectToken = projectToken
         this._capturePageview = options.capturePageview ?? true
+        this._automaticAnalytics = automaticAnalytics
         this.logger = createLogger('[PostHog]', options.debug ?? false)
         const initialPersonProperties = options.initialPersonProperties
         try {
@@ -156,7 +205,7 @@ class PostHogBrowserClient implements PostHog {
             MAX_ANALYTICS_BYTES,
             MAX_ANALYTICS_AGE_MS,
             Date.now,
-            () => this.startInitialPageview()
+            () => this._startInitialPageview()
         )
         this._state = new BrowserState(
             projectToken,
@@ -167,10 +216,14 @@ class PostHogBrowserClient implements PostHog {
             !this._blocked && options.storage === undefined && requestedStorage !== undefined
                 ? getDefaultSessionStorage
                 : undefined,
-            () => {
-                this._consentGeneration++
-                this._analyticsLane.purge()
-                this._removePageviewListener()
+            (consent, previousConsent) => {
+                if (consent === 'denied') {
+                    this._consentGeneration++
+                    this._analyticsLane.purge()
+                    this._removePageviewListener()
+                } else if (previousConsent === 'denied' && !this._remoteConfigReplayActive) {
+                    void Promise.resolve().then(() => this._resumeRemoteConfig())
+                }
             }
         )
         this._consentObservation = this._observeConsent(
@@ -198,11 +251,27 @@ class PostHogBrowserClient implements PostHog {
         this.kv = this._state.keyValueStore('core', () => this._canUseState())
         this._latestRemoteConfigResult = this._remoteConfig ? { ok: true, config: this._remoteConfig } : undefined
         this.onRemoteConfig = (handler) => {
+            const subscription = this._remoteConfigPublisher.listener(handler)
+            const pending: PendingRemoteConfigSubscription = [handler, true]
+            const disposable: Disposable = {
+                dispose: () => {
+                    if (pending[1]) {
+                        pending[1] = false
+                        const index = this._pendingRemoteConfigSubscriptions.indexOf(pending)
+                        if (index !== -1) {
+                            this._pendingRemoteConfigSubscriptions.splice(index, 1)
+                        }
+                        subscription.dispose()
+                    }
+                },
+            }
             if (!this._canUseState()) {
-                return { dispose() {} }
+                if (this.hasOptedOut()) {
+                    this._pendingRemoteConfigSubscriptions.push(pending)
+                }
+                return disposable
             }
 
-            const subscription = this._remoteConfigPublisher.listener(handler)
             if (this._latestRemoteConfigResult) {
                 try {
                     handler(this._latestRemoteConfigResult)
@@ -212,7 +281,7 @@ class PostHogBrowserClient implements PostHog {
             } else {
                 void this.getRemoteConfig()
             }
-            return subscription
+            return disposable
         }
         this.onEvent = this._eventPublisher.listener
         this.onNewSession = this._newSessionPublisher.listener
@@ -254,10 +323,32 @@ class PostHogBrowserClient implements PostHog {
         event: string,
         properties: Record<string, unknown> | null = null,
         options: CaptureOptions = {},
-        consentGeneration = this._consentGeneration
+        consentGeneration = this._consentGeneration,
+        skipRateLimit = false
     ): boolean {
         if (!isNonEmptyString(event) || !this._canContinue(consentGeneration)) {
             return false
+        }
+        if (!skipRateLimit) {
+            const rateLimit = this._rateLimiter.consume()
+            if (!rateLimit.allowed) {
+                if (rateLimit.reportDropped !== undefined) {
+                    const warning = `${rateLimit.reportDropped} event(s) dropped since the last warning. Client limit is 10 events per second with a burst of 100.`
+                    this.logger.warn(`PostHog client rate limited: ${warning}`)
+                    if (
+                        this._capture(
+                            CLIENT_RATE_LIMIT_WARNING,
+                            { $$client_ingestion_warning_message: `posthog-js client rate limited: ${warning}` },
+                            {},
+                            consentGeneration,
+                            true
+                        )
+                    ) {
+                        this._rateLimiter.reported()
+                    }
+                }
+                return false
+            }
         }
 
         const dynamicProperties: Record<string, unknown> = {}
@@ -379,7 +470,11 @@ class PostHogBrowserClient implements PostHog {
         this._eventPublisher.publish(deepFreeze({ event, properties: observedProperties }), () =>
             this._canContinue(consentGeneration)
         )
-        return this._canContinue(consentGeneration)
+        const continues = this._canContinue(consentGeneration)
+        if (continues) {
+            void this._ensureAutomaticAnalytics('capture')
+        }
+        return continues
     }
 
     async identify(
@@ -459,6 +554,9 @@ class PostHogBrowserClient implements PostHog {
     }
 
     async flush(): Promise<void> {
+        if (this._analyticsLane.hasPending()) {
+            await this._ensureAutomaticAnalytics('flush')
+        }
         await this._analyticsLane.flush()
     }
 
@@ -469,7 +567,7 @@ class PostHogBrowserClient implements PostHog {
         if (this._state.optIn()) {
             this._dispatchConsentChange()
         }
-        this.startInitialPageview()
+        this._startInitialPageview()
     }
 
     optOut(): void {
@@ -512,6 +610,42 @@ class PostHogBrowserClient implements PostHog {
         return sendRequest(this._requestRuntime, path, init, () => this._canContinue(consentGeneration))
     }
 
+    private _resumeRemoteConfig(): void {
+        if (!this._canUseState()) {
+            return
+        }
+        const result = this._latestRemoteConfigResult
+        if (!result) {
+            if (this._remoteConfigPublisher.hasSubscribers()) {
+                void this.getRemoteConfig()
+            }
+            return
+        }
+
+        const consentGeneration = this._consentGeneration
+        const pending = this._pendingRemoteConfigSubscriptions.splice(0)
+        this._remoteConfigReplayActive = true
+        try {
+            for (let index = 0; index < pending.length; index++) {
+                const subscription = pending[index]!
+                if (!this._canContinue(consentGeneration)) {
+                    this._pendingRemoteConfigSubscriptions.push(...pending.slice(index).filter((entry) => entry[1]))
+                    return
+                }
+                if (!subscription[1]) {
+                    continue
+                }
+                try {
+                    subscription[0](result)
+                } catch (error) {
+                    this.logger.error('A remote configuration listener failed', error)
+                }
+            }
+        } finally {
+            this._remoteConfigReplayActive = false
+        }
+    }
+
     async getRemoteConfig(): Promise<RemoteConfig | undefined> {
         const consentGeneration = this._consentGeneration
         if (!this._canContinue(consentGeneration)) {
@@ -525,8 +659,25 @@ class PostHogBrowserClient implements PostHog {
         if (!this._remoteConfigPromise) {
             let timeout: ReturnType<typeof setTimeout> | undefined
             let invalidated = false
+            let cancelWait: (() => void) | undefined
             const timeoutResult = new Promise<undefined>((resolve) => {
-                timeout = globalThis.setTimeout(() => resolve(undefined), this._remoteConfigTimeoutMs)
+                cancelWait = () => {
+                    if (timeout !== undefined) {
+                        try {
+                            globalThis.clearTimeout(timeout)
+                        } catch {
+                            // Resolving the wait remains authoritative.
+                        }
+                        timeout = undefined
+                    }
+                    resolve(undefined)
+                }
+                this._cancelRemoteConfigWait = cancelWait
+                try {
+                    timeout = globalThis.setTimeout(cancelWait, this._remoteConfigTimeoutMs)
+                } catch {
+                    cancelWait()
+                }
             })
             this._remoteConfigPromise = Promise.race([
                 Promise.resolve().then(() => {
@@ -545,6 +696,7 @@ class PostHogBrowserClient implements PostHog {
                     }
 
                     this._latestRemoteConfigResult = remoteConfig ? { ok: true, config: remoteConfig } : { ok: false }
+                    this._pendingRemoteConfigSubscriptions.splice(0)
                     if (remoteConfig) {
                         this._remoteConfig = remoteConfig
                     }
@@ -560,6 +712,7 @@ class PostHogBrowserClient implements PostHog {
                     }
                     this.logger.error('Remote configuration failed', error)
                     this._latestRemoteConfigResult = { ok: false }
+                    this._pendingRemoteConfigSubscriptions.splice(0)
                     this._remoteConfigPublisher.publish(this._latestRemoteConfigResult, () =>
                         this._canContinue(consentGeneration)
                     )
@@ -567,7 +720,14 @@ class PostHogBrowserClient implements PostHog {
                 })
                 .finally(() => {
                     if (timeout !== undefined) {
-                        globalThis.clearTimeout(timeout)
+                        try {
+                            globalThis.clearTimeout(timeout)
+                        } catch {
+                            // Promise settlement remains authoritative.
+                        }
+                    }
+                    if (this._cancelRemoteConfigWait === cancelWait) {
+                        this._cancelRemoteConfigWait = undefined
                     }
                     if (invalidated) {
                         this._remoteConfigPromise = undefined
@@ -582,92 +742,195 @@ class PostHogBrowserClient implements PostHog {
         return this._registry.get<T>(name)
     }
 
-    async installExtension(extension: Extension): Promise<Disposable> {
+    private async _installExtension(extension: Extension, automatic: boolean): Promise<void> {
         const consentGeneration = this._consentGeneration
-        if (!this._canContinue(consentGeneration)) {
+        const canInstall = (): boolean =>
+            automatic ? this._canFinishAutomaticAnalytics(consentGeneration) : !this._closing && !this._disposed
+        if (!canInstall()) {
             throw new Error('PostHog extensions are disabled')
         }
-        const registered = await this._registry.install(extension)
-        let delivery: Disposable | undefined
+        const installsAnalytics = isAnalyticsExtension(extension)
+        await this._registry.install(extension)
         try {
-            if (!this._canContinue(consentGeneration)) {
+            if (!canInstall()) {
                 throw new Error('PostHog extensions are disabled')
             }
-            if (isAnalyticsExtension(extension)) {
-                delivery = this._analyticsLane.install(
-                    extension[createAnalyticsDelivery]({
-                        runtime: this._requestRuntime,
-                        libraryVersion: version,
-                        canRetry: () => this._canUseState(),
-                        reportFailure: (error) => this.logger.error('Event delivery failed', error),
-                    })
-                )
-            }
-            if (!this._canContinue(consentGeneration)) {
-                throw new Error('PostHog extensions are disabled')
+            if (installsAnalytics) {
+                const delivery = extension[createAnalyticsDelivery]({
+                    runtime: this._requestRuntime,
+                    libraryVersion: version,
+                    canRetry: () => this._canDeliver(),
+                    retryNow: () => this._analyticsLane.retryNow(),
+                    pause: () => this._analyticsLane.pause(),
+                    teardown: (maxBytes) => this._analyticsLane.teardown(maxBytes),
+                    reportFailure: (error) => this.logger.error('Event delivery failed', error),
+                    reportWarning: (message) => this.logger.warn(message),
+                })
+                if (!canInstall()) {
+                    throw new Error('PostHog extensions are disabled')
+                }
+                this._analyticsLane.attach(delivery)
             }
         } catch (error) {
-            delivery?.dispose()
             try {
-                await registered.dispose()
+                await this._registry.rollback(extension)
             } catch (cleanupError) {
                 this.logger.error(`Failed to dispose disabled extension "${extension.name}"`, cleanupError)
             }
             throw error
         }
+    }
 
-        let active = true
-        return {
-            dispose: async () => {
-                if (active) {
-                    active = false
-                    delivery?.dispose()
-                    await registered.dispose()
-                }
-            },
+    private async _initializeAutomaticAnalytics(): Promise<void> {
+        if (this._automaticAnalytics?.strategy === 'eager') {
+            await this._ensureAutomaticAnalytics('eager')
         }
     }
 
-    async loadExtension(loader: () => Promise<Extension>): Promise<Disposable> {
-        const consentGeneration = this._consentGeneration
-        if (!this._canContinue(consentGeneration)) {
-            throw new Error('PostHog extensions are disabled')
+    private _ensureAutomaticAnalytics(reason: AutomaticAnalyticsReason, retryAfterPending = true): Promise<void> {
+        const setup = this._automaticAnalytics
+        if (!setup || this._analyticsLane.hasDelivery()) {
+            return Promise.resolve()
         }
-        const extension = await loader()
-        if (!this._canContinue(consentGeneration)) {
-            try {
-                await extension.dispose?.()
-            } catch (error) {
-                this.logger.error(`Failed to dispose disabled extension "${extension.name}"`, error)
+        if (this._automaticAnalyticsLoad) {
+            const pending = this._automaticAnalyticsLoad
+            const failures = this._automaticAnalyticsFailures
+            if (reason === 'capture' || !retryAfterPending) {
+                return pending
             }
-            throw new Error('PostHog extensions are disabled')
+            return pending.then(() =>
+                this._automaticAnalyticsFailures > failures && this._analyticsLane.hasPending()
+                    ? this._ensureAutomaticAnalytics(reason, false)
+                    : undefined
+            )
         }
-        return this.installExtension(extension)
+        if (reason === 'capture' && this._automaticAnalyticsFailed) {
+            return Promise.resolve()
+        }
+        const consentGeneration = this._consentGeneration
+        if (!this._canFinishAutomaticAnalytics(consentGeneration)) {
+            return Promise.resolve()
+        }
+
+        this._automaticAnalyticsFailed = false
+        const loading = Promise.resolve()
+            .then(() => setup.load(setup.options))
+            .then(async (extension) => {
+                if (this._analyticsLane.hasDelivery() || !this._canFinishAutomaticAnalytics(consentGeneration)) {
+                    try {
+                        await extension.dispose?.()
+                    } catch (error) {
+                        this.logger.error('Failed to dispose unused automatic analytics', error)
+                    }
+                    return
+                }
+                if (!isAnalyticsExtension(extension)) {
+                    throw new Error('The automatic analytics loader returned an incompatible extension')
+                }
+                await this._installExtension(extension, true)
+            })
+            .catch((error: unknown) => {
+                if (!this._analyticsLane.hasDelivery()) {
+                    this._automaticAnalyticsFailed = true
+                    this._automaticAnalyticsFailures++
+                    this.logger.error('Automatic analytics loading failed', error)
+                }
+            })
+            .finally(() => {
+                if (this._automaticAnalyticsLoad === loading) {
+                    this._automaticAnalyticsLoad = undefined
+                }
+            })
+        this._automaticAnalyticsLoad = loading
+        return loading
     }
 
-    async dispose(): Promise<void> {
-        if (this._disposed) {
-            return
+    shutdown(shutdownTimeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS): Promise<void> {
+        if (!this._shutdownPromise) {
+            const analyticsLoad =
+                this._automaticAnalyticsLoad ??
+                (this._analyticsLane.hasPending() ? this._ensureAutomaticAnalytics('shutdown') : Promise.resolve())
+            this._closing = true
+            this._removePageviewListener()
+            try {
+                this._consentObservation.dispose()
+            } catch {
+                // Fresh consent reads remain authoritative while delivery finishes.
+            }
+            try {
+                this._cancelRemoteConfigWait?.()
+            } catch {
+                // Shutdown remains bounded when timer cleanup is hostile.
+            }
+            this._shutdownPromise = this._shutdown(shutdownTimeoutMs, analyticsLoad)
         }
-        this._disposed = true
-        this._removePageviewListener()
+        return this._shutdownPromise
+    }
+
+    dispose(): Promise<void> {
+        return this.shutdown()
+    }
+
+    private async _shutdown(shutdownTimeoutMs: number, analyticsLoad: Promise<void>): Promise<void> {
+        const timeoutMs = Math.max(
+            0,
+            Math.floor(Number.isFinite(shutdownTimeoutMs) ? shutdownTimeoutMs : DEFAULT_SHUTDOWN_TIMEOUT_MS)
+        )
+        let timer: ReturnType<typeof globalThis.setTimeout> | undefined
+        let timedOut = false
+        const timeout = new Promise<void>((resolve) => {
+            try {
+                timer = globalThis.setTimeout(() => {
+                    timedOut = true
+                    resolve()
+                }, timeoutMs)
+            } catch {
+                timedOut = true
+                resolve()
+            }
+        })
+
         try {
-            this._consentObservation.dispose()
-        } catch {
-            // Listener cleanup is best effort.
-        }
-        this._state.dispose()
+            await Promise.race([analyticsLoad, timeout])
+            await Promise.race([
+                this._analyticsLane.flush().catch((error) => this.logger.error('Event flush failed', error)),
+                timeout,
+            ])
 
-        const laneDisposal = this._analyticsLane.dispose()
-        const registryDisposal = this._registry.dispose()
-        await Promise.all([laneDisposal, registryDisposal])
-        this._remoteConfigPublisher.dispose()
-        this._eventPublisher.dispose()
-        this._newSessionPublisher.dispose()
-        this._dynamicEventProperties.splice(0)
+            this._disposed = true
+            try {
+                this._state.dispose()
+            } catch (error) {
+                this.logger.error('Failed to dispose browser state', error)
+            }
+
+            const cleanup = Promise.all([
+                this._analyticsLane.dispose().catch((error) => this.logger.error('Failed to dispose analytics', error)),
+                this._registry.dispose().catch((error) => this.logger.error('Failed to dispose extensions', error)),
+            ]).then(() => undefined)
+            this._remoteConfigPublisher.dispose()
+            this._pendingRemoteConfigSubscriptions.splice(0)
+            this._eventPublisher.dispose()
+            this._newSessionPublisher.dispose()
+            this._dynamicEventProperties.splice(0)
+            await Promise.race([cleanup, timeout])
+            if (timedOut) {
+                this.logger.warn(`PostHog shutdown stopped waiting for cleanup after ${timeoutMs}ms`)
+            }
+        } catch (error) {
+            this.logger.error('PostHog shutdown failed', error)
+        } finally {
+            if (timer !== undefined) {
+                try {
+                    globalThis.clearTimeout(timer)
+                } catch {
+                    // Detached cleanup remains inert after disposal.
+                }
+            }
+        }
     }
 
-    startInitialPageview(): void {
+    private _startInitialPageview(): void {
         const consentGeneration = this._consentGeneration
         if (
             !this._capturePageview ||
@@ -703,7 +966,7 @@ class PostHogBrowserClient implements PostHog {
                 this._removePageviewListener()
             }
             if (!this._pageviewListener) {
-                const listener = (): void => this.startInitialPageview()
+                const listener = (): void => this._startInitialPageview()
                 this._pageviewListener = [document, listener]
                 try {
                     // eslint-disable-next-line posthog-js/no-add-event-listener
@@ -878,27 +1141,29 @@ class PostHogBrowserClient implements PostHog {
         return this._canUseState() && consentGeneration === this._consentGeneration
     }
 
-    private _canUseState(): boolean {
+    private _canFinishAutomaticAnalytics(consentGeneration: number): boolean {
+        return consentGeneration === this._consentGeneration && !this._disposed && this._canDeliver()
+    }
+
+    private _canDeliver(): boolean {
         if (this._disposed || this._blocked || this.hasOptedOut()) {
             return false
         }
         return this._state.prepare() && !this.hasOptedOut()
     }
+
+    private _canUseState(): boolean {
+        return !this._closing && this._canDeliver()
+    }
 }
 
-export const createPostHog = async (options: PostHogOptions): Promise<PostHog> => {
+export const createPostHogCore = async (
+    options: CorePostHogOptions,
+    automaticAnalytics?: AutomaticAnalyticsSetup
+): Promise<PostHog> => {
     if (!options?.projectToken) {
         throw new Error('A PostHog project token is required')
     }
 
-    const client = new PostHogBrowserClient(options)
-    for (const extension of options.extensions ?? []) {
-        try {
-            await client.installExtension(extension)
-        } catch (error) {
-            client.logger.error(`Failed to install configured extension "${extension.name}"`, error)
-        }
-    }
-    client.startInitialPageview()
-    return client
+    return PostHogBrowserClient.create(options, automaticAnalytics)
 }

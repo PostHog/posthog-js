@@ -1,9 +1,17 @@
 import type { Client, Disposable, Extension } from '@posthog/browser-common'
 
-import { analytics } from '../src/analytics'
-import { createPostHog, type BrowserFetch, type RemoteConfig, type SendRequestInit, type StorageLike } from '../src'
+import { analytics as createAnalytics } from '../src/analytics'
+import {
+    createPostHog,
+    type BrowserFetch,
+    type RemoteConfig,
+    type SendRequestInit,
+    type StorageLike,
+} from '../src/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
+const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })
+const bufferedAnalytics = () => createAnalytics({ flushAt: 100, flushInterval: 0 })
 const DEFAULT_KEY = '__ph_opt_in_out_ph_test'
 
 class ObservableStorage extends MemoryStorage {
@@ -168,9 +176,13 @@ describe('portable consent persistence', () => {
         expect(storage.values.get(DEFAULT_KEY)).toBe('0')
     })
 
-    it('resolves prior denial before state access, persistence, fetch, or extension setup', async () => {
+    it('resolves prior denial before extension outputs access state, persistence, or fetch', async () => {
         const calls: string[] = []
-        const extensionSetup = jest.fn()
+        const extensionSetup = jest.fn(async (client: Client) => {
+            client.kv.set('private', true)
+            await client.capture('extension-blocked')
+            await client.sendRequest('/flags/')
+        })
         const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
         const stateKey = 'ph_ph_test_posthog_browser_v2'
         const storage: StorageLike = {
@@ -204,7 +216,8 @@ describe('portable consent persistence', () => {
         expect(calls).toContain(`remove:${stateKey}`)
         expect(calls).not.toContain(`get:${stateKey}`)
         expect(calls.some((call) => call.startsWith(`set:${stateKey}`))).toBe(false)
-        expect(extensionSetup).not.toHaveBeenCalled()
+        expect(extensionSetup).toHaveBeenCalledTimes(1)
+        expect(posthog.getExtension('blocked-by-consent')).toBeDefined()
         expect(fetch).not.toHaveBeenCalled()
         expect(posthog.anonymousId).toBe('')
         expect(posthog.session.sessionId).toBe('')
@@ -314,13 +327,13 @@ describe('portable consent persistence', () => {
             storage,
             navigator: false,
             fetch: createFetch(requests),
+            extensions: [bufferedAnalytics()],
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
         await first.capture('private-before-denial')
 
         second.optOut()
         second.optIn()
-        await first.installExtension(analytics())
         await first.flush()
 
         expect(requests).toHaveLength(0)
@@ -386,6 +399,7 @@ describe('portable consent persistence', () => {
             projectToken: 'ph_test',
             navigator: false,
             fetch: createFetch(requests),
+            extensions: [bufferedAnalytics()],
         })
         await posthog.capture('retained')
 
@@ -394,7 +408,6 @@ describe('portable consent persistence', () => {
         dispatchStorage(DEFAULT_KEY, new MemoryStorage())
         storage.values.set(DEFAULT_KEY, '1')
         dispatchStorage(DEFAULT_KEY, storage)
-        await posthog.installExtension(analytics())
         await posthog.flush()
         expect(requests).toHaveLength(1)
     })
@@ -407,6 +420,7 @@ describe('portable consent persistence', () => {
             projectToken: 'ph_test',
             navigator: false,
             fetch: createFetch(requests),
+            extensions: [bufferedAnalytics()],
         })
         await posthog.capture('private')
 
@@ -414,7 +428,6 @@ describe('portable consent persistence', () => {
         dispatchStorage(DEFAULT_KEY, storage)
         storage.values.set(DEFAULT_KEY, '1')
         dispatchStorage(DEFAULT_KEY, storage)
-        await posthog.installExtension(analytics())
         await posthog.flush()
         expect(requests).toHaveLength(0)
     })
@@ -427,13 +440,13 @@ describe('portable consent persistence', () => {
             projectToken: 'ph_test',
             navigator: false,
             fetch: createFetch(requests),
+            extensions: [bufferedAnalytics()],
         })
         await posthog.capture('private')
 
         storage.values.set(DEFAULT_KEY, '1')
         dispatchStorage(DEFAULT_KEY, storage, '0')
         dispatchStorage(DEFAULT_KEY, storage, '1')
-        await posthog.installExtension(analytics())
         await posthog.flush()
         expect(requests).toHaveLength(0)
     })
@@ -446,13 +459,13 @@ describe('portable consent persistence', () => {
             storage,
             navigator: false,
             fetch: createFetch(requests),
+            extensions: [bufferedAnalytics()],
         })
         await posthog.capture('retained')
 
         storage.values.set(DEFAULT_KEY, '0')
         dispatchStorage(DEFAULT_KEY, storage)
         storage.values.set(DEFAULT_KEY, '1')
-        await posthog.installExtension(analytics())
         await posthog.flush()
         expect(requests).toHaveLength(1)
     })
@@ -495,6 +508,7 @@ describe('portable consent persistence', () => {
             storage,
             navigator: false,
             fetch: createFetch(requests),
+            extensions: [bufferedAnalytics()],
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
         await first.capture('private')
@@ -503,7 +517,6 @@ describe('portable consent persistence', () => {
         expect(() => second.optOut()).not.toThrow()
         expect(first.hasOptedOut()).toBe(true)
         second.optIn()
-        await first.installExtension(analytics())
         await first.flush()
         expect(requests).toHaveLength(0)
     })
@@ -516,11 +529,11 @@ describe('portable consent persistence', () => {
             storage: observable,
             navigator: false,
             fetch: createFetch(observableRequests),
+            extensions: [bufferedAnalytics()],
         })
         await observed.capture('observable-private')
         observable.externalSet(DEFAULT_KEY, '0')
         observable.externalSet(DEFAULT_KEY, '1')
-        await observed.installExtension(analytics())
         await observed.flush()
         expect(observableRequests).toHaveLength(0)
 
@@ -531,12 +544,12 @@ describe('portable consent persistence', () => {
             storage: plain,
             navigator: false,
             fetch: createFetch(plainRequests),
+            extensions: [bufferedAnalytics()],
         })
         await nextGate.capture('plain-private')
         plain.values.set(DEFAULT_KEY, '0')
         await expect(nextGate.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         plain.values.set(DEFAULT_KEY, '1')
-        await nextGate.installExtension(analytics())
         await nextGate.flush()
         expect(plainRequests).toHaveLength(0)
     })
@@ -647,6 +660,9 @@ describe('portable consent persistence', () => {
     it('purges an admission when overflow reporting crosses denial and grant', async () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
+        const startedAt = Date.now()
+        let captureTime = startedAt
+        jest.spyOn(Date, 'now').mockImplementation(() => captureTime)
         const first = await createPostHog({
             projectToken: 'ph_test',
             storage,
@@ -662,6 +678,7 @@ describe('portable consent persistence', () => {
             fetch: false,
         })
         for (let index = 0; index < 1_000; index++) {
+            captureTime = startedAt + (index + 1) * 110
             await first.capture(`queued-${index}`)
         }
         const warn = jest.spyOn(console, 'warn').mockImplementationOnce(() => {
@@ -670,45 +687,10 @@ describe('portable consent persistence', () => {
         })
 
         await first.capture('private-overflow')
-        await first.installExtension(analytics())
         await first.flush()
 
         expect(warn).toHaveBeenCalled()
         expect(requests).toEqual([])
-    })
-
-    it('rolls back delivery installation when expiry reporting crosses denial and grant', async () => {
-        jest.useFakeTimers({ now: new Date('2026-01-01T00:00:00.000Z') })
-        try {
-            const storage = new MemoryStorage()
-            const requests: SentRequest[] = []
-            const first = await createPostHog({
-                projectToken: 'ph_test',
-                storage,
-                navigator: false,
-                fetch: createFetch(requests),
-                debug: true,
-            })
-            const second = await createPostHog({
-                projectToken: 'ph_test',
-                capturePageview: false,
-                storage,
-                navigator: false,
-                fetch: false,
-            })
-            await first.capture('expired')
-            jest.advanceTimersByTime(3_600_001)
-            jest.spyOn(console, 'warn').mockImplementationOnce(() => {
-                second.optOut()
-                second.optIn()
-            })
-
-            await expect(first.installExtension(analytics())).rejects.toThrow('disabled')
-            expect(first.getExtension('analytics')).toBeUndefined()
-            expect(requests).toEqual([])
-        } finally {
-            jest.useRealTimers()
-        }
     })
 
     it('stops capture after a new-session observer crosses denial and grant', async () => {
@@ -775,46 +757,44 @@ describe('portable consent persistence', () => {
         expect(observed).not.toHaveBeenCalled()
     })
 
-    it('rolls back an extension whose asynchronous setup crosses denial and grant', async () => {
+    it('keeps a configured extension whose asynchronous setup crosses denial and grant', async () => {
         const storage = new MemoryStorage()
         let finishSetup: (() => void) | undefined
+        let markSetupStarted: (() => void) | undefined
         const setup = new Promise<void>((resolve) => {
             finishSetup = resolve
         })
+        const setupStarted = new Promise<void>((resolve) => {
+            markSetupStarted = resolve
+        })
         const dispose = jest.fn()
-        const extension: Extension = { name: 'late-consent', setup: () => setup, dispose }
-        const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
+        const extension: Extension = {
+            name: 'late-consent',
+            setup: () => {
+                markSetupStarted?.()
+                return setup
+            },
+            dispose,
+        }
+        const creatingFirst = createPostHog({
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch: false,
+            extensions: [extension],
+        })
+        await setupStarted
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
 
-        const installation = first.installExtension(extension)
         second.optOut()
         second.optIn()
         finishSetup?.()
+        const first = await creatingFirst
 
-        await expect(installation).rejects.toThrow('disabled')
+        expect(dispose).not.toHaveBeenCalled()
+        expect(first.getExtension('late-consent')).toBe(extension)
+        await first.dispose()
         expect(dispose).toHaveBeenCalledTimes(1)
-        expect(first.getExtension('late-consent')).toBeUndefined()
-    })
-
-    it('disposes an extension whose loader crosses denial and grant', async () => {
-        const storage = new MemoryStorage()
-        let finishLoad: ((extension: Extension) => void) | undefined
-        const loaded = new Promise<Extension>((resolve) => {
-            finishLoad = resolve
-        })
-        const dispose = jest.fn()
-        const extension: Extension = { name: 'late-loader', setup() {}, dispose }
-        const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-        const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-
-        const installation = first.loadExtension(() => loaded)
-        second.optOut()
-        second.optIn()
-        finishLoad?.(extension)
-
-        await expect(installation).rejects.toThrow('disabled')
-        expect(dispose).toHaveBeenCalledTimes(1)
-        expect(first.getExtension('late-loader')).toBeUndefined()
     })
 
     it('does not invoke transport when request preparation crosses denial and grant', async () => {
@@ -901,6 +881,108 @@ describe('portable consent persistence', () => {
         await expect(
             first.sendRequest('/flags/', { body: {}, method: 'POST', transport: 'sendBeacon' })
         ).resolves.toMatchObject({ statusCode: 0 })
+    })
+
+    it('resumes a retained remote-config subscription after a sibling grants consent', async () => {
+        const storage = new MemoryStorage()
+        storage.setItem(DEFAULT_KEY, '0')
+        const config = { supportedCompression: ['gzip-js'] } as RemoteConfig
+        const loader = jest.fn(async () => config)
+        const observed = jest.fn()
+        const first = await createPostHog({
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch: false,
+            remoteConfigLoader: loader,
+            extensions: [{ name: 'subscriber', setup: (client) => void client.onRemoteConfig(observed) }],
+        })
+        const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
+
+        expect(loader).not.toHaveBeenCalled()
+        second.optIn()
+        await Promise.resolve()
+        await first.getRemoteConfig()
+
+        expect(loader).toHaveBeenCalledTimes(1)
+        expect(observed).toHaveBeenCalledWith({ ok: true, config })
+    })
+
+    it('tracks denied remote-config subscriptions independently for the same callback', async () => {
+        const storage = new MemoryStorage()
+        storage.setItem(DEFAULT_KEY, '0')
+        const config = { supportedCompression: ['gzip-js'] } as RemoteConfig
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch: false,
+            remoteConfig: config,
+        })
+        const observer = jest.fn()
+        const first = posthog.onRemoteConfig(observer)
+        posthog.onRemoteConfig(observer)
+        first.dispose()
+
+        posthog.optIn()
+        await Promise.resolve()
+
+        expect(observer).toHaveBeenCalledTimes(1)
+        expect(observer).toHaveBeenCalledWith({ ok: true, config })
+    })
+
+    it('honors subscription disposal during opt-in replay', async () => {
+        const storage = new MemoryStorage()
+        storage.setItem(DEFAULT_KEY, '0')
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch: false,
+            remoteConfig: { supportedCompression: ['gzip-js'] } as RemoteConfig,
+        })
+        const laterObserver = jest.fn()
+        const later: { subscription?: Disposable } = {}
+        posthog.onRemoteConfig(() => later.subscription?.dispose())
+        later.subscription = posthog.onRemoteConfig(laterObserver)
+
+        posthog.optIn()
+        await Promise.resolve()
+
+        expect(laterObserver).not.toHaveBeenCalled()
+    })
+
+    it('stops opt-in replay across a nested denial and grant', async () => {
+        const storage = new MemoryStorage()
+        storage.setItem(DEFAULT_KEY, '0')
+        const config = { supportedCompression: ['gzip-js'] } as RemoteConfig
+        const first = await createPostHog({
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch: false,
+            remoteConfig: config,
+        })
+        const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
+        const firstObserver = jest.fn(() => {
+            second.optOut()
+            second.optIn()
+        })
+        const laterObserver = jest.fn()
+        first.onRemoteConfig(firstObserver)
+        first.onRemoteConfig(laterObserver)
+
+        second.optIn()
+        await Promise.resolve()
+
+        expect(firstObserver).toHaveBeenCalledTimes(1)
+        expect(laterObserver).not.toHaveBeenCalled()
+
+        second.optOut()
+        second.optIn()
+        await Promise.resolve()
+        expect(firstObserver).toHaveBeenCalledTimes(1)
+        expect(laterObserver).toHaveBeenCalledTimes(1)
     })
 
     it('discards and retries remote config whose loader crosses denial and grant', async () => {

@@ -305,7 +305,7 @@ export class BrowserState {
     private readonly _storage: StorageLike | undefined
     private readonly _windowStorageFactory: (() => StorageLike | undefined) | undefined
     private readonly _defaultConsent: ConsentState
-    private readonly _onDenied: () => void
+    private readonly _onConsentChange: (consent: ConsentState, previousConsent: ConsentState) => void
     private readonly _beforeUnload = (): void => {
         this._flushSession()
         this._windowRemove(this._primaryWindowKey)
@@ -318,7 +318,7 @@ export class BrowserState {
         consentPersistenceName: string | undefined,
         optOutByDefault: boolean,
         windowStorageFactory: (() => StorageLike | undefined) | undefined,
-        onDenied: () => void
+        onConsentChange: (consent: ConsentState, previousConsent: ConsentState) => void
     ) {
         this._storage = storage
         this._windowStorageFactory = windowStorageFactory
@@ -330,7 +330,7 @@ export class BrowserState {
             consentPersistenceName === undefined ? `__ph_opt_in_out_${projectToken}` : consentPersistenceName
         this._defaultConsent = optOutByDefault ? 'denied' : 'implicit'
         this._consent = this._defaultConsent
-        this._onDenied = onDenied
+        this._onConsentChange = onConsentChange
 
         const [consentRead, storedConsent] = this._read(this.consentKey)
         if (consentRead) {
@@ -799,7 +799,8 @@ export class BrowserState {
         if (consent === this._consent) {
             return
         }
-        const wasDenied = this._consent === 'denied'
+        const previousConsent = this._consent
+        const wasDenied = previousConsent === 'denied'
         this._consent = consent
         if (consent === 'denied') {
             this._state = createDeniedState()
@@ -808,19 +809,15 @@ export class BrowserState {
             this._pendingSessionReason = undefined
             this._clearWindow(true)
             this._remove(this._stateKey)
-            this._notifyDenied()
         } else if (wasDenied) {
             this._state = createInitialState()
             this._stateReadPending = false
             this._lastActivityWriteTimestamp = 0
         }
-    }
-
-    private _notifyDenied(): void {
         try {
-            this._onDenied()
+            this._onConsentChange(consent, previousConsent)
         } catch {
-            // Consent remains denied when host cleanup fails.
+            // The consent transition remains authoritative when host reactions fail.
         }
     }
 

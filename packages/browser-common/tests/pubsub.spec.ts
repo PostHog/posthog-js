@@ -5,11 +5,13 @@ describe('Publisher', () => {
         const publisher = new Publisher<{ value: number }>()
         const calls: Array<{ value: number }> = []
 
+        expect(publisher.hasSubscribers()).toBe(false)
         publisher.listener((payload) => {
             calls.push(payload)
         })
         publisher.publish({ value: 1 })
 
+        expect(publisher.hasSubscribers()).toBe(true)
         expect(calls).toEqual([{ value: 1 }])
     })
 
@@ -49,6 +51,7 @@ describe('Publisher', () => {
         publisher.dispose()
         publisher.publish('payload')
 
+        expect(publisher.hasSubscribers()).toBe(false)
         expect(firstCalls).toEqual([])
         expect(secondCalls).toEqual([])
     })

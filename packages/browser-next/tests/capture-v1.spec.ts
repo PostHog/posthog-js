@@ -1054,6 +1054,41 @@ describe('Capture Analytics V1', () => {
         }
     })
 
+    it('cancels an active request when the owning lane aborts', async () => {
+        jest.useFakeTimers()
+        try {
+            const controller = new AbortController()
+            let requestSignal: AbortSignal | undefined
+            const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>().mockImplementation(
+                async (_input, init = {}) =>
+                    new Promise<Response>((_resolve, reject) => {
+                        requestSignal = init.signal ?? undefined
+                        if (requestSignal) {
+                            requestSignal.onabort = () => reject(new Error('Fetch observed abort'))
+                        }
+                    })
+            )
+
+            const delivery = sendCaptureV1Batch(runtime(fetch), [message()], '1.2.3', {
+                maxAttempts: 4,
+                requestTimeoutMs: 10_000,
+                maxElapsedMs: 60_000,
+                signal: controller.signal,
+            })
+            await jest.advanceTimersByTimeAsync(0)
+            controller.abort()
+            const result = await delivery
+
+            expect(requestSignal?.aborted).toBe(true)
+            expect(fetch).toHaveBeenCalledTimes(1)
+            expect(result.retry).toEqual(['event-uuid'])
+            expect(result.error).toHaveProperty('message', 'Capture V1 retry was cancelled')
+            expect(jest.getTimerCount()).toBe(0)
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
     it('cancels the body when an injected Fetch resolves after its timeout', async () => {
         jest.useFakeTimers()
         try {

@@ -1,5 +1,5 @@
 import { analytics } from '../src/analytics'
-import { createPostHog, type SessionContext } from '../src'
+import { createPostHog, type SessionContext } from '../src/core'
 
 interface ConsentHarness {
     anonymousId(): Promise<string>
@@ -13,9 +13,10 @@ interface ConsentHarness {
     consentValue(): string | null
     denialEvents(): number
     dispose(): Promise<void>
-    installAnalyticsAndFlush(): Promise<void>
+    flush(): Promise<void>
     optIn(): Promise<void>
     optOut(): Promise<void>
+    prepareTeardown(events: string[], projectToken: string): Promise<void>
     requests(): number
     reset(): Promise<void>
     session(): Promise<SessionContext>
@@ -31,7 +32,6 @@ declare global {
 let requests = 0
 let denialEvents = 0
 let lastDelivery: { body: string; compressedBytes: number; encoding: string | null } | undefined
-let analyticsInstalled = false
 const currentDelivery = () => lastDelivery
 const sessionChanges: string[] = []
 
@@ -62,6 +62,7 @@ const client = createPostHog({
         }
         return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
     },
+    extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
     remoteConfig: {
         supportedCompression: ['gzip-js'],
         toolbarParams: {},
@@ -84,10 +85,6 @@ window.consentHarness = {
         lastDelivery = undefined
         const started = performance.now()
         await posthog.capture('compression_test', { value })
-        if (!analyticsInstalled) {
-            await posthog.installExtension(analytics())
-            analyticsInstalled = true
-        }
         await posthog.flush()
         const delivery = currentDelivery()
         if (!delivery) {
@@ -104,16 +101,27 @@ window.consentHarness = {
     async dispose() {
         await (await client).dispose()
     },
-    async installAnalyticsAndFlush() {
-        const posthog = await client
-        await posthog.installExtension(analytics())
-        await posthog.flush()
+    async flush() {
+        await (await client).flush()
     },
     async optIn() {
         ;(await client).optIn()
     },
     async optOut() {
         ;(await client).optOut()
+    },
+    async prepareTeardown(events, projectToken) {
+        const posthog = await createPostHog({
+            projectToken,
+            apiHost: window.location.origin,
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
+        })
+        for (const event of events) {
+            await posthog.capture(event)
+        }
     },
     requests() {
         return requests

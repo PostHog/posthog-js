@@ -17,7 +17,7 @@ describe('Lane', () => {
         await lane.flush()
         expect(batches).toEqual([])
 
-        lane.install({
+        lane.attach({
             async deliver(events) {
                 batches.push([...events])
             },
@@ -36,7 +36,7 @@ describe('Lane', () => {
         const lane = createLane<string>()
         lane.enqueue('first')
         lane.enqueue('second')
-        lane.install({
+        lane.attach({
             async deliver(events) {
                 batches.push([...events])
                 if (batches.length === 1) {
@@ -57,7 +57,7 @@ describe('Lane', () => {
     it('invalidates a staged batch when the queue is purged', async () => {
         const delivered: string[] = []
         const lane = createLane<string>()
-        lane.install({
+        lane.attach({
             async deliver(events) {
                 delivered.push(...events)
             },
@@ -68,80 +68,6 @@ describe('Lane', () => {
         await lane.flush()
 
         expect(delivered).toEqual([])
-    })
-
-    it('does not let a stale installation handle detach its replacement', async () => {
-        const delivered: string[] = []
-        const lane = createLane<string>()
-        lane.enqueue('event')
-        const first = lane.install({ async deliver() {} })
-        first.dispose()
-        const secondDelivery: LaneDelivery<string> = {
-            async deliver(events) {
-                delivered.push(...events)
-            },
-        }
-        lane.install(secondDelivery)
-
-        first.dispose()
-        await lane.flush()
-
-        expect(delivered).toEqual(['event'])
-    })
-
-    it('counts staged work toward capacity when delivery is detached and replaced', async () => {
-        const delivered: string[] = []
-        const lane = createLane<string>(2)
-        const first = lane.install({ async deliver() {} })
-        lane.enqueue('oldest')
-        lane.enqueue('middle')
-
-        first.dispose()
-        lane.enqueue('newest')
-        lane.install({
-            async deliver(events) {
-                delivered.push(...events)
-            },
-        })
-        await lane.flush()
-
-        expect(delivered).toEqual(['middle', 'newest'])
-    })
-
-    it('bounds queued retries separately from active delivery', async () => {
-        let finish: ((result: { retry: readonly string[] }) => void) | undefined
-        const pending = new Promise<{ retry: readonly string[] }>((resolve) => {
-            finish = resolve
-        })
-        const drops: number[] = []
-        const delivered: string[] = []
-        const lane = new Lane<string>(
-            2,
-            () => {},
-            (count) => drops.push(count)
-        )
-        const first = lane.install({
-            batchSize: 1,
-            async deliver(events) {
-                return pending.then(() => ({ retry: events }))
-            },
-        })
-        lane.enqueue('retry')
-        await Promise.resolve()
-        lane.enqueue('middle')
-        lane.enqueue('newest')
-
-        first.dispose()
-        lane.install({
-            async deliver(events) {
-                delivered.push(...events)
-            },
-        })
-        finish?.({ retry: ['retry'] })
-        await lane.flush()
-
-        expect(delivered).toEqual(['middle', 'newest'])
-        expect(drops).toEqual([1])
     })
 
     it('drops the oldest event when its count bound is reached', async () => {
@@ -155,7 +81,7 @@ describe('Lane', () => {
         lane.enqueue('oldest')
         lane.enqueue('middle')
         lane.enqueue('newest')
-        lane.install({
+        lane.attach({
             async deliver(events) {
                 delivered.push(...events)
             },
@@ -179,7 +105,7 @@ describe('Lane', () => {
 
         expect(lane.enqueue('exact', 10)).toBe(true)
         expect(lane.enqueue('oversized', 11)).toBe(false)
-        lane.install({
+        lane.attach({
             async deliver(events) {
                 delivered.push(...events)
             },
@@ -203,7 +129,7 @@ describe('Lane', () => {
         lane.enqueue('second', 4)
 
         expect(lane.enqueue('newest', 7)).toBe(true)
-        lane.install({
+        lane.attach({
             async deliver(events) {
                 delivered.push(...events)
             },
@@ -233,7 +159,7 @@ describe('Lane', () => {
 
         now = 101
         await lane.flush()
-        lane.install({
+        lane.attach({
             async deliver(events) {
                 delivered.push(...events.map(({ name }) => name))
             },
@@ -259,7 +185,7 @@ describe('Lane', () => {
         now = 101
         lane.enqueue('current', 1)
         now = 202
-        lane.install({
+        lane.attach({
             async deliver(events) {
                 delivered.push(...events)
             },
@@ -280,7 +206,7 @@ describe('Lane', () => {
             100,
             () => now
         )
-        lane.install({
+        lane.attach({
             async deliver(events) {
                 delivered.push(...events)
             },
@@ -307,7 +233,7 @@ describe('Lane', () => {
             (_total, _count, reason) => drops.push(reason ?? ''),
             10
         )
-        lane.install({
+        lane.attach({
             batchSize: 1,
             async deliver(events) {
                 delivered.push(...events)
@@ -328,7 +254,7 @@ describe('Lane', () => {
         expect(drops).toEqual(['overflow'])
     })
 
-    it('expires a detached retry and preserves newer queued work', async () => {
+    it('expires a retry and preserves newer queued work', async () => {
         let now = 0
         let finish: ((result: { retry: readonly string[] }) => void) | undefined
         const pending = new Promise<{ retry: readonly string[] }>((resolve) => {
@@ -344,45 +270,39 @@ describe('Lane', () => {
             100,
             () => now
         )
-        const first = lane.install({
+        lane.attach({
             batchSize: 1,
-            async deliver() {
-                return pending
-            },
-        })
-        lane.enqueue('retry', 6)
-        await Promise.resolve()
-        now = 50
-        lane.enqueue('newer', 4)
-        first.dispose()
-        lane.install({
+            flushAt: 100,
             async deliver(events) {
+                if (events[0] === 'retry') {
+                    return pending
+                }
                 delivered.push(...events)
             },
         })
+        lane.enqueue('retry', 6)
+        const firstFlush = lane.flush()
+        await Promise.resolve()
+        now = 50
+        lane.enqueue('newer', 4)
         now = 101
         finish?.({ retry: ['retry'] })
+        await firstFlush
+        await Promise.resolve()
         await lane.flush()
 
         expect(delivered).toEqual(['newer'])
         expect(drops).toContain('expired')
     })
 
-    it('keeps a mixed retained retry pending until replacement delivery settles', async () => {
+    it('retains only unexpired retry entries for a later drive', async () => {
         let now = 0
         let finish: ((result: { retry: readonly string[] }) => void) | undefined
-        let release: (() => void) | undefined
-        let started: (() => void) | undefined
         const pending = new Promise<{ retry: readonly string[] }>((resolve) => {
             finish = resolve
         })
-        const stalled = new Promise<void>((resolve) => {
-            release = resolve
-        })
-        const replacementStarted = new Promise<void>((resolve) => {
-            started = resolve
-        })
         const delivered: string[] = []
+        let calls = 0
         const lane = new Lane<string>(
             3,
             () => {},
@@ -394,36 +314,26 @@ describe('Lane', () => {
         lane.enqueue('expired', 1)
         now = 50
         lane.enqueue('retained', 1)
-        const first = lane.install({
+        lane.attach({
             batchSize: 2,
-            async deliver() {
-                return pending
-            },
-        })
-        await Promise.resolve()
-        const flush = lane.flush()
-        first.dispose()
-        lane.install({
             async deliver(events) {
+                if (calls++ === 0) {
+                    return pending
+                }
                 delivered.push(...events)
-                started?.()
-                await stalled
             },
         })
-        let flushed = false
-        void flush.then(() => {
-            flushed = true
-        })
+        const flush = lane.flush()
+        await Promise.resolve()
 
         now = 101
         finish?.({ retry: ['expired', 'retained'] })
-        await replacementStarted
-
-        expect(delivered).toEqual(['retained'])
-        expect(flushed).toBe(false)
-        release?.()
         await flush
-        expect(flushed).toBe(true)
+        expect(delivered).toEqual([])
+
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 0))
+        await lane.flush()
+        expect(delivered).toEqual(['retained'])
     })
 
     it('does not revive a retained retry when expiry reporting purges the lane', async () => {
@@ -432,7 +342,6 @@ describe('Lane', () => {
         const pending = new Promise<{ retry: readonly string[] }>((resolve) => {
             finish = resolve
         })
-        const delivered: string[] = []
         const lane = new Lane<string>(
             3,
             () => {},
@@ -448,17 +357,10 @@ describe('Lane', () => {
         lane.enqueue('expired', 1)
         now = 50
         lane.enqueue('retained', 1)
-        const first = lane.install({
+        lane.attach({
             batchSize: 2,
             async deliver() {
                 return pending
-            },
-        })
-        await Promise.resolve()
-        first.dispose()
-        lane.install({
-            async deliver(events) {
-                delivered.push(...events)
             },
         })
 
@@ -467,7 +369,7 @@ describe('Lane', () => {
         await Promise.resolve()
         await lane.flush()
 
-        expect(delivered).toEqual([])
+        expect(lane.hasPending()).toBe(false)
     })
 
     it('contains hostile retry getters and collections without leaking active bookkeeping', async () => {
@@ -486,26 +388,18 @@ describe('Lane', () => {
                 }),
             },
         ]) {
-            let finish: ((value: unknown) => void) | undefined
-            const pending = new Promise<unknown>((resolve) => {
-                finish = resolve
-            })
             const lane = new Lane<string>(
                 2,
                 (error) => errors.push(error),
                 () => {},
                 10
             )
-            const first = lane.install({
+            lane.attach({
                 async deliver() {
-                    return pending as Promise<{ retry: readonly string[] }>
+                    return result as { retry: readonly string[] }
                 },
             })
             lane.enqueue('retry', 5)
-            await Promise.resolve()
-            first.dispose()
-            lane.install({ async deliver() {} })
-            finish?.(result)
 
             await expect(lane.flush()).resolves.toBeUndefined()
             expect((lane as unknown as { _activeBytes: number })._activeBytes).toBe(0)
@@ -515,68 +409,26 @@ describe('Lane', () => {
     })
 
     it('preserves retry multiplicity when active entries share the same value', async () => {
-        let finish: ((result: { retry: readonly string[] }) => void) | undefined
-        const pending = new Promise<{ retry: readonly string[] }>((resolve) => {
-            finish = resolve
-        })
         const delivered: string[] = []
+        let calls = 0
         const lane = createLane<string>(3)
-        lane.enqueue('same')
-        lane.enqueue('same')
-        const first = lane.install({
+        lane.attach({
             batchSize: 2,
-            async deliver() {
-                return pending
-            },
-        })
-        await Promise.resolve()
-        const flush = lane.flush()
-        first.dispose()
-        lane.install({
             async deliver(events) {
+                if (calls++ === 0) {
+                    return { retry: [events[0]!] }
+                }
                 delivered.push(...events)
             },
         })
+        lane.enqueue('same')
+        lane.enqueue('same')
 
-        finish?.({ retry: ['same'] })
-        await flush
+        await lane.flush()
+        expect(delivered).toEqual([])
+        await lane.flush()
 
         expect(delivered).toEqual(['same'])
-    })
-
-    it('resolves a detached flush after retry handoff when no replacement is installed', async () => {
-        let finish: ((result: { retry: readonly string[] }) => void) | undefined
-        const pending = new Promise<{ retry: readonly string[] }>((resolve) => {
-            finish = resolve
-        })
-        const lane = createLane<string>()
-        const installation = lane.install({
-            async deliver() {
-                return pending
-            },
-        })
-        lane.enqueue('retry')
-        await Promise.resolve()
-        const flush = lane.flush()
-        let flushed = false
-        void flush.then(() => {
-            flushed = true
-        })
-
-        installation.dispose()
-        await Promise.resolve()
-        expect(flushed).toBe(false)
-        finish?.({ retry: ['retry'] })
-        await expect(flush).resolves.toBeUndefined()
-
-        const delivered: string[] = []
-        lane.install({
-            async deliver(events) {
-                delivered.push(...events)
-            },
-        })
-        await lane.flush()
-        expect(delivered).toEqual(['retry'])
     })
 
     it('makes an ignored active delivery terminal for purge barriers and accounting', async () => {
@@ -590,7 +442,7 @@ describe('Lane', () => {
             () => {},
             10
         )
-        lane.install({
+        lane.attach({
             async deliver() {
                 await stalled
             },
@@ -637,7 +489,7 @@ describe('Lane', () => {
             () => {},
             10
         )
-        lane.install({
+        lane.attach({
             async deliver() {
                 await stalled
             },
@@ -680,7 +532,7 @@ describe('Lane', () => {
         const delivered: string[] = []
         const lane = createLane<string>(1)
         lane.enqueue('active')
-        lane.install({
+        lane.attach({
             batchSize: 1,
             async deliver(events) {
                 delivered.push(...events)
@@ -725,7 +577,7 @@ describe('Lane', () => {
         }
         lane.enqueue('first')
         lane.enqueue('second')
-        lane.install(delivery)
+        lane.attach(delivery)
 
         await lane.flush()
         await expect(lane.dispose()).resolves.toBeUndefined()
@@ -746,7 +598,7 @@ describe('Lane', () => {
         })
         let calls = 0
         const lane = createLane<string>()
-        lane.install({
+        lane.attach({
             batchSize: 1,
             async deliver() {
                 await (++calls === 1 ? first : second)
@@ -770,7 +622,7 @@ describe('Lane', () => {
         const lane = createLane<string>()
         lane.enqueue('purged')
         lane.purge()
-        lane.install({
+        lane.attach({
             async deliver(events) {
                 delivered.push(...events)
             },
@@ -780,5 +632,149 @@ describe('Lane', () => {
         await lane.flush()
 
         expect(delivered).toEqual([])
+    })
+
+    it('starts delivery at the configured count threshold', async () => {
+        const batches: string[][] = []
+        const lane = createLane<string>()
+        lane.attach({
+            flushAt: 3,
+            flushInterval: 0,
+            async deliver(events) {
+                batches.push([...events])
+            },
+        })
+
+        lane.enqueue('first')
+        lane.enqueue('second')
+        await Promise.resolve()
+        expect(batches).toEqual([])
+
+        lane.enqueue('third')
+        await lane.flush()
+        expect(batches).toEqual([['first', 'second', 'third']])
+    })
+
+    it('starts delivery when the configured interval elapses', async () => {
+        jest.useFakeTimers()
+        try {
+            const batches: string[][] = []
+            const lane = createLane<string>()
+            lane.attach({
+                flushAt: 3,
+                flushInterval: 100,
+                async deliver(events) {
+                    batches.push([...events])
+                },
+            })
+            lane.enqueue('first')
+
+            await jest.advanceTimersByTimeAsync(99)
+            expect(batches).toEqual([])
+            await jest.advanceTimersByTimeAsync(1)
+            expect(batches).toEqual([['first']])
+            await lane.dispose()
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it('measures interval delivery from admission across active work and late installation', async () => {
+        jest.useFakeTimers({ now: 0 })
+        try {
+            let release: (() => void) | undefined
+            const stalled = new Promise<void>((resolve) => {
+                release = resolve
+            })
+            const batches: string[][] = []
+            const lane = createLane<string>()
+            lane.attach({
+                batchSize: 1,
+                flushAt: 2,
+                flushInterval: 100,
+                async deliver(events) {
+                    batches.push([...events])
+                    if (events[0] === 'first') {
+                        await stalled
+                    }
+                },
+            })
+            lane.enqueue('first')
+            lane.enqueue('second')
+            await jest.advanceTimersByTimeAsync(150)
+            expect(batches).toEqual([['first']])
+
+            release?.()
+            await jest.advanceTimersByTimeAsync(0)
+            expect(batches).toEqual([['first'], ['second']])
+            await lane.dispose()
+
+            const backlog: string[][] = []
+            const late = createLane<string>()
+            late.enqueue('waiting')
+            await jest.advanceTimersByTimeAsync(100)
+            late.attach({
+                flushAt: 2,
+                flushInterval: 100,
+                async deliver(events) {
+                    backlog.push([...events])
+                },
+            })
+            await jest.advanceTimersByTimeAsync(0)
+            expect(backlog).toEqual([['waiting']])
+            await late.dispose()
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it('waits a fresh interval before automatically redriving retained work', async () => {
+        jest.useFakeTimers({ now: 0 })
+        try {
+            const batches: string[][] = []
+            const lane = createLane<string>()
+            lane.attach({
+                flushAt: 1,
+                flushInterval: 100,
+                async deliver(events) {
+                    batches.push([...events])
+                    return batches.length === 1 ? { retry: events } : undefined
+                },
+            })
+            lane.enqueue('retry')
+            await lane.flush()
+            await Promise.resolve()
+            expect(batches).toEqual([['retry']])
+
+            await jest.advanceTimersByTimeAsync(99)
+            expect(batches).toEqual([['retry']])
+            await jest.advanceTimersByTimeAsync(1)
+            expect(batches).toEqual([['retry'], ['retry']])
+            await lane.dispose()
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it('retains exhausted work without hot-looping and redrives it on the next flush', async () => {
+        const batches: string[][] = []
+        const lane = createLane<string>()
+        lane.attach({
+            flushAt: 1,
+            flushInterval: 0,
+            async deliver(events) {
+                batches.push([...events])
+                return batches.length === 1 ? { retry: events } : undefined
+            },
+        })
+        lane.enqueue('retry')
+
+        await lane.flush()
+        expect(batches).toEqual([['retry']])
+        await Promise.resolve()
+        expect(batches).toEqual([['retry']])
+
+        await lane.flush()
+        expect(batches).toEqual([['retry'], ['retry']])
     })
 })

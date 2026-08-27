@@ -1,8 +1,10 @@
 import type { Client, Extension } from '@posthog/browser-common'
 
-import { analytics } from '../src/analytics'
-import { createPostHog } from '../src'
+import { analytics as createAnalytics } from '../src/analytics'
+import { createPostHog } from '../src/core'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
+
+const analytics = () => createAnalytics({ flushAt: 1, flushInterval: 0 })
 
 class TestDocument extends EventTarget {
     constructor(public visibilityState: DocumentVisibilityState) {
@@ -359,7 +361,7 @@ describe('browser-next initial pageview', () => {
         expect(remove.mock.calls.filter(([event]) => event === 'visibilitychange')).toHaveLength(1)
     })
 
-    it('buffers the initial pageview without delivery and drains it after analytics installs', async () => {
+    it('buffers the initial pageview without configured delivery', async () => {
         setDocument(new TestDocument('visible'))
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
@@ -370,12 +372,9 @@ describe('browser-next initial pageview', () => {
         })
 
         await posthog.flush()
-        expect(requests).toEqual([])
-        await posthog.installExtension(analytics())
-        await posthog.flush()
 
-        expect((requests[0]?.body?.batch as Array<{ event: string }> | undefined)?.[0]?.event).toBe('$pageview')
-        expect(requests).toHaveLength(1)
+        expect(requests).toEqual([])
+        expect(posthog.getExtension('analytics')).toBeUndefined()
     })
 
     it('removes a hidden-document listener during disposal', async () => {
