@@ -2,17 +2,17 @@
 import '../../entrypoints/default-extensions'
 
 import { PostHog, init_as_module } from '../../posthog-core'
-import { PostHogConfig } from '../../types'
+import { PostHogConfig, RemoteConfig } from '../../types'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { assignableWindow } from '../../utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
-import { Compression } from '@posthog/core'
 
 export const createPosthogInstance = async (
     // Use a random UUID for the token, such that we don't have to worry
     // about collisions between test cases.
     token: string = uuidv7(),
-    config: Partial<PostHogConfig> = {}
+    config: Partial<PostHogConfig> = {},
+    remoteConfig: Partial<RemoteConfig> = {}
 ): Promise<PostHog> => {
     // We need to create a new instance of the library for each test, to ensure
     // that they are isolated from each other. The way the library is currently
@@ -23,7 +23,7 @@ export const createPosthogInstance = async (
     // NOTE: Temporary change whilst testing remote config
     assignableWindow._POSTHOG_REMOTE_CONFIG = {
         [token]: {
-            config: { autocapture_opt_out: false, supportedCompression: [Compression.GZipJS] },
+            config: { autocapture_opt_out: false, ...remoteConfig },
             siteApps: [],
         },
     } as any

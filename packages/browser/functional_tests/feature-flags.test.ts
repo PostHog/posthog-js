@@ -4,6 +4,7 @@ import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance
 import { waitFor } from '@testing-library/dom'
 import { getFlagsWireRequests, getRequests, resetRequests } from './mock-server'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { Compression } from '@posthog/core'
 
 async function shortWait() {
     // no need to worry about ie11 compat in tests
@@ -22,11 +23,15 @@ describe('FunctionalTests / Feature Flags', () => {
         token = 'flags-wire-snapshot-token'
         resetRequests(token)
 
-        const posthog = await createPosthogInstance(token, {
-            advanced_disable_flags: false,
-            advanced_disable_feature_flags_on_first_load: true,
-            before_send: (cr) => cr,
-        })
+        const posthog = await createPosthogInstance(
+            token,
+            {
+                advanced_disable_flags: false,
+                advanced_disable_feature_flags_on_first_load: true,
+                before_send: (cr) => cr,
+            },
+            { supportedCompression: [Compression.GZipJS] }
+        )
         posthog.reloadFeatureFlags()
 
         await waitFor(() => expect(getFlagsWireRequests(token)).toHaveLength(1))
