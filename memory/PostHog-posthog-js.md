@@ -2,19 +2,7 @@
 
 ...<older entries truncated>
 
-ruction is a silent-corruption and security-sensitive path: any change must retain replay sandbox protections and use a real-browser visual or pixel assertion.
-- Fix assessment: The likely fault spans sampled-frame capture, asynchronous image loading, virtual-DOM seek reconstruction, and rrdom diffing. A speculative ordering change could silently corrupt replays or alter recording volume. A deterministic browser regression test is needed before selecting the narrowest fix.
-
-## 2026-08-22T16:26:20.046Z
-- Item: issue #3588 — Bug: Surveys cause errors when trying to access localStorage cross-origin
-- Conclusion: Already fixed and released in posthog-js 1.386.7.
-- Labels: feature/surveys, web, team/client-libraries
-- URL: https://github.com/PostHog/posthog-js/issues/3588
-- Relevant files: `packages/browser/src/posthog-surveys.ts`, `packages/browser/src/extensions/surveys.tsx`, `packages/browser/src/extensions/surveys/surveys-extension-utils.tsx`, `packages/browser/src/storage.ts`, `packages/browser/CHANGELOG.md`, `packages/browser/src/__tests__/extensions/surveys-utils.test.ts`
-- Findings: The browser changelog records PR #3832 under posthog-js 1.386.7 and explicitly says it guarded the remaining unprotected survey localStorage accesses for cross-origin iframes.; Survey reset in posthog-surveys.ts wraps localStorage removal, enumeration, and key deletion in try/catch, so inaccessible storage no longer propagates an exception.; Survey display and markSurveyAsSeen paths wrap writes to lastSeenSurveyDate in try/catch.; Survey utility code uses localStore for read paths; localStore catches storage access errors and returns null.; The survey utility tests verify that wait-period checks do not throw when localStorage.getItem is unavailable.
-- Fix assessment: No new PR is appropriate: the minimal targeted guards for the reported cross-origin localStorage failures have already been merged and released.
-
-## 2026-08-22T16:27:15.457Z
+-22T16:27:15.457Z
 - Item: issue #3593 — Feature Request: Expose experiment metadata in SDKs
 - Conclusion: Valid experiments feature request, but it requires a deliberately designed backend metadata contract rather than an SDK-only getter.
 - Labels: enhancement, team/experiments, feature/experiments, node
@@ -96,3 +84,12 @@ ruction is a silent-corruption and security-sensitive path: any change must reta
 - Findings: `autocaptureFromTouchEvent` checks `props?.[noCaptureProp]` inside a loop whose condition includes `elements.length < maxElementsCaptured`; the default cap is 20.; Each labelled element is pushed into `elements`, so 20 labelled descendants end the loop before a further ancestor's `ph-no-capture` prop can be inspected.; When elements are collected, the function calls `posthog.autocapture('touch', elements, ...)`, meaning a missed opt-out results in event capture rather than a marked or partial payload.; `PostHogProvider` delegates touch-end capture to this same `autocaptureFromTouchEvent` helper, and existing unit tests already exercise this helper with mocked Fiber-like `.return` chains.; `maxElementsCaptured` is documented as the maximum number of elements to capture, supporting the distinction between an emission limit and an opt-out decision.
 - Fix assessment: The fault is localized to the pure Fiber-chain traversal and can be covered with a deterministic unit test. No public API or payload shape needs to change.
 - PR: https://github.com/PostHog/posthog-js/pull/4649
+
+## 2026-08-27T22:24:27.464Z
+- Item: issue #4667 — nextjs-config: sourcemap CLI races Turbopack filesystem cache in Next.js 16.3+ (Chunk ID not found)
+- Conclusion: Credible Next.js/Turbopack sourcemap-upload race; it needs a targeted compatibility fix rather than an arbitrary delay or a speculative retry.
+- Labels: frameworks/next-js, team/client-libraries
+- URL: https://github.com/PostHog/posthog-js/issues/4667
+- Relevant files: `packages/nextjs-config/src/config.ts`, `packages/nextjs-config/src/utils.ts`, `packages/plugin-utils/src/cli.ts`, `packages/nextjs-config/src/strip-sourcemap-comments.ts`, `packages/nextjs-config/CHANGELOG.md`
+- Findings: For Turbopack with source maps enabled, `withCompilerConfig` sets `productionBrowserSourceMaps` and installs an async `runAfterProductionCompile` hook.; That hook awaits any user hook and then calls `processSourceMaps(posthogConfig, config.distDir)`, which passes the complete Next output directory to the CLI rather than a stable compiler-provided file list.; `processSourceMaps` invokes `runSourcemapCli` with the default `sourcemap process` command. The plugin-utils contract documents that `process` injects chunk IDs into files on disk and uploads them.; The hook has no output-stability check, snapshot, or handling for files that materialize during CLI processing. It performs dangling-source-map-comment cleanup only after the CLI succeeds.; The current package version is 1.10.0; its documented change is experimental event release mode and a CLI bump, not synchronization with Next.js 16.3 filesystem-cache writes.
+- Fix assessment: The reported race is plausible and localized, but a blind sleep or retry would only mask scheduling behavior and could still upload/delete an inconsistent set of files. The minimal safe fix depends on whether Next.js exposes a post-flush lifecycle guarantee or whether the CLI can classify late, unstamped chunks as safely skippable.
