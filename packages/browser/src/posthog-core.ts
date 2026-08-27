@@ -962,12 +962,16 @@ export class PostHog implements PostHogInterface {
             (this.config.persistence === 'memory' || this.config.persistence === 'sessionStorage') &&
             isUndefined(config.bootstrap?.distinctID)
         ) {
+            // sessionStorage survives same-tab reloads and navigation, so it mints a fresh ID per tab/window;
+            // memory is dropped on every load. Name the right lifetime so the reader can't disprove it in one refresh.
+            const lifetime =
+                this.config.persistence === 'memory' ? 'on every page load' : 'for every new browser tab or window'
             // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
             // eslint-disable-next-line no-console
             console.warn(
                 '[PostHog.js]',
                 `persistence is set to '${this.config.persistence}' but no bootstrap.distinctID was provided. ` +
-                    'PostHog will mint a new distinct ID on every page load, so calling identify() merges a new ' +
+                    `PostHog will mint a new distinct ID ${lifetime}, so calling identify() merges a new ` +
                     'ID onto the person each time. A person can then pass the distinct-ID limit and its events stop ' +
                     "appearing on person pages and the session tab. Either set persistence to 'localStorage+cookie', " +
                     'or keep this persistence and pass a stable ID through bootstrap.distinctID.'

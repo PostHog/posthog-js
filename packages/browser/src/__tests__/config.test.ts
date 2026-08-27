@@ -26,6 +26,15 @@ describe('config', () => {
             }
         )
 
+        // memory is dropped every load; sessionStorage survives same-tab reloads and only resets per tab/window.
+        it.each([
+            ['memory', 'on every page load'],
+            ['sessionStorage', 'for every new browser tab or window'],
+        ] as const)("names the correct distinct-ID lifetime for '%s'", (persistence, lifetime) => {
+            new PostHog()._init('test-token', { persistence })
+            expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining(lifetime))
+        })
+
         it('does not warn when bootstrap.distinctID is provided', () => {
             new PostHog()._init('test-token', { persistence: 'memory', bootstrap: { distinctID: 'stable-id' } })
             expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
