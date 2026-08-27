@@ -375,8 +375,8 @@ export class PostHogPersistence {
 
     private _mergeCrossTabFeatureFlagProperties(nextEntry: Properties, slot: StorageSlot, notify: boolean): boolean {
         let changed = false
-        CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
-            const group = getPersistenceKeyPolicy(key)?.storageGroup
+        CROSS_TAB_FEATURE_FLAG_KEYS.forEach((prop) => {
+            const group = getPersistenceKeyPolicy(prop)?.storageGroup
             if (
                 (slot === MAIN_STORAGE_SLOT && this._splitStorage && group) ||
                 (slot !== MAIN_STORAGE_SLOT && group !== slot)
@@ -384,19 +384,19 @@ export class PostHogPersistence {
                 return
             }
 
-            const hasNextValue = key in nextEntry
+            const hasNextValue = prop in nextEntry
             const nextValue = this._mergePendingCrossTabFeatureFlagChanges(
-                key,
-                hasNextValue ? nextEntry[key] : undefined
+                prop,
+                hasNextValue ? nextEntry[prop] : undefined
             )
-            const keepKey = this._pendingCrossTabFeatureFlagChanges.has(key) ? key in this.props : hasNextValue
-            if (keepKey === key in this.props && isStorageValueEqual(nextValue, this.props[key])) {
+            const keepKey = this._pendingCrossTabFeatureFlagChanges.has(prop) ? prop in this.props : hasNextValue
+            if (keepKey === prop in this.props && isStorageValueEqual(nextValue, this.props[prop])) {
                 return
             }
             if (keepKey) {
-                this.props[key] = nextValue
+                this._setProp(prop, nextValue, false)
             } else {
-                delete this.props[key]
+                this._deleteProp(prop, false)
             }
             changed = true
         })
@@ -1734,9 +1734,12 @@ export class PostHogPersistence {
         this.save()
     }
 
-    private _setProp(prop: string, to: any): void {
+    private _setProp(prop: string, to: any, trackLocalChange: boolean = true): void {
         const previousValue = this.props[prop]
         this.props[prop] = to
+        if (!trackLocalChange) {
+            return
+        }
         if ((prop === DISTINCT_ID || prop === USER_STATE) && previousValue !== to) {
             this._localIdentityChangePending = true
         }
@@ -1750,8 +1753,11 @@ export class PostHogPersistence {
         }
     }
 
-    private _deleteProp(prop: string): void {
+    private _deleteProp(prop: string, trackLocalChange: boolean = true): void {
         delete this.props[prop]
+        if (!trackLocalChange) {
+            return
+        }
         if (isCrossTabFeatureFlagKey(prop)) {
             this._setCrossTabFeatureFlagChangesPending(prop, true)
         }
