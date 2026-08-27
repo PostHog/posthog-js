@@ -406,7 +406,11 @@ export class WrappedResponses extends Responses {
                     modelParametersSource: body,
                   },
                   error,
-                  accumulated.completionId
+                  {
+                    completionId: accumulated.completionId,
+                    usage: accumulated.usage,
+                    latency: (Date.now() - startTime) / 1000,
+                  }
                 )
               )
               throw error
@@ -778,17 +782,18 @@ export class WrappedTranscriptions extends Transcriptions {
             (iterator, controller) => new Stream(iterator, controller)
           )
           ;(async () => {
+            // Declared outside the try so the error path can report what the
+            // stream managed to read. Token counts stay undefined until an event
+            // carries usage, so a stream cut short is not reported as having
+            // consumed nothing.
+            let usage: {
+              inputTokens?: number
+              outputTokens?: number
+              rawUsage?: unknown
+            } = {}
             try {
               let finalContent: string = ''
               let firstTokenTime: number | undefined
-              let usage: {
-                inputTokens?: number
-                outputTokens?: number
-                rawUsage?: unknown
-              } = {
-                inputTokens: 0,
-                outputTokens: 0,
-              }
 
               const doneEvent: OpenAIOrignal.Audio.Transcriptions.TranscriptionTextDoneEvent['type'] =
                 'transcript.text.done'
@@ -834,10 +839,11 @@ export class WrappedTranscriptions extends Transcriptions {
                 provider: 'openai',
                 input: openAIParams.prompt,
                 output: [],
-                latency: 0,
+                latency: (Date.now() - startTime) / 1000,
                 baseURL: this.baseURL,
                 modelParameters: getModelParams(body),
-                usage: { inputTokens: 0, outputTokens: 0 },
+                // Whatever the stream reported before it failed.
+                usage,
                 error,
               })
               throw error
@@ -890,10 +896,10 @@ export class WrappedTranscriptions extends Transcriptions {
             latency: 0,
             baseURL: this.baseURL,
             modelParameters: getModelParams(body),
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
+            // The call returned no usage, and a failure this side of a response
+            // can still have consumed the input, so report no counts rather
+            // than zero.
+            usage: {},
             error,
           })
           throw error

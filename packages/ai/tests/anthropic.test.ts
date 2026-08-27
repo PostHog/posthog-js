@@ -951,8 +951,6 @@ describe('PostHogAnthropic', () => {
 
       assertPostHogCapture(mockPostHogClient, {
         httpStatus: 429,
-        inputTokens: 0,
-        outputTokens: 0,
       })
 
       const captureMock = mockPostHogClient.capture as jest.Mock
@@ -960,6 +958,10 @@ describe('PostHogAnthropic', () => {
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_error']).toBeDefined()
+      // A failed call reports no token counts rather than zero, because it may
+      // still have consumed the prompt before failing.
+      expect(properties['$ai_input_tokens']).toBeUndefined()
+      expect(properties['$ai_output_tokens']).toBeUndefined()
     })
 
     conditionalTest('should handle streaming errors', async () => {
@@ -997,9 +999,13 @@ describe('PostHogAnthropic', () => {
 
       assertPostHogCapture(mockPostHogClient, {
         httpStatus: 500,
-        inputTokens: 0,
-        outputTokens: 0,
       })
+
+      // The stream failed before reporting usage, so the counts are absent
+      // rather than zero. A stream that had reported some would keep them.
+      const [errorCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      expect(errorCall[0].properties['$ai_input_tokens']).toBeUndefined()
+      expect(errorCall[0].properties['$ai_output_tokens']).toBeUndefined()
     })
   })
 

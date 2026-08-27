@@ -104,10 +104,9 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
-        usage: {
-          inputTokens: 0,
-          outputTokens: 0,
-        },
+        // The call returned no usage, and a failure this side of a response can
+        // still have consumed the prompt, so report no counts rather than zero.
+        usage: {},
         error,
       })
       throw error
@@ -122,9 +121,9 @@ export class WrappedModels {
     const accumulatedContent: FormattedContent = []
     let firstTokenTime: number | undefined
     let stopReason: string | undefined
+    // Token counts stay undefined until a chunk carries usageMetadata, so a
+    // stream that ends before one arrives is not reported as having used nothing.
     let usage: TokenUsage = {
-      inputTokens: 0,
-      outputTokens: 0,
       webSearchCount: 0,
       rawUsage: undefined,
     }
@@ -249,10 +248,9 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
-        usage: {
-          inputTokens: 0,
-          outputTokens: 0,
-        },
+        // Whatever the stream reported before it failed. Gemini sends
+        // usageMetadata on chunks, so a stream cut short often has real counts.
+        usage,
         error,
       })
       throw error
@@ -298,9 +296,9 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as EmbedContentParameters & MonitoringParams),
-        usage: {
-          inputTokens: 0,
-        },
+        // The call returned no usage, and a failure this side of a response can
+        // still have consumed the input, so report no count rather than zero.
+        usage: {},
         error,
       })
       throw error

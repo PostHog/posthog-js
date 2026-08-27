@@ -81,18 +81,17 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
         let firstTokenTime: number | undefined
         let stopReason: string | undefined
 
+        // Token counts stay undefined until an event reports them. Anthropic
+        // sends input tokens on message_start and output tokens on message_delta,
+        // so a stream cut short still carries whatever arrived before the cut.
         const usage: {
-          inputTokens: number
-          outputTokens: number
+          inputTokens?: number
+          outputTokens?: number
           cacheCreationInputTokens?: number
           cacheReadInputTokens?: number
           webSearchCount?: number
           rawUsage?: unknown
         } = {
-          inputTokens: 0,
-          outputTokens: 0,
-          cacheCreationInputTokens: 0,
-          cacheReadInputTokens: 0,
           webSearchCount: 0,
         }
         let rawUsage: Record<string, unknown> = {}
@@ -262,13 +261,12 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 provider: 'anthropic',
                 input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic'), this.phClient),
                 output: [],
-                latency: 0,
+                latency: (Date.now() - startTime) / 1000,
                 baseURL: this.baseURL,
                 modelParameters: getModelParams(body),
-                usage: {
-                  inputTokens: 0,
-                  outputTokens: 0,
-                },
+                // Whatever the stream reported before it failed, rather than a
+                // zero that would read as a call which consumed nothing.
+                usage,
                 error: error,
               })
               throw error
@@ -329,10 +327,10 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
             baseURL: this.baseURL,
             modelParameters: getModelParams(body),
             httpStatus: error?.status ? error.status : 500,
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
+            // The call returned no usage, and a failure this side of a response
+            // can still have consumed the prompt, so report no counts rather
+            // than zero.
+            usage: {},
             error: error,
           })
           throw error

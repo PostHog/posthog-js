@@ -207,7 +207,7 @@ export function buildBackgroundResponseOptions(
 export function buildResponsesErrorOptions(
   context: CommonContext<ResponsesParams>,
   error: unknown,
-  completionId?: string
+  metadata: { completionId?: string; usage?: TokenUsage; latency?: number } = {}
 ): CaptureAiGenerationOptions {
   return {
     ...context.monitoring,
@@ -215,11 +215,13 @@ export function buildResponsesErrorOptions(
     provider: context.provider,
     input: buildSanitizedResponsesInput(context),
     output: [],
-    latency: 0,
+    latency: metadata.latency ?? 0,
     baseURL: context.baseURL,
     modelParameters: getModelParams(context.modelParametersSource),
-    usage: { inputTokens: 0, outputTokens: 0 },
-    completionId,
+    // Left empty when the caller has no usage to give, so the counts stay absent
+    // rather than reporting that the call consumed nothing.
+    usage: metadata.usage ?? {},
+    completionId: metadata.completionId,
     error,
   }
 }
@@ -258,7 +260,9 @@ export function buildEmbeddingErrorOptions(
     latency: 0,
     baseURL: context.baseURL,
     modelParameters: getModelParams(context.modelParametersSource),
-    usage: { inputTokens: 0 },
+    // The call returned no usage, and a failure this side of a response can
+    // still have consumed the input, so report no count rather than zero.
+    usage: {},
     error,
   }
 }

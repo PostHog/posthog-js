@@ -604,10 +604,10 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             latency: 0,
             baseURL,
             modelParameters: getModelParams(mergedParams as any),
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
+            // The call failed before a response, so no usage exists to report.
+            // Left empty rather than zero, which would read as a call that
+            // consumed nothing.
+            usage: {},
             error: error,
             tools: availableTools,
           })
@@ -871,10 +871,10 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             latency: 0,
             baseURL,
             modelParameters: getModelParams(mergedParams as any),
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
+            // The call failed before a response, so no usage exists to report.
+            // Left empty rather than zero, which would read as a call that
+            // consumed nothing.
+            usage: {},
             error: error,
             tools: availableTools,
           })

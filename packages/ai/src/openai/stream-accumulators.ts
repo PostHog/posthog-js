@@ -138,7 +138,10 @@ export class OpenAIResponsesStreamAccumulator {
   private serviceTier?: string
   private firstTokenTime?: number
   private stopReason?: string
-  private usage: TokenUsage = { inputTokens: 0, outputTokens: 0, webSearchCount: 0 }
+  // Undefined until an event reports usage, for the same reason as the chat
+  // accumulator above: a stream that never carried usage is not a stream that
+  // consumed nothing.
+  private usage: TokenUsage = { webSearchCount: 0 }
   private terminalResponse?: OpenAI.Responses.Response
 
   consume(event: OpenAI.Responses.ResponseStreamEvent, receivedAt = Date.now()): void {

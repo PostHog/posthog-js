@@ -394,7 +394,11 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                     modelParametersSource: body,
                   },
                   error,
-                  accumulated.completionId
+                  {
+                    completionId: accumulated.completionId,
+                    usage: accumulated.usage,
+                    latency: (Date.now() - startTime) / 1000,
+                  }
                 )
               )
               throw error
