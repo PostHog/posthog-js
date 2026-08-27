@@ -55,7 +55,18 @@ describe('config', () => {
             expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         })
 
-        it('does not warn when bootstrap.distinctID is provided', () => {
+        // Empty, whitespace-only, and null distinctIDs are type-legal for JS callers but not a usable stable
+        // id (identify() rejects them the same way), so the warning must still fire.
+        it.each([
+            ['an empty string', ''],
+            ['a whitespace-only string', '   '],
+            ['null', null as unknown as string],
+        ])('warns when persistence is volatile and bootstrap.distinctID is %s', (_label, distinctID) => {
+            new PostHog()._init('test-token', { persistence: 'memory', bootstrap: { distinctID } })
+            expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
+        })
+
+        it('does not warn when bootstrap.distinctID is a non-empty string', () => {
             new PostHog()._init('test-token', { persistence: 'memory', bootstrap: { distinctID: 'stable-id' } })
             expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         })

@@ -960,10 +960,15 @@ export class PostHog implements PostHogInterface {
 
         const volatileIdentityPersistence =
             this.config.persistence === 'memory' || this.config.persistence === 'sessionStorage'
+        // Treat an empty, whitespace-only, or missing bootstrap.distinctID as not-provided — the same rule
+        // identify() applies (_validateIdentifyId) and the identity_distinct_id check above use. These values
+        // are type-legal for JS callers, but the bootstrap branch then mints a fresh uuid per load (the exact
+        // failure this warns about), whereas isUndefined() alone stayed silent for '' and null.
+        const noStableBootstrapId = !config.bootstrap?.distinctID || isEmptyString(config.bootstrap?.distinctID)
         if (
             !startInCookielessMode &&
             (volatileIdentityPersistence || this.config.disable_persistence) &&
-            isUndefined(config.bootstrap?.distinctID)
+            noStableBootstrapId
         ) {
             // memory, sessionStorage, and disable_persistence all drop durable identity, so the ID lives in
             // memory for a single page and each load mints a fresh one that identify() then merges onto the
