@@ -143,9 +143,6 @@ plugins.withId('com.android.application') {
                         doFirst {
                             def cliPackage = PostHogCli.resolveCliPackagePath(rootDirFile, reactRoot)
                             if (!posthogReleaseModeArgs.isEmpty() && System.getenv("POSTHOG_SKIP_CLI_VERSION_CHECK") != "1") {
-                                if (PostHogCli.MIN_RELEASE_MODE_VERSION == "TODO:PLACEHOLDER") {
-                                    throw new GradleException("posthog.releaseMode '${posthogReleaseMode}' needs a posthog-cli that carries --release-mode on the hermes commands. No release carries it yet (PostHog/posthog#87660).")
-                                }
                                 def cliVersion = PostHogCli.resolveVersion([*osCompatibility, cliPackage])
                                 if (cliVersion == null) {
                                     throw new GradleException("Could not determine the posthog-cli version, which posthog.releaseMode '${posthogReleaseMode}' needs. Upgrade: npm install -g @posthog/cli@latest")
@@ -313,11 +310,10 @@ abstract class PostHogCli {
      * --release-mode with a bare argument-parser error. Mirrors the floor check in posthog-ios
      * build-tools/upload-symbols.sh. POSTHOG_SKIP_CLI_VERSION_CHECK=1 allows a posthog-cli built
      * from source, which reports its Cargo manifest version rather than the version it ships as.
-     *
-     * TODO: replace the placeholder with the real floor once PostHog/posthog#87660 releases. Until
-     * then no posthog-cli carries the flag, so event mode cannot work and the build says so.
+     * posthog-cli 0.16.0 added --release-mode to the hermes commands (PostHog/posthog#87660). Keep
+     * this in step with MIN_RELEASE_MODE_CLI_VERSION in posthog-xcode.sh.
      */
-    static final String MIN_RELEASE_MODE_VERSION = "TODO:PLACEHOLDER"
+    static final String MIN_RELEASE_MODE_VERSION = "0.16.0"
 
     /** Null when the version cannot be read. */
     static String resolveVersion(List command) {

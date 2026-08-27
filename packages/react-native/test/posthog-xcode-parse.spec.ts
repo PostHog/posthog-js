@@ -435,8 +435,7 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
     args: string[],
     extraEnv: Record<string, string>,
     infoPlist?: Record<string, string>,
-    cli: string = CLI_NEW_ENOUGH,
-    minVersion?: string
+    cli: string = CLI_NEW_ENOUGH
   ): { status: number; invocations: string[]; output: string } => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-release-mode-'))
     try {
@@ -483,18 +482,7 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
         plistEnv.INFOPLIST_FILE = 'App/Info.plist'
       }
 
-      // The shipped floor is a placeholder that blocks event mode outright. Substituting a real
-      // one exercises the version comparison that goes live once the floor is filled in.
-      let scriptPath = SCRIPT_PATH
-      if (minVersion) {
-        scriptPath = path.join(tempDir, 'posthog-xcode.sh')
-        const patched = fs
-          .readFileSync(SCRIPT_PATH, 'utf8')
-          .replace('MIN_RELEASE_MODE_CLI_VERSION="TODO:PLACEHOLDER"', `MIN_RELEASE_MODE_CLI_VERSION="${minVersion}"`)
-        fs.writeFileSync(scriptPath, patched, { mode: 0o755 })
-      }
-
-      const result = spawnSync(scriptPath, [...args, '/bin/sh', reactNativePath], {
+      const result = spawnSync(SCRIPT_PATH, [...args, '/bin/sh', reactNativePath], {
         cwd: iosDir,
         env: {
           ...process.env,
@@ -525,7 +513,7 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
     ['the POSTHOG_RELEASE_MODE env var', [] as string[], { POSTHOG_RELEASE_MODE: 'event' }],
     ['the --posthog-release-mode argument', ['--posthog-release-mode', 'event', '--'], {}],
   ])('passes --release-mode event to clone and upload from %s', (_source, args, env) => {
-    const { status, invocations } = runWrapper(args, env, undefined, CLI_NEW_ENOUGH, '0.1.0')
+    const { status, invocations } = runWrapper(args, env)
 
     expect(status).toBe(0)
     expect(invocations).toHaveLength(2)
@@ -535,20 +523,21 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
     expect(invocations[1]).toContain('--release-mode event')
   })
 
-  it('refuses event mode while the minimum version is still a placeholder', () => {
-    const { status, invocations, output } = runWrapper([], { POSTHOG_RELEASE_MODE: 'event' })
+  it('pins the same posthog-cli floor as posthog.gradle', () => {
+    const shellFloor = fs.readFileSync(SCRIPT_PATH, 'utf8').match(/^MIN_RELEASE_MODE_CLI_VERSION="([^"]+)"$/m)?.[1]
+    const gradleFloor = fs
+      .readFileSync(path.join(path.dirname(SCRIPT_PATH), 'posthog.gradle'), 'utf8')
+      .match(/MIN_RELEASE_MODE_VERSION = "([^"]+)"/)?.[1]
 
-    expect(status).not.toBe(0)
-    expect(output).toContain('No release carries it yet')
-    expect(output).toContain('PostHog/posthog#87660')
-    expect(invocations.join('\n')).not.toContain('hermes')
+    expect(shellFloor).toMatch(/^\d+\.\d+\.\d+$/)
+    expect(gradleFloor).toBe(shellFloor)
   })
 
   it.each([
     ['is below the minimum', CLI_TOO_OLD, 'needs posthog-cli >='],
     ['reports no version at all', CLI_WITHOUT_VERSION, 'could not determine the posthog-cli version'],
   ])('names the upgrade when the posthog-cli on the box %s', (_case, cli, message) => {
-    const { status, invocations, output } = runWrapper([], { POSTHOG_RELEASE_MODE: 'event' }, undefined, cli, '9.0.0')
+    const { status, invocations, output } = runWrapper([], { POSTHOG_RELEASE_MODE: 'event' }, undefined, cli)
 
     expect(status).not.toBe(0)
     expect(output).toContain(message)
@@ -558,9 +547,9 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
   })
 
   it('reports the version it found so the message is actionable', () => {
-    const { output } = runWrapper([], { POSTHOG_RELEASE_MODE: 'event' }, undefined, CLI_TOO_OLD, '9.0.0')
+    const { output } = runWrapper([], { POSTHOG_RELEASE_MODE: 'event' }, undefined, CLI_TOO_OLD)
 
-    expect(output).toContain('found 0.0.1')
+    expect(output).toContain('needs posthog-cli >= 0.16.0 (found 0.0.1)')
   })
 
   it('skips the version check for a posthog-cli built from source', () => {

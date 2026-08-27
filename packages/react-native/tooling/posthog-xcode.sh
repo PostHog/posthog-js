@@ -178,15 +178,10 @@ fi
 # with a bare argument-parser error. Checks the version read above, and mirrors the floor check in
 # posthog-ios build-tools/upload-symbols.sh. POSTHOG_SKIP_CLI_VERSION_CHECK=1 allows a posthog-cli
 # built from source, which reports its Cargo manifest version rather than the version it ships as.
-#
-# TODO: replace the placeholder with the real floor once PostHog/posthog#87660 releases. Until
-# then no posthog-cli carries the flag, so event mode cannot work and the build says so.
-MIN_RELEASE_MODE_CLI_VERSION="TODO:PLACEHOLDER"
+# posthog-cli 0.16.0 added --release-mode to the hermes commands (PostHog/posthog#87660). Keep this
+# in step with PostHogCli.MIN_RELEASE_MODE_VERSION in posthog.gradle.
+MIN_RELEASE_MODE_CLI_VERSION="0.16.0"
 if [ ${#POSTHOG_RELEASE_MODE_ARGS[@]} -gt 0 ] && [ "${POSTHOG_SKIP_CLI_VERSION_CHECK:-}" != "1" ]; then
-  if [ "$MIN_RELEASE_MODE_CLI_VERSION" = "TODO:PLACEHOLDER" ]; then
-    echo "error: release mode '$POSTHOG_RELEASE_MODE_VALUE' needs a posthog-cli that carries --release-mode on the hermes commands. No release carries it yet (PostHog/posthog#87660)."
-    exit 1
-  fi
   if [ -z "$PH_CLI_VERSION" ]; then
     echo "error: could not determine the posthog-cli version, which release mode '$POSTHOG_RELEASE_MODE_VALUE' needs. Upgrade: npm install -g @posthog/cli@latest"
     exit 1

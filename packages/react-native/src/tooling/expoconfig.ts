@@ -679,10 +679,9 @@ type PostHogPluginProps = {
    * android/build.gradle already carries the classpath line keeps its version: bump that line by
    * hand or prebuild with `--clean`. The dSYM half needs posthog-cli >= 0.10.0 and
    * posthog-ios >= 3.69.1; older ones ignore `POSTHOG_NO_RELEASE_BIND` and keep binding.
-   *
-   * TODO: state the Hermes minimum once PostHog/posthog#87660 releases. Until then the floors in
-   * posthog-xcode.sh and posthog.gradle are placeholders. Update them, this line, and the
-   * changeset together.
+   * The Hermes source map upload needs posthog-cli >= 0.16.0, which carries `--release-mode` on
+   * the `hermes` commands; the build fails on an older one and names the upgrade. That floor
+   * lives in posthog-xcode.sh and posthog.gradle: update them and this line together.
    */
   releaseMode?: PostHogReleaseMode
 }
