@@ -174,6 +174,7 @@ describe('utils', () => {
                 'Mozilla/5.0 (compatible; SeznamBot/4.0; +https://o-seznam.cz/napoveda/vyhledavani/en/seznambot-crawler/)',
             ],
             ['BrightEdge Crawler/1.0 (crawler@brightedge.com)'],
+            ['Mozilla/5.0 (compatible; Pinterestbot/1.0; +http://www.pinterest.com/bot.html)'],
         ])('blocks based on user agent', (botString) => {
             expect(isBlockedUA(botString, [])).toBe(true)
             expect(isBlockedUA(botString.toLowerCase(), [])).toBe(true)
@@ -193,6 +194,10 @@ describe('utils', () => {
             ],
             [
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) elec/1.0.0 Chrome/126.0.6478.127 Electron/31.2.1 Safari/537.36',
+            ],
+            [
+                // Pinterest app's own in-app browser -- a real user, not the Pinterestbot crawler
+                'Mozilla/5.0 (iPad; CPU OS 11_2_6 like Mac OS X) AppleWebKit/604.5.6 (KHTML, like Gecko) Mobile/15D100 [Pinterest/iOS]',
             ],
         ])('does not block based on non-bot user agent', (userAgent) => {
             expect(isBlockedUA(userAgent, [])).toBe(false)
