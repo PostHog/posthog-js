@@ -1761,6 +1761,34 @@ describe('SurveyManager', () => {
             expect(textareaAfter.value).toBe('my in-progress answer')
         })
 
+        it('renders in the flipped language once a delayed popup elapses, even though the flip happened mid-delay', () => {
+            jest.useFakeTimers()
+            try {
+                setNavigatorLanguage('en')
+                mockPostHog.get_property = jest.fn().mockReturnValue([langSurvey])
+
+                surveyManager.handlePopoverSurvey({
+                    ...langSurvey,
+                    appearance: { surveyPopupDelaySeconds: 5 },
+                })
+
+                // Flip the language while the popup is still counting down its delay.
+                setNavigatorLanguage('fr')
+                act(() => {
+                    window.dispatchEvent(new Event('languagechange'))
+                })
+
+                act(() => {
+                    jest.advanceTimersByTime(5000)
+                })
+
+                const { shadow } = retrieveSurveyShadow(langSurvey, mockPostHog)
+                expect(within(shadow as unknown as HTMLElement).getByText('Bonjour?')).toBeInTheDocument()
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
         it('keeps display overrides (position) applied after a language change', () => {
             setNavigatorLanguage('en')
             mockPostHog.get_property = jest.fn().mockReturnValue([langSurvey])
@@ -1785,6 +1813,66 @@ describe('SurveyManager', () => {
             const containerAfter = (shadow as unknown as HTMLElement).querySelector('.ph-survey') as HTMLElement
             expect(containerAfter.style.left).toBe('0px')
             expect(containerAfter.style.right).toBe('')
+        })
+
+        it('keeps the shuffled question order stable across a language change', () => {
+            // With only 2 questions, getDisplayOrderQuestions's reverseIfUnshuffled makes the
+            // "shuffled" order deterministic (there's only one non-identity permutation), so a
+            // reshuffle-on-every-render bug would be invisible. 4 questions give 24 possible
+            // orders, so recomputing on every render would show up as a different order almost
+            // every time. Repeat with a fresh survey id (and shadow root) per trial so a flaky
+            // pass doesn't mask a regression.
+            for (let trial = 0; trial < 10; trial++) {
+                const shuffledSurvey: Survey = {
+                    id: `shuffled-lang-survey-${trial}`,
+                    name: 'Shuffled Lang Survey',
+                    type: SurveyType.Popover,
+                    linked_flag_key: null,
+                    targeting_flag_key: null,
+                    internal_targeting_flag_key: null,
+                    questions: ['q1', 'q2', 'q3', 'q4'].map((id) => ({
+                        type: SurveyQuestionType.Open,
+                        question: `${id.toUpperCase()}-EN`,
+                        id,
+                        description: '',
+                        translations: { fr: { question: `${id.toUpperCase()}-FR` } },
+                    })),
+                    appearance: { shuffleQuestions: true },
+                    conditions: null,
+                    start_date: '2024-01-01T00:00:00.000Z',
+                    end_date: null,
+                    current_iteration: null,
+                    current_iteration_start_date: null,
+                    feature_flag_keys: [],
+                } as unknown as Survey
+
+                setNavigatorLanguage('en')
+                mockPostHog.get_property = jest.fn().mockReturnValue([shuffledSurvey])
+
+                surveyManager.handlePopoverSurvey(shuffledSurvey)
+
+                const { shadow } = retrieveSurveyShadow(shuffledSurvey, mockPostHog)
+                const shadowEl = shadow as unknown as HTMLElement
+                // Whichever question the (random) shuffle put first is the one that must still
+                // be shown first — with its translation, not some other question's — after the
+                // language change below.
+                const firstQuestionId = ['q1', 'q2', 'q3', 'q4'].find((id) =>
+                    Boolean(within(shadowEl).queryByText(`${id.toUpperCase()}-EN`))
+                )
+                expect(firstQuestionId).toBeDefined()
+
+                setNavigatorLanguage('fr')
+                act(() => {
+                    window.dispatchEvent(new Event('languagechange'))
+                })
+
+                expect(within(shadowEl).getByText(`${firstQuestionId!.toUpperCase()}-FR`)).toBeInTheDocument()
+                for (const otherId of ['q1', 'q2', 'q3', 'q4'].filter((id) => id !== firstQuestionId)) {
+                    expect(within(shadowEl).queryByText(`${otherId.toUpperCase()}-FR`)).not.toBeInTheDocument()
+                }
+
+                surveyManager.getTestAPI().removeSurveyFromFocus(shuffledSurvey)
+            }
         })
     })
 

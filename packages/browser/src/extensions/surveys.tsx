@@ -170,7 +170,7 @@ export class SurveyManager {
     }
 
     private _onLanguageChange(): void {
-        if (isNull(this._surveyInFocus) || !this._surveyIsRendered) {
+        if (isNull(this._surveyInFocus)) {
             return
         }
         const surveys = this._posthog.get_property(SURVEYS) as Survey[] | undefined
@@ -183,6 +183,13 @@ export class SurveyManager {
             return
         }
         this._currentLanguage = newLanguage
+        if (!this._surveyIsRendered) {
+            // Nothing on screen yet (survey is still counting down its popup delay) — just
+            // record the language flip. renderAfterDelay re-translates from scratch when the
+            // delay elapses, so it always picks up whatever _currentLanguage ends up being,
+            // rather than the language in effect when the delay started.
+            return
+        }
         // Translate from the raw survey (so a language with no translation still falls back to
         // the original), then re-apply the same display overrides handlePopoverSurvey used —
         // otherwise a survey shown via displaySurvey(id, { position, selector }) would snap back
@@ -259,6 +266,12 @@ export class SurveyManager {
         // "focus" != "survey is displayed"
         if (this._surveyInFocus === surveyId) {
             this._surveyInFocus = null
+            // Mirror _removeSurveyFromFocus's cleanup: a cancelled survey never rendered, so
+            // there's no display state to keep around for it either.
+            this._currentLanguage = null
+            this._surveyIsRendered = false
+            this._surveyPopupProps = null
+            this._displayOptions = undefined
         }
     }
 
@@ -357,13 +370,27 @@ export class SurveyManager {
         // rendering with surveyPopupDelaySeconds = 0 because the delay is handled here, not in the popup
         const renderAfterDelay = () => {
             this._surveyIsRendered = true
+            // Re-translate from the original survey rather than reusing the `survey` captured
+            // when the delay started — the display language can change while the delay counts
+            // down (see _onLanguageChange), and without this the popup would render in
+            // whatever language was active at the start of the delay instead of the current one.
+            const { survey: freshlyTranslated, language: freshLanguage } =
+                this._translateSurveyForRendering(surveyParam)
+            this._currentLanguage = freshLanguage
+            const freshSurvey = this._applyDisplayOverrides(freshlyTranslated, options)
+            const freshPopupProps: SurveyPopupProps = {
+                ...surveyPopupProps,
+                survey: freshSurvey,
+                surveyLanguage: freshLanguage,
+            }
+            this._surveyPopupProps = freshPopupProps
             render(
                 <SurveyPopup
-                    {...surveyPopupProps}
+                    {...freshPopupProps}
                     survey={{
-                        ...survey,
+                        ...freshSurvey,
                         appearance: {
-                            ...survey.appearance,
+                            ...freshSurvey.appearance,
                             surveyPopupDelaySeconds: 0,
                         },
                     }}
@@ -1650,10 +1677,28 @@ export function Questions({
         const inProgressSurveyData = getInProgressSurveyState(survey)
         return inProgressSurveyData?.questionSnapshots ?? {}
     })
-    const surveyQuestions = useMemo(
-        () => getDisplayOrderQuestions(survey, initialInProgressState),
-        [survey, initialInProgressState]
+    // A shuffled survey's display order (and any random shuffle) must stay fixed across a
+    // language re-translation. Re-translating gives `survey` a new object identity on every
+    // render, so keying this off `survey` directly would recompute — and for a shuffled survey,
+    // reshuffle — the order on every language change. Compute the order once per survey.id from
+    // question ids, then map those ids onto whatever the current (possibly re-translated)
+    // question objects are, so text updates but order holds.
+    const questionOrderIds = useMemo(
+        () => getQuestionOrder(getDisplayOrderQuestions(survey, initialInProgressState)),
+        [survey.id, initialInProgressState]
     )
+    const surveyQuestions = useMemo(() => {
+        if (!questionOrderIds) {
+            // Some questions lack an id (older data) — there's no reliable way to map a stable
+            // order onto fresh question objects, so fall back to recomputing fresh each time.
+            return getDisplayOrderQuestions(survey, initialInProgressState)
+        }
+        const byId = new Map(survey.questions.map((question) => [question.id, question]))
+        const mapped = questionOrderIds
+            .map((id) => byId.get(id))
+            .filter((question): question is SurveyQuestion => !!question)
+        return mapped.length === questionOrderIds.length ? mapped : survey.questions
+    }, [questionOrderIds, survey.questions, survey, initialInProgressState])
 
     // Sync preview state. Negative sentinels (the intro screen page) are rendered by SurveyPopup
     // instead of Questions, so they must never reach currentQuestionIndex.
@@ -1761,6 +1806,7 @@ export function Questions({
             questionOrder: getQuestionOrder(surveyQuestions),
             visitedIndices: newVisitedIndices,
             surveyLanguage,
+            questionSnapshots,
         })
     }
 

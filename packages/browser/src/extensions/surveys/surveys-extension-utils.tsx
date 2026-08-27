@@ -494,10 +494,12 @@ export const dismissedSurveyEvent = (
     }
 
     const inProgressSurvey = getInProgressSurveyState(survey)
-    // Prefer the language snapshotted when the user last answered (answer-time language).
-    // Only fall back to the current display language when no in-progress state exists
-    // (i.e. the survey was dismissed without answering any question).
-    const effectiveLanguage = inProgressSurvey?.surveyLanguage ?? surveyLanguage
+    // Prefer the language snapshotted when the user last answered (answer-time language),
+    // which is legitimately `null` when no translation matched at answer time — that must not
+    // fall through to the current display language. Only fall back to the current display
+    // language when no in-progress state exists at all (i.e. the survey was dismissed without
+    // answering any question), so check for the record's presence, not its value.
+    const effectiveLanguage = inProgressSurvey ? inProgressSurvey.surveyLanguage : surveyLanguage
     posthog.capture(SurveyEventName.DISMISSED, {
         ..._buildSurveyEventProperties(survey, inProgressSurvey, posthog),
         ...(effectiveLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: effectiveLanguage }),

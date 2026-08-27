@@ -241,6 +241,36 @@ describe('SurveyPopup', () => {
         expect(screen.getByText('Question 2')).toBeVisible()
     })
 
+    test('preserves questionSnapshots when navigating back', () => {
+        const generatedId = 'newly-generated-id'
+        mockedGetInProgressSurveyState.mockReturnValue(null)
+        mockedUuidv7.mockReturnValue(generatedId)
+        const goBackSurvey = {
+            ...mockSurvey,
+            appearance: { ...mockSurvey.appearance, allowGoBack: true },
+        }
+        render(
+            <SurveyPopup
+                survey={goBackSurvey}
+                removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                isPopup={true}
+                posthog={mockPosthog as any}
+            />
+        )
+
+        fireEvent.input(screen.getByRole('textbox'), { target: { value: 'Answer Q1' } })
+        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        expect(screen.getByText('Question 2')).toBeVisible()
+
+        fireEvent.click(screen.getByRole('button', { name: /go to previous question/i }))
+        expect(screen.getByText('Question 1')).toBeVisible()
+
+        const storageKey = Object.keys(localStorage).find((key) => key.includes(goBackSurvey.id))
+        expect(storageKey).toBeDefined()
+        const persisted = JSON.parse(localStorage.getItem(storageKey!)!)
+        expect(persisted.questionSnapshots).toEqual({ q1: 'Question 1' })
+    })
+
     test('clears localStorage on final submission', async () => {
         const existingState = {
             surveySubmissionId: 'existing-uuid-final',

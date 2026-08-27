@@ -1855,19 +1855,21 @@ describe('surveys', () => {
             id: 'survey-lang-1',
             name: 'Lang Survey',
             type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'Hello?', id: 'q1', description: '' }],
+            questions: [
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'Hello?',
+                    id: 'q1',
+                    description: '',
+                    translations: { fr: { question: 'Bonjour?' } },
+                },
+            ],
             appearance: null,
             conditions: null,
             start_date: '2024-01-01T00:00:00Z',
             end_date: null,
             current_iteration: null,
             current_iteration_start_date: null,
-            translations: [
-                {
-                    language_code: 'fr',
-                    questions: [{ id: 'q1', question: 'Bonjour?', description: '' }],
-                },
-            ],
         } as unknown as Survey
 
         beforeEach(() => {
@@ -1916,7 +1918,10 @@ describe('surveys', () => {
             expect(translateSpy).not.toHaveBeenCalled()
         })
 
-        it('does not re-render when survey is in focus but not yet rendered (pending delay)', () => {
+        it('tracks the language flip but does not re-render while the survey is still pending delay', () => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const preactModule = require('preact')
+            const renderSpy = jest.spyOn(preactModule, 'render')
             const translateSpy = jest.fn().mockReturnValue({ survey: frSurvey, language: 'fr' })
             ;(surveyManager as any)._translateSurveyForRendering = translateSpy
 
@@ -1927,8 +1932,14 @@ describe('surveys', () => {
 
             window.dispatchEvent(new Event('languagechange'))
 
-            expect(translateSpy).not.toHaveBeenCalled()
-            expect((surveyManager as any)._currentLanguage).toBe('en')
+            // The language flip is still detected and tracked — renderAfterDelay reads
+            // _currentLanguage fresh when the delay elapses, so this must stay accurate even
+            // though nothing is on screen yet to actually re-render.
+            expect(translateSpy).toHaveBeenCalledWith(frSurvey)
+            expect((surveyManager as any)._currentLanguage).toBe('fr')
+            expect(renderSpy).not.toHaveBeenCalled()
+
+            renderSpy.mockRestore()
         })
 
         it('clears _currentLanguage when survey is removed from focus', () => {
