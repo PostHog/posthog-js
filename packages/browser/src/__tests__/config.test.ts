@@ -2,8 +2,39 @@ import { PostHog } from '../posthog-core'
 import type { PostHogConfig } from '../types'
 import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '@posthog/browser-common/utils/autocapture-utils'
 import { isFunction } from '@posthog/core'
+import { logger } from '@posthog/browser-common/utils/logger'
 
 describe('config', () => {
+    describe('memory persistence without bootstrap.distinctID', () => {
+        let warnSpy: jest.SpyInstance
+
+        beforeEach(() => {
+            warnSpy = jest.spyOn(logger, 'warn').mockImplementation()
+        })
+
+        afterEach(() => {
+            warnSpy.mockRestore()
+        })
+
+        it.each(['memory', 'sessionStorage'] as const)(
+            "warns when persistence is '%s' and no bootstrap.distinctID is set",
+            (persistence) => {
+                new PostHog()._init('test-token', { persistence })
+                expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('bootstrap.distinctID'))
+            }
+        )
+
+        it('does not warn when bootstrap.distinctID is provided', () => {
+            new PostHog()._init('test-token', { persistence: 'memory', bootstrap: { distinctID: 'stable-id' } })
+            expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('bootstrap.distinctID'))
+        })
+
+        it('does not warn for the default localStorage+cookie persistence', () => {
+            new PostHog()._init('test-token')
+            expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('bootstrap.distinctID'))
+        })
+    })
+
     describe('compatibilityDate', () => {
         it('should set capture_pageview to true when defaults is undefined', () => {
             const posthog = new PostHog()

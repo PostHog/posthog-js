@@ -958,6 +958,19 @@ export class PostHog implements PostHogInterface {
             this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
         }
 
+        if (
+            (this.config.persistence === 'memory' || this.config.persistence === 'sessionStorage') &&
+            isUndefined(config.bootstrap?.distinctID)
+        ) {
+            logger.warn(
+                `persistence is set to '${this.config.persistence}' but no bootstrap.distinctID was provided. ` +
+                    'PostHog will mint a new distinct ID on every page load, so calling identify() merges a new ' +
+                    'ID onto the person each time. A person can then pass the distinct-ID limit and its events stop ' +
+                    "appearing on person pages and the session tab. Either set persistence to 'localStorage+cookie', " +
+                    'or keep this persistence and pass a stable ID through bootstrap.distinctID.'
+            )
+        }
+
         if (this.config.ip) {
             logger.warn(
                 'The `ip` config option has NO EFFECT AT ALL and has been deprecated. Use a custom transformation or "Discard IP data" project setting instead. See https://posthog.com/tutorials/web-redact-properties#hiding-customer-ip-address for more information.'
