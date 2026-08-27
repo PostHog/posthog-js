@@ -200,7 +200,7 @@ describe('LocalFeatureFlagEvaluator', () => {
     expect(await evaluator.getFeatureFlag('not-pro', 'user', {}, { plan: 'free' })).toBe(true)
   })
 
-  test('is_not_set condition resolves locally without forcing inconclusive', async () => {
+  test('is_not_set condition is inconclusive when the property is omitted', async () => {
     const evaluator = new LocalFeatureFlagEvaluator(
       definitions([
         makeFlag('only-anon', {
@@ -215,9 +215,7 @@ describe('LocalFeatureFlagEvaluator', () => {
         }),
       ])
     )
-    // Key absent → property is_not_set is true → flag matches.
-    expect(await evaluator.getFeatureFlag('only-anon', 'user', {}, {})).toBe(true)
-    // Key present → property IS set → flag does not match.
+    expect(await evaluator.getFeatureFlag('only-anon', 'user', {}, {})).toBeUndefined()
     expect(await evaluator.getFeatureFlag('only-anon', 'user', {}, { email: 'a@b.com' })).toBe(false)
   })
 

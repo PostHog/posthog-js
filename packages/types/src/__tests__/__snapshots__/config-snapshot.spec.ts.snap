@@ -419,6 +419,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   "properties_string_max_length": "number",
   "defaults": [
+    "\\"2026-08-30\\"",
     "\\"2026-08-29\\"",
     "\\"2026-06-25\\"",
     "\\"2026-05-30\\"",
@@ -499,6 +500,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "true",
       "Partial<SlimDOMOptions>",
       "\\"all\\""
+    ],
+    "captureJsonLd": [
+      "undefined",
+      "false",
+      "true"
     ],
     "collectFonts": [
       "undefined",

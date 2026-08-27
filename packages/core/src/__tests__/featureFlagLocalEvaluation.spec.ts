@@ -48,10 +48,32 @@ describe('feature flag local evaluation primitives', () => {
       expect(matchFeatureFlagProperty(property(operator, target), { key: actual })).toBe(expected)
     })
 
-    test('preserves missing and null property behavior', () => {
-      expect(matchFeatureFlagProperty(property('is_not_set', ''), {})).toBe(true)
-      expect(matchFeatureFlagProperty(property('is_not_set', ''), { key: null })).toBe(false)
-      expect(matchFeatureFlagProperty(property('is_set', ''), { key: null })).toBe(true)
+    test.each([
+      ['null', null],
+      ['undefined', undefined],
+      ['false', false],
+      ['zero', 0],
+      ['empty string', ''],
+      ['empty array', []],
+      ['empty object', {}],
+    ])('treats present %s as set', (_, value) => {
+      expect(matchFeatureFlagProperty(property('is_set', ''), { key: value })).toBe(true)
+      expect(matchFeatureFlagProperty(property('is_not_set', ''), { key: value })).toBe(false)
+    })
+
+    test.each(['is_set', 'is_not_set'])('%s is inconclusive when the property is omitted', (operator) => {
+      expect(() => matchFeatureFlagProperty(property(operator, ''), {})).toThrow(InconclusiveMatchError)
+    })
+
+    test('does not treat inherited object properties as present map entries', () => {
+      const inheritedPropertyValues = Object.create({ key: 'inherited' })
+
+      expect(() => matchFeatureFlagProperty(property('is_set', ''), inheritedPropertyValues)).toThrow(
+        InconclusiveMatchError
+      )
+    })
+
+    test('preserves null and missing property behavior for exact matching', () => {
       expect(matchFeatureFlagProperty(property('exact', null as never), { key: null })).toBe(false)
       expect(() => matchFeatureFlagProperty(property('exact', 'x'), {})).toThrow(InconclusiveMatchError)
     })

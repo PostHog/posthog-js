@@ -16,22 +16,44 @@ describe('resolveSurveyAlignment', () => {
     expect(resolveSurveyAlignment(position)).toEqual({ vertical, horizontal })
   })
 
+  it.each([
+    ['bottom-left', 'flex-end', 'flex-start'],
+    ['bottom-center', 'flex-end', 'center'],
+    ['bottom-right', 'flex-end', 'flex-end'],
+    ['top-right', 'flex-start', 'flex-end'],
+    ['middle-left', 'center', 'flex-start'],
+  ])('maps compatible position %s to vertical=%s, horizontal=%s', (position, vertical, horizontal) => {
+    expect(resolveSurveyAlignment(position)).toEqual({ vertical, horizontal })
+  })
+
   it('falls back to the Center default when position is undefined', () => {
     expect(resolveSurveyAlignment(undefined)).toEqual({ vertical: 'flex-end', horizontal: 'center' })
   })
 
-  it('warns once and falls back to the default for unknown position strings', () => {
-    // Module-scope dedup of warned positions persists across tests, so use a
-    // unique unknown string per run to avoid coupling to other tests' state.
-    const unknown = `unknown-${Math.random().toString(36).slice(2)}`
+  it('warns and falls back to the default for non-string positions', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
     try {
-      const result = resolveSurveyAlignment(unknown)
+      const result = resolveSurveyAlignment(42 as unknown as string)
       expect(result).toEqual({ vertical: 'flex-end', horizontal: 'center' })
       expect(warn).toHaveBeenCalledTimes(1)
-      expect(warn.mock.calls[0][0]).toContain(unknown)
-      // Calling again with the same unknown string does not re-warn.
-      resolveSurveyAlignment(unknown)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('warns once for unknown positions that normalize to the same value', () => {
+    // Module-scope dedup of warned positions persists across tests, so use a
+    // unique unknown string per run to avoid coupling to other tests' state.
+    const suffix = Math.random().toString(36).slice(2)
+    const unknownWithHyphen = `unknown-${suffix}`
+    const unknownWithUnderscore = `unknown_${suffix}`
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const result = resolveSurveyAlignment(unknownWithHyphen)
+      expect(result).toEqual({ vertical: 'flex-end', horizontal: 'center' })
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(warn.mock.calls[0][0]).toContain(unknownWithHyphen)
+      resolveSurveyAlignment(unknownWithUnderscore)
       expect(warn).toHaveBeenCalledTimes(1)
     } finally {
       warn.mockRestore()

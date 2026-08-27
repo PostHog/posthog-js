@@ -96,7 +96,7 @@ export interface AutocaptureConfig {
     element_attribute_ignorelist?: string[]
 
     /**
-     * When set to true, autocapture will capture the text of any element that is cut or copied.
+     * When true, autocapture captures cut, copy, and paste interactions. Paste events do not contain pasted text.
      */
     capture_copied_text?: boolean
 }
@@ -465,6 +465,7 @@ export interface HeatmapConfig {
  * Later dates include all earlier default changes.
  */
 export type ConfigDefaults =
+    | '2026-08-30'
     | '2026-08-29'
     | '2026-06-25'
     | '2026-05-30'
@@ -685,6 +686,18 @@ export interface SessionRecordingOptions {
      * @default {}
      */
     slimDOMOptions?: true | Partial<SlimDOMOptions> | 'all'
+
+    /**
+     * Captures sanitized Schema.org JSON-LD as session replay custom events.
+     * JSON-LD inside a text mask or blocked element is never captured.
+     * The recorder keeps `@id` values without changes.
+     * The event tag is `$json_ld`. The payload is a JSON-LD object or array.
+     * The recorder removes all script nodes from snapshots when this option is enabled.
+     * The JSON-LD observer starts only when this option is true at recording start.
+     * @see https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/extensions/replay/external/json-ld.ts
+     * @default false before the `2026-08-30` defaults, otherwise true
+     */
+    captureJsonLd?: boolean
 
     /**
      * Derived from `rrweb.record` options
@@ -1711,6 +1724,7 @@ export interface PostHogConfig {
      * - `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces
      * - `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)
      * - `'2026-08-29'`: Defaults from '2026-06-25' plus `cookieWinsOnConflict` defaults to `true` (the shared cross-subdomain cookie wins over stale per-origin localStorage)
+     * - `'2026-08-30'`: Defaults from '2026-08-29' plus `session_recording.captureJsonLd` defaults to `true`
      *
      * @default 'unset'
      */

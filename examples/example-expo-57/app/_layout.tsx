@@ -7,7 +7,7 @@ import 'react-native-reanimated'
 import { PostHogProvider, PostHogSurveyProvider } from 'posthog-react-native'
 
 import { useColorScheme } from '@/hooks/useColorScheme'
-import { posthog } from './posthog'
+import { posthog } from '@/posthog'
 
 export default function RootLayout() {
     const colorScheme = useColorScheme()

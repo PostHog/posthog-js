@@ -19,7 +19,7 @@ const countingStorage = {
 
 // Dedicated instance for this demo. flushAt is set high so a burst stays in one
 // batch and we observe storage *write coalescing* rather than a flush-per-capture.
-// (The main app instance in app/posthog.tsx uses flushAt: 1, which drains storage
+// (The main app instance in posthog.ts uses flushAt: 1, which drains storage
 // on every capture and would hide the effect.)
 const burstPostHog = new PostHog(process.env.EXPO_PUBLIC_POSTHOG_PROJECT_API_KEY ?? 'phc_storage_burst_demo', {
     host: process.env.EXPO_PUBLIC_POSTHOG_API_HOST,

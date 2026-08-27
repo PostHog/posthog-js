@@ -14,7 +14,11 @@ export type PostHogNavigationRef = {
 
 export type PostHogAutocaptureOptions = {
   /**
-   * Enable autocapture of touch events
+   * Enable autocapture of touch events.
+   *
+   * On React Native Web this also captures `click` events — mouse, trackpad, keyboard
+   * activation and programmatic clicks — emitted with `$event_type: 'click'`, since
+   * browsers fire `touchend` only for touch input.
    *
    * @default false
    */

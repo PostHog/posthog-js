@@ -253,6 +253,44 @@ describe('local evaluation', () => {
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
     })
 
+    it.each(['is_set', 'is_not_set'])(
+      'preserves remote fallback after an inconclusive %s condition',
+      async (operator) => {
+        const flags: any = {
+          flags: [
+            {
+              id: 1,
+              name: 'Early Exit Presence Feature',
+              key: 'early-exit-presence-flag',
+              active: true,
+              filters: {
+                early_exit: true,
+                groups: [
+                  {
+                    properties: [{ key: 'plan', operator, value: '', type: 'person' }],
+                    rollout_percentage: 100,
+                  },
+                  { properties: [], rollout_percentage: 0 },
+                ],
+              },
+            },
+          ],
+        }
+        mockedFetch.mockImplementation(
+          apiImplementation({
+            localFlags: flags,
+            decideFlags: { 'early-exit-presence-flag': 'server-fallback' },
+          })
+        )
+        posthog = newPosthog()
+
+        expect(await posthog.getFeatureFlag('early-exit-presence-flag', 'some-distinct-id')).toEqual('server-fallback')
+
+        expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+        expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
+      }
+    )
+
     it('does not early exit when a group fails on a property filter rather than rollout', async () => {
       // First group fails on its property (region mismatch), not rollout — so even with early_exit
       // enabled, evaluation must continue to the second group, which matches.
@@ -2739,7 +2777,7 @@ describe('local evaluation', () => {
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 
-  it('resolves is_not_set locally without forcing inconclusive', async () => {
+  it('treats an omitted is_not_set property as inconclusive locally', async () => {
     const flags = {
       flags: [
         {
@@ -2767,11 +2805,17 @@ describe('local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    // Key absent → property is_not_set is true → flag matches.
-    expect(await posthog.getFeatureFlag('only-anon', 'some-distinct-id', { personProperties: {} })).toEqual(true)
-    // Key present → property IS set → flag does not match.
     expect(
-      await posthog.getFeatureFlag('only-anon', 'some-distinct-id', { personProperties: { email: 'a@b.com' } })
+      await posthog.getFeatureFlag('only-anon', 'some-distinct-id', {
+        personProperties: {},
+        onlyEvaluateLocally: true,
+      })
+    ).toBeUndefined()
+    expect(
+      await posthog.getFeatureFlag('only-anon', 'some-distinct-id', {
+        personProperties: { email: 'a@b.com' },
+        onlyEvaluateLocally: true,
+      })
     ).toEqual(false)
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
@@ -3575,44 +3619,26 @@ describe('match properties', () => {
     })
   })
 
-  describe('is_not_set', () => {
-    it('returns true when the property is absent', () => {
-      expect(matchProperty({ key: 'missing', value: 'whatever', operator: 'is_not_set' }, {})).toBe(true)
+  describe('presence operators', () => {
+    it.each([
+      ['null', null],
+      ['undefined', undefined],
+      ['false', false],
+      ['zero', 0],
+      ['empty string', ''],
+      ['empty array', []],
+      ['empty object', {}],
+    ])('treats present %s as set', (_, value) => {
+      expect(matchProperty({ key: 'key', value: '', operator: 'is_set' }, { key: value })).toBe(true)
+      expect(matchProperty({ key: 'key', value: '', operator: 'is_not_set' }, { key: value })).toBe(false)
     })
 
-    it('returns false when the property is present', () => {
-      expect(matchProperty({ key: 'plan', value: 'whatever', operator: 'is_not_set' }, { plan: 'pro' })).toBe(false)
-    })
-
-    it('treats a null-valued property as still set (returns false)', () => {
-      // `null` counts as present in propertyValues; only genuinely missing keys read as "not set".
-      expect(matchProperty({ key: 'plan', value: 'whatever', operator: 'is_not_set' }, { plan: null })).toBe(false)
+    it.each(['is_set', 'is_not_set'])('%s is inconclusive when the property is omitted', (operator) => {
+      expect(() => matchProperty({ key: 'key', value: '', operator }, {})).toThrow(InconclusiveMatchError)
     })
 
     it('still throws InconclusiveMatchError when key is absent for other operators', () => {
-      expect(() => matchProperty({ key: 'k', value: 'x', operator: 'exact' }, {})).toThrow(InconclusiveMatchError)
-    })
-  })
-
-  describe('is_set with null/undefined values', () => {
-    // Pre-fix, `NULL_VALUES_ALLOWED_OPERATORS = ['is_not']` excluded `is_set`, so the null guard
-    // returned false (and warned) before the switch could reach the `case 'is_set'` branch.
-    // `is_set` is about key presence, not value.
-    it('returns true when the property value is null', () => {
-      expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: null })).toBe(true)
-    })
-
-    it('returns true when the property value is undefined but the key is present', () => {
-      expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: undefined })).toBe(true)
-    })
-
-    it('returns true for a normal value', () => {
-      expect(matchProperty({ key: 'plan', value: '', operator: 'is_set' }, { plan: 'pro' })).toBe(true)
-    })
-
-    it('throws InconclusiveMatchError when the key is absent', () => {
-      // Key not in propertyValues — we cant tell locally whether the server has it.
-      expect(() => matchProperty({ key: 'plan', value: '', operator: 'is_set' }, {})).toThrow(InconclusiveMatchError)
+      expect(() => matchProperty({ key: 'key', value: 'x', operator: 'exact' }, {})).toThrow(InconclusiveMatchError)
     })
   })
 })

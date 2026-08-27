@@ -1,5 +1,7 @@
+import { withXcodeProject } from '@expo/config-plugins'
 import { spawnSync } from 'child_process'
 
+import * as postHogExpoPluginModule from '../src/tooling/expoconfig'
 import {
   addDsymUploadBuildPhase,
   addPostHogAndroidGradlePluginClasspath,
@@ -12,10 +14,13 @@ import {
   buildIosDotenvFileBuildSetting,
   disableUserScriptSandboxing,
   modifyExistingXcodeBuildScript,
+  moveDsymUploadBuildPhaseToEnd,
   resolveDotenvFileProp,
   resolveNativeSymbolUpload,
   updateDotenvFileGradleProperties,
 } from '../src/tooling/expoconfig'
+
+const postHogExpoPlugin = (postHogExpoPluginModule as any).default
 
 type MockBuildConfig = { buildSettings: Record<string, string> }
 
@@ -259,11 +264,10 @@ describe('modifyExistingXcodeBuildScript', () => {
   })
 })
 
-const mockXcodeProjectForBuildPhase = (
-  existingPhase: any = undefined
-): { pbxItemByComment: jest.Mock; addBuildPhase: jest.Mock } => ({
+const mockXcodeProjectForBuildPhase = (existingPhase: any = undefined, buildPhases: any[] = []) => ({
   pbxItemByComment: jest.fn(() => existingPhase),
   addBuildPhase: jest.fn(),
+  getFirstTarget: jest.fn(() => ({ firstTarget: { buildPhases } })),
 })
 
 describe('buildDsymUploadShellScript', () => {
@@ -311,6 +315,9 @@ describe('addDsymUploadBuildPhase', () => {
     expect(files).toEqual([])
     expect(isa).toBe('PBXShellScriptBuildPhase')
     expect(comment).toBe('Upload PostHog Debug Symbols')
+    expect(opts.inputPaths).toEqual([
+      '"$(DWARF_DSYM_FOLDER_PATH)/$(DWARF_DSYM_FILE_NAME)/Contents/Resources/DWARF/$(EXECUTABLE_NAME)"',
+    ])
     expect(opts.shellPath).toBe('/bin/sh')
     expect(opts.shellScript).toContain('upload-symbols.sh')
     expect(opts.shellScript).not.toContain('POSTHOG_INCLUDE_SOURCE')
@@ -341,15 +348,112 @@ describe('addDsymUploadBuildPhase', () => {
   const encodePbx = (script: string): string => '"' + script.replace(/"/g, '\\"') + '"'
 
   it('refreshes an existing plugin-generated phase script so option changes take effect', () => {
-    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: encodePbx(buildDsymUploadShellScript()) }
+    const existing: any = {
+      isa: 'PBXShellScriptBuildPhase',
+      shellScript: encodePbx(buildDsymUploadShellScript()),
+      inputPaths: ['"$(SRCROOT)/custom-input"'],
+    }
     const xp = mockXcodeProjectForBuildPhase(existing)
 
     addDsymUploadBuildPhase(xp, false, true)
     expect(xp.addBuildPhase).not.toHaveBeenCalled()
     expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, true)))
+    expect(existing.inputPaths).toEqual([
+      '"$(SRCROOT)/custom-input"',
+      '"$(DWARF_DSYM_FOLDER_PATH)/$(DWARF_DSYM_FILE_NAME)/Contents/Resources/DWARF/$(EXECUTABLE_NAME)"',
+    ])
 
     addDsymUploadBuildPhase(xp, false, false)
     expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript()))
+  })
+
+  it('moves an existing plugin-generated phase after extension embedding', () => {
+    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: encodePbx(buildDsymUploadShellScript()) }
+    const buildPhases = [
+      { value: 'SOURCES', comment: 'Sources' },
+      { value: 'POSTHOG', comment: 'Upload PostHog Debug Symbols' },
+      { value: 'EXTENSION', comment: 'Embed App Extensions' },
+    ]
+    const xp = mockXcodeProjectForBuildPhase(existing, buildPhases)
+
+    addDsymUploadBuildPhase(xp)
+
+    expect(buildPhases.map((phase) => phase.comment)).toEqual([
+      'Sources',
+      'Embed App Extensions',
+      'Upload PostHog Debug Symbols',
+    ])
+  })
+
+  it('moves a newly added phase again after a later plugin appends extension embedding', () => {
+    let existing: any
+    const buildPhases = [{ value: 'SOURCES', comment: 'Sources' }]
+    const xp = mockXcodeProjectForBuildPhase(undefined, buildPhases)
+    xp.pbxItemByComment.mockImplementation(() => existing)
+    xp.addBuildPhase.mockImplementation((_files, _isa, comment, _target, options) => {
+      existing = {
+        isa: 'PBXShellScriptBuildPhase',
+        shellScript: encodePbx(options.shellScript),
+      }
+      buildPhases.push({ value: 'POSTHOG', comment })
+    })
+
+    addDsymUploadBuildPhase(xp)
+    buildPhases.push({ value: 'EXTENSION', comment: 'Embed App Extensions' })
+    moveDsymUploadBuildPhaseToEnd(xp)
+
+    expect(buildPhases.map((phase) => phase.comment)).toEqual([
+      'Sources',
+      'Embed App Extensions',
+      'Upload PostHog Debug Symbols',
+    ])
+  })
+
+  it('finalizes phase ordering after all Expo Xcode project mods', async () => {
+    jest.useRealTimers()
+    let uploadPhase: any
+    const bundlePhase = {
+      shellScript: JSON.stringify('../node_modules/react-native/scripts/react-native-xcode.sh'),
+    }
+    const buildPhases: any[] = [{ value: 'SOURCES', comment: 'Sources' }]
+    const xcodeProject = {
+      pbxItemByComment: jest.fn((comment: string) => {
+        if (comment === 'Bundle React Native code and images') {
+          return bundlePhase
+        }
+        if (comment === 'Upload PostHog Debug Symbols') {
+          return uploadPhase
+        }
+      }),
+      addBuildPhase: jest.fn((_files, _isa, comment, _target, options) => {
+        uploadPhase = {
+          isa: 'PBXShellScriptBuildPhase',
+          shellScript: encodePbx(options.shellScript),
+        }
+        buildPhases.push({ value: 'POSTHOG', comment })
+      }),
+      getFirstTarget: jest.fn(() => ({ firstTarget: { buildPhases } })),
+      pbxXCBuildConfigurationSection: jest.fn(() => ({})),
+    }
+
+    let config: any = { name: 'Test', slug: 'test' }
+    config = withXcodeProject(config, (config: any) => {
+      buildPhases.push({ value: 'EXTENSION', comment: 'Embed App Extensions' })
+      return config
+    })
+    config = postHogExpoPlugin(config, {
+      disableSandboxing: false,
+      uploadNativeSymbols: true,
+    })
+
+    await config.mods.ios.xcodeproj({ ...config, modRequest: {}, modResults: xcodeProject })
+
+    expect(buildPhases.map((phase) => phase.comment)).toEqual([
+      'Sources',
+      'Embed App Extensions',
+      'Upload PostHog Debug Symbols',
+    ])
+    jest.useFakeTimers()
   })
 
   it('refreshing with unchanged options preserves the stored pbxproj representation', () => {
@@ -379,12 +483,13 @@ describe('addDsymUploadBuildPhase', () => {
 
   it('leaves a user-customized phase script untouched', () => {
     const customized = encodePbx(`${buildDsymUploadShellScript()}\necho "my custom step"`)
-    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: customized }
+    const existing: any = { isa: 'PBXShellScriptBuildPhase', shellScript: customized }
     const xp = mockXcodeProjectForBuildPhase(existing)
 
     addDsymUploadBuildPhase(xp, false, true)
     expect(xp.addBuildPhase).not.toHaveBeenCalled()
     expect(existing.shellScript).toBe(customized)
+    expect(existing.inputPaths).toBeUndefined()
   })
 })
 
