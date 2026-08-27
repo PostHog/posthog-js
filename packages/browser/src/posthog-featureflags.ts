@@ -458,21 +458,47 @@ export class PostHogFeatureFlags implements Extension {
         const previousFlags = this._prop(ENABLED_FEATURE_FLAGS) || {}
         const nextFlags = statePatch[ENABLED_FEATURE_FLAGS] || {}
         const responseFlags = response.flags || response.featureFlags
-        const ownedFlagKeys =
-            partialResponse && !isArray(responseFlags)
-                ? Object.keys(responseFlags || {})
-                : Array.from(new Set([...Object.keys(previousFlags), ...Object.keys(nextFlags)]))
+        const successfulResponseFlagKeys = response.flags
+            ? Object.entries(response.flags)
+                  .filter(([, detail]) => !detail?.failed)
+                  .map(([key]) => key)
+            : []
+        const isIncompleteResponse = !!response.errorsWhileComputingFlags && !!response.flags
+        const ownedFlagKeys = isIncompleteResponse
+            ? successfulResponseFlagKeys
+            : partialResponse && !isArray(responseFlags)
+              ? Object.keys(responseFlags || {})
+              : Array.from(new Set([...Object.keys(previousFlags), ...Object.keys(nextFlags)]))
         const previousPayloads = this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) || {}
         const nextPayloads = statePatch[PERSISTENCE_FEATURE_FLAG_PAYLOADS] || {}
-        const ownedPayloadKeys = partialResponse
-            ? Array.from(new Set([...ownedFlagKeys, ...Object.keys(response.featureFlagPayloads || {})]))
-            : Array.from(new Set([...Object.keys(previousPayloads), ...Object.keys(nextPayloads)]))
-
-        this._instance.persistence.markCrossTabFeatureFlagChanges({
+        const responsePayloadKeys = response.flags
+            ? Object.entries(response.flags)
+                  .filter(([, detail]) => !detail?.failed && detail.enabled && detail.metadata?.payload)
+                  .map(([key]) => key)
+            : Object.keys(response.featureFlagPayloads || {})
+        const ownedPayloadKeys =
+            isIncompleteResponse || partialResponse
+                ? responsePayloadKeys
+                : Array.from(new Set([...Object.keys(previousPayloads), ...Object.keys(nextPayloads)]))
+        const changes: Record<string, readonly string[] | true> = {
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ownedFlagKeys,
             [ENABLED_FEATURE_FLAGS]: ownedFlagKeys,
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: ownedPayloadKeys,
-        })
+        }
+        if (statePatch[PERSISTENCE_FEATURE_FLAG_DETAILS]) {
+            changes[PERSISTENCE_FEATURE_FLAG_DETAILS] = ownedFlagKeys
+        }
+        for (const key of [
+            PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+            PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+            PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
+        ] as const) {
+            if (!isUndefined(statePatch[key])) {
+                changes[key] = true
+            }
+        }
+
+        this._instance.persistence.markCrossTabFeatureFlagChanges(changes)
     }
 
     private _remove(keys: keyof FeatureFlagsState | readonly (keyof FeatureFlagsState)[]): void {

@@ -4,7 +4,11 @@ import { SessionIdManager } from '../sessionid'
 import {
     ENABLED_FEATURE_FLAGS,
     PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    PERSISTENCE_FEATURE_FLAG_DETAILS,
+    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     SESSION_ID,
     STORED_PERSON_PROPERTIES_KEY,
 } from '../constants'
@@ -572,7 +576,13 @@ describe('cross-tab persistence interactions', () => {
             const tabA = new PostHogPersistence(config)
             tabA.register({
                 [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': false },
+                [PERSISTENCE_FEATURE_FLAG_DETAILS]: {
+                    'early-access-flag': { key: 'early-access-flag', enabled: false, metadata: { id: 1, version: 1 } },
+                },
                 [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { 'early-access-flag': { version: 'old' } },
+                [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'old-request',
+                [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: 100,
+                [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: false,
                 [STORED_PERSON_PROPERTIES_KEY]: { '$feature_enrollment/early-access-flag': false },
             })
             tabA.flush()
@@ -581,7 +591,13 @@ describe('cross-tab persistence interactions', () => {
 
             tabA.register({
                 [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': true },
+                [PERSISTENCE_FEATURE_FLAG_DETAILS]: {
+                    'early-access-flag': { key: 'early-access-flag', enabled: true, metadata: { id: 2, version: 2 } },
+                },
                 [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { 'early-access-flag': { version: 'new' } },
+                [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'new-request',
+                [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: 200,
+                [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: true,
                 [STORED_PERSON_PROPERTIES_KEY]: { '$feature_enrollment/early-access-flag': true },
             })
             tabA.flush()
@@ -589,9 +605,15 @@ describe('cross-tab persistence interactions', () => {
             dispatchStorageChange(STORAGE_KEY, oldValue, newValue)
 
             expect(tabB.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'early-access-flag': true })
+            expect(tabB.get_property(PERSISTENCE_FEATURE_FLAG_DETAILS)).toEqual({
+                'early-access-flag': { key: 'early-access-flag', enabled: true, metadata: { id: 2, version: 2 } },
+            })
             expect(tabB.get_property(PERSISTENCE_FEATURE_FLAG_PAYLOADS)).toEqual({
                 'early-access-flag': { version: 'new' },
             })
+            expect(tabB.get_property(PERSISTENCE_FEATURE_FLAG_REQUEST_ID)).toBe('new-request')
+            expect(tabB.get_property(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT)).toBe(200)
+            expect(tabB.get_property(PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS)).toBe(true)
             expect(tabB.get_property(STORED_PERSON_PROPERTIES_KEY)).toEqual({
                 '$feature_enrollment/early-access-flag': true,
             })
@@ -600,9 +622,15 @@ describe('cross-tab persistence interactions', () => {
             tabB.flush()
 
             expect(readStorage()[ENABLED_FEATURE_FLAGS]).toEqual({ 'early-access-flag': true })
+            expect(readStorage()[PERSISTENCE_FEATURE_FLAG_DETAILS]).toEqual({
+                'early-access-flag': { key: 'early-access-flag', enabled: true, metadata: { id: 2, version: 2 } },
+            })
             expect(readStorage()[PERSISTENCE_FEATURE_FLAG_PAYLOADS]).toEqual({
                 'early-access-flag': { version: 'new' },
             })
+            expect(readStorage()[PERSISTENCE_FEATURE_FLAG_REQUEST_ID]).toBe('new-request')
+            expect(readStorage()[PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]).toBe(200)
+            expect(readStorage()[PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]).toBe(true)
             expect(readStorage()[STORED_PERSON_PROPERTIES_KEY]).toEqual({
                 '$feature_enrollment/early-access-flag': true,
             })

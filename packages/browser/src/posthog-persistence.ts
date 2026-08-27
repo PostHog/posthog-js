@@ -32,6 +32,7 @@ import {
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
     SURVEYS_LOADED_AT,
@@ -101,7 +102,11 @@ const MAIN_STORAGE_SLOT = 'main'
 const CROSS_TAB_FEATURE_FLAG_KEYS = [
     ENABLED_FEATURE_FLAGS,
     PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    PERSISTENCE_FEATURE_FLAG_DETAILS,
     PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     STORED_PERSON_PROPERTIES_KEY,
 ] as const
 
@@ -279,10 +284,14 @@ export class PostHogPersistence {
         }
     }
 
-    markCrossTabFeatureFlagChanges(changes: Record<string, readonly string[]>): void {
+    markCrossTabFeatureFlagChanges(changes: Record<string, readonly string[] | true>): void {
         Object.entries(changes).forEach(([key, properties]) => {
             const existingPendingChanges = this._pendingCrossTabFeatureFlagChanges.get(key)
             if (!isCrossTabFeatureFlagKey(key) || existingPendingChanges === true) {
+                return
+            }
+            if (properties === true) {
+                this._setCrossTabFeatureFlagChangesPending(key, true)
                 return
             }
             const pendingChanges = new Set(existingPendingChanges || [])
@@ -432,9 +441,12 @@ export class PostHogPersistence {
 
     private _setCrossTabFeatureFlagChangesPending(key: string, changes: Set<string> | true): void {
         this._pendingCrossTabFeatureFlagChanges.set(key, changes)
-        const group = this._splitStorage ? getPersistenceKeyPolicy(key)?.storageGroup : undefined
-        this._slotWriteState(group || MAIN_STORAGE_SLOT).fingerprint = undefined
-        this._markGroupDirty(key)
+        const policy = getPersistenceKeyPolicy(key)
+        if (!policy?.volatile) {
+            const group = this._splitStorage ? policy?.storageGroup : undefined
+            this._slotWriteState(group || MAIN_STORAGE_SLOT).fingerprint = undefined
+            this._markGroupDirty(key)
+        }
     }
 
     private _markAllCrossTabFeatureFlagChangesPending(): void {
@@ -561,7 +573,11 @@ export class PostHogPersistence {
                 }
             })
         } else {
-            this._setCrossTabFeatureFlagChangesPending(key, true)
+            if (!isStorageValueEqual(durableValue, nextValue)) {
+                this._setCrossTabFeatureFlagChangesPending(key, true)
+            } else {
+                this._pendingCrossTabFeatureFlagChanges.delete(key)
+            }
             return
         }
 
@@ -1244,7 +1260,8 @@ export class PostHogPersistence {
             const groupWriteResult = this._writeEntry(localStore, this._groupEntryName(group), groupProps, group)
             if (groupWriteResult !== false) {
                 CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
-                    if (getPersistenceKeyPolicy(key)?.storageGroup === group) {
+                    const policy = getPersistenceKeyPolicy(key)
+                    if (policy?.storageGroup === group && (groupWriteResult || !policy.volatile)) {
                         this._pendingCrossTabFeatureFlagChanges.delete(key)
                     }
                 })

@@ -71,7 +71,20 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const oldValue = window.localStorage.getItem(storageKey)
 
         siblingPersistence.register({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['early-access-flag'],
             [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': true },
+            [PERSISTENCE_FEATURE_FLAG_DETAILS]: {
+                'early-access-flag': {
+                    key: 'early-access-flag',
+                    enabled: true,
+                    reason: { code: 'condition_match', description: 'Fresh sibling evaluation' },
+                    metadata: { id: 2, version: 3 },
+                },
+            },
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { 'early-access-flag': { source: 'fresh-sibling' } },
+            [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'fresh-request',
+            [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: 200,
+            [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: false,
             [STORED_PERSON_PROPERTIES_KEY]: { '$feature_enrollment/early-access-flag': true },
         })
         const newValue = window.localStorage.getItem(storageKey)
@@ -85,6 +98,20 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             ['early-access-flag'],
             { 'early-access-flag': true },
             { errorsLoading: undefined }
+        )
+        const capture = jest.spyOn(posthog, 'capture').mockImplementation()
+        posthog.getFeatureFlag('early-access-flag')
+        expect(capture).toHaveBeenCalledWith(
+            '$feature_flag_called',
+            expect.objectContaining({
+                $feature_flag_response: true,
+                $feature_flag_payload: { source: 'fresh-sibling' },
+                $feature_flag_request_id: 'fresh-request',
+                $feature_flag_evaluated_at: 200,
+                $feature_flag_version: 3,
+                $feature_flag_reason: 'Fresh sibling evaluation',
+                $feature_flag_id: 2,
+            })
         )
 
         siblingPersistence.destroy()
@@ -133,6 +160,57 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         expect(JSON.parse(window.localStorage.getItem(`ph_${persistenceName}`) || '{}')[ENABLED_FEATURE_FLAGS]).toEqual(
             { flag: false }
         )
+        siblingPersistence.destroy()
+        await posthog.shutdown()
+    })
+
+    it('does not overwrite sibling state with a retained failed evaluation', async () => {
+        const token = uuidv7()
+        const persistenceName = `cross-tab-failed-evaluation-${token}`
+        const posthog = await createPosthogInstance(token, {
+            advanced_disable_feature_flags: true,
+            persistence: 'localStorage',
+            persistence_name: persistenceName,
+            persistence_save_debounce_ms: 0,
+        })
+        posthog.persistence?.register({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: [],
+            [ENABLED_FEATURE_FLAGS]: { flag: false },
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { flag: { source: 'stale-cache' } },
+            [PERSISTENCE_FEATURE_FLAG_DETAILS]: {
+                flag: { key: 'flag', enabled: false, metadata: { id: 1, version: 1 } },
+            },
+        })
+        const siblingPersistence = new PostHogPersistence(posthog.config)
+        siblingPersistence.register({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['flag'],
+            [ENABLED_FEATURE_FLAGS]: { flag: true },
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { flag: { source: 'fresh-sibling' } },
+            [PERSISTENCE_FEATURE_FLAG_DETAILS]: {
+                flag: { key: 'flag', enabled: true, metadata: { id: 2, version: 2 } },
+            },
+        })
+
+        posthog.featureFlags?.receivedFeatureFlags({
+            flags: {
+                flag: {
+                    key: 'flag',
+                    enabled: false,
+                    failed: true,
+                    metadata: { id: 3, version: 3 },
+                },
+            },
+            errorsWhileComputingFlags: true,
+            requestId: 'failed-request',
+        })
+
+        expect(posthog.isFeatureEnabled('flag', { send_event: false })).toBe(true)
+        expect(posthog.persistence?.get_property(PERSISTENCE_FEATURE_FLAG_PAYLOADS)).toEqual({
+            flag: { source: 'fresh-sibling' },
+        })
+        expect(posthog.persistence?.get_property(PERSISTENCE_FEATURE_FLAG_DETAILS)).toEqual({
+            flag: { key: 'flag', enabled: true, metadata: { id: 2, version: 2 } },
+        })
         siblingPersistence.destroy()
         await posthog.shutdown()
     })
