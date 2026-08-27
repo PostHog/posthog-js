@@ -1,6 +1,6 @@
 # @posthog/browser agent guide
 
-Follow [Bundle architecture](./ARCHITECTURE.md) for behavioral constraints, package boundaries, tree-shaking rules, and bundle review. Follow [`posthog-browser-v2-minimal-bundle-plan.md`](../../posthog-browser-v2-minimal-bundle-plan.md) for the parity gate and implementation order.
+Follow [Bundle architecture](./ARCHITECTURE.md) for behavioral constraints, package boundaries, tree-shaking rules, and bundle review.
 
 Core behavior is a fixed constraint. Bundle size is the optimization objective. Do not remove wire, consent, bot-filter, identity, session, cross-context, delivery, no-throw, or extension-isolation behavior to meet a byte target.
 
