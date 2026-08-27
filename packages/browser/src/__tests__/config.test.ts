@@ -116,8 +116,34 @@ describe('config', () => {
             expect(bootstrapWarnings()).toHaveLength(0)
         })
 
-        // Only a persistence change re-runs the check, so repeatedly calling set_config for other reasons
-        // under volatile persistence must not re-warn.
+        // set_config() can also turn on disable_persistence after init, which removes the durable store the
+        // same way a switch to a volatile persistence does. The init check has already run and cannot see the
+        // later change, so set_config must re-run it.
+        it('warns once when set_config enables disable_persistence after init', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { persistence: 'localStorage+cookie' })
+            warnSpy.mockClear()
+
+            posthog.set_config({ disable_persistence: true })
+
+            expect(bootstrapWarnings()).toHaveLength(1)
+        })
+
+        it('does not warn when set_config enables disable_persistence but a bootstrap.distinctID is set', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                persistence: 'localStorage+cookie',
+                bootstrap: { distinctID: 'stable-id' },
+            })
+            warnSpy.mockClear()
+
+            posthog.set_config({ disable_persistence: true })
+
+            expect(bootstrapWarnings()).toHaveLength(0)
+        })
+
+        // Only a persistence or disable_persistence change re-runs the check, so repeatedly calling set_config
+        // for other reasons under volatile persistence must not re-warn.
         it('does not re-warn when set_config changes an unrelated option under volatile persistence', () => {
             const posthog = new PostHog()
             posthog._init('test-token', { persistence: 'memory' })

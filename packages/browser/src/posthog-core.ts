@@ -510,8 +510,8 @@ export class PostHog implements PostHogInterface {
     // memory for a single page, so each load mints a fresh one that identify() then merges onto the person,
     // eventually pushing it past the distinct-ID display limit and hiding its events from person pages and the
     // session tab. Warn (visibly, unlike logger.warn) unless a stable ID is supplied. Called at init and again
-    // from set_config() when persistence is switched to a volatile mode after init. Cookieless mode registers a
-    // stable sentinel instead of a new uuid, so it is excluded.
+    // from set_config() when persistence is switched to a volatile mode — or disable_persistence turned on —
+    // after init. Cookieless mode registers a stable sentinel instead of a new uuid, so it is excluded.
     private _warnIfVolatileIdentityWithoutStableId(): void {
         if (this._inCookielessMode()) {
             return
@@ -3827,12 +3827,18 @@ export class PostHog implements PostHogInterface {
                           false
                       )
 
-            // A runtime switch to memory/sessionStorage drops durable identity the same way an init with that
-            // persistence does, so the next load mints a fresh ID that identify() then merges onto the person.
-            // The init-time check has already run, so re-run it here on a persistence change. Guarded on
-            // `this.persistence` so the init-time set_config (which runs before persistence exists) does not
-            // double-warn with the init check.
-            if (this.persistence && this.config.persistence !== oldConfig.persistence) {
+            // A runtime switch to memory/sessionStorage — or turning on disable_persistence — drops durable
+            // identity the same way an init with that config does, so the next load mints a fresh ID that
+            // identify() then merges onto the person. Both changes remove the durable store here via
+            // update_config() above, and the init-time check has already run, so re-run it on either change.
+            // Guarded on `this.persistence` so the init-time set_config (which runs before persistence exists)
+            // does not double-warn with the init check. `disable_cookie` is renamed to `disable_persistence` by
+            // configRenames() before this comparison, so the deprecated option is covered too.
+            if (
+                this.persistence &&
+                (this.config.persistence !== oldConfig.persistence ||
+                    this.config.disable_persistence !== oldConfig.disable_persistence)
+            ) {
                 this._warnIfVolatileIdentityWithoutStableId()
             }
 
