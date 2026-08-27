@@ -35,6 +35,26 @@ describe('config', () => {
             expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining(lifetime))
         })
 
+        // disable_persistence clears durable identity too, so it hits the same per-load ID-minting failure.
+        it('warns when disable_persistence is true and no bootstrap.distinctID is set', () => {
+            new PostHog()._init('test-token', { disable_persistence: true })
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[PostHog.js]',
+                expect.stringContaining('persistence is disabled (disable_persistence is true)')
+            )
+        })
+
+        it('does not warn when disable_persistence is true but bootstrap.distinctID is provided', () => {
+            new PostHog()._init('test-token', { disable_persistence: true, bootstrap: { distinctID: 'stable-id' } })
+            expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
+        })
+
+        // Cookieless mode registers a stable sentinel instead of a fresh uuid, so the failure does not occur.
+        it('does not warn under cookieless mode even when disable_persistence is true', () => {
+            new PostHog()._init('test-token', { disable_persistence: true, cookieless_mode: 'always' })
+            expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
+        })
+
         it('does not warn when bootstrap.distinctID is provided', () => {
             new PostHog()._init('test-token', { persistence: 'memory', bootstrap: { distinctID: 'stable-id' } })
             expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))

@@ -958,23 +958,41 @@ export class PostHog implements PostHogInterface {
             this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
         }
 
+        const volatileIdentityPersistence =
+            this.config.persistence === 'memory' || this.config.persistence === 'sessionStorage'
         if (
-            (this.config.persistence === 'memory' || this.config.persistence === 'sessionStorage') &&
+            !startInCookielessMode &&
+            (volatileIdentityPersistence || this.config.disable_persistence) &&
             isUndefined(config.bootstrap?.distinctID)
         ) {
-            // sessionStorage survives same-tab reloads and navigation, so it mints a fresh ID per tab/window;
-            // memory is dropped on every load. Name the right lifetime so the reader can't disprove it in one refresh.
-            const lifetime =
-                this.config.persistence === 'memory' ? 'on every page load' : 'for every new browser tab or window'
+            // memory, sessionStorage, and disable_persistence all drop durable identity, so the ID lives in
+            // memory for a single page and each load mints a fresh one that identify() then merges onto the
+            // person. Cookieless mode registers a stable sentinel instead of a new uuid, so it is excluded.
+            let cause: string
+            let lifetime: string
+            let fix: string
+            if (volatileIdentityPersistence) {
+                cause = `persistence is set to '${this.config.persistence}'`
+                // sessionStorage survives same-tab reloads and navigation, so it mints a fresh ID per
+                // tab/window; memory is dropped on every load.
+                lifetime =
+                    this.config.persistence === 'memory' ? 'on every page load' : 'for every new browser tab or window'
+                fix =
+                    "Either set persistence to 'localStorage+cookie', or keep this persistence and pass a stable ID through bootstrap.distinctID."
+            } else {
+                cause = 'persistence is disabled (disable_persistence is true)'
+                lifetime = 'on every page load'
+                fix =
+                    'Either set disable_persistence to false, or keep persistence disabled and pass a stable ID through bootstrap.distinctID.'
+            }
             // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
             // eslint-disable-next-line no-console
             console.warn(
                 '[PostHog.js]',
-                `persistence is set to '${this.config.persistence}' but no bootstrap.distinctID was provided. ` +
+                `${cause} but no bootstrap.distinctID was provided. ` +
                     `PostHog will mint a new distinct ID ${lifetime}, so calling identify() merges a new ` +
                     'ID onto the person each time. A person can then pass the distinct-ID limit and its events stop ' +
-                    "appearing on person pages and the session tab. Either set persistence to 'localStorage+cookie', " +
-                    'or keep this persistence and pass a stable ID through bootstrap.distinctID.'
+                    `appearing on person pages and the session tab. ${fix}`
             )
         }
 
