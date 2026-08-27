@@ -1,4 +1,4 @@
-import type { Client } from '@posthog/browser-common'
+import type { Client, ExtensionToken } from '@posthog/browser-common'
 
 import { analytics as createAnalytics } from '../src/analytics'
 import { createPostHog, type Extension, type RemoteConfig } from '../src/core'
@@ -12,6 +12,8 @@ const createRemoteConfig = (overrides: Partial<RemoteConfig> = {}): RemoteConfig
 interface FlagCapability extends Extension {
     getFlag(key: string): string | undefined
 }
+
+const FlagsExtension = 'flags' as ExtensionToken<FlagCapability>
 
 const flagExtension = (events: string[]): FlagCapability => {
     let propertyRegistration: { dispose(): void } | undefined
@@ -37,15 +39,30 @@ describe('@posthog/browser extensions', () => {
         const requests: SentRequest[] = []
         const events: string[] = []
         const extension = flagExtension(events)
+        let extensionCanCapture: boolean | undefined
+        let flagFromExtension: string | undefined
         const posthog = await createPostHog({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
             fetch: createFetch(requests),
-            extensions: [analytics(), extension],
+            extensions: [
+                analytics(),
+                extension,
+                {
+                    name: 'consumer',
+                    setup(client) {
+                        extensionCanCapture = client.canCapture
+                        flagFromExtension = client.getExtension(FlagsExtension)?.getFlag('beta')
+                    },
+                },
+            ],
         })
 
-        expect(posthog.getExtension<FlagCapability>('flags')?.getFlag('beta')).toBe('enabled')
+        expect(posthog.canCapture).toBe(true)
+        expect(extensionCanCapture).toBe(true)
+        expect(flagFromExtension).toBe('enabled')
+        expect(posthog.getExtension(FlagsExtension)?.getFlag('beta')).toBe('enabled')
         await posthog.capture('event')
         await posthog.flush()
         const batch = requests[0]?.body?.batch as Array<{ properties: Record<string, unknown> }> | undefined
@@ -183,10 +200,13 @@ describe('@posthog/browser extensions', () => {
         expect(Object.isFrozen(client?.library)).toBe(true)
         expect(Object.isFrozen(client?.initialPersonProperties)).toBe(true)
         expect(Object.isFrozen(client?.initialPersonProperties.initial)).toBe(true)
+        expect(client?.canCapture).toBe(true)
 
         posthog.optOut()
         expect(client?.deviceId).toBe(initialAnonymousId)
+        expect(client?.canCapture).toBe(false)
         posthog.optIn()
+        expect(client?.canCapture).toBe(true)
         const postConsentAnonymousId = posthog.anonymousId
         expect(client?.deviceId).toBe(postConsentAnonymousId)
         await posthog.identify('user-123')

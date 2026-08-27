@@ -11,6 +11,7 @@ import type {
     Client,
     Disposable,
     Extension,
+    ExtensionToken,
     Listener,
     RemoteConfig,
     SendRequestInit,
@@ -99,6 +100,7 @@ export interface PostHog extends Client, Disposable {
     optIn(): void
     optOut(): void
     hasOptedOut(): boolean
+    getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
     getExtension<T extends Extension = Extension>(name: string): T | undefined
     getRemoteConfig(): Promise<RemoteConfig | undefined>
 }

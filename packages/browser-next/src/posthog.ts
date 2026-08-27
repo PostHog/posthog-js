@@ -5,6 +5,7 @@ import {
     type Client,
     type Disposable,
     type Extension,
+    type ExtensionToken,
     type RemoteConfig,
     type RemoteConfigResult,
     type SendRequestInit,
@@ -285,6 +286,10 @@ class PostHogBrowserClient implements PostHog {
     get session(): SessionContext {
         this._state.prepare()
         return this._state.session
+    }
+
+    get canCapture(): boolean {
+        return !this._closing && !this._disposed && !this._blocked && !this.hasOptedOut() && this._state.prepare()
     }
 
     async capture(
@@ -638,6 +643,8 @@ class PostHogBrowserClient implements PostHog {
         return this._remoteConfigPromise
     }
 
+    getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
+    getExtension<T extends Extension = Extension>(name: string): T | undefined
     getExtension<T extends Extension = Extension>(name: string): T | undefined {
         return this._registry.get<T>(name)
     }
@@ -1002,8 +1009,12 @@ class PostHogBrowserClient implements PostHog {
             get session() {
                 return host.session
             },
+            get canCapture() {
+                return host.canCapture
+            },
             capture: (event, properties, options) => host.capture(event, properties, options),
             registerDynamicEventProperties: (producer) => host.registerDynamicEventProperties(producer),
+            getExtension: (name) => host.getExtension(name),
             get projectToken() {
                 return host.projectToken
             },
