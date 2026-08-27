@@ -14,6 +14,7 @@ export class MutationThrottler {
             bucketSize?: number
             refillRate?: number
             onBlockedNode?: (id: number, node: Node | null) => void
+            onDroppedAttributeMutations?: (count: number) => void
         } = {}
     ) {
         this._rateLimiter = new BucketedRateLimiter({
@@ -71,6 +72,7 @@ export class MutationThrottler {
         const initialMutationCount = this._numberOfChanges(data)
 
         if (data.attributes) {
+            const beforeCount = data.attributes.length
             // Most problematic mutations come from attrs where the style or minor properties are changed rapidly
             data.attributes = data.attributes.filter((attr) => {
                 const [nodeId] = this._getNodeOrRelevantParent(attr.id)
@@ -83,6 +85,14 @@ export class MutationThrottler {
 
                 return attr
             })
+
+            // A dropped attribute mutation (e.g. the class or style that hides an outgoing
+            // subtree) never reaches the player, which then shows DOM that left the live page.
+            // Report the drop so the recorder can count how often that happens.
+            const droppedCount = beforeCount - data.attributes.length
+            if (droppedCount > 0) {
+                this._options.onDroppedAttributeMutations?.(droppedCount)
+            }
         }
 
         // Check if every part of the mutation is empty in which case there is nothing to do

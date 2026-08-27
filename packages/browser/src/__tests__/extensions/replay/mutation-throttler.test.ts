@@ -37,14 +37,17 @@ describe('MutationThrottler', () => {
 
     let mutationThrottler: MutationThrottler
     let onBlockedNodeMock: (id: number, node: Node | null) => void
+    let onDroppedAttributeMutationsMock: jest.Mock
 
     beforeEach(() => {
         mockGetNode.mockReturnValueOnce({ nodeName: 'div' })
         mockGetId.mockReturnValueOnce(1)
 
         onBlockedNodeMock = jest.fn()
+        onDroppedAttributeMutationsMock = jest.fn()
         mutationThrottler = new MutationThrottler(rrwebMock as unknown as rrwebRecord, {
             onBlockedNode: onBlockedNodeMock,
+            onDroppedAttributeMutations: onDroppedAttributeMutationsMock,
         })
     })
 
@@ -106,6 +109,24 @@ describe('MutationThrottler', () => {
                 attributes: [],
             })
         )
+    })
+
+    test('reports dropped attribute mutations so the recorder can count them', () => {
+        const event = makeEvent({ attributes: [{ id: 1, attributes: { a: 'ttribute' } }] })
+
+        mutationThrottler['_rateLimiter']['_buckets']['1'] = { tokens: 0, lastAccess: Date.now() }
+
+        mutationThrottler.throttleMutations(event)
+
+        expect(onDroppedAttributeMutationsMock).toHaveBeenCalledWith(1)
+    })
+
+    test('does not report dropped mutations when nothing is throttled', () => {
+        const event = makeEvent({ attributes: [{ id: 1, attributes: { a: 'ttribute' } }] })
+
+        mutationThrottler.throttleMutations(event)
+
+        expect(onDroppedAttributeMutationsMock).not.toHaveBeenCalled()
     })
 
     test('does not throttle non-mutation events', () => {

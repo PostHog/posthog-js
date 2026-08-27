@@ -802,6 +802,7 @@
         "_sync_opt_out_with_persistence",
         "_takeConsoleBuffer",
         "_teardown",
+        "_throttledMutationsDropped",
         "_tickets",
         "_timestamp",
         "_totalBytes",
