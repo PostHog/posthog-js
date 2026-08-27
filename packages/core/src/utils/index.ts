@@ -25,6 +25,27 @@ export function getEventUuid(uuid: unknown, generateUuid: () => string): string 
   return isValidUUID(uuid) ? uuid : generateUuid()
 }
 
+/**
+ * Creates an `Error` with the given `name`, in a way that also holds on pages where a browser
+ * extension has made `Error.prototype.name` non-writable. A plain `error.name = ...` throws
+ * there in strict mode, and swallowing that throw leaves the name as `Error`. Defining an own
+ * property on the instance shadows the prototype property instead. The descriptor matches what
+ * a plain assignment produces, so the resulting error is unchanged everywhere else.
+ *
+ * @param name the value for `error.name`, e.g. `'AbortError'`
+ * @param message the error message
+ * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
+ */
+export function createNamedError(name: string, message?: string): Error {
+  const error = new Error(message)
+  try {
+    Object.defineProperty(error, 'name', { value: name, writable: true, enumerable: true, configurable: true })
+  } catch {
+    // a page hostile enough to harden `Error.prototype` can also patch `Object.defineProperty`
+  }
+  return error
+}
+
 export function assert(truthyValue: any, message: string): void {
   if (!truthyValue || typeof truthyValue !== 'string' || isEmpty(truthyValue)) {
     throw new Error(message)
