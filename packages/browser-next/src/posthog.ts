@@ -51,7 +51,13 @@ export interface AutomaticAnalyticsSetup {
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
-const normalizeHost = (host: string): string => host.replace(/\/+$/, '')
+const normalizeHost = (host: string): string => {
+    let end = host.length
+    while (end > 0 && host.charCodeAt(end - 1) === 47) {
+        end--
+    }
+    return end === host.length ? host : host.slice(0, end)
+}
 const isValidDistinctId = (value: unknown): value is string =>
     isNonEmptyString(value) &&
     !['$posthog_cookieless', 'distinct_id', 'distinctid', 'undefined', 'null'].includes(value.toLowerCase())

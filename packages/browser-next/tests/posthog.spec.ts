@@ -813,9 +813,9 @@ describe('@posthog/browser core', () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
-            apiHost: 'https://api.example.com',
-            flagsHost: 'https://flags.example.com',
-            assetsHost: 'https://assets.example.com',
+            apiHost: 'https://api.example.com/',
+            flagsHost: 'https://flags.example.com//',
+            assetsHost: 'https://assets.example.com///',
             storage: false,
             navigator: false,
             fetch: createFetch(requests),
