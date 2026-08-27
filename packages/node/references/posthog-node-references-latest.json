@@ -3038,6 +3038,11 @@
           "description": "Evaluation context tags set on the flag. The local evaluation poller keeps a flag only\nwhen this list is empty or shares at least one entry with the SDK's `evaluationContexts`.\nAbsent when the server does not report it.",
           "type": "string[]",
           "name": "evaluation_contexts"
+        },
+        {
+          "description": "Legacy name for `evaluation_contexts`. Servers older than the field rename (PostHog,\n2026-03-11) expose the same list under this key on `/flags/definitions`. Read as a\nfallback so local-evaluation context filtering still works against those servers.",
+          "type": "string[]",
+          "name": "evaluation_tags"
         }
       ],
       "path": "src/types.ts"
