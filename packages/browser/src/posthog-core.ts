@@ -962,7 +962,10 @@ export class PostHog implements PostHogInterface {
             (this.config.persistence === 'memory' || this.config.persistence === 'sessionStorage') &&
             isUndefined(config.bootstrap?.distinctID)
         ) {
-            logger.warn(
+            // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
+            // eslint-disable-next-line no-console
+            console.warn(
+                '[PostHog.js]',
                 `persistence is set to '${this.config.persistence}' but no bootstrap.distinctID was provided. ` +
                     'PostHog will mint a new distinct ID on every page load, so calling identify() merges a new ' +
                     'ID onto the person each time. A person can then pass the distinct-ID limit and its events stop ' +
