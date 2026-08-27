@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.422.0
+
+### Minor Changes
+
+- [#4658](https://github.com/PostHog/posthog-js/pull/4658) [`db8687c`](https://github.com/PostHog/posthog-js/commit/db8687c46bc34d1364c092a030adaef7c67c6c67) Thanks [@posthog](https://github.com/apps/posthog)! - Report `$sdk_debug_replay_throttled_mutations_dropped` on captured events, counting the attribute changes the session recorder discarded during that session. The recorder throttles elements that change hundreds of times a second, and a discarded `class` or `style` change never reaches the player — so a recording can keep showing an element the live page had already hidden. Query this property to see whether your app is affected.
+  (2026-08-27)
+
 ## 1.421.2
 
 ### Patch Changes
