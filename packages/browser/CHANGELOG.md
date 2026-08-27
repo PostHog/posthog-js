@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.421.1
+
+### Patch Changes
+
+- [#4657](https://github.com/PostHog/posthog-js/pull/4657) [`9c09bd4`](https://github.com/PostHog/posthog-js/commit/9c09bd4758c2b05734c07086aec7ca3c4f128476) Thanks [@marandaneto](https://github.com/marandaneto)! - Use the best available compression for browser feature flag requests, preferring gzip when supported.
+  (2026-08-27)
+
+- [#4520](https://github.com/PostHog/posthog-js/pull/4520) [`362d081`](https://github.com/PostHog/posthog-js/commit/362d0812d713b6ecb7e686db8f484f3416ab6584) Thanks [@veksa](https://github.com/veksa)! - Drop `sourcesContent` from the source maps published to npm. The maps themselves still ship, so downstream source-map chaining and the `//# sourceMappingURL` references are unaffected — only the copy of our TypeScript sources embedded in each map is gone, taking the package from 40.8 MB to 17.4 MB unpacked. CDN artifacts are built separately and keep their inlined sources.
+  (2026-08-27)
+- Updated dependencies [[`7902e44`](https://github.com/PostHog/posthog-js/commit/7902e445d0a66b93bd4c7febce04cdf8836ea86b), [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524)]:
+    - @posthog/core@1.48.12
+
 ## 1.421.0
 
 ### Minor Changes

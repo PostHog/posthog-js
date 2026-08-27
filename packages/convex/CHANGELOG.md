@@ -1,5 +1,15 @@
 # @posthog/convex
 
+## 2.1.3
+
+### Patch Changes
+
+- [#4651](https://github.com/PostHog/posthog-js/pull/4651) [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524) Thanks [@marandaneto](https://github.com/marandaneto)! - Treat omitted local evaluation properties as inconclusive for `is_not_set`.
+  (2026-08-27)
+- Updated dependencies [[`7902e44`](https://github.com/PostHog/posthog-js/commit/7902e445d0a66b93bd4c7febce04cdf8836ea86b), [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524)]:
+  - @posthog/core@1.48.12
+  - posthog-node@5.51.3
+
 ## 2.1.2
 
 ### Patch Changes

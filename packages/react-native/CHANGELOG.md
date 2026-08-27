@@ -1,5 +1,14 @@
 # posthog-react-native
 
+## 4.65.1
+
+### Patch Changes
+
+- [#4616](https://github.com/PostHog/posthog-js/pull/4616) [`7902e44`](https://github.com/PostHog/posthog-js/commit/7902e445d0a66b93bd4c7febce04cdf8836ea86b) Thanks [@shahidrogers](https://github.com/shahidrogers)! - Stop crashing when the environment's `Math.random()` misbehaves. The vendored UUIDv7 generator builds its random fields from a `Math.random()`-based `nextUint32()`, and a nonconformant implementation that returns a value of 1 or greater, or NaN, pushed those fields out of range, so `fromFieldsV7` threw `RangeError: invalid field value` on every event captured. On React Native this is not hypothetical: Hermes implements `Math.random` with C++ `std::uniform_real_distribution`, which is documented to occasionally return its upper bound, and affected Android devices crash-looped on startup during the SDK's internal event-queue flush — a path applications cannot wrap in a try/catch. `nextUint32()` now clamps its result to a valid unsigned 32-bit integer (`>>> 0`), so a bad random value degrades UUID entropy for that id instead of taking the app down; the timestamp bits are untouched and generated ids remain spec-valid UUIDv7.
+  (2026-08-27)
+- Updated dependencies [[`7902e44`](https://github.com/PostHog/posthog-js/commit/7902e445d0a66b93bd4c7febce04cdf8836ea86b), [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524)]:
+  - @posthog/core@1.48.12
+
 ## 4.65.0
 
 ### Minor Changes
