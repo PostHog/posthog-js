@@ -195,7 +195,10 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       $ai_input: safeInput,
       $ai_output_choices: safeOutput,
       $ai_http_status: httpStatus,
-      $ai_input_tokens: usage.inputTokens ?? 0,
+      // Omitted rather than defaulted to 0 when the provider never reported it,
+      // matching $ai_output_tokens below. A cancelled stream still consumed its
+      // input, so reporting 0 would state a cost we know to be wrong.
+      ...(usage.inputTokens !== undefined ? { $ai_input_tokens: usage.inputTokens } : {}),
       ...(usage.outputTokens !== undefined ? { $ai_output_tokens: usage.outputTokens } : {}),
       ...additionalTokenValues,
       ...(options.latency !== undefined ? { $ai_latency: options.latency } : {}),

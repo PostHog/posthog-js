@@ -23,7 +23,11 @@ export class OpenAIChatStreamAccumulator {
   private serviceTier?: string
   private firstTokenTime?: number
   private stopReason?: string
-  private usage: TokenUsage = { inputTokens: 0, outputTokens: 0, webSearchCount: 0 }
+  // Token counts stay undefined until a chunk reports them. Seeding them at 0
+  // would make a stream that never carried usage — cancelled, or streamed
+  // without usage reporting enabled — indistinguishable from one that genuinely
+  // consumed nothing.
+  private usage: TokenUsage = { webSearchCount: 0 }
   private readonly toolCalls = new Map<number, { id: string; name: string; arguments: string }>()
 
   consume(chunk: OpenAI.ChatCompletionChunk, receivedAt = Date.now()): void {

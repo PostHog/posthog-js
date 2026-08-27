@@ -183,6 +183,8 @@ export class WrappedCompletions extends Completions {
                   {
                     completionId: accumulated.completionId,
                     systemFingerprint: accumulated.systemFingerprint,
+                    usage: accumulated.usage,
+                    latency: (Date.now() - startTime) / 1000,
                   }
                 )
               )

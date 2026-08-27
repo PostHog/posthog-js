@@ -1,6 +1,27 @@
 import { OpenAIChatStreamAccumulator, OpenAIResponsesStreamAccumulator } from '../src/openai/stream-accumulators'
 
 describe('OpenAI-compatible stream accumulators', () => {
+  // Separate from the accumulation test below because the setup is the absence
+  // of a usage chunk: a stream cancelled before the end, or one streamed without
+  // usage reporting on. Seeding the counts at 0 would report those as free.
+  test('chat leaves token counts undefined when no chunk reported usage', () => {
+    const accumulator = new OpenAIChatStreamAccumulator()
+    accumulator.consume(
+      {
+        id: 'chatcmpl-1',
+        model: 'gpt-4o',
+        object: 'chat.completion.chunk',
+        created: 1,
+        choices: [{ index: 0, finish_reason: null, logprobs: null, delta: { content: 'Hel' } }],
+      } as any,
+      120
+    )
+
+    const { usage } = accumulator.result()
+    expect(usage.inputTokens).toBeUndefined()
+    expect(usage.outputTokens).toBeUndefined()
+  })
+
   test('chat accumulates text, tools, stop reason, metadata, web search, and raw usage', () => {
     const accumulator = new OpenAIChatStreamAccumulator()
     accumulator.consume(

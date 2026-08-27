@@ -122,7 +122,12 @@ export function buildChatSuccessOptions(
 export function buildChatErrorOptions(
   context: CommonContext<ChatParams>,
   error: unknown,
-  metadata: { completionId?: string; systemFingerprint?: string } = {}
+  metadata: {
+    completionId?: string
+    systemFingerprint?: string
+    usage?: TokenUsage
+    latency?: number
+  } = {}
 ): CaptureAiGenerationOptions {
   return {
     ...context.monitoring,
@@ -130,10 +135,13 @@ export function buildChatErrorOptions(
     provider: context.provider,
     input: sanitizeOpenAI(context.params.messages, context.client),
     output: [],
-    latency: 0,
+    latency: metadata.latency ?? 0,
     baseURL: context.baseURL,
     modelParameters: getModelParams(context.modelParametersSource),
-    usage: { inputTokens: 0, outputTokens: 0 },
+    // A stream that fails partway has still consumed everything it read, so pass
+    // on whatever the accumulator collected. Left empty when the caller has no
+    // usage to give, which keeps the counts absent rather than reporting zero.
+    usage: metadata.usage ?? {},
     completionId: metadata.completionId,
     providerMetadata: buildProviderMetadata({ systemFingerprint: metadata.systemFingerprint }),
     error,
