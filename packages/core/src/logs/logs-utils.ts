@@ -11,7 +11,7 @@ import type {
 } from '@posthog/types'
 import type { Logger } from '../types'
 import type { LogSdkContext, ResolvedPostHogLogsConfig } from './types'
-import { isArray, isBoolean, isNull, isNullish, isUndefined } from '../utils'
+import { isArray, isBoolean, isNull, isNullish, isNumber, isUndefined } from '../utils'
 import {
   CIRCULAR_VALUE,
   FUNCTION_VALUE,
@@ -245,14 +245,14 @@ function encodeKeyValueList(
 // ============================================================================
 
 /**
- * Returns the current wall-clock time as a unix-nanos string.
+ * Returns `timestampMs` (default: now) as a unix-nanos string.
  *
  * OTLP requires nanoseconds as a string (uint64 doesn't fit in JS Number).
  * `Date.now() * 1_000_000` would exceed Number.MAX_SAFE_INTEGER, so we
  * concatenate instead of multiplying.
  */
-function timestampToUnixNano(): string {
-  return String(Date.now()) + '000000'
+function timestampToUnixNano(timestampMs: number = Date.now()): string {
+  return String(timestampMs) + '000000'
 }
 
 /**
@@ -264,6 +264,10 @@ function timestampToUnixNano(): string {
  * `screenName` / `appState`), so a missing field never adds a stray attribute.
  *
  * User-provided `options.attributes` always wins on conflicts.
+ *
+ * `occurredAtMs` is when the event happened, for a host that records an event earlier
+ * than it can build the record; it stamps both OTLP timestamps, which the logs spec
+ * requires to be equal.
  */
 // `body` is only typed as a string. An untyped caller — or a `beforeSend` that
 // rewrites it — can pass anything, and `String()` throws on a value whose
@@ -279,11 +283,12 @@ function encodeBody(body: string): string {
 export function buildOtlpLogRecord(
   options: CaptureLogOptions,
   sdkContext: LogSdkContext,
-  logger?: Logger
+  logger?: Logger,
+  occurredAtMs?: number
 ): OtlpLogRecord {
   const level: LogSeverityLevel = options.level || 'info'
   const { text: severityText, number: severityNumber } = OTLP_SEVERITY_MAP[level] || DEFAULT_OTLP_SEVERITY
-  const now = timestampToUnixNano()
+  const eventTimeNano = timestampToUnixNano(isNumber(occurredAtMs) ? occurredAtMs : undefined)
 
   const autoAttributes: Record<string, LogAttributeValue> = {}
 
@@ -340,8 +345,8 @@ export function buildOtlpLogRecord(
   }
 
   const record: OtlpLogRecord = {
-    timeUnixNano: now,
-    observedTimeUnixNano: now,
+    timeUnixNano: eventTimeNano,
+    observedTimeUnixNano: eventTimeNano,
     severityNumber,
     severityText,
     body: { stringValue: encodeBody(options.body) },

@@ -4278,6 +4278,12 @@ export class PostHog implements PostHogInterface {
     private _sync_opt_out_with_persistence(): boolean {
         const persistenceDisabled = this._is_persistence_disabled()
 
+        // Release what console capture is holding as soon as capturing is off, rather
+        // than at the next console write.
+        if (!this.is_capturing()) {
+            this.logs?._onOptOut()
+        }
+
         if (this.persistence?._disabled !== persistenceDisabled) {
             this.persistence?.set_disabled(persistenceDisabled)
         }

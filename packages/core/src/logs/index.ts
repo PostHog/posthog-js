@@ -24,6 +24,9 @@ export class PostHogLogs {
   // Head records evicted (FIFO) while a batch is in flight; the queue-advance
   // subtracts these so it drops the sent records, not ones captured mid-send.
   private _evictedSinceAdvance = 0
+  // A batch captures this when it is assembled, so it can tell that the records it is
+  // holding no longer correspond to anything queued.
+  private _queueGeneration = 0
   // Consecutive failed flushes; drives exponential backoff on the retry timer.
   // A successful flush resets it to 0.
   private _consecutiveFlushFailures = 0
@@ -66,16 +69,27 @@ export class PostHogLogs {
   }
 
   /**
+   * Drops every queued record. A batch this instance has in flight is retired with
+   * them, so it can neither re-send what was just purged nor advance past records
+   * captured after this call.
+   */
+  clearQueue(): void {
+    this._queueGeneration++
+    this._instance.setPersistedProperty(PostHogPersistedProperty.LogsQueue, [])
+  }
+
+  /**
    * Clears the flush timer and rate-cap state. The host owns the record queue
    * and clears it separately (the browser empties its in-memory store).
    */
   reset(): void {
     this._clearFlushTimer()
-    this._flushPromise = null
+    // `_flushPromise` is deliberately left alone: clearing it would let a second flush
+    // run alongside the in-flight one. Retiring that flush is `clearQueue`'s job,
+    // because the queue it holds belongs to the host, not to this state.
     this._intervalWindowStart = 0
     this._intervalLogCount = 0
     this._droppedWarned = false
-    this._evictedSinceAdvance = 0
     this._consecutiveFlushFailures = 0
     this._maxBatchRecordsPerPost = this._config.maxBatchRecordsPerPost
   }
@@ -88,7 +102,14 @@ export class PostHogLogs {
     this._flushInBackground()
   }
 
-  captureLog(options: CaptureLogOptions): void {
+  /**
+   * Captures one log record.
+   *
+   * @param capturedAt State snapshotted when the event occurred, for a caller that
+   * observes an event earlier than it can build the record. Defaults to the identity,
+   * session and flags as of now.
+   */
+  captureLog(options: CaptureLogOptions, capturedAt?: { context?: LogSdkContext; occurredAtMs?: number }): void {
     if (this._instance.isDisabled) {
       return
     }
@@ -119,7 +140,12 @@ export class PostHogLogs {
     // Build before deferring so attributes reflect state at capture time, not
     // at drain time (identity/session changes between capture and drain must
     // not corrupt recorded attributes).
-    const record = buildOtlpLogRecord(filtered, this._getContext(), this._logger)
+    const record = buildOtlpLogRecord(
+      filtered,
+      capturedAt?.context ?? this._getContext(),
+      this._logger,
+      capturedAt?.occurredAtMs
+    )
     const entry: BufferedLogEntry = { record }
 
     this._onReady(() => this._enqueue(entry))
@@ -233,6 +259,10 @@ export class PostHogLogs {
     let sentCount = 0
 
     while (queue.length > 0 && sentCount < originalQueueLength) {
+      // Captured per batch, not per flush: a clear that lands between batches leaves
+      // the next one assembled from an already-fresh queue, so that batch advances
+      // normally instead of being retired for a purge it never held.
+      const generation = this._queueGeneration
       // Reset per batch so the advance below counts only evictions during THIS
       // batch's send. Evictions during the persist await or between iterations
       // are already reflected in the next iteration's queue read, so they must
@@ -251,6 +281,13 @@ export class PostHogLogs {
       )
 
       const outcome = await this._instance._sendLogsBatch(payload)
+
+      if (this._queueGeneration !== generation) {
+        // The queue was cleared while this batch was in flight. `queue` is a stale local
+        // copy, so retrying it would re-send purged records and advancing it would slice
+        // records captured since. Retire the batch instead.
+        return
+      }
 
       if (outcome.kind === 'too-large' && batch.length > 1) {
         this._maxBatchRecordsPerPost = Math.max(1, Math.floor(batch.length / 2))

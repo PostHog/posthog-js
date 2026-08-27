@@ -47,14 +47,15 @@ test('current logs bundle captures through its host array bundle', async ({ page
         logs.onRemoteConfig({ ok: true, config })
     })
 
-    await expect.poll(() => page.evaluate(() => !!(console.warn as any).__rrweb_original__)).toBe(true)
-
-    const result = await page.evaluate(() => {
+    // Spy before the call and poll for it, rather than probing a console wrapper for a
+    // marker: the SDK's pre-load recorder marks its wrapper exactly as the lazy bundle
+    // does, so the marker cannot tell which of the two is installed.
+    await page.evaluate(() => {
         const logs = (window as any).posthog.logs
-        const usesClientHost = typeof logs.setup === 'function'
         const calls: Array<{ method: string; args: any[] }> = []
+        ;(window as any).__skewCalls = calls
 
-        for (const method of ['le', 'de', 'he', 'ui', 'ci', 'vi', 'captureConsoleLog']) {
+        for (const method of ['le', 'de', 'he', 'ui', 'ci', 'vi', 'captureConsoleLog', 'captureBufferedConsoleLog']) {
             const original = logs[method]
             if (typeof original === 'function') {
                 logs[method] = (...args: any[]) => {
@@ -65,17 +66,31 @@ test('current logs bundle captures through its host array bundle', async ({ page
         }
 
         console.warn('posthog-logs-version-skew-smoke')
-
-        return {
-            captured: calls.find(
-                ({ args }) => args[0]?.level === 'warn' && args[0]?.body?.includes('posthog-logs-version-skew-smoke')
-            ),
-            usesClientHost,
-            version: (window as any).posthog.version,
-        }
     })
 
-    expect(result.captured?.method).toBe(
-        result.usesClientHost ? 'captureConsoleLog' : historicalCaptureMethod(result.version)
+    const findCaptured = () =>
+        page.evaluate(
+            () =>
+                ((window as any).__skewCalls as Array<{ method: string; args: any[] }>).find(
+                    ({ args }) =>
+                        args[0]?.level === 'warn' && args[0]?.body?.includes('posthog-logs-version-skew-smoke')
+                ) ?? null
+        )
+    await expect.poll(findCaptured).not.toBeNull()
+
+    const result = await page.evaluate(() => ({
+        usesClientHost: typeof (window as any).posthog.logs.setup === 'function',
+        version: (window as any).posthog.version,
+    }))
+    const captured = await findCaptured()
+
+    // A call the recorder buffered is replayed through `captureBufferedConsoleLog`, which
+    // only an SDK new enough to have the recorder exposes; every other build has to land
+    // on the capture method its own vintage of the chunk calls by name.
+    const liveMethod = result.usesClientHost ? 'captureConsoleLog' : historicalCaptureMethod(result.version)
+    expect(captured?.method).toBe(
+        result.usesClientHost && captured?.method === 'captureBufferedConsoleLog'
+            ? 'captureBufferedConsoleLog'
+            : liveMethod
     )
 })

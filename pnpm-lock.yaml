@@ -368,6 +368,9 @@ importers:
       '@posthog/rrweb-types':
         specifier: workspace:*
         version: link:../rrweb/types
+      '@posthog/rrweb-utils':
+        specifier: workspace:*
+        version: link:../rrweb/utils
       '@rollup/plugin-babel':
         specifier: ^6.0.4
         version: 6.0.4(@babel/core@7.28.5)(@types/babel__core@7.1.18)(rollup@4.53.3)

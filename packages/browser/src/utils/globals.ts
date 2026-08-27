@@ -4,6 +4,7 @@ import type { DeferredStylesheetStats, MutationCost, SnapshotCost } from '@posth
 import type { ErrorTracking } from '@posthog/core'
 
 import type { PostHog } from '../posthog-core'
+import type { BufferedConsoleEntry } from '../logs-types'
 import type { SessionIdManager } from '../sessionid'
 import type {
     DeadClicksAutoCaptureConfig,
@@ -297,6 +298,7 @@ interface PostHogExtensions {
     generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined
     logs?: {
         initializeLogs?: (host: PostHog | Client) => (() => void) | undefined
+        replayConsoleBuffer?: (host: PostHog | Client, entries: BufferedConsoleEntry[]) => void
     }
     /** @deprecated Use `postHogWebVitalsCallbacksByFlavor` to select callbacks explicitly. */
     postHogWebVitalsCallbacks?: WebVitalsCallbacks
