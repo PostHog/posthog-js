@@ -28,7 +28,11 @@ export const DEFAULT_BLOCKED_UA_STRS = [
   'msnbot',
   'nessus',
   'petalbot',
-  'pinterest',
+  // not the bare 'pinterest' -- that also matches the Pinterest app's own in-app
+  // browser UA (e.g. "...Mobile/15D100 [Pinterest/iOS]"), which is a real user,
+  // not the crawler. The crawler's other UA variant ("...pinterest.com/bot.html")
+  // is still covered by the generic 'bot.htm' entry below.
+  'pinterestbot',
   'prerender',
   'rogerbot',
   'screaming frog',
