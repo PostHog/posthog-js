@@ -267,13 +267,20 @@ describe('consentManager', () => {
 
             try {
                 posthog = await createPostHog({ cookieless_mode: 'on_reject' })
+
+                // one flip first, so the count is measured from a steady state rather than
+                // from whatever the shared instance carried in from an earlier test
+                posthog.opt_out_capturing()
+                posthog.opt_in_capturing({ captureEventName: false })
+                const liveAfterFirstFlip = added - removed
+
                 for (let i = 0; i < 3; i++) {
                     posthog.opt_out_capturing()
                     posthog.opt_in_capturing({ captureEventName: false })
                 }
 
-                // only the live recorder's listener remains, not one per flip
-                expect(added - removed).toEqual(1)
+                // further flips replace the listener rather than adding one each time
+                expect(added - removed).toEqual(liveAfterFirstFlip)
             } finally {
                 document.addEventListener = originalAdd
                 document.removeEventListener = originalRemove
