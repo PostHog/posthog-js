@@ -11,10 +11,13 @@ jest.mock('@posthog/react', () => ({
 let mockPathname = '/initial'
 let mockSearchParams = new URLSearchParams()
 let mockParams: Record<string, string | string[] | undefined> = {}
+let mockUseParams: (() => Record<string, string | string[] | undefined>) | undefined = () => mockParams
 jest.mock('next/navigation.js', () => ({
     usePathname: () => mockPathname,
     useSearchParams: () => mockSearchParams,
-    useParams: () => mockParams,
+    get useParams() {
+        return mockUseParams
+    },
 }))
 
 describe('PostHogPageView', () => {
@@ -24,6 +27,7 @@ describe('PostHogPageView', () => {
         mockPathname = '/initial'
         mockSearchParams = new URLSearchParams()
         mockParams = {}
+        mockUseParams = () => mockParams
     })
 
     it('captures a $pageview event on mount', () => {
@@ -60,19 +64,39 @@ describe('PostHogPageView', () => {
 
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
             $current_url: `http://localhost${pathname}?ref=test`,
-            $pathname: expectedTemplate,
+            $route: expectedTemplate,
         })
     })
 
-    it('keeps the concrete pathname when the route template is ambiguous', () => {
-        mockPathname = '/blog/blog'
-        mockParams = { slug: 'blog' }
+    it('omits the route template when it is ambiguous', () => {
+        mockPathname = '/orgs/1/projects/1'
+        mockParams = { orgId: '1', projectId: '1' }
 
         render(<PostHogPageView captureRouteTemplate />)
 
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
-            $current_url: 'http://localhost/blog/blog',
+            $current_url: 'http://localhost/orgs/1/projects/1',
         })
+    })
+
+    it('falls back to ordinary pageview capture when useParams is unavailable', () => {
+        mockUseParams = undefined
+        const consoleWarn = jest.spyOn(console, 'warn').mockImplementation()
+
+        try {
+            const { rerender } = render(<PostHogPageView captureRouteTemplate />)
+            rerender(<PostHogPageView captureRouteTemplate />)
+
+            expect(mockCapture).toHaveBeenCalledWith('$pageview', {
+                $current_url: 'http://localhost/initial',
+            })
+            expect(consoleWarn).toHaveBeenCalledTimes(1)
+            expect(consoleWarn).toHaveBeenCalledWith(
+                '[PostHog Next.js] captureRouteTemplate requires Next.js 13.3 or later. Capturing pageview without $route.'
+            )
+        } finally {
+            consoleWarn.mockRestore()
+        }
     })
 
     it('captures a new $pageview when pathname changes', () => {

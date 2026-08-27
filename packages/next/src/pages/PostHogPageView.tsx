@@ -4,6 +4,17 @@ import { usePostHog } from '@posthog/react'
 import { stripUrlHash } from '@posthog/core'
 import { getCurrentUrl } from '../shared/browser.js'
 
+export interface PostHogPageViewProps {
+    /**
+     * Capture the Next.js route template in `$route`, such as `/posts/[id]`.
+     * The concrete URL remains available in `$current_url` and `$pathname`.
+     * Optional catch-all parameters use the normalized `[...param]` form.
+     *
+     * @default false
+     */
+    captureRouteTemplate?: boolean
+}
+
 /**
  * Tracks pageviews on route change in Next.js Pages Router.
  *
@@ -27,16 +38,6 @@ import { getCurrentUrl } from '../shared/browser.js'
  * }
  * ```
  */
-export interface PostHogPageViewProps {
-    /**
-     * Set `$pathname` to the Next.js route template, such as `/posts/[id]`.
-     * The concrete URL remains available in `$current_url`.
-     *
-     * @default false
-     */
-    captureRouteTemplate?: boolean
-}
-
 export function PostHogPageView({ captureRouteTemplate = false }: PostHogPageViewProps = {}) {
     const router = useRouter()
     const posthog = usePostHog()
@@ -51,7 +52,7 @@ export function PostHogPageView({ captureRouteTemplate = false }: PostHogPageVie
 
         posthog.capture('$pageview', {
             $current_url: currentUrlWithoutHash,
-            ...(captureRouteTemplate ? { $pathname: router.pathname } : {}),
+            ...(captureRouteTemplate ? { $route: router.pathname.replace(/\[\[\.\.\.([^\]]+)\]\]/g, '[...$1]') } : {}),
         })
     }, [router.asPath, router.pathname, router.isReady, posthog, captureRouteTemplate])
 

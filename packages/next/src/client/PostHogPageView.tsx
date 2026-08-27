@@ -6,6 +6,20 @@ import { usePostHog } from '@posthog/react'
 import { isArray } from '@posthog/core'
 import { getCurrentUrl } from '../shared/browser.js'
 
+export interface PostHogPageViewProps {
+    /**
+     * Capture a best-effort Next.js route template in `$route`, such as `/posts/[id]`.
+     * The concrete URL remains available in `$current_url` and `$pathname`.
+     *
+     * App Router route-template capture requires Next.js 13.3 or later. On earlier versions, pageviews are captured
+     * without `$route`. Templates are inferred from `useParams()`, ambiguous matches omit `$route`, and optional
+     * catch-all parameters use the normalized `[...param]` form when populated.
+     *
+     * @default false
+     */
+    captureRouteTemplate?: boolean
+}
+
 /**
  * Tracks pageviews on route change in Next.js App Router.
  *
@@ -34,19 +48,6 @@ import { getCurrentUrl } from '../shared/browser.js'
  * }
  * ```
  */
-export interface PostHogPageViewProps {
-    /**
-     * Set `$pathname` to a best-effort Next.js route template, such as `/posts/[id]`.
-     * The concrete URL remains available in `$current_url`.
-     *
-     * App Router templates are inferred from `useParams()`. Ambiguous matches fall back to the concrete pathname,
-     * and optional catch-all parameters use the normalized `[...param]` form when populated.
-     *
-     * @default false
-     */
-    captureRouteTemplate?: boolean
-}
-
 export function PostHogPageView({ captureRouteTemplate = false }: PostHogPageViewProps = {}) {
     return (
         <Suspense fallback={null}>
@@ -111,7 +112,24 @@ function computeRouteTemplate(pathname: string, params: RouteParams): string | u
     return segments.join('/')
 }
 
+let hasWarnedAboutUnsupportedRouteTemplates = false
+
 function RouteTemplatePageViewTracker() {
+    if (typeof useParams !== 'function') {
+        if (!hasWarnedAboutUnsupportedRouteTemplates) {
+            hasWarnedAboutUnsupportedRouteTemplates = true
+            // eslint-disable-next-line no-console
+            console.warn(
+                '[PostHog Next.js] captureRouteTemplate requires Next.js 13.3 or later. Capturing pageview without $route.'
+            )
+        }
+        return <PageViewTracker />
+    }
+
+    return <SupportedRouteTemplatePageViewTracker />
+}
+
+function SupportedRouteTemplatePageViewTracker() {
     const params = useParams<RouteParams>()
     return <PageViewTracker params={params} />
 }
@@ -135,7 +153,7 @@ function PageViewTracker({ params }: PageViewTrackerProps = {}) {
 
         posthog.capture('$pageview', {
             $current_url: currentUrl,
-            ...(routeTemplate ? { $pathname: routeTemplate } : {}),
+            ...(routeTemplate ? { $route: routeTemplate } : {}),
         })
     }, [pathname, searchParams, posthog, routeTemplate])
 

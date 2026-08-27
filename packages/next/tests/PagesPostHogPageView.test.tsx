@@ -59,7 +59,22 @@ describe('Pages PostHogPageView', () => {
 
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
             $current_url: 'http://localhost/posts/123?ref=test#comments',
-            $pathname: '/posts/[id]',
+            $route: '/posts/[id]',
+        })
+    })
+
+    it('normalizes optional catch-all route templates', () => {
+        mockRouter = {
+            asPath: '/docs/guides/setup',
+            pathname: '/docs/[[...slug]]',
+            isReady: true,
+        }
+
+        render(<PostHogPageView captureRouteTemplate />)
+
+        expect(mockCapture).toHaveBeenCalledWith('$pageview', {
+            $current_url: 'http://localhost/docs/guides/setup',
+            $route: '/docs/[...slug]',
         })
     })
 
