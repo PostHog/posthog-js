@@ -1,6 +1,6 @@
 import type { Client, Extension } from '@posthog/browser-common'
 
-type ExtensionRecord = [extension: Extension, disposed: boolean, ready: boolean]
+type ExtensionRecord = [extension: Extension, disposed: boolean]
 
 export class ExtensionRegistry {
     private readonly _records = new Map<string, ExtensionRecord>()
@@ -15,8 +15,7 @@ export class ExtensionRegistry {
     }
 
     get<T extends Extension = Extension>(name: string): T | undefined {
-        const record = this._records.get(name)
-        return record?.[2] ? (record[0] as T) : undefined
+        return this._records.get(name)?.[0] as T | undefined
     }
 
     async install(extension: Extension): Promise<void> {
@@ -28,14 +27,13 @@ export class ExtensionRegistry {
             throw new Error(`An extension named "${name}" is already installed`)
         }
 
-        const record: ExtensionRecord = [extension, false, false]
+        const record: ExtensionRecord = [extension, false]
         this._records.set(name, record)
         try {
             await extension.setup(this._createClient(name))
             if (this._disposed || record[1]) {
                 throw new Error('The extension registry was disposed during setup')
             }
-            record[2] = true
         } catch (error) {
             if (this._records.get(name) === record) {
                 this._records.delete(name)

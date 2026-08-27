@@ -333,11 +333,18 @@ describe('@posthog/browser extensions', () => {
         await posthog.dispose()
     })
 
-    it('disposes a configured extension whose setup fails', async () => {
+    it('exposes a typed self-capability during setup and removes it after setup fails', async () => {
+        interface FailingExtension extends Extension {
+            marker: true
+        }
+        const FailingExtension = 'failed' as ExtensionToken<FailingExtension>
         const dispose = jest.fn()
-        const failed: Extension = {
-            name: 'failed',
-            setup() {
+        let resolvedDuringSetup: FailingExtension | undefined
+        const failed: FailingExtension = {
+            name: FailingExtension,
+            marker: true,
+            setup(client) {
+                resolvedDuringSetup = client.getExtension(FailingExtension)
                 throw new Error('setup failed')
             },
             dispose,
@@ -350,8 +357,9 @@ describe('@posthog/browser extensions', () => {
             extensions: [failed],
         })
 
+        expect(resolvedDuringSetup).toBe(failed)
         expect(dispose).toHaveBeenCalledTimes(1)
-        expect(posthog.getExtension('failed')).toBeUndefined()
+        expect(posthog.getExtension(FailingExtension)).toBeUndefined()
         await posthog.dispose()
         expect(dispose).toHaveBeenCalledTimes(1)
     })

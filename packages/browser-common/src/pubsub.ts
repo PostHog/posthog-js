@@ -57,21 +57,13 @@ export class Publisher<T> implements Disposable {
         }
     }
 
-    /** Whether at least one active subscription is waiting for a payload. */
-    hasSubscribers(): boolean {
-        return !this._disposed && this._subscriptions.length > 0
-    }
-
     /** Notify every currently registered listener with the provided payload. */
-    publish(payload: T, canContinue?: () => boolean): void {
+    publish(payload: T): void {
         const subscriptions = this._subscriptions.slice()
 
         for (const subscription of subscriptions) {
             if (!subscription[1]) {
                 continue
-            }
-            if (canContinue && !canContinue()) {
-                return
             }
 
             try {

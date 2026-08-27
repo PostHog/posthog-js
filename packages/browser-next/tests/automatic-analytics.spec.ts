@@ -36,7 +36,8 @@ describe('@posthog/browser automatic analytics', () => {
 
         expect(requests).toHaveLength(1)
         expect((requests[0]?.body?.batch as Array<{ event: string }> | undefined)?.[0]?.event).toBe('automatic')
-        await posthog.shutdown()
+        const disposal: Promise<void> = posthog.dispose()
+        await disposal
     })
 
     it('passes a stable snapshot of root scheduling options to the analytics constructor', async () => {

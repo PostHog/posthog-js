@@ -97,6 +97,7 @@ export interface PostHog extends Client, Disposable {
     reset(): void
     flush(): Promise<void>
     shutdown(shutdownTimeoutMs?: number): Promise<void>
+    dispose(): Promise<void>
     optIn(): void
     optOut(): void
     hasOptedOut(): boolean

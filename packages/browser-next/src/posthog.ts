@@ -243,6 +243,9 @@ class PostHogBrowserClient implements PostHog {
         this.kv = this._state.keyValueStore('core', () => !this._closing && !this._disposed && this._state.prepare())
         this._latestRemoteConfigResult = this._remoteConfig ? { ok: true, config: this._remoteConfig } : undefined
         this.onRemoteConfig = (handler) => {
+            if (this._closing || this._disposed) {
+                return { dispose() {} }
+            }
             const subscription = this._remoteConfigPublisher.listener(handler)
             if (this._latestRemoteConfigResult) {
                 try {

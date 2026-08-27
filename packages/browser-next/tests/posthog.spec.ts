@@ -1242,17 +1242,20 @@ describe('@posthog/browser core', () => {
     it('blocks registration, requests, and persisted key-value mutation after disposal', async () => {
         const requests: SentRequest[] = []
         const storage = new MemoryStorage()
-        const remoteConfigLoader = jest.fn(async () => createRemoteConfig())
+        const remoteConfig = createRemoteConfig()
         const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage,
             navigator: false,
             fetch: createFetch(requests),
-            remoteConfigLoader,
+            remoteConfig,
         })
         const events: string[] = []
+        const closingRemoteConfigListener = jest.fn()
+        const lateRemoteConfigListener = jest.fn()
         posthog.kv.set('before_dispose', true)
         const disposal = posthog.dispose()
+        posthog.onRemoteConfig(closingRemoteConfigListener)
         posthog.kv.set('while_closing', true)
         posthog.kv.remove('before_dispose')
         expect(posthog.kv.get('before_dispose')).toBeUndefined()
@@ -1260,6 +1263,7 @@ describe('@posthog/browser core', () => {
         await disposal
 
         posthog.onEvent(({ event }) => events.push(event))
+        posthog.onRemoteConfig(lateRemoteConfigListener)
         posthog.registerDynamicEventProperties(() => ({ after_dispose: true }))
         await expect(posthog.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         await expect(posthog.getRemoteConfig()).resolves.toBeUndefined()
@@ -1279,8 +1283,9 @@ describe('@posthog/browser core', () => {
         expect(reloaded.kv.get('while_closing')).toBeUndefined()
         expect(reloaded.kv.get('after_dispose')).toBeUndefined()
         expect(requests).toHaveLength(0)
-        expect(remoteConfigLoader).toHaveBeenCalledTimes(1)
         expect(events).toHaveLength(0)
+        expect(closingRemoteConfigListener).not.toHaveBeenCalled()
+        expect(lateRemoteConfigListener).not.toHaveBeenCalled()
     })
 
     it('uses sendBeacon for unload requests', async () => {

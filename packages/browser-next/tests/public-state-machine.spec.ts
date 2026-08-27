@@ -55,7 +55,7 @@ describe('@posthog/browser public lifecycle state machine', () => {
         observed.length = 0
 
         const shutdown = posthog.shutdown()
-        const dispose = posthog.dispose()
+        const dispose: Promise<void> = posthog.dispose()
         const repeatedShutdown = posthog.shutdown(0)
         let concurrentFlushSettled = false
         const concurrentFlush = posthog.flush().then(() => {

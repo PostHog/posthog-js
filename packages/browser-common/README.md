@@ -124,7 +124,7 @@ Use `Publisher<T>` when an extension exposes an event stream. Keep the publisher
 private, expose only its listener, and dispose it with the extension:
 
 ```ts
-import { Publisher, type Listener } from '@posthog/browser-common'
+import { Publisher, type Listener } from '@posthog/browser-common/pubsub'
 
 const changes = new Publisher<{ enabled: boolean }>()
 export const onChange: Listener<{ enabled: boolean }> = changes.listener
