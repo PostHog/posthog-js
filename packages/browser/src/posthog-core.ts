@@ -1308,7 +1308,10 @@ export class PostHog implements PostHogInterface {
             ...this.config.request_headers,
             ...options.headers,
         }
-        options.compression = options.compression === 'best-available' ? this.compression : options.compression
+        options.compression =
+            options.compression === 'best-available'
+                ? (this.compression ?? options.compressionFallback)
+                : options.compression
         const disableBeacon = isUndefined(this.config.disable_beacon)
             ? this.config.__preview_disable_beacon
             : this.config.disable_beacon

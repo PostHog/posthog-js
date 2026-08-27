@@ -4,7 +4,7 @@ import * as globals from '@posthog/browser-common/utils/globals'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
-import { isUndefined } from '@posthog/core'
+import { Compression, isUndefined } from '@posthog/core'
 import {
     AUTOCAPTURE_DISABLED_SERVER_SIDE,
     ENABLE_PERSON_PROCESSING,
@@ -2022,5 +2022,19 @@ describe('_send_request', () => {
         const eventRequest = { url: 'http://localhost/e/' }
         posthog._send_request(eventRequest)
         expect(eventRequest.url).toBe('http://localhost/e/')
+    })
+
+    it('uses the configured fallback when best-available compression is unavailable', async () => {
+        const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
+        posthog.compression = undefined
+        const requestOptions = {
+            url: 'http://localhost/flags/',
+            compression: 'best-available' as const,
+            compressionFallback: Compression.Base64,
+        }
+
+        posthog._send_request(requestOptions)
+
+        expect(requestOptions.compression).toBe(Compression.Base64)
     })
 })

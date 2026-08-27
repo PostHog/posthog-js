@@ -401,7 +401,7 @@ describe('BrowserClientAdapter', () => {
             headers: { 'X-Extension-Header': 'value' },
             transport: 'XHR',
             timeoutMs: 321,
-            compression: 'base64',
+            compression: 'best-available',
             sentAt: 'body',
         })
 
@@ -415,7 +415,8 @@ describe('BrowserClientAdapter', () => {
                 headers: { 'X-Extension-Header': 'value' },
                 transport: 'XHR',
                 timeout: 321,
-                compression: 'base64',
+                compression: 'best-available',
+                compressionFallback: 'base64',
                 timestampMode: 'body',
                 fireCallbackOnDrop: true,
                 callback: expect.any(Function),
