@@ -1,4 +1,7 @@
-import { type Mirror as NodeMirror } from '@posthog/rrweb-snapshot';
+import {
+  type Mirror as NodeMirror,
+  attachShadowRootSafely,
+} from '@posthog/rrweb-snapshot';
 import { NodeType as RRNodeType } from '@posthog/rrweb-types';
 import type {
   canvasMutationData,
@@ -184,14 +187,18 @@ function diffBeforeUpdatingChildren(
         }
       }
       if (newRRElement.shadowRoot) {
-        if (!oldElement.shadowRoot) oldElement.attachShadow({ mode: 'open' });
-        diffChildren(
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          oldElement.shadowRoot!,
-          newRRElement.shadowRoot,
-          replayer,
-          rrnodeMirror,
-        );
+        // The recorded host can come back as a tag the real element refuses as
+        // a shadow host. Skip that subtree rather than let the exception
+        // abandon the rest of the diff.
+        if (oldElement.shadowRoot || attachShadowRootSafely(oldElement)) {
+          diffChildren(
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            oldElement.shadowRoot!,
+            newRRElement.shadowRoot,
+            replayer,
+            rrnodeMirror,
+          );
+        }
       }
       /**
        * Attributes and styles of the old element need to be updated before updating its children because of an edge case:

@@ -1,4 +1,4 @@
-import { autocaptureFromTouchEvent } from '../src/autocapture'
+import { autocaptureFromTouchEvent, maxAncestorsTraversed } from '../src/autocapture'
 
 import goodEvent from './data/autocapture-event.json'
 import ignoreEvent from './data/autocapture-event-no-capture.json'
@@ -172,6 +172,116 @@ describe('PostHog React Native', () => {
       const mockPostHog = { autocapture: jest.fn() } as any
       autocaptureFromTouchEvent({ _targetInst: ignoreEvent, nativeEvent }, mockPostHog)
       expect(mockPostHog.autocapture).toHaveBeenCalledTimes(0)
+    })
+
+    it('should ignore a no-capture ancestor beyond maxElementsCaptured', () => {
+      const mockPostHog = { autocapture: jest.fn() } as any
+      let targetInst: any = {
+        memoizedProps: { 'ph-no-capture': true },
+        return: null,
+      }
+
+      for (let i = 0; i <= 20; i++) {
+        targetInst = {
+          elementType: { name: `View${i}` },
+          memoizedProps: {},
+          return: targetInst,
+        }
+      }
+
+      autocaptureFromTouchEvent({ _targetInst: targetInst, nativeEvent }, mockPostHog)
+
+      expect(mockPostHog.autocapture).not.toHaveBeenCalled()
+    })
+
+    it('should still cap the emitted elements at maxElementsCaptured', () => {
+      const mockPostHog = { autocapture: jest.fn() } as any
+      let targetInst: any = null
+
+      for (let i = 0; i < 25; i++) {
+        targetInst = {
+          elementType: { name: `View${i}` },
+          memoizedProps: {},
+          return: targetInst,
+        }
+      }
+
+      autocaptureFromTouchEvent({ _targetInst: targetInst, nativeEvent }, mockPostHog)
+
+      expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
+      expect(mockPostHog.autocapture.mock.calls[0][1]).toHaveLength(20)
+    })
+
+    it('should fall back to the default cap when maxElementsCaptured is not a number', () => {
+      const mockPostHog = { autocapture: jest.fn() } as any
+      let targetInst: any = null
+
+      for (let i = 0; i < 25; i++) {
+        targetInst = {
+          elementType: { name: `View${i}` },
+          memoizedProps: {},
+          return: targetInst,
+        }
+      }
+
+      autocaptureFromTouchEvent({ _targetInst: targetInst, nativeEvent }, mockPostHog, {
+        maxElementsCaptured: NaN,
+      })
+
+      expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
+      expect(mockPostHog.autocapture.mock.calls[0][1]).toHaveLength(20)
+    })
+
+    it('should still capture on an ordinarily deep component tree', () => {
+      const mockPostHog = { autocapture: jest.fn() } as any
+      let targetInst: any = null
+
+      // autocapture-event.json is already 129 fibers deep for one trivial screen
+      for (let i = 0; i < 400; i++) {
+        targetInst = {
+          elementType: { name: `View${i}` },
+          memoizedProps: {},
+          return: targetInst,
+        }
+      }
+
+      autocaptureFromTouchEvent({ _targetInst: targetInst, nativeEvent }, mockPostHog)
+
+      expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
+    })
+
+    it('should still capture at exactly the traversal bound', () => {
+      const mockPostHog = { autocapture: jest.fn() } as any
+      let targetInst: any = null
+
+      for (let i = 0; i < maxAncestorsTraversed; i++) {
+        targetInst = {
+          elementType: { name: `View${i}` },
+          memoizedProps: {},
+          return: targetInst,
+        }
+      }
+
+      autocaptureFromTouchEvent({ _targetInst: targetInst, nativeEvent }, mockPostHog)
+
+      expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
+    })
+
+    it('should fail closed when the ancestor chain exceeds the traversal bound', () => {
+      const mockPostHog = { autocapture: jest.fn() } as any
+      let targetInst: any = null
+
+      for (let i = 0; i <= maxAncestorsTraversed; i++) {
+        targetInst = {
+          elementType: i % 10 === 0 ? { name: `View${i}` } : {},
+          memoizedProps: {},
+          return: targetInst,
+        }
+      }
+
+      autocaptureFromTouchEvent({ _targetInst: targetInst, nativeEvent }, mockPostHog)
+
+      expect(mockPostHog.autocapture).not.toHaveBeenCalled()
     })
 
     it('should handle animated styles without errors', () => {

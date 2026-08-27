@@ -25,7 +25,7 @@ pnpm android
 # Or start an iOS simulator, then run:
 pnpm ios
 
-# Web (use `persistence: 'memory'` in app/posthog.tsx):
+# Web (use `persistence: 'memory'` in posthog.ts):
 pnpm web
 ```
 

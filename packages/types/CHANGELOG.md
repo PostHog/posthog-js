@@ -1,5 +1,22 @@
 # @posthog/types
 
+## 1.407.0
+
+### Minor Changes
+
+- [#4655](https://github.com/PostHog/posthog-js/pull/4655) [`4f80973`](https://github.com/PostHog/posthog-js/commit/4f80973b5fe6aa0e34f84d751e0511abac4f9d33) Thanks [@robbie-c](https://github.com/robbie-c)! - Add the `2026-08-30` config defaults. These defaults enable sanitized JSON-LD replay events.
+  (2026-08-26)
+
+## 1.406.2
+
+### Patch Changes
+
+- [#4635](https://github.com/PostHog/posthog-js/pull/4635) [`ab1383a`](https://github.com/PostHog/posthog-js/commit/ab1383a8471b003124161c5839c15debacbc1e28) Thanks [@robbie-c](https://github.com/robbie-c)! - Capture paste interactions with clipboard autocapture without collecting pasted text.
+  (2026-08-26)
+
+- [#4640](https://github.com/PostHog/posthog-js/pull/4640) [`0d2cf49`](https://github.com/PostHog/posthog-js/commit/0d2cf4941d0e6306f51666305fbdaa8669a631d2) Thanks [@robbie-c](https://github.com/robbie-c)! - Add opt-in Schema.org JSON-LD capture to session replay through `session_recording.captureJsonLd`. When enabled, the recorder emits sanitized JSON-LD as custom replay events and excludes all script elements from replay snapshots.
+  (2026-08-26)
+
 ## 1.406.1
 
 ### Patch Changes
