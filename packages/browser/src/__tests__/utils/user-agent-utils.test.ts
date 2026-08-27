@@ -29,6 +29,27 @@ describe('user-agent-utils', () => {
                 expectedBrowser: 'Chrome',
             },
             {
+                name: 'Claude desktop browser on mac',
+                userAgent:
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_4) AppleWebKit/537.36 (KHTML, like Gecko) Claude/1.2.3 Chrome/140.0.0.0 Safari/537.36',
+                expectedVersion: 1.2,
+                expectedBrowser: 'Claude',
+            },
+            {
+                name: 'Codex desktop browser on mac',
+                userAgent:
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_4) AppleWebKit/537.36 (KHTML, like Gecko) Codex/2.3.4 Chrome/140.0.0.0 Safari/537.36',
+                expectedVersion: 2.3,
+                expectedBrowser: 'Codex',
+            },
+            {
+                name: 'ChatGPT desktop browser on mac',
+                userAgent:
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_4) AppleWebKit/537.36 (KHTML, like Gecko) ChatGPT/3.4.5 Chrome/140.0.0.0 Safari/537.36',
+                expectedVersion: 3.4,
+                expectedBrowser: 'ChatGPT',
+            },
+            {
                 name: 'Chrome 111 on Linux',
                 userAgent:
                     'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',

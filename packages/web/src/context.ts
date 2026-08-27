@@ -55,6 +55,12 @@ function browser(userAgent: string, vendor: string, opera: boolean): string {
     return 'Microsoft Edge'
   } else if (includes(userAgent, 'FBIOS')) {
     return 'Facebook Mobile'
+  } else if (includes(userAgent, 'Claude/')) {
+    return 'Claude'
+  } else if (includes(userAgent, 'Codex/')) {
+    return 'Codex'
+  } else if (includes(userAgent, 'ChatGPT/')) {
+    return 'ChatGPT'
   } else if (includes(userAgent, 'Chrome')) {
     return 'Chrome'
   } else if (includes(userAgent, 'CriOS')) {
@@ -87,6 +93,9 @@ function browserVersion(userAgent: string, vendor: string, opera: boolean): numb
   const regexList = {
     'Internet Explorer Mobile': /rv:(\d+(\.\d+)?)/,
     'Microsoft Edge': /Edge?\/(\d+(\.\d+)?)/,
+    Claude: /Claude\/(\d+(\.\d+)?)/,
+    Codex: /Codex\/(\d+(\.\d+)?)/,
+    ChatGPT: /ChatGPT\/(\d+(\.\d+)?)/,
     Chrome: /Chrome\/(\d+(\.\d+)?)/,
     'Chrome iOS': /CriOS\/(\d+(\.\d+)?)/,
     'UC Browser': /(UCBrowser|UCWEB)\/(\d+(\.\d+)?)/,

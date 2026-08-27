@@ -57,6 +57,9 @@ const DUCKDUCKGO = 'DuckDuckGo'
 const PALE_MOON = 'Pale Moon'
 const WATERFOX = 'Waterfox'
 const BRAVE = 'Brave'
+const CLAUDE = 'Claude'
+const CODEX = 'Codex'
+const CHATGPT = 'ChatGPT'
 const GOOGLE_SEARCH_APP = 'Google Search App'
 
 const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
@@ -191,6 +194,12 @@ export const detectBrowser = function (
     return WHALE
   } else if (includes(user_agent, DUCKDUCKGO + '/') || includes(user_agent, 'Ddg/')) {
     return DUCKDUCKGO
+  } else if (includes(user_agent, CLAUDE + '/')) {
+    return CLAUDE
+  } else if (includes(user_agent, CODEX + '/')) {
+    return CODEX
+  } else if (includes(user_agent, CHATGPT + '/')) {
+    return CHATGPT
   } else if (includes(user_agent, 'FBIOS')) {
     return FACEBOOK + ' ' + MOBILE
   } else if (includes(user_agent, 'UCWEB') || includes(user_agent, 'UCBrowser')) {
@@ -257,6 +266,9 @@ const versionRegexes: Record<string, RegExp[]> = {
   // Brave don't, which is why hint-based Brave detection returns a null
   // version: we have no UA marker to parse.
   [BRAVE]: [new RegExp(BRAVE + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [CLAUDE]: [new RegExp(CLAUDE + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [CODEX]: [new RegExp(CODEX + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [CHATGPT]: [new RegExp(CHATGPT + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   // DuckDuckGo on iOS uses `Ddg/`, on Android/desktop preview it uses `DuckDuckGo/`.
   [DUCKDUCKGO]: [new RegExp('(DuckDuckGo|Ddg)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   [PALE_MOON]: [new RegExp('PaleMoon\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
