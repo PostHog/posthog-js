@@ -97,9 +97,9 @@ const proxy = createServer(async (request, response) => {
         }
         response.writeHead(upstream.status, responseHeaders)
         response.end(Buffer.from(await upstream.arrayBuffer()))
-    } catch (error) {
+    } catch {
         response.writeHead(502, { 'Content-Type': 'text/plain' })
-        response.end(error instanceof Error ? error.message : String(error))
+        response.end('Capture proxy request failed')
     }
 })
 
