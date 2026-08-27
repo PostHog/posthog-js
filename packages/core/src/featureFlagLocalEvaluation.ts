@@ -51,6 +51,11 @@ function isValidRegex(regex: string): boolean {
   }
 }
 
+// The flags service deliberately folds only ASCII for substring, prefix, and suffix operators.
+function asciiLowercase(value: unknown): string {
+  return String(value).replace(/[A-Z]/g, (character) => character.toLowerCase())
+}
+
 type SemverTuple = [number, number, number]
 
 function parseSemverNumericIdentifier(
@@ -221,17 +226,17 @@ export function matchFeatureFlagProperty(
     case 'is_set':
       return true
     case 'icontains':
-      return String(overrideValue).toLowerCase().includes(String(value).toLowerCase())
+      return asciiLowercase(overrideValue).includes(asciiLowercase(value))
     case 'not_icontains':
-      return !String(overrideValue).toLowerCase().includes(String(value).toLowerCase())
+      return !asciiLowercase(overrideValue).includes(asciiLowercase(value))
     case 'starts_with':
-      return String(overrideValue).toLowerCase().startsWith(String(value).toLowerCase())
+      return asciiLowercase(overrideValue).startsWith(asciiLowercase(value))
     case 'not_starts_with':
-      return !String(overrideValue).toLowerCase().startsWith(String(value).toLowerCase())
+      return !asciiLowercase(overrideValue).startsWith(asciiLowercase(value))
     case 'ends_with':
-      return String(overrideValue).toLowerCase().endsWith(String(value).toLowerCase())
+      return asciiLowercase(overrideValue).endsWith(asciiLowercase(value))
     case 'not_ends_with':
-      return !String(overrideValue).toLowerCase().endsWith(String(value).toLowerCase())
+      return !asciiLowercase(overrideValue).endsWith(asciiLowercase(value))
     case 'regex':
       return isValidRegex(String(value)) && String(overrideValue).match(String(value)) !== null
     case 'not_regex':

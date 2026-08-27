@@ -65,6 +65,38 @@ describe('feature flag local evaluation primitives', () => {
       expect(() => matchFeatureFlagProperty(property(operator, ''), {})).toThrow(InconclusiveMatchError)
     })
 
+    test.each([
+      ['icontains', 'RO', 'Pro plan', true],
+      ['not_icontains', 'RO', 'Pro plan', false],
+      ['starts_with', 'PRO', 'Pro plan', true],
+      ['not_starts_with', 'PRO', 'Pro plan', false],
+      ['ends_with', 'PLAN', 'Pro plan', true],
+      ['not_ends_with', 'PLAN', 'Pro plan', false],
+      ['icontains', 'ä', 'Äbc', false],
+      ['not_icontains', 'ä', 'Äbc', true],
+      ['starts_with', 'ä', 'Äbc', false],
+      ['not_starts_with', 'ä', 'Äbc', true],
+      ['ends_with', 'ä', 'bcÄ', false],
+      ['not_ends_with', 'ä', 'bcÄ', true],
+    ] as const)('%s uses ASCII-only folding for target %p and actual %p', (operator, target, actual, expected) => {
+      expect(matchFeatureFlagProperty(property(operator, target), { key: actual })).toBe(expected)
+    })
+
+    test('uses Unicode lowercase rather than case folding for exact and is_not', () => {
+      expect(matchFeatureFlagProperty(property('exact', 'Ä'), { key: 'ä' })).toBe(true)
+      expect(matchFeatureFlagProperty(property('is_not', 'Ä'), { key: 'ä' })).toBe(false)
+      expect(matchFeatureFlagProperty(property('exact', 'ß'), { key: 'ss' })).toBe(false)
+      expect(matchFeatureFlagProperty(property('is_not', 'ß'), { key: 'ss' })).toBe(true)
+      expect(matchFeatureFlagProperty(property('exact', 'Σ'), { key: 'ς' })).toBe(false)
+      expect(matchFeatureFlagProperty(property('is_not', 'Σ'), { key: 'ς' })).toBe(true)
+    })
+
+    test('preserves ANY/NONE semantics for exact and is_not arrays', () => {
+      expect(matchFeatureFlagProperty(property('exact', ['FREE', 'Ä']), { key: 'ä' })).toBe(true)
+      expect(matchFeatureFlagProperty(property('is_not', ['FREE', 'Ä']), { key: 'ä' })).toBe(false)
+      expect(matchFeatureFlagProperty(property('is_not', ['FREE', 'PRO']), { key: 'starter' })).toBe(true)
+    })
+
     test('does not treat inherited object properties as present map entries', () => {
       const inheritedPropertyValues = Object.create({ key: 'inherited' })
 
