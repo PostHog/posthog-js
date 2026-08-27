@@ -175,4 +175,71 @@ describe('MutationThrottler', () => {
             expect(Object.keys(mutationThrottler['_loggedTracker'])).toHaveLength(0)
         })
     })
+
+    describe('byte budget', () => {
+        let onDroppedOversizedMutation: jest.Mock
+        let requestFullSnapshot: jest.Mock
+        let throttler: MutationThrottler
+
+        const eventOfRoughSize = (chars: number): eventWithTime =>
+            makeEvent({ adds: [{ parentId: 1, nextId: null, node: { textContent: 'x'.repeat(chars) } } as any] })
+
+        beforeEach(() => {
+            onDroppedOversizedMutation = jest.fn()
+            requestFullSnapshot = jest.fn()
+            throttler = new MutationThrottler(rrwebMock as unknown as rrwebRecord, {
+                bytesBucketSize: 1000,
+                bytesRefillRate: 100,
+                onDroppedOversizedMutation,
+                requestFullSnapshot,
+            })
+        })
+
+        test.each([
+            ['drops a mutation larger than the burst allowance', 2000, true],
+            ['passes a mutation within the budget', 100, false],
+        ])('%s', (_name, chars, expectDropped) => {
+            const result = throttler.throttleMutations(eventOfRoughSize(chars))
+
+            if (expectDropped) {
+                expect(result).toBeUndefined()
+                expect(onDroppedOversizedMutation).toHaveBeenCalledWith(expect.any(Number))
+            } else {
+                expect(result).toBeDefined()
+                expect(onDroppedOversizedMutation).not.toHaveBeenCalled()
+            }
+        })
+
+        test('drops once the sustained budget is exhausted and recovers after refill', () => {
+            expect(throttler.throttleMutations(eventOfRoughSize(300))).toBeDefined()
+            expect(throttler.throttleMutations(eventOfRoughSize(300))).toBeDefined()
+            expect(throttler.throttleMutations(eventOfRoughSize(300))).toBeUndefined()
+
+            jest.advanceTimersByTime(5000)
+
+            expect(throttler.throttleMutations(eventOfRoughSize(300))).toBeDefined()
+        })
+
+        test('requests a single resyncing full snapshot after a drop window ends', () => {
+            throttler.throttleMutations(eventOfRoughSize(2000))
+            expect(requestFullSnapshot).not.toHaveBeenCalled()
+
+            throttler.throttleMutations(eventOfRoughSize(100))
+            expect(requestFullSnapshot).toHaveBeenCalledTimes(1)
+
+            throttler.throttleMutations(eventOfRoughSize(100))
+            expect(requestFullSnapshot).toHaveBeenCalledTimes(1)
+        })
+
+        test('non-mutation events are not charged against the budget', () => {
+            const nonMutation = {
+                type: 999,
+                data: { textContent: 'x'.repeat(5000) },
+                timestamp: 1,
+            } as unknown as eventWithTime
+
+            expect(throttler.throttleMutations(nonMutation)).toBe(nonMutation)
+            expect(throttler.throttleMutations(eventOfRoughSize(400))).toBeDefined()
+        })
+    })
 })

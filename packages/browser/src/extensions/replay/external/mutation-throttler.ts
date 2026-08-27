@@ -1,20 +1,32 @@
 import type { eventWithTime, mutationCallbackParam } from '../types/rrweb-types'
-import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, MUTATION_SOURCE_TYPE } from './sessionrecording-utils'
+import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, MUTATION_SOURCE_TYPE, estimateSize } from './sessionrecording-utils'
 import type { rrwebRecord } from '../types/rrweb'
 import { BucketedRateLimiter } from '@posthog/core'
 import { logger } from '@posthog/browser-common/utils/logger'
 
+export const DEFAULT_MUTATION_BYTES_BUCKET_SIZE = 1024 * 1024
+export const DEFAULT_MUTATION_BYTES_REFILL_RATE = 25 * 1024
+
 export class MutationThrottler {
     private _loggedTracker: Record<string, boolean> = {}
     private _rateLimiter: BucketedRateLimiter<number>
+    private _bytesBucketSize: number
+    private _bytesRefillRate: number
+    private _byteTokens: number
+    private _lastByteRefill: number = Date.now()
+    private _snapshotPendingAfterDrop = false
 
     constructor(
         private readonly _rrweb: rrwebRecord,
         private readonly _options: {
             bucketSize?: number
             refillRate?: number
+            bytesBucketSize?: number
+            bytesRefillRate?: number
             onBlockedNode?: (id: number, node: Node | null) => void
             onDroppedAttributeMutations?: (count: number) => void
+            onDroppedOversizedMutation?: (bytes: number) => void
+            requestFullSnapshot?: () => void
         } = {}
     ) {
         this._rateLimiter = new BucketedRateLimiter({
@@ -24,6 +36,22 @@ export class MutationThrottler {
             _onBucketRateLimited: this._onNodeRateLimited,
             _logger: logger,
         })
+        this._bytesBucketSize = this._options.bytesBucketSize ?? DEFAULT_MUTATION_BYTES_BUCKET_SIZE
+        this._bytesRefillRate = this._options.bytesRefillRate ?? DEFAULT_MUTATION_BYTES_REFILL_RATE
+        this._byteTokens = this._bytesBucketSize
+    }
+
+    private _refillByteBudget = () => {
+        const now = Date.now()
+        const elapsedMs = now - this._lastByteRefill
+        if (elapsedMs <= 0) {
+            return
+        }
+        this._byteTokens = Math.min(
+            this._bytesBucketSize,
+            this._byteTokens + (elapsedMs / 1000) * this._bytesRefillRate
+        )
+        this._lastByteRefill = now
     }
 
     private _onNodeRateLimited = (key: number) => {
@@ -102,11 +130,29 @@ export class MutationThrottler {
             // If we have modified the mutation count and the remaining count is 0, then we don't need the event.
             return
         }
+
+        this._refillByteBudget()
+        const eventBytes = estimateSize(event)
+        if (eventBytes > this._byteTokens) {
+            this._snapshotPendingAfterDrop = true
+            this._options.onDroppedOversizedMutation?.(eventBytes)
+            return
+        }
+        this._byteTokens -= eventBytes
+
+        if (this._snapshotPendingAfterDrop) {
+            this._snapshotPendingAfterDrop = false
+            this._options.requestFullSnapshot?.()
+        }
+
         return event
     }
 
     public reset() {
         this._loggedTracker = {}
+        this._byteTokens = this._bytesBucketSize
+        this._lastByteRefill = Date.now()
+        this._snapshotPendingAfterDrop = false
     }
 
     public stop() {

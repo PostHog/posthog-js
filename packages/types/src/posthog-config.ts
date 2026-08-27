@@ -920,6 +920,24 @@ export interface SessionRecordingOptions {
     __mutationThrottlerBucketSize?: number
 
     /**
+     * ADVANCED: alters the sustained mutation byte budget, in bytes per second.
+     * Mutation events beyond the budget are dropped and the recording resyncs with a full snapshot.
+     * Normally only altered alongside posthog support guidance.
+     *
+     * @default 25600
+     */
+    __mutationBytesRefillRate?: number
+
+    /**
+     * ADVANCED: alters the burst allowance for the mutation byte budget, in bytes.
+     * Also the largest single mutation event that will be recorded.
+     * Normally only altered alongside posthog support guidance.
+     *
+     * @default 1048576
+     */
+    __mutationBytesBucketSize?: number
+
+    /**
      * When true, minimum duration is checked against the actual buffer data (first to last timestamp)
      * rather than session duration. This ensures recordings are not sent until they contain the minimum
      * duration of actual data, even across page navigations.
