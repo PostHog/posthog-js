@@ -166,8 +166,15 @@ export const parseFlagsResponse = (
         // The response is intentionally partial (e.g., only survey flags were requested via
         // advanced_only_evaluate_survey_feature_flags). Merge with existing flags so that
         // bootstrapped or previously loaded non-survey flags are preserved.
+        const evaluatedFlagKeys = Object.keys(newFeatureFlags)
+        const evaluatedPayloads = newFeatureFlagPayloads || {}
         newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
-        newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
+        newFeatureFlagPayloads = { ...currentFlagPayloads, ...evaluatedPayloads }
+        evaluatedFlagKeys.forEach((key) => {
+            if (!(key in evaluatedPayloads)) {
+                delete newFeatureFlagPayloads?.[key]
+            }
+        })
         newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
     } else if (response.errorsWhileComputingFlags) {
         // if not all flags were computed, we upsert flags instead of replacing them
@@ -179,12 +186,18 @@ export const parseFlagsResponse = (
                 ...currentFlags,
                 ...Object.fromEntries(Object.entries(newFeatureFlags).filter(([key]) => successfulKeys.has(key))),
             }
+            const successfulPayloads = Object.fromEntries(
+                Object.entries(newFeatureFlagPayloads || {}).filter(([key]) => successfulKeys.has(key))
+            )
             newFeatureFlagPayloads = {
                 ...currentFlagPayloads,
-                ...Object.fromEntries(
-                    Object.entries(newFeatureFlagPayloads || {}).filter(([key]) => successfulKeys.has(key))
-                ),
+                ...successfulPayloads,
             }
+            successfulKeys.forEach((key) => {
+                if (!(key in successfulPayloads)) {
+                    delete newFeatureFlagPayloads?.[key]
+                }
+            })
             newFeatureFlagDetails = {
                 ...currentFlagDetails,
                 ...Object.fromEntries(
@@ -227,7 +240,7 @@ const normalizeFlagsResponse = (response: Partial<FlagsResponse>, responseLogger
         const featureFlagPayloads = Object.fromEntries(
             Object.keys(flagDetails)
                 .filter((flag) => flagDetails[flag].enabled)
-                .filter((flag) => flagDetails[flag].metadata?.payload)
+                .filter((flag) => !isUndefined(flagDetails[flag].metadata?.payload))
                 .map((flag) => [flag, flagDetails[flag].metadata?.payload])
         )
         return { ...response, featureFlags, featureFlagPayloads }
@@ -471,14 +484,9 @@ export class PostHogFeatureFlags implements Extension {
               : Array.from(new Set([...Object.keys(previousFlags), ...Object.keys(nextFlags)]))
         const previousPayloads = this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) || {}
         const nextPayloads = statePatch[PERSISTENCE_FEATURE_FLAG_PAYLOADS] || {}
-        const responsePayloadKeys = response.flags
-            ? Object.entries(response.flags)
-                  .filter(([, detail]) => !detail?.failed && detail.enabled && detail.metadata?.payload)
-                  .map(([key]) => key)
-            : Object.keys(response.featureFlagPayloads || {})
         const ownedPayloadKeys =
             isIncompleteResponse || partialResponse
-                ? responsePayloadKeys
+                ? ownedFlagKeys
                 : Array.from(new Set([...Object.keys(previousPayloads), ...Object.keys(nextPayloads)]))
         const changes: Record<string, readonly string[] | true> = {
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ownedFlagKeys,
