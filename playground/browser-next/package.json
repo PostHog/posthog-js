@@ -1,0 +1,20 @@
+{
+    "name": "@posthog-playground/browser-next",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "scripts": {
+        "prepare:sdk": "pnpm --dir ../.. --filter @posthog/browser-common build",
+        "predev": "pnpm prepare:sdk",
+        "dev": "vite --host 127.0.0.1",
+        "predev:real": "pnpm prepare:sdk",
+        "dev:real": "bash scripts/dev-real.sh",
+        "prebuild": "pnpm prepare:sdk",
+        "build": "tsc && vite build",
+        "preview": "vite preview --host 127.0.0.1"
+    },
+    "devDependencies": {
+        "typescript": "~5.9.3",
+        "vite": "^7.2.4"
+    }
+}
