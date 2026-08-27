@@ -2735,6 +2735,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 onDroppedAttributeMutations: (count) => (this._throttledMutationsDropped += count),
                 bytesRefillRate: this._instance.config.session_recording.__mutationBytesRefillRate,
                 bytesBucketSize: this._instance.config.session_recording.__mutationBytesBucketSize,
+                resyncIntervalMs: this._fullSnapshotIntervalMillis,
                 onDroppedOversizedMutation: (bytes) => {
                     if (this._oversizedMutationsDropped === 0) {
                         this.log(
@@ -2746,8 +2747,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     this._oversizedMutationsDropped += 1
                     this._oversizedMutationBytesDropped += bytes
                 },
-                // deferred so the snapshot is not emitted re-entrantly from inside rrweb's emit
-                requestFullSnapshot: () => setTimeout(() => this._tryTakeFullSnapshot(), 0),
+                requestFullSnapshot: () => this._tryTakeFullSnapshot(),
             })
 
         const activePlugins = this._gatherRRWebPlugins()
