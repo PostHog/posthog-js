@@ -2365,7 +2365,7 @@ describe('featureflags', () => {
             })
 
             // check right compression is sent
-            expect(instance._send_request.mock.calls[0][0].compression).toEqual('base64')
+            expect(instance._send_request.mock.calls[0][0].compression).toEqual('best-available')
 
             // check the request sent person properties
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
@@ -3838,6 +3838,7 @@ describe('getRemoteConfigPayload', () => {
             expect.objectContaining({
                 method: 'POST',
                 url: 'flags/flags/?v=2',
+                compression: 'best-available',
                 data: expect.objectContaining({
                     distinct_id: 'test-distinct-id',
                     token: 'test-token',

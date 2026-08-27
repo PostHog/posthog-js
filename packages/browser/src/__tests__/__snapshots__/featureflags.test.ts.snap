@@ -3,7 +3,7 @@
 exports[`featureflags _callFlagsEndpoint via reloadFeatureFlags builds a representative flags request 1`] = `
 {
   "callback": "<request-callback>",
-  "compression": "base64",
+  "compression": "best-available",
   "data": {
     "$anon_distinct_id": "anonymous-456",
     "$device_id": "device-123",

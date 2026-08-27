@@ -7,7 +7,6 @@ import {
     EarlyAccessFeatureResponse,
     Properties,
     JsonType,
-    Compression,
     EarlyAccessFeature,
     RemoteConfigFeatureFlagCallback,
     EarlyAccessFeatureStage,
@@ -958,7 +957,7 @@ export class PostHogFeatureFlags implements Extension {
                     target: 'flags',
                     method: 'POST',
                     body: data,
-                    compression: this._config.compression === 'base64' ? Compression.Base64 : undefined,
+                    compression: this._config.compression,
                     sentAt: 'body',
                     timeoutMs: this._config.requestTimeoutMs,
                 })
@@ -1256,7 +1255,7 @@ export class PostHogFeatureFlags implements Extension {
                 target: 'flags',
                 method: 'POST',
                 body: data,
-                compression: this._config.compression === 'base64' ? Compression.Base64 : undefined,
+                compression: this._config.compression,
                 sentAt: 'body',
                 timeoutMs: this._config.requestTimeoutMs,
             })

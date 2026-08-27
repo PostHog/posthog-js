@@ -2,9 +2,9 @@
 
 exports[`FunctionalTests / Feature Flags snapshots the decoded /flags wire envelope from the real transport 1`] = `
 {
-  "bodyWrapper": "data=<base64>",
-  "compression": "base64",
-  "contentType": "application/x-www-form-urlencoded",
+  "bodyWrapper": "<gzip>",
+  "compression": null,
+  "contentType": "text/plain",
   "decodedBody": {
     "$device_id": "<generated-device-id>",
     "distinct_id": "<generated-distinct-id>",
@@ -46,6 +46,6 @@ exports[`FunctionalTests / Feature Flags snapshots the decoded /flags wire envel
     "timezone": "<runtime-timezone>",
     "token": "flags-wire-snapshot-token",
   },
-  "path": "/flags/?v=2&compression=base64",
+  "path": "/flags/?v=2",
 }
 `;
