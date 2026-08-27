@@ -4001,13 +4001,12 @@ describe('Lazy SessionRecording', () => {
 
         it('resets the throttled mutation drop count on session change', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
 
-            sessionRecording['_lazyLoadedSessionRecording']['_throttledMutationsDropped'] = 5
-            expect(
-                sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties[
-                    '$sdk_debug_replay_throttled_mutations_dropped'
-                ]
-            ).toEqual(5)
+            // Drive the count through the throttler's own callback, so the reset is proven against
+            // the path that really increments it rather than against a hand-set field.
+            lazyRecording['_mutationThrottler']!['_options'].onDroppedAttributeMutations!(5)
+            expect(lazyRecording.sdkDebugProperties['$sdk_debug_replay_throttled_mutations_dropped']).toEqual(5)
 
             sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdCallback']('new-session-id', 'new-window-id', {
                 activityTimeout: true,
