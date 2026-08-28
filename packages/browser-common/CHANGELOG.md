@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.7.0
+
+### Minor Changes
+
+- [#4378](https://github.com/PostHog/posthog-js/pull/4378) [`a895e7e`](https://github.com/PostHog/posthog-js/commit/a895e7ecf78e434e43958052096ac03aa4670e9d) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add a direct pubsub export, isolate publisher listener failures, and make disposal terminal.
+  (2026-08-28)
+
 ## 0.6.2
 
 ### Patch Changes
