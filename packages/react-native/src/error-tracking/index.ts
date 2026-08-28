@@ -245,7 +245,9 @@ export class ErrorTracking {
   }
 
   /**
-   * Clears the buffer. Called on SDK close, not on capture or identity changes.
+   * Clears the buffer. The host calls this on SDK close and on `reset()`, which is the logout
+   * boundary, so one user's steps never reach the next user's exception. A capture does not clear the
+   * buffer: the steps stay attached to every exception in the same session.
    */
   clearExceptionSteps(): void {
     this._exceptionStepsBuffer.clear()

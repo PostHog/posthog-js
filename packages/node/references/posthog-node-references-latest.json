@@ -1730,6 +1730,28 @@
       "path": "src/types.ts"
     },
     {
+      "id": "AutomaticExceptionStepsConfig",
+      "name": "AutomaticExceptionStepsConfig",
+      "properties": [
+        {
+          "description": "Screen or route changes.",
+          "type": "boolean",
+          "name": "navigation"
+        },
+        {
+          "description": "Taps and clicks the SDK already autocaptures.",
+          "type": "boolean",
+          "name": "taps"
+        },
+        {
+          "description": "App lifecycle transitions such as open, foreground and background.",
+          "type": "boolean",
+          "name": "lifecycle"
+        }
+      ],
+      "path": "../core/src/error-tracking/exception-steps.ts"
+    },
+    {
       "id": "BaseException",
       "name": "BaseException",
       "properties": [
@@ -2177,6 +2199,13 @@
         }
       ],
       "path": "../core/src/error-tracking/exception-steps.ts"
+    },
+    {
+      "id": "ExceptionStepType",
+      "name": "ExceptionStepType",
+      "properties": [],
+      "path": "../core/src/error-tracking/exception-steps.ts",
+      "example": "(typeof EXCEPTION_STEP_TYPES)[keyof typeof EXCEPTION_STEP_TYPES]"
     },
     {
       "id": "ExpressErrorMiddleware",
@@ -3916,6 +3945,25 @@
       "properties": [],
       "path": "../core/src/error-tracking/coercers/promise-rejection-event.ts",
       "example": "PromiseRejectionEventLike | EventWithDetailReason"
+    },
+    {
+      "id": "ResolvedAutomaticExceptionStepsConfig",
+      "name": "ResolvedAutomaticExceptionStepsConfig",
+      "properties": [
+        {
+          "type": "boolean",
+          "name": "navigation"
+        },
+        {
+          "type": "boolean",
+          "name": "taps"
+        },
+        {
+          "type": "boolean",
+          "name": "lifecycle"
+        }
+      ],
+      "path": "../core/src/error-tracking/exception-steps.ts"
     },
     {
       "id": "ResolvedExceptionStepsConfig",
