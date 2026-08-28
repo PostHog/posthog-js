@@ -695,6 +695,7 @@
         "_rrwebError",
         "_rrwebStartAttempted",
         "_runBeforeSend",
+        "_runSanitizeProperties",
         "_runWithPreparedSiteAppElements",
         "_runtime",
         "_safeTrackFullSnapshotCost",
