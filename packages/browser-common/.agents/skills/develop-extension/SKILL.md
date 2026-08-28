@@ -90,8 +90,9 @@ so consumers do not pull its code into their bundles.
 | log                           | `client.logger`                                            |
 
 Create an extension-named child logger with `client.logger.createLogger('[myExtension]')` when its messages need a
-prefix. `onRemoteConfig` immediately replays the latest known outcome; narrow on `result.ok` before reading
-`result.config` and define safe behavior for `{ ok: false }`.
+prefix. `onRemoteConfig` replays the latest available outcome when host capabilities permit; configuration timing is
+host-owned, and the subscription remains active until disposed. Narrow on `result.ok` before reading `result.config`
+and define safe behavior for `{ ok: false }`.
 
 `sendRequest` is a low-level transport bridge. Select the configured origin with `target` (`api`, `flags`, or
 `assets`) and construct endpoint authentication using `client.projectToken` in the required query parameter, body,

@@ -76,7 +76,10 @@ export interface SendRequestInit {
     query?: Record<string, string>
     /** Additional headers merged with the host SDK's configured request headers. */
     headers?: Record<string, string>
-    /** Browser transport to prefer. `sendBeacon` returns a best-effort response immediately. */
+    /**
+     * Browser transport to prefer. Fetch is the normal runtime transport. Use `sendBeacon` only for an eligible
+     * best-effort teardown POST. Its response confirms browser handoff, not delivery.
+     */
     transport?: RequestTransport
     /** Abort the request if it does not complete within this many milliseconds. */
     timeoutMs?: number
@@ -123,7 +126,7 @@ export interface Client {
     /** Fires for every captured event through a deeply readonly view. */
     readonly onEvent: Listener<CapturedEventInfo>
 
-    /** Replays the latest remote-config outcome on subscription and fires for subsequent outcomes. */
+    /** Replays the latest available remote-config outcome and fires subsequent outcomes when the host makes them available. */
     readonly onRemoteConfig: Listener<DeepReadonly<RemoteConfigResult>>
 
     /** Public project token used to authenticate endpoint-specific requests. */
