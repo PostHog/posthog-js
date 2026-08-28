@@ -131,11 +131,12 @@ describe('BrowserClientAdapter', () => {
         expect(client?.logger).toBeDefined()
 
         const timestamp = new Date('2026-01-01T00:00:00Z')
-        await client?.capture(
+        const captureResult: void = client?.capture(
             'test-event',
             { explicit: true },
             { timestamp, uuid: 'test-uuid', set: { plan: 'paid' }, setOnce: { source: 'test' } }
         )
+        expect(captureResult).toBeUndefined()
         expect(instance.capture).toHaveBeenCalledWith('test-event', { explicit: true }, {
             timestamp,
             uuid: 'test-uuid',

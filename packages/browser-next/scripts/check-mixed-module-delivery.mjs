@@ -60,7 +60,7 @@ const posthog = await createCorePostHog({
     },
 })
 
-await posthog.capture('mixed_module_event')
+posthog.capture('mixed_module_event')
 await posthog.flush()
 await posthog.dispose()
 
@@ -79,7 +79,7 @@ const automatic = await createPostHog({
         return new Response('{}', { status: 200 })
     },
 })
-await automatic.capture('automatic_cjs_event')
+automatic.capture('automatic_cjs_event')
 await automatic.flush()
 await automatic.dispose()
 
@@ -98,7 +98,7 @@ const core = await createCorePostHog({
         return new Response('{}', { status: 200 })
     },
 })
-await core.capture('core_buffered_event')
+core.capture('core_buffered_event')
 await core.flush()
 await core.dispose()
 if (coreRequests.length !== 0) {

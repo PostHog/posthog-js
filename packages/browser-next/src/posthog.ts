@@ -301,11 +301,7 @@ class PostHogBrowserClient implements PostHog {
         return !this._closing && !this._disposed && !this._blocked && !this.hasOptedOut() && this._state.prepare()
     }
 
-    async capture(
-        event: string,
-        properties: Record<string, unknown> | null = null,
-        options: CaptureOptions = {}
-    ): Promise<void> {
+    capture(event: string, properties: Record<string, unknown> | null = null, options: CaptureOptions = {}): void {
         this._capture(event, properties, options)
     }
 
@@ -470,18 +466,18 @@ class PostHogBrowserClient implements PostHog {
         if (distinctId === previousDistinctId) {
             if (!wasIdentified) {
                 this._state.identify(distinctId)
-                await this.capture('$set', null, { set: set ?? {}, setOnce: setOnce ?? {} })
+                this.capture('$set', null, { set: set ?? {}, setOnce: setOnce ?? {} })
             } else if (hasPersonProperties) {
-                await this.capture('$set', null, captureOptions)
+                this.capture('$set', null, captureOptions)
             }
             return
         }
 
         this._state.identify(distinctId)
         if (!wasIdentified) {
-            await this.capture('$identify', { $anon_distinct_id: previousDistinctId }, captureOptions)
+            this.capture('$identify', { $anon_distinct_id: previousDistinctId }, captureOptions)
         } else if (hasPersonProperties) {
-            await this.capture('$set', null, captureOptions)
+            this.capture('$set', null, captureOptions)
         }
     }
 
@@ -495,7 +491,7 @@ class PostHogBrowserClient implements PostHog {
         if (!changed && !properties) {
             return
         }
-        await this.capture('$groupidentify', {
+        this.capture('$groupidentify', {
             $group_type: type,
             $group_key: key,
             ...(properties ? { $group_set: properties } : {}),

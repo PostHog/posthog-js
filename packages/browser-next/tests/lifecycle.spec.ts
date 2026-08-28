@@ -183,10 +183,9 @@ describe('browser-next analytics lifecycle', () => {
             extensions: [analytics({ flushAt: 1, flushInterval: 0 })],
         })
 
-        const capture = posthog.capture('staged')
+        posthog.capture('staged')
         navigator.onLine = false
         events.dispatchEvent(new Event('offline'))
-        await capture
         await Promise.resolve()
         expect(fetch).not.toHaveBeenCalled()
 
