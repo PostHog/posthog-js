@@ -1,5 +1,14 @@
 # posthog-react-native
 
+## 4.66.2
+
+### Patch Changes
+
+- [#4677](https://github.com/PostHog/posthog-js/pull/4677) [`c984623`](https://github.com/PostHog/posthog-js/commit/c9846233872234a32050df3657836bf633ee82b6) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix Android builds failing to resolve a Kotlin compiler plugin when `uploadNativeSymbols` is enabled, by picking up `com.posthog:posthog-android-gradle-plugin` 1.5.2. Re-run `expo prebuild` to apply it.
+  (2026-08-28)
+- Updated dependencies [[`c984623`](https://github.com/PostHog/posthog-js/commit/c9846233872234a32050df3657836bf633ee82b6)]:
+  - @posthog/react-native-plugin@2.5.1
+
 ## 4.66.1
 
 ### Patch Changes

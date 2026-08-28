@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.5.1
+
+### Patch Changes
+
+- [#4677](https://github.com/PostHog/posthog-js/pull/4677) [`c984623`](https://github.com/PostHog/posthog-js/commit/c9846233872234a32050df3657836bf633ee82b6) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Update the native SDKs to `posthog-ios` 3.70.1 and `posthog-android` 3.61.0, fixing session replay masks drifting off their content during scroll, a crash when replay console-log capture tears down on iOS, and web-scoped surveys showing on native Android.
+  (2026-08-28)
+
 ## 2.5.0
 
 ### Minor Changes
