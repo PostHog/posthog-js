@@ -26,7 +26,14 @@ describe('JSON-LD replay capture', () => {
             <div id="product-id"></div>
             <div class="ph-mask"><div id="masked-text-id"></div></div>
             <div class="ph-no-capture"><div id="blocked-id"></div></div>
+            <div class="ph-no-capture"><div id="duplicate-id"></div></div>
+            <div id="duplicate-id"></div>
+            <div id="mirror-missing-id"></div>
         `
+        const shadowHost = document.createElement('div')
+        const shadowRoot = shadowHost.attachShadow({ mode: 'open' })
+        shadowRoot.innerHTML = '<div id="shadow-id"></div>'
+        document.body.append(shadowHost)
         const script = jsonLdScript({
             '@context': 'https://schema.org',
             '@type': 'Product',
@@ -36,6 +43,9 @@ describe('JSON-LD replay capture', () => {
                 { '@type': 'Offer', '@id': '#blocked-id' },
                 { '@type': 'Offer', '@id': '#missing-id' },
                 { '@type': 'Offer', '@id': '#json-ld-script' },
+                { '@type': 'Offer', '@id': '#shadow-id' },
+                { '@type': 'Offer', '@id': '#duplicate-id' },
+                { '@type': 'Offer', '@id': '#mirror-missing-id' },
             ],
         })
         script.id = 'json-ld-script'
@@ -43,6 +53,10 @@ describe('JSON-LD replay capture', () => {
         const emit = jest.fn(() => true)
         const capture = startJsonLdCapture(document, MutationObserver, {
             blockClass: 'ph-no-capture',
+            getCapturedDomNodes: () =>
+                [...document.querySelectorAll('*'), ...shadowRoot.querySelectorAll('*')].filter(
+                    (element) => element.id !== 'mirror-missing-id'
+                ),
             maskTextClass: 'ph-mask',
             emit,
         })
@@ -57,6 +71,9 @@ describe('JSON-LD replay capture', () => {
                 { '@type': 'Offer', '@id': 'masked-text-id' },
                 { '@type': 'Offer' },
                 { '@type': 'Offer' },
+                { '@type': 'Offer' },
+                { '@type': 'Offer', '@id': 'shadow-id' },
+                { '@type': 'Offer', '@id': 'duplicate-id' },
                 { '@type': 'Offer' },
             ],
         })
