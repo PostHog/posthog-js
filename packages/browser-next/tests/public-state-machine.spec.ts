@@ -65,11 +65,8 @@ describe('@posthog/browser public lifecycle state machine', () => {
         expect(repeatedShutdown).toBe(shutdown)
 
         posthog.reset()
-        await Promise.all([
-            posthog.capture('closing-capture'),
-            posthog.identify('closing-user'),
-            posthog.group('company', 'closing-company'),
-        ])
+        posthog.capture('closing-capture')
+        await Promise.all([posthog.identify('closing-user'), posthog.group('company', 'closing-company')])
         expect(observed).toEqual([])
 
         await Promise.resolve()
@@ -82,8 +79,8 @@ describe('@posthog/browser public lifecycle state machine', () => {
         expect(cleanup).toHaveBeenCalledTimes(1)
 
         posthog.reset()
+        posthog.capture('disposed-capture')
         await Promise.all([
-            posthog.capture('disposed-capture'),
             posthog.identify('disposed-user'),
             posthog.group('company', 'disposed-company'),
             posthog.flush(),

@@ -213,7 +213,9 @@ describe('@posthog/browser automatic analytics', () => {
             automaticSetup(load, { flushAt: 100, flushInterval: 0 })
         )
 
-        await Promise.all([posthog.capture('one'), posthog.capture('two'), posthog.capture('three')])
+        posthog.capture('one')
+        posthog.capture('two')
+        posthog.capture('three')
         await Promise.resolve()
         expect(load).toHaveBeenCalledTimes(1)
 
