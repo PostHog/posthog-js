@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Preserve universally safe JSON-LD properties and their tree structure when replay redacts the other fields. Replace unlisted property names with fixed placeholders, and keep JSON-LD IDs only as fragments that match captured DOM element IDs.
+Preserve universally safe JSON-LD properties and allowlisted tree structure when replay redacts the other fields. Drop unlisted property branches, and keep JSON-LD IDs only as fragments that match captured DOM element IDs.
