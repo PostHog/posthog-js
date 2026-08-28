@@ -9,7 +9,7 @@ const { withAppBuildGradle, withBaseMod, withGradleProperties, withProjectBuildG
 // crash stack traces can be deobfuscated. The injected version has to read every gradle
 // property the plugin writes, or that half of the build ignores the option: 1.4.0 is the first
 // version that reads posthog.dotenvFile, and 1.5.0 the first that reads posthog.releaseMode.
-const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.5.1'
+const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.5.2'
 
 const resolvePostHogReactNativePackageJsonPath =
   "[\"node\", \"--print\", \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')\"].execute().text.trim()"
