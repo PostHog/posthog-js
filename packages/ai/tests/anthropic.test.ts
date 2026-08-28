@@ -958,8 +958,6 @@ describe('PostHogAnthropic', () => {
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_error']).toBeDefined()
-      // A failed call reports no token counts rather than zero, because it may
-      // still have consumed the prompt before failing.
       expect(properties['$ai_input_tokens']).toBeUndefined()
       expect(properties['$ai_output_tokens']).toBeUndefined()
     })
@@ -1001,8 +999,6 @@ describe('PostHogAnthropic', () => {
         httpStatus: 500,
       })
 
-      // The stream failed before reporting usage, so the counts are absent
-      // rather than zero. A stream that had reported some would keep them.
       const [errorCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
       expect(errorCall[0].properties['$ai_input_tokens']).toBeUndefined()
       expect(errorCall[0].properties['$ai_output_tokens']).toBeUndefined()
@@ -1301,6 +1297,10 @@ describe('PostHogAnthropic - streaming error safety', () => {
     const sourceController = new AbortController()
     let pulls = 0
     let sourceReturned = false
+    const messageStart = {
+      type: 'message_start',
+      message: { usage: { input_tokens: 42 } },
+    } as unknown as AnthropicOriginal.Messages.RawMessageStreamEvent
     const firstChunk = {
       type: 'content_block_delta',
       index: 0,
@@ -1309,6 +1309,8 @@ describe('PostHogAnthropic - streaming error safety', () => {
     const source = new AnthropicStream<AnthropicOriginal.Messages.RawMessageStreamEvent>(() => {
       const iterator = (async function* () {
         try {
+          pulls += 1
+          yield messageStart
           pulls += 1
           yield firstChunk
           pulls += 1
@@ -1336,23 +1338,30 @@ describe('PostHogAnthropic - streaming error safety', () => {
 
     expect(stream).toBeInstanceOf(AnthropicStream)
     expect(pulls).toBe(0)
+    let consumed = 0
     for await (const _chunk of stream as unknown as AsyncIterable<AnthropicOriginal.Messages.RawMessageStreamEvent>) {
-      break
+      consumed += 1
+      if (consumed === 2) {
+        break
+      }
     }
     await new Promise(process.nextTick)
 
-    expect(pulls).toBe(1)
+    expect(pulls).toBe(2)
     expect(sourceReturned).toBe(true)
     expect(sourceController.signal.aborted).toBe(true)
     expect(safetyMockPostHogClient.capture).toHaveBeenCalledTimes(1)
     const properties = (safetyMockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
     expect(properties['$ai_output_choices'][0].content[0].text).toBe('partial')
+    expect(properties['$ai_input_tokens']).toBe(42)
+    expect(properties['$ai_output_tokens']).toBeUndefined()
   })
 
   test('messages stream error is not rethrown unhandled', async () => {
     const streamError = new Error('provider error injected into SSE stream')
     const createErroringIterator = (): { [Symbol.asyncIterator](): AsyncIterator<unknown> } => ({
       async *[Symbol.asyncIterator]() {
+        yield { type: 'message_start', message: { usage: { input_tokens: 42 } } }
         yield { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'partial' } }
         throw streamError
       },
@@ -1380,8 +1389,12 @@ describe('PostHogAnthropic - streaming error safety', () => {
       }).rejects.toThrow(streamError)
     })
 
-    // The analytics error event is still captured
+    // The analytics error event is still captured, with the usage the stream
+    // reported before it died
     expect(safetyMockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const errorProperties = (safetyMockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    expect(errorProperties['$ai_input_tokens']).toBe(42)
+    expect(errorProperties['$ai_output_tokens']).toBeUndefined()
 
     // The detached analytics consumer must not crash the host process
     expect(unhandledRejections).toEqual([])

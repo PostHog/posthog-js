@@ -173,6 +173,8 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                   {
                     completionId: accumulated.completionId,
                     systemFingerprint: accumulated.systemFingerprint,
+                    usage: accumulated.usage,
+                    latency: (Date.now() - startTime) / 1000,
                   }
                 )
               )
@@ -233,7 +235,8 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 monitoring: posthogParams,
                 modelParametersSource: body,
               },
-              error
+              error,
+              { latency: (Date.now() - startTime) / 1000 }
             )
           )
           throw error
@@ -458,7 +461,8 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 monitoring: posthogParams,
                 modelParametersSource: body,
               },
-              error
+              error,
+              { latency: (Date.now() - startTime) / 1000 }
             )
           )
           throw error
@@ -599,7 +603,8 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               monitoring: posthogParams,
               modelParametersSource: body,
             },
-            error
+            error,
+            { latency: (Date.now() - startTime) / 1000 }
           )
         )
         throw error
@@ -659,7 +664,8 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
               monitoring: posthogParams,
               modelParametersSource: body,
             },
-            error
+            error,
+            (Date.now() - startTime) / 1000
           )
         )
         throw error

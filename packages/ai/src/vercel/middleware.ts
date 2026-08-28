@@ -601,12 +601,9 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
               ? ''
               : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
             output: [],
-            latency: 0,
+            latency: (Date.now() - startTime) / 1000,
             baseURL,
             modelParameters: getModelParams(mergedParams as any),
-            // The call failed before a response, so no usage exists to report.
-            // Left empty rather than zero, which would read as a call that
-            // consumed nothing.
             usage: {},
             error: error,
             tools: availableTools,
@@ -868,12 +865,9 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
               ? ''
               : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
             output: [],
-            latency: 0,
+            latency: (Date.now() - startTime) / 1000,
             baseURL,
             modelParameters: getModelParams(mergedParams as any),
-            // The call failed before a response, so no usage exists to report.
-            // Left empty rather than zero, which would read as a call that
-            // consumed nothing.
             usage: {},
             error: error,
             tools: availableTools,

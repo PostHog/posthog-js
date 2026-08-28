@@ -151,10 +151,10 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     }
     httpStatus = httpStatus ?? 200
 
-    // A price times an unknown token count is unknown, not zero: a cancelled
-    // stream still consumed its prompt. Each component is priced only when its
-    // count exists, and the total sums the priced components, so a call with no
-    // reported usage sends no cost instead of asserting $0.
+    // A configured price applies only to a count the provider reported, so a call with no
+    // reported usage sends no cost instead of asserting $0. $ai_total_cost_usd sums the sides
+    // that were priced, which makes it the cost of the known side alone when the other side
+    // went unreported: a lower bound on the true total, not an assertion of it.
     const costOverrideData: Record<string, number> = {}
     if (options.costOverride) {
       if (usage.inputTokens !== undefined) {
@@ -202,9 +202,6 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       $ai_input: safeInput,
       $ai_output_choices: safeOutput,
       $ai_http_status: httpStatus,
-      // Omitted rather than defaulted to 0 when the provider never reported it,
-      // matching $ai_output_tokens below. A cancelled stream still consumed its
-      // input, so reporting 0 would state a cost we know to be wrong.
       ...(usage.inputTokens !== undefined ? { $ai_input_tokens: usage.inputTokens } : {}),
       ...(usage.outputTokens !== undefined ? { $ai_output_tokens: usage.outputTokens } : {}),
       ...additionalTokenValues,

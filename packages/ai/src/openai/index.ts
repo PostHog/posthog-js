@@ -245,7 +245,8 @@ export class WrappedCompletions extends Completions {
                 monitoring: posthogParams,
                 modelParametersSource: body,
               },
-              error
+              error,
+              { latency: (Date.now() - startTime) / 1000 }
             )
           )
           throw error
@@ -470,7 +471,8 @@ export class WrappedResponses extends Responses {
                 monitoring: posthogParams,
                 modelParametersSource: body,
               },
-              error
+              error,
+              { latency: (Date.now() - startTime) / 1000 }
             )
           )
           throw error
@@ -611,7 +613,8 @@ export class WrappedResponses extends Responses {
               monitoring: posthogParams,
               modelParametersSource: body,
             },
-            error
+            error,
+            { latency: (Date.now() - startTime) / 1000 }
           )
         )
         throw error
@@ -672,7 +675,8 @@ export class WrappedEmbeddings extends Embeddings {
               monitoring: posthogParams,
               modelParametersSource: body,
             },
-            error
+            error,
+            (Date.now() - startTime) / 1000
           )
         )
         throw error
@@ -782,10 +786,6 @@ export class WrappedTranscriptions extends Transcriptions {
             (iterator, controller) => new Stream(iterator, controller)
           )
           ;(async () => {
-            // Declared outside the try so the error path can report what the
-            // stream managed to read. Token counts stay undefined until an event
-            // carries usage, so a stream cut short is not reported as having
-            // consumed nothing.
             let usage: {
               inputTokens?: number
               outputTokens?: number
@@ -842,7 +842,6 @@ export class WrappedTranscriptions extends Transcriptions {
                 latency: (Date.now() - startTime) / 1000,
                 baseURL: this.baseURL,
                 modelParameters: getModelParams(body),
-                // Whatever the stream reported before it failed.
                 usage,
                 error,
               })
@@ -893,12 +892,9 @@ export class WrappedTranscriptions extends Transcriptions {
             provider: 'openai',
             input: openAIParams.prompt,
             output: [],
-            latency: 0,
+            latency: (Date.now() - startTime) / 1000,
             baseURL: this.baseURL,
             modelParameters: getModelParams(body),
-            // The call returned no usage, and a failure this side of a response
-            // can still have consumed the input, so report no counts rather
-            // than zero.
             usage: {},
             error,
           })

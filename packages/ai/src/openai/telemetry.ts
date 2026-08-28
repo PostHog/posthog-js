@@ -126,8 +126,8 @@ export function buildChatErrorOptions(
     completionId?: string
     systemFingerprint?: string
     usage?: TokenUsage
-    latency?: number
-  } = {}
+    latency: number
+  }
 ): CaptureAiGenerationOptions {
   return {
     ...context.monitoring,
@@ -135,12 +135,9 @@ export function buildChatErrorOptions(
     provider: context.provider,
     input: sanitizeOpenAI(context.params.messages, context.client),
     output: [],
-    latency: metadata.latency ?? 0,
+    latency: metadata.latency,
     baseURL: context.baseURL,
     modelParameters: getModelParams(context.modelParametersSource),
-    // A stream that fails partway has still consumed everything it read, so pass
-    // on whatever the accumulator collected. Left empty when the caller has no
-    // usage to give, which keeps the counts absent rather than reporting zero.
     usage: metadata.usage ?? {},
     completionId: metadata.completionId,
     providerMetadata: buildProviderMetadata({ systemFingerprint: metadata.systemFingerprint }),
@@ -207,7 +204,7 @@ export function buildBackgroundResponseOptions(
 export function buildResponsesErrorOptions(
   context: CommonContext<ResponsesParams>,
   error: unknown,
-  metadata: { completionId?: string; usage?: TokenUsage; latency?: number } = {}
+  metadata: { completionId?: string; usage?: TokenUsage; latency: number }
 ): CaptureAiGenerationOptions {
   return {
     ...context.monitoring,
@@ -215,11 +212,9 @@ export function buildResponsesErrorOptions(
     provider: context.provider,
     input: buildSanitizedResponsesInput(context),
     output: [],
-    latency: metadata.latency ?? 0,
+    latency: metadata.latency,
     baseURL: context.baseURL,
     modelParameters: getModelParams(context.modelParametersSource),
-    // Left empty when the caller has no usage to give, so the counts stay absent
-    // rather than reporting that the call consumed nothing.
     usage: metadata.usage ?? {},
     completionId: metadata.completionId,
     error,
@@ -248,7 +243,8 @@ export function buildEmbeddingSuccessOptions(
 
 export function buildEmbeddingErrorOptions(
   context: CommonContext<OpenAI.EmbeddingCreateParams>,
-  error: unknown
+  error: unknown,
+  latency: number
 ): CaptureAiGenerationOptions {
   return {
     eventType: AIEvent.Embedding,
@@ -257,11 +253,9 @@ export function buildEmbeddingErrorOptions(
     provider: context.provider,
     input: withPrivacyMode(context.client, context.monitoring.privacyMode, context.params.input),
     output: null,
-    latency: 0,
+    latency,
     baseURL: context.baseURL,
     modelParameters: getModelParams(context.modelParametersSource),
-    // The call returned no usage, and a failure this side of a response can
-    // still have consumed the input, so report no count rather than zero.
     usage: {},
     error,
   }

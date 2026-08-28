@@ -393,8 +393,6 @@ describe('PostHogGemini - Jest test suite', () => {
 
     expect(properties['$ai_is_error']).toBe(true)
     expect(properties['$ai_http_status']).toBe(400)
-    // A failed call reports no token counts rather than zero, because it may
-    // still have consumed the prompt before failing.
     expect(properties['$ai_input_tokens']).toBeUndefined()
     expect(properties['$ai_output_tokens']).toBeUndefined()
   })
@@ -1236,7 +1234,6 @@ describe('PostHogGemini - Jest test suite', () => {
       const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
       expect(captureArgs[0].event).toBe('$ai_embedding')
       expect(captureArgs[0].properties['$ai_is_error']).toBe(true)
-      // Absent rather than zero: the call may still have consumed its input.
       expect(captureArgs[0].properties['$ai_input_tokens']).toBeUndefined()
     })
 

@@ -104,8 +104,6 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
-        // The call returned no usage, and a failure this side of a response can
-        // still have consumed the prompt, so report no counts rather than zero.
         usage: {},
         error,
       })
@@ -121,8 +119,6 @@ export class WrappedModels {
     const accumulatedContent: FormattedContent = []
     let firstTokenTime: number | undefined
     let stopReason: string | undefined
-    // Token counts stay undefined until a chunk carries usageMetadata, so a
-    // stream that ends before one arrives is not reported as having used nothing.
     let usage: TokenUsage = {
       webSearchCount: 0,
       rawUsage: undefined,
@@ -248,8 +244,6 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
-        // Whatever the stream reported before it failed. Gemini sends
-        // usageMetadata on chunks, so a stream cut short often has real counts.
         usage,
         error,
       })
@@ -296,8 +290,6 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as EmbedContentParameters & MonitoringParams),
-        // The call returned no usage, and a failure this side of a response can
-        // still have consumed the input, so report no count rather than zero.
         usage: {},
         error,
       })

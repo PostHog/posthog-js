@@ -23,10 +23,6 @@ export class OpenAIChatStreamAccumulator {
   private serviceTier?: string
   private firstTokenTime?: number
   private stopReason?: string
-  // Token counts stay undefined until a chunk reports them. Seeding them at 0
-  // would make a stream that never carried usage — cancelled, or streamed
-  // without usage reporting enabled — indistinguishable from one that genuinely
-  // consumed nothing.
   private usage: TokenUsage = { webSearchCount: 0 }
   private readonly toolCalls = new Map<number, { id: string; name: string; arguments: string }>()
 
@@ -138,9 +134,6 @@ export class OpenAIResponsesStreamAccumulator {
   private serviceTier?: string
   private firstTokenTime?: number
   private stopReason?: string
-  // Undefined until an event reports usage, for the same reason as the chat
-  // accumulator above: a stream that never carried usage is not a stream that
-  // consumed nothing.
   private usage: TokenUsage = { webSearchCount: 0 }
   private terminalResponse?: OpenAI.Responses.Response
 
