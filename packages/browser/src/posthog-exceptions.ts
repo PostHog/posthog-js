@@ -299,12 +299,16 @@ export class PostHogExceptions implements Extension {
 
         // Safari masks some of the page's own scripts as `webkit-masked-url:` too, so a masked frame
         // does not prove the exception came from an extension. When every extension frame is masked,
-        // drop the exception only if no in_app frame remains -- an in_app frame is the page's own code.
+        // drop the exception only if no in_app frame from the page's own code remains. A producer may
+        // still mark a masked frame in_app -- the Sentry integration (sentry-integration.ts) forwards
+        // Sentry's `in_app: true` for every browser frame -- so ignore masked frames when looking for
+        // that page code, otherwise a masked-only Sentry stack would keep the masked frame as its own
+        // "page code" and never drop.
         const onlyMaskedExtensionFrames = extensionFrames.every(
             ({ filename }) => !!filename && filename.startsWith(MASKED_URL_PREFIX)
         )
         if (onlyMaskedExtensionFrames) {
-            return !frames.some((frame) => frame.in_app)
+            return !frames.some(({ in_app, filename }) => in_app && !filename?.startsWith(MASKED_URL_PREFIX))
         }
 
         return true

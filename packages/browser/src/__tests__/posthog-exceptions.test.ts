@@ -291,6 +291,39 @@ describe('PostHogExceptions', () => {
                 )
             })
 
+            it('does not capture Safari extension exceptions with only masked frames marked in_app', () => {
+                // The Sentry integration forwards Sentry's `in_app: true` for every browser frame,
+                // and Sentry does not rewrite the masked scheme, so a masked-only stack arrives with
+                // in_app: true. The masked frame must not count as the page's own code.
+                const exception = {
+                    type: 'TypeError',
+                    value: "undefined is not an object (evaluating 'isolatedAPI.contexts.topHostname')",
+                    stacktrace: {
+                        frames: [
+                            {
+                                filename: 'webkit-masked-url://hidden/',
+                                function: 'global code',
+                                platform: 'javascript:web',
+                                in_app: true,
+                            },
+                            {
+                                filename: 'webkit-masked-url://hidden/',
+                                function: 'uBOL_cssSpecific',
+                                platform: 'javascript:web',
+                                in_app: true,
+                            },
+                        ],
+                        type: 'raw',
+                    },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toBeCalledWith(
+                    '$exception',
+                    { $exception_list: [exception] },
+                    expect.anything()
+                )
+            })
+
             it('captures exceptions where a masked frame sits alongside the page own code', () => {
                 const exception = {
                     type: 'TypeError',
