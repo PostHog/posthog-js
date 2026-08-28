@@ -8,10 +8,21 @@ import { isString, isArray, isObject, ErrorTracking, isNullish } from '@posthog/
 
 const logger = createLogger('[Error tracking]')
 
+// Safari masks the URL of extension content scripts as `webkit-masked-url://hidden/`. It masks
+// some of the page's own scripts the same way, so a masked frame alone does not prove the
+// exception came from an extension (see _isExtensionException).
+const MASKED_URL_PREFIX = 'webkit-masked-url:'
+
 // Browser extensions serve their content scripts from these schemes. `safari-extension:` and
 // `safari-web-extension:` are synthesised by the stack parser (see extractSafariExtensionDetails)
 // rather than being real URLs, but they mark the frame just as definitively.
-const EXTENSION_URL_PREFIXES = ['chrome-extension://', 'moz-extension://', 'safari-extension:', 'safari-web-extension:']
+const EXTENSION_URL_PREFIXES = [
+    'chrome-extension://',
+    'moz-extension://',
+    'safari-extension:',
+    'safari-web-extension:',
+    MASKED_URL_PREFIX,
+]
 
 // Some mobile browsers inject their own user scripts into every page. These scripts read
 // browser-private globals, and when a script runs before its global exists it throws. The
@@ -279,9 +290,24 @@ export class PostHogExceptions implements Extension {
 
     private _isExtensionException(exceptionList: ErrorTracking.ExceptionList): boolean {
         const frames = exceptionList.flatMap((e) => e.stacktrace?.frames ?? [])
-        return frames.some(({ filename }) => {
-            return !!filename && EXTENSION_URL_PREFIXES.some((prefix) => filename.startsWith(prefix))
-        })
+        const extensionFrames = frames.filter(
+            ({ filename }) => !!filename && EXTENSION_URL_PREFIXES.some((prefix) => filename.startsWith(prefix))
+        )
+        if (extensionFrames.length === 0) {
+            return false
+        }
+
+        // Safari masks some of the page's own scripts as `webkit-masked-url:` too, so a masked frame
+        // does not prove the exception came from an extension. When every extension frame is masked,
+        // drop the exception only if no in_app frame remains -- an in_app frame is the page's own code.
+        const onlyMaskedExtensionFrames = extensionFrames.every(
+            ({ filename }) => !!filename && filename.startsWith(MASKED_URL_PREFIX)
+        )
+        if (onlyMaskedExtensionFrames) {
+            return !frames.some((frame) => frame.in_app)
+        }
+
+        return true
     }
 
     private _isInjectedBrowserScriptException(exceptionList: ErrorTracking.ExceptionList): boolean {
