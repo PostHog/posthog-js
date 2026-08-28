@@ -1,6 +1,6 @@
 import { sanitizeJsonLd, startJsonLdCapture } from '../../../extensions/replay/external/json-ld'
 import jsonLdContract from '../../../../test-fixtures/json-ld-sanitization-v1.json'
-import { addJsonLdContractTests } from './json-ld-contract'
+import { addJsonLdContractTests } from '../../helpers/json-ld-contract'
 
 function jsonLdScript(value: unknown): HTMLScriptElement {
     const script = document.createElement('script')
