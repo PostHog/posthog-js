@@ -1688,9 +1688,11 @@ export function Questions({
         [survey.id, initialInProgressState]
     )
     const surveyQuestions = useMemo(() => {
-        if (!questionOrderIds) {
-            // Some questions lack an id (older data) — there's no reliable way to map a stable
-            // order onto fresh question objects, so fall back to recomputing fresh each time.
+        // Some questions lack an id (older data), or two questions share one (seen in a couple
+        // of playwright fixtures) — either way a Map keyed by id can't disambiguate positions,
+        // so fall back to recomputing fresh each time rather than mapping id -> question.
+        const hasUsableIds = !!questionOrderIds && new Set(questionOrderIds).size === questionOrderIds.length
+        if (!hasUsableIds) {
             return getDisplayOrderQuestions(survey, initialInProgressState)
         }
         const byId = new Map(survey.questions.map((question) => [question.id, question]))
