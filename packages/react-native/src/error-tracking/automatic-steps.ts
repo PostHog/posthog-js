@@ -1,4 +1,70 @@
-import { ErrorTracking as CoreErrorTracking, isString, isArray, isObject } from '@posthog/core'
+import { isString, isArray, isObject } from '@posthog/core'
+
+/**
+ * `$type` values the SDK sets on an automatic step, so the error tracking timeline labels the step.
+ * The signals are the ones React Native observes, so the vocabulary lives here rather than in
+ * `@posthog/core`, which every SDK shares.
+ */
+export const EXCEPTION_STEP_TYPES = {
+  NAVIGATION: 'navigation',
+  TAP: 'tap',
+  LIFECYCLE: 'lifecycle',
+} as const
+
+export type ExceptionStepType = (typeof EXCEPTION_STEP_TYPES)[keyof typeof EXCEPTION_STEP_TYPES]
+
+/**
+ * Which app signals the SDK turns into automatic steps. Every signal is opt-in, because a step adds
+ * bytes to each captured exception and the buffer already carries whatever the caller added by hand.
+ */
+export type AutomaticExceptionStepsOptions = {
+  /** Screen changes. @default false */
+  navigation?: boolean
+  /** Taps the SDK already autocaptures. @default false */
+  taps?: boolean
+  /** App lifecycle transitions such as open, foreground and background. @default false */
+  lifecycle?: boolean
+}
+
+export type ResolvedAutomaticExceptionStepsOptions = {
+  navigation: boolean
+  taps: boolean
+  lifecycle: boolean
+}
+
+const ALL_SIGNALS_OFF: ResolvedAutomaticExceptionStepsOptions = {
+  navigation: false,
+  taps: false,
+  lifecycle: false,
+}
+
+const ALL_SIGNALS_ON: ResolvedAutomaticExceptionStepsOptions = {
+  navigation: true,
+  taps: true,
+  lifecycle: true,
+}
+
+/**
+ * Resolves the automatic-steps options. `true` enables every signal, `false` and `undefined` disable
+ * every signal, and an object enables only the signals it sets.
+ */
+export function resolveAutomaticExceptionStepsOptions(
+  options?: boolean | AutomaticExceptionStepsOptions | null
+): ResolvedAutomaticExceptionStepsOptions {
+  if (options === true) {
+    return { ...ALL_SIGNALS_ON }
+  }
+
+  if (!options || !isObject(options)) {
+    return { ...ALL_SIGNALS_OFF }
+  }
+
+  return {
+    navigation: options.navigation ?? ALL_SIGNALS_OFF.navigation,
+    taps: options.taps ?? ALL_SIGNALS_OFF.taps,
+    lifecycle: options.lifecycle ?? ALL_SIGNALS_OFF.lifecycle,
+  }
+}
 
 /**
  * App lifecycle events the SDK captures in `captureAppLifecycleEvents`. The step message is the
@@ -15,7 +81,7 @@ const LIFECYCLE_EVENTS = new Set<string>([
 const TOUCH_EVENT_TYPE = 'touch'
 
 export type AutomaticExceptionStep = {
-  type: CoreErrorTracking.ExceptionStepType
+  type: ExceptionStepType
   message: string
 }
 
@@ -27,7 +93,7 @@ export type AutomaticExceptionStep = {
  * the capture path without touching the SDK's state.
  */
 export function buildAutomaticExceptionStep(
-  config: CoreErrorTracking.ResolvedAutomaticExceptionStepsConfig,
+  config: ResolvedAutomaticExceptionStepsOptions,
   event: unknown,
   properties: unknown
 ): AutomaticExceptionStep | undefined {
@@ -44,7 +110,7 @@ export function buildAutomaticExceptionStep(
   }
 
   if (config.lifecycle && LIFECYCLE_EVENTS.has(event)) {
-    return { type: CoreErrorTracking.EXCEPTION_STEP_TYPES.LIFECYCLE, message: event }
+    return { type: EXCEPTION_STEP_TYPES.LIFECYCLE, message: event }
   }
 
   return undefined
@@ -56,7 +122,7 @@ function buildNavigationStep(properties: unknown): AutomaticExceptionStep | unde
     return undefined
   }
 
-  return { type: CoreErrorTracking.EXCEPTION_STEP_TYPES.NAVIGATION, message: `Screen: ${screenName}` }
+  return { type: EXCEPTION_STEP_TYPES.NAVIGATION, message: `Screen: ${screenName}` }
 }
 
 /**
@@ -73,7 +139,7 @@ function buildTapStep(properties: unknown): AutomaticExceptionStep | undefined {
 
   const label = readTapLabel(properties)
   return {
-    type: CoreErrorTracking.EXCEPTION_STEP_TYPES.TAP,
+    type: EXCEPTION_STEP_TYPES.TAP,
     message: label ? `Tap: ${label}` : 'Tap',
   }
 }

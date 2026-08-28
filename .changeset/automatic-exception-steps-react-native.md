@@ -7,4 +7,4 @@ Add automatic exception steps to React Native, so a captured exception carries a
 
 Automatic steps carry `$type`, which the error tracking timeline already renders, and they share the byte-bounded buffer and the native forwarding that manual steps use. A manual step stays untyped. An event that `before_send` dropped leaves no step.
 
-`reset()` now clears the exception-step buffer, for automatic and manual steps alike. Exception steps are user-session state, so on a shared device the previous user's screen names and tap labels must not reach the next user's exception. The buffer still survives a capture, so every exception in one session carries the same steps.
+The buffer keeps its existing lifetime. A capture keeps the steps, and `reset()` keeps them too, because steps scope to the app session rather than to the user session.

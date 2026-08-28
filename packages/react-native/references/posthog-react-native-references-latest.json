@@ -2240,16 +2240,16 @@
       "path": "dist/error-tracking/index.d.ts"
     },
     {
-      "id": "AutomaticExceptionStepsConfig",
-      "name": "AutomaticExceptionStepsConfig",
+      "id": "AutomaticExceptionStepsOptions",
+      "name": "AutomaticExceptionStepsOptions",
       "properties": [
         {
-          "description": "Screen or route changes.",
+          "description": "Screen changes.",
           "type": "boolean",
           "name": "navigation"
         },
         {
-          "description": "Taps and clicks the SDK already autocaptures.",
+          "description": "Taps the SDK already autocaptures.",
           "type": "boolean",
           "name": "taps"
         },
@@ -2259,7 +2259,7 @@
           "name": "lifecycle"
         }
       ],
-      "path": "../core/src/error-tracking/exception-steps.ts"
+      "path": "dist/error-tracking/automatic-steps.d.ts"
     },
     {
       "id": "BaseException",
@@ -2617,7 +2617,7 @@
       "properties": [
         {
           "description": "Records steps for app signals the SDK already observes, so an exception carries a timeline even where nobody called `addExceptionStep`. Every signal is off by default, because each step adds bytes to every captured exception.\nPass `true` to enable every signal, or an object to enable single signals.\nfalse",
-          "type": "boolean | CoreErrorTracking.AutomaticExceptionStepsConfig",
+          "type": "boolean | AutomaticExceptionStepsOptions",
           "name": "automatic"
         },
         {
@@ -2632,13 +2632,6 @@
         }
       ],
       "path": "dist/error-tracking/index.d.ts"
-    },
-    {
-      "id": "ExceptionStepType",
-      "name": "ExceptionStepType",
-      "properties": [],
-      "path": "../core/src/error-tracking/exception-steps.ts",
-      "example": "(typeof EXCEPTION_STEP_TYPES)[keyof typeof EXCEPTION_STEP_TYPES]"
     },
     {
       "id": "FeatureFlagDetail",
@@ -4423,25 +4416,6 @@
       "properties": [],
       "path": "../core/src/error-tracking/coercers/promise-rejection-event.ts",
       "example": "PromiseRejectionEventLike | EventWithDetailReason"
-    },
-    {
-      "id": "ResolvedAutomaticExceptionStepsConfig",
-      "name": "ResolvedAutomaticExceptionStepsConfig",
-      "properties": [
-        {
-          "type": "boolean",
-          "name": "navigation"
-        },
-        {
-          "type": "boolean",
-          "name": "taps"
-        },
-        {
-          "type": "boolean",
-          "name": "lifecycle"
-        }
-      ],
-      "path": "../core/src/error-tracking/exception-steps.ts"
     },
     {
       "id": "ResolvedExceptionStepsConfig",
