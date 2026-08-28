@@ -90,6 +90,10 @@ test.describe('Session recording - masking', () => {
                     email: 'PRIVATE_UNAPPROVED_EMAIL',
                     description: 'PRIVATE_DESCRIPTION',
                     url: 'https://example.com/?token=PRIVATE_URL_TOKEN',
+                    'PRIVATE_PROPERTY_NAME@example.com': {
+                        '@type': 'CustomMetadata',
+                        priceCurrency: 'ALLOWED_REDACTED_PROPERTY_DESCENDANT',
+                    },
                     brand: {
                         '@type': 'Person',
                         name: 'PRIVATE_NESTED_PERSON',
@@ -196,6 +200,7 @@ test.describe('Session recording - masking', () => {
         expect(eventBytes).toContain('ALLOWED_MANUFACTURER')
         expect(eventBytes).toContain('ALLOWED_MANUFACTURER_LEGAL_NAME')
         expect(eventBytes).toContain('ALLOWED_GRAPH_LANGUAGE')
+        expect(eventBytes).toContain('ALLOWED_REDACTED_PROPERTY_DESCENDANT')
         expect(eventBytes).toContain('"@type":"PrivateType"')
         expect(eventBytes).toContain('ALLOWED_PRIVATE_GRAPH_ID')
         expect(eventBytes).toContain('"@type":"CustomChild"')
@@ -208,6 +213,7 @@ test.describe('Session recording - masking', () => {
             'PRIVATE_UNAPPROVED_EMAIL',
             'PRIVATE_DESCRIPTION',
             'PRIVATE_URL_TOKEN',
+            'PRIVATE_PROPERTY_NAME@example.com',
             'PRIVATE_ID_URL',
             'PRIVATE_MISSING_DOM_ID',
             'PRIVATE_NESTED_PERSON',
