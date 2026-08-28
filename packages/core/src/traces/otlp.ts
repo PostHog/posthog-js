@@ -11,7 +11,7 @@ import type { Logger } from '../types'
 import type { ResolvedTracesConfig, SpanRecord } from './types'
 import { toOtlpKeyValueList } from '../utils/otlp-any-value'
 import { UNSERIALIZABLE_VALUE, sanitizeString } from '../utils/json-utils'
-import { assignUserAttributes } from './sanitize'
+import { buildOtlpResourceAttributes } from '../utils/otlp-resource'
 
 const SPAN_KIND_TO_OTLP: Record<SpanKind, number> = {
   internal: 1,
@@ -132,16 +132,7 @@ export function buildTracesResourceAttributes(
   sdkName: string,
   sdkVersion: string
 ): SpanAttributes {
-  return {
-    // Read through the shared guard: a throwing accessor here runs on every
-    // flush, before the pass's own error handling.
-    ...assignUserAttributes<SpanAttributes>({}, config.resourceAttributes),
-    'service.name': config.serviceName || 'unknown_service',
-    ...(config.environment && { 'deployment.environment': config.environment }),
-    ...(config.serviceVersion && { 'service.version': config.serviceVersion }),
-    'telemetry.sdk.name': sdkName,
-    'telemetry.sdk.version': sdkVersion,
-  }
+  return buildOtlpResourceAttributes(config, sdkName, sdkVersion)
 }
 
 /**

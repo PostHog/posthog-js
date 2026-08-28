@@ -115,7 +115,10 @@ export function resolveSuppliedTime(
  * Read key by key rather than spread: a getter over a disposed resource or a
  * revoked proxy throws on the read itself, before the encoder's guards see it.
  */
-export function assignUserAttributes<T extends Record<string, any>>(target: T, source: SpanAttributes | undefined): T {
+export function assignUserAttributes<T extends Record<string, any>>(
+  target: T,
+  source: Record<string, unknown> | undefined
+): T {
   if (!source) {
     return target
   }

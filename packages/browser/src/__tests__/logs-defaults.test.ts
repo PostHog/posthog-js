@@ -110,4 +110,50 @@ describe('resolveLogsConfig', () => {
 
         expect(resolved.serviceName).toBe('from-named')
     })
+    describe('OS resource attributes', () => {
+        const setUserAgent = (value: string | undefined): void => {
+            Object.defineProperty(window.navigator, 'userAgent', { value, configurable: true })
+        }
+
+        afterEach(() => {
+            // @ts-expect-error restoring the jsdom prototype getter
+            delete window.navigator.userAgent
+        })
+
+        it('attaches the detected OS', () => {
+            setUserAgent(
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            )
+
+            expect(resolveLogsConfig(undefined).resourceAttributes).toEqual({
+                'os.name': 'Mac OS X',
+                'os.version': '10.15.7',
+            })
+        })
+
+        it('lets user resourceAttributes override the detected OS', () => {
+            setUserAgent(
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            )
+
+            expect(
+                resolveLogsConfig({ resourceAttributes: { 'os.name': 'my-os', 'os.version': '1.2.3' } })
+                    .resourceAttributes
+            ).toEqual({ 'os.name': 'my-os', 'os.version': '1.2.3' })
+        })
+
+        it('omits a key the user agent cannot supply rather than emitting it empty', () => {
+            setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0')
+
+            expect(resolveLogsConfig(undefined).resourceAttributes).toEqual({ 'os.name': 'Linux' })
+        })
+
+        it('resolves without OS keys when there is no user agent', () => {
+            setUserAgent(undefined)
+
+            expect(resolveLogsConfig({ resourceAttributes: { 'host.name': 'web-01' } }).resourceAttributes).toEqual({
+                'host.name': 'web-01',
+            })
+        })
+    })
 })

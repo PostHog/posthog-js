@@ -71,6 +71,27 @@ describe('resolveTracesConfig', () => {
   it('floors an explicit maxQueueSize at the export batch size', () => {
     expect(resolveTracesConfig({ maxExportBatchSize: 512, maxQueueSize: 10 }).maxQueueSize).toBe(512)
   })
+
+  it('attaches the host resource attributes the entrypoint supplies', () => {
+    expect(
+      resolveTracesConfig(undefined, { 'os.name': 'linux', 'os.version': '6.1.0-27-amd64' }).resourceAttributes
+    ).toEqual({ 'os.name': 'linux', 'os.version': '6.1.0-27-amd64' })
+  })
+
+  it('lets user resource attributes override the host ones', () => {
+    expect(
+      resolveTracesConfig(
+        { resourceAttributes: { 'os.name': 'my-os', 'os.version': '1.2.3' } },
+        { 'os.name': 'linux', 'os.version': '6.1.0-27-amd64' }
+      ).resourceAttributes
+    ).toEqual({ 'os.name': 'my-os', 'os.version': '1.2.3' })
+  })
+
+  it('resolves when the entrypoint supplies no host attributes', () => {
+    expect(resolveTracesConfig({ resourceAttributes: { 'host.name': 'worker-01' } }).resourceAttributes).toEqual({
+      'host.name': 'worker-01',
+    })
+  })
 })
 
 describe('resourceAttributes guarding', () => {

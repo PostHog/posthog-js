@@ -1,3 +1,4 @@
+import { platform, release } from 'node:os'
 import { PostHog } from '@/entrypoints/index.node'
 import type { OtlpSpan, OtlpTracesPayload } from '@posthog/types'
 import { waitForPromises } from './utils'
@@ -113,6 +114,26 @@ describe('PostHog traces', () => {
       expect(resourceSpan.resource.attributes).toContainEqual({
         key: 'telemetry.sdk.name',
         value: { stringValue: 'posthog-node' },
+      })
+    })
+
+    it('sends the host OS as resource attributes', async () => {
+      posthog.startSpan('checkout').end()
+      await flushTraces()
+
+      const attributes = sentPayloads()[0].resourceSpans[0].resource.attributes
+      expect(attributes).toContainEqual({ key: 'os.name', value: { stringValue: platform() } })
+      expect(attributes).toContainEqual({ key: 'os.version', value: { stringValue: release() } })
+    })
+
+    it('lets configured resourceAttributes override the host OS', async () => {
+      posthog = createClient({ traces: { serviceName: 'checkout-api', resourceAttributes: { 'os.name': 'my-os' } } })
+      posthog.startSpan('checkout').end()
+      await flushTraces()
+
+      expect(sentPayloads()[0].resourceSpans[0].resource.attributes).toContainEqual({
+        key: 'os.name',
+        value: { stringValue: 'my-os' },
       })
     })
   })
