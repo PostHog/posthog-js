@@ -9,6 +9,8 @@ type IsCapturedDomId = (id: string) => boolean
 const MAX_JSON_LD_LENGTH = 100_000
 const MAX_JSON_LD_OUTPUT_LENGTH = 20_000
 const MAX_JSON_LD_TYPE_LENGTH = 100
+const MAX_JSON_LD_TYPES = 20
+const MAX_JSON_LD_NODES = 2_048
 const SCHEMA_CONTEXT = 'https://schema.org'
 const ANY_ENTITY_TYPES: readonly string[] = []
 const NO_CAPTURED_DOM_IDS: IsCapturedDomId = () => false
@@ -185,11 +187,38 @@ function getEntityRules(type: string): JsonLdEntityRules | undefined {
 }
 
 function getEntityTypes(value: unknown): string[] {
+    const seen = new Set<string>()
     const values = typeof value === 'string' ? [value] : isArray(value) ? value : []
-    return values
-        .filter((type): type is string => typeof type === 'string')
-        .map((type) => type.replace(/^https?:\/\/schema\.org\//, ''))
-        .filter((type) => !!type && type.length <= MAX_JSON_LD_TYPE_LENGTH)
+    const types: string[] = []
+    for (const value of values) {
+        if (typeof value !== 'string') {
+            continue
+        }
+        const type = value.replace(/^https?:\/\/schema\.org\//, '')
+        if (!type || type.length > MAX_JSON_LD_TYPE_LENGTH || seen.has(type)) {
+            continue
+        }
+        seen.add(type)
+        types.push(type)
+        if (types.length === MAX_JSON_LD_TYPES) {
+            break
+        }
+    }
+    return types
+}
+
+type SanitizationBudget = {
+    remainingNodes: number
+    exceeded: boolean
+}
+
+function takeNode(budget: SanitizationBudget): boolean {
+    if (!budget.remainingNodes) {
+        budget.exceeded = true
+        return false
+    }
+    budget.remainingNodes--
+    return true
 }
 
 function setOwnProperty(result: Record<string, unknown>, property: string, value: unknown): void {
@@ -204,24 +233,26 @@ function setOwnProperty(result: Record<string, unknown>, property: string, value
 function sanitizeEntityValue(
     value: unknown,
     isCapturedDomId: IsCapturedDomId,
+    budget: SanitizationBudget,
     allowedTypes?: readonly string[]
 ): unknown | undefined {
     if (isArray(value)) {
         const items = value
-            .map((item) => sanitizeEntityValue(item, isCapturedDomId, allowedTypes))
+            .map((item) => sanitizeEntityValue(item, isCapturedDomId, budget, allowedTypes))
             .filter((item) => !isUndefined(item))
         return items.length ? items : undefined
     }
 
-    return sanitizeEntity(value, isCapturedDomId, allowedTypes) || undefined
+    return sanitizeEntity(value, isCapturedDomId, budget, allowedTypes) || undefined
 }
 
 function sanitizeEntity(
     value: unknown,
     isCapturedDomId: IsCapturedDomId,
+    budget: SanitizationBudget,
     allowedTypes?: readonly string[]
 ): Record<string, unknown> | null {
-    if (!isObject(value)) {
+    if (!isObject(value) || !takeNode(budget)) {
         return null
     }
     const typeValue = getOwnProperty(value, '@type')
@@ -258,7 +289,7 @@ function sanitizeEntity(
                     setOwnProperty(result, property, scalar)
                 }
             } else {
-                const nestedValue = sanitizeEntityValue(propertyValue, isCapturedDomId, rule)
+                const nestedValue = sanitizeEntityValue(propertyValue, isCapturedDomId, budget, rule)
                 if (!isUndefined(nestedValue)) {
                     setOwnProperty(result, property, nestedValue)
                 }
@@ -266,7 +297,7 @@ function sanitizeEntity(
         }
     }
 
-    const graph = sanitizeEntityValue(getOwnProperty(value, '@graph'), isCapturedDomId)
+    const graph = sanitizeEntityValue(getOwnProperty(value, '@graph'), isCapturedDomId, budget)
     if (!isUndefined(graph)) {
         setOwnProperty(result, '@graph', graph)
     }
@@ -274,7 +305,11 @@ function sanitizeEntity(
     return Object.keys(result).length ? result : null
 }
 
-function sanitizeRoot(value: unknown, isCapturedDomId: IsCapturedDomId): Record<string, unknown> | null {
+function sanitizeRoot(
+    value: unknown,
+    isCapturedDomId: IsCapturedDomId,
+    budget: SanitizationBudget
+): Record<string, unknown> | null {
     if (!isObject(value)) {
         return null
     }
@@ -283,7 +318,7 @@ function sanitizeRoot(value: unknown, isCapturedDomId: IsCapturedDomId): Record<
         return null
     }
 
-    const entity = sanitizeEntity(value, isCapturedDomId)
+    const entity = sanitizeEntity(value, isCapturedDomId, budget)
     return entity ? { '@context': SCHEMA_CONTEXT, ...entity } : null
 }
 
@@ -297,10 +332,18 @@ export function sanitizeJsonLd(
 
     try {
         const value: unknown = JSON.parse(text)
+        const budget: SanitizationBudget = {
+            remainingNodes: MAX_JSON_LD_NODES,
+            exceeded: false,
+        }
         const sanitized = isArray(value)
-            ? value.map((root) => sanitizeRoot(root, isCapturedDomId))
-            : sanitizeRoot(value, isCapturedDomId)
-        if (isNull(sanitized) || (isArray(sanitized) && (!sanitized.length || sanitized.some(isNull)))) {
+            ? value.map((root) => sanitizeRoot(root, isCapturedDomId, budget))
+            : sanitizeRoot(value, isCapturedDomId, budget)
+        if (
+            budget.exceeded ||
+            isNull(sanitized) ||
+            (isArray(sanitized) && (!sanitized.length || sanitized.some(isNull)))
+        ) {
             return null
         }
 

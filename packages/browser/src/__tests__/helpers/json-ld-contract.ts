@@ -4,6 +4,8 @@ type JsonLdContract = {
     schemaVersion: number
     limits: {
         maxTypeLength: number
+        maxTypes: number
+        maxNodes: number
         maxSourceLength: number
         maxPayloadLength: number
     }
@@ -92,7 +94,7 @@ export function addJsonLdContractTests(contractValue: unknown, sanitizeJsonLd: S
     )
 
     it('enforces the published type and payload limits', () => {
-        const { maxTypeLength, maxSourceLength, maxPayloadLength } = contract.limits
+        const { maxTypeLength, maxTypes, maxNodes, maxSourceLength, maxPayloadLength } = contract.limits
         const root = (type: string, name: string | null = null): Record<string, unknown> => ({
             '@context': 'https://schema.org',
             '@type': type,
@@ -105,6 +107,25 @@ export function addJsonLdContractTests(contractValue: unknown, sanitizeJsonLd: S
         expect(sanitizeJsonLd(JSON.stringify(root('T'.repeat(maxTypeLength + 1))))).toBeNull()
         expect(sanitizeJsonLd(JSON.stringify(root('😀'.repeat(50))))?.[0]).toEqual(root('😀'.repeat(50)))
         expect(sanitizeJsonLd(JSON.stringify(root('😀'.repeat(51))))).toBeNull()
+
+        const types = Array.from({ length: maxTypes }, (_, index) => `Type${index}`)
+        expect(sanitizeJsonLd(JSON.stringify({ ...root('Type0'), '@type': types }))?.[0]).toEqual({
+            ...root('Type0'),
+            '@type': types,
+        })
+        expect(sanitizeJsonLd(JSON.stringify({ ...root('Type0'), '@type': [...types, 'TypeOverLimit'] }))?.[0]).toEqual(
+            {
+                ...root('Type0'),
+                '@type': types,
+            }
+        )
+
+        const rootWithGraph = (graphSize: number): Record<string, unknown> => ({
+            ...root('Thing'),
+            '@graph': Array.from({ length: graphSize }, () => ({})),
+        })
+        expect(sanitizeJsonLd(JSON.stringify(rootWithGraph(maxNodes - 1)))?.[0]).toEqual(root('Thing'))
+        expect(sanitizeJsonLd(JSON.stringify(rootWithGraph(maxNodes)))).toBeNull()
 
         const sourcePrefix = '{"@context":"https://schema.org","@type":"Product","private":"'
         const sourceSuffix = '"}'
