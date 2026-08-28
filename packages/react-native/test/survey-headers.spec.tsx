@@ -68,12 +68,7 @@ describe('survey headers', () => {
     const description = 'A long intro description that wraps before it reaches the top-right close button'
 
     render(
-      <IntroMessage
-        appearance={defaultSurveyAppearance}
-        header=""
-        description={description}
-        onStart={jest.fn()}
-      />
+      <IntroMessage appearance={defaultSurveyAppearance} header="" description={description} onStart={jest.fn()} />
     )
 
     const introDescription = screen.getByText(description) as HTMLElement
