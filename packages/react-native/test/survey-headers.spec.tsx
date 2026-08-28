@@ -63,4 +63,20 @@ describe('survey headers', () => {
 
     expect(header.style.paddingRight).toBe(`${closeButtonSize}px`)
   })
+
+  it('reserves room for a headerless intro description', () => {
+    const description = 'A long intro description that wraps before it reaches the top-right close button'
+
+    render(
+      <IntroMessage
+        appearance={defaultSurveyAppearance}
+        header=""
+        description={description}
+        onStart={jest.fn()}
+      />
+    )
+
+    const introDescription = screen.getByText(description) as HTMLElement
+    expect(introDescription.style.paddingRight).toBe(`${closeButtonSize}px`)
+  })
 })
