@@ -1,5 +1,6 @@
-import type { OtlpLogsPayload, OtlpMetricsPayload } from '@posthog/types'
+import type { OtlpLogsPayload, OtlpMetricsPayload, OtlpTracesPayload } from '@posthog/types'
 import type { SendMetricsBatchOutcome } from './metrics/types'
+import type { SendTracesBatchOutcome } from './traces/types'
 import { SimpleEventEmitter } from './eventemitter'
 import { getFeatureFlagValue, minimizeFlagCalledEventProperties, normalizeFlagsResponse } from './featureFlagUtils'
 import { gzipCompress, isGzipSupported } from './gzip'
@@ -238,8 +239,8 @@ export type SendLogsBatchOutcome =
 
 /**
  * Each signal keeps its own exported outcome type because each belongs to a
- * separate host contract. The wrappers return this value directly, so one
- * drifting out of shape fails to compile.
+ * separate host contract. The wrappers return this value directly, so any of
+ * the three drifting out of shape fails to compile.
  */
 type SendOtlpBatchOutcome =
   | { kind: 'ok' }
@@ -1642,9 +1643,9 @@ export abstract class PostHogCoreStateless {
   }
 
   /**
-   * Shared implementation behind the OTLP senders, which differ only in path.
-   * Returns a tagged outcome instead of throwing so the queue owners don't
-   * have to know the core's error class hierarchy.
+   * Shared implementation behind the three OTLP senders, which differ only in
+   * path and auth style. Returns a tagged outcome instead of throwing so the
+   * queue owners don't have to know the core's error class hierarchy.
    *
    * Exhausted 408/429/5xx stay `retry-later`, unlike the events `_flush()`
    * which drops anything that isn't a network error: every OTLP queue is
@@ -1653,17 +1654,22 @@ export abstract class PostHogCoreStateless {
    */
   private async _sendOtlpBatch({
     path,
+    auth,
     payload,
   }: {
-    path: 'logs' | 'metrics'
-    payload: OtlpLogsPayload | OtlpMetricsPayload
+    path: 'logs' | 'metrics' | 'traces'
+    auth: 'query-token' | 'bearer'
+    payload: OtlpLogsPayload | OtlpMetricsPayload | OtlpTracesPayload
   }): Promise<SendOtlpBatchOutcome> {
     if (this.disabled) {
       return { kind: 'fatal', error: new Error('The client is disabled') }
     }
 
     const serialized = JSON.stringify(payload)
-    const url = `${this.host}/i/v1/${path}?token=${encodeURIComponent(this.apiKey)}`
+    const url =
+      auth === 'bearer'
+        ? `${this.host}/i/v1/${path}`
+        : `${this.host}/i/v1/${path}?token=${encodeURIComponent(this.apiKey)}`
 
     const gzippedPayload = !this.disableCompression ? await this.compressPayload(serialized) : null
     const fetchOptions: PostHogFetchOptions = {
@@ -1671,6 +1677,7 @@ export abstract class PostHogCoreStateless {
       headers: {
         ...this.getCustomHeaders(),
         'Content-Type': 'application/json',
+        ...(auth === 'bearer' && { Authorization: `Bearer ${this.apiKey}` }),
         ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
       },
       body: gzippedPayload || serialized,
@@ -1703,11 +1710,23 @@ export abstract class PostHogCoreStateless {
   }
 
   async _sendLogsBatch(payload: OtlpLogsPayload): Promise<SendLogsBatchOutcome> {
-    return this._sendOtlpBatch({ path: 'logs', payload })
+    return this._sendOtlpBatch({ path: 'logs', auth: 'query-token', payload })
   }
 
   async _sendMetricsBatch(payload: OtlpMetricsPayload): Promise<SendMetricsBatchOutcome> {
-    return this._sendOtlpBatch({ path: 'metrics', payload })
+    return this._sendOtlpBatch({ path: 'metrics', auth: 'query-token', payload })
+  }
+
+  /**
+   * The `TracesHost._sendTracesBatch` implementation, so `PostHogTraces` can
+   * use any core-based SDK as its host.
+   *
+   * Authenticates with `Authorization: Bearer` rather than the `?token=` query
+   * parameter the logs and metrics senders use: it's the service's primary auth
+   * path, and server runtimes have no CORS preflight to avoid.
+   */
+  async _sendTracesBatch(payload: OtlpTracesPayload): Promise<SendTracesBatchOutcome> {
+    return this._sendOtlpBatch({ path: 'traces', auth: 'bearer', payload })
   }
 
   private fetchWithRetry<T>(
