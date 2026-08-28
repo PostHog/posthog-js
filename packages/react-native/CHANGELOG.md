@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.66.1
+
+### Patch Changes
+
+- [#4673](https://github.com/PostHog/posthog-js/pull/4673) [`956d252`](https://github.com/PostHog/posthog-js/commit/956d252448f5bec49e6f87ac3f4e465f5e581aa9) Thanks [@github-actions](https://github.com/apps/github-actions)! - Survey question, intro and thank-you headers no longer run underneath the close button. Long headers now wrap before reaching the modal's top-right corner instead of being overlapped by it.
+  (2026-08-28)
+
 ## 4.66.0
 
 ### Minor Changes
