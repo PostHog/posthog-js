@@ -36,6 +36,11 @@ export const posthog = new PostHog(process.env.EXPO_PUBLIC_POSTHOG_PROJECT_API_K
             // `uploadNativeSymbols` option in app.json).
             nativeCrashes: true,
         },
+        exceptionSteps: {
+            // Record a step for every screen change, autocaptured tap and lifecycle transition, so a
+            // captured exception carries a timeline without an addExceptionStep call at each site.
+            automatic: true,
+        },
     },
     // Inject X-POSTHOG-DISTINCT-ID and X-POSTHOG-SESSION-ID on outgoing fetch
     // requests to these hostnames. Used by the Tracing Headers screen to verify
