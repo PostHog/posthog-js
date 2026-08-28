@@ -4,6 +4,7 @@ import { Text, View } from 'react-native'
 import { SurveyQuestionDescriptionContentType } from '@posthog/core'
 import { createSafeStyleSheet } from '../safeStyleSheet'
 import {
+  closeButtonSize,
   defaultDescriptionOpacity,
   getContrastingTextColor,
   shouldRenderDescription,
@@ -39,7 +40,7 @@ export function QuestionHeader({
 const styles = createSafeStyleSheet({
   container: {
     padding: 10,
-    paddingRight: 40,
+    paddingRight: closeButtonSize,
   },
   question: {
     fontSize: 18,

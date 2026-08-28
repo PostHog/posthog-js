@@ -42,6 +42,13 @@ export const defaultBackgroundColor = '#eeeded' as const
 export const defaultDescriptionOpacity = 0.8
 export const defaultRatingLabelOpacity = 0.7
 
+/**
+ * Side of the circular close button. The button is absolutely positioned in the modal's
+ * top-right corner, so the headers underneath it reserve this much padding on their right
+ * edge to keep long text from wrapping into it.
+ */
+export const closeButtonSize = 40
+
 // textColor and inputTextColor are optional overrides (auto-calculated if not provided)
 export type SurveyAppearanceTheme = Omit<
   Required<SurveyAppearance>,
