@@ -8,6 +8,7 @@ type IsCapturedDomId = (id: string) => boolean
 
 const MAX_JSON_LD_LENGTH = 100_000
 const MAX_JSON_LD_OUTPUT_LENGTH = 20_000
+const MAX_JSON_LD_TYPE_LENGTH = 100
 const SCHEMA_CONTEXT = 'https://schema.org'
 const ANY_ENTITY_TYPES: readonly string[] = []
 const NO_CAPTURED_DOM_IDS: IsCapturedDomId = () => false
@@ -188,7 +189,7 @@ function getEntityTypes(value: unknown): string[] {
     return values
         .filter((type): type is string => typeof type === 'string')
         .map((type) => type.replace(/^https?:\/\/schema\.org\//, ''))
-        .filter(Boolean)
+        .filter((type) => !!type && type.length <= MAX_JSON_LD_TYPE_LENGTH)
 }
 
 function setOwnProperty(result: Record<string, unknown>, property: string, value: unknown): void {

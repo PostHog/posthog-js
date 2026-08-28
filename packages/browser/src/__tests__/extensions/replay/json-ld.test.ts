@@ -1,4 +1,24 @@
+import { isNull } from '@posthog/core'
+
 import { sanitizeJsonLd, startJsonLdCapture } from '../../../extensions/replay/external/json-ld'
+import jsonLdContract from '../../../../test-fixtures/json-ld-sanitization-v1.json'
+
+type JsonLdContract = {
+    schemaVersion: 1
+    limits: {
+        maxTypeLength: number
+        maxSourceLength: number
+        maxPayloadLength: number
+    }
+    cases: Array<{
+        name: string
+        capturedDomIds: string[]
+        input: unknown
+        expected: unknown
+    }>
+}
+
+const contract = jsonLdContract as JsonLdContract
 
 const GOOGLE_SEARCH_TYPES =
     '3DModel Accommodation Action AdministrativeArea AggregateOffer AggregateRating AlignmentObject Answer Article BedDetails Blog BlogPosting Book BorrowAction Brand BreadcrumbList BroadcastEvent Car Certification Clip Comment ContactPoint Country Course CreativeWork CreativeWorkSeason CreativeWorkSeries CreditCard DataCatalog DataDownload DataFeed Dataset DaySpa DefinedRegion DiscussionForumPosting EducationalOccupationalCredential Electrician EmployerAggregateRating EntryPoint Episode Event Game GeoCoordinates GeoShape HealthClub Hotel HowTo HowToDirection HowToSection HowToStep HowToTip ImageObject InteractionCounter ItemList JobPosting LearningResource Library LibrarySystem ListItem LocalBusiness LocationFeatureSpecification Locksmith LodgingBusiness MathSolver MediaObject MemberProgram MemberProgramTier MerchantReturnPolicy MerchantReturnPolicySeasonalOverride Message MobileApplication MonetaryAmount Movie MusicPlaylist MusicRecording NewsArticle NutritionInformation OccupationalExperienceRequirements Offer OfferShippingDetails OnlineStore OpeningHoursSpecification Organization PeopleAudience PerformingGroup Person Pharmacy Place Plumber PostalAddress PriceSpecification Product ProductGroup ProfilePage PropertyValue QAPage QuantitativeValue Question Quiz Rating ReadAction Recipe Restaurant Review SeekToAction ServicePeriod ShippingConditions ShippingDeliveryTime ShippingRateSettings ShippingService SocialMediaPosting SoftwareApplication SolveMathAction SpeakableSpecification State Store Thing UnitPriceSpecification VacationRental VideoGame VideoObject WatchAction WebApplication WebPage WebPageElement'.split(
@@ -28,6 +48,44 @@ function capturedDomIds(...ids: string[]): (id: string) => boolean {
 describe('JSON-LD replay capture', () => {
     afterEach(() => {
         document.body.replaceChildren()
+    })
+
+    it('uses the supported sanitization contract version', () => {
+        expect(contract.schemaVersion).toBe(1)
+    })
+
+    it.each(contract.cases)('matches the published contract: $name', ({ capturedDomIds: ids, input, expected }) => {
+        const sanitized = sanitizeJsonLd(JSON.stringify(input), capturedDomIds(...ids))
+        expect(sanitized?.[0] ?? null).toEqual(expected)
+    })
+
+    it('enforces the published type and payload limits', () => {
+        const { maxTypeLength, maxSourceLength, maxPayloadLength } = contract.limits
+        const root = (type: string, name: string | null = null): Record<string, unknown> => ({
+            '@context': 'https://schema.org',
+            '@type': type,
+            ...(isNull(name) ? {} : { name }),
+        })
+
+        expect(sanitizeJsonLd(JSON.stringify(root('T'.repeat(maxTypeLength))))?.[0]).toEqual(
+            root('T'.repeat(maxTypeLength))
+        )
+        expect(sanitizeJsonLd(JSON.stringify(root('T'.repeat(maxTypeLength + 1))))).toBeNull()
+        expect(sanitizeJsonLd(JSON.stringify(root('😀'.repeat(50))))?.[0]).toEqual(root('😀'.repeat(50)))
+        expect(sanitizeJsonLd(JSON.stringify(root('😀'.repeat(51))))).toBeNull()
+
+        const sourcePrefix = '{"@context":"https://schema.org","@type":"Product","private":"'
+        const sourceSuffix = '"}'
+        const sourceAtLimit =
+            sourcePrefix + 'x'.repeat(maxSourceLength - sourcePrefix.length - sourceSuffix.length) + sourceSuffix
+        expect(sourceAtLimit).toHaveLength(maxSourceLength)
+        expect(sanitizeJsonLd(sourceAtLimit)?.[0]).toEqual(root('Product'))
+        expect(sanitizeJsonLd(sourceAtLimit + ' ')).toBeNull()
+
+        const emptyPayloadLength = JSON.stringify(root('Product', '')).length
+        const nameAtLimit = 'x'.repeat(maxPayloadLength - emptyPayloadLength)
+        expect(sanitizeJsonLd(JSON.stringify(root('Product', nameAtLimit)))?.[1]).toHaveLength(maxPayloadLength)
+        expect(sanitizeJsonLd(JSON.stringify(root('Product', nameAtLimit + 'x')))).toBeNull()
     })
 
     it('accepts every Google-listed type', () => {
