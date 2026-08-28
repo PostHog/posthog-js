@@ -840,6 +840,45 @@ describe('posthog core', () => {
             })
         })
 
+        // A sanitize_properties hook that returns nullish or throws must not drop the event.
+        it('keeps original properties when sanitize_properties returns undefined', () => {
+            posthog = posthogWith(
+                {
+                    api_host: 'https://app.posthog.com',
+                    token: 'testtoken',
+                    sanitize_properties: () => undefined as any,
+                },
+                overrides
+            )
+
+            expect(posthog.calculateEventProperties('custom_event', { event: 'prop' }, new Date(), uuid)).toMatchObject(
+                {
+                    event: 'prop',
+                    token: 'testtoken',
+                }
+            )
+        })
+
+        it('keeps original properties when sanitize_properties throws', () => {
+            posthog = posthogWith(
+                {
+                    api_host: 'https://app.posthog.com',
+                    token: 'testtoken',
+                    sanitize_properties: () => {
+                        throw new Error('boom')
+                    },
+                },
+                overrides
+            )
+
+            expect(posthog.calculateEventProperties('custom_event', { event: 'prop' }, new Date(), uuid)).toMatchObject(
+                {
+                    event: 'prop',
+                    token: 'testtoken',
+                }
+            )
+        })
+
         describe('initial person props and $identify interaction', () => {
             const setupPosthogWithInitialProps = () => {
                 posthog = posthogWith(

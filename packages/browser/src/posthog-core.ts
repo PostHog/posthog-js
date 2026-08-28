@@ -180,6 +180,8 @@ const RESET_CONSENT_WARN =
     'Call opt_in_capturing() again, and prefer calling reset() before opting in rather than after.'
 const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
+const SANITIZE_NULLISH = (eventName: string): string =>
+    `sanitize_properties returned undefined for event '${eventName}', so the original properties were kept. The hook must return the properties object.`
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
 // Transport-level keys the browser SDK carries inside event properties (unlike other SDKs,
@@ -1910,11 +1912,7 @@ export class PostHog implements PostHogInterface {
             )
         }
 
-        const sanitize_properties = this.config.sanitize_properties
-        if (sanitize_properties) {
-            logger.error(SANITIZE_DEPRECATED)
-            properties = sanitize_properties(properties, eventName)
-        }
+        properties = this._runSanitizeProperties(properties, eventName)
 
         // add person processing flag as very last step, so it cannot be overridden
         const hasPersonProcessing = this._hasPersonProcessing()
@@ -1925,6 +1923,31 @@ export class PostHog implements PostHogInterface {
         }
 
         return properties
+    }
+
+    /**
+     * Run the deprecated `sanitize_properties` hook. A hook that returns nullish or throws
+     * must not drop the event, so keep the original properties and warn. Without this a hook
+     * that forgets to return silently takes out high-volume events like `$pageview`, the same
+     * failure `before_send` already guards against.
+     */
+    private _runSanitizeProperties(properties: Properties, eventName: string): Properties {
+        const sanitize_properties = this.config.sanitize_properties
+        if (!sanitize_properties) {
+            return properties
+        }
+        logger.error(SANITIZE_DEPRECATED)
+        try {
+            const sanitizedProperties = sanitize_properties(properties, eventName)
+            if (isNullish(sanitizedProperties)) {
+                logger.warn(SANITIZE_NULLISH(eventName))
+                return properties
+            }
+            return sanitizedProperties
+        } catch (e) {
+            logger.error(`Error in sanitize_properties function for event '${eventName}':`, e)
+            return properties
+        }
     }
 
     /** @deprecated - deprecated in 1.241.0, use `calculateEventProperties` instead  */
@@ -1958,11 +1981,7 @@ export class PostHog implements PostHogInterface {
         const initialProps = this.persistence.get_initial_props()
         const sessionProps = this.sessionPropsManager?.getSetOnceProps()
         let setOnceProperties = extend({}, initialProps, sessionProps || {}, dataSetOnce || {})
-        const sanitize_properties = this.config.sanitize_properties
-        if (sanitize_properties) {
-            logger.error(SANITIZE_DEPRECATED)
-            setOnceProperties = sanitize_properties(setOnceProperties, '$set_once')
-        }
+        setOnceProperties = this._runSanitizeProperties(setOnceProperties, '$set_once')
         if (markAsSent) {
             this._personProcessingSetOncePropertiesSent = true
         }
