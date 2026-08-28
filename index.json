@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/4674": {
+    "key": "PostHog/posthog-js/issue/4674",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4674",
+    "url": "https://github.com/PostHog/posthog-js/issues/4674",
+    "conclusion": "Likely Android/Expo build compatibility regression introduced through the native-symbol upload Gradle integration, but the exact dependency edge needs verification.",
+    "labels": [
+      "react-native",
+      "Android",
+      "feature/error-tracking",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-28T17:00:46.038Z"
+  },
   "PostHog/posthog-js/issue/4671": {
     "key": "PostHog/posthog-js/issue/4671",
     "repo": "PostHog/posthog-js",
