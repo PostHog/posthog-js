@@ -364,6 +364,7 @@ function isJsonLdScript(node: Node): node is HTMLScriptElement {
 type JsonLdPrivacyOptions = {
     blockClass?: string | RegExp
     blockSelector?: string | null
+    getCapturedDomNodes?: () => Iterable<Node | null>
     maskAllElementAttributes?: boolean
     maskAttributeFn?: ((name: string, value: string, element: Element) => string) | null
     maskTextClass?: string | RegExp
@@ -411,19 +412,44 @@ function isWithinPrivacyBoundary(element: Element, options: JsonLdPrivacyOptions
     )
 }
 
-function isCapturedDomId(doc: Document, id: string, options: JsonLdPrivacyOptions): boolean {
+function* getOpenDomElements(root: Document | ShadowRoot): Iterable<Element> {
+    for (const element of root.querySelectorAll('*')) {
+        yield element
+        if (element.shadowRoot) {
+            yield* getOpenDomElements(element.shadowRoot)
+        }
+    }
+}
+
+function createCapturedDomIdMatcher(doc: Document, options: JsonLdPrivacyOptions): IsCapturedDomId {
     if (options.maskAllElementAttributes || options.maskAttributeFn) {
-        return false
+        return NO_CAPTURED_DOM_IDS
     }
 
-    const element = doc.getElementById(id)
-    return !!(
-        element &&
-        element.isConnected &&
-        element.ownerDocument === doc &&
-        element.nodeName !== 'SCRIPT' &&
-        !isWithinBoundary(element, options.blockClass, options.blockSelector)
-    )
+    let capturedDomIds: Set<string> | undefined
+    return (id) => {
+        if (!capturedDomIds) {
+            const nextCapturedDomIds = new Set<string>()
+            const nodes = options.getCapturedDomNodes?.() ?? getOpenDomElements(doc)
+            for (const node of nodes) {
+                if (!node || node.nodeType !== node.ELEMENT_NODE) {
+                    continue
+                }
+                const element = node as Element
+                if (
+                    element.id &&
+                    element.isConnected &&
+                    element.ownerDocument === doc &&
+                    element.nodeName !== 'SCRIPT' &&
+                    !isWithinBoundary(element, options.blockClass, options.blockSelector)
+                ) {
+                    nextCapturedDomIds.add(element.id)
+                }
+            }
+            capturedDomIds = nextCapturedDomIds
+        }
+        return capturedDomIds.has(id)
+    }
 }
 
 function getJsonLdScripts(node: Node): HTMLScriptElement[] {
@@ -447,10 +473,9 @@ export function startJsonLdCapture(
 ): { scan: (force?: boolean) => void; stop: () => void } {
     const lastJsonByScript = new WeakMap<HTMLScriptElement, string>()
     const getCaptureState = options.getCaptureState || (() => true)
-    const hasCapturedDomId: IsCapturedDomId = (id) => isCapturedDomId(doc, id, options)
     let remainingLength = MAX_JSON_LD_LENGTH
 
-    const captureScript = (script: HTMLScriptElement): void => {
+    const captureScript = (script: HTMLScriptElement, hasCapturedDomId: IsCapturedDomId): void => {
         try {
             const captureState = getCaptureState()
             if (
@@ -493,25 +518,26 @@ export function startJsonLdCapture(
                 if (!remainingLength || getCaptureState() === false) {
                     return
                 }
+                const hasCapturedDomId = createCapturedDomIdMatcher(doc, options)
                 const captureScripts = (node: Node): void => {
                     for (const script of getJsonLdScripts(node)) {
-                        captureScript(script)
+                        captureScript(script, hasCapturedDomId)
                     }
                 }
 
                 for (const mutation of mutations) {
                     if (mutation.type === 'childList') {
                         if (isJsonLdScript(mutation.target)) {
-                            captureScript(mutation.target)
+                            captureScript(mutation.target, hasCapturedDomId)
                         }
                         mutation.addedNodes.forEach(captureScripts)
                     } else if (mutation.type === 'characterData') {
                         const parent = mutation.target.parentNode
                         if (parent && isJsonLdScript(parent)) {
-                            captureScript(parent)
+                            captureScript(parent, hasCapturedDomId)
                         }
                     } else if (mutation.type === 'attributes' && isJsonLdScript(mutation.target)) {
-                        captureScript(mutation.target)
+                        captureScript(mutation.target, hasCapturedDomId)
                     }
                 }
             } catch {
@@ -530,11 +556,12 @@ export function startJsonLdCapture(
             if (!remainingLength || getCaptureState() === false) {
                 return
             }
+            const hasCapturedDomId = createCapturedDomIdMatcher(doc, options)
             getJsonLdScripts(doc.documentElement).forEach((script) => {
                 if (force) {
                     lastJsonByScript.delete(script)
                 }
-                captureScript(script)
+                captureScript(script, hasCapturedDomId)
             })
         }
 
