@@ -13,7 +13,12 @@ import {
 } from '@posthog/browser-common'
 import { Publisher } from '@posthog/browser-common/pubsub'
 
-import { createAnalyticsDelivery, isAnalyticsExtension, type AnalyticsMessage } from './analytics-internal'
+import {
+    createAnalyticsDelivery,
+    isAnalyticsExtension,
+    type AnalyticsDelivery,
+    type AnalyticsMessage,
+} from './analytics-internal'
 import { isLikelyBot } from './bot-filter'
 import { ExtensionRegistry } from './extensions/registry'
 import { createId } from './id'
@@ -25,6 +30,7 @@ import { BrowserState, getDefaultSessionStorage, getDefaultStorage } from './sta
 import type {
     AnalyticsOptions,
     BrowserFetch,
+    CaptureSummary,
     LoadStrategy,
     BrowserNavigator,
     CorePostHogOptions,
@@ -40,7 +46,14 @@ const MAX_ANALYTICS_AGE_MS = 60 * 60 * 1000
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000
 const CLIENT_RATE_LIMIT_WARNING = '$$client_ingestion_warning'
 
-type AutomaticAnalyticsReason = 'capture' | 'flush' | 'shutdown' | 'eager'
+type AutomaticAnalyticsReason = 'capture' | 'immediate' | 'flush' | 'shutdown' | 'eager'
+
+const EMPTY_CAPTURE_SUMMARY: CaptureSummary = Object.freeze({
+    submitted: 0,
+    notPersisted: 0,
+    allPersisted: true,
+    results: Object.freeze({}),
+})
 
 export interface AutomaticAnalyticsSetup {
     strategy: LoadStrategy
@@ -142,6 +155,8 @@ class PostHogBrowserClient implements PostHog {
     private _remoteConfigPromise: Promise<RemoteConfig | undefined> | undefined
     private _cancelRemoteConfigWait: (() => void) | undefined
     private _automaticAnalyticsLoad: Promise<void> | undefined
+    private _analyticsDelivery: AnalyticsDelivery | undefined
+    private _immediateAuthority = {}
     private _automaticAnalyticsFailed = false
     private _automaticAnalyticsFailures = 0
     private _closing = false
@@ -220,6 +235,7 @@ class PostHogBrowserClient implements PostHog {
                 : undefined,
             (consent) => {
                 if (consent === 'denied') {
+                    this._immediateAuthority = {}
                     this._analyticsLane.purge()
                 }
             }
@@ -305,12 +321,50 @@ class PostHogBrowserClient implements PostHog {
         this._capture(event, properties, options)
     }
 
+    async captureImmediate(
+        event: string,
+        properties: Record<string, unknown> | null = null,
+        options: CaptureOptions = {}
+    ): Promise<CaptureSummary> {
+        const authority = this._immediateAuthority
+        const message = this._admitCapture(event, properties, options, false, true)
+        if (!message) {
+            return EMPTY_CAPTURE_SUMMARY
+        }
+
+        await this._ensureAutomaticAnalytics('immediate')
+        const delivery = this._analyticsDelivery
+        let deliverImmediate: AnalyticsDelivery['deliverImmediate'] | undefined
+        try {
+            deliverImmediate = delivery?.deliverImmediate
+        } catch {
+            deliverImmediate = undefined
+        }
+        if (this._immediateAuthority !== authority) {
+            throw new Error('Immediate analytics delivery was cancelled')
+        }
+        if (!delivery || typeof deliverImmediate !== 'function' || this._disposed) {
+            throw new Error('Immediate analytics delivery is unavailable')
+        }
+        return deliverImmediate.call(delivery, [message], () => this._immediateAuthority === authority)
+    }
+
     private _capture(
         event: string,
         properties: Record<string, unknown> | null = null,
         options: CaptureOptions = {},
         skipRateLimit = false
     ): boolean {
+        return this._admitCapture(event, properties, options, skipRateLimit, false) !== undefined
+    }
+
+    private _admitCapture(
+        event: string,
+        properties: Record<string, unknown> | null,
+        options: CaptureOptions,
+        skipRateLimit: boolean,
+        immediate: boolean
+    ): AnalyticsMessage | undefined {
         if (
             !isNonEmptyString(event) ||
             this._closing ||
@@ -319,7 +373,7 @@ class PostHogBrowserClient implements PostHog {
             this.hasOptedOut() ||
             !this._state.prepare()
         ) {
-            return false
+            return undefined
         }
         if (!skipRateLimit) {
             const rateLimit = this._rateLimiter.consume()
@@ -338,7 +392,7 @@ class PostHogBrowserClient implements PostHog {
                         this._rateLimiter.reported()
                     }
                 }
-                return false
+                return undefined
             }
         }
 
@@ -380,7 +434,7 @@ class PostHogBrowserClient implements PostHog {
             observedProperties = parsedObservedProperties
         } catch (error) {
             this.logger.error('Event properties are not JSON-serializable', error)
-            return false
+            return undefined
         }
 
         const preparedSession = this._state.prepareSessionForEvent()
@@ -421,25 +475,29 @@ class PostHogBrowserClient implements PostHog {
             bytes = utf8Bytes(JSON.stringify(message))
         } catch (error) {
             this.logger.error('The finalized event could not be measured', error)
-            return false
+            return undefined
         }
-        const admitted = this._analyticsLane.enqueue(message, bytes)
-        if (!admitted) {
+
+        if (immediate ? bytes > MAX_ANALYTICS_BYTES : !this._analyticsLane.enqueue(message, bytes)) {
             if (bytes > MAX_ANALYTICS_BYTES) {
                 this.logger.warn(`Event "${event}" (${bytes} bytes) exceeds the local analytics limit and was dropped`)
             }
-            return false
+            return undefined
         }
         if (!this._state.sessionAdmitted(preparedSession)) {
-            this._analyticsLane.discardQueued(message)
-            return false
+            if (!immediate) {
+                this._analyticsLane.discardQueued(message)
+            }
+            return undefined
         }
         if (preparedSession.reason) {
             this._newSessionPublisher.publish({ ...session, reason: preparedSession.reason })
         }
         this._eventPublisher.publish(deepFreeze({ event, properties: observedProperties }))
-        void this._ensureAutomaticAnalytics('capture')
-        return true
+        if (!immediate) {
+            void this._ensureAutomaticAnalytics('capture')
+        }
+        return message
     }
 
     async identify(
@@ -680,6 +738,7 @@ class PostHogBrowserClient implements PostHog {
                     throw new Error('PostHog extensions are disabled')
                 }
                 this._analyticsLane.attach(delivery)
+                this._analyticsDelivery = delivery
             }
         } catch (error) {
             try {
@@ -803,6 +862,7 @@ class PostHogBrowserClient implements PostHog {
             ])
 
             this._disposed = true
+            this._analyticsDelivery = undefined
             try {
                 this._state.dispose()
             } catch (error) {

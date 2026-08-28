@@ -1,9 +1,10 @@
 import { analytics } from '../src/analytics'
-import { createPostHog, type SessionContext } from '../src/core'
+import { createPostHog, type CaptureSummary, type SessionContext } from '../src/core'
 
 interface ConsentHarness {
     anonymousId(): Promise<string>
     capture(event: string): Promise<void>
+    captureImmediate(event: string): Promise<CaptureSummary>
     compressionDelivery(value: string): Promise<{
         body: string
         compressedBytes: number
@@ -60,7 +61,12 @@ const client = createPostHog({
             compressedBytes: requestBody instanceof Blob ? requestBody.size : new TextEncoder().encode(body).length,
             encoding,
         }
-        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+        const envelope = JSON.parse(body) as { batch: Array<{ uuid: string }> }
+        const results = Object.fromEntries(envelope.batch.map(({ uuid }) => [uuid, { result: 'ok' }]))
+        return new Response(JSON.stringify({ results }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+        })
     },
     extensions: [analytics({ flushAt: 100, flushInterval: 0 })],
     remoteConfig: {
@@ -78,7 +84,10 @@ window.consentHarness = {
         return (await client).anonymousId
     },
     async capture(event) {
-        await (await client).capture(event)
+        ;(await client).capture(event)
+    },
+    async captureImmediate(event) {
+        return (await client).captureImmediate(event)
     },
     async compressionDelivery(value) {
         const posthog = await client
