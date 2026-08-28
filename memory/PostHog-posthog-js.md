@@ -2,18 +2,7 @@
 
 ...<older entries truncated>
 
-nd data-handling risk.
 
-## 2026-08-22T16:29:40.766Z
-- Item: issue #3978 — Feature Request: Capture network info in event properties
-- Conclusion: Valid browser SDK enhancement, but automatic default capture needs product and privacy decisions before implementation.
-- Labels: enhancement, feature/product-analytics, web
-- URL: https://github.com/PostHog/posthog-js/issues/3978
-- Relevant files: `packages/browser-common/src/utils/event-utils.ts`, `packages/browser/src/posthog-core.ts`, `packages/browser/src/__tests__/utils/event-utils.test.ts`, `packages/types/src/posthog-config.ts`, `packages/browser/src/extensions/web-vitals/index.ts`
-- Findings: `getEventProperties` in `packages/browser-common/src/utils/event-utils.ts` builds the default browser, device, URL, screen, timezone, language, library, insert-ID, and time properties; it has no Network Information API reads or network-quality properties.; `PostHog.calculateEventProperties` calls `getEventProperties` for normal events and merges the returned values into the final payload, so adding fields there would affect broad event capture.; The existing event-utility test suite covers default property collection and is the focused location for supported and unsupported Network Information API regression coverage.; `capture_performance` is documented as Session Replay network timing and Web Vitals configuration, and the Web Vitals extension captures performance metrics separately; neither currently provides connection-quality fields on every event.; Repository searches found no existing use of `navigator.connection`, `mozConnection`, `webkitConnection`, `effectiveType`, or `downlink`.
-- Fix assessment: The code addition could be small, but introducing new automatically captured event properties creates a public data contract and affects every browser event. The requested fields have incomplete browser availability and may add fingerprinting/privacy and payload considerations. Selecting default-on versus opt-in behavior and stable property names before changing shared defaults avoids a speculative implementation.
-
-## 2026-08-22T16:30:22.279Z
 - Item: issue #3935 — Feature Request: Consider adding features from previous posthog nuxt module
 - Conclusion: Valid but underspecified Nuxt enhancement request; no safe implementation can be selected yet.
 - Labels: enhancement, nuxt, team/client-libraries
@@ -96,3 +85,12 @@ nd data-handling risk.
 - Findings: `SurveyModal` renders `Cancel` in `topIconContainer`, which is `position: 'absolute'`, `right: 8`, and `top: 8` within the survey modal.; `Cancel` has a fixed 40x40 touch target, so it occupies the top-right portion of the modal without taking space in normal layout flow.; `QuestionHeader` renders question and description text in a container with uniform `padding: 10` and no extra right-side space, allowing long text to flow into the cancel button's area.; The existing modal tests cover close behavior but do not assert a layout reservation between survey header content and the close control.
 - Fix assessment: The overlap has a direct, localized cause. Reserving right-side space for the fixed-size, absolutely positioned close button in the survey header layout is a small surgical change. The exact padding should be chosen from the button dimensions and existing modal padding rather than introducing a new layout abstraction.
 - PR: https://github.com/PostHog/posthog-js/pull/4673
+
+## 2026-08-28T17:00:49.933Z
+- Item: issue #4674 — posthog-react-native 4.66.0 fails to compile on Android/Expo
+- Conclusion: Likely Android/Expo build compatibility regression introduced through the native-symbol upload Gradle integration, but the exact dependency edge needs verification.
+- Labels: react-native, Android, feature/error-tracking, team/client-libraries
+- URL: https://github.com/PostHog/posthog-js/issues/4674
+- Relevant files: `packages/react-native/src/tooling/expoconfig.ts`, `packages/react-native/package.json`, `packages/react-native/CHANGELOG.md`, `packages/react-native-plugin/android/build.gradle`, `packages/react-native-plugin/android/gradle.properties`
+- Findings: `uploadNativeSymbols` registers `withAndroidNativeSymbolsPlugin`, which adds a buildscript classpath for `com.posthog:posthog-android-gradle-plugin` and applies `com.posthog.android` to the app Gradle project.; The injected Gradle plugin version in 4.66.0 is explicitly pinned to `1.5.1`; the 4.66.0 changelog says this version was introduced for Android `releaseMode` support.; The React Native native module's checked-in Gradle properties specify `PosthogReactNativePlugin_kotlinVersion=2.0.21`, not Kotlin 2.1.21.; No inspected repository source or Gradle configuration references `pika`, `pika-compiler`, or Kotlin 2.1.21, so the reported missing `pika-compiler:0.3.2-2.1.21` artifact appears to come from transitive metadata outside this repository, likely from the injected Android Gradle plugin or another Expo build dependency.; The config plugin preserves an existing `posthog-android-gradle-plugin` classpath rather than updating it, so the generated Android Gradle files are necessary to confirm which plugin version the affected project actually resolves.
+- Fix assessment: A dependency-scope change in the PostHog Android Gradle plugin cannot be verified from this repository, and blindly changing or downgrading the injected plugin could break the Android native-symbol and release-mode behavior introduced in 4.66.0. First verify the generated classpath and the upstream plugin's transitive dependency metadata.
