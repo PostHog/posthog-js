@@ -9,6 +9,7 @@ type IsCapturedDomId = (id: string) => boolean
 const MAX_JSON_LD_LENGTH = 100_000
 const MAX_JSON_LD_OUTPUT_LENGTH = 20_000
 const SCHEMA_CONTEXT = 'https://schema.org'
+const REDACTED_PROPERTY_PREFIX = '$redacted_'
 const ANY_ENTITY_TYPES: readonly string[] = []
 const NO_CAPTURED_DOM_IDS: IsCapturedDomId = () => false
 const UNIVERSALLY_ALLOWED_PROPERTIES =
@@ -200,6 +201,16 @@ function setOwnProperty(result: Record<string, unknown>, property: string, value
     })
 }
 
+function isAllowedPropertyName(property: string, types: readonly string[]): boolean {
+    return (
+        UNIVERSALLY_ALLOWED_PROPERTIES.includes(property) ||
+        types.some((type) => {
+            const rules = getEntityRules(type)
+            return !!rules && hasOwnProperty.call(rules, property)
+        })
+    )
+}
+
 function sanitizeEntityValue(
     value: unknown,
     isCapturedDomId: IsCapturedDomId,
@@ -274,6 +285,7 @@ function sanitizeEntity(
         setOwnProperty(result, '@graph', graph)
     }
 
+    let redactedPropertyIndex = 0
     for (const property of Object.keys(value)) {
         if (property === '@context' || property === '@type' || property === '@id' || property === '@graph') {
             continue
@@ -284,7 +296,10 @@ function sanitizeEntity(
 
         const nestedValue = sanitizeEntityValue(getOwnProperty(value, property), isCapturedDomId, undefined, false)
         if (!isUndefined(nestedValue)) {
-            setOwnProperty(result, property, nestedValue)
+            const sanitizedProperty = isAllowedPropertyName(property, typesWithAllowedFields)
+                ? property
+                : `${REDACTED_PROPERTY_PREFIX}${redactedPropertyIndex++}`
+            setOwnProperty(result, sanitizedProperty, nestedValue)
         }
     }
 

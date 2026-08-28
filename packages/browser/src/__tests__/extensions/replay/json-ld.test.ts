@@ -359,16 +359,39 @@ describe('JSON-LD replay capture', () => {
         ).toEqual({
             '@context': 'https://schema.org',
             '@type': 'CustomType',
-            customMetadata: {
+            $redacted_0: {
                 availability: 'https://schema.org/InStock',
                 isAccessibleForFree: true,
                 numberOfItems: 2,
                 priceCurrency: 'GBP',
-                nestedMetadata: {
+                $redacted_0: {
                     ratingValue: 4.5,
                 },
             },
         })
+    })
+
+    it('redacts unallowlisted property names while keeping their nested safe fields', () => {
+        const sanitized = sanitizeJsonLd(
+            JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                'private@example.com': {
+                    '@type': 'CustomMetadata',
+                    ratingValue: 4.5,
+                },
+            })
+        )
+
+        expect(sanitized?.[0]).toEqual({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            $redacted_0: {
+                '@type': 'CustomMetadata',
+                ratingValue: 4.5,
+            },
+        })
+        expect(sanitized?.[1]).not.toContain('private@example.com')
     })
 
     it('sanitizes root and nested entity arrays', () => {
@@ -434,15 +457,15 @@ describe('JSON-LD replay capture', () => {
             '@type': 'Product',
             '@id': 'root-id',
             name: 'Camera',
-            customChild: {
+            $redacted_0: {
                 '@type': 'CustomChild',
                 '@id': 'child-id',
-                nestedEntity: {
+                $redacted_0: {
                     '@type': 'Product',
                     '@id': 'product-id',
                     ratingValue: 4.5,
                 },
-                idOnlyNode: {
+                $redacted_1: {
                     '@id': 'reference-id',
                 },
             },
@@ -565,7 +588,7 @@ describe('JSON-LD replay capture', () => {
             '@context': 'https://schema.org',
             '@type': 'Product',
             '@id': 'product-id',
-            customChildren: [
+            $redacted_0: [
                 { '@type': 'PrivateType', '@id': 'masked-text-id' },
                 { '@type': 'PrivateType' },
                 { '@type': 'PrivateType' },
