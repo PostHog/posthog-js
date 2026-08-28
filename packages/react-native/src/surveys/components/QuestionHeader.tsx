@@ -39,6 +39,7 @@ export function QuestionHeader({
 const styles = createSafeStyleSheet({
   container: {
     padding: 10,
+    paddingRight: 40,
   },
   question: {
     fontSize: 18,
