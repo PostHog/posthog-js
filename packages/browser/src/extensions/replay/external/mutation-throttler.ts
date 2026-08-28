@@ -5,7 +5,7 @@ import {
     estimateCompressedEventSize,
 } from './sessionrecording-utils'
 import type { rrwebRecord } from '../types/rrweb'
-import { BucketedRateLimiter } from '@posthog/core'
+import { BucketedRateLimiter, isNumber } from '@posthog/core'
 import { logger } from '@posthog/browser-common/utils/logger'
 
 export const DEFAULT_MUTATION_BYTES_REFILL_RATE = 25 * 1024
@@ -49,7 +49,13 @@ export class MutationThrottler {
         this._bytesRefillRate = this._options.bytesRefillRate ?? DEFAULT_MUTATION_BYTES_REFILL_RATE
         this._byteBudgetDisabled = !Number.isFinite(this._bytesBucketSize) || this._bytesBucketSize <= 0
         this._byteTokens = this._bytesBucketSize
-        this._resyncIntervalMs = this._options.resyncIntervalMs ?? DEFAULT_MUTATION_RESYNC_INTERVAL_MS
+        const resyncIntervalMs = this._options.resyncIntervalMs
+        // guard against 0 (the "scheduled snapshots disabled" config value) and other
+        // non-positive values: a zero cooldown would take a full snapshot per dropped mutation
+        this._resyncIntervalMs =
+            isNumber(resyncIntervalMs) && Number.isFinite(resyncIntervalMs) && resyncIntervalMs > 0
+                ? resyncIntervalMs
+                : DEFAULT_MUTATION_RESYNC_INTERVAL_MS
     }
 
     private _refillByteBudget = () => {

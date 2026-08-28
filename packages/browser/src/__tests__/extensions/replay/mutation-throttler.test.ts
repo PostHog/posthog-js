@@ -262,6 +262,23 @@ describe('MutationThrottler', () => {
             expect(requestFullSnapshot).not.toHaveBeenCalled()
         })
 
+        test('a resync interval of 0 falls back to the default cooldown', () => {
+            const zeroInterval = new MutationThrottler(rrwebMock as unknown as rrwebRecord, {
+                bytesBucketSize: 1000,
+                bytesRefillRate: 1,
+                resyncIntervalMs: 0,
+                requestFullSnapshot,
+            })
+
+            zeroInterval.throttleMutations(eventOfRoughSize(2000))
+            jest.runOnlyPendingTimers()
+            expect(requestFullSnapshot).toHaveBeenCalledTimes(1)
+
+            zeroInterval.throttleMutations(eventOfRoughSize(2000))
+            jest.advanceTimersByTime(10_000)
+            expect(requestFullSnapshot).toHaveBeenCalledTimes(1)
+        })
+
         test('a bucket size of 0 disables the byte budget', () => {
             const unlimited = new MutationThrottler(rrwebMock as unknown as rrwebRecord, { bytesBucketSize: 0 })
 
