@@ -77,8 +77,8 @@ test.describe('Session recording - masking', () => {
                 for (const id of [
                     'ALLOWED_PRODUCT_ID',
                     'ALLOWED_PRIVATE_GRAPH_ID',
-                    'ALLOWED_CUSTOM_CHILD_ID',
-                    'ALLOWED_ID_ONLY_NODE_ID',
+                    'DROPPED_CUSTOM_CHILD_ID',
+                    'DROPPED_ID_ONLY_NODE_ID',
                 ]) {
                     appendCapturedDomId(id)
                 }
@@ -120,10 +120,10 @@ test.describe('Session recording - masking', () => {
                             name: 'PRIVATE_GRAPH_ENTITY',
                             customChild: {
                                 '@type': 'CustomChild',
-                                '@id': '/custom#ALLOWED_CUSTOM_CHILD_ID',
+                                '@id': '/custom#DROPPED_CUSTOM_CHILD_ID',
                                 privateValue: 'PRIVATE_CUSTOM_CHILD_VALUE',
                                 idOnlyNode: {
-                                    '@id': 'ALLOWED_ID_ONLY_NODE_ID',
+                                    '@id': 'DROPPED_ID_ONLY_NODE_ID',
                                     privateValue: 'PRIVATE_ID_ONLY_NODE_VALUE',
                                 },
                             },
@@ -194,18 +194,20 @@ test.describe('Session recording - masking', () => {
             )
         await expect.poll(getEventBytes).toContain('ALLOWED_DYNAMIC_PRODUCT')
         const eventBytes = await getEventBytes()
+        const jsonLdEventBytes = JSON.stringify(
+            (await page.capturedEvents())
+                .filter((event) => event.event === '$snapshot')
+                .flatMap((event) => event.properties['$snapshot_data'])
+                .filter((event) => event.type === 5 && event.data.tag === '$json_ld')
+        )
         expect(eventBytes).toContain('ALLOWED_PRODUCT_ID')
         expect(eventBytes).toContain('ALLOWED_INITIAL_PRODUCT')
         expect(eventBytes).toContain('ALLOWED_DYNAMIC_PRODUCT')
         expect(eventBytes).toContain('ALLOWED_MANUFACTURER')
         expect(eventBytes).toContain('ALLOWED_MANUFACTURER_LEGAL_NAME')
         expect(eventBytes).toContain('ALLOWED_GRAPH_LANGUAGE')
-        expect(eventBytes).toContain('ALLOWED_REDACTED_PROPERTY_DESCENDANT')
         expect(eventBytes).toContain('"@type":"PrivateType"')
         expect(eventBytes).toContain('ALLOWED_PRIVATE_GRAPH_ID')
-        expect(eventBytes).toContain('"@type":"CustomChild"')
-        expect(eventBytes).toContain('ALLOWED_CUSTOM_CHILD_ID')
-        expect(eventBytes).toContain('ALLOWED_ID_ONLY_NODE_ID')
         expect(eventBytes).not.toContain('"tagName":"script"')
         for (const privateMarker of [
             'PRIVATE_ATTRIBUTE',
@@ -214,6 +216,7 @@ test.describe('Session recording - masking', () => {
             'PRIVATE_DESCRIPTION',
             'PRIVATE_URL_TOKEN',
             'PRIVATE_PROPERTY_NAME@example.com',
+            'ALLOWED_REDACTED_PROPERTY_DESCENDANT',
             'PRIVATE_ID_URL',
             'PRIVATE_MISSING_DOM_ID',
             'PRIVATE_NESTED_PERSON',
@@ -228,6 +231,8 @@ test.describe('Session recording - masking', () => {
         ]) {
             expect(eventBytes).not.toContain(privateMarker)
         }
+        expect(jsonLdEventBytes).not.toContain('DROPPED_CUSTOM_CHILD_ID')
+        expect(jsonLdEventBytes).not.toContain('DROPPED_ID_ONLY_NODE_ID')
     })
 
     test('masks text', async ({ page, context }) => {

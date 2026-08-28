@@ -9,7 +9,6 @@ type IsCapturedDomId = (id: string) => boolean
 const MAX_JSON_LD_LENGTH = 100_000
 const MAX_JSON_LD_OUTPUT_LENGTH = 20_000
 const SCHEMA_CONTEXT = 'https://schema.org'
-const REDACTED_PROPERTY_PREFIX = '$redacted_'
 const ANY_ENTITY_TYPES: readonly string[] = []
 const NO_CAPTURED_DOM_IDS: IsCapturedDomId = () => false
 const UNIVERSALLY_ALLOWED_PROPERTIES =
@@ -201,48 +200,34 @@ function setOwnProperty(result: Record<string, unknown>, property: string, value
     })
 }
 
-function isAllowedPropertyName(property: string, types: readonly string[]): boolean {
-    return (
-        UNIVERSALLY_ALLOWED_PROPERTIES.includes(property) ||
-        types.some((type) => {
-            const rules = getEntityRules(type)
-            return !!rules && hasOwnProperty.call(rules, property)
-        })
-    )
-}
-
 function sanitizeEntityValue(
     value: unknown,
     isCapturedDomId: IsCapturedDomId,
-    allowedTypes?: readonly string[],
-    captureAllowedFields = true
+    allowedTypes?: readonly string[]
 ): unknown | undefined {
     if (isArray(value)) {
         const items = value
-            .map((item) => sanitizeEntityValue(item, isCapturedDomId, allowedTypes, captureAllowedFields))
+            .map((item) => sanitizeEntityValue(item, isCapturedDomId, allowedTypes))
             .filter((item) => !isUndefined(item))
         return items.length ? items : undefined
     }
 
-    return sanitizeEntity(value, isCapturedDomId, allowedTypes, captureAllowedFields) || undefined
+    return sanitizeEntity(value, isCapturedDomId, allowedTypes) || undefined
 }
 
 function sanitizeEntity(
     value: unknown,
     isCapturedDomId: IsCapturedDomId,
-    allowedTypes?: readonly string[],
-    captureAllowedFields = true
+    allowedTypes?: readonly string[]
 ): Record<string, unknown> | null {
     if (!isObject(value)) {
         return null
     }
     const typeValue = getOwnProperty(value, '@type')
     const types = getEntityTypes(typeValue)
-    const typesWithAllowedFields = captureAllowedFields
-        ? types.filter(
-              (type) => !!getEntityRules(type) && (!allowedTypes || !allowedTypes.length || allowedTypes.includes(type))
-          )
-        : []
+    const typesWithAllowedFields = types.filter(
+        (type) => !!getEntityRules(type) && (!allowedTypes || !allowedTypes.length || allowedTypes.includes(type))
+    )
     const result: Record<string, unknown> = {}
 
     for (const property of UNIVERSALLY_ALLOWED_PROPERTIES) {
@@ -283,24 +268,6 @@ function sanitizeEntity(
     const graph = sanitizeEntityValue(getOwnProperty(value, '@graph'), isCapturedDomId)
     if (!isUndefined(graph)) {
         setOwnProperty(result, '@graph', graph)
-    }
-
-    let redactedPropertyIndex = 0
-    for (const property of Object.keys(value)) {
-        if (property === '@context' || property === '@type' || property === '@id' || property === '@graph') {
-            continue
-        }
-        if (hasOwnProperty.call(result, property)) {
-            continue
-        }
-
-        const nestedValue = sanitizeEntityValue(getOwnProperty(value, property), isCapturedDomId, undefined, false)
-        if (!isUndefined(nestedValue)) {
-            const sanitizedProperty = isAllowedPropertyName(property, typesWithAllowedFields)
-                ? property
-                : `${REDACTED_PROPERTY_PREFIX}${redactedPropertyIndex++}`
-            setOwnProperty(result, sanitizedProperty, nestedValue)
-        }
     }
 
     return Object.keys(result).length ? result : null
