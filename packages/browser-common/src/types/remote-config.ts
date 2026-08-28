@@ -113,6 +113,10 @@ export interface ConversationsRemoteConfig {
     color?: string
     /** Placeholder text for the message input. */
     placeholderText?: string
+    /** Text shown before the ticket recovery link in the widget footer. */
+    ticketRecoveryText?: string
+    /** Label for the ticket recovery link in the widget footer. */
+    ticketRecoveryLinkText?: string
     /** Whether to require an email address before starting a conversation. */
     requireEmail?: boolean
     /** Whether to show the name field in the identification form. */
