@@ -587,6 +587,14 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "undefined",
       "number"
     ],
+    "__mutationBytesRefillRate": [
+      "undefined",
+      "number"
+    ],
+    "__mutationBytesBucketSize": [
+      "undefined",
+      "number"
+    ],
     "strictMinimumDuration": [
       "undefined",
       "false",
