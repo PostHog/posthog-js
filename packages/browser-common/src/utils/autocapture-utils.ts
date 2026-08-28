@@ -721,6 +721,13 @@ function escapeQuotes(input: string): string {
     return input.replace(/"|\\"/g, '\\"')
 }
 
+// Plain lexical (code-unit) comparator. We avoid String.prototype.localeCompare here:
+// on browsers with incomplete or faulty ICU data it can throw a RangeError ("Icu error"),
+// and attribute keys do not need locale-aware ordering.
+function lexicalCompare(a: string, b: string): number {
+    return a < b ? -1 : a > b ? 1 : 0
+}
+
 function elementsToString(elements: PHElement[]): string {
     const ret = elements.map((element) => {
         let el_string = ''
@@ -743,7 +750,7 @@ function elementsToString(elements: PHElement[]): string {
         }
         const sortedAttributes: Record<string, any> = {}
         entries(attributes)
-            .sort(([a], [b]) => a.localeCompare(b))
+            .sort(([a], [b]) => lexicalCompare(a, b))
             .forEach(
                 ([key, value]) => (sortedAttributes[escapeQuotes(key.toString())] = escapeQuotes(value.toString()))
             )
