@@ -1,23 +1,4 @@
 {
   "version": 1,
-  "items": [
-    {
-      "id": "pull_request-4673-fix-address-review-3882075742-no-close-1787932991179",
-      "kind": "pull_request",
-      "number": 4673,
-      "mode": "fix",
-      "command": "address-review",
-      "actor": "turnipdabeets",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-08-28T16:03:11.179Z",
-      "source": {
-        "eventName": "pull_request_review_comment",
-        "runId": 33188078183,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/33188078183",
-        "commentId": 3882075742,
-        "commentUrl": "https://github.com/PostHog/posthog-js/pull/4673#discussion_r3882075742"
-      },
-      "attempts": 1
-    }
-  ]
+  "items": []
 }
