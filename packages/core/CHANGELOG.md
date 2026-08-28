@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.49.2
+
+### Patch Changes
+
+- [#4626](https://github.com/PostHog/posthog-js/pull/4626) [`3c650a1`](https://github.com/PostHog/posthog-js/commit/3c650a15f1d3eaf5add26b7e4c33cf4286af75f4) Thanks [@nandinitiw](https://github.com/nandinitiw)! - Re-translate popover surveys when the display language changes while the survey is on screen, either from a browser `languagechange` event or from `identify()` updating the `language` person property. In-progress answers are preserved. `$survey_questions[].question` and `$survey_language` on `survey sent` / `survey dismissed` now report the text and language the user saw when they answered, not the language active when the event fired. Feedback-button (widget) surveys are unchanged.
+  (2026-08-28)
+
 ## 1.49.1
 
 ### Patch Changes
