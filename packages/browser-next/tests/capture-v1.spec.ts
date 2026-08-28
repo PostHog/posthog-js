@@ -303,9 +303,13 @@ describe('Capture Analytics V1', () => {
 
         it('returns only never-attempted batches when delivery is cancelled between requests', async () => {
             let canRetryChecks = 0
-            const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(
-                async () => new Response('{"results":{}}', { status: 200 })
-            )
+            const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(async (_input, init = {}) => {
+                const uuid = (JSON.parse(String(init.body)).batch as CaptureV1Message[])[0]!.uuid
+                return new Response(
+                    JSON.stringify({ results: { [uuid]: { result: 'drop', details: 'not_persisted' } } }),
+                    { status: 200 }
+                )
+            })
 
             const result = await sendCaptureV1Batches(
                 runtime(fetch),
@@ -320,7 +324,8 @@ describe('Capture Analytics V1', () => {
 
             expect(fetch).toHaveBeenCalledTimes(1)
             expect(result.retry).toEqual(['unsent-1', 'unsent-2'])
-            expect(result.error).toHaveProperty('message', 'Capture V1 retry was cancelled')
+            expect(result.error).toHaveProperty('message', 'Capture V1 dropped one or more events')
+            expect(result.terminalError).toHaveProperty('message', 'Capture V1 retry was cancelled')
         })
 
         it('preserves source identity for an unsent duplicate UUID after an accepted batch', async () => {
@@ -785,7 +790,13 @@ describe('Capture Analytics V1', () => {
         expect(sleep).toHaveBeenCalledWith(3_000)
         expect(result.retry).toEqual([])
         expect(result.drops).toEqual([{ uuid: 'drop', details: 'invalid event' }])
+        expect(result.outcomes).toEqual({
+            accepted: { result: 'ok' },
+            retry: { result: 'ok' },
+            drop: { result: 'drop', details: 'invalid event' },
+        })
         expect(result.error).toBeInstanceOf(Error)
+        expect(result.terminalError).toBeUndefined()
     })
 
     it.each([408, 500, 502, 503, 504])('retries transient HTTP %s and then succeeds', async (status) => {

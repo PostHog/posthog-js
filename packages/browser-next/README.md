@@ -36,6 +36,19 @@ Use `analytics: false` to keep the default entrypoint buffer-only, or import `cr
 
 `capture()` admits an event to the queue synchronously and does not wait for code or network delivery. `flush()` waits for an in-progress automatic load and retries a failed first load once when explicitly asked to flush; without available delivery it resolves without discarding unexpired queued events. Core admission retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
 
+Use `captureImmediate()` only when the caller needs a terminal delivery outcome before continuing:
+
+```ts
+const summary = await posthog.captureImmediate('import_completed', { source: 'warehouse' })
+if (summary.submitted !== 1 || !summary.allPersisted) {
+    // The request completed, but Capture V1 did not confirm persistence.
+}
+```
+
+Immediate capture finalizes the event through the same consent, identity, session, protected-property, size, and rate-limit boundaries, then bypasses the lane and sends inline through the same Capture V1 sender. A valid `2xx` resolves to a `CaptureSummary`; `drop`, final `retry`, and missing outcomes set `allPersisted` to `false`, while `warning` counts as persisted. Terminal HTTP failures, exhausted transport retries, malformed responses, cancellation, and unavailable delivery reject the promise. Local non-admission resolves an empty summary, so durability-sensitive callers must check both `submitted` and `allPersisted`. Immediate requests can overtake buffered events and run concurrently with each other; they are never retained for a later `flush()`.
+
+The default entrypoint loads analytics on the first admitted immediate call. The core entrypoint supports immediate capture only when `analytics()` was explicitly installed through `extensions`; otherwise the promise rejects without adding a delivery import to the core graph.
+
 The analytics extension sends FIFO Capture V1 batches of at most 100 events and partitions large backlogs by exact uncompressed envelope size. `flushAt` defaults to 20 and triggers delivery by queued count; `flushInterval` defaults to 3,000 milliseconds and triggers delivery by age. Set `flushInterval: 0` to disable timer delivery. Explicit `flush()` and shutdown bypass both thresholds. Retry-exhausted transient failures remain in the bounded lane for a later interval, reconnect, or explicit flush rather than hot-looping or being discarded.
 
 When remote configuration advertises gzip, eligible normal batches use native `CompressionStream`; delivery remains uncompressed while configuration is unresolved or compression is unavailable, invalid, stalled, or larger than the JSON body. While offline, finalized events remain admitted and avoid network attempts until an `online` notification. On `pagehide`, or `unload` where `pagehide` is unavailable, queued analytics receive one synchronous uncompressed handoff through headered keepalive Fetch under one conservative aggregate body budget. Beacon remains disabled until Capture V1 supports the required metadata without request headers.

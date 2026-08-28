@@ -90,8 +90,35 @@ export interface PostHogOptions {
 /** Options for the analytics-free `@posthog/browser/core` entrypoint. */
 export type CorePostHogOptions = Omit<PostHogOptions, 'analytics'>
 
+/** Capture V1's terminal verdict for one reported event. */
+export type CaptureOutcomeStatus = 'ok' | 'warning' | 'drop' | 'retry'
+
+/** A backend-reported Capture V1 event verdict. */
+export interface CaptureOutcome {
+    readonly result: CaptureOutcomeStatus
+    readonly details?: string
+}
+
+/** Terminal outcome of an immediate Capture V1 operation. */
+export interface CaptureSummary {
+    /** Number of finalized events submitted on the wire. */
+    readonly submitted: number
+    /** Submitted events without an `ok` or `warning` verdict. */
+    readonly notPersisted: number
+    /** Whether every submitted event received an `ok` or `warning` verdict. */
+    readonly allPersisted: boolean
+    /** Backend-reported outcomes keyed by event UUID. Missing outcomes count as not persisted. */
+    readonly results: Readonly<Record<string, CaptureOutcome>>
+}
+
 export interface PostHog extends Client, Disposable {
     readonly onNewSession: Listener<NewSessionInfo>
+    /** Sends one finalized event inline and resolves after Capture V1 reaches a terminal outcome. */
+    captureImmediate(
+        event: string,
+        properties?: Record<string, unknown> | null,
+        options?: CaptureOptions
+    ): Promise<CaptureSummary>
     identify(distinctId: string, set?: Record<string, unknown>, setOnce?: Record<string, unknown>): Promise<void>
     group(type: string, key: string, properties?: Record<string, unknown>): Promise<void>
     reset(): void
