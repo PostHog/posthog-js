@@ -240,7 +240,10 @@ function numberValue(id: string, fallback: number): number {
 }
 
 function safeSuffix(value: string, fallback: string): string {
-    const normalized = value.trim().replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '')
+    const normalized = value
+        .trim()
+        .replace(/[^a-zA-Z0-9_-]+/g, '_')
+        .replace(/^_+|_+$/g, '')
     return normalized || fallback
 }
 
@@ -311,12 +314,13 @@ async function initialize(): Promise<void> {
         capturePageview: false,
         disableBotDetection: true,
         debug: element<HTMLInputElement>('debug').checked,
-        analytics: installExplicitly || element<HTMLInputElement>('disable-auto').checked
-            ? false
-            : {
-                  flushAt: numberValue('flush-at', 3),
-                  flushInterval: numberValue('flush-interval', 3_000),
-              },
+        analytics:
+            installExplicitly || element<HTMLInputElement>('disable-auto').checked
+                ? false
+                : {
+                      flushAt: numberValue('flush-at', 3),
+                      flushInterval: numberValue('flush-interval', 3_000),
+                  },
         extensions,
         fetch: sandboxFetch,
         consentPersistenceName: '__ph_browser_next_real_sandbox_consent',
@@ -386,7 +390,10 @@ element<HTMLButtonElement>('flush').addEventListener('click', () =>
 element<HTMLButtonElement>('identify').addEventListener('click', () =>
     enqueue('Identify', async () => {
         const suffix = safeSuffix(element<HTMLInputElement>('distinct-id-suffix').value, `browser-next-${randomPart}`)
-        await requireClient().identify(`${TEST_DISTINCT_ID_PREFIX}${suffix}`, syntheticProperties({ sandbox_user: true }))
+        await requireClient().identify(
+            `${TEST_DISTINCT_ID_PREFIX}${suffix}`,
+            syntheticProperties({ sandbox_user: true })
+        )
     })
 )
 element<HTMLButtonElement>('group').addEventListener('click', () =>

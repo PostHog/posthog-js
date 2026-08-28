@@ -102,8 +102,7 @@ const readRequestBody = async (body: BodyInit | null | undefined, gzip: boolean)
 
 const stringValue = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined)
 
-const shortId = (value: string): string =>
-    value.length <= 14 ? value : `${value.slice(0, 8)}…${value.slice(-4)}`
+const shortId = (value: string): string => (value.length <= 14 ? value : `${value.slice(0, 8)}…${value.slice(-4)}`)
 
 const formatAge = (timestamp: number): string => {
     const elapsed = Math.max(0, Date.now() - timestamp)
@@ -118,9 +117,18 @@ const formatAge = (timestamp: number): string => {
 
 const isSensitiveMetadataKey = (key: string): boolean => {
     const normalized = key.replace(/[^a-z0-9]/gi, '').toLowerCase()
-    return ['authorization', 'auth', 'token', 'apikey', 'password', 'passwd', 'secret', 'privatekey', 'credential'].some(
-        (sensitive) =>
-            normalized === sensitive || normalized.startsWith(sensitive) || normalized.endsWith(sensitive)
+    return [
+        'authorization',
+        'auth',
+        'token',
+        'apikey',
+        'password',
+        'passwd',
+        'secret',
+        'privatekey',
+        'credential',
+    ].some(
+        (sensitive) => normalized === sensitive || normalized.startsWith(sensitive) || normalized.endsWith(sensitive)
     )
 }
 
@@ -424,7 +432,12 @@ export class EventQueueVisualizer {
             target.replaceChildren(message)
             return
         }
-        target.replaceChildren(...events.slice(-30).reverse().map((event) => this.card(event)))
+        target.replaceChildren(
+            ...events
+                .slice(-30)
+                .reverse()
+                .map((event) => this.card(event))
+        )
     }
 
     private render(): void {
