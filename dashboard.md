@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4671](https://github.com/PostHog/posthog-js/issues/4671) | Confirmed React Native survey layout bug: the absolutely positioned cancel control can overlap long question text. | react-native, feature/surveys, team/client-libraries | https://github.com/PostHog/posthog-js/pull/4673 | no | 2026-08-28T15:18:16.288Z |
 | PostHog/posthog-js | [issue 4670](https://github.com/PostHog/posthog-js/issues/4670) | Confirmed bug: default symbol-set mode still injects a random chunk ID during renderChunk, making otherwise identical content-hashed chunks change on every build. | feature/error-tracking, team/error-tracking |  | no | 2026-08-28T13:31:11.621Z |
 | PostHog/posthog-js | [issue 4667](https://github.com/PostHog/posthog-js/issues/4667) | Credible Next.js/Turbopack sourcemap-upload race; it needs a targeted compatibility fix rather than an arbitrary delay or a speculative retry. | frameworks/next-js, team/client-libraries |  | no | 2026-08-27T22:24:22.951Z |
 | PostHog/posthog-js | [issue 4648](https://github.com/PostHog/posthog-js/issues/4648) | Confirmed React Native autocapture privacy bug; a focused, small fix and regression test are appropriate. | react-native, feature/autocapture, team/client-libraries | https://github.com/PostHog/posthog-js/pull/4649 | no | 2026-08-25T19:04:51.529Z |
