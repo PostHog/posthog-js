@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/4671": {
+    "key": "PostHog/posthog-js/issue/4671",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4671",
+    "url": "https://github.com/PostHog/posthog-js/issues/4671",
+    "conclusion": "Confirmed React Native survey layout bug: the absolutely positioned cancel control can overlap long question text.",
+    "labels": [
+      "react-native",
+      "feature/surveys",
+      "team/client-libraries"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/4673",
+    "closed": false,
+    "updatedAt": "2026-08-28T15:18:16.288Z"
+  },
   "PostHog/posthog-js/issue/4670": {
     "key": "PostHog/posthog-js/issue/4670",
     "repo": "PostHog/posthog-js",
