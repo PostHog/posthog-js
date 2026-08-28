@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/4670": {
+    "key": "PostHog/posthog-js/issue/4670",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4670",
+    "url": "https://github.com/PostHog/posthog-js/issues/4670",
+    "conclusion": "Confirmed bug: default symbol-set mode still injects a random chunk ID during renderChunk, making otherwise identical content-hashed chunks change on every build.",
+    "labels": [
+      "feature/error-tracking",
+      "team/error-tracking"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-28T13:31:11.621Z"
+  },
   "PostHog/posthog-js/issue/4667": {
     "key": "PostHog/posthog-js/issue/4667",
     "repo": "PostHog/posthog-js",
