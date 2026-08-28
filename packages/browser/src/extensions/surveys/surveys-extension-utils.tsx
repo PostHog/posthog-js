@@ -416,6 +416,8 @@ interface SendSurveyEventArgs {
     properties?: Properties
     /** The language that was applied to the survey. */
     surveyLanguage?: string | null
+    /** Question text as displayed to the user at answer time, keyed by question id. */
+    questionSnapshots?: Record<string, string>
 }
 
 export const sendSurveyEvent = ({
@@ -426,6 +428,7 @@ export const sendSurveyEvent = ({
     isSurveyCompleted,
     properties,
     surveyLanguage,
+    questionSnapshots,
 }: SendSurveyEventArgs) => {
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
@@ -441,7 +444,7 @@ export const sendSurveyEvent = ({
         [SurveyEventProperties.SURVEY_COMPLETED]: isSurveyCompleted,
         ...(surveyLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: surveyLanguage }),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        ...buildSurveyResponseProperties(responses, survey),
+        ...buildSurveyResponseProperties(responses, survey, questionSnapshots),
         ...properties,
         $set: {
             [getSurveyInteractionProperty(survey, 'responded')]: true,
@@ -473,7 +476,7 @@ const _buildSurveyEventProperties = (
     }),
     sessionRecordingUrl: posthog.get_session_replay_url?.(),
     [SurveyEventProperties.SURVEY_SUBMISSION_ID]: inProgressSurvey?.surveySubmissionId,
-    ...buildSurveyResponseProperties(inProgressSurvey?.responses, survey),
+    ...buildSurveyResponseProperties(inProgressSurvey?.responses, survey, inProgressSurvey?.questionSnapshots),
 })
 
 export const dismissedSurveyEvent = (
@@ -491,9 +494,15 @@ export const dismissedSurveyEvent = (
     }
 
     const inProgressSurvey = getInProgressSurveyState(survey)
+    // Prefer the language snapshotted when the user last answered (answer-time language),
+    // which is legitimately `null` when no translation matched at answer time — that must not
+    // fall through to the current display language. Only fall back to the current display
+    // language when no in-progress state exists at all (i.e. the survey was dismissed without
+    // answering any question), so check for the record's presence, not its value.
+    const effectiveLanguage = inProgressSurvey ? inProgressSurvey.surveyLanguage : surveyLanguage
     posthog.capture(SurveyEventName.DISMISSED, {
         ..._buildSurveyEventProperties(survey, inProgressSurvey, posthog),
-        ...(surveyLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: surveyLanguage }),
+        ...(effectiveLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: effectiveLanguage }),
         $set: {
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
         },
@@ -753,6 +762,10 @@ interface InProgressSurveyState {
     visitedIndices?: number[]
     responses: SurveyResponses
     surveyLanguage?: string | null
+    // Maps question id → the question text displayed when the user answered it. Used so that
+    // $survey_questions[].question in sent/dismissed events reflects the language the user saw,
+    // not the language active at event-fire time after a mid-session switch.
+    questionSnapshots?: Record<string, string>
 }
 
 const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {

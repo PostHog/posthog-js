@@ -1,4 +1,5 @@
 import { act, fireEvent, render, renderHook } from '@testing-library/preact'
+import { within } from '@testing-library/dom'
 import {
     SurveyManager,
     generateSurveys,
@@ -13,7 +14,9 @@ import {
     setInProgressSurveyState,
 } from '../../extensions/surveys/surveys-extension-utils'
 import {
+    DisplaySurveyType,
     Survey,
+    SurveyPosition,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
     SurveySchedule,
@@ -96,13 +99,22 @@ describe('survey display logic', () => {
     test('callSurveysAndEvaluateDisplayLogic runs on interval irrespective of url change', () => {
         jest.useFakeTimers()
         jest.spyOn(global, 'setInterval')
-        generateSurveys(mockPostHog, true)
-        expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(1)
-        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
+        // generateSurveys constructs a real SurveyManager, which attaches a 'languagechange'
+        // window listener (see surveys.tsx). Left undisposed, that listener stays live for the
+        // rest of the suite and fires on any later test's window.dispatchEvent(new
+        // Event('languagechange')), even in an unrelated describe block.
+        const surveyManager = generateSurveys(mockPostHog, true)
+        try {
+            expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(1)
+            expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
 
-        jest.advanceTimersByTime(1000)
-        expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(2)
-        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
+            jest.advanceTimersByTime(1000)
+            expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(2)
+            expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
+        } finally {
+            surveyManager?.dispose()
+            jest.useRealTimers()
+        }
     })
 })
 
@@ -432,6 +444,18 @@ describe('SurveyManager', () => {
     let mockPostHog: PostHog
     let surveyManager: SurveyManager
     let mockSurveys: Survey[]
+    // Several nested describes/tests below construct their own SurveyManager and reassign
+    // `surveyManager`, overwriting the reference to any previous instance. Since SurveyManager
+    // attaches a 'languagechange' window listener on construction, an overwritten instance's
+    // listener stays attached unless disposed — createSurveyManager tracks every instance so
+    // the outer afterEach can dispose all of them, not just whichever one `surveyManager`
+    // currently points to.
+    let createdSurveyManagers: SurveyManager[] = []
+    const createSurveyManager = (instance: PostHog): SurveyManager => {
+        const manager = new SurveyManager(instance)
+        createdSurveyManagers.push(manager)
+        return manager
+    }
     const flagsResponse = {
         featureFlags: {
             'linked-flag-key': true,
@@ -496,7 +520,7 @@ describe('SurveyManager', () => {
             },
         })
 
-        surveyManager = new SurveyManager(mockPostHog)
+        surveyManager = createSurveyManager(mockPostHog)
     })
 
     it('resolves feature flags through the extension registry', () => {
@@ -524,6 +548,25 @@ describe('SurveyManager', () => {
         expect(mockPostHog.featureFlags.isFeatureEnabled).toHaveBeenCalledWith('linked-flag-key', {
             send_event: true,
         })
+    })
+
+    afterEach(() => {
+        // Dispose every SurveyManager constructed during the test (see createSurveyManager
+        // above), not just the current value of `surveyManager` — otherwise listeners from
+        // overwritten instances stay attached and fire on later tests'
+        // window.dispatchEvent(new Event('languagechange')), hitting a stale mockPostHog whose
+        // mocks may no longer exist. try/catch per instance so one throwing dispose() (e.g. a
+        // mocked-out dependency from that specific test) doesn't abort the forEach and skip
+        // disposing the rest.
+        createdSurveyManagers.forEach((manager) => {
+            try {
+                manager.dispose()
+            } catch {
+                // best-effort cleanup; a failure here shouldn't fail the test or block
+                // disposing the remaining tracked managers
+            }
+        })
+        createdSurveyManagers = []
     })
 
     test('callSurveysAndEvaluateDisplayLogic should handle a single popover survey correctly', () => {
@@ -1219,7 +1262,7 @@ describe('SurveyManager', () => {
         } as unknown as Survey
 
         beforeEach(() => {
-            surveyManager = new SurveyManager(mockPostHog)
+            surveyManager = createSurveyManager(mockPostHog)
         })
 
         it('can render survey', () => {
@@ -1391,7 +1434,7 @@ describe('SurveyManager', () => {
                 featureFlags: { isFeatureEnabled: jest.fn().mockReturnValue(true) },
             })
 
-            surveyManager = new SurveyManager(mockPH)
+            surveyManager = createSurveyManager(mockPH)
 
             const survey: Survey = {
                 id: 'prefill-render-survey',
@@ -1455,7 +1498,7 @@ describe('SurveyManager', () => {
                 capture: jest.fn(),
                 featureFlags: { isFeatureEnabled: jest.fn().mockReturnValue(true) },
             })
-            surveyManager = new SurveyManager(mockPH)
+            surveyManager = createSurveyManager(mockPH)
 
             const survey: Survey = {
                 id: 'prefill-merge-survey',
@@ -1528,7 +1571,7 @@ describe('SurveyManager', () => {
                 },
             })
 
-            surveyManager = new SurveyManager(mockPostHog)
+            surveyManager = createSurveyManager(mockPostHog)
 
             mockSurvey = {
                 id: 'delayed-survey',
@@ -1578,7 +1621,13 @@ describe('SurveyManager', () => {
 
         afterEach(() => {
             jest.useRealTimers()
-            jest.clearAllMocks()
+            // restoreAllMocks (not clearAllMocks) so spies installed via jest.spyOn(global,
+            // 'clearTimeout') below get their real implementation back. Left merely cleared,
+            // the spy stays wrapped around whatever clearTimeout fake timers had installed when
+            // the spy was created; once real timers are restored that reference is stale, and a
+            // later test's SurveyManager.dispose() (which calls clearTimeout on any pending
+            // timeout) throws "clearTimeout is not defined".
+            jest.restoreAllMocks()
         })
 
         test('should track timeouts when scheduling delayed surveys', () => {
@@ -1646,6 +1695,184 @@ describe('SurveyManager', () => {
             surveyManager.cancelSurvey('non-existent-survey')
 
             expect(clearTimeoutSpy).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('re-renders the actual popup on a real language change', () => {
+        const setNavigatorLanguage = (language: string): void => {
+            Object.defineProperty(window.navigator, 'language', {
+                value: language,
+                configurable: true,
+            })
+        }
+
+        const langSurvey: Survey = {
+            id: 'lang-survey-1',
+            name: 'Lang Survey',
+            type: SurveyType.Popover,
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+            questions: [
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'Hello?',
+                    id: 'q1',
+                    description: '',
+                    translations: { fr: { question: 'Bonjour?' } },
+                },
+            ],
+            appearance: {},
+            conditions: null,
+            start_date: '2024-01-01T00:00:00.000Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            feature_flag_keys: [],
+        } as unknown as Survey
+
+        const originalLanguage = window.navigator.language
+
+        afterEach(() => {
+            setNavigatorLanguage(originalLanguage)
+            document.getElementsByTagName('html')[0].innerHTML = ''
+        })
+
+        it('updates the rendered question text and keeps the typed answer when the language changes', () => {
+            setNavigatorLanguage('en')
+            mockPostHog.get_property = jest.fn().mockReturnValue([langSurvey])
+
+            surveyManager.handlePopoverSurvey(langSurvey)
+
+            const { shadow } = retrieveSurveyShadow(langSurvey, mockPostHog)
+            const textarea = within(shadow as unknown as HTMLElement).getByRole('textbox') as HTMLTextAreaElement
+            expect(within(shadow as unknown as HTMLElement).getByText('Hello?')).toBeInTheDocument()
+
+            fireEvent.input(textarea, { target: { value: 'my in-progress answer' } })
+            expect(textarea.value).toBe('my in-progress answer')
+
+            setNavigatorLanguage('fr')
+            act(() => {
+                window.dispatchEvent(new Event('languagechange'))
+            })
+
+            expect(within(shadow as unknown as HTMLElement).getByText('Bonjour?')).toBeInTheDocument()
+            const textareaAfter = within(shadow as unknown as HTMLElement).getByRole('textbox') as HTMLTextAreaElement
+            expect(textareaAfter.value).toBe('my in-progress answer')
+        })
+
+        it('renders in the flipped language once a delayed popup elapses, even though the flip happened mid-delay', () => {
+            jest.useFakeTimers()
+            try {
+                setNavigatorLanguage('en')
+                mockPostHog.get_property = jest.fn().mockReturnValue([langSurvey])
+
+                surveyManager.handlePopoverSurvey({
+                    ...langSurvey,
+                    appearance: { surveyPopupDelaySeconds: 5 },
+                })
+
+                // Flip the language while the popup is still counting down its delay.
+                setNavigatorLanguage('fr')
+                act(() => {
+                    window.dispatchEvent(new Event('languagechange'))
+                })
+
+                act(() => {
+                    jest.advanceTimersByTime(5000)
+                })
+
+                const { shadow } = retrieveSurveyShadow(langSurvey, mockPostHog)
+                expect(within(shadow as unknown as HTMLElement).getByText('Bonjour?')).toBeInTheDocument()
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
+        it('keeps display overrides (position) applied after a language change', () => {
+            setNavigatorLanguage('en')
+            mockPostHog.get_property = jest.fn().mockReturnValue([langSurvey])
+
+            surveyManager.handlePopoverSurvey(langSurvey, {
+                ignoreConditions: false,
+                ignoreDelay: false,
+                displayType: DisplaySurveyType.Popover,
+                position: SurveyPosition.TopLeft,
+            })
+
+            const { shadow } = retrieveSurveyShadow(langSurvey, mockPostHog)
+            const container = (shadow as unknown as HTMLElement).querySelector('.ph-survey') as HTMLElement
+            expect(container.style.left).toBe('0px')
+            expect(container.style.right).toBe('')
+
+            setNavigatorLanguage('fr')
+            act(() => {
+                window.dispatchEvent(new Event('languagechange'))
+            })
+
+            const containerAfter = (shadow as unknown as HTMLElement).querySelector('.ph-survey') as HTMLElement
+            expect(containerAfter.style.left).toBe('0px')
+            expect(containerAfter.style.right).toBe('')
+        })
+
+        it('keeps the shuffled question order stable across a language change', () => {
+            // With only 2 questions, getDisplayOrderQuestions's reverseIfUnshuffled makes the
+            // "shuffled" order deterministic (there's only one non-identity permutation), so a
+            // reshuffle-on-every-render bug would be invisible. 4 questions give 24 possible
+            // orders, so recomputing on every render would show up as a different order almost
+            // every time. Repeat with a fresh survey id (and shadow root) per trial so a flaky
+            // pass doesn't mask a regression.
+            for (let trial = 0; trial < 10; trial++) {
+                const shuffledSurvey: Survey = {
+                    id: `shuffled-lang-survey-${trial}`,
+                    name: 'Shuffled Lang Survey',
+                    type: SurveyType.Popover,
+                    linked_flag_key: null,
+                    targeting_flag_key: null,
+                    internal_targeting_flag_key: null,
+                    questions: ['q1', 'q2', 'q3', 'q4'].map((id) => ({
+                        type: SurveyQuestionType.Open,
+                        question: `${id.toUpperCase()}-EN`,
+                        id,
+                        description: '',
+                        translations: { fr: { question: `${id.toUpperCase()}-FR` } },
+                    })),
+                    appearance: { shuffleQuestions: true },
+                    conditions: null,
+                    start_date: '2024-01-01T00:00:00.000Z',
+                    end_date: null,
+                    current_iteration: null,
+                    current_iteration_start_date: null,
+                    feature_flag_keys: [],
+                } as unknown as Survey
+
+                setNavigatorLanguage('en')
+                mockPostHog.get_property = jest.fn().mockReturnValue([shuffledSurvey])
+
+                surveyManager.handlePopoverSurvey(shuffledSurvey)
+
+                const { shadow } = retrieveSurveyShadow(shuffledSurvey, mockPostHog)
+                const shadowEl = shadow as unknown as HTMLElement
+                // Whichever question the (random) shuffle put first is the one that must still
+                // be shown first — with its translation, not some other question's — after the
+                // language change below.
+                const firstQuestionId = ['q1', 'q2', 'q3', 'q4'].find((id) =>
+                    Boolean(within(shadowEl).queryByText(`${id.toUpperCase()}-EN`))
+                )
+                expect(firstQuestionId).toBeDefined()
+
+                setNavigatorLanguage('fr')
+                act(() => {
+                    window.dispatchEvent(new Event('languagechange'))
+                })
+
+                expect(within(shadowEl).getByText(`${firstQuestionId!.toUpperCase()}-FR`)).toBeInTheDocument()
+                for (const otherId of ['q1', 'q2', 'q3', 'q4'].filter((id) => id !== firstQuestionId)) {
+                    expect(within(shadowEl).queryByText(`${otherId.toUpperCase()}-FR`)).not.toBeInTheDocument()
+                }
+
+                surveyManager.getTestAPI().removeSurveyFromFocus(shuffledSurvey)
+            }
         })
     })
 
@@ -1730,7 +1957,7 @@ describe('SurveyManager', () => {
                 },
             })
 
-            surveyManager = new SurveyManager(mockPostHog)
+            surveyManager = createSurveyManager(mockPostHog)
         })
 
         afterEach(() => {

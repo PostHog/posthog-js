@@ -211,6 +211,7 @@ describe('surveys', () => {
             _send_request: jest
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse })),
+            onFeatureFlags: jest.fn().mockReturnValue(() => {}),
             featureFlags: {
                 hasLoadedFlags: true,
                 _send_request: jest
@@ -1845,6 +1846,115 @@ describe('surveys', () => {
                 'survey sent',
                 expect.objectContaining({ $survey_completed: true })
             )
+        })
+    })
+
+    describe('language change re-translation', () => {
+        let surveyManager: SurveyManager
+        const frSurvey: Survey = {
+            id: 'survey-lang-1',
+            name: 'Lang Survey',
+            type: SurveyType.Popover,
+            questions: [
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'Hello?',
+                    id: 'q1',
+                    description: '',
+                    translations: { fr: { question: 'Bonjour?' } },
+                },
+            ],
+            appearance: null,
+            conditions: null,
+            start_date: '2024-01-01T00:00:00Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+        } as unknown as Survey
+
+        beforeEach(() => {
+            surveyManager = (surveys as any)._surveyManager
+            instance.get_property = jest.fn().mockReturnValue([frSurvey])
+            instance.onFeatureFlags = jest.fn().mockReturnValue(() => {})
+        })
+
+        it('updates _currentLanguage and re-renders when languagechange fires and language differs', () => {
+            // Spy on _translateSurveyForRendering to return French translation
+            ;(surveyManager as any)._translateSurveyForRendering = jest
+                .fn()
+                .mockReturnValue({ survey: frSurvey, language: 'fr' })
+            ;(surveyManager as any)._surveyInFocus = frSurvey.id
+            ;(surveyManager as any)._currentLanguage = 'en'
+            ;(surveyManager as any)._surveyIsRendered = true
+
+            window.dispatchEvent(new Event('languagechange'))
+
+            expect((surveyManager as any)._currentLanguage).toBe('fr')
+            expect((surveyManager as any)._translateSurveyForRendering).toHaveBeenCalledWith(frSurvey)
+        })
+
+        it('does not re-render when language is unchanged', () => {
+            ;(surveyManager as any)._translateSurveyForRendering = jest
+                .fn()
+                .mockReturnValue({ survey: frSurvey, language: 'fr' })
+            ;(surveyManager as any)._surveyInFocus = frSurvey.id
+            ;(surveyManager as any)._currentLanguage = 'fr'
+            ;(surveyManager as any)._surveyIsRendered = true
+
+            const languageBefore = (surveyManager as any)._currentLanguage
+            window.dispatchEvent(new Event('languagechange'))
+
+            // _translateSurveyForRendering should still be called (to detect), but language shouldn't change
+            expect((surveyManager as any)._currentLanguage).toBe(languageBefore)
+        })
+
+        it('does nothing when no survey is in focus', () => {
+            const translateSpy = jest.fn()
+            ;(surveyManager as any)._translateSurveyForRendering = translateSpy
+            ;(surveyManager as any)._surveyInFocus = null
+
+            window.dispatchEvent(new Event('languagechange'))
+
+            expect(translateSpy).not.toHaveBeenCalled()
+        })
+
+        it('tracks the language flip but does not re-render while the survey is still pending delay', () => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const preactModule = require('preact')
+            const renderSpy = jest.spyOn(preactModule, 'render')
+            const translateSpy = jest.fn().mockReturnValue({ survey: frSurvey, language: 'fr' })
+            ;(surveyManager as any)._translateSurveyForRendering = translateSpy
+
+            // Survey is queued (focus set) but the delay timer has not fired yet
+            ;(surveyManager as any)._surveyInFocus = frSurvey.id
+            ;(surveyManager as any)._currentLanguage = 'en'
+            ;(surveyManager as any)._surveyIsRendered = false
+
+            window.dispatchEvent(new Event('languagechange'))
+
+            // The language flip is still detected and tracked — renderAfterDelay reads
+            // _currentLanguage fresh when the delay elapses, so this must stay accurate even
+            // though nothing is on screen yet to actually re-render.
+            expect(translateSpy).toHaveBeenCalledWith(frSurvey)
+            expect((surveyManager as any)._currentLanguage).toBe('fr')
+            expect(renderSpy).not.toHaveBeenCalled()
+
+            renderSpy.mockRestore()
+        })
+
+        it('clears _currentLanguage when survey is removed from focus', () => {
+            ;(surveyManager as any)._surveyInFocus = frSurvey.id
+            ;(surveyManager as any)._currentLanguage = 'fr'
+
+            surveyManager.getTestAPI().removeSurveyFromFocus(frSurvey as any)
+
+            expect(surveyManager.getTestAPI().currentLanguage).toBeNull()
+        })
+
+        it('removes languagechange listener on dispose', () => {
+            const removeListenerSpy = jest.spyOn(window, 'removeEventListener')
+            surveyManager.dispose()
+            expect(removeListenerSpy).toHaveBeenCalledWith('languagechange', expect.any(Function))
         })
     })
 })
