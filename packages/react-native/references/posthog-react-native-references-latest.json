@@ -2249,7 +2249,7 @@
           "name": "navigation"
         },
         {
-          "description": "Taps the SDK already autocaptures.",
+          "description": "Taps the SDK already autocaptures, and clicks on React Native Web.",
           "type": "boolean",
           "name": "taps"
         },

@@ -86,10 +86,25 @@ describe('buildAutomaticExceptionStep', () => {
     })
   })
 
-  it('ignores an autocaptured event that is not a touch', () => {
+  it('records a React Native Web click under the same taps signal', () => {
+    expect(
+      buildAutomaticExceptionStep(ALL_ON, '$autocapture', {
+        $event_type: 'click',
+        $elements: [{ tag_name: 'CheckoutButton' }],
+      })
+    ).toEqual({ type: 'tap', message: 'Click: CheckoutButton' })
+
+    expect(buildAutomaticExceptionStep(ALL_ON, '$autocapture', { $event_type: 'click', $elements: [] })).toEqual({
+      type: 'tap',
+      message: 'Click',
+    })
+  })
+
+  it('ignores an autocaptured event that is not an interaction', () => {
     expect(
       buildAutomaticExceptionStep(ALL_ON, '$autocapture', { $event_type: 'change', $elements: [{ tag_name: 'Input' }] })
     ).toBeUndefined()
+    expect(buildAutomaticExceptionStep(ALL_ON, '$autocapture', { $elements: [{ tag_name: 'Input' }] })).toBeUndefined()
   })
 
   it.each([

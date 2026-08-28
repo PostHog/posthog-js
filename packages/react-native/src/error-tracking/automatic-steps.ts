@@ -20,7 +20,7 @@ export type ExceptionStepType = (typeof EXCEPTION_STEP_TYPES)[keyof typeof EXCEP
 export type AutomaticExceptionStepsOptions = {
   /** Screen changes. @default false */
   navigation?: boolean
-  /** Taps the SDK already autocaptures. @default false */
+  /** Taps the SDK already autocaptures, and clicks on React Native Web. @default false */
   taps?: boolean
   /** App lifecycle transitions such as open, foreground and background. @default false */
   lifecycle?: boolean
@@ -78,7 +78,15 @@ const LIFECYCLE_EVENTS = new Set<string>([
   'Application Backgrounded',
 ])
 
-const TOUCH_EVENT_TYPE = 'touch'
+/**
+ * Interaction event types autocapture emits. React Native Web reports a `click` for mouse, trackpad
+ * and keyboard activation, because a browser fires `touchend` only for touch input, so both belong
+ * to the `taps` signal.
+ */
+const INTERACTION_VERBS: Record<string, string> = {
+  touch: 'Tap',
+  click: 'Click',
+}
 
 export type AutomaticExceptionStep = {
   type: ExceptionStepType
@@ -126,21 +134,27 @@ function buildNavigationStep(properties: unknown): AutomaticExceptionStep | unde
 }
 
 /**
- * Only a touch leaves a tap step. The label comes from the innermost autocaptured element, which
- * holds either a `ph-label` or a component display name.
+ * Only an interaction leaves a tap step, so a non-interaction `$autocapture` event records nothing.
+ * The label comes from the innermost autocaptured element, which holds either a `ph-label` or a
+ * component display name.
+ *
+ * A touch and a click share the `tap` type, because they are one signal to the caller who enabled
+ * `taps`, and only the message verb tells them apart.
  *
  * The step never carries `$el_text` or touch coordinates. Element text is user-visible copy and can
  * hold personal data, and an exception timeline does not need the pixel the user hit.
  */
 function buildTapStep(properties: unknown): AutomaticExceptionStep | undefined {
-  if (readStringProperty(properties, '$event_type') !== TOUCH_EVENT_TYPE) {
+  const eventType = readStringProperty(properties, '$event_type')
+  const verb = eventType ? INTERACTION_VERBS[eventType] : undefined
+  if (!verb) {
     return undefined
   }
 
   const label = readTapLabel(properties)
   return {
     type: EXCEPTION_STEP_TYPES.TAP,
-    message: label ? `Tap: ${label}` : 'Tap',
+    message: label ? `${verb}: ${label}` : verb,
   }
 }
 
