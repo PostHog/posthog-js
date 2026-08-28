@@ -838,6 +838,9 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
+      '@posthog/types':
+        specifier: workspace:^
+        version: link:../types
       '@rslib/core':
         specifier: 'catalog:'
         version: 0.10.6(@microsoft/api-extractor@7.58.9(@types/node@20.19.9))(typescript@5.9.3)

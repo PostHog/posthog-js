@@ -86,6 +86,21 @@ export type {
   Metrics,
   MetricsConfig,
 } from './metrics/types'
+export { PostHogTraces } from './traces'
+export { SyncSpanContextManager } from './traces/context'
+export { NOOP_SPAN } from './traces/span'
+export type { ResolvedTracesConfig, SpanContextManager, TraceSdkContext } from './traces/types'
+// Same barrel convention as logs and metrics for the user-facing tracing types.
+export type {
+  Span,
+  SpanAttributes,
+  SpanAttributeValue,
+  SpanKind,
+  SpanStatusCode,
+  SpanTimeInput,
+  StartSpanOptions,
+  TracesConfig,
+} from './traces/types'
 export { uuidv7 } from './vendor/uuidv7'
 export * from './cookie'
 export * from './posthog-core'

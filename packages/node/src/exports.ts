@@ -14,6 +14,19 @@ export type { FeatureFlagErrorType } from '@posthog/core'
 // and API surface without a direct @posthog/core dependency.
 export type { CaptureMetricOptions, Metrics, MetricsConfig } from '@posthog/core'
 
+// Tracing types re-exported so consumers can name the `traces` client option and
+// the span API without a direct @posthog/core dependency.
+export type {
+  Span,
+  SpanAttributes,
+  SpanAttributeValue,
+  SpanKind,
+  SpanStatusCode,
+  SpanTimeInput,
+  StartSpanOptions,
+  TracesConfig,
+} from '@posthog/core'
+
 // Identity helpers re-exported from core for posthog-node consumers managing
 // distinct_id outside the browser SDK (e.g. Lambda functions handing out
 // `download-app` redirects). Closes #2143.
