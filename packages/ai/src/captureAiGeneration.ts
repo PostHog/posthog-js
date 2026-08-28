@@ -151,14 +151,21 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     }
     httpStatus = httpStatus ?? 200
 
-    let costOverrideData: Record<string, number> = {}
+    // A price times an unknown token count is unknown, not zero: a cancelled
+    // stream still consumed its prompt. Each component is priced only when its
+    // count exists, and the total sums the priced components, so a call with no
+    // reported usage sends no cost instead of asserting $0.
+    const costOverrideData: Record<string, number> = {}
     if (options.costOverride) {
-      const inputCostUSD = (options.costOverride.inputCost ?? 0) * (usage.inputTokens ?? 0)
-      const outputCostUSD = (options.costOverride.outputCost ?? 0) * (usage.outputTokens ?? 0)
-      costOverrideData = {
-        $ai_input_cost_usd: inputCostUSD,
-        $ai_output_cost_usd: outputCostUSD,
-        $ai_total_cost_usd: inputCostUSD + outputCostUSD,
+      if (usage.inputTokens !== undefined) {
+        costOverrideData.$ai_input_cost_usd = (options.costOverride.inputCost ?? 0) * usage.inputTokens
+      }
+      if (usage.outputTokens !== undefined) {
+        costOverrideData.$ai_output_cost_usd = (options.costOverride.outputCost ?? 0) * usage.outputTokens
+      }
+      if (Object.keys(costOverrideData).length > 0) {
+        costOverrideData.$ai_total_cost_usd =
+          (costOverrideData.$ai_input_cost_usd ?? 0) + (costOverrideData.$ai_output_cost_usd ?? 0)
       }
     }
 

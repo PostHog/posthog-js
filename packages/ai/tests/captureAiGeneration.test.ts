@@ -415,6 +415,38 @@ describe('captureAiGeneration', () => {
     expect(properties.$ai_total_cost_usd).toBeCloseTo(0.025)
   })
 
+  // A price times an unknown count is unknown: an interrupted stream that never
+  // reported usage must not assert a $0 cost just because a price was configured.
+  it.each([
+    {
+      name: 'no cost when usage was never reported',
+      usage: {},
+      expected: { $ai_input_cost_usd: undefined, $ai_output_cost_usd: undefined, $ai_total_cost_usd: undefined },
+    },
+    {
+      name: 'only the priced side when one count is known',
+      usage: { inputTokens: 1000 },
+      expected: { $ai_input_cost_usd: 0.01, $ai_output_cost_usd: undefined, $ai_total_cost_usd: 0.01 },
+    },
+  ])('cost override sends $name', async ({ usage, expected }) => {
+    const client = buildClient()
+
+    await captureAiGeneration(client, {
+      ...baseRequiredOptions,
+      usage,
+      costOverride: { inputCost: 0.000_01, outputCost: 0.000_03 },
+    })
+
+    const properties = lastCaptureProperties(client)
+    for (const [key, value] of Object.entries(expected)) {
+      if (value === undefined) {
+        expect(properties[key]).toBeUndefined()
+      } else {
+        expect(properties[key]).toBeCloseTo(value)
+      }
+    }
+  })
+
   it('supports embedding events via eventType', async () => {
     const client = buildClient()
 
