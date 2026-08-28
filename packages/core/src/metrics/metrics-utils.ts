@@ -1,5 +1,5 @@
 import type { MetricAttributeValue, OtlpMetric, OtlpMetricsPayload } from '@posthog/types'
-import { toOtlpKeyValueList } from '../logs/logs-utils'
+import { toOtlpKeyValueList } from '../utils/otlp-any-value'
 import type { ResolvedPostHogMetricsConfig } from './types'
 
 /**

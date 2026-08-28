@@ -762,11 +762,12 @@ describe('PostHog Core', () => {
   })
 
   describe('OTLP batch senders', () => {
-    // Both share one `_sendOtlpBatch`; the table pins them to the same
+    // All three share one `_sendOtlpBatch`; the table pins them to the same
     // classification so a wrapper can't reintroduce a per-signal retry policy.
     const senders = {
       logs: (client: PostHogCoreTestClient) => client._sendLogsBatch({ resourceLogs: [] }),
       metrics: (client: PostHogCoreTestClient) => client._sendMetricsBatch({ resourceMetrics: [] }),
+      traces: (client: PostHogCoreTestClient) => client._sendTracesBatch({ resourceSpans: [] }),
     }
 
     const cases: [number, string][] = [
