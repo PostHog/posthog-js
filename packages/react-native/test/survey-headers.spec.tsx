@@ -59,8 +59,8 @@ describe('survey headers', () => {
     ],
   ])('reserves room for the close button on the %s screen', (_name, element) => {
     render(element)
-    const headerContainer = screen.getByText(LONG_HEADER).parentElement as HTMLElement
+    const header = screen.getByText(LONG_HEADER) as HTMLElement
 
-    expect(headerContainer.style.paddingRight).toBe(`${closeButtonSize}px`)
+    expect(header.style.paddingRight).toBe(`${closeButtonSize}px`)
   })
 })

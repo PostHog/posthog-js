@@ -48,9 +48,9 @@ export function IntroMessage({
 const styles = createSafeStyleSheet({
   introMessageContainer: {
     padding: 10,
-    paddingRight: closeButtonSize,
   },
   introMessageHeader: {
+    paddingRight: closeButtonSize,
     fontSize: 18,
     fontWeight: 'bold',
   },
