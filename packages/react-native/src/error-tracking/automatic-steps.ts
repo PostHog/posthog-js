@@ -83,10 +83,10 @@ const LIFECYCLE_EVENTS = new Set<string>([
  * and keyboard activation, because a browser fires `touchend` only for touch input, so both belong
  * to the `taps` signal.
  */
-const INTERACTION_VERBS: Record<string, string> = {
-  touch: 'Tap',
-  click: 'Click',
-}
+const INTERACTION_VERBS = new Map<string, string>([
+  ['touch', 'Tap'],
+  ['click', 'Click'],
+])
 
 export type AutomaticExceptionStep = {
   type: ExceptionStepType
@@ -146,7 +146,9 @@ function buildNavigationStep(properties: unknown): AutomaticExceptionStep | unde
  */
 function buildTapStep(properties: unknown): AutomaticExceptionStep | undefined {
   const eventType = readStringProperty(properties, '$event_type')
-  const verb = eventType ? INTERACTION_VERBS[eventType] : undefined
+  // A Map, not an object literal, so an event type such as `toString` cannot reach Object.prototype
+  // and resolve to a function the message would then stringify.
+  const verb = eventType ? INTERACTION_VERBS.get(eventType) : undefined
   if (!verb) {
     return undefined
   }

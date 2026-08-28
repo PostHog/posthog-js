@@ -107,6 +107,15 @@ describe('buildAutomaticExceptionStep', () => {
     expect(buildAutomaticExceptionStep(ALL_ON, '$autocapture', { $elements: [{ tag_name: 'Input' }] })).toBeUndefined()
   })
 
+  it.each(['toString', 'constructor', 'valueOf', 'hasOwnProperty', '__proto__'])(
+    'ignores the Object.prototype key %s as an event type',
+    (eventType) => {
+      expect(
+        buildAutomaticExceptionStep(ALL_ON, '$autocapture', { $event_type: eventType, $elements: [] })
+      ).toBeUndefined()
+    }
+  )
+
   it.each([
     'Application Installed',
     'Application Updated',
