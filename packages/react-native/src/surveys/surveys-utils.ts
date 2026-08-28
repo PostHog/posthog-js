@@ -44,8 +44,8 @@ export const defaultRatingLabelOpacity = 0.7
 
 /**
  * Side of the circular close button. The button is absolutely positioned in the modal's
- * top-right corner, so the headers underneath it reserve this much padding on their right
- * edge to keep long text from wrapping into it.
+ * top-right corner, so the content containers underneath it reserve this much padding on
+ * their right edge to keep long text from wrapping into it.
  */
 export const closeButtonSize = 40
 

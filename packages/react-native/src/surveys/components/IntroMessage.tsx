@@ -32,14 +32,7 @@ export function IntroMessage({
       <View style={styles.introMessageContainer}>
         {header ? <Text style={[styles.introMessageHeader, { color: textColor }]}>{header}</Text> : null}
         {shouldRenderDescription(description, contentType) && (
-          <Text
-            style={[
-              { color: textColor, opacity: defaultDescriptionOpacity },
-              !header && styles.introMessageDescriptionWithoutHeader,
-            ]}
-          >
-            {description}
-          </Text>
+          <Text style={{ color: textColor, opacity: defaultDescriptionOpacity }}>{description}</Text>
         )}
       </View>
       <BottomSection
@@ -55,13 +48,10 @@ export function IntroMessage({
 const styles = createSafeStyleSheet({
   introMessageContainer: {
     padding: 10,
+    paddingRight: closeButtonSize,
   },
   introMessageHeader: {
-    paddingRight: closeButtonSize,
     fontSize: 18,
     fontWeight: 'bold',
-  },
-  introMessageDescriptionWithoutHeader: {
-    paddingRight: closeButtonSize,
   },
 })

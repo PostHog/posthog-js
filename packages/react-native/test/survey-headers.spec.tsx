@@ -61,7 +61,7 @@ describe('survey headers', () => {
     render(element)
     const header = screen.getByText(LONG_HEADER) as HTMLElement
 
-    expect(header.style.paddingRight).toBe(`${closeButtonSize}px`)
+    expect(header.parentElement?.style.paddingRight).toBe(`${closeButtonSize}px`)
   })
 
   it('reserves room for a headerless intro description', () => {
@@ -77,6 +77,6 @@ describe('survey headers', () => {
     )
 
     const introDescription = screen.getByText(description) as HTMLElement
-    expect(introDescription.style.paddingRight).toBe(`${closeButtonSize}px`)
+    expect(introDescription.parentElement?.style.paddingRight).toBe(`${closeButtonSize}px`)
   })
 })

@@ -54,9 +54,9 @@ export function ConfirmationMessage({
 const styles = createSafeStyleSheet({
   thankYouMessageContainer: {
     padding: 10,
+    paddingRight: closeButtonSize,
   },
   thankYouMessageHeader: {
-    paddingRight: closeButtonSize,
     fontSize: 18,
     fontWeight: 'bold',
   },

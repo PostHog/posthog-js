@@ -40,9 +40,9 @@ export function QuestionHeader({
 const styles = createSafeStyleSheet({
   container: {
     padding: 10,
+    paddingRight: closeButtonSize,
   },
   question: {
-    paddingRight: closeButtonSize,
     fontSize: 18,
     fontWeight: 'bold',
   },
