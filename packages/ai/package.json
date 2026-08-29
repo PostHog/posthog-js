@@ -25,6 +25,7 @@
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.15",
     "@anthropic-ai/sdk": "^0.117.1",
+    "@google/adk": "^2.0.0",
     "@google/genai": "^1.52.0",
     "@langchain/core": "^1.2.8",
     "openai": "^6.49.0",
@@ -64,6 +65,7 @@
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": "^0.112.3",
+    "@google/adk": "^2.0.0",
     "@google/genai": "^1.52.0",
     "@langchain/core": "^1.2.3",
     "openai": "^6.48.0",
@@ -77,6 +79,9 @@
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "@google/adk": {
       "optional": true
     },
     "@google/genai": {
@@ -155,6 +160,11 @@
       "require": "./dist/openai-agents/index.cjs",
       "import": "./dist/openai-agents/index.mjs",
       "types": "./dist/openai-agents/index.d.ts"
+    },
+    "./adk": {
+      "require": "./dist/adk/index.cjs",
+      "import": "./dist/adk/index.mjs",
+      "types": "./dist/adk/index.d.ts"
     }
   },
   "directories": {
