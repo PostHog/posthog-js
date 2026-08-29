@@ -506,14 +506,19 @@ export class PostHogPersistence {
             store = sessionStore
         } else if (storage_type === 'memory') {
             store = memoryStore
-        } else if (storage_type === 'cookie') {
+        } else if (storage_type === 'cookie' && cookieStore._is_supported()) {
             store = cookieStore
         } else if (localPlusCookieStore._is_supported()) {
             // selected storage type wasn't supported, fallback to 'localstorage+cookie' if possible
             store = localPlusCookieStore
             splitEligible = true
-        } else {
+        } else if (cookieStore._is_supported()) {
             store = cookieStore
+        } else {
+            // Neither web storage nor cookies are available -- e.g. a page served from a
+            // `data:` URL, where Chrome disables both. Falling back to cookieStore here left
+            // every read and write silently failing, so degrade to in-memory persistence.
+            store = memoryStore
         }
 
         this._splitStorageEligible = splitEligible
