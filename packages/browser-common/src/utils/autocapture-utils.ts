@@ -698,6 +698,11 @@ This code is just copied over from ingestion, but we should optimize it
 to create elements_chain string directly.
 */
 export function getElementsChainString(elements: Properties[]): string {
+    // Guard against malformed input: callers can pass a non-array value (for example a
+    // stringified or null `$elements`), which would make `.map` throw a TypeError.
+    if (!isArray(elements)) {
+        return ''
+    }
     return elementsToString(extractElements(elements))
 }
 

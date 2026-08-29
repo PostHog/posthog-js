@@ -792,6 +792,13 @@ describe(`Autocapture utility functions`, () => {
             })
         })
 
+        it('should return an empty string for non-array input', () => {
+            expect(getElementsChainString(undefined as any)).toEqual('')
+            expect(getElementsChainString(null as any)).toEqual('')
+            expect(getElementsChainString('not an array' as any)).toEqual('')
+            expect(getElementsChainString({ tag_name: 'div' } as any)).toEqual('')
+        })
+
         it('should not throw when localeCompare throws (faulty ICU data)', () => {
             // Some browsers with incomplete ICU data throw a RangeError from localeCompare.
             const originalLocaleCompare = String.prototype.localeCompare
