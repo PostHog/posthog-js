@@ -186,6 +186,11 @@ export interface PromptCodeFallbackResult {
 export type PromptResult = PromptRemoteResult | PromptCodeFallbackResult
 
 /**
+ * Single prompt item or descriptor for batch fetching in Prompts.getMany()
+ */
+export type PromptBatchItem = string | ({ name: string } & GetPromptOptions)
+
+/**
  * Variables for prompt compilation
  */
 export type PromptVariables = Record<string, string | number | boolean>
