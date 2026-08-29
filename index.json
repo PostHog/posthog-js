@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/4688": {
+    "key": "PostHog/posthog-js/issue/4688",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4688",
+    "url": "https://github.com/PostHog/posthog-js/issues/4688",
+    "conclusion": "Confirmed Session Replay memory-leak bug in the vendored rrweb MutationBuffer cleanup path.",
+    "labels": [
+      "feature/replay",
+      "needs-to-be-contributed-back",
+      "team/client-libraries"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/4689",
+    "closed": false,
+    "updatedAt": "2026-08-29T14:34:29.266Z"
+  },
   "PostHog/posthog-js/issue/4674": {
     "key": "PostHog/posthog-js/issue/4674",
     "repo": "PostHog/posthog-js",
