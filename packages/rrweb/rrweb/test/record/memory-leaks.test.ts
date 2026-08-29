@@ -135,6 +135,28 @@ describe('memory leak prevention', () => {
       // Verify buffers are cleared
       expect(mutationBuffers.length).toBe(0);
     });
+
+    it('clears pending nodes when mutations produce an empty payload', async () => {
+      const stopRecording = record({
+        emit: (event) => events.push(event),
+      });
+      const eventCount = events.length;
+      const div = document.createElement('div');
+
+      document.body.appendChild(div);
+      document.body.removeChild(div);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(events).toHaveLength(eventCount);
+      expect(
+        (
+          mutationBuffers[0] as unknown as { droppedSet: Set<Node> }
+        ).droppedSet.size,
+      ).toBe(0);
+
+      stopRecording?.();
+    });
   });
 
   describe('IframeManager cleanup', () => {
