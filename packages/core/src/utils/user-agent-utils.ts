@@ -64,6 +64,9 @@ const GOOGLE_SEARCH_APP = 'Google Search App'
 
 const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
 const DEFAULT_BROWSER_VERSION_REGEX = new RegExp('Version/' + BROWSER_VERSION_REGEX_SUFFIX)
+const AI_APP_VERSION_REGEX = new RegExp(
+  '(' + CLAUDE + '|' + CODEX + '|' + CHATGPT + ')\\/' + BROWSER_VERSION_REGEX_SUFFIX
+)
 
 /**
  * Hints from sources outside the User-Agent string. These let us identify Brave
@@ -85,10 +88,10 @@ function browserFromHints(hints: BrowserDetectionHints | undefined): string | nu
 }
 
 /**
- * Opt-in tweaks to UA-string detection. These change how existing traffic is
- * attributed, so the host SDK gates them (behind its `2026-05-30` config
- * defaults) rather than enabling them unconditionally — turning one on
- * reattributes browsers that were previously reported as something else.
+ * Opt-in tweaks to UA-string detection. Turning one on reattributes browsers
+ * that were previously reported as something else, so the host SDK gates
+ * shifts big enough to move users' metrics behind its `2026-05-30` config
+ * defaults. Smaller reattributions ship unconditionally in `detectBrowser`.
  */
 export interface BrowserDetectionOptions {
   // Surface the Google Search App as its own browser via its `GSA/` UA marker
@@ -184,8 +187,9 @@ export const detectBrowser = function (
   } else if (includes(user_agent, EDGE) || includes(user_agent, 'Edg/')) {
     return MICROSOFT_EDGE
   }
-  // Chromium forks that DO stamp themselves into the UA. These must be
-  // checked before Chrome because their UA also contains `Chrome/`.
+  // Chromium forks and Chromium-based apps that DO stamp themselves into the
+  // UA. These must be checked before Chrome because their UA also contains
+  // `Chrome/`.
   else if (includes(user_agent, VIVALDI + '/')) {
     return VIVALDI
   } else if (includes(user_agent, 'YaBrowser/')) {
@@ -266,9 +270,9 @@ const versionRegexes: Record<string, RegExp[]> = {
   // Brave don't, which is why hint-based Brave detection returns a null
   // version: we have no UA marker to parse.
   [BRAVE]: [new RegExp(BRAVE + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [CLAUDE]: [new RegExp(CLAUDE + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [CODEX]: [new RegExp(CODEX + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-  [CHATGPT]: [new RegExp(CHATGPT + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
+  [CLAUDE]: [AI_APP_VERSION_REGEX],
+  [CODEX]: [AI_APP_VERSION_REGEX],
+  [CHATGPT]: [AI_APP_VERSION_REGEX],
   // DuckDuckGo on iOS uses `Ddg/`, on Android/desktop preview it uses `DuckDuckGo/`.
   [DUCKDUCKGO]: [new RegExp('(DuckDuckGo|Ddg)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
   [PALE_MOON]: [new RegExp('PaleMoon\\/' + BROWSER_VERSION_REGEX_SUFFIX)],

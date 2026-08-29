@@ -89,31 +89,31 @@ function browser(userAgent: string, vendor: string, opera: boolean): string {
   }
 }
 
-function browserVersion(userAgent: string, vendor: string, opera: boolean): number | null {
-  const regexList = {
-    'Internet Explorer Mobile': /rv:(\d+(\.\d+)?)/,
-    'Microsoft Edge': /Edge?\/(\d+(\.\d+)?)/,
-    Claude: /Claude\/(\d+(\.\d+)?)/,
-    Codex: /Codex\/(\d+(\.\d+)?)/,
-    ChatGPT: /ChatGPT\/(\d+(\.\d+)?)/,
-    Chrome: /Chrome\/(\d+(\.\d+)?)/,
-    'Chrome iOS': /CriOS\/(\d+(\.\d+)?)/,
-    'UC Browser': /(UCBrowser|UCWEB)\/(\d+(\.\d+)?)/,
-    Safari: /Version\/(\d+(\.\d+)?)/,
-    'Mobile Safari': /Version\/(\d+(\.\d+)?)/,
-    Opera: /(Opera|OPR)\/(\d+(\.\d+)?)/,
-    Firefox: /Firefox\/(\d+(\.\d+)?)/,
-    'Firefox iOS': /FxiOS\/(\d+(\.\d+)?)/,
-    Konqueror: /Konqueror:(\d+(\.\d+)?)/,
-    BlackBerry: /BlackBerry (\d+(\.\d+)?)/,
-    'Android Mobile': /android\s(\d+(\.\d+)?)/,
-    'Samsung Internet': /SamsungBrowser\/(\d+(\.\d+)?)/,
-    'Internet Explorer': /(rv:|MSIE )(\d+(\.\d+)?)/,
-    Mozilla: /rv:(\d+(\.\d+)?)/,
-  }
+const browserVersionRegexList = {
+  'Internet Explorer Mobile': /rv:(\d+(\.\d+)?)/,
+  'Microsoft Edge': /Edge?\/(\d+(\.\d+)?)/,
+  Claude: /Claude\/(\d+(\.\d+)?)/,
+  Codex: /Codex\/(\d+(\.\d+)?)/,
+  ChatGPT: /ChatGPT\/(\d+(\.\d+)?)/,
+  Chrome: /Chrome\/(\d+(\.\d+)?)/,
+  'Chrome iOS': /CriOS\/(\d+(\.\d+)?)/,
+  'UC Browser': /(UCBrowser|UCWEB)\/(\d+(\.\d+)?)/,
+  Safari: /Version\/(\d+(\.\d+)?)/,
+  'Mobile Safari': /Version\/(\d+(\.\d+)?)/,
+  Opera: /(Opera|OPR)\/(\d+(\.\d+)?)/,
+  Firefox: /Firefox\/(\d+(\.\d+)?)/,
+  'Firefox iOS': /FxiOS\/(\d+(\.\d+)?)/,
+  Konqueror: /Konqueror:(\d+(\.\d+)?)/,
+  BlackBerry: /BlackBerry (\d+(\.\d+)?)/,
+  'Android Mobile': /android\s(\d+(\.\d+)?)/,
+  'Samsung Internet': /SamsungBrowser\/(\d+(\.\d+)?)/,
+  'Internet Explorer': /(rv:|MSIE )(\d+(\.\d+)?)/,
+  Mozilla: /rv:(\d+(\.\d+)?)/,
+}
 
-  const browserString = browser(userAgent, vendor, opera) as keyof typeof regexList
-  const regex: RegExp = regexList[browserString] || undefined
+function browserVersion(userAgent: string, vendor: string, opera: boolean): number | null {
+  const browserString = browser(userAgent, vendor, opera) as keyof typeof browserVersionRegexList
+  const regex: RegExp = browserVersionRegexList[browserString] || undefined
 
   if (regex === undefined) {
     return null

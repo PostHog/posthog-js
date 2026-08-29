@@ -50,6 +50,14 @@ describe('user-agent-utils', () => {
                 expectedBrowser: 'ChatGPT',
             },
             {
+                // ChatGPT on Windows uses a `1.YYYY.WW` scheme, unlike its other platforms
+                name: 'ChatGPT desktop browser on windows',
+                userAgent:
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ChatGPT/1.2026.190 Chrome/140.0.0.0 Safari/537.36',
+                expectedVersion: 1.2026,
+                expectedBrowser: 'ChatGPT',
+            },
+            {
                 name: 'Chrome 111 on Linux',
                 userAgent:
                     'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
