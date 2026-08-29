@@ -94,12 +94,14 @@ describe('posthogRollupPlugin', () => {
             expect(determineChunkIdFromSource(result!.code)).toBe(commentId)
         })
 
-        it('mints a fresh chunk id per injection', () => {
+        it('derives the chunk id from content, so identical code keeps its id across rebuilds', () => {
             const plugin = testPlugin(options)
             const first = plugin.renderChunk.handler(code, { fileName: 'a.js' })
-            const second = plugin.renderChunk.handler(code, { fileName: 'b.js' })
+            const rebuilt = testPlugin(options).renderChunk.handler(code, { fileName: 'b.js' })
+            const other = plugin.renderChunk.handler(`${code}more();`, { fileName: 'c.js' })
 
-            expect(determineChunkIdFromSource(first!.code)).not.toBe(determineChunkIdFromSource(second!.code))
+            expect(determineChunkIdFromSource(rebuilt!.code)).toBe(determineChunkIdFromSource(first!.code))
+            expect(determineChunkIdFromSource(other!.code)).not.toBe(determineChunkIdFromSource(first!.code))
         })
 
         it('does not re-inject already injected code', () => {

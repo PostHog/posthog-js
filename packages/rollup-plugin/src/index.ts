@@ -4,7 +4,6 @@ import {
     resolveConfig,
     runSourcemapCli,
     resolveReleaseId,
-    createChunkId,
     createStableChunkId,
     createChunkIdSnippet,
     createChunkIdComment,
@@ -118,7 +117,9 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                 }
 
                 if (!eventReleaseMode) {
-                    const chunkId = createChunkId()
+                    // Content-addressed so an unchanged chunk keeps its id — and therefore its
+                    // emitted [hash] file name — across rebuilds.
+                    const chunkId = createStableChunkId(code)
                     rememberChunkId(chunk.fileName, chunkId)
                     return injectChunkId(code, chunkId)
                 }

@@ -71,3 +71,44 @@ process.stdin.on('end', () => {
         'the runtime snippet and upload comment should carry the same chunk id'
     )
 })
+
+test('keeps [hash] file names identical across identical builds', async (t) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'posthog-rollup-plugin-vite-'))
+    t.after(() => fs.rm(root, { recursive: true, force: true }))
+
+    const cliPath = path.join(root, 'posthog-cli.mjs')
+    await fs.writeFile(cliPath, '#!/usr/bin/env node\n')
+    await fs.chmod(cliPath, 0o755)
+    await fs.writeFile(path.join(root, 'index.html'), '<script type="module" src="/src.ts"></script>')
+    await fs.writeFile(path.join(root, 'src.ts'), 'console.log("app")')
+
+    const buildEntryFiles = async (outDir) => {
+        await build({
+            configFile: false,
+            root,
+            logLevel: 'silent',
+            plugins: [
+                posthogRollupPlugin({
+                    personalApiKey: 'phx_test',
+                    projectId: '1',
+                    cliBinaryPath: cliPath,
+                    sourcemaps: { deleteAfterUpload: false },
+                }),
+            ],
+            build: { outDir, minify: 'esbuild' },
+        })
+
+        return (await fs.readdir(path.join(root, outDir))).filter((fileName) => fileName.endsWith('.js')).sort()
+    }
+
+    // The injected chunk id is content-addressed, so identical input must emit the same [hash] file
+    // names — a random id in renderChunk would rename every chunk on every build.
+    const first = await buildEntryFiles('dist-a')
+    const second = await buildEntryFiles('dist-b')
+    assert.deepEqual(first, second)
+
+    // Changed input still gets a different chunk id and therefore a different hash.
+    await fs.writeFile(path.join(root, 'src.ts'), 'console.log("app changed")')
+    const changed = await buildEntryFiles('dist-c')
+    assert.notDeepEqual(changed, first)
+})
