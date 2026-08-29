@@ -1,4 +1,4 @@
-import { currentTimestamp, stripUrlHash } from '@posthog/core'
+import { currentTimestamp, detectBrowser, detectBrowserVersion, stripUrlHash } from '@posthog/core'
 import { version } from './version'
 
 export function getContext(window: Window | undefined, disableCaptureUrlHashes: boolean = false): any {
@@ -9,14 +9,14 @@ export function getContext(window: Window | undefined, disableCaptureUrlHashes: 
     context = {
       ...context,
       ...(osValue !== undefined && { $os: osValue }),
-      $browser: browser(userAgent, window.navigator.vendor, !!(window as any).opera),
+      $browser: detectBrowser(userAgent, window.navigator.vendor),
       $referrer: window.document.referrer,
       $referring_domain: referringDomain(window.document.referrer),
       $device: device(userAgent),
       $current_url: disableCaptureUrlHashes ? stripUrlHash(window.location.href) : window.location.href,
       $host: window.location.host,
       $pathname: window.location.pathname,
-      $browser_version: browserVersion(userAgent, window.navigator.vendor, !!(window as any).opera),
+      $browser_version: detectBrowserVersion(userAgent, window.navigator.vendor),
       $screen_height: window.screen.height,
       $screen_width: window.screen.width,
       $screen_dpr: window.devicePixelRatio,
@@ -31,98 +31,6 @@ export function getContext(window: Window | undefined, disableCaptureUrlHashes: 
     $time: currentTimestamp() / 1000, // epoch time in seconds
   }
   return context // TODO: strip empty props?
-}
-
-function includes(haystack: string, needle: string): boolean {
-  return haystack.indexOf(needle) >= 0
-}
-
-function browser(userAgent: string, vendor: string, opera: boolean): string {
-  vendor = vendor || '' // vendor is undefined for at least IE9
-  if (opera || includes(userAgent, ' OPR/')) {
-    if (includes(userAgent, 'Mini')) {
-      return 'Opera Mini'
-    }
-    return 'Opera'
-  } else if (/(BlackBerry|PlayBook|BB10)/i.test(userAgent)) {
-    return 'BlackBerry'
-  } else if (includes(userAgent, 'IEMobile') || includes(userAgent, 'WPDesktop')) {
-    return 'Internet Explorer Mobile'
-  } else if (includes(userAgent, 'SamsungBrowser/')) {
-    // https://developer.samsung.com/internet/user-agent-string-format
-    return 'Samsung Internet'
-  } else if (includes(userAgent, 'Edge') || includes(userAgent, 'Edg/')) {
-    return 'Microsoft Edge'
-  } else if (includes(userAgent, 'FBIOS')) {
-    return 'Facebook Mobile'
-  } else if (includes(userAgent, 'Claude/')) {
-    return 'Claude'
-  } else if (includes(userAgent, 'Codex/')) {
-    return 'Codex'
-  } else if (includes(userAgent, 'ChatGPT/')) {
-    return 'ChatGPT'
-  } else if (includes(userAgent, 'Chrome')) {
-    return 'Chrome'
-  } else if (includes(userAgent, 'CriOS')) {
-    return 'Chrome iOS'
-  } else if (includes(userAgent, 'UCWEB') || includes(userAgent, 'UCBrowser')) {
-    return 'UC Browser'
-  } else if (includes(userAgent, 'FxiOS')) {
-    return 'Firefox iOS'
-  } else if (includes(vendor, 'Apple')) {
-    if (includes(userAgent, 'Mobile')) {
-      return 'Mobile Safari'
-    }
-    return 'Safari'
-  } else if (includes(userAgent, 'Android')) {
-    return 'Android Mobile'
-  } else if (includes(userAgent, 'Konqueror')) {
-    return 'Konqueror'
-  } else if (includes(userAgent, 'Firefox')) {
-    return 'Firefox'
-  } else if (includes(userAgent, 'MSIE') || includes(userAgent, 'Trident/')) {
-    return 'Internet Explorer'
-  } else if (includes(userAgent, 'Gecko')) {
-    return 'Mozilla'
-  } else {
-    return ''
-  }
-}
-
-const browserVersionRegexList = {
-  'Internet Explorer Mobile': /rv:(\d+(\.\d+)?)/,
-  'Microsoft Edge': /Edge?\/(\d+(\.\d+)?)/,
-  Claude: /Claude\/(\d+(\.\d+)?)/,
-  Codex: /Codex\/(\d+(\.\d+)?)/,
-  ChatGPT: /ChatGPT\/(\d+(\.\d+)?)/,
-  Chrome: /Chrome\/(\d+(\.\d+)?)/,
-  'Chrome iOS': /CriOS\/(\d+(\.\d+)?)/,
-  'UC Browser': /(UCBrowser|UCWEB)\/(\d+(\.\d+)?)/,
-  Safari: /Version\/(\d+(\.\d+)?)/,
-  'Mobile Safari': /Version\/(\d+(\.\d+)?)/,
-  Opera: /(Opera|OPR)\/(\d+(\.\d+)?)/,
-  Firefox: /Firefox\/(\d+(\.\d+)?)/,
-  'Firefox iOS': /FxiOS\/(\d+(\.\d+)?)/,
-  Konqueror: /Konqueror:(\d+(\.\d+)?)/,
-  BlackBerry: /BlackBerry (\d+(\.\d+)?)/,
-  'Android Mobile': /android\s(\d+(\.\d+)?)/,
-  'Samsung Internet': /SamsungBrowser\/(\d+(\.\d+)?)/,
-  'Internet Explorer': /(rv:|MSIE )(\d+(\.\d+)?)/,
-  Mozilla: /rv:(\d+(\.\d+)?)/,
-}
-
-function browserVersion(userAgent: string, vendor: string, opera: boolean): number | null {
-  const browserString = browser(userAgent, vendor, opera) as keyof typeof browserVersionRegexList
-  const regex: RegExp = browserVersionRegexList[browserString] || undefined
-
-  if (regex === undefined) {
-    return null
-  }
-  const matches = userAgent.match(regex)
-  if (!matches) {
-    return null
-  }
-  return parseFloat(matches[matches.length - 2])
 }
 
 function os(window: Window | undefined): string | undefined {
