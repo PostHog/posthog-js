@@ -761,6 +761,11 @@ export class PostHog extends PostHogCore {
     // to the user session, because error tracking explains what the app did rather than what one user
     // did. Clearing here would drop exactly the steps that explain a failure in a login or logout
     // flow. Every other SDK keeps them too. See the ExceptionSteps docs before changing this.
+    //
+    // Instead of clearing, mark the boundary: the `identity` automatic signal records a step here, so
+    // a reader can see where one user's activity ended rather than reading it as the next user's.
+    // Recorded before super.reset() so the step sits on the boundary rather than after it.
+    this._errorTracking.onIdentityReset()
 
     // When propertiesToKeep is not explicitly provided, automatically preserve app lifecycle
     // properties and device_id to prevent duplicate "Application Installed" events and

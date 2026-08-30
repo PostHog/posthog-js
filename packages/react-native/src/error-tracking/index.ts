@@ -12,9 +12,11 @@ import {
 import { Properties } from '@posthog/types'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
 import {
+  AutomaticExceptionStep,
   AutomaticExceptionStepsOptions,
   ResolvedAutomaticExceptionStepsOptions,
   buildAutomaticExceptionStep,
+  buildIdentityExceptionStep,
   resolveAutomaticExceptionStepsOptions,
 } from './automatic-steps'
 import { getRemoteConfigBool } from '../utils'
@@ -159,7 +161,7 @@ export class ErrorTracking {
    */
   get automaticExceptionStepsEnabled(): boolean {
     const config = this._automaticStepsConfig
-    return config.navigation || config.taps || config.lifecycle
+    return config.navigation || config.taps || config.lifecycle || config.identity
   }
 
   /**
@@ -175,20 +177,52 @@ export class ErrorTracking {
 
     try {
       const step = buildAutomaticExceptionStep(this._automaticStepsConfig, event, properties)
-      if (!step) {
-        return
+      if (step) {
+        this.recordAutomaticStep(step)
       }
-
-      const stepProperties = { [CoreErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]: step.type }
-      this._exceptionStepsBuffer.add({
-        ...stepProperties,
-        [CoreErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE]: step.message,
-        [CoreErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: new Date().toISOString(),
-      })
-      this.forwardExceptionStepToNative(step.message, stepProperties)
     } catch (error) {
       this.logger.error('Failed to add automatic exception step. Ignoring breadcrumb.', error)
     }
+  }
+
+  /**
+   * Records the step marking an identity change. `reset()` calls this before it clears the identity,
+   * so the step lands on the boundary rather than after it.
+   *
+   * The buffer itself survives `reset()`, because steps scope to the app session rather than to the
+   * user session, and clearing would drop exactly the steps that explain a failure in a login or
+   * logout flow. This step is what keeps the previous user's activity from reading as the next
+   * user's: it marks where one identity ended instead of deleting the history.
+   *
+   * Like every automatic signal it is opt-in, and it never captures an event of its own.
+   */
+  onIdentityReset(): void {
+    if (!this._exceptionStepsConfig.enabled) {
+      return
+    }
+
+    try {
+      const step = buildIdentityExceptionStep(this._automaticStepsConfig)
+      if (step) {
+        this.recordAutomaticStep(step)
+      }
+    } catch (error) {
+      this.logger.error('Failed to add identity exception step. Ignoring breadcrumb.', error)
+    }
+  }
+
+  /**
+   * Buffers an SDK-recorded step and mirrors it to native. The SDK sets `$type` here, so the timeline
+   * can tell an automatic step from a manual one.
+   */
+  private recordAutomaticStep(step: AutomaticExceptionStep): void {
+    const stepProperties = { [CoreErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]: step.type }
+    this._exceptionStepsBuffer.add({
+      ...stepProperties,
+      [CoreErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE]: step.message,
+      [CoreErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: new Date().toISOString(),
+    })
+    this.forwardExceptionStepToNative(step.message, stepProperties)
   }
 
   /**

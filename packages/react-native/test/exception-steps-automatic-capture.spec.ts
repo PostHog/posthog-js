@@ -110,9 +110,25 @@ describe('PostHog React Native automatic exception steps capture', () => {
   })
 
   // Steps scope to the app session, not to the user session, so a logout keeps the steps that explain
-  // a failure in the logout flow itself. Every other SDK behaves the same way.
-  it('keeps buffered steps across a reset', async () => {
+  // a failure in the logout flow itself. Every other SDK behaves the same way. The identity step
+  // marks where one user's activity ended, so keeping the buffer does not leave the previous user's
+  // steps reading as the next user's.
+  it('keeps buffered steps across a reset and marks the boundary', async () => {
     await newPostHog({ errorTracking: { exceptionSteps: { automatic: true } } })
+    const spy = captureSpy(posthog)
+
+    await posthog.screen('Cart')
+    posthog.reset()
+    await posthog.screen('Login')
+    await wait(20)
+
+    posthog.captureException(new Error('boom'))
+
+    expect(messagesOf(spy)).toEqual(['Screen: Cart', 'User changed', 'Screen: Login'])
+  })
+
+  it('keeps buffered steps across a reset without marking it when identity is off', async () => {
+    await newPostHog({ errorTracking: { exceptionSteps: { automatic: { navigation: true } } } })
     const spy = captureSpy(posthog)
 
     await posthog.screen('Cart')

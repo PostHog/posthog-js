@@ -9,6 +9,7 @@ export const EXCEPTION_STEP_TYPES = {
   NAVIGATION: 'navigation',
   TAP: 'tap',
   LIFECYCLE: 'lifecycle',
+  IDENTITY: 'identity',
 } as const
 
 export type ExceptionStepType = (typeof EXCEPTION_STEP_TYPES)[keyof typeof EXCEPTION_STEP_TYPES]
@@ -24,24 +25,29 @@ export type AutomaticExceptionStepsOptions = {
   taps?: boolean
   /** App lifecycle transitions such as open, foreground and background. @default false */
   lifecycle?: boolean
+  /** Identity changes, recorded at `reset()`. @default false */
+  identity?: boolean
 }
 
 export type ResolvedAutomaticExceptionStepsOptions = {
   navigation: boolean
   taps: boolean
   lifecycle: boolean
+  identity: boolean
 }
 
 const ALL_SIGNALS_OFF: ResolvedAutomaticExceptionStepsOptions = {
   navigation: false,
   taps: false,
   lifecycle: false,
+  identity: false,
 }
 
 const ALL_SIGNALS_ON: ResolvedAutomaticExceptionStepsOptions = {
   navigation: true,
   taps: true,
   lifecycle: true,
+  identity: true,
 }
 
 /**
@@ -63,6 +69,7 @@ export function resolveAutomaticExceptionStepsOptions(
     navigation: options.navigation ?? ALL_SIGNALS_OFF.navigation,
     taps: options.taps ?? ALL_SIGNALS_OFF.taps,
     lifecycle: options.lifecycle ?? ALL_SIGNALS_OFF.lifecycle,
+    identity: options.identity ?? ALL_SIGNALS_OFF.identity,
   }
 }
 
@@ -122,6 +129,28 @@ export function buildAutomaticExceptionStep(
   }
 
   return undefined
+}
+
+/**
+ * Message recorded when the active identity changes. The step marks the boundary and nothing more:
+ * it carries no distinct ID, so it says that the user changed without saying who either user was.
+ */
+export const IDENTITY_STEP_MESSAGE = 'User changed'
+
+/**
+ * Builds the step marking an identity change, or `undefined` when the caller left the signal off.
+ *
+ * No enqueued event maps to this, because `reset()` clears the identity rather than capturing it, so
+ * this sits outside `buildAutomaticExceptionStep` and the reset path calls it directly.
+ */
+export function buildIdentityExceptionStep(
+  config: ResolvedAutomaticExceptionStepsOptions
+): AutomaticExceptionStep | undefined {
+  if (!config.identity) {
+    return undefined
+  }
+
+  return { type: EXCEPTION_STEP_TYPES.IDENTITY, message: IDENTITY_STEP_MESSAGE }
 }
 
 function buildNavigationStep(properties: unknown): AutomaticExceptionStep | undefined {

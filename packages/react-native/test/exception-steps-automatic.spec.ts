@@ -1,6 +1,7 @@
 import { ErrorTracking, ExceptionStepsOptions } from '../src/error-tracking'
 import {
   buildAutomaticExceptionStep,
+  buildIdentityExceptionStep,
   resolveAutomaticExceptionStepsOptions,
 } from '../src/error-tracking/automatic-steps'
 
@@ -149,6 +150,23 @@ describe('buildAutomaticExceptionStep', () => {
   })
 })
 
+describe('buildIdentityExceptionStep', () => {
+  it('marks the boundary without naming either user', () => {
+    expect(buildIdentityExceptionStep(ALL_ON)).toEqual({ type: 'identity', message: 'User changed' })
+  })
+
+  it('records nothing when the caller left the signal off', () => {
+    expect(buildIdentityExceptionStep(resolveAutomaticExceptionStepsOptions())).toBeUndefined()
+    expect(buildIdentityExceptionStep(resolveAutomaticExceptionStepsOptions({ navigation: true }))).toBeUndefined()
+  })
+
+  // No enqueued event maps to identity, so the reset path is the only thing that can record it.
+  it('is not reachable from the event path', () => {
+    expect(buildAutomaticExceptionStep(ALL_ON, '$identify', {})).toBeUndefined()
+    expect(buildAutomaticExceptionStep(ALL_ON, '$create_alias', {})).toBeUndefined()
+  })
+})
+
 describe('ErrorTracking automatic exception steps', () => {
   let logger: ReturnType<typeof createMockLogger>
 
@@ -213,6 +231,41 @@ describe('ErrorTracking automatic exception steps', () => {
 
     expect(et.automaticExceptionStepsEnabled).toBe(true)
     expect(et.getAttachableExceptionSteps().map((s) => s.$message)).toEqual(['Tap: PayButton'])
+  })
+
+  it('marks an identity change in the buffer instead of clearing it', () => {
+    const et = newErrorTracking({ automatic: true })
+    et.onEnqueuedEvent('$screen', { $screen_name: 'Cart' })
+    et.onIdentityReset()
+    et.onEnqueuedEvent('$screen', { $screen_name: 'Login' })
+
+    const steps = et.getAttachableExceptionSteps()
+    expect(steps.map((s) => s.$message)).toEqual(['Screen: Cart', 'User changed', 'Screen: Login'])
+    expect(steps.map((s) => s.$type)).toEqual(['navigation', 'identity', 'navigation'])
+  })
+
+  it('records no identity step when the caller left the signal off', () => {
+    const et = newErrorTracking({ automatic: { navigation: true } })
+    et.onEnqueuedEvent('$screen', { $screen_name: 'Cart' })
+    et.onIdentityReset()
+
+    expect(et.getAttachableExceptionSteps().map((s) => s.$message)).toEqual(['Screen: Cart'])
+  })
+
+  it('records an identity step with no distinct id attached', () => {
+    const et = newErrorTracking({ automatic: { identity: true } })
+    et.onIdentityReset()
+
+    const [step] = et.getAttachableExceptionSteps()
+    expect(et.automaticExceptionStepsEnabled).toBe(true)
+    expect(Object.keys(step).sort()).toEqual(['$message', '$timestamp', '$type'])
+  })
+
+  it('records no identity step when exception steps are disabled', () => {
+    const et = newErrorTracking({ enabled: false, automatic: true })
+    et.onIdentityReset()
+
+    expect(et.getAttachableExceptionSteps()).toEqual([])
   })
 
   it('evicts the oldest automatic steps once the byte budget is exceeded', () => {

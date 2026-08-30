@@ -2257,6 +2257,11 @@
           "description": "App lifecycle transitions such as open, foreground and background.",
           "type": "boolean",
           "name": "lifecycle"
+        },
+        {
+          "description": "Identity changes, recorded at `reset()`.",
+          "type": "boolean",
+          "name": "identity"
         }
       ],
       "path": "dist/error-tracking/automatic-steps.d.ts"

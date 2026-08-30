@@ -37,8 +37,9 @@ export const posthog = new PostHog(process.env.EXPO_PUBLIC_POSTHOG_PROJECT_API_K
             nativeCrashes: true,
         },
         exceptionSteps: {
-            // Record a step for every screen change, autocaptured tap and lifecycle transition, so a
-            // captured exception carries a timeline without an addExceptionStep call at each site.
+            // Record a step for every screen change, autocaptured tap, lifecycle transition and
+            // identity change, so a captured exception carries a timeline without an
+            // addExceptionStep call at each site.
             automatic: true,
         },
     },
