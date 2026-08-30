@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/4694": {
+    "key": "PostHog/posthog-js/issue/4694",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4694",
+    "url": "https://github.com/PostHog/posthog-js/issues/4694",
+    "conclusion": "Valid, narrowly scoped enhancement: `respect_dnt` currently ignores Global Privacy Control, and the requested behavior fits the existing consent mechanism.",
+    "labels": [
+      "enhancement",
+      "feature",
+      "web",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-30T22:52:15.289Z"
+  },
   "PostHog/posthog-js/issue/4693": {
     "key": "PostHog/posthog-js/issue/4693",
     "repo": "PostHog/posthog-js",
