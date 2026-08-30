@@ -21,7 +21,7 @@ export type ConsentStatus = (typeof ConsentStatus)[keyof typeof ConsentStatus]
 export class ConsentManager {
     private _persistentStore?: PersistentStore
 
-    constructor(private _instance: PostHog) {}
+    constructor(private _instance: PostHog) { }
 
     private get _config() {
         return this._instance.config
@@ -128,7 +128,8 @@ export class ConsentManager {
             navigator?.doNotTrack, // standard
             (navigator as any)?.['msDoNotTrack'],
             assignableWindow['doNotTrack'],
-            navigator?.globalPrivacyControl, // FireFox 120+ DNT replacement, CA/DE legal enforcement
+            // DNT replacement, EFF Privacy Badger, Firefox 120+. Possibly legally required
+            (navigator as any)?.globalPrivacyControl,
         ].some((dntValue) => isYesLike(dntValue))
     }
 }
