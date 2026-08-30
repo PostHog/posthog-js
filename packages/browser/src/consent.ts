@@ -128,7 +128,7 @@ export class ConsentManager {
             navigator?.doNotTrack, // standard
             (navigator as any)?.['msDoNotTrack'],
             assignableWindow['doNotTrack'],
-            navigator.globalPrivacyControl, // FireFox 120+ DNT replacement, CA/DE legal enforcement
+            navigator?.globalPrivacyControl, // FireFox 120+ DNT replacement, CA/DE legal enforcement
         ].some((dntValue) => isYesLike(dntValue))
     }
 }
