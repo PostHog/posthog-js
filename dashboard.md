@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4694](https://github.com/PostHog/posthog-js/issues/4694) | Valid, narrowly scoped enhancement: `respect_dnt` currently ignores Global Privacy Control, and the requested behavior fits the existing consent mechanism. | enhancement, feature, web, team/client-libraries |  | no | 2026-08-30T22:52:15.289Z |
 | PostHog/posthog-js | [issue 4693](https://github.com/PostHog/posthog-js/issues/4693) | Confirmed session-replay bug in cross-origin iframe relay after an iframe temporarily becomes same-origin during navigation. | feature/replay, javascript, team/client-libraries, web |  | no | 2026-08-30T21:39:09.101Z |
 | PostHog/posthog-js | [issue 4688](https://github.com/PostHog/posthog-js/issues/4688) | Confirmed Session Replay memory-leak bug in the vendored rrweb MutationBuffer cleanup path. | feature/replay, needs-to-be-contributed-back, team/client-libraries | https://github.com/PostHog/posthog-js/pull/4689 | no | 2026-08-29T14:34:29.266Z |
 | PostHog/posthog-js | [issue 4674](https://github.com/PostHog/posthog-js/issues/4674) | Likely Android/Expo build compatibility regression introduced through the native-symbol upload Gradle integration, but the exact dependency edge needs verification. | react-native, Android, feature/error-tracking, team/client-libraries |  | no | 2026-08-28T17:00:46.038Z |
