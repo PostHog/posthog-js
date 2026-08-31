@@ -417,6 +417,8 @@ describe('captureAiGeneration', () => {
 
   // A price times an unknown count is unknown: an interrupted stream that never
   // reported usage must not assert a $0 cost just because a price was configured.
+  // And one priced side is not a total, so the total is only sent when both
+  // sides were priced.
   it.each([
     {
       name: 'no cost when usage was never reported',
@@ -424,9 +426,9 @@ describe('captureAiGeneration', () => {
       expected: { $ai_input_cost_usd: undefined, $ai_output_cost_usd: undefined, $ai_total_cost_usd: undefined },
     },
     {
-      name: 'only the priced side when one count is known',
+      name: 'only the priced side, without a total, when one count is known',
       usage: { inputTokens: 1000 },
-      expected: { $ai_input_cost_usd: 0.01, $ai_output_cost_usd: undefined, $ai_total_cost_usd: 0.01 },
+      expected: { $ai_input_cost_usd: 0.01, $ai_output_cost_usd: undefined, $ai_total_cost_usd: undefined },
     },
   ])('cost override sends $name', async ({ usage, expected }) => {
     const client = buildClient()

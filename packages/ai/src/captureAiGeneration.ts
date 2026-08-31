@@ -152,9 +152,9 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     httpStatus = httpStatus ?? 200
 
     // A configured price applies only to a count the provider reported, so a call with no
-    // reported usage sends no cost instead of asserting $0. $ai_total_cost_usd sums the sides
-    // that were priced, which makes it the cost of the known side alone when the other side
-    // went unreported: a lower bound on the true total, not an assertion of it.
+    // reported usage sends no cost instead of asserting $0. The total is written only when
+    // both sides were priced: $ai_total_cost_usd reads downstream as the whole cost, and one
+    // known side is a lower bound, not a total. A partial call sends its components alone.
     const costOverrideData: Record<string, number> = {}
     if (options.costOverride) {
       if (usage.inputTokens !== undefined) {
@@ -163,9 +163,8 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       if (usage.outputTokens !== undefined) {
         costOverrideData.$ai_output_cost_usd = (options.costOverride.outputCost ?? 0) * usage.outputTokens
       }
-      if (Object.keys(costOverrideData).length > 0) {
-        costOverrideData.$ai_total_cost_usd =
-          (costOverrideData.$ai_input_cost_usd ?? 0) + (costOverrideData.$ai_output_cost_usd ?? 0)
+      if (costOverrideData.$ai_input_cost_usd !== undefined && costOverrideData.$ai_output_cost_usd !== undefined) {
+        costOverrideData.$ai_total_cost_usd = costOverrideData.$ai_input_cost_usd + costOverrideData.$ai_output_cost_usd
       }
     }
 
