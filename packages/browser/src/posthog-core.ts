@@ -486,6 +486,8 @@ export class PostHog implements PostHogInterface {
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
+    private _hasStableInitialDistinctId = false
+    private _hasWarnedAboutVolatileIdentity = false
 
     private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
         if (oldExt) {
@@ -503,6 +505,61 @@ export class PostHog implements PostHogInterface {
         return (
             this.config.cookieless_mode === COOKIELESS_ALWAYS ||
             (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isRejected())
+        )
+    }
+
+    // memory, sessionStorage, and disable_persistence all drop durable identity: the distinct ID lives in
+    // memory for a single page, so each load mints a fresh one that identify() then merges onto the person,
+    // eventually pushing it past the distinct-ID display limit and hiding its events from person pages and the
+    // session tab. Warn once, when person processing is first requested, unless a stable ID is supplied.
+    // Cookieless mode registers a stable sentinel instead of a new uuid, so it is excluded.
+    private _warnIfVolatileIdentityWithoutStableId(): void {
+        if (this._hasWarnedAboutVolatileIdentity) {
+            return
+        }
+        // The Segment integration owns identity and supplies its stable user/anonymous ID before events load.
+        if (this.config.segment) {
+            return
+        }
+        if (this._inCookielessMode()) {
+            return
+        }
+        const volatileIdentityPersistence =
+            this.config.persistence === 'memory' || this.config.persistence === 'sessionStorage'
+        if (!volatileIdentityPersistence && !this.config.disable_persistence) {
+            return
+        }
+        // Only an ID supplied at init is guaranteed to be restored on the next load. setIdentity() and
+        // set_config({ bootstrap }) mutate these config fields at runtime without replacing the current distinct ID.
+        if (this._hasStableInitialDistinctId) {
+            return
+        }
+        let cause: string
+        let lifetime: string
+        let fix: string
+        if (volatileIdentityPersistence) {
+            cause = `persistence is set to '${this.config.persistence}'`
+            // sessionStorage survives same-tab reloads and navigation, so it mints a fresh ID per
+            // tab/window; memory is dropped on every load.
+            lifetime =
+                this.config.persistence === 'memory' ? 'on every page load' : 'for every new browser tab or window'
+            fix =
+                "Either set persistence to 'localStorage+cookie', or keep this persistence and pass a stable ID through bootstrap.distinctID."
+        } else {
+            cause = 'persistence is disabled (disable_persistence is true)'
+            lifetime = 'on every page load'
+            fix =
+                'Either set disable_persistence to false, or keep persistence disabled and pass a stable ID through bootstrap.distinctID.'
+        }
+        this._hasWarnedAboutVolatileIdentity = true
+        // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
+        // eslint-disable-next-line no-console
+        console.warn(
+            '[PostHog.js]',
+            `${cause} but no bootstrap.distinctID was provided. ` +
+                `PostHog will mint a new distinct ID ${lifetime}, so calling identify() merges a new ` +
+                'ID onto the person each time. A person can then pass the distinct-ID limit and its events stop ' +
+                `appearing on person pages and the session tab. ${fix}`
         )
     }
 
@@ -862,6 +919,9 @@ export class PostHog implements PostHogInterface {
                 isIdentifiedID: true,
             }
         }
+
+        const initialDistinctId = config.bootstrap?.distinctID
+        this._hasStableInitialDistinctId = !!initialDistinctId && !isEmptyString(initialDistinctId)
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // eslint-disable-next-line posthog-js/no-direct-undefined-check
@@ -4259,6 +4319,7 @@ export class PostHog implements PostHogInterface {
             )
             return false
         }
+        this._warnIfVolatileIdentityWithoutStableId()
         this._register_single(ENABLE_PERSON_PROCESSING, true)
         return true
     }

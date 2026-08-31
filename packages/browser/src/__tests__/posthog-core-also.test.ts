@@ -528,7 +528,11 @@ describe('posthog core', () => {
         })
 
         it('does not enable compression from flags response if compression is disabled', () => {
-            const posthog = posthogWith({ disable_compression: true, persistence: 'memory' })
+            const posthog = posthogWith({
+                disable_compression: true,
+                persistence: 'memory',
+                bootstrap: { distinctID: 'test-id' },
+            })
 
             posthog._onRemoteConfig({
                 ok: true,
@@ -1226,10 +1230,14 @@ describe('posthog core', () => {
         })
 
         it('does nothing when empty', () => {
+            // memory persistence with an empty bootstrap is the exact volatile-identity case the init
+            // warning covers, so allow that console.warn here instead of failing on it.
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
             const posthog = posthogWith({
                 bootstrap: {},
                 persistence: 'memory',
             })
+            warnSpy.mockRestore()
 
             expect(posthog.get_distinct_id()).not.toBe('abcd')
             expect(posthog.get_distinct_id()).not.toEqual(undefined)
@@ -1538,6 +1546,7 @@ describe('posthog core', () => {
                 'testtoken',
                 {
                     persistence: 'memory',
+                    bootstrap: { distinctID: 'test-id' },
                 },
                 uuidv7()
             )!
@@ -1572,6 +1581,7 @@ describe('posthog core', () => {
                 'testtoken',
                 {
                     persistence: 'memory',
+                    bootstrap: { distinctID: 'test-id' },
                 },
                 uuidv7()
             )!
@@ -1701,6 +1711,7 @@ describe('posthog core', () => {
                     'testtoken',
                     {
                         persistence: 'memory',
+                        bootstrap: { distinctID: 'test-id' },
                     },
                     uuidv7()
                 )!
