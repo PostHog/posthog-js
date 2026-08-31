@@ -21,7 +21,7 @@ export type ConsentStatus = (typeof ConsentStatus)[keyof typeof ConsentStatus]
 export class ConsentManager {
     private _persistentStore?: PersistentStore
 
-    constructor(private _instance: PostHog) { }
+    constructor(private _instance: PostHog) {}
 
     private get _config() {
         return this._instance.config
