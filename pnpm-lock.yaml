@@ -229,6 +229,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.120.0
         version: 0.120.0(zod@4.1.13)
+      '@anthropic-ai/sdk-0-112':
+        specifier: npm:@anthropic-ai/sdk@0.112.3
+        version: '@anthropic-ai/sdk@0.112.3(zod@4.1.13)'
       '@babel/preset-env':
         specifier: 'catalog:'
         version: 7.28.5(@babel/core@7.28.5)
@@ -1868,6 +1871,15 @@ packages:
 
   '@antfu/install-pkg@1.1.0':
     resolution: {integrity: sha512-MGQsmw10ZyI+EJo45CdSER4zEb+p31LpDAFp2Z3gkSd1yqVZGi0Ebx++YTEMonJy4oChEMLsxZ64j8FH6sSqtQ==}
+
+  '@anthropic-ai/sdk@0.112.3':
+    resolution: {integrity: sha512-wjcozJlitVIuBEw9cj/xBuRznwkhcLmXmNzlFoeHbh4AvrDG3HGZrdvEOTTmobcbhjGkfOpKbmDTCQ4s9LQvCg==}
+    hasBin: true
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
 
   '@anthropic-ai/sdk@0.120.0':
     resolution: {integrity: sha512-ZlvmNFT/iIF6JD13rxbbMWD8nvGR0RaUp6yMQnoc+4Af0YjVVe/bIdW1XSQQsoxXAtg1NaT6Vak0LKFlJ4d37Q==}
@@ -18664,6 +18676,13 @@ snapshots:
     dependencies:
       package-manager-detector: 1.4.0
       tinyexec: 1.0.1
+
+  '@anthropic-ai/sdk@0.112.3(zod@4.1.13)':
+    dependencies:
+      json-schema-to-ts: 3.1.1
+      standardwebhooks: 1.0.0
+    optionalDependencies:
+      zod: 4.1.13
 
   '@anthropic-ai/sdk@0.120.0(zod@4.1.13)':
     dependencies:
