@@ -76,6 +76,8 @@ export interface SpanRecord {
   /** ms epoch. */
   startTime: number
   endTime: number
+  droppedAttributesCount?: number
+  droppedEventsCount?: number
 }
 
 /**
@@ -102,4 +104,6 @@ export interface ResolvedTracesConfig extends TracesConfig {
    * dropped rather than queued ones, whose children may already have shipped.
    */
   maxQueueSize: number
+  maxAttributesPerSpan: number
+  maxEventsPerSpan: number
 }

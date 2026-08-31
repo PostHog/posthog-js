@@ -78,6 +78,8 @@ export class PostHogTraces {
     const now = Date.now()
     const startTime = resolveStartTime(options?.startTime, now, this._logger)
 
+    const autoAttributes = this._autoContextAttributes()
+
     return new PostHogSpan(
       {
         traceId: parent?.traceId ?? newTraceId(),
@@ -87,7 +89,10 @@ export class PostHogTraces {
         name: sanitizeName(name, 'Span name', this._logger),
         kind: options?.kind ?? 'internal',
         // Auto-context first so user-supplied attributes win on collision.
-        attributes: assignUserAttributes(this._autoContextAttributes(), options?.attributes),
+        attributes: assignUserAttributes({ ...autoAttributes }, options?.attributes),
+        autoAttributeKeys: Object.keys(autoAttributes),
+        maxAttributes: this._config.maxAttributesPerSpan,
+        maxEvents: this._config.maxEventsPerSpan,
         startTime,
         backdated: startTime !== now,
       },

@@ -5,6 +5,9 @@ import type { ResolvedTracesConfig, TracesConfig } from '@posthog/core'
 const DEFAULT_FLUSH_INTERVAL_MS = 5000
 const DEFAULT_MAX_EXPORT_BATCH_SIZE = 512
 const DEFAULT_MAX_QUEUE_SIZE = 2048
+// OpenTelemetry's per-span defaults.
+const DEFAULT_MAX_ATTRIBUTES_PER_SPAN = 128
+const DEFAULT_MAX_EVENTS_PER_SPAN = 128
 
 /**
  * Coerces a caller-supplied positive-integer option. `0`, a negative, or `NaN`
@@ -27,6 +30,8 @@ export function resolveTracesConfig(config: TracesConfig | undefined): ResolvedT
     serviceVersion: (resourceAttributes?.['service.version'] as string | undefined) ?? config?.serviceVersion,
     environment: (resourceAttributes?.['deployment.environment'] as string | undefined) ?? config?.environment,
     resourceAttributes,
+    maxAttributesPerSpan: positiveInteger(config?.maxAttributesPerSpan, DEFAULT_MAX_ATTRIBUTES_PER_SPAN),
+    maxEventsPerSpan: positiveInteger(config?.maxEventsPerSpan, DEFAULT_MAX_EVENTS_PER_SPAN),
     flushIntervalMs: positiveInteger(config?.flushIntervalMs, DEFAULT_FLUSH_INTERVAL_MS),
     maxExportBatchSize,
     // Never below the flush trigger, or the depth-based flush could never fire.
