@@ -160,12 +160,8 @@ describe('memory leak prevention', () => {
 
         const eventCountBefore = events.length;
 
-        // Append then remove the same node within a single synchronous task,
-        // so the MutationObserver callback sees both records in one batch.
-        // Net effect: no add, no remove, no text/attribute change — the
-        // payload normalizes to fully empty (adds/removes/texts/attributes
-        // all length 0) — but the node passes through MutationBuffer's
-        // addedSet/droppedSet bookkeeping along the way.
+        // Append and remove in one task so the batch becomes empty after
+        // addedSet/droppedSet bookkeeping.
         const el = document.createElement('div');
         document.body.appendChild(el);
         document.body.removeChild(el);
@@ -204,13 +200,8 @@ describe('memory leak prevention', () => {
 
         const eventCountBefore = events.length;
 
-        // Add a node, mutate its attribute and its child text node's data,
-        // then remove it -- all within one synchronous task. The node is
-        // never serialized (no mirror id), so both mutations get pushed to
-        // `texts`/`attributes` but are filtered out of the emitted payload
-        // by the mirror-membership check, leaving the payload empty even
-        // though the pre-filter buffer entries are non-empty going into the
-        // reset this test exercises.
+        // Mutate a new node before removing it in the same task. The missing
+        // mirror id filters its text and attribute entries from the payload.
         const el = document.createElement('div');
         const textNode = document.createTextNode('before');
         el.appendChild(textNode);
