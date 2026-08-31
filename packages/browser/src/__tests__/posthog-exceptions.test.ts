@@ -291,6 +291,24 @@ describe('PostHogExceptions', () => {
                 )
             })
 
+            it('captures ambiguous masked-only application exceptions', () => {
+                // Safari also masks blob, eval'd, and injected application code, so the masked URL
+                // is not sufficient evidence that the exception came from a browser extension.
+                const frame = {
+                    filename: 'webkit-masked-url://hidden/',
+                    function: 'applicationEval',
+                    platform: 'javascript:web',
+                    in_app: false,
+                }
+                const exception = {
+                    type: 'Error',
+                    value: 'application failure',
+                    stacktrace: { frames: [frame], type: 'raw' },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
             it('does not capture Safari extension exceptions with only masked frames marked in_app', () => {
                 // The Sentry integration forwards Sentry's `in_app: true` for every browser frame,
                 // and Sentry does not rewrite the masked scheme, so a masked-only stack arrives with

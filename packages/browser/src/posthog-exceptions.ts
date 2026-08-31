@@ -13,6 +13,10 @@ const logger = createLogger('[Error tracking]')
 // exception came from an extension (see _isExtensionException).
 const MASKED_URL_PREFIX = 'webkit-masked-url:'
 
+// Safari's masked URL is ambiguous, so require a value that identifies the reported extension
+// failure before filtering a stack made entirely of masked frames.
+const MASKED_EXTENSION_EXCEPTION_VALUE = 'isolatedAPI.contexts.topHostname'
+
 // Browser extensions serve their content scripts from these schemes. `safari-extension:` and
 // `safari-web-extension:` are synthesised by the stack parser (see extractSafariExtensionDetails)
 // rather than being real URLs, but they mark the frame just as definitively.
@@ -297,18 +301,21 @@ export class PostHogExceptions implements Extension {
             return false
         }
 
-        // Safari masks some of the page's own scripts as `webkit-masked-url:` too, so a masked frame
-        // does not prove the exception came from an extension. When every extension frame is masked,
-        // drop the exception only if no in_app frame from the page's own code remains. A producer may
-        // still mark a masked frame in_app -- the Sentry integration (sentry-integration.ts) forwards
-        // Sentry's `in_app: true` for every browser frame -- so ignore masked frames when looking for
-        // that page code, otherwise a masked-only Sentry stack would keep the masked frame as its own
-        // "page code" and never drop.
+        // Safari also masks blob, eval'd, and injected application code, so a masked URL alone does
+        // not prove the exception came from an extension. For an all-masked stack, require a known
+        // extension-only value and no remaining page frame. Ignore masked frames when checking for
+        // page code because the Sentry integration may forward them with `in_app: true`.
         const onlyMaskedExtensionFrames = extensionFrames.every(
             ({ filename }) => !!filename && filename.startsWith(MASKED_URL_PREFIX)
         )
         if (onlyMaskedExtensionFrames) {
-            return !frames.some(({ in_app, filename }) => in_app && !filename?.startsWith(MASKED_URL_PREFIX))
+            const hasKnownExtensionValue = exceptionList.some(
+                ({ value }) => isString(value) && value.includes(MASKED_EXTENSION_EXCEPTION_VALUE)
+            )
+            return (
+                hasKnownExtensionValue &&
+                !frames.some(({ in_app, filename }) => in_app && !filename?.startsWith(MASKED_URL_PREFIX))
+            )
         }
 
         return true
