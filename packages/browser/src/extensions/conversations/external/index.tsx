@@ -172,6 +172,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _onOnline = (): void => {
         this._consecutivePollingStatusZeroFailures = 0
         this._consecutivePollingRateLimitFailures = 0
+        // Clearing the streak alone leaves any pending long backoff timeout in place,
+        // so messages/unread would stay stale until it fires (up to a minute).
+        // Restarting polls immediately and reschedules at the normal cadence.
+        if (this._pollLoopRunning) {
+            this._stopPolling()
+            this._startPolling()
+        }
     }
 
     private _currentUrl(): string | undefined {

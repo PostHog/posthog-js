@@ -1275,6 +1275,43 @@ describe('ConversationsManager', () => {
             expect(getMessagesCalls).toHaveLength(1)
         })
 
+        it('recovers immediately when the browser comes back online during a 429 backoff', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            await act(async () => {
+                await manager.sendMessage('Hello!')
+            })
+            await flushMicrotasks()
+
+            // Drive several 429s so the next poll is scheduled far out (backoff).
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 429, json: null })
+            })
+            for (let i = 0; i < 4; i++) {
+                await act(async () => {
+                    await manager['_poll']()
+                })
+            }
+            expect(manager['_nextPollDelayMs']()).toBeGreaterThan(15000)
+
+            // Server recovers; coming back online must poll now, not after the backoff.
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 200, json: createMockGetMessagesResponse() })
+            })
+            jest.clearAllMocks()
+            act(() => {
+                window.dispatchEvent(new Event('online'))
+            })
+            await flushMicrotasks()
+
+            const getMessagesCalls = (mockPosthog._send_request as jest.Mock).mock.calls.filter((call) =>
+                (call[0].url as string).includes('/widget/messages/ticket-123')
+            )
+            expect(getMessagesCalls.length).toBeGreaterThanOrEqual(1)
+            expect(manager['_consecutivePollingRateLimitFailures']).toBe(0)
+        })
+
         it('caps the 429 backoff at one minute', async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
             await flushPromises()
