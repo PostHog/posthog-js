@@ -297,15 +297,24 @@ describe('PostHog traces', () => {
   })
 
   describe('flush cycle', () => {
-    it('flushes on its own interval, not with the events pipeline', async () => {
-      // Traces are a separate pipeline with their own queue and endpoint.
-      // `posthog.flush()` drains events only; wiring traces into it is a
-      // deliberate follow-up because it changes that method's contract.
+    it('drains queued spans', async () => {
       posthog.startSpan('checkout').end()
       await posthog.flush()
-      expect(traceRequests()).toHaveLength(0)
 
+      expect(sentSpans()).toHaveLength(1)
+    })
+
+    it('resolves when the span export fails', async () => {
+      mockedFetch.mockRejectedValue(new Error('network down'))
+      posthog.startSpan('checkout').end()
+
+      await expect(posthog.flush()).resolves.toBeUndefined()
+    })
+
+    it('still flushes on its own interval', async () => {
+      posthog.startSpan('checkout').end()
       await flushTraces()
+
       expect(sentSpans()).toHaveLength(1)
     })
   })
