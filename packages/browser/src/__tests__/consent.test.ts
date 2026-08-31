@@ -451,7 +451,8 @@ describe('consent storage when no browser storage is available', () => {
 
             const posthog = await new Promise<PostHog>(
                 (resolve) =>
-                    defaultPostHog().init('testtoken',
+                    defaultPostHog().init(
+                        'testtoken',
                         {
                             opt_out_capturing_persistence_type: persistenceType,
                             loaded: (posthog) => resolve(posthog),
