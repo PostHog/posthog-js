@@ -128,6 +128,8 @@ export class ConsentManager {
             navigator?.doNotTrack, // standard
             (navigator as any)?.['msDoNotTrack'],
             assignableWindow['doNotTrack'],
+            // DNT replacement, EFF Privacy Badger, Firefox 120+. Possibly legally required
+            (navigator as any)?.globalPrivacyControl,
         ].some((dntValue) => isYesLike(dntValue))
     }
 }

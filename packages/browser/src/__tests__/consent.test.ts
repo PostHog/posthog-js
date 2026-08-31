@@ -300,12 +300,42 @@ describe('consentManager', () => {
             ;(navigator as any).doNotTrack = '1'
         })
 
+        afterEach(() => {
+            ;(navigator as any).doNotTrack = undefined
+        })
+
         it('should respect it if explicitly set', async () => {
             posthog = await createPostHog({ respect_dnt: true })
             expect(posthog.has_opted_in_capturing()).toBe(false)
         })
 
         it('should not respect it if not explicitly set', () => {
+            expect(posthog.has_opted_in_capturing()).toBe(true)
+        })
+    })
+
+    describe('with global privacy control setting', () => {
+        beforeEach(() => {
+            ;(navigator as any).globalPrivacyControl = true
+        })
+
+        afterEach(() => {
+            ;(navigator as any).globalPrivacyControl = undefined
+        })
+
+        it('should respect it if respect_dnt is explicitly set', async () => {
+            posthog = await createPostHog({ respect_dnt: true })
+            expect(posthog.has_opted_in_capturing()).toBe(false)
+            expect(posthog.get_explicit_consent_status()).toBe('denied')
+        })
+
+        it('should not respect it if respect_dnt is not explicitly set', () => {
+            expect(posthog.has_opted_in_capturing()).toBe(true)
+        })
+
+        it('should not treat globalPrivacyControl false as opted out', async () => {
+            ;(navigator as any).globalPrivacyControl = false
+            posthog = await createPostHog({ respect_dnt: true })
             expect(posthog.has_opted_in_capturing()).toBe(true)
         })
     })
