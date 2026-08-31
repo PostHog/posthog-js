@@ -138,12 +138,13 @@ describe(`Segment integration`, () => {
                 $initialization_time: expect.any(String),
                 $insert_id: expect.any(String),
                 $raw_user_agent: expect.any(String),
-                $sdk_debug_extensions_init_time_ms: expect.any(Number),
                 $time: expect.any(Number),
                 $timezone: expect.any(String),
                 $timezone_offset: expect.any(Number),
             })
         )
+        // SDK telemetry must not leak onto the Segment event, which fans out to every destination.
+        expect(Object.keys(event.properties!).filter((key) => key.startsWith('$sdk_debug_'))).toEqual([])
         expect({
             ...event,
             properties: {
@@ -154,7 +155,6 @@ describe(`Segment integration`, () => {
                 $initialization_time: '<initialization-time>',
                 $insert_id: '<insert-id>',
                 $raw_user_agent: '<user-agent>',
-                $sdk_debug_extensions_init_time_ms: '<extension-init-time>',
                 $time: '<event-time>',
                 $timezone: '<runtime-timezone>',
                 $timezone_offset: '<runtime-timezone-offset>',

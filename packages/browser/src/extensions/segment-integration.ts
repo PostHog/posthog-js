@@ -52,7 +52,17 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         }
 
         const additionalProperties = posthog.calculateEventProperties(eventName, ctx.event.properties)
-        ctx.event.properties = Object.assign({}, additionalProperties, ctx.event.properties)
+        // We register as a Segment enrichment plugin, so these properties become part of the
+        // event that Segment fans out to every destination, not just PostHog. $sdk_debug_*
+        // keys are internal SDK telemetry that only our capture pipeline reads, so we drop
+        // them here to keep them out of the customer's other destinations.
+        const enrichedProperties: typeof additionalProperties = {}
+        for (const key in additionalProperties) {
+            if (!key.startsWith('$sdk_debug_')) {
+                enrichedProperties[key] = additionalProperties[key]
+            }
+        }
+        ctx.event.properties = Object.assign({}, enrichedProperties, ctx.event.properties)
         return ctx
     }
 
