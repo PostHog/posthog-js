@@ -2,10 +2,4 @@
 '@posthog/ai': patch
 ---
 
-Report the tokens an interrupted stream actually used, instead of zero.
-
-When a stream failed or was cancelled partway, the wrappers discarded the token counts they had already accumulated and reported zero, so a call that consumed a large prompt appeared to cost nothing. They now report what they collected, along with the real latency. This covers the OpenAI chat, Responses and transcription streams, and the Anthropic, Gemini, Azure and Vercel wrappers.
-
-Token counts are also omitted entirely when the provider never reported them, rather than being sent as `$ai_input_tokens: 0`. Zero remains a valid value and still means the model consumed nothing. The package API does not change, but `$ai_input_tokens` was previously always present on a generation event, so anything reading that property downstream needs to handle it being absent.
-
-Cost overrides follow the same rule: a configured price is applied only to the token counts the provider reported, so an interrupted stream no longer claims a `$0` cost just because a `costOverride` was set. When only one side was reported, `$ai_total_cost_usd` is the cost of the known side alone, a lower bound on the true total rather than an assertion of it.
+Interrupted or cancelled streams now report the token usage and latency they actually observed, instead of zeros, across the OpenAI, Anthropic, Gemini, Azure and Vercel wrappers. When usage was never reported, token counts and override costs are omitted entirely, so `$ai_input_tokens` can be absent where it was previously always `0`.

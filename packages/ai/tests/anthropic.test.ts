@@ -1002,6 +1002,8 @@ describe('PostHogAnthropic', () => {
       const [errorCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
       expect(errorCall[0].properties['$ai_input_tokens']).toBeUndefined()
       expect(errorCall[0].properties['$ai_output_tokens']).toBeUndefined()
+      // Died before message_start, so there is no raw usage to report either.
+      expect(errorCall[0].properties['$ai_usage']).toBeUndefined()
     })
   })
 
@@ -1395,6 +1397,7 @@ describe('PostHogAnthropic - streaming error safety', () => {
     const errorProperties = (safetyMockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
     expect(errorProperties['$ai_input_tokens']).toBe(42)
     expect(errorProperties['$ai_output_tokens']).toBeUndefined()
+    expect(errorProperties['$ai_usage']).toEqual({ input_tokens: 42 })
 
     // The detached analytics consumer must not crash the host process
     expect(unhandledRejections).toEqual([])

@@ -252,6 +252,11 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 tools: availableTools,
               })
             } catch (error: unknown) {
+              // The final usage delta may never arrive; whatever raw usage did
+              // still belongs on the event.
+              if (Object.keys(rawUsage).length > 0) {
+                usage.rawUsage = rawUsage
+              }
               await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: anthropicParams.model,
