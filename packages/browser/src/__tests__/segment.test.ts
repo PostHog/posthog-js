@@ -108,10 +108,10 @@ describe(`Segment integration`, () => {
     })
 
     it('enriches Segment track events with PostHog properties', async () => {
-        // memory persistence without a bootstrap distinctID triggers the volatile-identity init warning;
-        // Segment supplies the identity here, so allow that console.warn instead of failing on it.
+        // Segment supplies a stable identity, so memory persistence should not trigger the volatile-identity warning.
         const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
         await initPostHogInAPromise(segment, posthogName, { persistence: 'memory' })
+        expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         warnSpy.mockRestore()
         const context = {
             event: {

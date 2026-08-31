@@ -513,6 +513,10 @@ export class PostHog implements PostHogInterface {
     // from set_config() when persistence is switched to a volatile mode — or disable_persistence turned on —
     // after init. Cookieless mode registers a stable sentinel instead of a new uuid, so it is excluded.
     private _warnIfVolatileIdentityWithoutStableId(): void {
+        // The Segment integration owns identity and supplies its stable user/anonymous ID before events load.
+        if (this.config.segment) {
+            return
+        }
         if (this._inCookielessMode()) {
             return
         }
@@ -3837,13 +3841,15 @@ export class PostHog implements PostHogInterface {
             // identity the same way an init with that config does, so the next load mints a fresh ID that
             // identify() then merges onto the person. Both changes remove the durable store here via
             // update_config() above, and the init-time check has already run, so re-run it on either change.
-            // Guarded on `this.persistence` so the init-time set_config (which runs before persistence exists)
-            // does not double-warn with the init check. `disable_cookie` is renamed to `disable_persistence` by
+            // Enabling person processing can also make an existing volatile identity vulnerable. Guarded on
+            // `this.persistence` so the init-time set_config (which runs before persistence exists) does not
+            // double-warn with the init check. `disable_cookie` is renamed to `disable_persistence` by
             // configRenames() before this comparison, so the deprecated option is covered too.
             if (
                 this.persistence &&
                 (this.config.persistence !== oldConfig.persistence ||
-                    this.config.disable_persistence !== oldConfig.disable_persistence)
+                    this.config.disable_persistence !== oldConfig.disable_persistence ||
+                    (oldConfig.person_profiles === 'never' && this.config.person_profiles !== 'never'))
             ) {
                 this._warnIfVolatileIdentityWithoutStableId()
             }

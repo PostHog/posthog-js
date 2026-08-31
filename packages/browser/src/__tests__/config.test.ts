@@ -73,6 +73,16 @@ describe('config', () => {
             expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         })
 
+        it('warns when set_config enables person processing under volatile persistence', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { persistence: 'memory', person_profiles: 'never' })
+            warnSpy.mockClear()
+
+            posthog.set_config({ person_profiles: 'identified_only' })
+
+            expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
+        })
+
         // The exclusion is specific to 'never'; the default 'identified_only' can still merge IDs, so it warns.
         it('still warns under the default person_profiles with volatile persistence', () => {
             new PostHog()._init('test-token', { persistence: 'memory', person_profiles: 'identified_only' })
