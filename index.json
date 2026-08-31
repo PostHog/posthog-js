@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/4695": {
+    "key": "PostHog/posthog-js/issue/4695",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4695",
+    "url": "https://github.com/PostHog/posthog-js/issues/4695",
+    "conclusion": "Confirmed autocapture precedence bug: an ancestor's capture attribute overwrites the same attribute on the clicked element or its closest attributed ancestor.",
+    "labels": [
+      "feature/autocapture",
+      "web",
+      "team/client-libraries"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/4696",
+    "closed": false,
+    "updatedAt": "2026-08-31T02:16:17.290Z"
+  },
   "PostHog/posthog-js/issue/4694": {
     "key": "PostHog/posthog-js/issue/4694",
     "repo": "PostHog/posthog-js",
