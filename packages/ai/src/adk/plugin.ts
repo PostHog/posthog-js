@@ -48,6 +48,7 @@ interface PendingModelCall {
   model?: string
   modelParameters: Record<string, unknown>
   tools?: unknown[] | null
+  streamedOutput: FormattedMessage[]
 }
 
 /** Cap on in-flight model calls tracked per plugin, guarding against leaks. */
@@ -93,7 +94,7 @@ export class PostHogADKPlugin extends BasePlugin {
   private readonly _captureImmediate: boolean
   private readonly _onError?: (error: unknown) => void
 
-  /** Per-invocation FIFO stack of in-flight model calls, keyed by invocation ID. */
+  /** FIFO of in-flight model calls for each invocation branch and agent. */
   private readonly _pending: Map<string, PendingModelCall[]> = new Map()
 
   constructor(options: PostHogADKPluginOptions) {
@@ -123,8 +124,9 @@ export class PostHogADKPlugin extends BasePlugin {
         model: llmRequest.model,
         modelParameters: extractModelParameters(llmRequest.config),
         tools: extractTools(llmRequest),
+        streamedOutput: [],
       }
-      const key = callbackContext.invocationId
+      const key = this._pendingKey(callbackContext)
       const queue = this._pending.get(key)
       if (queue) {
         queue.push(pending)
@@ -151,15 +153,28 @@ export class PostHogADKPlugin extends BasePlugin {
         return undefined
       }
 
-      const pending = this._takePending(callbackContext.invocationId)
+      const key = this._pendingKey(callbackContext)
+      const pending = this._peekPending(key)
+      if (this._isNonTerminalStreamResponse(llmResponse)) {
+        if (pending) {
+          pending.streamedOutput.push(...this._formatOutput(llmResponse))
+        }
+        return undefined
+      }
+
+      const completedPending = this._takePending(key)
       const error = llmResponse.errorCode
         ? new Error(llmResponse.errorMessage ?? String(llmResponse.errorCode))
         : undefined
+      const output = error ? [] : this._formatOutput(llmResponse)
 
       await this._capture(callbackContext, {
-        pending,
-        output: error ? [] : this._formatOutput(llmResponse),
-        model: llmResponse.modelVersion ?? pending?.model,
+        pending: completedPending,
+        output:
+          !error && output.length === 0 && completedPending?.streamedOutput.length
+            ? completedPending.streamedOutput
+            : output,
+        model: llmResponse.modelVersion ?? completedPending?.model,
         usage: llmResponse.usageMetadata,
         stopReason: llmResponse.finishReason ? String(llmResponse.finishReason) : undefined,
         error,
@@ -180,7 +195,7 @@ export class PostHogADKPlugin extends BasePlugin {
     error: Error
   }): Promise<LlmResponse | undefined> {
     try {
-      const pending = this._takePending(callbackContext.invocationId)
+      const pending = this._takePending(this._pendingKey(callbackContext))
       await this._capture(callbackContext, {
         pending: pending ?? {
           startTime: Date.now(),
@@ -188,6 +203,7 @@ export class PostHogADKPlugin extends BasePlugin {
           model: llmRequest.model,
           modelParameters: extractModelParameters(llmRequest.config),
           tools: extractTools(llmRequest),
+          streamedOutput: [],
         },
         output: [],
         model: llmRequest.model,
@@ -238,6 +254,7 @@ export class PostHogADKPlugin extends BasePlugin {
       groups: this._groups,
       privacyMode: this._privacyMode,
       captureImmediate: this._captureImmediate,
+      onError: this._onError,
       properties: {
         $ai_framework: 'google-adk',
         ...(callbackContext.sessionId ? { $ai_session_id: callbackContext.sessionId } : {}),
@@ -260,16 +277,37 @@ export class PostHogADKPlugin extends BasePlugin {
     return context.userId ? String(context.userId) : undefined
   }
 
-  private _takePending(invocationId: string): PendingModelCall | undefined {
-    const queue = this._pending.get(invocationId)
+  private _pendingKey(context: Context): string {
+    return [context.invocationId, context.invocationContext.branch ?? '', context.agentName].join('\0')
+  }
+
+  private _peekPending(key: string): PendingModelCall | undefined {
+    return this._pending.get(key)?.[0]
+  }
+
+  private _takePending(key: string): PendingModelCall | undefined {
+    const queue = this._pending.get(key)
     if (!queue || queue.length === 0) {
       return undefined
     }
     const pending = queue.shift()
     if (queue.length === 0) {
-      this._pending.delete(invocationId)
+      this._pending.delete(key)
     }
     return pending
+  }
+
+  private _isNonTerminalStreamResponse(llmResponse: LlmResponse): boolean {
+    if (llmResponse.turnComplete === false) {
+      return true
+    }
+    return (
+      llmResponse.partial === false &&
+      llmResponse.turnComplete !== true &&
+      llmResponse.content !== undefined &&
+      llmResponse.finishReason === undefined &&
+      llmResponse.errorCode === undefined
+    )
   }
 
   private _evictStalePending(): void {

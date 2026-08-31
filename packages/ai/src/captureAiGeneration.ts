@@ -78,6 +78,8 @@ export interface CaptureAiGenerationOptions {
 
   /** Awaits delivery instead of batching. Useful in serverless environments. */
   captureImmediate?: boolean
+  /** Invoked when generation telemetry cannot be captured. Errors thrown by this callback are ignored. */
+  onError?: (error: unknown) => void
 }
 
 /**
@@ -229,6 +231,11 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     }
   } catch (error) {
     // Telemetry failures must never affect the instrumented provider call.
+    try {
+      options.onError?.(error)
+    } catch {
+      // Error reporting must not affect the instrumented provider call either.
+    }
     console.warn('[PostHog AI] Failed to capture generation telemetry:', error)
   }
 }

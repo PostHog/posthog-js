@@ -31,6 +31,7 @@ function createContext(overrides: Record<string, any> = {}): any {
     sessionId: 'sess_123',
     userId: 'user_123',
     agentName: 'assistant',
+    invocationContext: {},
     ...overrides,
   }
 }
@@ -348,5 +349,87 @@ describe('PostHogADKPlugin', () => {
     const props = capturedEvent(client).properties
     expect(props.$ai_provider).toBe('anthropic')
     expect(props.$ai_model).toBe('claude-sonnet-4')
+  })
+
+  it('waits for the terminal response before capturing a streamed function call', async () => {
+    const ctx = createContext()
+    await plugin.beforeModelCallback({ callbackContext: ctx, llmRequest: createRequest() })
+
+    await plugin.afterModelCallback({
+      callbackContext: ctx,
+      llmResponse: createResponse({
+        partial: false,
+        content: { role: 'model', parts: [{ functionCall: { name: 'get_weather', args: { city: 'SF' } } }] },
+        usageMetadata: undefined,
+        finishReason: undefined,
+      }),
+    })
+    expect(client.capture).not.toHaveBeenCalled()
+
+    await plugin.afterModelCallback({
+      callbackContext: ctx,
+      llmResponse: createResponse({ content: undefined, partial: false }),
+    })
+
+    expect(client.capture).toHaveBeenCalledTimes(1)
+    const props = capturedEvent(client).properties
+    expect(props.$ai_input).toEqual([
+      { role: 'system', content: 'You are a helpful assistant' },
+      { role: 'user', content: [{ type: 'text', text: 'Hello there' }] },
+    ])
+    expect(props.$ai_output_choices).toEqual([
+      {
+        role: 'assistant',
+        content: [{ type: 'function', function: { name: 'get_weather', arguments: { city: 'SF' } } }],
+      },
+    ])
+    expect(props.$ai_input_tokens).toBe(12)
+    expect(props.$ai_output_tokens).toBe(8)
+  })
+
+  it('pairs out-of-order parallel responses with their own request', async () => {
+    const firstContext = createContext({ agentName: 'worker', invocationContext: { branch: 'parallel.first' } })
+    const secondContext = createContext({ agentName: 'worker', invocationContext: { branch: 'parallel.second' } })
+    await plugin.beforeModelCallback({
+      callbackContext: firstContext,
+      llmRequest: createRequest({ contents: [{ role: 'user', parts: [{ text: 'first request' }] }], config: {} }),
+    })
+    await plugin.beforeModelCallback({
+      callbackContext: secondContext,
+      llmRequest: createRequest({ contents: [{ role: 'user', parts: [{ text: 'second request' }] }], config: {} }),
+    })
+
+    await plugin.afterModelCallback({
+      callbackContext: secondContext,
+      llmResponse: createResponse({ content: { role: 'model', parts: [{ text: 'second response' }] } }),
+    })
+    await plugin.afterModelCallback({
+      callbackContext: firstContext,
+      llmResponse: createResponse({ content: { role: 'model', parts: [{ text: 'first response' }] } }),
+    })
+
+    expect(capturedEvent(client, 0).properties.$ai_input).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'second request' }] },
+    ])
+    expect(capturedEvent(client, 1).properties.$ai_input).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'first request' }] },
+    ])
+  })
+
+  it('invokes onError when event capture fails', async () => {
+    const captureError = new Error('capture failed')
+    client.capture.mockImplementation(() => {
+      throw captureError
+    })
+    const onError = jest.fn()
+    plugin = new PostHogADKPlugin({ client, onError })
+    const ctx = createContext()
+    const consoleWarn = jest.spyOn(console, 'warn').mockImplementation()
+
+    await plugin.beforeModelCallback({ callbackContext: ctx, llmRequest: createRequest() })
+    await plugin.afterModelCallback({ callbackContext: ctx, llmResponse: createResponse() })
+
+    expect(onError).toHaveBeenCalledWith(captureError)
+    consoleWarn.mockRestore()
   })
 })
