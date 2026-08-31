@@ -98,13 +98,13 @@ plugins.withId('com.android.application') {
                         }
 
                         // How the release a build belongs to gets associated with the exceptions
-                        // it reports. `symbol-set` (the default) stamps the release onto the
-                        // uploaded source maps; `event` uploads them release-independent and lets
-                        // each event resolve its own release from the $app_namespace /
-                        // $app_version / $app_build the SDK already sends, which the release
-                        // coordinates below are built from. Passed only outside the default mode,
-                        // so a symbol-set build keeps working against a posthog-cli predating the
-                        // flag.
+                        // it reports. `event` (the default) uploads the source maps
+                        // release-independent and lets each event resolve its own release from the
+                        // $app_namespace / $app_version / $app_build the SDK already sends, which
+                        // the release coordinates below are built from. `symbol-set` stamps the
+                        // release onto the uploaded maps instead. Passed only outside symbol-set
+                        // mode, so a symbol-set build keeps working against a posthog-cli predating
+                        // the flag.
                         def posthogReleaseMode = resolvePostHogReleaseMode(project)
                         def posthogReleaseModeArgs = []
                         if (posthogReleaseMode != null && posthogReleaseMode != "symbol-set") {
@@ -360,8 +360,8 @@ def resolvePostHogReactNativeSDKPath(reactRoot) {
 /**
  * Release mode for this build: the `posthog.releaseMode` gradle property, then the
  * `POSTHOG_RELEASE_MODE` environment variable posthog-cli and the bundler plugins already read,
- * then null for the posthog-cli default. `com.posthog.android` reads the same property for the R8
- * mapping upload, so one entry covers both halves of an Android build.
+ * then `event`. `com.posthog.android` reads the same property for the R8 mapping upload, so one
+ * entry covers both halves of an Android build.
  *
  * An unrecognized value fails the build rather than falling back, so a typo cannot silently leave
  * a build binding its source maps to a release it meant to keep independent.
@@ -372,7 +372,7 @@ static String resolvePostHogReleaseMode(Project project) {
         value = System.getenv("POSTHOG_RELEASE_MODE")?.trim()
     }
     if (!value) {
-        return null
+        return "event"
     }
     if (!(value in ["symbol-set", "event"])) {
         throw new GradleException("posthog.releaseMode must be one of symbol-set, event, was '${value}'")

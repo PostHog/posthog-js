@@ -840,9 +840,13 @@ describe('updateReleaseModeGradleProperties', () => {
 })
 
 describe('resolveReleaseModeProp', () => {
-  it('treats an unset or blank prop as the posthog-cli default', () => {
-    expect(resolveReleaseModeProp()).toBeUndefined()
-    expect(resolveReleaseModeProp('  ')).toBeUndefined()
+  it('resolves an unset or blank prop to event', () => {
+    expect(resolveReleaseModeProp()).toBe('event')
+    expect(resolveReleaseModeProp('  ')).toBe('event')
+  })
+
+  it('keeps an explicit symbol-set prop', () => {
+    expect(resolveReleaseModeProp(' symbol-set ')).toBe('symbol-set')
   })
 
   it('stops the prebuild on a typo rather than falling back to the default', () => {

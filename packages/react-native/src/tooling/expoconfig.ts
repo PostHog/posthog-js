@@ -29,13 +29,15 @@ export type PostHogReleaseMode = 'symbol-set' | 'event'
 // dSYM phase to this list, because nothing else fails when they drift.
 export const POSTHOG_RELEASE_MODES: PostHogReleaseMode[] = ['symbol-set', 'event']
 
-// Empty/whitespace-only values (easy to produce from templated app.config values) count as unset.
-// An unrecognized value stops the prebuild rather than falling back, so a typo cannot silently
-// leave a build binding its symbols to a release it meant to keep independent.
-export function resolveReleaseModeProp(releaseMode?: string): PostHogReleaseMode | undefined {
+// Empty/whitespace-only values (easy to produce from templated app.config values) count as unset
+// and resolve to `event`. Resolving here rather than leaving the phases blank keeps a build off
+// whichever default the installed posthog-cli happens to carry. An unrecognized value stops the
+// prebuild rather than falling back, so a typo cannot silently leave a build binding its symbols
+// to a release it meant to keep independent.
+export function resolveReleaseModeProp(releaseMode?: string): PostHogReleaseMode {
   const trimmed = releaseMode?.trim()
   if (!trimmed) {
-    return undefined
+    return 'event'
   }
   if (!POSTHOG_RELEASE_MODES.includes(trimmed as PostHogReleaseMode)) {
     throw new Error(

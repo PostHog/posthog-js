@@ -152,6 +152,9 @@ describe('posthog-xcode.sh bundle command composition', () => {
         DERIVED_FILE_DIR: derivedDir,
         HOME: homeDir,
         NODE_BINARY: process.execPath,
+        // This stub reports no version, and event mode is the default, so the floor check would
+        // stop the run before it composes anything.
+        POSTHOG_SKIP_CLI_VERSION_CHECK: '1',
         SKIP_BUNDLING: '1',
         TRACE_PATH: tracePath,
       }
@@ -325,6 +328,8 @@ describe('posthog-xcode.sh release version resolution', () => {
           INFOPLIST_FILE: 'ExampleApp/Info.plist',
           MARKETING_VERSION: '1.0',
           POSTHOG_PLIST_BUDDY: plistBuddyPath,
+          // The matrix covers CLIs below the event-mode floor, which is not what it tests.
+          POSTHOG_SKIP_CLI_VERSION_CHECK: '1',
           PRODUCT_BUNDLE_IDENTIFIER: 'com.example.app',
           SRCROOT: sourceRoot,
           TEST_CLI_TRACE: cliTracePath,
@@ -565,8 +570,22 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
     expect(invocations[0]).toContain('--release-mode event')
   })
 
-  it('omits the flag by default so an older posthog-cli keeps working', () => {
-    const { status, invocations } = runWrapper([], { POSTHOG_RELEASE_MODE: '' }, undefined, CLI_WITHOUT_VERSION)
+  it('passes the flag by default so a build that configures nothing uploads release-independent', () => {
+    const { status, invocations } = runWrapper([], {})
+
+    expect(status).toBe(0)
+    const uploads = invocations.filter((line) => line.includes('hermes'))
+    expect(uploads).toHaveLength(2)
+    expect(uploads.join('\n')).toContain('--release-mode event')
+  })
+
+  it('omits the flag in symbol-set mode so an older posthog-cli keeps working', () => {
+    const { status, invocations } = runWrapper(
+      [],
+      { POSTHOG_RELEASE_MODE: 'symbol-set' },
+      undefined,
+      CLI_WITHOUT_VERSION
+    )
 
     expect(status).toBe(0)
     const uploads = invocations.filter((line) => line.includes('hermes'))
@@ -594,6 +613,8 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
         PRODUCT_BUNDLE_IDENTIFIER: 'com.example.app',
         MARKETING_VERSION: '1.0',
         CURRENT_PROJECT_VERSION: '1',
+        // This CLI predates the event-mode floor, and the release coordinates are what matters here.
+        POSTHOG_SKIP_CLI_VERSION_CHECK: '1',
       },
       { CFBundleShortVersionString: '1.0.0', CFBundleVersion: '42' },
       CLI_WITHOUT_INFO_PLIST
@@ -612,6 +633,8 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
         PRODUCT_BUNDLE_IDENTIFIER: 'com.example.app',
         MARKETING_VERSION: '2.5.0',
         CURRENT_PROJECT_VERSION: '7',
+        // This CLI predates the event-mode floor, and the release coordinates are what matters here.
+        POSTHOG_SKIP_CLI_VERSION_CHECK: '1',
       },
       { CFBundleShortVersionString: '$(MARKETING_VERSION)', CFBundleVersion: '$(CURRENT_PROJECT_VERSION)' },
       CLI_WITHOUT_INFO_PLIST

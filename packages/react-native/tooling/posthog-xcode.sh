@@ -33,7 +33,7 @@ print_command_error() {
 # WITH_ENVIRONMENT is executed by React Native
 
 POSTHOG_SKIP_ON_CONFLICT_ENABLED="${POSTHOG_SKIP_ON_CONFLICT:-}"
-POSTHOG_RELEASE_MODE_VALUE="${POSTHOG_RELEASE_MODE:-}"
+POSTHOG_RELEASE_MODE_VALUE="${POSTHOG_RELEASE_MODE:-event}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --posthog-skip-on-conflict)
@@ -69,11 +69,11 @@ if [ "$POSTHOG_SKIP_ON_CONFLICT_ENABLED" = "1" ] || [ "$POSTHOG_SKIP_ON_CONFLICT
 fi
 
 # How the release a build belongs to gets associated with the exceptions it reports.
-#   symbol-set (the default) stamps the release onto the uploaded source maps, and an exception
-#     inherits the release of the maps its frames resolved against.
-#   event uploads the maps release-independent, and each event resolves its own release from the
-#     $app_namespace / $app_version / $app_build the SDK already sends. Xcode's build settings
-#     supply matching coordinates below, so nothing has to be injected into the app.
+#   event (the default) uploads the maps release-independent, and each event resolves its own
+#     release from the $app_namespace / $app_version / $app_build the SDK already sends. Xcode's
+#     build settings supply matching coordinates below, so nothing has to be injected into the app.
+#   symbol-set stamps the release onto the uploaded source maps instead, and an exception inherits
+#     the release of the maps its frames resolved against.
 POSTHOG_RELEASE_MODE_ARGS=()
 if [ -n "$POSTHOG_RELEASE_MODE_VALUE" ]; then
   case "$POSTHOG_RELEASE_MODE_VALUE" in
