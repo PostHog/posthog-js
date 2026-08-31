@@ -227,7 +227,7 @@ importers:
         specifier: ^3.0.15
         version: 3.0.15
       '@anthropic-ai/sdk':
-        specifier: ^0.112.3 || ^0.120.0
+        specifier: '>=0.112.3 <0.121.0'
         version: 0.120.0(zod@4.1.13)
       '@babel/preset-env':
         specifier: 'catalog:'
