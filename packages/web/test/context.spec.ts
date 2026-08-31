@@ -32,6 +32,14 @@ describe('getContext', () => {
       expectedBrowser: 'ChatGPT',
       expectedVersion: 3.4,
     },
+    {
+      // detected by the shared @posthog/core detector; the old local detector reported Chrome
+      name: 'Vivaldi',
+      userAgent:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Vivaldi/6.8.3381.48',
+      expectedBrowser: 'Vivaldi',
+      expectedVersion: 6.8,
+    },
   ])('detects $name', ({ userAgent, expectedBrowser, expectedVersion }) => {
     expect(getContext(windowWithUserAgent(userAgent), false)).toEqual(
       expect.objectContaining({
