@@ -98,13 +98,16 @@ test('keeps [hash] file names identical across identical builds', async (t) => {
             build: { outDir, minify: 'esbuild' },
         })
 
-        return (await fs.readdir(path.join(root, outDir))).filter((fileName) => fileName.endsWith('.js')).sort()
+        return (await fs.readdir(path.join(root, outDir), { recursive: true }))
+            .filter((fileName) => fileName.endsWith('.js'))
+            .sort()
     }
 
     // The injected chunk id is content-addressed, so identical input must emit the same [hash] file
     // names — a random id in renderChunk would rename every chunk on every build.
     const first = await buildEntryFiles('dist-a')
     const second = await buildEntryFiles('dist-b')
+    assert.ok(first.length > 0, 'the test must discover Vite output nested under assets/')
     assert.deepEqual(first, second)
 
     // Changed input still gets a different chunk id and therefore a different hash.

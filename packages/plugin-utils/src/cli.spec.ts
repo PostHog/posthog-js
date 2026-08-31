@@ -47,6 +47,12 @@ describe('buildSourcemapCliArgs', () => {
         expect(args).not.toContain('--delete-after')
     })
 
+    it('forces symbol-set uploads so stable chunk ids can move to a new release', () => {
+        const args = buildSourcemapCliArgs(config, { stdin: true }, 'upload')
+
+        expect(args).toContain('--force')
+    })
+
     it.each([
         { releaseMode: 'symbol-set' as const, expected: false },
         { releaseMode: 'event' as const, expected: true },

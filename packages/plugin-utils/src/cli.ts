@@ -52,6 +52,11 @@ export function buildSourcemapCliArgs(
     // predating the flag.
     if (config.sourcemaps.releaseMode === 'event') {
         args.push('--release-mode', 'event')
+    } else if (command === 'upload') {
+        // Bundler-injected symbol-set ids are content-addressed so identical builds keep stable
+        // file names. A later release reuses the id but changes the release metadata in the
+        // upload, so allow the CLI to replace the previous release-bound symbol set.
+        args.push('--force')
     }
 
     // On `upload` the caller owns map deletion: `--delete-after` also rewrites
