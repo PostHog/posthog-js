@@ -698,6 +698,11 @@ This code is just copied over from ingestion, but we should optimize it
 to create elements_chain string directly.
 */
 export function getElementsChainString(elements: Properties[]): string {
+    // This utility is directly importable from @posthog/browser-common, so guard runtime
+    // JavaScript callers that bypass its TypeScript array contract.
+    if (!isArray(elements)) {
+        return ''
+    }
     return elementsToString(extractElements(elements))
 }
 
