@@ -44,6 +44,7 @@ export {
   getOtlpSeverityText,
 } from './logs/logs-utils'
 export { toOtlpAnyValue, toOtlpKeyValueList } from './utils/otlp-any-value'
+export { osResourceAttributes } from './utils/otlp-resource'
 export { PostHogLogs } from './logs'
 export type {
   BeforeSendLogFn,
