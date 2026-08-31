@@ -19,9 +19,16 @@ describe('config', () => {
         })
 
         it.each(['memory', 'sessionStorage'] as const)(
-            "warns when persistence is '%s' and no bootstrap.distinctID is set",
+            "warns on identify when persistence is '%s' and no bootstrap.distinctID is set",
             (persistence) => {
-                new PostHog()._init('test-token', { persistence })
+                const posthog = new PostHog()._init('test-token', { persistence })
+                expect(warnSpy).not.toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining('bootstrap.distinctID')
+                )
+
+                posthog.identify('identified-id')
+
                 expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
             }
         )
@@ -31,13 +38,18 @@ describe('config', () => {
             ['memory', 'on every page load'],
             ['sessionStorage', 'for every new browser tab or window'],
         ] as const)("names the correct distinct-ID lifetime for '%s'", (persistence, lifetime) => {
-            new PostHog()._init('test-token', { persistence })
+            const posthog = new PostHog()._init('test-token', { persistence })
+            posthog.identify('identified-id')
             expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining(lifetime))
         })
 
         // disable_persistence clears durable identity too, so it hits the same per-load ID-minting failure.
-        it('warns when disable_persistence is true and no bootstrap.distinctID is set', () => {
-            new PostHog()._init('test-token', { disable_persistence: true })
+        it('warns on identify when disable_persistence is true and no bootstrap.distinctID is set', () => {
+            const posthog = new PostHog()._init('test-token', { disable_persistence: true })
+            expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
+
+            posthog.identify('identified-id')
+
             expect(warnSpy).toHaveBeenCalledWith(
                 '[PostHog.js]',
                 expect.stringContaining('persistence is disabled (disable_persistence is true)')
@@ -45,13 +57,21 @@ describe('config', () => {
         })
 
         it('does not warn when disable_persistence is true but bootstrap.distinctID is provided', () => {
-            new PostHog()._init('test-token', { disable_persistence: true, bootstrap: { distinctID: 'stable-id' } })
+            const posthog = new PostHog()._init('test-token', {
+                disable_persistence: true,
+                bootstrap: { distinctID: 'stable-id' },
+            })
+            posthog.identify('identified-id')
             expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         })
 
         // Cookieless mode registers a stable sentinel instead of a fresh uuid, so the failure does not occur.
         it('does not warn under cookieless mode even when disable_persistence is true', () => {
-            new PostHog()._init('test-token', { disable_persistence: true, cookieless_mode: 'always' })
+            const posthog = new PostHog()._init('test-token', {
+                disable_persistence: true,
+                cookieless_mode: 'always',
+            })
+            posthog.identify('identified-id')
             expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         })
 
@@ -60,7 +80,8 @@ describe('config', () => {
         it.each(['memory', 'sessionStorage'] as const)(
             "does not warn under person_profiles: 'never' with volatile persistence '%s'",
             (persistence) => {
-                new PostHog()._init('test-token', { persistence, person_profiles: 'never' })
+                const posthog = new PostHog()._init('test-token', { persistence, person_profiles: 'never' })
+                posthog.identify('identified-id')
                 expect(warnSpy).not.toHaveBeenCalledWith(
                     '[PostHog.js]',
                     expect.stringContaining('bootstrap.distinctID')
@@ -69,23 +90,33 @@ describe('config', () => {
         )
 
         it("does not warn under person_profiles: 'never' when disable_persistence is true", () => {
-            new PostHog()._init('test-token', { disable_persistence: true, person_profiles: 'never' })
+            const posthog = new PostHog()._init('test-token', {
+                disable_persistence: true,
+                person_profiles: 'never',
+            })
+            posthog.identify('identified-id')
             expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         })
 
-        it('warns when set_config enables person processing under volatile persistence', () => {
+        it('waits for person processing after set_config enables it under volatile persistence', () => {
             const posthog = new PostHog()
             posthog._init('test-token', { persistence: 'memory', person_profiles: 'never' })
             warnSpy.mockClear()
 
             posthog.set_config({ person_profiles: 'identified_only' })
+            expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
 
+            posthog.identify('identified-id')
             expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         })
 
         // The exclusion is specific to 'never'; the default 'identified_only' can still merge IDs, so it warns.
-        it('still warns under the default person_profiles with volatile persistence', () => {
-            new PostHog()._init('test-token', { persistence: 'memory', person_profiles: 'identified_only' })
+        it('warns when person processing is requested under the default person_profiles', () => {
+            const posthog = new PostHog()._init('test-token', {
+                persistence: 'memory',
+                person_profiles: 'identified_only',
+            })
+            posthog.identify('identified-id')
             expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         })
 
@@ -96,17 +127,26 @@ describe('config', () => {
             ['a whitespace-only string', '   '],
             ['null', null as unknown as string],
         ])('warns when persistence is volatile and bootstrap.distinctID is %s', (_label, distinctID) => {
-            new PostHog()._init('test-token', { persistence: 'memory', bootstrap: { distinctID } })
+            const posthog = new PostHog()._init('test-token', {
+                persistence: 'memory',
+                bootstrap: { distinctID },
+            })
+            posthog.identify('identified-id')
             expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         })
 
         it('does not warn when bootstrap.distinctID is a non-empty string', () => {
-            new PostHog()._init('test-token', { persistence: 'memory', bootstrap: { distinctID: 'stable-id' } })
+            const posthog = new PostHog()._init('test-token', {
+                persistence: 'memory',
+                bootstrap: { distinctID: 'stable-id' },
+            })
+            posthog.identify('identified-id')
             expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         })
 
         it('does not warn for the default localStorage+cookie persistence', () => {
-            new PostHog()._init('test-token')
+            const posthog = new PostHog()._init('test-token')
+            posthog.identify('identified-id')
             expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         })
 
@@ -114,16 +154,33 @@ describe('config', () => {
         const bootstrapWarnings = () =>
             warnSpy.mock.calls.filter((args) => typeof args[1] === 'string' && args[1].includes('bootstrap.distinctID'))
 
-        // _init() calls set_config() internally before persistence exists; that internal call must not
-        // re-trigger the warning on top of the init check.
-        it('warns exactly once at init for volatile persistence', () => {
-            new PostHog()._init('test-token', { persistence: 'memory' })
+        it('waits until person processing is requested and then warns only once', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { persistence: 'memory' })
+
+            expect(bootstrapWarnings()).toHaveLength(0)
+
+            posthog.identify('identified-id')
+            expect(bootstrapWarnings()).toHaveLength(1)
+
+            posthog.setPersonProperties({ plan: 'paid' })
+            expect(bootstrapWarnings()).toHaveLength(1)
+        })
+
+        it('does not warn for a runtime persistence change until person processing is requested', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { persistence: 'localStorage+cookie' })
+            warnSpy.mockClear()
+
+            posthog.set_config({ persistence: 'memory' })
+            expect(bootstrapWarnings()).toHaveLength(0)
+
+            posthog.identify('identified-id')
             expect(bootstrapWarnings()).toHaveLength(1)
         })
 
         // set_config() can move persistence to a volatile mode after init. The migration drops durable
-        // identity, so the next load mints a fresh ID — the same failure the init check warns about, which by
-        // then has already run and cannot see the switch.
+        // identity, so the next load mints a fresh ID. Defer the warning until person processing is requested.
         it.each(['memory', 'sessionStorage'] as const)(
             "warns once when set_config switches persistence to '%s' after init",
             (persistence) => {
@@ -132,7 +189,9 @@ describe('config', () => {
                 warnSpy.mockClear()
 
                 posthog.set_config({ persistence })
+                expect(bootstrapWarnings()).toHaveLength(0)
 
+                posthog.identify('identified-id')
                 expect(bootstrapWarnings()).toHaveLength(1)
             }
         )
@@ -146,6 +205,7 @@ describe('config', () => {
             warnSpy.mockClear()
 
             posthog.set_config({ persistence: 'memory' })
+            posthog.identify('identified-id')
 
             expect(bootstrapWarnings()).toHaveLength(0)
         })
@@ -159,6 +219,7 @@ describe('config', () => {
             warnSpy.mockClear()
 
             posthog.set_config({ persistence: 'memory' })
+            posthog.identify('identified-id')
 
             expect(bootstrapWarnings()).toHaveLength(0)
         })
@@ -170,7 +231,9 @@ describe('config', () => {
 
             posthog.setIdentity('runtime-id', 'runtime-hash')
             posthog.set_config({ persistence: 'memory' })
+            expect(bootstrapWarnings()).toHaveLength(0)
 
+            posthog.identify('identified-id')
             expect(bootstrapWarnings()).toHaveLength(1)
         })
 
@@ -181,20 +244,23 @@ describe('config', () => {
 
             posthog.set_config({ bootstrap: { distinctID: 'runtime-id' } })
             posthog.set_config({ persistence: 'memory' })
+            expect(bootstrapWarnings()).toHaveLength(0)
 
+            posthog.identify('identified-id')
             expect(bootstrapWarnings()).toHaveLength(1)
         })
 
         // set_config() can also turn on disable_persistence after init, which removes the durable store the
-        // same way a switch to a volatile persistence does. The init check has already run and cannot see the
-        // later change, so set_config must re-run it.
+        // same way a switch to volatile persistence does. Warn on the next person-processing request.
         it('warns once when set_config enables disable_persistence after init', () => {
             const posthog = new PostHog()
             posthog._init('test-token', { persistence: 'localStorage+cookie' })
             warnSpy.mockClear()
 
             posthog.set_config({ disable_persistence: true })
+            expect(bootstrapWarnings()).toHaveLength(0)
 
+            posthog.identify('identified-id')
             expect(bootstrapWarnings()).toHaveLength(1)
         })
 
@@ -207,20 +273,24 @@ describe('config', () => {
             warnSpy.mockClear()
 
             posthog.set_config({ disable_persistence: true })
+            posthog.identify('identified-id')
 
             expect(bootstrapWarnings()).toHaveLength(0)
         })
 
-        // Only a persistence or disable_persistence change re-runs the check, so repeatedly calling set_config
-        // for other reasons under volatile persistence must not re-warn.
+        // Once emitted, unrelated config changes and later person-processing requests must not re-warn.
         it('does not re-warn when set_config changes an unrelated option under volatile persistence', () => {
             const posthog = new PostHog()
             posthog._init('test-token', { persistence: 'memory' })
             warnSpy.mockClear()
 
-            posthog.set_config({ debug: false })
+            posthog.identify('identified-id')
+            expect(bootstrapWarnings()).toHaveLength(1)
 
-            expect(bootstrapWarnings()).toHaveLength(0)
+            posthog.set_config({ debug: false })
+            posthog.setPersonProperties({ plan: 'paid' })
+
+            expect(bootstrapWarnings()).toHaveLength(1)
         })
     })
 

@@ -487,6 +487,7 @@ export class PostHog implements PostHogInterface {
     private _browserClientAdapter: BrowserClientAdapter | undefined
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
     private _hasStableInitialDistinctId = false
+    private _hasWarnedAboutVolatileIdentity = false
 
     private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
         if (oldExt) {
@@ -510,21 +511,17 @@ export class PostHog implements PostHogInterface {
     // memory, sessionStorage, and disable_persistence all drop durable identity: the distinct ID lives in
     // memory for a single page, so each load mints a fresh one that identify() then merges onto the person,
     // eventually pushing it past the distinct-ID display limit and hiding its events from person pages and the
-    // session tab. Warn (visibly, unlike logger.warn) unless a stable ID is supplied. Called at init and again
-    // from set_config() when persistence is switched to a volatile mode — or disable_persistence turned on —
-    // after init. Cookieless mode registers a stable sentinel instead of a new uuid, so it is excluded.
+    // session tab. Warn once, when person processing is first requested, unless a stable ID is supplied.
+    // Cookieless mode registers a stable sentinel instead of a new uuid, so it is excluded.
     private _warnIfVolatileIdentityWithoutStableId(): void {
+        if (this._hasWarnedAboutVolatileIdentity) {
+            return
+        }
         // The Segment integration owns identity and supplies its stable user/anonymous ID before events load.
         if (this.config.segment) {
             return
         }
         if (this._inCookielessMode()) {
-            return
-        }
-        // With person_profiles: 'never', identify() and alias() both bail in _requirePersonProcessing()
-        // before they touch identity or capture $identify/$create_alias, so no distinct IDs ever merge onto a
-        // person and the failure this warns about cannot happen. Exclude it the same way cookieless mode is.
-        if (this.config.person_profiles === 'never') {
             return
         }
         const volatileIdentityPersistence =
@@ -554,6 +551,7 @@ export class PostHog implements PostHogInterface {
             fix =
                 'Either set disable_persistence to false, or keep persistence disabled and pass a stable ID through bootstrap.distinctID.'
         }
+        this._hasWarnedAboutVolatileIdentity = true
         // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
         // eslint-disable-next-line no-console
         console.warn(
@@ -1019,11 +1017,6 @@ export class PostHog implements PostHogInterface {
             logger.warn('onCapture is deprecated. Please use `before_send` instead')
             this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
         }
-
-        // memory, sessionStorage, and disable_persistence all drop durable identity, so each load mints a
-        // fresh ID that identify() then merges onto the person. set_config() re-runs this same check when it
-        // switches persistence to one of those modes after init.
-        this._warnIfVolatileIdentityWithoutStableId()
 
         if (this.config.ip) {
             logger.warn(
@@ -3837,23 +3830,6 @@ export class PostHog implements PostHogInterface {
                           false
                       )
 
-            // A runtime switch to memory/sessionStorage — or turning on disable_persistence — drops durable
-            // identity the same way an init with that config does, so the next load mints a fresh ID that
-            // identify() then merges onto the person. Both changes remove the durable store here via
-            // update_config() above, and the init-time check has already run, so re-run it on either change.
-            // Enabling person processing can also make an existing volatile identity vulnerable. Guarded on
-            // `this.persistence` so the init-time set_config (which runs before persistence exists) does not
-            // double-warn with the init check. `disable_cookie` is renamed to `disable_persistence` by
-            // configRenames() before this comparison, so the deprecated option is covered too.
-            if (
-                this.persistence &&
-                (this.config.persistence !== oldConfig.persistence ||
-                    this.config.disable_persistence !== oldConfig.disable_persistence ||
-                    (oldConfig.person_profiles === 'never' && this.config.person_profiles !== 'never'))
-            ) {
-                this._warnIfVolatileIdentityWithoutStableId()
-            }
-
             const debugConfigFromLocalStorage = this._checkLocalStorageForDebug(this.config.debug)
             if (isBoolean(debugConfigFromLocalStorage)) {
                 this.config.debug = debugConfigFromLocalStorage
@@ -4343,6 +4319,7 @@ export class PostHog implements PostHogInterface {
             )
             return false
         }
+        this._warnIfVolatileIdentityWithoutStableId()
         this._register_single(ENABLE_PERSON_PROCESSING, true)
         return true
     }
