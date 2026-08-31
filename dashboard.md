@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4702](https://github.com/PostHog/posthog-js/issues/4702) | Valid browser SDK feature request; the current identify flow always merges the previous anonymous ID and also forwards it to the feature-flags request. | enhancement, feature/product-analytics, web, team/client-libraries |  | no | 2026-08-31T14:40:44.385Z |
 | PostHog/posthog-js | [issue 4695](https://github.com/PostHog/posthog-js/issues/4695) | Confirmed autocapture precedence bug: an ancestor's capture attribute overwrites the same attribute on the clicked element or its closest attributed ancestor. | feature/autocapture, web, team/client-libraries | https://github.com/PostHog/posthog-js/pull/4696 | no | 2026-08-31T02:16:17.290Z |
 | PostHog/posthog-js | [issue 4694](https://github.com/PostHog/posthog-js/issues/4694) | Valid, narrowly scoped enhancement: `respect_dnt` currently ignores Global Privacy Control, and the requested behavior fits the existing consent mechanism. | enhancement, feature, web, team/client-libraries |  | no | 2026-08-30T22:52:15.289Z |
 | PostHog/posthog-js | [issue 4693](https://github.com/PostHog/posthog-js/issues/4693) | Confirmed session-replay bug in cross-origin iframe relay after an iframe temporarily becomes same-origin during navigation. | feature/replay, javascript, team/client-libraries, web |  | no | 2026-08-30T21:39:09.101Z |
