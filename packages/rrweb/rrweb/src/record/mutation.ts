@@ -604,10 +604,8 @@ export default class MutationBuffer {
       adds,
     };
 
-    // reset — must happen unconditionally (even when the payload below is
-    // empty) since these collections can strongly reference DOM nodes;
-    // `payload` was already built above from independent array/map
-    // references, so resetting here doesn't affect it.
+    // Reset before the empty-payload return: these collections strongly
+    // reference DOM nodes, and payload holds its own references.
     this.texts = [];
     this.attributes = [];
     this.attributeMap = new WeakMap<Node, attributeCursor>();
