@@ -235,6 +235,7 @@ export class PostHogADKPlugin extends BasePlugin {
       traceId: callbackContext.invocationId,
       model,
       provider: this._provider,
+      baseURL: null,
       input: pending?.input ?? [],
       output,
       latency,
