@@ -248,6 +248,15 @@ describe('cookieStore._is_supported', () => {
         expect(cookieStore._is_supported()).toEqual(false)
     })
 
+    it('does not overwrite an existing cookie with the former fixed probe name', () => {
+        cookieStore._set('__ph_cookie_support__', 'existing-value')
+
+        expect(cookieStore._is_supported()).toEqual(true)
+        expect(cookieStore._get('__ph_cookie_support__')).toEqual('"existing-value"')
+
+        cookieStore._remove('__ph_cookie_support__')
+    })
+
     it('caches the result so the probe cookie is only written once', () => {
         const getter = jest.spyOn(document, 'cookie', 'get')
         cookieStore._is_supported()

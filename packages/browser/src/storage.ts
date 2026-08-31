@@ -124,7 +124,7 @@ export const cookieStore: PersistentStore = {
         cookieStorageSupported = false
         if (document) {
             try {
-                const key = '__ph_cookie_support__'
+                const key = `__ph_cookie_support_${uuidv7()}`
                 cookieStore._set(key, 'xyz')
                 cookieStorageSupported = getCookieValue(key) === '"xyz"'
                 cookieStore._remove(key)
