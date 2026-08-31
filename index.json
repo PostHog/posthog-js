@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/4702": {
+    "key": "PostHog/posthog-js/issue/4702",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4702",
+    "url": "https://github.com/PostHog/posthog-js/issues/4702",
+    "conclusion": "Valid browser SDK feature request; the current identify flow always merges the previous anonymous ID and also forwards it to the feature-flags request.",
+    "labels": [
+      "enhancement",
+      "feature/product-analytics",
+      "web",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-31T14:40:44.385Z"
+  },
   "PostHog/posthog-js/issue/4695": {
     "key": "PostHog/posthog-js/issue/4695",
     "repo": "PostHog/posthog-js",
