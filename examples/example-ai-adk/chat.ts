@@ -40,7 +40,10 @@ const runner = new Runner({
 async function main(): Promise<void> {
     const userId = 'example-ai-adk-user'
     const sessionId = randomUUID()
-    const prompt = process.argv.slice(2).join(' ') || 'Explain in one sentence why observability matters for AI agents.'
+    const promptArgs = process.argv.slice(2)
+    const prompt =
+        (promptArgs[0] === '--' ? promptArgs.slice(1) : promptArgs).join(' ') ||
+        'Explain in one sentence why observability matters for AI agents.'
 
     await sessionService.createSession({
         appName: runner.appName,

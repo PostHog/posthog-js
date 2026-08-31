@@ -23,7 +23,7 @@ cp .env.example .env
 
 ```bash
 pnpm chat
-pnpm chat -- "What are three benefits of agent observability?"
+pnpm chat "What are three benefits of agent observability?"
 ```
 
 The response is printed to the terminal. The model call is captured in PostHog LLM Analytics with `example-ai-adk-user` as its distinct ID and `example-ai-adk` as its `example` property.
