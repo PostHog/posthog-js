@@ -627,7 +627,10 @@ export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number)
 
         function cancel(): void {
             try {
-                void reader?.cancel()
+                // cancel() returns a promise that rejects on some browsers (e.g. Safari) when the
+                // underlying transfer already died. Attach a no-op handler so that rejection can never
+                // escape this never-reject helper as an uncaught error.
+                void reader?.cancel().catch(() => {})
             } catch {
                 // the reader may already be released; nothing to clean up
             }
@@ -824,15 +827,21 @@ function initFetchObserver(
                 if (recordResponseHeaders) {
                     networkRequest.responseHeaders = responseHeaders
                 }
-                if (
-                    shouldRecordBody({
-                        type: 'response',
-                        headers: responseHeaders,
-                        url,
-                        recordBody: options.recordBody,
-                    })
-                ) {
-                    networkRequest.responseBody = await _tryReadResponseBody({ r: res, options, url })
+                // Recording the response body must never break a request the host already got a good
+                // response for, so a body-read failure is swallowed and we still return the response.
+                try {
+                    if (
+                        shouldRecordBody({
+                            type: 'response',
+                            headers: responseHeaders,
+                            url,
+                            recordBody: options.recordBody,
+                        })
+                    ) {
+                        networkRequest.responseBody = await _tryReadResponseBody({ r: res, options, url })
+                    }
+                } catch (e) {
+                    logger.error('Failed to record fetch response for network capture', e)
                 }
 
                 return res
