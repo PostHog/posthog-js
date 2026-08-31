@@ -87,7 +87,16 @@ const createInvalidConversationsResponseError = (operation: string, logFailure: 
 }
 
 const WIDGET_CONTAINER_ID = 'ph-conversations-widget-container'
-const POLL_INTERVAL_MS = 5000 // 5 seconds
+// Polling cadence. The widget polls faster while open (so replies feel live) and
+// much slower while closed (the badge can lag a few seconds). Idle widgets with no
+// conversation don't poll at all — see _hasSomethingToPoll.
+const POLL_INTERVAL_OPEN_MS = 5000 // 5 seconds
+const POLL_INTERVAL_CLOSED_MS = 15000 // 15 seconds
+// On HTTP 429 we back off exponentially instead of hammering the shared team budget,
+// which is what starves visitor sends (the send and poll budgets are separate server-side,
+// but polling still competes with everyone else's polls).
+const POLL_RATE_LIMIT_BASE_MS = 5000 // 5 seconds
+const POLL_RATE_LIMIT_MAX_MS = 60000 // 1 minute
 // How often to check that the widget container is still attached to the DOM.
 // SPA frameworks that replace document.body on navigation (e.g. Turbo Drive)
 // detach our container; this watcher re-attaches it so the widget survives.
@@ -110,7 +119,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
     private _widgetRef: ConversationsWidget | null = null
     private _containerElement: HTMLDivElement | null = null
     private _currentTicketId: string | null = null
-    private _pollIntervalId: number | null = null
+    private _pollTimeoutId: number | null = null
+    // Guards against a second _startPolling() while the first poll is still in flight
+    // (the timeout id isn't set until the poll resolves and schedules the next tick).
+    private _pollLoopRunning: boolean = false
+    // Bumped by every start/stop. An in-flight poll chain captures the generation it
+    // started with and abandons itself if a stop/restart happened while it awaited,
+    // so open/close (which stops then starts) can never leave two loops running.
+    private _pollGeneration: number = 0
+    private _consecutivePollingRateLimitFailures: number = 0
     private _reattachIntervalId: number | null = null
     private _lastMessageTimestamp: string | null = null
     private _isPollingMessages: boolean = false
@@ -154,6 +171,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
     private _onOnline = (): void => {
         this._consecutivePollingStatusZeroFailures = 0
+        this._consecutivePollingRateLimitFailures = 0
     }
 
     private _currentUrl(): string | undefined {
@@ -281,6 +299,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     // Update last message timestamp
                     this._lastMessageTimestamp = data.created_at
 
+                    // A ticket now exists, so resume polling if the loop had stopped
+                    // because there was nothing to poll. Only when a widget is rendered —
+                    // programmatic API-only usage never polls.
+                    if (this._isWidgetRendered) {
+                        this._startPolling()
+                    }
+
                     resolve(data)
                 },
             })
@@ -344,6 +369,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 },
                 callback: (response) => {
                     this._trackPollingEndpointReachability(response.statusCode)
+                    this._trackPollingRateLimit(response.statusCode)
 
                     if (response.statusCode !== 200) {
                         reject(
@@ -567,7 +593,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
         if (data.migrated_ticket_ids?.length) {
             this._currentTicketId = data.migrated_ticket_ids[0]
             this._persistence.saveTicketId(this._currentTicketId)
-            // Poll straight away so messages and ticket list are fresh
+            // Poll straight away so messages and ticket list are fresh, and resume
+            // the loop in case it had stopped while there was no conversation. At
+            // initial boot the widget isn't rendered yet — _doInitializeWidget starts
+            // the loop after restore completes, so only restart an already-live widget.
+            if (this._isWidgetRendered) {
+                this._startPolling()
+            }
             void this._pollMessages()
             void this._pollTickets()
         } else {
@@ -700,7 +732,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // logging it here as well would surface a benign network failure as a captured exception.
         await this.sendMessage(message, userTraits)
 
-        // Poll for response immediately
+        // Poll for response immediately (sendMessage already resumed the loop)
         setTimeout(() => this._pollMessages(), 1000)
     }
 
@@ -718,6 +750,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
         })
 
         this._persistence.saveWidgetState(state)
+
+        // Restart the loop so the new open/closed cadence takes effect immediately
+        // (and opening triggers a fresh poll rather than waiting out a closed interval).
+        if (this._isWidgetRendered) {
+            this._stopPolling()
+            this._startPolling()
+        }
 
         // Mark messages as read when widget opens (only if in message view with a ticket)
         if (state === 'open') {
@@ -941,6 +980,18 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
+     * Track HTTP 429s on polling requests so the loop can back off. Any 2xx
+     * clears the streak; a 429 lengthens the next poll delay exponentially.
+     */
+    private _trackPollingRateLimit(statusCode: number): void {
+        if (statusCode === 429) {
+            this._consecutivePollingRateLimitFailures += 1
+        } else if (statusCode >= 200 && statusCode < 300) {
+            this._consecutivePollingRateLimitFailures = 0
+        }
+    }
+
+    /**
      * Handle view changes from the widget
      */
     private _handleViewChange = (view: WidgetView): void => {
@@ -965,6 +1016,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         // Push resolved state for this ticket so MessagesView locks the input if needed
         this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
+
+        // Selecting a ticket gives the loop something to poll again
+        this._startPolling()
 
         // Load messages for the selected ticket
         await this._loadMessages()
@@ -1012,6 +1066,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // Load tickets
         this._widgetRef?.setTicketsLoading(true)
         await this._loadTickets()
+
+        // Resume the loop if it had stopped (tickets view polls the list)
+        this._startPolling()
 
         // Track back to tickets
         this._posthog.capture('$conversations_back_to_tickets')
@@ -1075,33 +1132,101 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     /**
-     * Start polling based on current view
+     * Start the self-scheduling poll loop.
+     *
+     * Idempotent: safe to call from any state-changing handler (send, restore,
+     * identity change, ticket selection). The loop polls immediately, then
+     * reschedules itself with a delay derived from widget state and rate-limit
+     * backoff (see _nextPollDelayMs), and stops itself when there is nothing to
+     * poll (see _hasSomethingToPoll).
      */
     private _startPolling(): void {
-        if (this._pollIntervalId) {
+        if (this._pollLoopRunning) {
             return // Already polling
         }
-
-        // Poll immediately
-        this._poll()
-
-        // Set up interval
-        this._pollIntervalId = window?.setInterval(() => {
-            this._poll()
-        }, POLL_INTERVAL_MS) as unknown as number
-
+        this._pollLoopRunning = true
+        const generation = ++this._pollGeneration
         logger.info('Started polling', { view: this._currentView })
+        void this._pollThenSchedule(generation)
+    }
+
+    private _pollThenSchedule = async (generation: number): Promise<void> => {
+        try {
+            await this._poll()
+        } catch (error) {
+            // _poll is defensively coded not to throw, but never let an unexpected
+            // error kill the loop (which would leave _pollLoopRunning stuck true).
+            logger.error('Polling iteration failed', error)
+        }
+        // A stop/restart bumped the generation while the request was in flight;
+        // abandon this chain so we don't end up running two loops.
+        if (generation !== this._pollGeneration) {
+            return
+        }
+        this._scheduleNextPoll(generation)
     }
 
     /**
-     * Stop polling for new messages
+     * Schedule the next poll, or stop the loop when there is nothing to poll.
+     * An idle widget with no conversation generates zero polling traffic.
+     */
+    private _scheduleNextPoll(generation: number): void {
+        if (!this._pollLoopRunning || generation !== this._pollGeneration) {
+            return
+        }
+        if (!this._hasSomethingToPoll()) {
+            this._pollTimeoutId = null
+            this._pollLoopRunning = false
+            logger.info('Nothing to poll, pausing until next user action')
+            return
+        }
+        this._pollTimeoutId = window?.setTimeout(
+            () => void this._pollThenSchedule(generation),
+            this._nextPollDelayMs()
+        ) as unknown as number
+    }
+
+    /**
+     * Delay before the next poll: exponential backoff while rate limited,
+     * otherwise the open/closed cadence.
+     */
+    private _nextPollDelayMs(): number {
+        if (this._consecutivePollingRateLimitFailures > 0) {
+            return Math.min(
+                POLL_RATE_LIMIT_BASE_MS * 2 ** (this._consecutivePollingRateLimitFailures - 1),
+                POLL_RATE_LIMIT_MAX_MS
+            )
+        }
+        return this._isWidgetOpen() ? POLL_INTERVAL_OPEN_MS : POLL_INTERVAL_CLOSED_MS
+    }
+
+    /**
+     * Whether the current view has anything worth polling for. Messages view
+     * needs an active ticket; tickets view needs at least one ticket. The
+     * restore-request view never polls.
+     */
+    private _hasSomethingToPoll(): boolean {
+        if (this._currentView === 'restore_request') {
+            return false
+        }
+        if (this._currentView === 'messages') {
+            return !!this._currentTicketId
+        }
+        return this._tickets.length > 0
+    }
+
+    /**
+     * Stop the poll loop.
      */
     private _stopPolling(): void {
-        if (this._pollIntervalId) {
-            window?.clearInterval(this._pollIntervalId)
-            this._pollIntervalId = null
+        if (this._pollTimeoutId != null) {
+            window?.clearTimeout(this._pollTimeoutId)
+            this._pollTimeoutId = null
             logger.info('Stopped polling for messages')
         }
+        this._pollLoopRunning = false
+        // Invalidate any in-flight poll chain so it won't reschedule itself.
+        this._pollGeneration++
     }
 
     /**
@@ -1250,6 +1375,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 },
                 callback: (response) => {
                     this._trackPollingEndpointReachability(response.statusCode)
+                    this._trackPollingRateLimit(response.statusCode)
 
                     if (response.statusCode !== 200) {
                         reject(createConversationsRequestError(response, 'fetching tickets', 'Failed to fetch tickets'))
@@ -1403,6 +1529,12 @@ export class ConversationsManager implements ConversationsManagerInterface {
             this._widgetRef?.setCurrentTicketResolved(this._isCurrentTicketResolved())
             this._currentView = view
             this._widgetRef?.setView(view)
+
+            // Identity change may have surfaced (or cleared) conversations; resume
+            // the loop if it had stopped. It stops itself again if there's nothing to poll.
+            if (this._isWidgetRendered) {
+                this._startPolling()
+            }
 
             if (view === 'messages' && this._currentTicketId) {
                 void this._loadMessages()
