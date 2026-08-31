@@ -395,6 +395,25 @@ describe('addDsymUploadBuildPhase', () => {
     '  echo "warning: PostHog upload-symbols.sh not found in Pods or SwiftPM checkouts; skipping dSYM upload."',
     'fi',
   ]
+  // The release-mode block as SDKs before the event default wrote it, written out rather than
+  // generated for the same reason as LEGACY_DSYM_SCRIPT_TAIL.
+  const PREVIOUS_SYMBOL_SET_RELEASE_MODE_BLOCK = [
+    'POSTHOG_RESOLVED_RELEASE_MODE="symbol-set"',
+    'case "$POSTHOG_RESOLVED_RELEASE_MODE" in',
+    '  ""|symbol-set) ;;',
+    '  event)',
+    '    # Upload dSYMs without binding them to a release, so each crash resolves its own from the',
+    '    # app version and namespace the SDK sends. posthog-ios versions whose upload-symbols.sh',
+    '    # does not read this variable ignore it and keep binding the dSYMs.',
+    '    export POSTHOG_NO_RELEASE_BIND=1',
+    '    ;;',
+    '  *)',
+    "    echo \"error: posthog release mode must be 'symbol-set' or 'event', was '$POSTHOG_RESOLVED_RELEASE_MODE'\"",
+    '    exit 1',
+    '    ;;',
+    'esac',
+  ]
+
   const legacyDsymPhases: Array<[string, boolean, boolean, string[]]> = [
     [
       'no options',
@@ -435,6 +454,28 @@ describe('addDsymUploadBuildPhase', () => {
     }
   )
 
+  it('refreshes a symbol-set phase written before the event default', () => {
+    // That phase exports nothing for symbol-set, which a posthog-ios uploading dSYMs unbound by
+    // default now reads as event. Recognizing it is what lets the refresh rewrite it.
+    const existing = {
+      isa: 'PBXShellScriptBuildPhase',
+      shellScript: encodePbx(
+        [
+          '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
+          '# upload-symbols.sh ships inside the posthog-ios dependency.',
+          ...PREVIOUS_SYMBOL_SET_RELEASE_MODE_BLOCK,
+          ...LEGACY_DSYM_SCRIPT_TAIL,
+        ].join('\n')
+      ),
+    }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, false, false, 'symbol-set')
+
+    expect(xp.addBuildPhase).not.toHaveBeenCalled()
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, false, 'symbol-set')))
+  })
+
   // Runs the generated phase against a stub upload-symbols.sh, so the assertions are on what
   // posthog-ios actually receives rather than on the shell source.
   const runDsymPhase = (script: string, env: Record<string, string>): { status: number; output: string } => {
@@ -457,14 +498,15 @@ describe('addDsymUploadBuildPhase', () => {
     }
   }
 
-  it('unbinds dSYM uploads when only the environment selects event mode', () => {
+  it('settles the bind decision itself rather than leaving it to posthog-ios', () => {
     // The bundle phase reads POSTHOG_RELEASE_MODE from the environment, so a build configured that
-    // way and not through the plugin prop used to upload maps unbound and dSYMs bound.
+    // way and not through the plugin prop still has to reach this phase. Both modes export the
+    // variable, because posthog-ios uploads dSYMs unbound unless a build says otherwise.
     const script = buildDsymUploadShellScript()
 
     expect(runDsymPhase(script, { POSTHOG_RELEASE_MODE: 'event' }).output).toContain('NO_RELEASE_BIND=1')
-    expect(runDsymPhase(script, { POSTHOG_RELEASE_MODE: 'symbol-set' }).output).toContain('NO_RELEASE_BIND=unset')
-    expect(runDsymPhase(script, {}).output).toContain('NO_RELEASE_BIND=unset')
+    expect(runDsymPhase(script, { POSTHOG_RELEASE_MODE: 'symbol-set' }).output).toContain('NO_RELEASE_BIND=0')
+    expect(runDsymPhase(script, {}).output).toContain('NO_RELEASE_BIND=1')
   })
 
   it('keeps the plugin prop in charge when the environment disagrees', () => {

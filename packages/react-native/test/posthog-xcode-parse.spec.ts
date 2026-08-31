@@ -682,13 +682,14 @@ describe('release mode lists stay in sync', () => {
     return match[1].split(',').map((mode) => mode.trim().replace(/"/g, ''))
   }
 
-  // Reads the case labels out of the generated dSYM phase, dropping the `""` unset arm.
+  // Reads the case labels out of the generated dSYM phase, dropping the `""` unset arm. Labels are
+  // single-line, so the pattern stops at a newline rather than running through an arm's body.
   const dsymModes = (): string[] => {
     const script = buildDsymUploadShellScript(false, false, undefined)
     const start = script.indexOf('case "$POSTHOG_RESOLVED_RELEASE_MODE" in')
     const end = script.indexOf('\n  *)', start)
     if (start === -1 || end === -1) throw new Error('Could not locate the release mode case in the dSYM phase')
-    return [...script.slice(start, end).matchAll(/^ {2}([^)]+)\)/gm)]
+    return [...script.slice(start, end).matchAll(/^ {2}([^)\n]+)\)/gm)]
       .flatMap((match) => match[1].split('|'))
       .map((mode) => mode.replace(/"/g, '').trim())
       .filter(Boolean)

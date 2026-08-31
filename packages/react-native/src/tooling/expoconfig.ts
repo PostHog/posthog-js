@@ -380,6 +380,36 @@ function buildDsymReleaseModeLines(releaseMode?: PostHogReleaseMode): string[] {
   return [
     releaseMode
       ? `POSTHOG_RESOLVED_RELEASE_MODE="${releaseMode}"`
+      : 'POSTHOG_RESOLVED_RELEASE_MODE="${POSTHOG_RELEASE_MODE:-event}"',
+    'case "$POSTHOG_RESOLVED_RELEASE_MODE" in',
+    '  symbol-set)',
+    '    # Bind the dSYMs to the release. posthog-ios uploads them unbound by default, so a',
+    '    # symbol-set build has to ask for the binding rather than leaving the variable alone.',
+    '    export POSTHOG_NO_RELEASE_BIND=0',
+    '    ;;',
+    '  event)',
+    '    # Upload dSYMs without binding them to a release, so each crash resolves its own from the',
+    '    # app version and namespace the SDK sends. posthog-ios versions whose upload-symbols.sh',
+    '    # does not read this variable ignore it and keep binding the dSYMs.',
+    '    export POSTHOG_NO_RELEASE_BIND=1',
+    '    ;;',
+    '  *)',
+    "    echo \"error: posthog release mode must be 'symbol-set' or 'event', was '$POSTHOG_RESOLVED_RELEASE_MODE'\"",
+    '    exit 1',
+    '    ;;',
+    'esac',
+  ]
+}
+
+// The release-mode block as SDKs before the event default wrote it. Symbol-set mode exported
+// nothing there, because posthog-ios bound dSYMs unless told otherwise. Kept among the recognized
+// variants for the same reason as buildLegacyDsymUploadShellScript: without it a project prebuilt
+// by such an SDK keeps its old phase, which now reads as symbol-set to a posthog-ios that defaults
+// the other way.
+function buildPreviousDsymReleaseModeLines(releaseMode?: PostHogReleaseMode): string[] {
+  return [
+    releaseMode
+      ? `POSTHOG_RESOLVED_RELEASE_MODE="${releaseMode}"`
       : 'POSTHOG_RESOLVED_RELEASE_MODE="${POSTHOG_RELEASE_MODE:-}"',
     'case "$POSTHOG_RESOLVED_RELEASE_MODE" in',
     '  ""|symbol-set) ;;',
@@ -422,7 +452,11 @@ function isPluginGeneratedDsymUploadBuildPhase(phase: any): boolean {
     [false, true].some(
       (skip) =>
         stored === buildLegacyDsymUploadShellScript(source, skip) ||
-        [undefined, ...POSTHOG_RELEASE_MODES].some((mode) => stored === buildDsymUploadShellScript(source, skip, mode))
+        [undefined, ...POSTHOG_RELEASE_MODES].some(
+          (mode) =>
+            stored === buildDsymUploadShellScript(source, skip, mode) ||
+            stored === composeDsymUploadShellScript(source, skip, buildPreviousDsymReleaseModeLines(mode))
+        )
     )
   )
 }
