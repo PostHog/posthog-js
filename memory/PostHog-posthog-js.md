@@ -2,15 +2,7 @@
 
 ...<older entries truncated>
 
-esponse is captured before page navigation.
-
-## 2026-08-25T10:30:37.987Z
-- Item: issue #4637 — Declare React peer dependencies for posthog-js/react
-- Conclusion: Valid packaging bug: the embedded `posthog-js/react` entry point imports React, but `posthog-js` does not declare React as an optional peer dependency.
-- Labels: web, team/client-libraries
-- URL: https://github.com/PostHog/posthog-js/issues/4637
-- Relevant files: `packages/browser/package.json`, `packages/browser/react/package.json`, `packages/react/package.json`, `packages/react/rollup.config.mjs`, `packages/react/src/index.ts`, `packages/react/src/context/PostHogProvider.tsx`, `packages/react/src/components/PostHogCaptureOnViewed.tsx`
-- Findings: `packages/browser/package.json`, the manifest published as `posthog-js`, has no `peerDependencies` or `peerDependenciesMeta` entries for React.; `packages/browser/react/package.json` is the manifest included for the `posthog-js/react` subpath, but it also declares no dependencies or peers.; `packages/react/package.json` for the standalone `@posthog/react` package already declares `react: >=16.8.0` as a peer dependency and marks only `@types/react` optional.; The React source imports React throughout the public integration, and the Rollup configuration keeps `react` external, so the emitted React bundle requires the consumer's installed React package at runtime.; No inspected React integration source imports `react-dom`; adding it as a peer would not be evidence-backed for the reported missing-module failure.; Because Node-style resolution from `posthog-js/react/dist/umd/index.js` climbs to `posthog-js/node_modules`, declaring React as an optional peer on the published parent `posthog-js` package is the relevant installer metadata change for isolated layouts.
+-js` package is the relevant installer metadata change for isolated layouts.
 - Fix assessment: The failure is explained by missing package metadata, and the standalone React package provides an existing compatible React peer range. An optional peer preserves the requested behavior for users who do not import the React subpath.
 - PR: https://github.com/PostHog/posthog-js/pull/4638
 
@@ -97,3 +89,13 @@ esponse is captured before page navigation.
 - Relevant files: `packages/browser/src/consent.ts`, `packages/browser/src/__tests__/consent.test.ts`, `packages/browser-common/src/utils/globals.ts`, `packages/types/src/posthog-config.ts`, `packages/browser/src/posthog-core.ts`
 - Findings: `ConsentManager._getDnt()` returns `false` unless `respect_dnt` is enabled, so the requested behavior remains explicitly opt-in.; When enabled, `_getDnt()` currently checks `navigator.doNotTrack`, legacy `navigator.msDoNotTrack`, and `window.doNotTrack`, but no inspected source references `navigator.globalPrivacyControl`.; The DNT result is used by the `consent` getter to return `DENIED`, which in turn makes the SDK report capture as opted out.; `isYesLike` already recognizes both boolean `true` and string/number truthy DNT representations; GPC's boolean `true` is compatible with the existing evaluation helper.; Existing consent tests already establish that `navigator.doNotTrack = '1'` is respected only with `respect_dnt: true`, providing the appropriate test location and pattern.
 - Fix assessment: The behavior is localized to the browser consent manager and can reuse its existing DNT evaluation semantics. No new configuration, persistence behavior, or cross-package API is required.
+
+## 2026-08-31T02:16:20.581Z
+- Item: issue #4695 — Capture attrs don't come from the nearest parent
+- Conclusion: Confirmed autocapture precedence bug: an ancestor's capture attribute overwrites the same attribute on the clicked element or its closest attributed ancestor.
+- Labels: feature/autocapture, web, team/client-libraries
+- URL: https://github.com/PostHog/posthog-js/issues/4695
+- Relevant files: `packages/browser/src/autocapture.ts`, `packages/browser/src/__tests__/autocapture.test.ts`, `packages/browser-common/src/utils/general-utils.ts`, `packages/react-native/src/autocapture.tsx`
+- Findings: `autocapturePropertiesForElement` builds `targetElementList` in target-to-ancestor order.; For every element in that order, `getAugmentPropertiesFromElement` extracts `data-ph-capture-attribute-*` attributes and `extend(autocaptureAugmentProperties, augmentProperties)` merges them.; `extend` assigns every defined source value over the destination's current value. Consequently, an ancestor's value for a duplicate key overwrites the closer target/descendant value.; The existing browser tests verify capture attributes from a target and parent only when their keys differ; there is no test defining the same key at multiple DOM levels.; The React Native implementation currently also overwrites accumulated capture-property keys while walking from target to ancestors, but this report is specifically for the browser SDK.
+- Fix assessment: The faulty precedence is localized to the browser autocapture attribute merge. Preserving the first valid value for each key changes only duplicate-key behavior and can be protected by a small regression test.
+- PR: https://github.com/PostHog/posthog-js/pull/4696
