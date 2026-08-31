@@ -3,6 +3,7 @@ import { Text, View } from 'react-native'
 
 import { createSafeStyleSheet } from '../safeStyleSheet'
 import {
+  closeButtonSize,
   defaultDescriptionOpacity,
   getContrastingTextColor,
   shouldRenderDescription,
@@ -47,6 +48,7 @@ export function IntroMessage({
 const styles = createSafeStyleSheet({
   introMessageContainer: {
     padding: 10,
+    paddingRight: closeButtonSize,
   },
   introMessageHeader: {
     fontSize: 18,

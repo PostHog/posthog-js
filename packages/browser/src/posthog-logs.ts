@@ -1,4 +1,4 @@
-import { LOAD_EXT_NOT_FOUND } from './constants'
+import { LOAD_EXT_NOT_FOUND, LOGS_CAPTURE_ENABLED_SERVER_SIDE } from './constants'
 import Config from './config'
 import { PostHog } from './posthog-core'
 import type { CaptureLogOptions, RemoteConfigResult, Logger, LogSdkContext, OtlpLogsPayload } from './types'
@@ -17,11 +17,20 @@ import { assignableWindow } from './utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { resolveLogsConfig } from './logs-defaults'
+import { BUFFERED_CONSOLE_LEVELS } from './logs-types'
+import type { BufferedConsoleEntry, BufferedConsoleLevel } from './logs-types'
+import { patch } from './extensions/replay/rrweb-plugins/patch'
+import { originalConsoleMethod } from './utils/console-original'
 import { LogsExtension } from './extension-tokens'
 import {
     isStatusZeroFailureCircuitBreakerTripped,
     updateStatusZeroFailureCount,
 } from '@posthog/browser-common/utils/request-utils'
+
+// Backstop for a page where remote config or the logs script never settles the
+// question: the buffer holds live references to console arguments, so it is
+// released after this long regardless.
+export const RECORDER_MAX_AGE_MS = 30000
 
 const LOGS_ENDPOINT = '/i/v1/logs'
 // OTLP instrumentation-scope name for console auto-capture, distinguishing it from
@@ -94,6 +103,20 @@ export class PostHogLogs implements Extension {
     private _client?: Client
     private _remoteConfigSubscription?: Disposable
     private _disposed = false
+
+    // Console recorder: `console` is patched and the buffer fills until either the logs
+    // script takes it over (`_takeConsoleBuffer`) or something drops it
+    // (`_stopConsoleRecorder`).
+    private _consoleBuffer: BufferedConsoleEntry[] = []
+    private _consoleRecorderUnpatchers: (() => void)[] = []
+    private _isRecordingConsole = false
+    private _consoleRecorderTimeout: ReturnType<typeof setTimeout> | undefined
+    // Mirrors the entrypoint's own guard. Snapshotting the SDK context reaches into
+    // session, persistence and feature flags; anything on that path that writes
+    // through the global `console` would re-enter the recorder while the outer entry
+    // is still being built. `logger._log` escapes via `__rrweb_original__`;
+    // `logger.critical` writes straight to the global `console`.
+    private _isRecordingConsoleEntry = false
 
     constructor(private readonly _instance: PostHog) {
         if (this._instance && this._instance.config.logs?.captureConsoleLogs) {
@@ -175,6 +198,19 @@ export class PostHogLogs implements Extension {
             return
         }
         this._client = client
+        // Non-slim bundles build this extension in the `PostHog` constructor, while
+        // `config` is still the defaults, so the opt-in is re-read here.
+        if (this._instance?.config?.logs?.captureConsoleLogs) {
+            this._isLogsEnabled = true
+        }
+        // Both routes to console capture have a window before the logs script can run,
+        // so both get a recorder. Local config is the caller's own opt-in for this page
+        // load; a persisted `true` is only a hint remote config may since have withdrawn.
+        // Neither emits anything here. Started before subscribing, because a replayed
+        // config calls back synchronously.
+        if (this._isLogsEnabled || (this._remoteConfigWillArrive() && this._persistedCaptureHint())) {
+            this._startConsoleRecorder()
+        }
         let replayedEnabledConfig = false
         const subscription = client.onRemoteConfig((result) => {
             replayedEnabledConfig = result.ok && result.config.logs?.captureConsoleLogs === true
@@ -195,6 +231,7 @@ export class PostHogLogs implements Extension {
             return
         }
         this._disposed = true
+        this._stopConsoleRecorder()
         this._remoteConfigSubscription?.dispose()
         this._remoteConfigSubscription = undefined
         this._client = undefined
@@ -209,22 +246,48 @@ export class PostHogLogs implements Extension {
     }
 
     onRemoteConfig(result: DeepReadonly<RemoteConfigResult>): void {
-        if (this._disposed || !result.ok) {
-            // Failure behaves like a response without a logs key.
+        if (this._disposed) {
             return
         }
 
-        const logCapture = result.config.logs?.captureConsoleLogs
-        if (isNullish(logCapture) || !logCapture) {
+        // A failed fetch and a response without a `logs` key behave the same: no fresh
+        // verdict arrived.
+        const logCapture = result.ok ? result.config.logs?.captureConsoleLogs : undefined
+        if (isNullish(logCapture)) {
+            // Nothing to persist, and a recorder the hint alone started stands down
+            // rather than holding console arguments for a handover that may never come.
+            this._stopRecorderStartedByPersistedHint()
+            return
+        }
+        this._instance?.persistence?.register({ [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: !!logCapture })
+        if (!logCapture) {
+            // The server reports `false` for every project that has not turned console
+            // capture on, so it cannot distinguish "not enabled" from "turned off" and
+            // does not override a local `captureConsoleLogs` opt-in. It does withdraw the
+            // persisted hint, which is the only thing it granted.
+            this._stopRecorderStartedByPersistedHint()
             return
         }
         this._isLogsEnabled = true
+        if (!this._isLoaded) {
+            // On a first visit there is no local option and no persisted hint, so `setup`
+            // started no recorder and this is the first thing to enable capture. The
+            // script it kicks off below does not land in the same tick, and console calls
+            // made in between would otherwise fall through the gap. The recorder runs
+            // until `loadIfEnabled` hands its buffer to the script.
+            this._startConsoleRecorder()
+        }
         this.loadIfEnabled()
     }
 
     reset(): void {
+        // Buffered entries carry the pre-reset identity, so they are dropped rather
+        // than replayed under whoever the SDK is told to be next.
+        this._stopConsoleRecorder()
+        this._core?.clearQueue()
         this._queue = []
         this._core?.reset()
+        this._consoleCore?.clearQueue()
         this._consoleQueue = []
         this._consoleCore?.reset()
         this._consecutiveStatusZeroFailures = 0
@@ -243,6 +306,150 @@ export class PostHogLogs implements Extension {
         if (!this._disposed) {
             this._getConsoleCore().captureLog(options)
         }
+    }
+
+    // Replay path for entries the recorder buffered before the `logs` chunk existed.
+    // Same pipeline as `captureConsoleLog`, but the record is stamped with the state
+    // captured at the console call rather than the state at replay. Unmangled for the
+    // same reason `captureConsoleLog` is: the caller lives in a separately built bundle.
+    /** @internal */
+    captureBufferedConsoleLog(options: CaptureLogOptions, context: LogSdkContext, occurredAtMs: number): void {
+        if (!this._disposed) {
+            this._getConsoleCore().captureLog(options, { context, occurredAtMs })
+        }
+    }
+
+    private _persistedCaptureHint(): boolean {
+        return !!this._instance?.persistence?.props?.[LOGS_CAPTURE_ENABLED_SERVER_SIDE]
+    }
+
+    // A hint is only worth acting on if something can still confirm or withdraw it.
+    // With flags disabled and no preloaded config, `onRemoteConfig` never fires, so a
+    // recorder started from the hint alone would hold console arguments until the
+    // max-age backstop for a handover that cannot happen.
+    private _remoteConfigWillArrive(): boolean {
+        if (!this._instance?._shouldDisableFlags?.()) {
+            return true
+        }
+        return !!assignableWindow._POSTHOG_REMOTE_CONFIG?.[this._instance.config.token]?.config
+    }
+
+    /**
+     * Releases everything console capture is holding when capturing is turned off: the
+     * pre-load buffer, the `console` patches, and console records already queued — at
+     * that moment rather than whenever the page next writes to the console.
+     *
+     * @internal
+     */
+    _onOptOut(): void {
+        this._stopConsoleRecorder()
+        // Console autocapture is passive mirroring the app never asked for, so records
+        // already queued go too. `captureLog`/`logger` records were captured explicitly
+        // while consent stood, so `_queue` is left alone and a flush already armed will
+        // still send them — the same as events queued before an opt-out.
+        this._consoleCore?.clearQueue()
+        this._consoleQueue = []
+    }
+
+    // Withdraws a recorder that nothing but the persisted hint ever granted. A running
+    // recorder with `_isLogsEnabled` unset can only have come from the hint, and once it
+    // is set capture has been granted for real and the handover is coming — so the hint
+    // is no longer the only thing holding the recorder up.
+    private _stopRecorderStartedByPersistedHint(): void {
+        if (this._isLogsEnabled) {
+            return
+        }
+        this._stopConsoleRecorder()
+    }
+
+    private _startConsoleRecorder(): void {
+        if (this._isRecordingConsole || !assignableWindow?.console) {
+            return
+        }
+        // Deliberately tighter than the console queue's own depth: entries here pin
+        // live argument graphs rather than serialized records, so the ceiling is core's
+        // flush threshold rather than its eviction cap.
+        const maxBufferSize = resolveLogsConfig(this._instance?.config?.logs).maxBufferSize
+        for (const level of BUFFERED_CONSOLE_LEVELS) {
+            let trueOriginal: any
+            try {
+                trueOriginal = originalConsoleMethod(assignableWindow.console[level])
+            } catch {
+                // A hostile `console` accessor must not take the whole logs extension
+                // down with it: the runtime disposes an extension whose setup throws.
+                continue
+            }
+            if (!trueOriginal) {
+                continue
+            }
+            this._consoleRecorderUnpatchers.push(
+                patch(assignableWindow.console, level, (next: any) => {
+                    const wrapped = (...args: any[]) => {
+                        try {
+                            this._recordConsoleEntry(level, args, maxBufferSize)
+                        } catch {
+                            // Recording must never break the page's own console output.
+                        }
+                        return next.apply(assignableWindow.console, args)
+                    }
+                    // Later patchers walk this marker to reach the real console method
+                    // instead of re-entering the recorder.
+                    ;(wrapped as any).__rrweb_original__ = trueOriginal
+                    return wrapped
+                })
+            )
+        }
+        this._isRecordingConsole = true
+        this._consoleRecorderTimeout = setTimeout(() => {
+            this._stopConsoleRecorder()
+        }, RECORDER_MAX_AGE_MS)
+    }
+
+    // Keeps the earliest calls on overflow rather than evicting oldest-first like the
+    // logs queue: the early ones are exactly what the live path would otherwise miss.
+    private _recordConsoleEntry(level: BufferedConsoleLevel, args: any[], maxBufferSize: number): void {
+        if (!this._isRecordingConsole || this._isRecordingConsoleEntry || args.length === 0) {
+            return
+        }
+        if (!this._instance?.is_capturing()) {
+            // Opting out mid-window releases the arguments already held, not just
+            // future ones.
+            this._stopConsoleRecorder()
+            return
+        }
+        if (this._consoleBuffer.length >= maxBufferSize) {
+            return
+        }
+        this._isRecordingConsoleEntry = true
+        try {
+            this._consoleBuffer.push({ level, args, occurredAtMs: Date.now(), context: this._getSdkContext() })
+        } finally {
+            this._isRecordingConsoleEntry = false
+        }
+    }
+
+    // Stops recording and drops anything buffered, releasing the live argument
+    // references. `_takeConsoleBuffer` takes the buffer before calling this.
+    private _stopConsoleRecorder(): void {
+        this._consoleBuffer = []
+        if (!this._isRecordingConsole) {
+            return
+        }
+        this._isRecordingConsole = false
+        if (this._consoleRecorderTimeout) {
+            clearTimeout(this._consoleRecorderTimeout)
+            this._consoleRecorderTimeout = undefined
+        }
+        for (const unpatch of this._consoleRecorderUnpatchers) {
+            unpatch()
+        }
+        this._consoleRecorderUnpatchers = []
+    }
+
+    private _takeConsoleBuffer(): BufferedConsoleEntry[] {
+        const buffered = this._consoleBuffer
+        this._stopConsoleRecorder()
+        return buffered
     }
 
     get logger(): Logger {
@@ -286,15 +493,21 @@ export class PostHogLogs implements Extension {
             return
         }
 
+        // Both are terminal. A plain `no-external` bundle never creates
+        // `__PosthogExtensions__` at all, and a `full.no-external` one creates it without
+        // a loader, so the handover can never come and the recorder has to come off now
+        // rather than at the max-age backstop.
         const phExtensions = assignableWindow?.__PosthogExtensions__
         if (!phExtensions) {
             this._logger.error('PostHog Extensions not found.')
+            this._stopConsoleRecorder()
             return
         }
 
         const loadExternalDependency = phExtensions.loadExternalDependency
         if (!loadExternalDependency) {
             this._logger.error(LOAD_EXT_NOT_FOUND)
+            this._stopConsoleRecorder()
             return
         }
 
@@ -302,15 +515,25 @@ export class PostHogLogs implements Extension {
         try {
             loadExternalDependency(this._instance, 'logs', (err) => {
                 this._isLoading = false
-                if (this._disposed) {
+                if (this._disposed || !this._isLogsEnabled) {
+                    // Remote config turned capture off while the script was in flight.
                     return
                 }
                 const logsExtension = phExtensions.logs
                 if (err || !logsExtension?.initializeLogs) {
                     this._logger.error('Could not load logs script', err)
+                    this._stopConsoleRecorder()
                 } else {
+                    // Unpatch the recorder before the entrypoint patches `console`, so a
+                    // call made in this tick is either buffered or captured live, never
+                    // both. Both steps run synchronously here, so stopping first opens no
+                    // capture gap.
+                    const buffered = this._takeConsoleBuffer()
                     this._consoleLogsDispose = logsExtension.initializeLogs(this._client ?? this._instance)
                     this._isLoaded = true
+                    if (buffered.length > 0) {
+                        logsExtension.replayConsoleBuffer?.(this._client ?? this._instance, buffered)
+                    }
                 }
             })
         } catch (error) {

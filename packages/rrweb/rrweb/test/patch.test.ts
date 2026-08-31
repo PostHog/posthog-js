@@ -16,6 +16,34 @@ describe('patch', () => {
     source = { fakeMethod: original };
   });
 
+  it('splices out from under a posthog-js wrapper', () => {
+    // posthog-js ships its own copy of patch() under `__posthog_layer__` and wraps
+    // the same console methods. A walk that recognised only our marker would give
+    // up here, leaving this wrapper in the call path for the life of the page.
+    const calls: string[] = [];
+    const base = () => calls.push('base');
+    const target: { fn: (...args: unknown[]) => unknown } = { fn: base };
+
+    const restore = patch(target, 'fn', (next: any) => () => {
+      calls.push('rrweb');
+      return next();
+    });
+
+    const posthogLayer = { next: target.fn };
+    const posthogWrapper: any = () => {
+      calls.push('posthog');
+      return posthogLayer.next();
+    };
+    Object.defineProperty(posthogWrapper, '__posthog_layer__', { enumerable: false, value: posthogLayer });
+    target.fn = posthogWrapper;
+
+    restore();
+    calls.length = 0;
+    target.fn();
+
+    expect(calls).toEqual(['posthog', 'base']);
+  });
+
   it('marks a function as wrapped with the original reference', () => {
     patch(source, 'fakeMethod', () => () => {});
     expect((source.fakeMethod as any).__rrweb_original__).toBe(original);

@@ -66,6 +66,11 @@ type FeatureFlagsPollerOptions = {
   customHeaders?: { [key: string]: string }
   cacheProvider?: FlagDefinitionCacheProvider
   strictLocalEvaluation?: boolean
+  /**
+   * When set, the poller keeps only flags whose evaluation contexts are empty or share at
+   * least one entry with this list. Flags with no evaluation contexts are always kept.
+   */
+  evaluationContexts?: readonly string[]
 }
 
 export type FeatureFlagEvaluationContext = {
@@ -108,6 +113,11 @@ class FeatureFlagsPoller {
   private strictLocalEvaluation: boolean
   private flagDefinitionsLoadedAt?: number
   private onMinimalFlagCalledEvents?: (enabled: boolean) => void
+  private evaluationContexts?: readonly string[]
+  // Keys present in the definitions payload but dropped by evaluation-context filtering. A kept
+  // flag may still depend on one of these; the remote evaluator pre-seeds such flags as false,
+  // so dependency evaluation mirrors that instead of throwing "Missing flag dependency".
+  private filteredOutFlagKeys: Set<string> = new Set()
 
   constructor({
     pollingInterval,
@@ -136,6 +146,7 @@ class FeatureFlagsPoller {
     this.onMinimalFlagCalledEvents = options.onMinimalFlagCalledEvents
     this.cacheProvider = options.cacheProvider
     this.strictLocalEvaluation = options.strictLocalEvaluation ?? false
+    this.evaluationContexts = options.evaluationContexts
     void this.loadFeatureFlags()
   }
 
@@ -417,8 +428,15 @@ class FeatureFlagsPoller {
         // Need to evaluate this dependency first
         const depFlag = this.featureFlagsByKey[depFlagKey]
         if (!depFlag) {
-          // Missing flag dependency - cannot evaluate locally
-          throw new InconclusiveMatchError(`Missing flag dependency '${depFlagKey}' for flag '${targetFlagKey}'`)
+          if (this.filteredOutFlagKeys.has(depFlagKey)) {
+            // Dependency was dropped by evaluation-context filtering, not genuinely missing. The
+            // remote evaluator pre-seeds context-filtered flags as false so conditions like
+            // `flag_evaluates_to=false` still match; do the same here instead of throwing.
+            evaluationCache[depFlagKey] = false
+          } else {
+            // Missing flag dependency - cannot evaluate locally
+            throw new InconclusiveMatchError(`Missing flag dependency '${depFlagKey}' for flag '${targetFlagKey}'`)
+          }
         } else if (!depFlag.active) {
           // Inactive flag evaluates to false
           evaluationCache[depFlagKey] = false
@@ -629,12 +647,41 @@ class FeatureFlagsPoller {
   /**
    * Updates the internal flag state with the provided flag data.
    */
+  /**
+   * Keeps only the flags this SDK instance should evaluate for its configured evaluation
+   * contexts. A flag with no evaluation contexts is always kept. A flag with contexts is
+   * kept only when it shares at least one with the configured list. Matching is exact, to
+   * mirror the remote `/flags` evaluation path. Returns all flags when no contexts are set.
+   * Older servers report the flag's contexts under the legacy `evaluation_tags` key, which is
+   * read as a fallback.
+   */
+  private filterFlagsByEvaluationContexts(flags: PostHogFeatureFlag[]): PostHogFeatureFlag[] {
+    if (!this.evaluationContexts || this.evaluationContexts.length === 0) {
+      return flags
+    }
+
+    const contexts = new Set(this.evaluationContexts)
+    return flags.filter((flag) => {
+      // Older servers (pre-2026-03-11) send the same list under the legacy `evaluation_tags` key.
+      const tags = flag.evaluation_contexts ?? flag.evaluation_tags
+      if (!tags || tags.length === 0) {
+        return true
+      }
+      return tags.some((tag) => contexts.has(tag))
+    })
+  }
+
   private updateFlagState(flagData: FlagDefinitionCacheData): void {
-    this.featureFlags = flagData.flags
-    this.featureFlagsByKey = flagData.flags.reduce<Record<string, PostHogFeatureFlag>>(
+    const flags = this.filterFlagsByEvaluationContexts(flagData.flags)
+    this.featureFlags = flags
+    this.featureFlagsByKey = flags.reduce<Record<string, PostHogFeatureFlag>>(
       (acc, curr) => ((acc[curr.key] = curr), acc),
       {}
     )
+    // Remember which definitions were dropped by context filtering so dependency evaluation can
+    // treat them as false (mirroring the remote path) rather than as genuinely missing.
+    const keptKeys = new Set(flags.map((flag) => flag.key))
+    this.filteredOutFlagKeys = new Set(flagData.flags.filter((flag) => !keptKeys.has(flag.key)).map((flag) => flag.key))
     this.groupTypeMapping = flagData.groupTypeMapping
     this.cohorts = flagData.cohorts
     this.loadedSuccessfullyOnce = true
@@ -682,7 +729,9 @@ class FeatureFlagsPoller {
         this.updateFlagState(cached)
         this.logMsgIfDebug(() => console.debug(`[FEATURE FLAGS] ${debugMessage} (${cached.flags.length} flags)`))
         this.onLoad?.(this.featureFlags.length)
-        this.warnAboutExperienceContinuityFlags(cached.flags)
+        // Warn only about flags this instance actually evaluates locally; context-filtered flags
+        // are absent from the kept set and never take the server-fallback path.
+        this.warnAboutExperienceContinuityFlags(this.featureFlags)
         return true
       }
       return false
@@ -853,6 +902,7 @@ class FeatureFlagsPoller {
           )
           this.featureFlags = []
           this.featureFlagsByKey = {}
+          this.filteredOutFlagKeys = new Set()
           this.groupTypeMapping = {}
           this.cohorts = {}
           this.onMinimalFlagCalledEvents?.(false)
@@ -910,7 +960,8 @@ class FeatureFlagsPoller {
           }
 
           this.onLoad?.(this.featureFlags.length)
-          this.warnAboutExperienceContinuityFlags(flagData.flags)
+          // Warn only about the kept (context-filtered) flags, not the full payload.
+          this.warnAboutExperienceContinuityFlags(this.featureFlags)
           break
         }
 

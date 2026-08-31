@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.421.0",
+    "version": "1.422.5",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -17,6 +17,7 @@
         "build": "tsc -b && rollup -c",
         "bundle-size:array": "node scripts/compare-array-bundle-size.mjs",
         "postbuild": "node scripts/strip-lib-package-json.js && node scripts/check-mangled-property-consistency.js && node scripts/check-sourcemap-ignore-list.js",
+        "prepack": "node scripts/strip-sourcemap-sources-content.js",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
         "lint": "eslint src && eslint playwright",
         "lint:fix": "eslint src --fix && eslint playwright --fix",
@@ -102,6 +103,7 @@
         "@posthog/rrweb-plugin-console-record": "workspace:*",
         "@posthog/rrweb-record": "workspace:*",
         "@posthog/rrweb-types": "workspace:*",
+        "@posthog/rrweb-utils": "workspace:*",
         "@rollup/plugin-babel": "^6.0.4",
         "@rollup/plugin-commonjs": "^28.0.6",
         "@rollup/plugin-json": "^6.1.0",

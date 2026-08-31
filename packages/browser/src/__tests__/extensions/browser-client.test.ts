@@ -1,5 +1,6 @@
 import type { Client, Extension, ExtensionToken } from '@posthog/browser-common'
 
+import { runClientConformanceSuite } from '@posthog/browser-common/tests/client-conformance'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 
@@ -72,6 +73,24 @@ function createMockPostHog(
 
     return instance
 }
+
+runClientConformanceSuite('legacy browser', async () => {
+    const posthog = await createPosthogInstance(undefined, {
+        capture_pageview: false,
+        before_send: (event) => event,
+    })
+    const client = posthog._getBrowserClientAdapter()
+    jest.spyOn(posthog, '_send_request').mockImplementation((options) => {
+        options.callback?.({ statusCode: 200 })
+    })
+    return {
+        client,
+        publishRemoteConfig(result) {
+            posthog._onRemoteConfig(result)
+        },
+        dispose: () => posthog.shutdown(0),
+    }
+})
 
 function testExtension(
     name: string,

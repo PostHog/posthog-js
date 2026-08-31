@@ -27,6 +27,7 @@ import {
 } from './types'
 import {
   allSettled,
+  createNamedError,
   currentISOTime,
   PromiseQueue,
   removeTrailingSlash,
@@ -76,16 +77,14 @@ class PostHogFetchHttpError extends Error {
     if (!this.responseBodyTextPromise) {
       if (Date.now() >= this.responseBodyDeadline) {
         this._bodyReadTimedOut = true
-        const timeoutError = new Error('Response body read timed out')
-        timeoutError.name = 'AbortError'
+        const timeoutError = createNamedError('AbortError', 'Response body read timed out')
         this.cancelResponseBody(timeoutError)
         this.responseBodyTextPromise = Promise.reject(timeoutError)
       } else {
         const responseBodyTimeout = new Promise<never>((_resolve, reject) => {
           this.responseBodyTimer = safeSetTimeout(() => {
             this._bodyReadTimedOut = true
-            const timeoutError = new Error('Response body read timed out')
-            timeoutError.name = 'AbortError'
+            const timeoutError = createNamedError('AbortError', 'Response body read timed out')
             // Reject first so the timeout remains the diagnostic if abort rejects the body read synchronously.
             reject(timeoutError)
             this.cancelResponseBody(timeoutError)
@@ -1768,8 +1767,7 @@ export abstract class PostHogCoreStateless {
         // relying only on standards-compliant AbortSignal behavior.
         const deadline = new Promise<never>((_resolve, reject) => {
           timer = safeSetTimeout(() => {
-            const timeoutError = new Error(`Request timed out after ${timeoutMs}ms`)
-            timeoutError.name = 'AbortError'
+            const timeoutError = createNamedError('AbortError', `Request timed out after ${timeoutMs}ms`)
             // Reject first so this error wins if an abort-aware injected fetch rejects synchronously.
             reject(timeoutError)
             ctrl.abort(timeoutError)

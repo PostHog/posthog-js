@@ -149,6 +149,35 @@ instrument(server, posthog, {                                     // keep it, dr
 
 `intentFallback` is the third option: supply the intent yourself when the agent did not send one.
 
+### What `$mcp_llm_model` records, and when it stays empty
+
+`captureModel` is **off** by default. Turn it on and the SDK adds a required `llm_model` parameter to
+every tool it advertises — including the `get_more_tools` virtual tool — asks the agent which model
+it runs as, and records the answer as `$mcp_llm_model` with `$mcp_llm_model_source = "self_reported"`.
+
+The value is self-reported and unverified, exactly like `clientInfo` in the MCP spec. Use it to spot
+degradation across models ("does our MCP get worse on model X?"), never for billing or access
+control. An agent that answers `unknown` is recorded as nothing rather than as a model called
+"unknown".
+
+Unlike `context`, this option degrades to **silence** rather than to a kept argument. Both the strip
+and the capture require the SDK to have confirmed the parameter is its own:
+
+- `instrument(server)` on a high-level `McpServer` resolves ownership for your registered tools per
+  request from the live tool registry, so those work even on a fresh instance.
+- The `get_more_tools` virtual tool works on any instance and on either server type: the SDK writes
+  that descriptor itself, so what it declares is known without a listing.
+- Instrumenting a low-level `Server` learns ownership of **your** tools while serving `tools/list`.
+  On a server that builds a fresh instance per HTTP request — `createMcpHandler`, or
+  `@rekog/mcp-nest` in its stateless mode — the instance handling a `tools/call` never served one,
+  so for those tools it neither strips `llm_model` nor records `$mcp_llm_model`. Nothing breaks and
+  no wrong value is stored; the property is simply absent while agents still pay a token for the
+  extra field.
+
+As with `context`, what matters is instance lifetime rather than statelessness: a transport-stateless
+server (`sessionIdGenerator: undefined`) that keeps one long-lived server object learns ownership
+from the first `tools/list` and keeps it.
+
 ### If you switched to `instrument(server.server)`
 
 Before v2 support landed, the compatibility gate rejected high-level v2 servers, and the usual

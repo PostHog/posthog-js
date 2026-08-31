@@ -4,11 +4,7 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { MCPAnalyticsOptions } from '../types'
-import {
-  canInjectAnalyticsParameter,
-  hasAnalyticsParameter,
-  type AnalyticsInjectableJsonSchema,
-} from './analytics-parameters'
+import { addAnalyticsParameterToTool, type AnalyticsInjectableJsonSchema } from './analytics-parameters'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION } from './constants'
 import { log, type LoggerFn } from './logger'
 
@@ -27,8 +23,8 @@ export function getContextDescription(context: MCPAnalyticsOptions['context']): 
 }
 
 /**
- * Adds a context parameter to a tool's JSON Schema.
- * This function is called AFTER the MCP SDK has converted Zod schemas to JSON Schema,
+ * Adds a context parameter to a tool's JSON Schema, via the shared injector.
+ * This is called AFTER the MCP SDK has converted Zod schemas to JSON Schema,
  * so we only need to handle JSON Schema format.
  *
  * Skips injection (with warning) for:
@@ -41,58 +37,13 @@ export function addContextParameterToTool<TTool extends ContextInjectableTool>(
   contextDescriptionOverride?: string,
   logger: LoggerFn = log
 ): TTool {
-  const modifiedTool = { ...tool }
-  const toolName = tool.name || 'unknown'
-  const schema = modifiedTool.inputSchema as AnalyticsInjectableJsonSchema | undefined
-
-  if (!canInjectAnalyticsParameter(schema, 'context')) {
-    if (hasAnalyticsParameter(schema, 'context')) {
-      logger(`WARN: Tool "${toolName}" already has 'context' parameter. Skipping context injection.`)
-    } else {
-      logger(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf/$ref). Skipping context injection.`)
-    }
-    return modifiedTool
-  }
-
-  if (!modifiedTool.inputSchema) {
-    modifiedTool.inputSchema = {
-      type: 'object',
-      properties: {},
-      required: [],
-    }
-  }
-
-  const contextDescription = contextDescriptionOverride || DEFAULT_CONTEXT_PARAMETER_DESCRIPTION
-
-  // Deep copy: the server may reuse or freeze the schema object it handed us.
-  modifiedTool.inputSchema = JSON.parse(JSON.stringify(modifiedTool.inputSchema)) as AnalyticsInjectableJsonSchema
-
-  const inputSchema = modifiedTool.inputSchema as AnalyticsInjectableJsonSchema
-
-  if (!inputSchema.properties) {
-    inputSchema.properties = {}
-  }
-
-  // The MCP SDK emits `additionalProperties: false` when converting Zod schemas;
-  // left in place it would make the injected `context` key invalid.
-  if (inputSchema.additionalProperties === false) {
-    inputSchema.additionalProperties = undefined
-  }
-
-  inputSchema.properties.context = {
-    type: 'string',
-    description: contextDescription,
-  }
-
-  if (Array.isArray(inputSchema.required)) {
-    if (!inputSchema.required.includes('context')) {
-      inputSchema.required.push('context')
-    }
-  } else {
-    inputSchema.required = ['context']
-  }
-
-  return modifiedTool
+  return addAnalyticsParameterToTool(
+    tool,
+    'context',
+    contextDescriptionOverride || DEFAULT_CONTEXT_PARAMETER_DESCRIPTION,
+    'context',
+    logger
+  )
 }
 
 export function addContextParameterToTools<TTool extends ContextInjectableTool>(

@@ -97,6 +97,20 @@ plugins.withId('com.android.application') {
                             posthogUploadArgs.add("--skip-on-conflict")
                         }
 
+                        // How the release a build belongs to gets associated with the exceptions
+                        // it reports. `symbol-set` (the default) stamps the release onto the
+                        // uploaded source maps; `event` uploads them release-independent and lets
+                        // each event resolve its own release from the $app_namespace /
+                        // $app_version / $app_build the SDK already sends, which the release
+                        // coordinates below are built from. Passed only outside the default mode,
+                        // so a symbol-set build keeps working against a posthog-cli predating the
+                        // flag.
+                        def posthogReleaseMode = resolvePostHogReleaseMode(project)
+                        def posthogReleaseModeArgs = []
+                        if (posthogReleaseMode != null && posthogReleaseMode != "symbol-set") {
+                            posthogReleaseModeArgs.addAll(["--release-mode", posthogReleaseMode])
+                        }
+
                         // posthog.dotenvFile (gradle.properties): dotenv file with POSTHOG_CLI_*
                         // credentials, relative paths resolved against the android root project.
                         // Exported to the CLI as POSTHOG_CLI_DOTENV_FILE (posthog-cli >= 0.8.4;
@@ -128,18 +142,35 @@ plugins.withId('com.android.application') {
 
                         doFirst {
                             def cliPackage = PostHogCli.resolveCliPackagePath(rootDirFile, reactRoot)
+                            if (!posthogReleaseModeArgs.isEmpty() && System.getenv("POSTHOG_SKIP_CLI_VERSION_CHECK") != "1") {
+                                def cliVersion = PostHogCli.resolveVersion([*osCompatibility, cliPackage])
+                                if (cliVersion == null) {
+                                    throw new GradleException("Could not determine the posthog-cli version, which posthog.releaseMode '${posthogReleaseMode}' needs. Upgrade: npm install -g @posthog/cli@latest")
+                                }
+                                if (!PostHogCli.meetsMinimumVersion(cliVersion, PostHogCli.MIN_RELEASE_MODE_VERSION)) {
+                                    throw new GradleException("posthog.releaseMode '${posthogReleaseMode}' needs posthog-cli >= ${PostHogCli.MIN_RELEASE_MODE_VERSION} (found ${cliVersion}). Upgrade: npm install -g @posthog/cli@latest")
+                                }
+                            }
                             def args = [cliPackage]
                             args.addAll(["hermes", "clone",
                                 "--minified-map-path", packagerSourcemapOutput, // The path to a sourcemap
                                 "--composed-map-path", sourcemapOutput          // The path of the composed source map
                             ])
                             args.addAll(extraArgs)
+                            args.addAll(posthogReleaseModeArgs)
                             logger.info("posthog-cli clone arguments: ${args}")
 
                             injected.execOps.exec {
                                 workingDir reactRoot
                                 if (posthogDotenvFilePath != null) {
                                     environment "POSTHOG_CLI_DOTENV_FILE", posthogDotenvFilePath
+                                }
+                                // posthog-cli reads POSTHOG_RELEASE_MODE itself when
+                                // --release-mode is absent, which it deliberately is in symbol-set
+                                // mode. Pin the resolved mode so a daemon that inherited the
+                                // variable cannot override an explicit posthog.releaseMode.
+                                if (posthogReleaseMode != null) {
+                                    environment "POSTHOG_RELEASE_MODE", posthogReleaseMode
                                 }
                                 commandLine(*osCompatibility, *args)
                             }
@@ -153,12 +184,16 @@ plugins.withId('com.android.application') {
                             ])
                             args.addAll(extraArgs)
                             args.addAll(posthogUploadArgs)
+                            args.addAll(posthogReleaseModeArgs)
                             logger.info("posthog-cli upload arguments: ${args}")
 
                             injected.execOps.exec {
                                 workingDir reactRoot
                                 if (posthogDotenvFilePath != null) {
                                     environment "POSTHOG_CLI_DOTENV_FILE", posthogDotenvFilePath
+                                }
+                                if (posthogReleaseMode != null) {
+                                    environment "POSTHOG_RELEASE_MODE", posthogReleaseMode
                                 }
                                 commandLine(*osCompatibility, *args)
                             }
@@ -269,6 +304,48 @@ abstract class PostHogCli {
         logger.info("falling back to global posthog-cli")
         return "posthog-cli"
     }
+
+    /**
+     * The CLI is whatever the machine has, not a pinned version, so an older one rejects
+     * --release-mode with a bare argument-parser error. Mirrors the floor check in posthog-ios
+     * build-tools/upload-symbols.sh. POSTHOG_SKIP_CLI_VERSION_CHECK=1 allows a posthog-cli built
+     * from source, which reports its Cargo manifest version rather than the version it ships as.
+     * posthog-cli 0.16.0 added --release-mode to the hermes commands (PostHog/posthog#87660). Keep
+     * this in step with MIN_RELEASE_MODE_CLI_VERSION in posthog-xcode.sh.
+     */
+    static final String MIN_RELEASE_MODE_VERSION = "0.16.0"
+
+    /** Null when the version cannot be read. */
+    static String resolveVersion(List command) {
+        try {
+            def process = (command + ["--version"]).execute()
+            def stdout = new StringBuffer()
+            def stderr = new StringBuffer()
+            process.waitForProcessOutput(stdout, stderr)
+            if (process.exitValue() != 0) {
+                return null
+            }
+            return (stdout.toString() + stderr.toString()).find(/\d+(\.\d+)+/)
+        } catch (Throwable ignored) {
+            return null
+        }
+    }
+
+    /** Compares numeric fields left to right, so 0.9.0 stays below 0.16.0. */
+    static boolean meetsMinimumVersion(String found, String minimum) {
+        def fields = { String version -> version.tokenize(".").collect { (it.find(/^\d+/) ?: "0") as int } }
+        def a = fields(found)
+        def b = fields(minimum)
+        // Pad the shorter one so 0.16 and 0.16.0 compare equal.
+        while (a.size() < b.size()) a << 0
+        while (b.size() < a.size()) b << 0
+        for (int i = 0; i < a.size(); i++) {
+            if (a[i] != b[i]) {
+                return a[i] > b[i]
+            }
+        }
+        return true
+    }
 }
 
 def resolvePostHogReactNativeSDKPath(reactRoot) {
@@ -278,6 +355,29 @@ def resolvePostHogReactNativeSDKPath(reactRoot) {
     } catch (Throwable ignored) {} // if the resolve fails we fallback to the default path
     def packagePath = resolvedPath != null && resolvedPath.exists() ? resolvedPath.getAbsolutePath() : "$reactRoot/node_modules/posthog-react-native"
     return packagePath
+}
+
+/**
+ * Release mode for this build: the `posthog.releaseMode` gradle property, then the
+ * `POSTHOG_RELEASE_MODE` environment variable posthog-cli and the bundler plugins already read,
+ * then null for the posthog-cli default. `com.posthog.android` reads the same property for the R8
+ * mapping upload, so one entry covers both halves of an Android build.
+ *
+ * An unrecognized value fails the build rather than falling back, so a typo cannot silently leave
+ * a build binding its source maps to a release it meant to keep independent.
+ */
+static String resolvePostHogReleaseMode(Project project) {
+    def value = project.findProperty("posthog.releaseMode")?.toString()?.trim()
+    if (!value) {
+        value = System.getenv("POSTHOG_RELEASE_MODE")?.trim()
+    }
+    if (!value) {
+        return null
+    }
+    if (!(value in ["symbol-set", "event"])) {
+        throw new GradleException("posthog.releaseMode must be one of symbol-set, event, was '${value}'")
+    }
+    return value
 }
 
 /** Extract from arguments collection bundle and sourcemap files output names. */

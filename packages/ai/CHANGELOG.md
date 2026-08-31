@@ -1,5 +1,18 @@
 # posthog-ai
 
+## 8.9.0
+
+### Minor Changes
+
+- [#4556](https://github.com/PostHog/posthog-js/pull/4556) [`a47b232`](https://github.com/PostHog/posthog-js/commit/a47b2326860b986915945d88b6a7689968617740) Thanks [@gouveags](https://github.com/gouveags)! - Add LangChain v1 agent middleware for AI observability.
+  (2026-08-27)
+
+### Patch Changes
+
+- Updated dependencies [[`7902e44`](https://github.com/PostHog/posthog-js/commit/7902e445d0a66b93bd4c7febce04cdf8836ea86b), [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524)]:
+  - @posthog/core@1.48.12
+  - posthog-node@5.51.3
+
 ## 8.8.1
 
 ### Patch Changes

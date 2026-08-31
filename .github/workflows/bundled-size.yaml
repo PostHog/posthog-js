@@ -36,6 +36,9 @@ jobs:
       - name: Build project
         run: pnpm build
 
+      - name: Check minimal browser package size
+        run: pnpm --filter @posthog/browser bundle-size
+
       - name: Upload bundle size visualization
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         id: viz-upload
