@@ -2,4 +2,4 @@
 '@posthog/ai': patch
 ---
 
-Preserve Anthropic workspace IDs on wrapped provider promises and support `@anthropic-ai/sdk` versions from 0.112.3 through 0.120.x.
+Preserve Anthropic workspace IDs on wrapped provider promises and add support for `@anthropic-ai/sdk` 0.120.x while retaining support for 0.112.x.
