@@ -137,7 +137,7 @@ describe('config', () => {
             }
         )
 
-        it('does not warn when set_config switches persistence but a bootstrap.distinctID is set', () => {
+        it('does not warn when set_config switches persistence but a bootstrap.distinctID was set at init', () => {
             const posthog = new PostHog()
             posthog._init('test-token', {
                 persistence: 'localStorage+cookie',
@@ -148,6 +148,41 @@ describe('config', () => {
             posthog.set_config({ persistence: 'memory' })
 
             expect(bootstrapWarnings()).toHaveLength(0)
+        })
+
+        it('does not warn when set_config switches persistence but identity_distinct_id was set at init', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                persistence: 'localStorage+cookie',
+                identity_distinct_id: 'stable-id',
+            })
+            warnSpy.mockClear()
+
+            posthog.set_config({ persistence: 'memory' })
+
+            expect(bootstrapWarnings()).toHaveLength(0)
+        })
+
+        it('warns when setIdentity is called before switching to volatile persistence', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { persistence: 'localStorage+cookie' })
+            warnSpy.mockClear()
+
+            posthog.setIdentity('runtime-id', 'runtime-hash')
+            posthog.set_config({ persistence: 'memory' })
+
+            expect(bootstrapWarnings()).toHaveLength(1)
+        })
+
+        it('warns when bootstrap.distinctID is set at runtime before switching to volatile persistence', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { persistence: 'localStorage+cookie' })
+            warnSpy.mockClear()
+
+            posthog.set_config({ bootstrap: { distinctID: 'runtime-id' } })
+            posthog.set_config({ persistence: 'memory' })
+
+            expect(bootstrapWarnings()).toHaveLength(1)
         })
 
         // set_config() can also turn on disable_persistence after init, which removes the durable store the

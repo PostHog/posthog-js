@@ -486,6 +486,7 @@ export class PostHog implements PostHogInterface {
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
+    private _hasStableInitialDistinctId = false
 
     private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
         if (oldExt) {
@@ -531,13 +532,9 @@ export class PostHog implements PostHogInterface {
         if (!volatileIdentityPersistence && !this.config.disable_persistence) {
             return
         }
-        // Treat an empty, whitespace-only, or missing id as not-provided — the same rule identify() applies
-        // (_validateIdentifyId). identity_distinct_id is folded in because _init copies it into
-        // bootstrap.distinctID, so it is an equally stable source of a durable ID. These values are type-legal
-        // for JS callers, but the no-distinct-id branch then mints a fresh uuid per load (the failure this warns
-        // about), whereas isUndefined() alone stayed silent for '' and null.
-        const stableId = this.config.bootstrap?.distinctID || this.config.identity_distinct_id
-        if (stableId && !isEmptyString(stableId)) {
+        // Only an ID supplied at init is guaranteed to be restored on the next load. setIdentity() and
+        // set_config({ bootstrap }) mutate these config fields at runtime without replacing the current distinct ID.
+        if (this._hasStableInitialDistinctId) {
             return
         }
         let cause: string
@@ -924,6 +921,9 @@ export class PostHog implements PostHogInterface {
                 isIdentifiedID: true,
             }
         }
+
+        const initialDistinctId = config.bootstrap?.distinctID
+        this._hasStableInitialDistinctId = !!initialDistinctId && !isEmptyString(initialDistinctId)
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // eslint-disable-next-line posthog-js/no-direct-undefined-check
