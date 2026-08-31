@@ -1,7 +1,7 @@
 import { parsePayload } from './featureFlagUtils'
 import type { FeatureFlagValue, JsonType } from './types'
 
-export type FeatureFlagPropertyValue = string | number | (string | number)[] | boolean
+export type FeatureFlagPropertyValue = JsonType
 
 export type FeatureFlagProperty = {
   key: string
@@ -42,6 +42,172 @@ export class InconclusiveMatchError extends Error {
   }
 }
 
+function isTruthyOrFalsyPropertyValue(value: unknown): boolean {
+  if (typeof value === 'boolean') return true
+  if (typeof value === 'string') {
+    const lowercaseValue = value.toLowerCase()
+    return lowercaseValue === 'true' || lowercaseValue === 'false'
+  }
+  if (!Array.isArray(value)) return false
+  for (let index = 0; index < value.length; index++) {
+    if (!isTruthyOrFalsyPropertyValue(index in value ? value[index] : null)) return false
+  }
+  return true
+}
+
+function isTruthyPropertyValue(value: unknown): boolean {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') return value.toLowerCase() === 'true'
+  if (!Array.isArray(value)) return false
+  for (let index = 0; index < value.length; index++) {
+    if (!isTruthyPropertyValue(index in value ? value[index] : null)) return false
+  }
+  return true
+}
+
+function assertUnicodeScalarString(value: string): void {
+  for (let index = 0; index < value.length; index++) {
+    const unit = value.charCodeAt(index)
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1)
+      if (index + 1 >= value.length || next < 0xdc00 || next > 0xdfff) {
+        throw new InconclusiveMatchError('Cannot stringify an unpaired surrogate like the flags service')
+      }
+      index++
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      throw new InconclusiveMatchError('Cannot stringify an unpaired surrogate like the flags service')
+    }
+  }
+}
+
+function assertJsonRepresentable(value: unknown, seen: Set<object> = new Set()): void {
+  if (value === null || typeof value === 'boolean') return
+  if (typeof value === 'string') {
+    assertUnicodeScalarString(value)
+    return
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new InconclusiveMatchError(`Cannot represent non-finite number ${value} like the flags service`)
+    }
+    return
+  }
+  if (Array.isArray(value)) {
+    if (seen.has(value)) throw new InconclusiveMatchError('Cannot represent a circular array during local evaluation')
+    seen.add(value)
+    try {
+      for (let index = 0; index < value.length; index++) {
+        if (index in value) assertJsonRepresentable(value[index], seen)
+      }
+    } finally {
+      seen.delete(value)
+    }
+    return
+  }
+  if (typeof value === 'object') {
+    const prototype = Object.getPrototypeOf(value)
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new InconclusiveMatchError('Cannot represent a non-JSON object like the flags service')
+    }
+    if (seen.has(value)) throw new InconclusiveMatchError('Cannot represent a circular object during local evaluation')
+    seen.add(value)
+    try {
+      for (const key of Object.keys(value)) {
+        assertUnicodeScalarString(key)
+        assertJsonRepresentable((value as Record<string, unknown>)[key], seen)
+      }
+    } finally {
+      seen.delete(value)
+    }
+    return
+  }
+  throw new InconclusiveMatchError(`Cannot represent ${typeof value} like the flags service`)
+}
+
+function compareJsonObjectKeys(left: string, right: string): number {
+  let leftIndex = 0
+  let rightIndex = 0
+  while (leftIndex < left.length && rightIndex < right.length) {
+    const leftUnit = left.charCodeAt(leftIndex)
+    const rightUnit = right.charCodeAt(rightIndex)
+    const leftIsHighSurrogate = leftUnit >= 0xd800 && leftUnit <= 0xdbff
+    const rightIsHighSurrogate = rightUnit >= 0xd800 && rightUnit <= 0xdbff
+    const leftNext = leftIsHighSurrogate ? left.charCodeAt(leftIndex + 1) : 0
+    const rightNext = rightIsHighSurrogate ? right.charCodeAt(rightIndex + 1) : 0
+
+    const leftCodePoint = leftIsHighSurrogate ? (leftUnit - 0xd800) * 0x400 + leftNext - 0xdc00 + 0x10000 : leftUnit
+    const rightCodePoint = rightIsHighSurrogate
+      ? (rightUnit - 0xd800) * 0x400 + rightNext - 0xdc00 + 0x10000
+      : rightUnit
+    if (leftCodePoint !== rightCodePoint) return leftCodePoint - rightCodePoint
+    leftIndex += leftIsHighSurrogate ? 2 : 1
+    rightIndex += rightIsHighSurrogate ? 2 : 1
+  }
+  return left.length - right.length
+}
+
+// JavaScript collapses JSON integers and integral floats into Number, including inside composites.
+// These values fall back rather than choosing a spelling that can disagree with the flags service.
+function serializeJsonValue(value: unknown, seen: Set<object> = new Set()): string {
+  if (value === null) return 'null'
+  if (typeof value === 'string') {
+    assertUnicodeScalarString(value)
+    return JSON.stringify(value)
+  }
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new InconclusiveMatchError(`Cannot stringify non-finite number ${value} like the flags service`)
+    }
+    if (Number.isInteger(value)) {
+      throw new InconclusiveMatchError(
+        `Cannot distinguish integer ${value} from an integral JSON float during local evaluation`
+      )
+    }
+    return String(value)
+  }
+  if (Array.isArray(value)) {
+    if (seen.has(value)) throw new InconclusiveMatchError('Cannot stringify a circular array during local evaluation')
+    seen.add(value)
+    try {
+      const items: string[] = []
+      for (let index = 0; index < value.length; index++) {
+        items.push(index in value ? serializeJsonValue(value[index], seen) : 'null')
+      }
+      return `[${items.join(',')}]`
+    } finally {
+      seen.delete(value)
+    }
+  }
+  if (typeof value === 'object') {
+    const prototype = Object.getPrototypeOf(value)
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new InconclusiveMatchError('Cannot stringify a non-JSON object like the flags service')
+    }
+    if (seen.has(value)) throw new InconclusiveMatchError('Cannot stringify a circular object during local evaluation')
+    seen.add(value)
+    try {
+      const keys = Object.keys(value)
+      keys.forEach(assertUnicodeScalarString)
+      return `{${keys
+        .sort(compareJsonObjectKeys)
+        .map((key) => `${JSON.stringify(key)}:${serializeJsonValue((value as Record<string, unknown>)[key], seen)}`)
+        .join(',')}}`
+    } finally {
+      seen.delete(value)
+    }
+  }
+  throw new InconclusiveMatchError(`Cannot stringify ${typeof value} like the flags service`)
+}
+
+function exactMatchString(value: unknown): string {
+  if (typeof value === 'string') {
+    assertUnicodeScalarString(value)
+    return value
+  }
+  return serializeJsonValue(value)
+}
+
 function isValidRegex(regex: string): boolean {
   try {
     new RegExp(regex)
@@ -49,6 +215,11 @@ function isValidRegex(regex: string): boolean {
   } catch {
     return false
   }
+}
+
+// The flags service deliberately folds only ASCII for substring, prefix, and suffix operators.
+function asciiLowercase(value: unknown): string {
+  return String(value).replace(/[A-Z]/g, (character) => character.toLowerCase())
 }
 
 type SemverTuple = [number, number, number]
@@ -190,19 +361,35 @@ export function matchFeatureFlagProperty(
     throw new InconclusiveMatchError(`Property ${key} not found in propertyValues`)
   } else if (operator === 'is_not_set') {
     return false
+  } else if (operator === 'is_set') {
+    return true
   }
 
   const overrideValue = propertyValues[key]
-  if (overrideValue == null && !NULL_VALUES_ALLOWED_OPERATORS.includes(operator)) {
-    options.warnFunction?.(`Property ${key} cannot have a value of null/undefined with the ${operator} operator`)
+  if (overrideValue === undefined) {
+    options.warnFunction?.(`Property ${key} cannot have a value of undefined with the ${operator} operator`)
+    return operator === 'is_not'
+  }
+  if (
+    overrideValue === null &&
+    !NULL_VALUES_ALLOWED_OPERATORS.includes(operator) &&
+    operator !== 'exact' &&
+    operator !== 'is_not'
+  ) {
+    options.warnFunction?.(`Property ${key} cannot have a value of null with the ${operator} operator`)
     return false
   }
 
-  const computeExactMatch = (target: any, actual: any): boolean => {
-    if (Array.isArray(target)) {
-      return target.map((item) => String(item).toLowerCase()).includes(String(actual).toLowerCase())
+  const computeExactMatch = (target: unknown, actual: unknown): boolean => {
+    if (isTruthyOrFalsyPropertyValue(target)) {
+      assertJsonRepresentable(actual)
+      return isTruthyPropertyValue(target) === isTruthyPropertyValue(actual)
     }
-    return String(target).toLowerCase() === String(actual).toLowerCase()
+    if (Array.isArray(target)) {
+      const actualString = exactMatchString(actual).toLowerCase()
+      return target.some((item) => exactMatchString(item).toLowerCase() === actualString)
+    }
+    return exactMatchString(target).toLowerCase() === exactMatchString(actual).toLowerCase()
   }
 
   const compare = (lhs: any, rhs: any, comparisonOperator: string): boolean => {
@@ -221,17 +408,17 @@ export function matchFeatureFlagProperty(
     case 'is_set':
       return true
     case 'icontains':
-      return String(overrideValue).toLowerCase().includes(String(value).toLowerCase())
+      return asciiLowercase(overrideValue).includes(asciiLowercase(value))
     case 'not_icontains':
-      return !String(overrideValue).toLowerCase().includes(String(value).toLowerCase())
+      return !asciiLowercase(overrideValue).includes(asciiLowercase(value))
     case 'starts_with':
-      return String(overrideValue).toLowerCase().startsWith(String(value).toLowerCase())
+      return asciiLowercase(overrideValue).startsWith(asciiLowercase(value))
     case 'not_starts_with':
-      return !String(overrideValue).toLowerCase().startsWith(String(value).toLowerCase())
+      return !asciiLowercase(overrideValue).startsWith(asciiLowercase(value))
     case 'ends_with':
-      return String(overrideValue).toLowerCase().endsWith(String(value).toLowerCase())
+      return asciiLowercase(overrideValue).endsWith(asciiLowercase(value))
     case 'not_ends_with':
-      return !String(overrideValue).toLowerCase().endsWith(String(value).toLowerCase())
+      return !asciiLowercase(overrideValue).endsWith(asciiLowercase(value))
     case 'regex':
       return isValidRegex(String(value)) && String(overrideValue).match(String(value)) !== null
     case 'not_regex':

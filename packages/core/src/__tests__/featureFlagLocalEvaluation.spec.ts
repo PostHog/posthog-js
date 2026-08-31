@@ -65,6 +65,118 @@ describe('feature flag local evaluation primitives', () => {
       expect(() => matchFeatureFlagProperty(property(operator, ''), {})).toThrow(InconclusiveMatchError)
     })
 
+    test.each([
+      ['icontains', 'RO', 'Pro plan', true],
+      ['not_icontains', 'RO', 'Pro plan', false],
+      ['starts_with', 'PRO', 'Pro plan', true],
+      ['not_starts_with', 'PRO', 'Pro plan', false],
+      ['ends_with', 'PLAN', 'Pro plan', true],
+      ['not_ends_with', 'PLAN', 'Pro plan', false],
+      ['icontains', 'ä', 'Äbc', false],
+      ['not_icontains', 'ä', 'Äbc', true],
+      ['starts_with', 'ä', 'Äbc', false],
+      ['not_starts_with', 'ä', 'Äbc', true],
+      ['ends_with', 'ä', 'bcÄ', false],
+      ['not_ends_with', 'ä', 'bcÄ', true],
+    ] as const)('%s uses ASCII-only folding for target %p and actual %p', (operator, target, actual, expected) => {
+      expect(matchFeatureFlagProperty(property(operator, target), { key: actual })).toBe(expected)
+    })
+
+    test.each([
+      ['Ä', 'ä', true],
+      ['ß', 'ss', false],
+      ['Σ', 'ς', false],
+      ['ΟΣ', 'ος', true],
+      ['ΟΣ', 'οσ', false],
+      ['ΟΔΟΣ', 'οδος', true],
+      ['ΟΔΟΣ', 'οδοσ', false],
+      ['İ', 'i\u0307', true],
+      ['İ', 'i', false],
+    ] as const)('uses full Unicode lowercase for exact target %p and actual %p', (target, actual, expected) => {
+      expect(matchFeatureFlagProperty(property('exact', target), { key: actual })).toBe(expected)
+      expect(matchFeatureFlagProperty(property('is_not', target), { key: actual })).toBe(!expected)
+    })
+
+    test.each([
+      [false, 'banana', true],
+      ['false', 0, true],
+      [['false'], null, true],
+      [['true', 'false'], 'true', false],
+      [['true', 'false'], 'pro', true],
+      [[], true, true],
+      [[], [], true],
+      [[], false, false],
+      [['FREE', 'Ä'], 'ä', true],
+      [['FREE', 'PRO'], 'starter', false],
+    ] as const)('matches backend exact truthiness for target %p and actual %p', (target, actual, expected) => {
+      expect(matchFeatureFlagProperty(property('exact', target), { key: actual })).toBe(expected)
+      expect(matchFeatureFlagProperty(property('is_not', target), { key: actual })).toBe(!expected)
+    })
+
+    test.each([
+      ['["one","two"]', ['one', 'two']],
+      ['{"a":"x","b":true}', { b: true, a: 'x' }],
+      ['{"a":{"y":"x","z":1e-7},"b":[true,null]}', { b: [true, null], a: { z: 1e-7, y: 'x' } }],
+      ['{"":"bmp","𐀀":"supplementary"}', { '𐀀': 'supplementary', '': 'bmp' }],
+    ])('uses canonical JSON stringification for exact filter %p', (target, actual) => {
+      expect(matchFeatureFlagProperty(property('exact', target), { key: actual })).toBe(true)
+      expect(matchFeatureFlagProperty(property('is_not', target), { key: actual })).toBe(false)
+    })
+
+    test('treats sparse array entries like JSON null values', () => {
+      const sparse = new Array(2)
+      sparse[1] = 'value'
+      expect(matchFeatureFlagProperty(property('exact', '[null,"value"]'), { key: sparse })).toBe(true)
+      expect(matchFeatureFlagProperty(property('exact', true), { key: new Array(1) })).toBe(false)
+    })
+
+    test('falls back for strings that cannot be represented by the flags service', () => {
+      expect(() => matchFeatureFlagProperty(property('exact', '\ud800'), { key: '\ud800' })).toThrow(
+        InconclusiveMatchError
+      )
+      expect(() => matchFeatureFlagProperty(property('exact', false), { key: '\ud800' })).toThrow(
+        InconclusiveMatchError
+      )
+    })
+
+    test('keeps explicit undefined values from matching non-exact operators', () => {
+      const warnFunction = jest.fn()
+      expect(matchFeatureFlagProperty(property('icontains', 'undefined'), { key: undefined }, { warnFunction })).toBe(
+        false
+      )
+      expect(matchFeatureFlagProperty(property('exact', 'undefined'), { key: undefined }, { warnFunction })).toBe(false)
+      expect(matchFeatureFlagProperty(property('is_not', 'undefined'), { key: undefined }, { warnFunction })).toBe(true)
+      expect(warnFunction).toHaveBeenCalledWith(
+        'Property key cannot have a value of undefined with the icontains operator'
+      )
+    })
+
+    test.each([
+      ['one,two', ['one', 'two']],
+      ['[object Object]', { a: 'x' }],
+    ])('does not match JavaScript-specific stringification %p', (target, actual) => {
+      expect(matchFeatureFlagProperty(property('exact', target), { key: actual })).toBe(false)
+    })
+
+    test.each([
+      ['1e-7', 1e-7],
+      ['0.00001', 1e-5],
+      ['0.000099', 9.9e-5],
+    ])('uses representable serde JSON number spelling %p', (target, actual) => {
+      expect(matchFeatureFlagProperty(property('exact', target), { key: actual })).toBe(true)
+    })
+
+    test.each([
+      ['323', 323],
+      ['323.0', 323],
+      ['1e+16', 1e16],
+      ['-0.0', -0],
+      ['[1,2]', [1, 2]],
+      ['{"a":2}', { a: 2 }],
+    ])('falls back when JavaScript loses the numeric type for %p', (target, actual) => {
+      expect(() => matchFeatureFlagProperty(property('exact', target), { key: actual })).toThrow(InconclusiveMatchError)
+    })
+
     test('does not treat inherited object properties as present map entries', () => {
       const inheritedPropertyValues = Object.create({ key: 'inherited' })
 
@@ -73,8 +185,11 @@ describe('feature flag local evaluation primitives', () => {
       )
     })
 
-    test('preserves null and missing property behavior for exact matching', () => {
-      expect(matchFeatureFlagProperty(property('exact', null as never), { key: null })).toBe(false)
+    test('matches explicit null values and keeps missing properties inconclusive', () => {
+      expect(matchFeatureFlagProperty(property('exact', null), { key: null })).toBe(true)
+      expect(matchFeatureFlagProperty(property('is_not', null), { key: null })).toBe(false)
+      expect(matchFeatureFlagProperty(property('exact', 'x'), { key: null })).toBe(false)
+      expect(matchFeatureFlagProperty(property('is_not', 'x'), { key: null })).toBe(true)
       expect(() => matchFeatureFlagProperty(property('exact', 'x'), {})).toThrow(InconclusiveMatchError)
     })
 
