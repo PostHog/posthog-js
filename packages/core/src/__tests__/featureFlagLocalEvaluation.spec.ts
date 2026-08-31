@@ -144,6 +144,8 @@ describe('feature flag local evaluation primitives', () => {
       expect(matchFeatureFlagProperty(property('icontains', 'undefined'), { key: undefined }, { warnFunction })).toBe(
         false
       )
+      expect(matchFeatureFlagProperty(property('exact', 'undefined'), { key: undefined }, { warnFunction })).toBe(false)
+      expect(matchFeatureFlagProperty(property('is_not', 'undefined'), { key: undefined }, { warnFunction })).toBe(true)
       expect(warnFunction).toHaveBeenCalledWith(
         'Property key cannot have a value of undefined with the icontains operator'
       )

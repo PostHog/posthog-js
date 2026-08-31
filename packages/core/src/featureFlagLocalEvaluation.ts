@@ -361,17 +361,14 @@ export function matchFeatureFlagProperty(
     throw new InconclusiveMatchError(`Property ${key} not found in propertyValues`)
   } else if (operator === 'is_not_set') {
     return false
+  } else if (operator === 'is_set') {
+    return true
   }
 
   const overrideValue = propertyValues[key]
   if (overrideValue === undefined) {
-    if (operator === 'exact' || operator === 'is_not') {
-      throw new InconclusiveMatchError(`Property ${key} is undefined and cannot be compared like a JSON value`)
-    }
-    if (!NULL_VALUES_ALLOWED_OPERATORS.includes(operator)) {
-      options.warnFunction?.(`Property ${key} cannot have a value of undefined with the ${operator} operator`)
-      return false
-    }
+    options.warnFunction?.(`Property ${key} cannot have a value of undefined with the ${operator} operator`)
+    return operator === 'is_not'
   }
   if (
     overrideValue === null &&
