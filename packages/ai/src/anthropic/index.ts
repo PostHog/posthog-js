@@ -284,7 +284,10 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
         return value
       })
 
-      return preserveProviderPromise(parentPromise, wrappedPromise, { requestIdHeader: 'request-id' })
+      return preserveProviderPromise(parentPromise, wrappedPromise, {
+        requestIdHeader: 'request-id',
+        workspaceIdHeader: 'anthropic-workspace-id',
+      })
     } else {
       const parentPromise = super.create(anthropicParams, options)
       const wrappedPromise = parentPromise.then(
@@ -339,7 +342,10 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
         }
       )
 
-      return preserveProviderPromise(parentPromise, wrappedPromise, { requestIdHeader: 'request-id' })
+      return preserveProviderPromise(parentPromise, wrappedPromise, {
+        requestIdHeader: 'request-id',
+        workspaceIdHeader: 'anthropic-workspace-id',
+      })
     }
   }
 }
