@@ -18,7 +18,7 @@ const posthog = new PostHog(posthogApiKey, {
 
 const agent = new LlmAgent({
     name: 'posthog_adk_example',
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.6-flash',
     instruction: 'Be concise and helpful.',
 })
 
