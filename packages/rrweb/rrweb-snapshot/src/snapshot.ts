@@ -34,6 +34,7 @@ import {
   checkDataURLSize,
   recompressBase64Image,
   absolutifyURLs,
+  SCRIPT_PLACEHOLDER,
 } from './utils';
 import dom from '@posthog/rrweb-utils';
 import {
@@ -678,7 +679,7 @@ function serializeTextNode(
     text = absolutifyURLs(text, getHref(options.doc));
   }
   if (isScript) {
-    text = 'SCRIPT_PLACEHOLDER';
+    text = SCRIPT_PLACEHOLDER;
   }
   if (!isStyle && !isScript && text && needsMask) {
     text = maskTextFn
