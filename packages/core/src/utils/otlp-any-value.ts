@@ -175,8 +175,8 @@ function encodeArrayValues(
   for (; index < itemCount && state.remainingNodes > 0; index++) {
     try {
       const element = index in values ? values[index] : undefined
-      // Dropped, as iOS and Android do: proto3 JSON has no null AnyValue, and
-      // both `null` and `{}` here are rejected for the whole request.
+      // Dropped: proto3 JSON has no null AnyValue, and both `null` and `{}` here
+      // are rejected for the whole request.
       if (isNullish(element)) {
         continue
       }

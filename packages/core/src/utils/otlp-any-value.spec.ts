@@ -48,7 +48,7 @@ describe('otlp-any-value', () => {
     })
 
     it('converts a bigint beyond int64 to a string, with a warning', () => {
-      const logger = { debug: jest.fn() }
+      const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), critical: jest.fn() }
       expect(toOtlpAnyValue(18446744073709551616n as unknown as LogAttributeValue, logger as any)).toEqual({
         stringValue: '18446744073709551616',
       })
