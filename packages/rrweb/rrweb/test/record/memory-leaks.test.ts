@@ -137,6 +137,54 @@ describe('memory leak prevention', () => {
     });
   });
 
+  describe('MutationBuffer empty-payload cleanup', () => {
+    it('releases node references even when a batch normalizes to an empty payload', async () => {
+      const emit = (event: eventWithTime) => {
+        events.push(event);
+      };
+
+      const stopRecording = record({ emit });
+
+      // Let the initial full snapshot settle.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const buffer = mutationBuffers[0] as unknown as {
+        addedSet: Set<Node>;
+        movedSet: Set<Node>;
+        droppedSet: Set<Node>;
+        texts: unknown[];
+        attributes: unknown[];
+      };
+      expect(buffer).toBeDefined();
+
+      const eventCountBefore = events.length;
+
+      // Append then remove the same node within a single synchronous task,
+      // so the MutationObserver callback sees both records in one batch.
+      // Net effect: no add, no remove, no text/attribute change — the
+      // payload normalizes to fully empty (adds/removes/texts/attributes
+      // all length 0) — but the node passes through MutationBuffer's
+      // addedSet/droppedSet bookkeeping along the way.
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      document.body.removeChild(el);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // An empty payload must not be emitted.
+      expect(events.length).toBe(eventCountBefore);
+
+      // The buffer must still release its node references.
+      expect(buffer.addedSet.size).toBe(0);
+      expect(buffer.movedSet.size).toBe(0);
+      expect(buffer.droppedSet.size).toBe(0);
+      expect(buffer.texts.length).toBe(0);
+      expect(buffer.attributes.length).toBe(0);
+
+      stopRecording?.();
+    });
+  });
+
   describe('IframeManager cleanup', () => {
     it('should remove window message listener when recording stops', () => {
       const emit = (event: eventWithTime) => {
