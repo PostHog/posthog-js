@@ -150,7 +150,7 @@
         "_coreLogger",
         "_counter",
         "_createHost",
-        "_crossTabFeatureFlagHandler",
+        "_crossTabFeatureFlagHandlers",
         "_crossTabFeatureFlagIdentityMismatch",
         "_crossTabPersistenceUnsubscribe",
         "_cross_subdomain",

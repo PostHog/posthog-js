@@ -850,6 +850,65 @@ describe('cross-tab persistence interactions', () => {
             tabB.destroy()
         })
 
+        it('does not treat a removed storage entry as an empty flag evaluation', () => {
+            const config = makeConfig(0)
+            const tab = new PostHogPersistence(config)
+            tab.register({
+                [ENABLED_FEATURE_FLAGS]: { 'my-flag': true },
+                [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { 'my-flag': { color: 'red' } },
+            })
+            const oldValue = window.localStorage.getItem(STORAGE_KEY)
+
+            window.localStorage.removeItem(STORAGE_KEY)
+            dispatchStorageChange(STORAGE_KEY, oldValue, null)
+
+            expect(tab.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'my-flag': true })
+            expect(tab.get_property(PERSISTENCE_FEATURE_FLAG_PAYLOADS)).toEqual({
+                'my-flag': { color: 'red' },
+            })
+            tab.destroy()
+        })
+
+        it('notifies every cross-tab feature flag subscriber', () => {
+            const config = makeConfig(0)
+            const tabA = new PostHogPersistence(config)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            const tabB = new PostHogPersistence(config)
+            const firstHandler = jest.fn()
+            const secondHandler = jest.fn()
+            const unsubscribeFirst = tabB.onCrossTabFeatureFlagChange(firstHandler)
+            tabB.onCrossTabFeatureFlagChange(secondHandler)
+
+            let oldValue = window.localStorage.getItem(STORAGE_KEY)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: true } })
+            dispatchStorageChange(STORAGE_KEY, oldValue, window.localStorage.getItem(STORAGE_KEY))
+
+            expect(firstHandler).toHaveBeenCalledTimes(1)
+            expect(secondHandler).toHaveBeenCalledTimes(1)
+
+            unsubscribeFirst()
+            oldValue = window.localStorage.getItem(STORAGE_KEY)
+            tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
+            dispatchStorageChange(STORAGE_KEY, oldValue, window.localStorage.getItem(STORAGE_KEY))
+
+            expect(firstHandler).toHaveBeenCalledTimes(1)
+            expect(secondHandler).toHaveBeenCalledTimes(2)
+            tabA.destroy()
+            tabB.destroy()
+        })
+
+        it('skips reconciliation work when the durable snapshot is unchanged', () => {
+            const config = makeConfig(0)
+            const tab = new PostHogPersistence(config)
+            tab.register({ [ENABLED_FEATURE_FLAGS]: { flag: true } })
+            const mergeSpy = jest.spyOn(tab as any, '_mergeCrossTabFeatureFlagProperties')
+
+            tab.register({ unrelated_property: 'updated' })
+
+            expect(mergeSpy).not.toHaveBeenCalled()
+            tab.destroy()
+        })
+
         it('adopts a split-group update while migrating flags from the main entry', () => {
             const config = makeConfig(HARDENED_DEBOUNCE_MS, { split_storage: true })
             const flagsStorageKey = `${STORAGE_KEY}__flags`
