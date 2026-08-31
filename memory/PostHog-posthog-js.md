@@ -2,18 +2,7 @@
 
 ...<older entries truncated>
 
--js` package is the relevant installer metadata change for isolated layouts.
-- Fix assessment: The failure is explained by missing package metadata, and the standalone React package provides an existing compatible React peer range. An optional peer preserves the requested behavior for users who do not import the React subpath.
-- PR: https://github.com/PostHog/posthog-js/pull/4638
-
-## 2026-08-25T18:15:32.860Z
-- Item: issue #4646 — uploadNativeSymbols: main app dSYM never ready on EAS Build, archive always fails
-- Conclusion: Confirmed likely React Native Expo-plugin build-ordering bug affecting iOS native-symbol uploads with embedded extensions.
-- Labels: react-native, iOS, feature/error-tracking, team/client-libraries
-- URL: https://github.com/PostHog/posthog-js/issues/4646
-- Relevant files: `packages/react-native/src/tooling/expoconfig.ts`, `packages/react-native/test/expoconfig.spec.ts`, `packages/react-native/package.json`, `packages/react-native/CHANGELOG.md`
-- Findings: `packages/react-native/src/tooling/expoconfig.ts` enables this phase when `uploadNativeSymbols` is configured, by calling `addDsymUploadBuildPhase` from the iOS Expo plugin.; `addDsymUploadBuildPhase` currently calls `xcodeProject.addBuildPhase([],... )` with an empty file list and only provides `shellPath` and `shellScript`; it does not declare a main-app dSYM input path or input file list.; The generated shell phase only locates and executes posthog-ios's `build-tools/upload-symbols.sh`; the Expo plugin itself does not establish a dSYM-producing build dependency.; The source comment says the phase is appended last so that it runs after the dSYM bundle is produced, but phase append order alone is not an explicit Xcode dependency and does not guarantee the reported ordering on EAS.; Existing unit tests validate phase creation, script content, options, and idempotency, but do not assert Xcode input paths or build ordering.; `packages/react-native/package.json` identifies the affected SDK version as `4.64.2`, matching the reporter's environment. The changelog's existing native-symbol changes concern Android wiring and upload conflicts, not main-app dSYM scheduling.
-- Fix assessment: The missing dependency declaration is clear, but the minimal input-path choice must be validated against Xcode target dependency behavior with embedded extensions. The report specifically identifies the extension case as one where a prior design avoided explicit dSYM inputs, so blindly adding an input path could trade this deterministic timeout for a dependency cycle.
+idated against Xcode target dependency behavior with embedded extensions. The report specifically identifies the extension case as one where a prior design avoided explicit dSYM inputs, so blindly adding an input path could trade this deterministic timeout for a dependency cycle.
 
 ## 2026-08-25T19:04:55.442Z
 - Item: issue #4648 — fix(react-native): ph-no-capture ignored past maxElementsCaptured
@@ -99,3 +88,12 @@
 - Findings: `autocapturePropertiesForElement` builds `targetElementList` in target-to-ancestor order.; For every element in that order, `getAugmentPropertiesFromElement` extracts `data-ph-capture-attribute-*` attributes and `extend(autocaptureAugmentProperties, augmentProperties)` merges them.; `extend` assigns every defined source value over the destination's current value. Consequently, an ancestor's value for a duplicate key overwrites the closer target/descendant value.; The existing browser tests verify capture attributes from a target and parent only when their keys differ; there is no test defining the same key at multiple DOM levels.; The React Native implementation currently also overwrites accumulated capture-property keys while walking from target to ancestors, but this report is specifically for the browser SDK.
 - Fix assessment: The faulty precedence is localized to the browser autocapture attribute merge. Preserving the first valid value for each key changes only duplicate-key behavior and can be protected by a small regression test.
 - PR: https://github.com/PostHog/posthog-js/pull/4696
+
+## 2026-08-31T14:40:48.271Z
+- Item: issue #4702 — feat(browser): support reuseAnonymousId during identify
+- Conclusion: Valid browser SDK feature request; the current identify flow always merges the previous anonymous ID and also forwards it to the feature-flags request.
+- Labels: enhancement, feature/product-analytics, web, team/client-libraries
+- URL: https://github.com/PostHog/posthog-js/issues/4702
+- Relevant files: `packages/types/src/posthog-config.ts`, `packages/browser/src/types.ts`, `packages/browser/src/posthog-core.ts`, `packages/browser/src/posthog-featureflags.ts`, `packages/browser/src/__tests__/posthog-core.identify.test.ts`, `packages/browser/src/__tests__/featureflags.test.ts`, `packages/browser/functional_tests/identify.test.ts`, `packages/browser/functional_tests/feature-flags.test.ts`
+- Findings: `packages/browser/src/types.ts` defines the browser config as an extension of the shared `@posthog/types` `PostHogConfig`; neither inspected config type currently defines `reuseAnonymousId`.; `defaultConfig` in `packages/browser/src/posthog-core.ts` has no reuse-anonymous-ID setting, so an explicit default of `false` is needed to preserve the current behavior.; During an anonymous-to-identified transition, `PostHog.identify()` captures `$identify` with `distinct_id: new_distinct_id` and `$anon_distinct_id: previous_distinct_id`, then calls `featureFlags.setAnonymousDistinctId(previous_distinct_id)`.; `PostHogFeatureFlags._callFlagsEndpoint()` serializes its stored anonymous ID as `$anon_distinct_id` in the `/flags/?v=2` request, so only changing the `$identify` event would leave feature-flag evaluation with merge semantics.; The identity transition, user-state update, person-property handling, and feature-flag reload are separate from setting `$anon_distinct_id`; they can remain intact when the option is enabled.; Existing unit and functional tests already assert the default `$identify` payload and the anonymous ID forwarded to feature-flag requests, providing direct locations for enabled and default-off regression coverage.
+- Fix assessment: The behavior is localized to the identify transition and its feature-flag handoff. A default-off boolean preserves existing users, and existing focused tests cover both affected payloads.
