@@ -488,13 +488,16 @@ export class PostHogFeatureFlags implements Extension {
             isIncompleteResponse || partialResponse
                 ? ownedFlagKeys
                 : Array.from(new Set([...Object.keys(previousPayloads), ...Object.keys(nextPayloads)]))
+        const ownsCompleteSnapshot = !isIncompleteResponse && !partialResponse
+        const flagOwnership = ownsCompleteSnapshot ? true : ownedFlagKeys
+        const payloadOwnership = ownsCompleteSnapshot ? true : ownedPayloadKeys
         const changes: Record<string, readonly string[] | true> = {
-            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ownedFlagKeys,
-            [ENABLED_FEATURE_FLAGS]: ownedFlagKeys,
-            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: ownedPayloadKeys,
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: flagOwnership,
+            [ENABLED_FEATURE_FLAGS]: flagOwnership,
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: payloadOwnership,
         }
         if (statePatch[PERSISTENCE_FEATURE_FLAG_DETAILS]) {
-            changes[PERSISTENCE_FEATURE_FLAG_DETAILS] = ownedFlagKeys
+            changes[PERSISTENCE_FEATURE_FLAG_DETAILS] = flagOwnership
         }
         for (const key of [
             PERSISTENCE_FEATURE_FLAG_REQUEST_ID,

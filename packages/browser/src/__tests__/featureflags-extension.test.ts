@@ -164,6 +164,36 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         await posthog.shutdown()
     })
 
+    it('removes unseen sibling flags after an authoritative full evaluation', async () => {
+        const token = uuidv7()
+        const persistenceName = `cross-tab-full-snapshot-${token}`
+        const posthog = await createPosthogInstance(token, {
+            advanced_disable_feature_flags: true,
+            persistence: 'localStorage',
+            persistence_name: persistenceName,
+            persistence_save_debounce_ms: 0,
+        })
+        const siblingPersistence = new PostHogPersistence(posthog.config)
+        siblingPersistence.register({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['unseen-flag'],
+            [ENABLED_FEATURE_FLAGS]: { 'unseen-flag': true },
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { 'unseen-flag': { source: 'sibling' } },
+            [PERSISTENCE_FEATURE_FLAG_DETAILS]: {
+                'unseen-flag': { key: 'unseen-flag', enabled: true, metadata: { id: 1, version: 1 } },
+            },
+        })
+
+        posthog.featureFlags?.receivedFeatureFlags({ flags: {} })
+
+        const stored = JSON.parse(window.localStorage.getItem(`ph_${persistenceName}`) || '{}')
+        expect(stored[PERSISTENCE_ACTIVE_FEATURE_FLAGS]).toEqual([])
+        expect(stored[ENABLED_FEATURE_FLAGS]).toEqual({})
+        expect(stored[PERSISTENCE_FEATURE_FLAG_PAYLOADS]).toEqual({})
+        expect(stored[PERSISTENCE_FEATURE_FLAG_DETAILS]).toEqual({})
+        siblingPersistence.destroy()
+        await posthog.shutdown()
+    })
+
     it('does not overwrite sibling state with a retained failed evaluation', async () => {
         const token = uuidv7()
         const persistenceName = `cross-tab-failed-evaluation-${token}`
