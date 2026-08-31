@@ -9,6 +9,8 @@ import {
     getCookiePersistedPropertiesMetadataName,
     cookieStore,
     resetLocalStorageSupported,
+    resetCookieStorageSupported,
+    memoryStore,
 } from '../storage'
 
 describe('sessionStore', () => {
@@ -212,5 +214,80 @@ describe('createLocalPlusCookieStore', () => {
         expect(result).toBe(true)
         expect(JSON.parse(window?.localStorage.getItem('ph_x_posthog') as string)).toEqual({ distinct_id: 'abc' })
         cookieSpy.mockRestore()
+    })
+})
+
+describe('cookieStore._is_supported', () => {
+    beforeEach(() => {
+        resetCookieStorageSupported()
+    })
+
+    afterEach(() => {
+        jest.restoreAllMocks()
+        resetCookieStorageSupported()
+    })
+
+    it('returns true when a probe cookie round-trips', () => {
+        expect(cookieStore._is_supported()).toEqual(true)
+    })
+
+    it('returns false when reading document.cookie throws, as it does inside a data: URL', () => {
+        // Chrome disables cookies in a `data:` URL and throws SecurityError on access.
+        // Before this check existed, _is_supported was `() => !!document`, which is true
+        // here, so persistence selected a cookie store that could never store anything.
+        jest.spyOn(document, 'cookie', 'get').mockImplementation(() => {
+            throw new Error('SecurityError: Storage is disabled inside data: URLs')
+        })
+
+        expect(cookieStore._is_supported()).toEqual(false)
+    })
+
+    it('returns false when cookie writes are silently dropped', () => {
+        jest.spyOn(document, 'cookie', 'get').mockReturnValue('')
+
+        expect(cookieStore._is_supported()).toEqual(false)
+    })
+
+    it('does not overwrite an existing cookie with the former fixed probe name', () => {
+        cookieStore._set('__ph_cookie_support__', 'existing-value')
+
+        expect(cookieStore._is_supported()).toEqual(true)
+        expect(cookieStore._get('__ph_cookie_support__')).toEqual('"existing-value"')
+
+        cookieStore._remove('__ph_cookie_support__')
+    })
+
+    it('caches the result so the probe cookie is only written once', () => {
+        const getter = jest.spyOn(document, 'cookie', 'get')
+        cookieStore._is_supported()
+        const callsAfterFirst = getter.mock.calls.length
+        cookieStore._is_supported()
+
+        expect(getter.mock.calls.length).toEqual(callsAfterFirst)
+    })
+})
+
+describe('memoryStore', () => {
+    it.each([0, '0', false, ''])('round-trips the falsy value %p instead of reporting it absent', (value) => {
+        memoryStore._set('falsy_probe', value)
+
+        expect(memoryStore._get('falsy_probe')).toEqual(value)
+        expect(memoryStore._parse('falsy_probe')).toEqual(value)
+
+        memoryStore._remove('falsy_probe')
+    })
+
+    it('still reports a genuinely absent key as null', () => {
+        expect(memoryStore._get('never_set')).toEqual(null)
+    })
+
+    // Consent stores `0` to mean "opted out". Reading that back as null made it
+    // indistinguishable from "no decision recorded", silently re-enabling capture.
+    it('distinguishes a stored 0 from an unset key', () => {
+        memoryStore._set('opt_out', 0)
+
+        expect(memoryStore._get('opt_out')).not.toEqual(memoryStore._get('unset_key'))
+
+        memoryStore._remove('opt_out')
     })
 })
