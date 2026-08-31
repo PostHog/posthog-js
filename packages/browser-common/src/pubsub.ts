@@ -1,4 +1,4 @@
-import { createDisposable, type Disposable } from './disposable'
+import type { Disposable } from './disposable'
 
 /**
  * Call it with a handler to start listening; dispose the returned
@@ -18,42 +18,70 @@ export type Listener<T> = (handler: (payload: T) => void) => Disposable
  */
 export class Publisher<T> implements Disposable {
     /** Subscriptions currently registered with this publisher. */
-    private _subscriptions: Array<{ handler: (payload: T) => void; isActive: boolean }> = []
+    private _subscriptions: Array<[(payload: T) => void, boolean]> = []
+    private _disposed = false
+
+    private readonly _onError: ((error: unknown) => void) | undefined
+
+    constructor(onError?: (error: unknown) => void) {
+        this._onError = onError
+    }
 
     /**
      * Register a handler for future payloads. The returned disposable
      * subscription unregisters this handler.
      */
     readonly listener: Listener<T> = (handler) => {
-        const subscription = { handler, isActive: true }
+        if (this._disposed) {
+            return { dispose() {} }
+        }
+
+        const subscription: [(payload: T) => void, boolean] = [handler, true]
 
         this._subscriptions.push(subscription)
 
-        return createDisposable(() => {
-            subscription.isActive = false
+        let active = true
+        return {
+            dispose: () => {
+                if (!active) {
+                    return
+                }
+                active = false
+                subscription[1] = false
 
-            const index = this._subscriptions.indexOf(subscription)
-            if (index !== -1) {
-                this._subscriptions.splice(index, 1)
-            }
-        })
+                const index = this._subscriptions.indexOf(subscription)
+                if (index !== -1) {
+                    this._subscriptions.splice(index, 1)
+                }
+            },
+        }
     }
 
     /** Notify every currently registered listener with the provided payload. */
     publish(payload: T): void {
         const subscriptions = this._subscriptions.slice()
 
-        subscriptions.forEach((subscription) => {
-            if (subscription.isActive) {
-                subscription.handler(payload)
+        for (const subscription of subscriptions) {
+            if (!subscription[1]) {
+                continue
             }
-        })
+
+            try {
+                subscription[0](payload)
+            } catch (error) {
+                if (!this._onError) {
+                    throw error
+                }
+                this._onError(error)
+            }
+        }
     }
 
     /** Drop all registered listeners. Safe to call more than once. */
     dispose(): void {
+        this._disposed = true
         this._subscriptions.forEach((subscription) => {
-            subscription.isActive = false
+            subscription[1] = false
         })
         this._subscriptions = []
     }

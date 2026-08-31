@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.421.1",
+    "version": "1.422.5",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -103,6 +103,7 @@
         "@posthog/rrweb-plugin-console-record": "workspace:*",
         "@posthog/rrweb-record": "workspace:*",
         "@posthog/rrweb-types": "workspace:*",
+        "@posthog/rrweb-utils": "workspace:*",
         "@rollup/plugin-babel": "^6.0.4",
         "@rollup/plugin-commonjs": "^28.0.6",
         "@rollup/plugin-json": "^6.1.0",

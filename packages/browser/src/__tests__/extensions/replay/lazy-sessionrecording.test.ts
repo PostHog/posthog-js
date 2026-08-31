@@ -3988,6 +3988,38 @@ describe('Lazy SessionRecording', () => {
             expect(assignableWindow.__PosthogExtensions__.rrweb.resetSnapshotCostState).toHaveBeenCalled()
         })
 
+        it('accumulates throttler-dropped attribute mutations onto the debug property', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+            const onDropped = lazyRecording['_mutationThrottler']!['_options'].onDroppedAttributeMutations!
+
+            onDropped(3)
+            onDropped(2)
+
+            expect(lazyRecording.sdkDebugProperties['$sdk_debug_replay_throttled_mutations_dropped']).toEqual(5)
+        })
+
+        it('resets the throttled mutation drop count on session change', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+
+            // Drive the count through the throttler's own callback, so the reset is proven against
+            // the path that really increments it rather than against a hand-set field.
+            lazyRecording['_mutationThrottler']!['_options'].onDroppedAttributeMutations!(5)
+            expect(lazyRecording.sdkDebugProperties['$sdk_debug_replay_throttled_mutations_dropped']).toEqual(5)
+
+            sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdCallback']('new-session-id', 'new-window-id', {
+                activityTimeout: true,
+            })
+
+            // the count is cumulative across the session, so the new session starts at zero
+            expect(
+                sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties[
+                    '$sdk_debug_replay_throttled_mutations_dropped'
+                ]
+            ).toEqual(0)
+        })
+
         it('resets $snapshot_max_depth_exceeded on session change', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({

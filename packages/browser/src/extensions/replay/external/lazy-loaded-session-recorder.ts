@@ -513,6 +513,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // Cleared only when a full snapshot actually passes the idle gate, so a failed
     // wake heal retries on the next wake instead of losing the signal
     private _eventsDroppedWhileIdle = 0
+    // attribute mutations the throttler dropped across this session, reported on captured
+    // events so the drop path is measurable in our own data
+    private _throttledMutationsDropped = 0
+    private _oversizedMutationsDropped = 0
+    private _oversizedMutationBytesDropped = 0
     // true while the current epoch has had no user interaction; a held epoch is
     // discarded (not shipped) by stop or a subsequent rotation
     private _holdFlushUntilInteraction = false
@@ -1539,6 +1544,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // belongs to the old session) and before the new one takes its first snapshot
         this._slowestFullSnapshot = undefined
         this._lastSeenSnapshotCost = undefined
+        // the throttler drop counts are per-session too, so the new session starts at zero
+        this._throttledMutationsDropped = 0
+        this._oversizedMutationsDropped = 0
+        this._oversizedMutationBytesDropped = 0
         getRRWeb()?.resetSnapshotCostState?.()
         this.start('session_id_changed')
         this._holdFlushUntilInteraction = holdNextEpoch
@@ -2554,6 +2563,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // the plausibility cap (see rrweb-snapshot snapshot-cost.ts): the duration
             // gauges above stay alert-safe, and the discard itself stays observable
             $sdk_debug_replay_discarded_duration_samples: getRRWeb()?.getDiscardedDurationSamples?.(),
+            // cumulative across the session: attribute mutations the throttler dropped, each
+            // of which risks the player showing DOM that already left the live page
+            $sdk_debug_replay_throttled_mutations_dropped: this._throttledMutationsDropped,
+            $sdk_debug_replay_oversized_mutations_dropped: this._oversizedMutationsDropped,
+            $sdk_debug_replay_oversized_mutation_bytes_dropped: this._oversizedMutationBytesDropped,
             $sdk_debug_replay_rrweb_error: this._rrwebError,
             [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
@@ -2718,6 +2732,22 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
                     this.log(LOGGER_PREFIX + ' ' + message, 'warn')
                 },
+                onDroppedAttributeMutations: (count) => (this._throttledMutationsDropped += count),
+                bytesRefillRate: this._instance.config.session_recording.__mutationBytesRefillRate,
+                bytesBucketSize: this._instance.config.session_recording.__mutationBytesBucketSize,
+                resyncIntervalMs: this._fullSnapshotIntervalMillis,
+                onDroppedOversizedMutation: (bytes) => {
+                    if (this._oversizedMutationsDropped === 0) {
+                        this.log(
+                            LOGGER_PREFIX +
+                                ' Dropped an oversized DOM mutation to keep the recording playable. The recording will resync with a full snapshot.',
+                            'warn'
+                        )
+                    }
+                    this._oversizedMutationsDropped += 1
+                    this._oversizedMutationBytesDropped += bytes
+                },
+                requestFullSnapshot: () => this._tryTakeFullSnapshot(),
             })
 
         const activePlugins = this._gatherRRWebPlugins()

@@ -1,5 +1,31 @@
 # @posthog/core
 
+## 1.49.2
+
+### Patch Changes
+
+- [#4626](https://github.com/PostHog/posthog-js/pull/4626) [`3c650a1`](https://github.com/PostHog/posthog-js/commit/3c650a15f1d3eaf5add26b7e4c33cf4286af75f4) Thanks [@nandinitiw](https://github.com/nandinitiw)! - Re-translate popover surveys when the display language changes while the survey is on screen, either from a browser `languagechange` event or from `identify()` updating the `language` person property. In-progress answers are preserved. `$survey_questions[].question` and `$survey_language` on `survey sent` / `survey dismissed` now report the text and language the user saw when they answered, not the language active when the event fired. Feedback-button (widget) surveys are unchanged.
+  (2026-08-28)
+
+## 1.49.1
+
+### Patch Changes
+
+- [#4636](https://github.com/PostHog/posthog-js/pull/4636) [`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7) Thanks [@yfwmaniish](https://github.com/yfwmaniish)! - Narrow the `pinterest` entry in the bot-detection blocklist to `pinterestbot`, so real users on Pinterest's in-app browser (whose UA also contains the substring `pinterest`) are no longer misclassified as bots and silently excluded from analytics. The crawler's other UA variant remains covered by the existing generic `bot.htm` entry, so no bot-detection coverage is lost.
+  (2026-08-27)
+
+## 1.49.0
+
+### Minor Changes
+
+- [#4036](https://github.com/PostHog/posthog-js/pull/4036) [`718beee`](https://github.com/PostHog/posthog-js/commit/718beee86aa31026beef9af2c13b049e9b847721) Thanks [@emmayusufu](https://github.com/emmayusufu)! - Add `capturedAt` to `PostHogLogs.captureLog()` for stamping a record with the time and context of when the event occurred, and `PostHogLogs.clearQueue()` for dropping every queued record
+  (2026-08-27)
+
+### Patch Changes
+
+- [#4653](https://github.com/PostHog/posthog-js/pull/4653) [`712223a`](https://github.com/PostHog/posthog-js/commit/712223a8ffb43dd28cc78059301ff607021bc6be) Thanks [@posthog](https://github.com/apps/posthog)! - Fix request timeouts never firing on pages where a browser extension makes `Error.prototype.name` non-writable
+  (2026-08-27)
+
 ## 1.48.12
 
 ### Patch Changes

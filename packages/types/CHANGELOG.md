@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.407.1
+
+### Patch Changes
+
+- [#4665](https://github.com/PostHog/posthog-js/pull/4665) [`d5ef459`](https://github.com/PostHog/posthog-js/commit/d5ef4590f1fc38b1944d9c0263a3bc015e2ea27d) Thanks [@fasyy612](https://github.com/fasyy612)! - Session replay can now bound DOM mutation bytes with an opt-in budget. Set `__mutationBytesBucketSize` (e.g. 1MB) to enable: mutations beyond the sustained budget (`__mutationBytesRefillRate`, default 25KB/s) are dropped and the recording resyncs with a full snapshot, keeping recordings from apps with very high DOM churn playable. Off by default.
+  (2026-08-28)
+
 ## 1.407.0
 
 ### Minor Changes

@@ -1,5 +1,9 @@
 import { assignableWindow } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
+import { PostHogLogs } from '../../posthog-logs'
+import { patch as rrwebPatch } from '@posthog/rrweb-utils'
+import { LOGS_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
+import type { Client } from '@posthog/browser-common'
 
 describe('logs entrypoint', () => {
     let mockPostHog: PostHog
@@ -822,6 +826,217 @@ describe('logs entrypoint', () => {
             expect(wrappedTime).toBeLessThanOrEqual(0.1)
 
             console.log(`Performance test (small object): wrapped=${wrappedTime.toFixed(2)}ms`)
+        })
+    })
+    describe('re-entrancy across multiple nested logs', () => {
+        beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            require('../../entrypoints/logs')
+        })
+
+        it('keeps the guard held when a nested log skips capture', () => {
+            // The capture path can write to the console more than once; the first nested
+            // line must not release the guard while the outer capture is still running.
+            mockEmit.mockImplementationOnce(() => {
+                assignableWindow.console.log('internal one')
+                assignableWindow.console.log('internal two')
+            })
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(mockPostHog)
+
+            assignableWindow.console.log('user message')
+
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+        })
+    })
+
+    describe('teardown under another console wrapper', () => {
+        beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            require('../../entrypoints/logs')
+        })
+
+        it('splices itself out when a later wrapper sits on top', () => {
+            const realLog = assignableWindow.console.log as jest.Mock
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            const dispose = initializeLogs(mockPostHog)
+            const ourWrapper = assignableWindow.console.log
+
+            // Session replay's console plugin, or any other library, wrapping after us.
+            rrwebPatch(
+                assignableWindow.console,
+                'log',
+                (next: any) =>
+                    (...args: any[]) =>
+                        next.apply(assignableWindow.console, args)
+            )
+            const outerLayer = (assignableWindow.console.log as any).__rrweb_layer__
+            expect(outerLayer.next).toBe(ourWrapper)
+
+            dispose()
+
+            expect(outerLayer.next).toBe(realLog)
+            realLog.mockClear()
+            assignableWindow.console.log('after teardown')
+            expect(realLog).toHaveBeenCalledTimes(1)
+        })
+    })
+
+    describe('handover from the main-bundle console recorder', () => {
+        // Runs the real recorder against the real entrypoint wrapper — mocking either
+        // side hides whether the handover leaves the console chain clean.
+        // The entrypoint reaches capture through `getCapturingLogs`, which uses the
+        // Client path; `loadIfEnabled` hands it `this._client`, so drive it the same way.
+        const noopClient = () =>
+            ({
+                onRemoteConfig: jest.fn(() => ({ dispose: jest.fn() })),
+                canCapture: true,
+                getExtension: () => (mockPostHog as any).logs,
+            }) as unknown as Client
+        let logs: PostHogLogs
+        let realConsoleLog: jest.Mock
+        let capturedBuffered: jest.Mock
+
+        beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            require('../../entrypoints/logs')
+
+            realConsoleLog = assignableWindow.console.log as jest.Mock
+            capturedBuffered = jest.fn()
+            ;(mockPostHog as any).config = { logs: {} }
+            ;(mockPostHog as any).persistence = {
+                register: jest.fn(),
+                props: { [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: true },
+            }
+            ;(mockPostHog as any).logs = {
+                captureConsoleLog: mockEmit,
+                captureBufferedConsoleLog: capturedBuffered,
+            }
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+                (_instance: any, _name: any, callback: any) => callback(null)
+            ) as any
+
+            logs = new PostHogLogs(mockPostHog)
+        })
+
+        afterEach(() => {
+            logs?.reset()
+        })
+
+        it('removes the temporary recorder from the console chain once the entrypoint takes over', () => {
+            logs.setup(noopClient())
+            expect((logs as any)._isRecordingConsole).toBe(true)
+            const recorder: any = assignableWindow.console.log
+            expect(recorder.__posthog_layer__).toBeDefined()
+
+            logs.onRemoteConfig({ ok: true, config: { logs: { captureConsoleLogs: true } } } as any)
+
+            expect((logs as any)._isRecordingConsole).toBe(false)
+            // The entrypoint's wrapper now sits directly on the real console: the
+            // recorder is neither on top of the chain nor buried inside it.
+            const wrapper: any = assignableWindow.console.log
+            expect(wrapper).not.toBe(recorder)
+            expect(wrapper.__rrweb_original__).toBe(realConsoleLog)
+            expect(recorder.__posthog_layer__.next).toBe(realConsoleLog)
+
+            let recorderRan = false
+            recorder.__posthog_layer__.next = () => {
+                recorderRan = true
+            }
+            assignableWindow.console.log('after handover')
+            expect(recorderRan).toBe(false)
+        })
+
+        it('writes to the real console once and captures once after handover', () => {
+            logs.setup(noopClient())
+            logs.onRemoteConfig({ ok: true, config: { logs: { captureConsoleLogs: true } } } as any)
+
+            realConsoleLog.mockClear()
+            mockEmit.mockClear()
+
+            assignableWindow.console.log('live message')
+
+            expect(realConsoleLog).toHaveBeenCalledTimes(1)
+            expect(mockEmit).toHaveBeenCalledTimes(1)
+        })
+
+        it.each(['debug', 'log', 'warn', 'error', 'info'] as const)(
+            'maps a buffered console.%s to its log severity',
+            (level) => {
+                logs.setup(noopClient())
+                ;(assignableWindow.console[level] as any)('early')
+
+                logs.onRemoteConfig({ ok: true, config: { logs: { captureConsoleLogs: true } } } as any)
+
+                const [options] = capturedBuffered.mock.calls[0]
+                expect(options.attributes['log.source']).toBe(`console.${level}`)
+                expect(options.level).toBe(
+                    { debug: 'debug', log: 'info', warn: 'warn', error: 'error', info: 'info' }[level]
+                )
+            }
+        )
+
+        it('keeps replaying after one entry fails to capture', () => {
+            logs.setup(noopClient())
+            assignableWindow.console.log('first')
+            assignableWindow.console.log('second')
+            assignableWindow.console.log('third')
+
+            capturedBuffered.mockImplementation((options: any) => {
+                if (options.body.includes('second')) {
+                    throw new Error('capture blew up')
+                }
+            })
+
+            logs.onRemoteConfig({ ok: true, config: { logs: { captureConsoleLogs: true } } } as any)
+
+            expect(capturedBuffered.mock.calls.map((c: any[]) => c[0].body)).toEqual([
+                expect.stringContaining('first'),
+                expect.stringContaining('second'),
+                expect.stringContaining('third'),
+            ])
+        })
+
+        it('replays a buffered entry stamped at the console call, not at the handover', () => {
+            const nowSpy = jest.spyOn(Date, 'now')
+            try {
+                logs.setup(noopClient())
+                nowSpy.mockReturnValue(1700000000000)
+                assignableWindow.console.log('early')
+                nowSpy.mockReturnValue(1700000005000)
+
+                logs.onRemoteConfig({ ok: true, config: { logs: { captureConsoleLogs: true } } } as any)
+
+                const [, , occurredAtMs] = capturedBuffered.mock.calls[0]
+                expect(occurredAtMs).toBe(1700000000000)
+            } finally {
+                nowSpy.mockRestore()
+            }
+        })
+
+        it('replays a buffered entry through the entrypoint serializer with its captured context', () => {
+            logs.setup(noopClient())
+
+            const cyclic: any = { name: 'early' }
+            cyclic.self = cyclic
+            assignableWindow.console.log('early', cyclic)
+
+            const entry = (logs as any)._consoleBuffer[0]
+            expect(entry.context).toEqual(expect.objectContaining({ distinctId: 'user-123', sessionId: 'session-123' }))
+
+            // A later identify must not re-stamp the buffered entry.
+            ;(mockPostHog.get_distinct_id as jest.Mock).mockReturnValue('identified-456')
+
+            logs.onRemoteConfig({ ok: true, config: { logs: { captureConsoleLogs: true } } } as any)
+
+            expect(capturedBuffered).toHaveBeenCalledTimes(1)
+            const [options, context, occurredAtMs] = capturedBuffered.mock.calls[0]
+            expect(options.attributes['log.source']).toBe('console.log')
+            expect(options.body).toContain('early')
+            // The entrypoint's serializer, not a second copy in the main bundle.
+            expect(options.body).toContain('[Circular]')
+            expect(context.distinctId).toBe('user-123')
+            expect(occurredAtMs).toBe(entry.occurredAtMs)
         })
     })
 })

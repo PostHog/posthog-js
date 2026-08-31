@@ -1,5 +1,18 @@
 # @posthog/mcp
 
+## 0.12.0
+
+### Minor Changes
+
+- [#4633](https://github.com/PostHog/posthog-js/pull/4633) [`5a652e9`](https://github.com/PostHog/posthog-js/commit/5a652e9f93d1c126e54397863c55e8a067377d29) Thanks [@DanielVisca](https://github.com/DanielVisca)! - Add opt-in `captureModel` option: injects a required `llm_model` parameter into every tool — including the `get_more_tools` virtual tool — so the calling agent self-reports the model it runs as, captured as `$mcp_llm_model` with `$mcp_llm_model_source = "self_reported"`. Stripping the argument before the handler runs and capturing the property both require confirmed SDK ownership of the parameter: a customer-declared `llm_model` is never stolen or captured, and a low-level `Server` that builds a fresh instance per request records nothing (see the README). An honest `"unknown"` from the agent is dropped rather than recorded.
+  (2026-08-27)
+
+### Patch Changes
+
+- Updated dependencies [[`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7), [`dfc3b59`](https://github.com/PostHog/posthog-js/commit/dfc3b59af4edf2b661626041134c79700c514853)]:
+  - @posthog/core@1.49.1
+  - posthog-node@5.51.4
+
 ## 0.11.7
 
 ### Patch Changes

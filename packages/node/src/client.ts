@@ -261,6 +261,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           customHeaders: this.getCustomHeaders(),
           cacheProvider: normalizedOptions.flagDefinitionCacheProvider,
           strictLocalEvaluation: normalizedOptions.strictLocalEvaluation,
+          evaluationContexts: normalizedOptions.evaluationContexts ?? normalizedOptions.evaluationEnvironments,
         })
       }
     }

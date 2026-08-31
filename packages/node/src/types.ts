@@ -381,6 +381,18 @@ export type PostHogFeatureFlag = {
   experiment_set: number[]
   /** Whether the flag is linked to an experiment. Absent when the server does not report it. */
   has_experiment?: boolean
+  /**
+   * Evaluation context tags set on the flag. The local evaluation poller keeps a flag only
+   * when this list is empty or shares at least one entry with the SDK's `evaluationContexts`.
+   * Absent when the server does not report it.
+   */
+  evaluation_contexts?: string[]
+  /**
+   * Legacy name for `evaluation_contexts`. Servers older than the field rename (PostHog,
+   * 2026-03-11) expose the same list under this key on `/flags/definitions`. Read as a
+   * fallback so local-evaluation context filtering still works against those servers.
+   */
+  evaluation_tags?: string[]
 }
 
 /**

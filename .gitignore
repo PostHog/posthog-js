@@ -37,6 +37,8 @@ cypress/downloads/downloads.html
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+/packages/browser-next/.playwright/
+/packages/browser-next/test-results/
 /stats
 packages/browser/docs
 

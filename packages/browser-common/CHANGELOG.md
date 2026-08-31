@@ -1,5 +1,28 @@
 # @posthog/browser-common
 
+## 0.7.0
+
+### Minor Changes
+
+- [#4378](https://github.com/PostHog/posthog-js/pull/4378) [`a895e7e`](https://github.com/PostHog/posthog-js/commit/a895e7ecf78e434e43958052096ac03aa4670e9d) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add a direct pubsub export, isolate publisher listener failures, and make disposal terminal.
+  (2026-08-28)
+
+## 0.6.2
+
+### Patch Changes
+
+- [#4669](https://github.com/PostHog/posthog-js/pull/4669) [`d0279e5`](https://github.com/PostHog/posthog-js/commit/d0279e5bc8758d12825927f4565d981f21085288) Thanks [@posthog](https://github.com/apps/posthog)! - Autocapture no longer throws a `RangeError` into the host page when it sorts element attributes. It now sorts attribute keys with a plain lexical comparator instead of `localeCompare`, which can throw on browsers with faulty ICU data.
+  (2026-08-28)
+
+## 0.6.1
+
+### Patch Changes
+
+- [#4636](https://github.com/PostHog/posthog-js/pull/4636) [`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7) Thanks [@yfwmaniish](https://github.com/yfwmaniish)! - Narrow the `pinterest` entry in the bot-detection blocklist to `pinterestbot`, so real users on Pinterest's in-app browser (whose UA also contains the substring `pinterest`) are no longer misclassified as bots and silently excluded from analytics. The crawler's other UA variant remains covered by the existing generic `bot.htm` entry, so no bot-detection coverage is lost.
+  (2026-08-27)
+- Updated dependencies [[`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7)]:
+    - @posthog/core@1.49.1
+
 ## 0.6.0
 
 ### Minor Changes

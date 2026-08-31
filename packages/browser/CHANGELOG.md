@@ -1,5 +1,71 @@
 # posthog-js
 
+## 1.422.5
+
+### Patch Changes
+
+- Updated dependencies [[`a895e7e`](https://github.com/PostHog/posthog-js/commit/a895e7ecf78e434e43958052096ac03aa4670e9d)]:
+    - @posthog/browser-common@0.7.0
+
+## 1.422.4
+
+### Patch Changes
+
+- [#4626](https://github.com/PostHog/posthog-js/pull/4626) [`3c650a1`](https://github.com/PostHog/posthog-js/commit/3c650a15f1d3eaf5add26b7e4c33cf4286af75f4) Thanks [@nandinitiw](https://github.com/nandinitiw)! - Re-translate popover surveys when the display language changes while the survey is on screen, either from a browser `languagechange` event or from `identify()` updating the `language` person property. In-progress answers are preserved. `$survey_questions[].question` and `$survey_language` on `survey sent` / `survey dismissed` now report the text and language the user saw when they answered, not the language active when the event fired. Feedback-button (widget) surveys are unchanged.
+  (2026-08-28)
+- Updated dependencies [[`3c650a1`](https://github.com/PostHog/posthog-js/commit/3c650a15f1d3eaf5add26b7e4c33cf4286af75f4)]:
+    - @posthog/core@1.49.2
+
+## 1.422.3
+
+### Patch Changes
+
+- [#4669](https://github.com/PostHog/posthog-js/pull/4669) [`d0279e5`](https://github.com/PostHog/posthog-js/commit/d0279e5bc8758d12825927f4565d981f21085288) Thanks [@posthog](https://github.com/apps/posthog)! - Autocapture no longer throws a `RangeError` into the host page when it sorts element attributes. It now sorts attribute keys with a plain lexical comparator instead of `localeCompare`, which can throw on browsers with faulty ICU data.
+  (2026-08-28)
+- Updated dependencies [[`d0279e5`](https://github.com/PostHog/posthog-js/commit/d0279e5bc8758d12825927f4565d981f21085288)]:
+    - @posthog/browser-common@0.6.2
+
+## 1.422.2
+
+### Patch Changes
+
+- [#4665](https://github.com/PostHog/posthog-js/pull/4665) [`d5ef459`](https://github.com/PostHog/posthog-js/commit/d5ef4590f1fc38b1944d9c0263a3bc015e2ea27d) Thanks [@fasyy612](https://github.com/fasyy612)! - Session replay can now bound DOM mutation bytes with an opt-in budget. Set `__mutationBytesBucketSize` (e.g. 1MB) to enable: mutations beyond the sustained budget (`__mutationBytesRefillRate`, default 25KB/s) are dropped and the recording resyncs with a full snapshot, keeping recordings from apps with very high DOM churn playable. Off by default.
+  (2026-08-28)
+- Updated dependencies [[`d5ef459`](https://github.com/PostHog/posthog-js/commit/d5ef4590f1fc38b1944d9c0263a3bc015e2ea27d)]:
+    - @posthog/types@1.407.1
+
+## 1.422.1
+
+### Patch Changes
+
+- [#4636](https://github.com/PostHog/posthog-js/pull/4636) [`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7) Thanks [@yfwmaniish](https://github.com/yfwmaniish)! - Narrow the `pinterest` entry in the bot-detection blocklist to `pinterestbot`, so real users on Pinterest's in-app browser (whose UA also contains the substring `pinterest`) are no longer misclassified as bots and silently excluded from analytics. The crawler's other UA variant remains covered by the existing generic `bot.htm` entry, so no bot-detection coverage is lost.
+  (2026-08-27)
+- Updated dependencies [[`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7)]:
+    - @posthog/core@1.49.1
+    - @posthog/browser-common@0.6.1
+
+## 1.422.0
+
+### Minor Changes
+
+- [#4658](https://github.com/PostHog/posthog-js/pull/4658) [`db8687c`](https://github.com/PostHog/posthog-js/commit/db8687c46bc34d1364c092a030adaef7c67c6c67) Thanks [@posthog](https://github.com/apps/posthog)! - Report `$sdk_debug_replay_throttled_mutations_dropped` on captured events, counting the attribute changes the session recorder discarded during that session. The recorder throttles elements that change hundreds of times a second, and a discarded `class` or `style` change never reaches the player — so a recording can keep showing an element the live page had already hidden. Query this property to see whether your app is affected.
+  (2026-08-27)
+
+## 1.421.2
+
+### Patch Changes
+
+- [#4653](https://github.com/PostHog/posthog-js/pull/4653) [`712223a`](https://github.com/PostHog/posthog-js/commit/712223a8ffb43dd28cc78059301ff607021bc6be) Thanks [@posthog](https://github.com/apps/posthog)! - Fix request timeouts never firing on pages where a browser extension makes `Error.prototype.name` non-writable
+  (2026-08-27)
+
+- [#4036](https://github.com/PostHog/posthog-js/pull/4036) [`718beee`](https://github.com/PostHog/posthog-js/commit/718beee86aa31026beef9af2c13b049e9b847721) Thanks [@emmayusufu](https://github.com/emmayusufu)! - Fix `logs.captureConsoleLogs` set in `init()` not enabling console autocapture, capture `console` calls made before the logs script loads, and drop captured console records when the user opts out
+  (2026-08-27)
+
+- [#4036](https://github.com/PostHog/posthog-js/pull/4036) [`718beee`](https://github.com/PostHog/posthog-js/commit/718beee86aa31026beef9af2c13b049e9b847721) Thanks [@emmayusufu](https://github.com/emmayusufu)! - Fix session replay and posthog-js leaving each other's `console` wrapper in the call path when either one stops
+  (2026-08-27)
+- Updated dependencies [[`718beee`](https://github.com/PostHog/posthog-js/commit/718beee86aa31026beef9af2c13b049e9b847721), [`712223a`](https://github.com/PostHog/posthog-js/commit/712223a8ffb43dd28cc78059301ff607021bc6be)]:
+    - @posthog/core@1.49.0
+
 ## 1.421.1
 
 ### Patch Changes

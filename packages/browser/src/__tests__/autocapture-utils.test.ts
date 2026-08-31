@@ -791,6 +791,42 @@ describe(`Autocapture utility functions`, () => {
                 expect(elementsChain).toContain(`text="${escapedText}"`)
             })
         })
+
+        it('should return an empty string for non-array input', () => {
+            expect(getElementsChainString(undefined as any)).toEqual('')
+            expect(getElementsChainString(null as any)).toEqual('')
+            expect(getElementsChainString('not an array' as any)).toEqual('')
+            expect(getElementsChainString({ tag_name: 'div' } as any)).toEqual('')
+        })
+
+        it('should not throw when localeCompare throws (faulty ICU data)', () => {
+            // Some browsers with incomplete ICU data throw a RangeError from localeCompare.
+            const originalLocaleCompare = String.prototype.localeCompare
+            String.prototype.localeCompare = function () {
+                throw new RangeError('Internal error. Icu error.')
+            }
+
+            try {
+                let elementChain = ''
+                expect(() => {
+                    elementChain = getElementsChainString([
+                        {
+                            tag_name: 'button',
+                            $el_text: 'text',
+                            nth_child: 1,
+                            nth_of_type: 2,
+                            'attr__data-b': 'b',
+                            'attr__data-a': 'a',
+                        },
+                    ])
+                }).not.toThrow()
+
+                // attributes still sort lexically without localeCompare
+                expect(elementChain.indexOf('attr__data-a')).toBeLessThan(elementChain.indexOf('attr__data-b'))
+            } finally {
+                String.prototype.localeCompare = originalLocaleCompare
+            }
+        })
     })
 
     describe('getClassNames', () => {

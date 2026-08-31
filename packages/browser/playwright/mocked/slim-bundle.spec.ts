@@ -396,19 +396,30 @@ test.describe('slim bundle + extension bundles (#3313)', () => {
                     const logs = (window as any).posthog.logs
                     logs.onRemoteConfig({ ok: true, config: { logs: { captureConsoleLogs: true } } })
                 })
-                await expect.poll(() => page.evaluate(() => !!(console.warn as any).__rrweb_original__)).toBe(true)
-
-                const captured = await page.evaluate(() => {
+                // Spy on both hand-off points rather than probing a console wrapper: the
+                // pre-load recorder marks its wrapper the same way the lazy bundle does, so
+                // the marker says nothing about which one is installed. A call made before
+                // the bundle takes over is buffered and replayed through
+                // `captureBufferedConsoleLog`; one made after goes straight to
+                // `captureConsoleLog`. Both carry the same record, and both names survive
+                // property mangling, which is why the bundle calls them by name.
+                await page.evaluate(() => {
                     const logs = (window as any).posthog.logs
-                    const originalCaptureConsoleLog = logs.captureConsoleLog
-                    let record: any
+                    const live = logs.captureConsoleLog.bind(logs)
+                    const buffered = logs.captureBufferedConsoleLog.bind(logs)
                     logs.captureConsoleLog = (options: any) => {
-                        record = options
-                        return originalCaptureConsoleLog.call(logs, options)
+                        ;(window as any).__consoleRecord ??= options
+                        return live(options)
+                    }
+                    logs.captureBufferedConsoleLog = (options: any, ...rest: any[]) => {
+                        ;(window as any).__consoleRecord ??= options
+                        return buffered(options, ...rest)
                     }
                     console.warn('slim bundle logs smoke')
-                    return record
                 })
+
+                await expect.poll(() => page.evaluate(() => (window as any).__consoleRecord ?? null)).not.toBeNull()
+                const captured = await page.evaluate(() => (window as any).__consoleRecord)
 
                 expect(captured).toEqual(
                     expect.objectContaining({
