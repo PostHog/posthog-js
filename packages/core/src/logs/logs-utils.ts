@@ -12,6 +12,7 @@ import type { LogSdkContext, ResolvedPostHogLogsConfig } from './types'
 import { isNullish, isNumber, isUndefined } from '../utils'
 import { sanitizeString, UNSERIALIZABLE_VALUE } from '../utils/json-utils'
 import { toOtlpKeyValueList } from '../utils/otlp-any-value'
+import { buildOtlpResourceAttributes } from '../utils/otlp-resource'
 
 // ============================================================================
 // Severity mapping
@@ -185,14 +186,7 @@ export function buildResourceAttributes(
   sdkName: string,
   sdkVersion: string
 ): Record<string, LogAttributeValue> {
-  return {
-    ...config.resourceAttributes,
-    'service.name': config.serviceName || 'unknown_service',
-    ...(config.environment && { 'deployment.environment': config.environment }),
-    ...(config.serviceVersion && { 'service.version': config.serviceVersion }),
-    'telemetry.sdk.name': sdkName,
-    'telemetry.sdk.version': sdkVersion,
-  }
+  return buildOtlpResourceAttributes(config, sdkName, sdkVersion)
 }
 
 /**

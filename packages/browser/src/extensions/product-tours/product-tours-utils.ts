@@ -351,15 +351,14 @@ export function getStepImageUrls(step: ProductTourStep): string[] {
 }
 
 export function getStepHtml(step: ProductTourStep): string {
-    if (step.contentHtml) {
-        return DOMPurify.sanitize(step.contentHtml, {
-            ADD_TAGS: ['iframe'],
-            ADD_ATTR: ['allowfullscreen', 'frameborder', 'referrerpolicy'],
-        })
-    }
+    // Fall back to rendering legacy TipTap content when pre-rendered HTML is unavailable.
+    // Both paths must be sanitized because TipTap node attributes can contain untrusted values.
+    const html = step.contentHtml || renderTipTapContent(step.content)
 
-    // backwards compat, will be deprecated
-    return renderTipTapContent(step.content)
+    return DOMPurify.sanitize(html, {
+        ADD_TAGS: ['iframe'],
+        ADD_ATTR: ['allowfullscreen', 'frameborder', 'referrerpolicy'],
+    })
 }
 
 export function hasTourWaitPeriodPassed(seenTourWaitPeriod?: ProductTourWaitPeriod): boolean {

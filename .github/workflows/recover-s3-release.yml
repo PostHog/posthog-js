@@ -51,6 +51,7 @@ jobs:
         runs-on: ubuntu-latest
         outputs:
             source-sha: ${{ steps.source.outputs.source-sha }}
+            source-version: ${{ steps.source.outputs.source-version }}
             toolbar-sha: ${{ steps.toolbar.outputs.toolbar-sha }}
             toolbar-matrix: ${{ steps.regions.outputs.toolbar-matrix }}
             upload-matrix: ${{ steps.regions.outputs.upload-matrix }}
@@ -172,7 +173,10 @@ jobs:
                       fi
                   fi
 
-                  echo "source-sha=$source_sha" >> "$GITHUB_OUTPUT"
+                  {
+                      echo "source-sha=$source_sha"
+                      echo "source-version=$source_version"
+                  } >> "$GITHUB_OUTPUT"
                   echo "✓ source: posthog-js@$source_version from $source_sha"
                   echo "✓ S3 target: /static/$TARGET_VERSION/"
                   echo "✓ publish to npm: $PUBLISH_TO_NPM"
@@ -242,6 +246,7 @@ jobs:
                   PUBLISH_TO_NPM: ${{ inputs.publish_to_npm }}
                   REGION: ${{ inputs.region }}
                   SOURCE_SHA: ${{ steps.source.outputs.source-sha }}
+                  SOURCE_VERSION: ${{ steps.source.outputs.source-version }}
                   TARGET_VERSION: ${{ inputs.target_version }}
                   TOOLBAR_SHA: ${{ steps.toolbar.outputs.toolbar-sha }}
                   UPDATE_LATEST_ALIASES: ${{ inputs.update_latest_aliases }}
@@ -249,7 +254,7 @@ jobs:
                   {
                       echo "### S3 recovery approval requested for posthog-js@$TARGET_VERSION"
                       echo
-                      echo "- SDK source: [\`$SOURCE_SHA\`](https://github.com/PostHog/posthog-js/commit/$SOURCE_SHA)"
+                      echo "- SDK source: [\`$SOURCE_SHA\`](https://github.com/PostHog/posthog-js/commit/$SOURCE_SHA) (\`posthog-js@$SOURCE_VERSION\`)"
                       echo "- Toolbar source: [\`$TOOLBAR_SHA\`](https://github.com/PostHog/posthog/commit/$TOOLBAR_SHA)"
                       echo "- Regions: \`$REGION\`"
                       echo "- Update latest CDN aliases: \`$UPDATE_LATEST_ALIASES\`"
@@ -274,24 +279,55 @@ jobs:
                   SLACK_CHANNEL_ID: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   SLACK_USER_GROUP_ID: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
                   SOURCE_SHA: ${{ needs.validate.outputs.source-sha }}
+                  SOURCE_VERSION: ${{ needs.validate.outputs.source-version }}
                   TARGET_VERSION: ${{ inputs.target_version }}
                   TOOLBAR_SHA: ${{ needs.validate.outputs.toolbar-sha }}
                   UPDATE_LATEST_ALIASES: ${{ inputs.update_latest_aliases }}
               run: |
                   set -euo pipefail
-                  text=$(printf '%s\n' \
+                  details=$(printf '%s\n' \
                       ":bufo-hotdog-rocket: <!subteam^$SLACK_USER_GROUP_ID> S3 recovery approval needed for posthog-js@$TARGET_VERSION" \
-                      "• SDK source: <https://github.com/PostHog/posthog-js/commit/$SOURCE_SHA|$SOURCE_SHA>" \
+                      "• SDK source: <https://github.com/PostHog/posthog-js/commit/$SOURCE_SHA|$SOURCE_SHA> (posthog-js@$SOURCE_VERSION)" \
                       "• Toolbar source: <https://github.com/PostHog/posthog/commit/$TOOLBAR_SHA|$TOOLBAR_SHA>" \
                       "• Regions: $REGION" \
                       "• Update latest aliases: $UPDATE_LATEST_ALIASES" \
                       "• Force overwrite immutable assets: $FORCE_OVERWRITE" \
-                      "• Publish and finalize on npm: $PUBLISH_TO_NPM" \
-                      "<$ACTION_URL|Review and approve on GitHub>")
+                      "• Publish and finalize on npm: $PUBLISH_TO_NPM")
+                  fallback_text=$(printf '%s\n%s' "$details" "<$ACTION_URL|Review and approve on GitHub>")
+                  payload=$(jq -n \
+                      --arg action_url "$ACTION_URL" \
+                      --arg channel "$SLACK_CHANNEL_ID" \
+                      --arg details "$details" \
+                      --arg text "$fallback_text" \
+                      '{
+                          channel: $channel,
+                          text: $text,
+                          blocks: [
+                              {
+                                  type: "section",
+                                  text: { type: "mrkdwn", text: $details }
+                              },
+                              {
+                                  type: "actions",
+                                  elements: [
+                                      {
+                                          type: "button",
+                                          text: {
+                                              type: "plain_text",
+                                              text: "Approve/Reject on GitHub",
+                                              emoji: true
+                                          },
+                                          url: $action_url,
+                                          style: "primary"
+                                      }
+                                  ]
+                              }
+                          ]
+                      }')
                   response=$(curl -sS --connect-timeout 10 --max-time 30 -X POST 'https://slack.com/api/chat.postMessage' \
                       -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
                       -H 'Content-Type: application/json; charset=utf-8' \
-                      --data "$(jq -n --arg channel "$SLACK_CHANNEL_ID" --arg text "$text" '{channel: $channel, text: $text}')")
+                      --data "$payload")
                   if [ "$(printf '%s' "$response" | jq -r '.ok')" != 'true' ]; then
                       printf '%s\n' "$response" >&2
                       exit 1

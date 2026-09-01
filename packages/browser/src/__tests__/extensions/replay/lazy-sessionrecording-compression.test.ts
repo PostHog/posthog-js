@@ -245,6 +245,55 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         )
     })
 
+    it('discards in-flight async compression without a deferred flush', async () => {
+        let releaseCompression: () => void = () => {}
+        const compressionGate = new Promise<void>((resolve) => {
+            releaseCompression = resolve
+        })
+        const gzipCompress = jest.fn(async (input: string) => {
+            await compressionGate
+            return new Blob([gzipSync(strToU8(input))])
+        })
+
+        const { emit, posthog, lazyLoadedSessionRecording, stopRrweb } = await setupLazyLoadedSessionRecording({
+            gzipSupported: true,
+            gzipCompress,
+        })
+
+        emit(createFullSnapshot({ content: 'discard pending compression' }))
+        const compressionQueue = lazyLoadedSessionRecording['_compressionQueue']
+        lazyLoadedSessionRecording.discard({ discardProducerEvents: true })
+
+        expect(stopRrweb).toHaveBeenCalled()
+        expect(posthog.capture).not.toHaveBeenCalled()
+
+        releaseCompression()
+        await compressionQueue
+        await Promise.resolve()
+
+        expect(posthog.capture).not.toHaveBeenCalled()
+    })
+
+    it('discards events emitted synchronously while rrweb stops', async () => {
+        const { emit, posthog, lazyLoadedSessionRecording, stopRrweb } = await setupLazyLoadedSessionRecording({
+            gzipSupported: false,
+        })
+        stopRrweb.mockImplementation(() => {
+            emit(createFullSnapshot({ content: 'rrweb teardown emission' }))
+        })
+        emit(createFullSnapshot({ content: 'existing buffered snapshot' }))
+        lazyLoadedSessionRecording['_buffer'].sessionId = 'stale-session-id'
+        expect(lazyLoadedSessionRecording['_buffer'].data.length).toBeGreaterThan(0)
+
+        lazyLoadedSessionRecording.discard({ discardProducerEvents: true })
+
+        expect(lazyLoadedSessionRecording['_buffer'].data).toEqual([])
+        expect(lazyLoadedSessionRecording['_flushBufferTimer']).toBeUndefined()
+
+        lazyLoadedSessionRecording['_flushBuffer']()
+        expect(posthog.capture).not.toHaveBeenCalled()
+    })
+
     it('synchronously drains pending async compression on beforeunload', async () => {
         let releaseCompression: () => void = () => {}
         const compressionGate = new Promise<void>((resolve) => {

@@ -1,5 +1,28 @@
 # @posthog/core
 
+## 1.50.1
+
+### Patch Changes
+
+- [#4710](https://github.com/PostHog/posthog-js/pull/4710) [`e87820a`](https://github.com/PostHog/posthog-js/commit/e87820a84d9a402b7db9b1c31c966e8028d0d65a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `os.name` and `os.version` resource attributes to logs from the browser SDK, overridable via `logs.resourceAttributes`
+  (2026-09-01)
+
+## 1.50.0
+
+### Minor Changes
+
+- [#4663](https://github.com/PostHog/posthog-js/pull/4663) [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3) Thanks [@pauldambra](https://github.com/pauldambra)! - Detect the Claude, Codex, and ChatGPT apps from their user agent markers: `$browser` now reports the app name instead of `Chrome`.
+
+  ChatGPT versions its apps differently per platform, so its `$browser_version` is not comparable across platforms. (2026-09-01)
+
+### Patch Changes
+
+- [#4661](https://github.com/PostHog/posthog-js/pull/4661) [`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b) Thanks [@marandaneto](https://github.com/marandaneto)! - Match local feature flag string operators, exact-value coercion, and JSON stringification with the flags service.
+  (2026-09-01)
+
+- [#4708](https://github.com/PostHog/posthog-js/pull/4708) [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Change `bigint` attributes on logs, metrics and spans to send as an int64 rather than as a string.
+  (2026-09-01)
+
 ## 1.49.2
 
 ### Patch Changes

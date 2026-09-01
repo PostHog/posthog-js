@@ -1,5 +1,6 @@
 import {
     calculateTooltipPosition,
+    getStepHtml,
     getSpotlightStyle,
     renderTipTapContent,
     normalizeUrl,
@@ -240,6 +241,24 @@ describe('renderTipTapContent', () => {
             ],
         }
         expect(renderTipTapContent(content)).toBe('<p>First paragraph</p><p>Second paragraph</p>')
+    })
+})
+
+describe('getStepHtml', () => {
+    it('sanitizes HTML rendered from legacy TipTap content', () => {
+        const step = {
+            content: {
+                type: 'heading',
+                attrs: { level: '1><img src=x onerror=alert(document.cookie)><h1' },
+                content: [{ type: 'text', text: 'Test' }],
+            },
+        } as ProductTourStep
+
+        const html = getStepHtml(step)
+
+        expect(html).toContain('Test')
+        expect(html).not.toContain('onerror')
+        expect(html).not.toContain('alert')
     })
 })
 

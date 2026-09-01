@@ -151,14 +151,21 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     }
     httpStatus = httpStatus ?? 200
 
-    let costOverrideData: Record<string, number> = {}
+    // A configured price applies only to a count the provider reported, so a call with no
+    // reported usage sends no cost instead of asserting $0. $ai_total_cost_usd sums the sides
+    // that were priced, which makes it the cost of the known side alone when the other side
+    // went unreported: a lower bound on the true total, not an assertion of it.
+    const costOverrideData: Record<string, number> = {}
     if (options.costOverride) {
-      const inputCostUSD = (options.costOverride.inputCost ?? 0) * (usage.inputTokens ?? 0)
-      const outputCostUSD = (options.costOverride.outputCost ?? 0) * (usage.outputTokens ?? 0)
-      costOverrideData = {
-        $ai_input_cost_usd: inputCostUSD,
-        $ai_output_cost_usd: outputCostUSD,
-        $ai_total_cost_usd: inputCostUSD + outputCostUSD,
+      if (usage.inputTokens !== undefined) {
+        costOverrideData.$ai_input_cost_usd = (options.costOverride.inputCost ?? 0) * usage.inputTokens
+      }
+      if (usage.outputTokens !== undefined) {
+        costOverrideData.$ai_output_cost_usd = (options.costOverride.outputCost ?? 0) * usage.outputTokens
+      }
+      if (Object.keys(costOverrideData).length > 0) {
+        costOverrideData.$ai_total_cost_usd =
+          (costOverrideData.$ai_input_cost_usd ?? 0) + (costOverrideData.$ai_output_cost_usd ?? 0)
       }
     }
 
@@ -195,7 +202,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       $ai_input: safeInput,
       $ai_output_choices: safeOutput,
       $ai_http_status: httpStatus,
-      $ai_input_tokens: usage.inputTokens ?? 0,
+      ...(usage.inputTokens !== undefined ? { $ai_input_tokens: usage.inputTokens } : {}),
       ...(usage.outputTokens !== undefined ? { $ai_output_tokens: usage.outputTokens } : {}),
       ...additionalTokenValues,
       ...(options.latency !== undefined ? { $ai_latency: options.latency } : {}),
