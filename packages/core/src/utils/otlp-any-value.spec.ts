@@ -357,5 +357,20 @@ describe('otlp-any-value', () => {
         })
       ).toEqual([{ key: 'kept', value: { stringValue: 'yes' } }])
     })
+
+    it('skips an empty key, which OTLP does not allow', () => {
+      expect(toOtlpKeyValueList({ '': 'nameless', kept: 'yes' })).toEqual([
+        { key: 'kept', value: { stringValue: 'yes' } },
+      ])
+    })
+
+    it('skips an empty key nested inside a value', () => {
+      expect(toOtlpKeyValueList({ outer: { '': 'nameless', kept: 'yes' } })).toEqual([
+        {
+          key: 'outer',
+          value: { kvlistValue: { values: [{ key: 'kept', value: { stringValue: 'yes' } }] } },
+        },
+      ])
+    })
   })
 })
