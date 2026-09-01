@@ -37,9 +37,17 @@ module.exports = {
     env: {
         browser: true,
         es6: true,
-        'jest/globals': true,
     },
     globals: {
+        afterAll: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        beforeEach: 'readonly',
+        describe: 'readonly',
+        expect: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        vi: 'readonly',
         given: 'readonly',
         global: 'readonly',
         Buffer: 'readonly',
@@ -49,7 +57,6 @@ module.exports = {
         '@typescript-eslint',
         'eslint-plugin-react',
         'eslint-plugin-react-hooks',
-        'jest',
         'no-only-tests',
         '@eslint-community/eslint-comments',
     ],
@@ -57,7 +64,7 @@ module.exports = {
     rules,
     overrides: [
         {
-            files: ['rollup.config.*', '.eslintrc.*', 'jest.config.*', 'babel.config.*'],
+            files: ['rollup.config.*', '.eslintrc.*', 'vitest.config.*', 'babel.config.*'],
             parserOptions: {
                 project: null,
             },
