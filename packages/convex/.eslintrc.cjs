@@ -27,4 +27,12 @@ module.exports = {
     'no-constant-condition': 'off',
     'compat/compat': 'off',
   },
+  overrides: [
+    {
+      files: ['src/component/_generated/**'],
+      rules: {
+        '@eslint-community/eslint-comments/no-unused-disable': 'off',
+      },
+    },
+  ],
 }

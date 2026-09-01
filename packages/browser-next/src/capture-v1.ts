@@ -829,7 +829,7 @@ export const sendCaptureV1TeardownBatches = (
         return result
     }
 
-    for (let index = 0; index < prepared.length && canContinue(options.canContinue); ) {
+    for (let index = 0; index < prepared.length && canContinue(options.canContinue);) {
         const createdAt = isoNow(now)
         const batch: PreparedCaptureV1Event[] = []
         let body = serializeEnvelope(createdAt, batch)

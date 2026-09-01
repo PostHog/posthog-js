@@ -1,6 +1,5 @@
 // https://eslint.org/docs/v8.x/use/configure/configuration-files
 const rules = {
-    'prettier/prettier': 'error',
     'prefer-spread': 'off',
     '@typescript-eslint/no-empty-function': 'off',
     '@typescript-eslint/no-this-alias': 'off',
@@ -47,7 +46,6 @@ module.exports = {
     },
     parser: '@typescript-eslint/parser',
     plugins: [
-        'prettier',
         '@typescript-eslint',
         'eslint-plugin-react',
         'eslint-plugin-react-hooks',
