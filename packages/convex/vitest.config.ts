@@ -38,6 +38,7 @@ export default defineConfig({
     include: ['src/**/*.test.ts', '../../examples/example-convex/convex/**/*.test.ts'],
     exclude: [...configDefaults.exclude, 'src/test.ts'],
     setupFiles: ['../../tooling/vitest/setup-fake-timers.ts'],
+    globalSetup: ['./test-support/setup-version.ts'],
     coverage: {
       enabled: true,
       provider: 'v8',
