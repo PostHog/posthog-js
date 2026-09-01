@@ -1,5 +1,16 @@
 # posthog-ai
 
+## 8.9.3
+
+### Patch Changes
+
+- [#4700](https://github.com/PostHog/posthog-js/pull/4700) [`a105b77`](https://github.com/PostHog/posthog-js/commit/a105b77cf1c61df8e8e4f547f5bbe467893644c3) Thanks [@bernatixer](https://github.com/bernatixer)! - Capture `$ai_stop_reason` from LangChain runs that use the OpenAI Responses API.
+
+  The callback only understood Chat Completions vocabulary (`finish_reason` / `stop_reason`), so Responses API runs, which report `status` and `incomplete_details.reason` instead, never carried a stop reason. The Chat Completions keys keep priority, and `incomplete_details.reason` outranks `status`, so an early stop names its cause (for example `max_output_tokens`) instead of just `incomplete`. (2026-09-01)
+
+- Updated dependencies [[`e87820a`](https://github.com/PostHog/posthog-js/commit/e87820a84d9a402b7db9b1c31c966e8028d0d65a)]:
+  - @posthog/core@1.50.1
+
 ## 8.9.2
 
 ### Patch Changes

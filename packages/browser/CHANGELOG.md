@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.424.0
+
+### Minor Changes
+
+- [#4710](https://github.com/PostHog/posthog-js/pull/4710) [`e87820a`](https://github.com/PostHog/posthog-js/commit/e87820a84d9a402b7db9b1c31c966e8028d0d65a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `os.name` and `os.version` resource attributes to logs from the browser SDK, overridable via `logs.resourceAttributes`
+  (2026-09-01)
+
+### Patch Changes
+
+- Updated dependencies [[`e87820a`](https://github.com/PostHog/posthog-js/commit/e87820a84d9a402b7db9b1c31c966e8028d0d65a)]:
+    - @posthog/core@1.50.1
+
 ## 1.423.2
 
 ### Patch Changes
