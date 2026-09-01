@@ -1,7 +1,7 @@
 import type { Span, SpanAttributes, SpanAttributeValue, SpanKind, SpanStatusCode, SpanTimeInput } from '@posthog/types'
 import type { Logger } from '../types'
 import type { SpanEventRecord, SpanRecord } from './types'
-import { formatTraceparent } from './traceparent'
+import { formatTraceparent, normalizeTraceparent, sanitizeTracestate } from './traceparent'
 import { assignUserAttributes, clampEndTime, resolveSuppliedTime, sanitizeName } from './sanitize'
 import { isError } from '../utils'
 
@@ -188,8 +188,8 @@ export class PostHogSpan implements Span {
 /**
  * An inert handle returned whenever tracing cannot run — traces unconfigured,
  * SDK disabled, user opted out. Supports the full surface so caller code never
- * branches, is never activated, and returns `null` from `traceparent()` so an id
- * that was never recorded cannot propagate.
+ * branches, and returns `null` from `traceparent()` so an id this SDK never
+ * recorded cannot propagate.
  */
 export class NoopSpan implements Span {
   setAttribute(): this {
@@ -222,6 +222,42 @@ export class NoopSpan implements Span {
 // Typed as `Span`, not `NoopSpan`: the class's methods take no parameters, so the
 // concrete type would reject calls the interface allows.
 export const NOOP_SPAN: Span = /* @__PURE__ */ new NoopSpan()
+
+/**
+ * An inert handle that carries an inbound trace context. Records nothing, and
+ * echoes the `traceparent` it was handed — including the caller's version and
+ * sampled flag — so a service with tracing off still forwards the trace it
+ * received rather than severing it. The ids it propagates are the upstream
+ * caller's own; this SDK invents none.
+ */
+export class PassThroughSpan extends NoopSpan {
+  constructor(
+    private readonly _traceparent: string,
+    private readonly _tracestate?: string
+  ) {
+    super()
+  }
+
+  override traceparent(): string {
+    return this._traceparent
+  }
+
+  override tracestate(): string | null {
+    return this._tracestate ?? null
+  }
+}
+
+/**
+ * The handle to return when a span cannot be recorded: a pass-through when the
+ * caller supplied a usable `parent` header, the shared no-op otherwise.
+ */
+export function inertSpan(options?: { parent?: unknown; tracestate?: unknown }): Span {
+  const traceparent = normalizeTraceparent(options?.parent)
+  if (!traceparent) {
+    return NOOP_SPAN
+  }
+  return new PassThroughSpan(traceparent, sanitizeTracestate(options?.tracestate))
+}
 
 /**
  * Extracts the OTel `exception.type` / `exception.message` pair from whatever was

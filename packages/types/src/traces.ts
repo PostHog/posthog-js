@@ -150,8 +150,13 @@ export interface Span {
 
     /**
      * This span's W3C `traceparent` header value (`00-<traceId>-<spanId>-01`),
-     * for propagating the trace to another service. Returns `null` on a no-op
-     * span, so an id that was never recorded cannot propagate.
+     * for propagating the trace to another service.
+     *
+     * When tracing is off, a span started with a `parent` header echoes that
+     * header back — version and sampled flag included — so a service that
+     * records nothing still keeps a distributed trace whole. With no `parent`
+     * there is no context to carry and this returns `null`, so an id this SDK
+     * never recorded cannot propagate.
      */
     traceparent(): string | null
 

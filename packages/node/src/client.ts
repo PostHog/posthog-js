@@ -19,6 +19,7 @@ import {
   PostHogPersistedProperty,
   PostHogTraces,
   NOOP_SPAN,
+  inertSpan,
   Properties,
   resolveMetricsConfig,
   RetriableOptions,
@@ -149,6 +150,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   protected readonly context?: IPostHogContext
   private _metrics?: PostHogMetrics
   private _traces?: PostHogTraces
+  private _spanContext?: SpanContextManager
 
   private readonly captureMode: CaptureMode
   private _v1Sender?: V1CaptureSender
@@ -629,6 +631,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Active-span tracking, built on first use. Lives on the client rather than
+   * on the traces pipeline because a client with tracing off still activates a
+   * pass-through span, so it needs the same store the pipeline would use.
+   */
+  private get _spanContextManager(): SpanContextManager {
+    if (!this._spanContext) {
+      this._spanContext = this.initializeSpanContextManager()
+    }
+    return this._spanContext
+  }
+
+  /**
    * The traces pipeline, built on first use. Returns `undefined` when the
    * `traces` client option is absent — tracing is off until configured.
    */
@@ -642,7 +656,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         resolveTracesConfig(this.options.traces),
         this._logger,
         () => this._tracingContext(),
-        this.initializeSpanContextManager(),
+        this._spanContextManager,
         // A handler that only traces still has to hold the invocation open.
         () => this.scheduleDebouncedFlush()
       )
@@ -666,7 +680,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * Always returns a handle, so calling code never has to branch: when the
    * `traces` option is absent, the SDK is disabled, or the user has opted out,
-   * the handle is inert and nothing is exported.
+   * the handle is inert and nothing is exported. An inert handle given a
+   * `parent` header still returns it from `traceparent()`, so a service with
+   * tracing off passes a distributed trace through instead of severing it.
    *
    * {@label Traces}
    *
@@ -680,7 +696,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * ```
    */
   startSpan(name: string, options?: StartSpanOptions): Span {
-    return this._tracesPipeline?.startSpan(name, options) ?? NOOP_SPAN
+    return this._tracesPipeline?.startSpan(name, options) ?? inertSpan(options)
   }
 
   /**
@@ -720,7 +736,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const pipeline = this._tracesPipeline
     if (!pipeline) {
       // Tracing off: still run the callback exactly once, with an inert handle.
-      return fn(NOOP_SPAN)
+      // A handle carrying an inbound `parent` is activated, so `getActiveSpan()`
+      // inside the callback can propagate the trace onward.
+      const span = inertSpan(options)
+      return span === NOOP_SPAN ? fn(span) : this._spanContextManager.with(span, () => fn(span))
     }
     return options ? pipeline.withSpan(name, options, fn) : pipeline.withSpan(name, fn)
   }
@@ -744,7 +763,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * ```
    */
   getActiveSpan(): Span | null {
-    return this._tracesPipeline?.getActiveSpan() ?? null
+    // Read from the store directly rather than through the pipeline: the two
+    // share one manager, and with tracing off there is no pipeline to ask.
+    return this._spanContextManager.active() ?? null
   }
 
   /**

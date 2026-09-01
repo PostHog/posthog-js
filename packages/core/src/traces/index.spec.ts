@@ -407,6 +407,60 @@ describe('PostHogTraces', () => {
     })
   })
 
+  // A service in the middle of a traced chain must not sever it just because it
+  // has no tracing of its own — OTel requires the API to carry the parent
+  // context through when no SDK is recording.
+  describe('trace context pass-through when tracing is off', () => {
+    const INBOUND_UNSAMPLED = `00-${TRACE_ID}-${REMOTE_SPAN_ID}-00`
+
+    it('echoes an inbound traceparent, flags included, when the SDK is disabled', async () => {
+      const instance = createMockInstance({ isDisabled: true })
+      const traces = createTraces({}, instance)
+
+      const span = traces.startSpan('proxied', { parent: INBOUND_UNSAMPLED, tracestate: 'vendor=abc' })
+      span.end()
+      await traces.flush()
+
+      expect(span.traceparent()).toBe(INBOUND_UNSAMPLED)
+      expect(span.tracestate()).toBe('vendor=abc')
+      expect(sentSpans(instance)).toHaveLength(0)
+    })
+
+    it('echoes an inbound traceparent when the user has opted out', () => {
+      const traces = createTraces({}, createMockInstance({ optedOut: true }))
+      const span = traces.startSpan('proxied', { parent: `00-${TRACE_ID}-${REMOTE_SPAN_ID}-01` })
+
+      expect(span.traceparent()).toBe(`00-${TRACE_ID}-${REMOTE_SPAN_ID}-01`)
+    })
+
+    it('activates the pass-through handle so getActiveSpan can propagate it', () => {
+      const traces = createTraces({}, createMockInstance({ optedOut: true }))
+
+      const propagated = traces.withSpan('proxied', { parent: INBOUND_UNSAMPLED }, () =>
+        traces.getActiveSpan()?.traceparent()
+      )
+
+      expect(propagated).toBe(INBOUND_UNSAMPLED)
+      expect(traces.getActiveSpan()).toBeNull()
+    })
+
+    it('passes the inbound context through when the live-span limit refuses the span', () => {
+      const traces = createTraces({ maxLiveSpans: 1 })
+      traces.startSpan('holds-the-only-slot')
+
+      const refused = traces.startSpan('refused', { parent: INBOUND_UNSAMPLED })
+
+      expect(refused.traceparent()).toBe(INBOUND_UNSAMPLED)
+    })
+
+    it('has nothing to propagate without a usable parent', () => {
+      const traces = createTraces({}, createMockInstance({ optedOut: true }))
+
+      expect(traces.startSpan('no-parent')).toBe(NOOP_SPAN)
+      expect(traces.startSpan('bad-parent', { parent: 'not-a-traceparent' })).toBe(NOOP_SPAN)
+    })
+  })
+
   describe('auto-context', () => {
     it('attaches the distinct id and session id as the product join keys', async () => {
       context = { distinctId: 'user-123', sessionId: 'session-123' }

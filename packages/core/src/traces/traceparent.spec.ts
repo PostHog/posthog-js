@@ -1,4 +1,4 @@
-import { formatTraceparent, parseTraceparent, sanitizeTracestate } from './traceparent'
+import { formatTraceparent, normalizeTraceparent, parseTraceparent, sanitizeTracestate } from './traceparent'
 
 const TRACE_ID = '4bf92f3577b34da6a3ce929d0e0e4736'
 const SPAN_ID = '00f067aa0ba902b7'
@@ -92,5 +92,27 @@ describe('tracestate character safety', () => {
     expect(sanitizeTracestate('rojo=00f067aa0ba902b7,congo=t61rcWkgMzE')).toBe(
       'rojo=00f067aa0ba902b7,congo=t61rcWkgMzE'
     )
+  })
+})
+
+describe('normalizeTraceparent', () => {
+  it('carries version and flags through as received', () => {
+    expect(normalizeTraceparent(`00-${TRACE_ID}-${SPAN_ID}-00`)).toBe(`00-${TRACE_ID}-${SPAN_ID}-00`)
+    expect(normalizeTraceparent(`01-${TRACE_ID}-${SPAN_ID}-01`)).toBe(`01-${TRACE_ID}-${SPAN_ID}-01`)
+  })
+
+  it('canonicalises whitespace and case, and drops unknown trailing fields', () => {
+    expect(normalizeTraceparent(`  00-${TRACE_ID.toUpperCase()}-${SPAN_ID}-01-extra `)).toBe(
+      `00-${TRACE_ID}-${SPAN_ID}-01`
+    )
+  })
+
+  it.each([
+    ['a malformed header', 'not-a-traceparent'],
+    ['the invalid ff version', `ff-${TRACE_ID}-${SPAN_ID}-01`],
+    ['an all-zero trace id', `00-${'0'.repeat(32)}-${SPAN_ID}-01`],
+    ['a non-string', ['a', 'b']],
+  ])('rejects %s', (_name, value) => {
+    expect(normalizeTraceparent(value)).toBeUndefined()
   })
 })

@@ -1303,7 +1303,7 @@
         },
         {
           "category": "Traces",
-          "description": "Starts a span without making it active — for work that can't wrap a callback. Prefer `withSpan`, which ends the span for you.\nAlways returns a handle, so calling code never has to branch: when the `traces` option is absent, the SDK is disabled, or the user has opted out, the handle is inert and nothing is exported.\n\nSubject to change in a minor release.",
+          "description": "Starts a span without making it active — for work that can't wrap a callback. Prefer `withSpan`, which ends the span for you.\nAlways returns a handle, so calling code never has to branch: when the `traces` option is absent, the SDK is disabled, or the user has opted out, the handle is inert and nothing is exported. An inert handle given a `parent` header still returns it from `traceparent()`, so a service with tracing off passes a distributed trace through instead of severing it.\n\nSubject to change in a minor release.",
           "details": null,
           "id": "startSpan",
           "showDocs": true,

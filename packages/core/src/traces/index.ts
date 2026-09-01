@@ -8,7 +8,7 @@ import type {
   TraceSdkContext,
   TracesHost,
 } from './types'
-import { NOOP_SPAN, PostHogSpan, describeError, monotonicNow } from './span'
+import { NOOP_SPAN, PostHogSpan, describeError, inertSpan, monotonicNow } from './span'
 import { newSpanId, newTraceId } from './ids'
 import { parseTraceparent, sanitizeTracestate } from './traceparent'
 import { assignUserAttributes, resolveStartTime, sanitizeName } from './sanitize'
@@ -105,7 +105,7 @@ export class PostHogTraces {
    */
   startSpan(name: string, options?: StartSpanOptions): Span {
     if (this._instance.isDisabled || this._instance.optedOut) {
-      return NOOP_SPAN
+      return inertSpan(options)
     }
 
     const explicitParent = options?.parent
@@ -115,8 +115,9 @@ export class PostHogTraces {
         this._logger.debug('Span parent is not a span from this SDK; returning an inert span')
         return NOOP_SPAN
       }
-      // Not a span at all — `req.headers.traceparent` is `string[]` when the header
-      // arrives twice. Ignored: falls back to the active span, or to a new trace.
+      // No `traceparent()` to read: `req.headers.traceparent` is `string[]` when the
+      // header arrives twice, and a span from another tracer exposes `spanContext()`
+      // instead. Ignored: falls back to the active span, or to a new trace.
       this._logger.debug('Ignoring an unusable span parent')
     }
 
@@ -130,7 +131,7 @@ export class PostHogTraces {
         1,
         `the live-span limit (${this._config.maxLiveSpans}) was reached — spans are being started and never ended`
       )
-      return NOOP_SPAN
+      return inertSpan(options)
     }
 
     const now = Date.now()
@@ -174,8 +175,10 @@ export class PostHogTraces {
     const span = this.startSpan(name, options)
 
     try {
-      // A no-op span is never activated, so `getActiveSpan()` inside the
-      // callback reads null — callbacks should use the handle they're given.
+      // The shared no-op is never activated, so `getActiveSpan()` inside the
+      // callback reads null — callbacks should use the handle they're given. A
+      // pass-through handle is activated, so `getActiveSpan()?.traceparent()`
+      // still propagates an inbound trace through a service with tracing off.
       const result = span === NOOP_SPAN ? fn(span) : this._contextManager.with(span, () => fn(span))
 
       if (isPromise(result)) {
