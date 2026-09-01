@@ -370,6 +370,7 @@ export class PostHogTraces {
 
     // Re-checked at end: opting out mid-trace must stop the span exporting.
     if (this._instance.isDisabled || this._instance.optedOut) {
+      this._recordDrop(1, 'the user has opted out')
       return
     }
 
@@ -451,6 +452,8 @@ export class PostHogTraces {
     if (this._instance.isDisabled || this._instance.optedOut) {
       const discarded = this._queue.length
       this._queue = []
+      this._recordDrop(discarded, 'the user has opted out')
+      this._warnAboutDrops()
       return discarded
     }
 
