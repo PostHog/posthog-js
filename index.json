@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/4718": {
+    "key": "PostHog/posthog-js/issue/4718",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4718",
+    "url": "https://github.com/PostHog/posthog-js/issues/4718",
+    "conclusion": "Confirmed TypeScript API-surface bug: request-scoped @posthog/next clients expose exception capture at runtime, but IPostHog omits both exception-capture methods.",
+    "labels": [
+      "node",
+      "frameworks/next-js",
+      "feature/error-tracking",
+      "team/client-libraries"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/4719",
+    "closed": false,
+    "updatedAt": "2026-09-01T12:02:45.670Z"
+  },
   "PostHog/posthog-js/issue/4702": {
     "key": "PostHog/posthog-js/issue/4702",
     "repo": "PostHog/posthog-js",
