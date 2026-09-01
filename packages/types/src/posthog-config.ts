@@ -631,7 +631,7 @@ export interface SessionRecordingOptions {
 
     /**
      * Derived from `rrweb.record` options. A CSS selector for non-input text to mask in session
-     * replay. Session replay masks every input value by default (see `maskAllInputs`), but it does
+     * replay. Session replay masks input values by default (see `maskAllInputs`), but it does
      * not mask other DOM text or images. This selector and the `ph-mask` class mask text content
      * only — for example a rendered card number — and do not hide an image, whose `src` is still
      * recorded. To redact a rendered image such as a scanned document, block the image or a
@@ -650,7 +650,9 @@ export interface SessionRecordingOptions {
 
     /**
      * Derived from `rrweb.record` options. When `true` (the default) session replay masks the
-     * value of every input. Set it to `false` to record input values, which is not recommended
+     * value of every input, except `hidden` and `file` inputs, whose values are recorded
+     * unmasked — block those with `ph-no-capture` or `blockSelector` if they hold sensitive data.
+     * Set it to `false` to record input values, which is not recommended
      * for apps that handle sensitive data. A `session_recording` masking option set in
      * `posthog.init` takes precedence over the project "Privacy and masking" setting; the SDK
      * warns once when the two differ.
