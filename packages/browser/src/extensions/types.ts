@@ -11,4 +11,9 @@ export interface Extension {
      * behavior explicitly in the `!result.ok` branch.
      */
     onRemoteConfig?(result: RemoteConfigResult): void
+    /**
+     * Release anything that outlives the instance (capture hooks, DOM listeners, timers).
+     * Called when the extension is torn down or replaced.
+     */
+    dispose?(): void
 }
