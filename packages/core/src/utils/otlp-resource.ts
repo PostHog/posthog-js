@@ -52,15 +52,19 @@ export function buildOtlpResourceAttributes<TAttributeValue>(
  * platforms they cover.
  */
 const OS_NAMES: Record<string, string> = {
-  // node:os platform()
+  // node:os platform(), all eleven of them
   darwin: 'macOS',
   win32: 'Windows',
+  // Cygwin is a POSIX layer over Windows, so it belongs under the same filter.
+  cygwin: 'Windows',
   linux: 'Linux',
   android: 'Android',
   freebsd: 'FreeBSD',
   openbsd: 'OpenBSD',
+  netbsd: 'NetBSD',
   sunos: 'SunOS',
   aix: 'AIX',
+  haiku: 'Haiku',
   // detectOS
   'Mac OS X': 'macOS',
 }

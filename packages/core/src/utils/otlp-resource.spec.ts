@@ -91,6 +91,12 @@ describe('osResourceAttributes', () => {
     ['linux', 'Linux'],
     ['android', 'Android'],
     ['freebsd', 'FreeBSD'],
+    ['openbsd', 'OpenBSD'],
+    ['netbsd', 'NetBSD'],
+    ['sunos', 'SunOS'],
+    ['aix', 'AIX'],
+    ['haiku', 'Haiku'],
+    ['cygwin', 'Windows'],
     // detectOS spellings
     ['Mac OS X', 'macOS'],
     ['iOS', 'iOS'],
@@ -102,7 +108,7 @@ describe('osResourceAttributes', () => {
   })
 
   it('passes an unmapped name through rather than dropping it', () => {
-    expect(normalizeOsName('Haiku')).toBe('Haiku')
+    expect(normalizeOsName('Plan 9')).toBe('Plan 9')
     expect(normalizeOsName('constructor')).toBe('constructor')
   })
 
