@@ -6,7 +6,7 @@ import {
   SurveyRatingDisplay,
   RatingSurveyQuestion,
   MultipleSurveyQuestion,
-  SurveyAppearance,
+  SurveyAppearance as CoreSurveyAppearance,
   SurveyPosition,
   SurveyQuestionDescriptionContentType,
   SurveyMatchType,
@@ -120,7 +120,6 @@ export const defaultBackgroundColor = '#eeeded' as const
 export const defaultDescriptionOpacity = 0.8
 export const defaultRatingLabelOpacity = 0.7
 
-// textColor and inputTextColor are optional overrides (auto-calculated if not provided)
 /**
  * The distinct kinds of text a survey renders, each at its own base size. They
  * are separate because one ceiling cannot serve all of them: `question` is an
@@ -147,16 +146,13 @@ export type SurveyTextRole =
   /** The validation hint under an open-text answer. */
   | 'validationHint'
 
-export type SurveyAppearanceTheme = Omit<
-  Required<SurveyAppearance>,
-  'widgetSelector' | 'widgetType' | 'widgetColor' | 'widgetLabel' | 'shuffleQuestions' | 'textColor' | 'inputTextColor'
-> & {
-  textColor?: string
-  inputTextColor?: string
+/** React Native survey appearance, including native-only text scaling options. */
+export interface SurveyAppearance extends CoreSurveyAppearance {
   /**
    * Caps how far survey text may grow under the OS text-size setting, as a
    * multiple of its base size - React Native's `maxFontSizeMultiplier`, applied
-   * to every `Text` and `TextInput` the survey renders.
+   * to every semantic `Text` and `TextInput` the survey renders. Icon-only text
+   * fallbacks do not scale because they occupy fixed-size icon boxes.
    *
    * Pass a number to cap every role at once, or an object to cap them
    * separately: a survey headline can usually take more scaling than a numeral
@@ -184,6 +180,23 @@ export type SurveyAppearanceTheme = Omit<
   maxFontSizeMultiplier?: number | Partial<Record<SurveyTextRole, number>>
 }
 
+// textColor and inputTextColor are optional overrides (auto-calculated if not provided)
+export type SurveyAppearanceTheme = Omit<
+  Required<SurveyAppearance>,
+  | 'widgetSelector'
+  | 'widgetType'
+  | 'widgetColor'
+  | 'widgetLabel'
+  | 'shuffleQuestions'
+  | 'textColor'
+  | 'inputTextColor'
+  | 'maxFontSizeMultiplier'
+> & {
+  textColor?: string
+  inputTextColor?: string
+  maxFontSizeMultiplier?: SurveyAppearance['maxFontSizeMultiplier']
+}
+
 /**
  * The ceiling for one role, from either form of `maxFontSizeMultiplier`.
  *
@@ -192,7 +205,7 @@ export type SurveyAppearanceTheme = Omit<
  * did before this option existed.
  */
 export function getMaxFontSizeMultiplier(
-  appearance: Pick<SurveyAppearanceTheme, 'maxFontSizeMultiplier'>,
+  appearance: Pick<SurveyAppearance, 'maxFontSizeMultiplier'>,
   role: SurveyTextRole
 ): number | undefined {
   const configured = appearance.maxFontSizeMultiplier

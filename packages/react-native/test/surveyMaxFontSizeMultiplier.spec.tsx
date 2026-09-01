@@ -6,17 +6,23 @@ import { render, cleanup } from '@testing-library/react'
 // which ceiling reached which node. Same minimal react-native shim as
 // SurveyModal.spec — jest-expo's full preset pulls in TurboModule code that
 // explodes under jsdom.
-const renderedTextProps: { children: unknown; maxFontSizeMultiplier: number | undefined }[] = []
+const renderedTextProps: {
+  children: unknown
+  maxFontSizeMultiplier: number | undefined
+  allowFontScaling: boolean | undefined
+}[] = []
 
 jest.mock('react-native', () => {
   const RealReact = jest.requireActual('react')
   const Box = RealReact.forwardRef(({ children, testID, ...rest }: any, ref: any) =>
     RealReact.createElement('div', { ref, 'data-testid': testID }, children)
   )
-  const RecordingText = RealReact.forwardRef(({ children, maxFontSizeMultiplier, testID }: any, ref: any) => {
-    renderedTextProps.push({ children, maxFontSizeMultiplier })
-    return RealReact.createElement('div', { ref, 'data-testid': testID }, children)
-  })
+  const RecordingText = RealReact.forwardRef(
+    ({ children, maxFontSizeMultiplier, allowFontScaling, testID }: any, ref: any) => {
+      renderedTextProps.push({ children, maxFontSizeMultiplier, allowFontScaling })
+      return RealReact.createElement('div', { ref, 'data-testid': testID }, children)
+    }
+  )
   return {
     View: Box,
     Modal: Box,
@@ -32,9 +38,13 @@ jest.mock('react-native', () => {
   }
 })
 
+jest.mock('../src/optional/OptionalReactNativeSvg', () => ({ OptionalReactNativeSvg: undefined }))
+
 import { BottomSection } from '../src/surveys/components/BottomSection'
 import { QuestionHeader } from '../src/surveys/components/QuestionHeader'
+import { CancelSVG } from '../src/surveys/icons'
 import { defaultSurveyAppearance, getMaxFontSizeMultiplier, SurveyAppearanceTheme } from '../src/surveys/surveys-utils'
+import type { PostHogSurveyProviderProps, SurveyAppearance, SurveyTextRole } from '../src'
 
 const capOf = (text: string): number | undefined =>
   renderedTextProps.find((entry) => entry.children === text)?.maxFontSizeMultiplier
@@ -75,6 +85,23 @@ describe('getMaxFontSizeMultiplier', () => {
     // which happens to render the same but stops meaning what the caller said.
     expect(getMaxFontSizeMultiplier({ maxFontSizeMultiplier: 0 }, 'question')).toBe(0)
     expect(getMaxFontSizeMultiplier({ maxFontSizeMultiplier: { question: 0 } }, 'question')).toBe(0)
+  })
+})
+
+describe('public survey appearance contract', () => {
+  it('accepts legacy core keys together with React Native text scaling options', () => {
+    const roleCaps: Partial<Record<SurveyTextRole, number>> = { question: 1.5 }
+    const appearance: SurveyAppearance = {
+      widgetSelector: '#feedback',
+      widgetType: 'button',
+      widgetColor: 'black',
+      widgetLabel: 'Feedback',
+      shuffleQuestions: true,
+      maxFontSizeMultiplier: roleCaps,
+    }
+    const providerAppearance: PostHogSurveyProviderProps['defaultSurveyAppearance'] = appearance
+
+    expect(providerAppearance).toEqual(appearance)
   })
 })
 
@@ -125,5 +152,11 @@ describe('survey text ceilings', () => {
 
     expect(capOf('What went wrong?')).toBe(1.6)
     expect(capOf('Tell us more')).toBe(1.6)
+  })
+
+  it('keeps fixed-size fallback icons from scaling and clipping', () => {
+    render(<CancelSVG />)
+
+    expect(renderedTextProps.find((entry) => entry.children === 'x')?.allowFontScaling).toBe(false)
   })
 })

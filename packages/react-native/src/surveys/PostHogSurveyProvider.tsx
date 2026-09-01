@@ -6,7 +6,12 @@ import { getActiveMatchingSurveys } from './getActiveMatchingSurveys'
 import { useSurveyStorage } from './useSurveyStorage'
 import { useActivatedSurveys } from './useActivatedSurveys'
 import { SurveyModal } from './components/SurveyModal'
-import { defaultSurveyAppearance, getContrastingTextColor, SurveyAppearanceTheme } from './surveys-utils'
+import {
+  defaultSurveyAppearance,
+  getContrastingTextColor,
+  SurveyAppearance,
+  SurveyAppearanceTheme,
+} from './surveys-utils'
 import { Survey, SurveyType, type SurveyResponses } from '@posthog/core'
 import { usePostHog } from '../hooks/usePostHog'
 import { useFeatureFlags } from '../hooks/useFeatureFlags'
@@ -78,7 +83,7 @@ export type PostHogSurveyProviderProps = {
    * `maxFontSizeMultiplier`) — they are merged into the same theme object the
    * survey components read, and PostHog never sends them down.
    */
-  defaultSurveyAppearance?: Partial<SurveyAppearanceTheme>
+  defaultSurveyAppearance?: SurveyAppearance
 
   /**
    * If true, PosHog appearance will be ignored and defaultSurveyAppearance is always used.
