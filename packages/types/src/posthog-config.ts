@@ -630,11 +630,13 @@ export interface SessionRecordingOptions {
     maskTextClass?: string | RegExp
 
     /**
-     * Derived from `rrweb.record` options. A CSS selector for non-input content to mask in
-     * session replay. Session replay masks every input value by default (see `maskAllInputs`),
-     * but it does not mask other DOM text or images. Use this selector — or the `ph-mask` class
-     * on an element, or `ph-no-capture` to redact an element and its subtree — to hide rendered
-     * sensitive content such as card numbers or scanned documents.
+     * Derived from `rrweb.record` options. A CSS selector for non-input text to mask in session
+     * replay. Session replay masks every input value by default (see `maskAllInputs`), but it does
+     * not mask other DOM text or images. This selector and the `ph-mask` class mask text content
+     * only — for example a rendered card number — and do not hide an image, whose `src` is still
+     * recorded. To redact a rendered image such as a scanned document, block the image or a
+     * container element with `ph-no-capture` (see `blockClass`/`blockSelector`), which replaces it
+     * with a placeholder and stops recording its subtree.
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @see https://posthog.com/docs/session-replay/privacy
      */
