@@ -16,6 +16,12 @@ const resolvePostHogReactNativePackageJsonPath =
 
 const POSTHOG_ANDROID_SKIP_ON_CONFLICT_PROPERTY = 'posthogReactNativeSkipOnConflict'
 
+const POSTHOG_HERMES_RELEASE_MODE_GRADLE_PROPERTY = 'posthog.hermesReleaseMode'
+
+// Written by earlier versions, and read by com.posthog.android for the R8 mapping upload. The
+// prebuild removes it so the Hermes mode cannot reach that upload through a stale entry.
+const LEGACY_RELEASE_MODE_GRADLE_PROPERTY = 'posthog.releaseMode'
+
 /**
  * How the release a build belongs to gets associated with the exceptions it reports. This steers
  * the Hermes source map upload only. iOS dSYMs and Android R8 mappings always bind to the release
@@ -512,9 +518,32 @@ export function updateDotenvFileGradleProperties(
   return rest
 }
 
-const withPostHogGradleProperties = (config: any, dotenvFile?: string) => {
+// Managed posthog.hermesReleaseMode entry in android/gradle.properties, read by the SDK's
+// posthog.gradle hermes upload. The key is deliberately not posthog.releaseMode: com.posthog.android
+// reads that one for the R8 mapping upload, and the mode must not reach it. A legacy entry written
+// by an earlier version is removed, so a stale value cannot steer either upload.
+export function updateHermesReleaseModeGradleProperties(
+  properties: GradlePropertiesItem[],
+  releaseMode?: PostHogReleaseMode
+): GradlePropertiesItem[] {
+  const rest = properties.filter(
+    (item) =>
+      !(
+        item.type === 'property' &&
+        (item.key === POSTHOG_HERMES_RELEASE_MODE_GRADLE_PROPERTY || item.key === LEGACY_RELEASE_MODE_GRADLE_PROPERTY)
+      )
+  )
+  if (!releaseMode) {
+    return rest
+  }
+  rest.push({ type: 'property', key: POSTHOG_HERMES_RELEASE_MODE_GRADLE_PROPERTY, value: releaseMode })
+  return rest
+}
+
+const withPostHogGradleProperties = (config: any, dotenvFile?: string, releaseMode?: PostHogReleaseMode) => {
   return withGradleProperties(config, (config: any) => {
     config.modResults = updateDotenvFileGradleProperties(config.modResults, dotenvFile)
+    config.modResults = updateHermesReleaseModeGradleProperties(config.modResults, releaseMode)
     return config
   })
 }
@@ -710,7 +739,7 @@ const withPostHogPlugin = (config: any, rawProps: PostHogPluginProps = {}) => {
   }
   config = withAndroidPlugin(config, props.skipOnConflict === true)
   // Runs unconditionally so removing the prop also removes the managed entry.
-  config = withPostHogGradleProperties(config, props.dotenvFile)
+  config = withPostHogGradleProperties(config, props.dotenvFile, props.releaseMode)
   return withIosPlugin(config, props)
 }
 
@@ -738,3 +767,4 @@ module.exports.buildAndroidDotenvFileGradleValue = buildAndroidDotenvFileGradleV
 module.exports.updateDotenvFileGradleProperties = updateDotenvFileGradleProperties
 module.exports.POSTHOG_RELEASE_MODES = POSTHOG_RELEASE_MODES
 module.exports.resolveReleaseModeProp = resolveReleaseModeProp
+module.exports.updateHermesReleaseModeGradleProperties = updateHermesReleaseModeGradleProperties

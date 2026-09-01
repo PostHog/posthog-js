@@ -145,10 +145,10 @@ plugins.withId('com.android.application') {
                             if (!posthogReleaseModeArgs.isEmpty() && System.getenv("POSTHOG_SKIP_CLI_VERSION_CHECK") != "1") {
                                 def cliVersion = PostHogCli.resolveVersion([*osCompatibility, cliPackage])
                                 if (cliVersion == null) {
-                                    throw new GradleException("Could not determine the posthog-cli version, which posthog.releaseMode '${posthogReleaseMode}' needs. Upgrade: npm install -g @posthog/cli@latest")
+                                    throw new GradleException("Could not determine the posthog-cli version, which posthog.hermesReleaseMode '${posthogReleaseMode}' needs. Upgrade: npm install -g @posthog/cli@latest")
                                 }
                                 if (!PostHogCli.meetsMinimumVersion(cliVersion, PostHogCli.MIN_RELEASE_MODE_VERSION)) {
-                                    throw new GradleException("posthog.releaseMode '${posthogReleaseMode}' needs posthog-cli >= ${PostHogCli.MIN_RELEASE_MODE_VERSION} (found ${cliVersion}). Upgrade: npm install -g @posthog/cli@latest")
+                                    throw new GradleException("posthog.hermesReleaseMode '${posthogReleaseMode}' needs posthog-cli >= ${PostHogCli.MIN_RELEASE_MODE_VERSION} (found ${cliVersion}). Upgrade: npm install -g @posthog/cli@latest")
                                 }
                             }
                             def args = [cliPackage]
@@ -168,7 +168,7 @@ plugins.withId('com.android.application') {
                                 // posthog-cli reads POSTHOG_RELEASE_MODE itself when
                                 // --release-mode is absent, which it deliberately is in symbol-set
                                 // mode. Pin the resolved mode so a daemon that inherited the
-                                // variable cannot override an explicit posthog.releaseMode.
+                                // variable cannot override an explicit posthog.hermesReleaseMode.
                                 if (posthogReleaseMode != null) {
                                     environment "POSTHOG_RELEASE_MODE", posthogReleaseMode
                                 }
@@ -358,16 +358,17 @@ def resolvePostHogReactNativeSDKPath(reactRoot) {
 }
 
 /**
- * Release mode for the Hermes source map upload: the `posthog.releaseMode` gradle property, then
- * the `POSTHOG_RELEASE_MODE` environment variable posthog-cli and the bundler plugins already read,
- * then `event`. The R8 mapping upload always binds to the release its build creates, so this covers
- * the JavaScript half of an Android build only.
+ * Release mode for the Hermes source map upload: the `posthog.hermesReleaseMode` gradle property,
+ * then the `POSTHOG_RELEASE_MODE` environment variable posthog-cli and the bundler plugins already
+ * read, then `event`. The key is not `posthog.releaseMode`, because com.posthog.android reads that
+ * one for the R8 mapping upload and the mode must not reach it. This covers the JavaScript half of
+ * an Android build only.
  *
  * An unrecognized value fails the build rather than falling back, so a typo cannot silently leave
  * a build binding its source maps to a release it meant to keep independent.
  */
 static String resolvePostHogReleaseMode(Project project) {
-    def value = project.findProperty("posthog.releaseMode")?.toString()?.trim()
+    def value = project.findProperty("posthog.hermesReleaseMode")?.toString()?.trim()
     if (!value) {
         value = System.getenv("POSTHOG_RELEASE_MODE")?.trim()
     }
@@ -375,7 +376,7 @@ static String resolvePostHogReleaseMode(Project project) {
         return "event"
     }
     if (!(value in ["symbol-set", "event"])) {
-        throw new GradleException("posthog.releaseMode must be one of symbol-set, event, was '${value}'")
+        throw new GradleException("posthog.hermesReleaseMode must be one of symbol-set, event, was '${value}'")
     }
     return value
 }

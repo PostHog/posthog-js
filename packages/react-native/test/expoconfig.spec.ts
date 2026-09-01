@@ -21,6 +21,7 @@ import {
   resolveDotenvFileProp,
   resolveNativeSymbolUpload,
   resolveReleaseModeProp,
+  updateHermesReleaseModeGradleProperties,
   updateDotenvFileGradleProperties,
 } from '../src/tooling/expoconfig'
 
@@ -752,6 +753,41 @@ describe('updateDotenvFileGradleProperties', () => {
   it('leaves unrelated properties untouched', () => {
     const result = updateDotenvFileGradleProperties([...unrelated], '.env')
     expect(result.slice(0, unrelated.length)).toEqual(unrelated)
+  })
+})
+
+describe('updateHermesReleaseModeGradleProperties', () => {
+  const unrelated = [
+    { type: 'comment', value: 'Project-wide Gradle settings.' },
+    { type: 'property', key: 'android.useAndroidX', value: 'true' },
+  ]
+
+  it('writes the mode under a key com.posthog.android does not read', () => {
+    // posthog.releaseMode would also steer the R8 mapping upload, which always binds now.
+    const result = updateHermesReleaseModeGradleProperties([...unrelated], 'symbol-set')
+
+    expect(result).toEqual([...unrelated, { type: 'property', key: 'posthog.hermesReleaseMode', value: 'symbol-set' }])
+  })
+
+  it('removes a legacy posthog.releaseMode entry', () => {
+    // An entry an earlier prebuild wrote would otherwise keep steering the R8 upload.
+    const legacy = [...unrelated, { type: 'property', key: 'posthog.releaseMode', value: 'event' }]
+
+    const result = updateHermesReleaseModeGradleProperties(legacy, 'event')
+
+    expect(result.filter((item) => item.key === 'posthog.releaseMode')).toEqual([])
+    expect(result.filter((item) => item.key === 'posthog.hermesReleaseMode')).toEqual([
+      { type: 'property', key: 'posthog.hermesReleaseMode', value: 'event' },
+    ])
+  })
+
+  it('replaces its own entry instead of duplicating it', () => {
+    const once = updateHermesReleaseModeGradleProperties([...unrelated], 'event')
+    const twice = updateHermesReleaseModeGradleProperties(once, 'symbol-set')
+
+    expect(twice.filter((item) => item.key === 'posthog.hermesReleaseMode')).toEqual([
+      { type: 'property', key: 'posthog.hermesReleaseMode', value: 'symbol-set' },
+    ])
   })
 })
 
