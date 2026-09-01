@@ -9,8 +9,8 @@ import { beforeEach } from 'vitest'
 import { RateLimiter } from '../rate-limiter'
 import { normalizeCaptureResult } from './helpers/normalize-capture-result'
 
-vi.mock('@posthog/browser-common/utils/globals', () => {
-    const orig = vi.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
+vi.mock('@posthog/browser-common/utils/globals', async () => {
+    const orig = (await import('./helpers/snapshot-test-globals')).snapshotTestGlobals
     const mockURL = vi.fn().mockReturnValue('https://example.com')
     const mockReferrer = vi.fn().mockReturnValue('https://referrer.com')
     const mockHostName = vi.fn().mockReturnValue('example.com')
@@ -837,7 +837,7 @@ describe('posthog core', () => {
 
         it('should execute methods normally when no Proxy interference', () => {
             const posthog = defaultPostHog()
-            const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation()
+            const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
 
             posthog.push(['capture', 'test-event', { foo: 'bar' }])
 
@@ -847,8 +847,8 @@ describe('posthog core', () => {
 
         it('should handle _execute_array with array of commands', () => {
             const posthog = defaultPostHog()
-            const registerSpy = vi.spyOn(posthog, 'register').mockImplementation()
-            const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation()
+            const registerSpy = vi.spyOn(posthog, 'register').mockImplementation(() => {})
+            const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
 
             posthog._execute_array([
                 ['register', { key: 'value' }],
@@ -863,7 +863,7 @@ describe('posthog core', () => {
 
         it('should not abort queued calls when one call throws', () => {
             const posthog = defaultPostHog()
-            const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation()
+            const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
             ;(posthog as any).parseInvalidJson = (payload: string) => JSON.parse(payload)
 
             expect(() => {

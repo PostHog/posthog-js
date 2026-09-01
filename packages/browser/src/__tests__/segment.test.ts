@@ -16,7 +16,7 @@ import { PostHogConfig } from '../types'
 
 vi.mock(
     '@posthog/browser-common/utils/globals',
-    () => vi.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
+    async () => (await import('./helpers/snapshot-test-globals')).snapshotTestGlobals
 )
 
 const initPostHogInAPromise = (
@@ -109,7 +109,7 @@ describe(`Segment integration`, () => {
 
     it('enriches Segment track events with PostHog properties', async () => {
         // Segment supplies a stable identity, so memory persistence should not trigger the volatile-identity warning.
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
         await initPostHogInAPromise(segment, posthogName, { persistence: 'memory' })
         expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         warnSpy.mockRestore()

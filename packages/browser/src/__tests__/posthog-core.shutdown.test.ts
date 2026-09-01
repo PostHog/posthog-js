@@ -67,7 +67,7 @@ describe('shutdown()', () => {
         const requestQueueUnload = vi.spyOn(instance._requestQueue!, 'unload')
         const retryQueueUnload = vi.spyOn(instance._retryQueue!, 'unload')
         const host = instance._getBrowserClientAdapter()
-        vi.spyOn(host.logger, 'error').mockImplementation()
+        vi.spyOn(host.logger, 'error').mockImplementation(() => {})
         await host.add({
             name: 'failing',
             setup: vi.fn(),

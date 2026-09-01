@@ -3,8 +3,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/preact'
 import { SurveyPopup } from '../../../extensions/surveys'
 import { Survey, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
 
-vi.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
-    ...vi.requireActual('../../../extensions/surveys/surveys-extension-utils'),
+vi.mock('../../../extensions/surveys/surveys-extension-utils', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../extensions/surveys/surveys-extension-utils')>()),
     sendSurveyEvent: vi.fn(),
     dismissedSurveyEvent: vi.fn(),
 }))

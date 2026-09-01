@@ -6,8 +6,8 @@ import { Survey, SurveyQuestionType, SurveyType } from '../../../posthog-surveys
 import * as uuid from '@posthog/browser-common/utils/uuidv7' // Import uuidv7
 
 // Mock the utility functions
-vi.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
-    ...vi.requireActual('../../../extensions/surveys/surveys-extension-utils'), // Keep original implementations for non-mocked parts
+vi.mock('../../../extensions/surveys/surveys-extension-utils', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../extensions/surveys/surveys-extension-utils')>()), // Keep original implementations for non-mocked parts
     getInProgressSurveyState: vi.fn(),
     sendSurveyEvent: vi.fn(),
     dismissedSurveyEvent: vi.fn(),

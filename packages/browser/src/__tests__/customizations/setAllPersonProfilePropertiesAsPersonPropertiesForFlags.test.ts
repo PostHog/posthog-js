@@ -3,8 +3,8 @@ import { createPosthogInstance } from '../helpers/posthog-instance'
 import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from '../../customizations/setAllPersonProfilePropertiesAsPersonPropertiesForFlags'
 import { STORED_PERSON_PROPERTIES_KEY } from '../../constants'
 
-vi.mock('@posthog/browser-common/utils/globals', () => {
-    const orig = vi.requireActual('@posthog/browser-common/utils/globals')
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
     const mockURLGetter = vi.fn()
     const mockReferrerGetter = vi.fn()
     return {

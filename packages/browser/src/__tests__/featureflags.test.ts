@@ -20,7 +20,7 @@ import { normalizeCaptureResult } from './helpers/normalize-capture-result'
 
 vi.mock(
     '@posthog/browser-common/utils/globals',
-    () => vi.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
+    async () => (await import('./helpers/snapshot-test-globals')).snapshotTestGlobals
 )
 
 vi.useFakeTimers()
@@ -222,7 +222,7 @@ describe('featureflags', () => {
         featureFlags = createFeatureFlags(instance)
 
         vi.spyOn(instance, 'capture').mockReturnValue(undefined)
-        mockWarn = vi.spyOn(window.console, 'warn').mockImplementation()
+        mockWarn = vi.spyOn(window.console, 'warn').mockImplementation(() => {})
 
         instance.persistence.register({
             $feature_flag_payloads: {
@@ -1385,7 +1385,7 @@ describe('featureflags', () => {
             ['configured with an invalid non-array value', 'beta-feature' as any, undefined, 1],
             ['not configured', undefined, undefined, 0],
         ])('should handle flag_keys when %s', (_description, configuredFlagKeys, expectedFlagKeys, expectedErrors) => {
-            const errorSpy = vi.spyOn(window.console, 'error').mockImplementation()
+            const errorSpy = vi.spyOn(window.console, 'error').mockImplementation(() => {})
             if (!isUndefined(configuredFlagKeys)) {
                 instance.config.flag_keys = configuredFlagKeys as any
             }
@@ -1884,7 +1884,7 @@ describe('featureflags', () => {
 
         it('isolates early access feature callback failures', async () => {
             const callbackError = new Error('callback failed')
-            const error = vi.spyOn(window.console, 'error').mockImplementation()
+            const error = vi.spyOn(window.console, 'error').mockImplementation(() => {})
 
             featureFlags.getEarlyAccessFeatures(() => {
                 throw callbackError
@@ -3352,7 +3352,7 @@ describe('parseFlagsResponse', () => {
                 'alpha-feature-2': 'fake-payload',
             },
         }
-        vi.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
 
         parseFlagsResponse(flagsResponse, persistence)
 
@@ -3409,7 +3409,7 @@ describe('parseFlagsResponse', () => {
                 'alpha-feature-2': '"fake-payload"',
             },
         }
-        vi.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
 
         parseFlagsResponse(flagsResponse, persistence)
 
@@ -3589,7 +3589,7 @@ describe('parseFlagsResponse', () => {
     it('enables feature flags from /flags response (v1 backwards compatibility)', () => {
         // checks that nothing fails when asking for ?v=2 and getting a ?v=1 response
         const flagsResponse = { featureFlags: ['beta-feature', 'alpha-feature-2'] }
-        vi.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
 
         // @ts-expect-error testing backwards compatibility
         parseFlagsResponse(flagsResponse, persistence)
@@ -3606,7 +3606,7 @@ describe('parseFlagsResponse', () => {
     })
 
     it('doesnt remove existing feature flags when no flags are returned', () => {
-        vi.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
         parseFlagsResponse({}, persistence)
 
         expect(persistence.register).not.toHaveBeenCalled()
@@ -3632,7 +3632,7 @@ describe('parseFlagsResponse', () => {
         // restore the previous value so this test stays self-contained.
         const previousDebug = (window as any).POSTHOG_DEBUG
         ;(window as any).POSTHOG_DEBUG = true
-        vi.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
 
         // @ts-expect-error testing partial/legacy response shapes
         parseFlagsResponse(response, persistence)
@@ -3651,7 +3651,7 @@ describe('parseFlagsResponse', () => {
             featureFlags: { 'test-flag': true },
             requestId: 'test-request-id-123',
         }
-        vi.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
 
         parseFlagsResponse(flagsResponse, persistence)
 
@@ -3941,7 +3941,7 @@ describe('getRemoteConfigPayload', () => {
             })
         )
         const callbackError = new Error('callback failed')
-        const error = vi.spyOn(window.console, 'error').mockImplementation()
+        const error = vi.spyOn(window.console, 'error').mockImplementation(() => {})
 
         featureFlags.getRemoteConfigPayload('test-flag', () => {
             throw callbackError
@@ -4001,7 +4001,7 @@ describe('getRemoteConfigPayload', () => {
     })
 
     it('should support deprecated evaluation_environments field', () => {
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
         instance.config.evaluation_environments = ['staging', 'backend']
 
@@ -4087,7 +4087,7 @@ describe('getRemoteConfigPayload', () => {
 
 describe('updateFlags', () => {
     beforeEach(() => {
-        vi.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
     })
 
     it('should update feature flags without making a network request', async () => {
@@ -4363,7 +4363,7 @@ describe('$feature_flag_error tracking', () => {
         }
 
         featureFlags = createFeatureFlags(instance)
-        mockWarn = vi.spyOn(window.console, 'warn').mockImplementation()
+        mockWarn = vi.spyOn(window.console, 'warn').mockImplementation(() => {})
         instance.persistence.unregister('$flag_call_reported')
         instance.persistence.unregister('$feature_flag_errors')
     })
@@ -4868,8 +4868,8 @@ describe('minimal $feature_flag_called events', () => {
     beforeEach(() => {
         // Events are dropped via before_send (expected warn) and bootstrap flags go through
         // the legacy-shape path (expected upgrade warn).
-        vi.spyOn(window.console, 'warn').mockImplementation()
-        vi.spyOn(window.console, 'error').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
+        vi.spyOn(window.console, 'error').mockImplementation(() => {})
     })
 
     const gatedFlagsResponse = (options: { minimalFlagCalledEvents?: boolean; hasExperiment?: boolean } = {}) => ({

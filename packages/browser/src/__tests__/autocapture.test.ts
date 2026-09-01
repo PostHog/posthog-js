@@ -70,7 +70,7 @@ describe('Autocapture system', () => {
     let beforeSendMock: vi.Mock
 
     beforeEach(async () => {
-        vi.spyOn(window!.console, 'log').mockImplementation()
+        vi.spyOn(window!.console, 'log').mockImplementation(() => {})
 
         Object.defineProperty(window, 'location', {
             configurable: true,

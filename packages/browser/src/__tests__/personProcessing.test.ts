@@ -65,8 +65,8 @@ const CAMPAIGN_PARAMS_NULL = {
     wbraid: null,
 }
 
-vi.mock('@posthog/browser-common/utils/globals', () => {
-    const orig = vi.requireActual('@posthog/browser-common/utils/globals')
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
     const mockURLGetter = vi.fn()
     const mockReferrerGetter = vi.fn()
     let mockedCookieVal = ''

@@ -41,15 +41,15 @@ describe('customizations entrypoints', () => {
         }
     })
 
-    it('initializes the shared config with the posthog-js identity', () => {
-        vi.isolateModules(() => {
-            const Config = vi.requireActual<typeof import('@posthog/browser-common/config')>(
+    it('initializes the shared config with the posthog-js identity', async () => {
+        await vi.isolateModulesAsync(async () => {
+            const Config = (await vi.importActual<typeof import('@posthog/browser-common/config')>(
                 '@posthog/browser-common/config'
-            ).default
+            )).default
             Config.LIB_NAME = 'test-sentinel'
             Config.LIB_VERSION = '0.0.0-test'
 
-            vi.requireActual('../../entrypoints/customizations.es')
+            await vi.importActual('../../entrypoints/customizations.es')
 
             expect(Config).toMatchObject({
                 LIB_NAME: 'web',

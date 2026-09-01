@@ -3,8 +3,8 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { createPosthogInstance } from './helpers/posthog-instance'
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-vi.mock('@posthog/browser-common/utils/globals', () => {
-    const orig = vi.requireActual('@posthog/browser-common/utils/globals')
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
     const mockURLGetter = vi.fn()
     const mockReferrerGetter = vi.fn()
     const mockedCookieBox = { cookie: '' }

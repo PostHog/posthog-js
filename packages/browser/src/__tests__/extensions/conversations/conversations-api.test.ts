@@ -31,8 +31,8 @@ describe('Conversations API Methods', () => {
         Config.DEBUG = true
 
         // Debug mode is required to exercise warnings, so silence the expected informational logs.
-        consoleLogSpy = vi.spyOn(console, 'log').mockImplementation()
-        consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation()
+        consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+        consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
         // Setup mock manager with API methods
         mockManager = {

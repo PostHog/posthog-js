@@ -270,7 +270,7 @@ describe('__extensionClasses enrollment', () => {
         const dispose = vi.fn(() => {
             throw disposeError
         })
-        const loggerError = vi.spyOn(logger, 'error').mockImplementation()
+        const loggerError = vi.spyOn(logger, 'error').mockImplementation(() => {})
         vi.spyOn(posthog._getBrowserClientAdapter(), 'add').mockRejectedValue(new Error('enrollment failed'))
         const initTasks: Array<() => void> = []
 

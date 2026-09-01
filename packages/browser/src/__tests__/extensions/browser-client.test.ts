@@ -356,7 +356,7 @@ describe('BrowserClientAdapter', () => {
         const host = new BrowserClientAdapter(instance)
         let client: Client | undefined
         await host.add(testExtension('test', (value) => (client = value)))
-        const error = vi.spyOn(host.logger, 'error').mockImplementation()
+        const error = vi.spyOn(host.logger, 'error').mockImplementation(() => {})
         const eventSibling = vi.fn()
         const configSibling = vi.fn()
 
@@ -660,7 +660,7 @@ describe('BrowserClientAdapter', () => {
         const host = posthog._getBrowserClientAdapter()
         let client: Client | undefined
         await host.add(testExtension('continuation-test', (value) => (client = value)))
-        const error = vi.spyOn(host.logger, 'error').mockImplementation()
+        const error = vi.spyOn(host.logger, 'error').mockImplementation(() => {})
         const enqueue = vi.spyOn(posthog._requestQueue!, 'enqueue')
         const eventSibling = vi.fn()
         const configSibling = vi.fn()
@@ -751,7 +751,7 @@ describe('PostHog extension dynamic properties', () => {
     it('merges producers before explicit properties, disposes them, and isolates producer errors', async () => {
         const beforeSend = vi.fn((event) => event)
         const posthog = await createPosthogInstance(undefined, { before_send: beforeSend })
-        const error = vi.spyOn(logger, 'error').mockImplementation()
+        const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
         posthog.register({ producerWinsPersistence: 'persistent' })
         const removeDynamic = posthog._registerExtensionEventProperties(() => ({
             dynamic: 'value',

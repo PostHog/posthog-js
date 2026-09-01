@@ -11,8 +11,8 @@ import {
 } from '../../../posthog-surveys-types'
 import * as uuid from '@posthog/browser-common/utils/uuidv7'
 
-vi.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
-    ...vi.requireActual('../../../extensions/surveys/surveys-extension-utils'),
+vi.mock('../../../extensions/surveys/surveys-extension-utils', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../extensions/surveys/surveys-extension-utils')>()),
     getInProgressSurveyState: vi.fn(),
     setInProgressSurveyState: vi.fn(),
     sendSurveyEvent: vi.fn(),

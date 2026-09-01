@@ -6,6 +6,7 @@ vi.mock('@posthog/browser-common/utils/logger', () => ({
     }),
 }))
 
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { RemoteConfigLoader } from '../remote-config'
 import { RequestRouter } from '../utils/request-router'
 import { PostHog } from '../posthog-core'
@@ -14,7 +15,7 @@ import '../entrypoints/external-scripts-loader'
 import { assignableWindow } from '../utils/globals'
 import { createMockPostHog } from './helpers/posthog-instance'
 
-const mockLogger = vi.requireMock('@posthog/browser-common/utils/logger').createLogger.mock.results[0].value
+const mockLogger = vi.mocked(createLogger).mock.results[0].value
 
 describe('RemoteConfigLoader', () => {
     let posthog: PostHog
@@ -31,7 +32,7 @@ describe('RemoteConfigLoader', () => {
 
         document.body.innerHTML = ''
         document.head.innerHTML = ''
-        vi.spyOn(window.console, 'error').mockImplementation()
+        vi.spyOn(window.console, 'error').mockImplementation(() => {})
 
         posthog = createMockPostHog({
             config: { ...defaultConfig },

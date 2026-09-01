@@ -4,8 +4,8 @@ import { RemoteConfig, RemoteConfigResult } from '../types'
 import type { Client } from '@posthog/browser-common'
 import { PostHog } from '../posthog-core'
 
-vi.mock('@posthog/browser-common/utils/globals', () => {
-    const orig = vi.requireActual('@posthog/browser-common/utils/globals')
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
     const mockURLGetter = vi.fn()
     const mockReferrerGetter = vi.fn()
     return {

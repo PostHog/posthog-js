@@ -4,8 +4,8 @@ import { ScrollManager } from '../scroll-manager'
 import { SessionIdChangedCallback } from '../types'
 
 const mockWindowGetter = vi.fn()
-vi.mock('@posthog/browser-common/utils/globals', () => ({
-    ...vi.requireActual('@posthog/browser-common/utils/globals'),
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
     get window() {
         return mockWindowGetter()
     },

@@ -1,7 +1,7 @@
 import type { CaptureResult } from '../types'
 
-vi.mock('@posthog/browser-common/utils/globals', () => ({
-    ...vi.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals,
+vi.mock('@posthog/browser-common/utils/globals', async () => ({
+    ...(await import('./helpers/snapshot-test-globals')).snapshotTestGlobals,
     fetch: vi.fn(),
 }))
 

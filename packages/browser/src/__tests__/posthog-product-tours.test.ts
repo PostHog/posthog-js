@@ -13,13 +13,14 @@ vi.mock('@posthog/browser-common/utils/logger', () => {
     }
 })
 
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { PostHog } from '../posthog-core'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PRODUCT_TOURS, PRODUCT_TOURS_ENABLED_SERVER_SIDE } from '../constants'
 import { RemoteConfig } from '../types'
 
-const mockLogger = vi.requireMock('@posthog/browser-common/utils/logger').createLogger.mock.results[0].value
+const mockLogger = vi.mocked(createLogger).mock.results[0].value
 
 describe('PostHogProductTours', () => {
     let instance: PostHog

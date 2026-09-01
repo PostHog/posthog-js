@@ -80,7 +80,7 @@ describe('ConversationsWidget', () => {
         )
         const previousDebug = Config.DEBUG
         Config.DEBUG = true
-        const errorSpy = vi.spyOn(console, 'error').mockImplementation()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
         try {
             const { getByText, getByPlaceholderText, findByText } = render(
@@ -147,7 +147,7 @@ describe('ConversationsWidget', () => {
         )
         const previousDebug = Config.DEBUG
         Config.DEBUG = true
-        const errorSpy = vi.spyOn(console, 'error').mockImplementation()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
         try {
             const { getByPlaceholderText, getByLabelText, findByText, queryByText } = render(
@@ -177,7 +177,7 @@ describe('ConversationsWidget', () => {
         const error = new Error('Unexpected send failure')
         const previousDebug = Config.DEBUG
         Config.DEBUG = true
-        const errorSpy = vi.spyOn(console, 'error').mockImplementation()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
         try {
             const { getByPlaceholderText, getByLabelText, findByText } = render(

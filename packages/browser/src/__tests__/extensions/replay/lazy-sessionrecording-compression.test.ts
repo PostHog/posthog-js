@@ -36,8 +36,8 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
             return new Blob([gzipSync(strToU8(input))])
         })
 
-    vi.doMock('@posthog/core', () => {
-        const actual = vi.requireActual('@posthog/core')
+    vi.doMock('@posthog/core', async (importOriginal) => {
+        const actual = await importOriginal<typeof import('@posthog/core')>()
         return {
             ...actual,
             gzipCompress: gzipCompressMock,

@@ -7,6 +7,7 @@ vi.mock('@posthog/browser-common/utils/logger', () => ({
 }))
 vi.useFakeTimers()
 
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { SURVEYS, SURVEYS_CACHE_TTL_MS, SURVEYS_LOADED_AT, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { SurveyManager } from '../extensions/surveys'
 import { PostHog } from '../posthog-core'
@@ -18,7 +19,7 @@ import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../utils/survey-u
 import { createMockPostHog } from './helpers/posthog-instance'
 import { createSurveysClient } from './helpers/surveys-client'
 
-const mockLogger = vi.requireMock('@posthog/browser-common/utils/logger').createLogger.mock.results[0].value
+const mockLogger = vi.mocked(createLogger).mock.results[0].value
 
 const flushPromises = async (): Promise<void> => {
     await Promise.resolve()

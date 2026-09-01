@@ -560,9 +560,9 @@ describe('ConversationsManager', () => {
 
                 const previousDebug = Config.DEBUG
                 Config.DEBUG = true
-                const infoSpy = vi.spyOn(console, 'log').mockImplementation()
-                const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
-                const errorSpy = vi.spyOn(console, 'error').mockImplementation()
+                const infoSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+                const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+                const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
                 try {
                     await expect(requests[method]()).rejects.toMatchObject({
@@ -608,8 +608,8 @@ describe('ConversationsManager', () => {
 
                 const previousDebug = Config.DEBUG
                 Config.DEBUG = true
-                const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
-                const errorSpy = vi.spyOn(console, 'error').mockImplementation()
+                const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+                const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
                 try {
                     await expect(manager.restoreFromToken('restore-token')).rejects.toMatchObject({ kind, message })
@@ -636,8 +636,8 @@ describe('ConversationsManager', () => {
 
             const previousDebug = Config.DEBUG
             Config.DEBUG = true
-            const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
-            const errorSpy = vi.spyOn(console, 'error').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
             try {
                 await expect(manager.getTickets()).rejects.toMatchObject({ kind: 'network' })
@@ -661,8 +661,8 @@ describe('ConversationsManager', () => {
 
             const previousDebug = Config.DEBUG
             Config.DEBUG = true
-            const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
-            const errorSpy = vi.spyOn(console, 'error').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
             try {
                 await expect(manager.restoreFromToken('restore-token')).rejects.toMatchObject({ kind: 'network' })
@@ -688,7 +688,7 @@ describe('ConversationsManager', () => {
 
             const previousDebug = Config.DEBUG
             Config.DEBUG = true
-            const errorSpy = vi.spyOn(console, 'error').mockImplementation()
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
             try {
                 await (manager as any)._loadTickets()
@@ -738,8 +738,8 @@ describe('ConversationsManager', () => {
 
             const previousDebug = Config.DEBUG
             Config.DEBUG = true
-            const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
-            const errorSpy = vi.spyOn(console, 'error').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
             try {
                 await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({
@@ -762,8 +762,8 @@ describe('ConversationsManager', () => {
 
             const previousDebug = Config.DEBUG
             Config.DEBUG = true
-            const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
-            const errorSpy = vi.spyOn(console, 'error').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
             try {
                 await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({
@@ -789,8 +789,8 @@ describe('ConversationsManager', () => {
 
             const previousDebug = Config.DEBUG
             Config.DEBUG = true
-            const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
-            const errorSpy = vi.spyOn(console, 'error').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
             try {
                 await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({

@@ -29,8 +29,8 @@ import { SessionPropsManager } from '../session-props'
 // eslint-disable-next-line no-var
 var mockGetProperties: vi.Mock
 
-vi.mock('@posthog/browser-common/utils/event-utils', () => {
-    const originalEventUtils = vi.requireActual('@posthog/browser-common/utils/event-utils')
+vi.mock('@posthog/browser-common/utils/event-utils', async (importOriginal) => {
+    const originalEventUtils = await importOriginal<typeof import('@posthog/browser-common/utils/event-utils')>()
     mockGetProperties = vi.fn().mockImplementation((...args) => originalEventUtils.getEventProperties(...args))
     return {
         ...originalEventUtils,
@@ -1232,7 +1232,7 @@ describe('posthog core', () => {
         it('does nothing when empty', () => {
             // memory persistence with an empty bootstrap is the exact volatile-identity case the init
             // warning covers, so allow that console.warn here instead of failing on it.
-            const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
             const posthog = posthogWith({
                 bootstrap: {},
                 persistence: 'memory',
@@ -1428,8 +1428,8 @@ describe('posthog core', () => {
         vi.spyOn(window, 'window', 'get')
 
         beforeEach(() => {
-            vi.spyOn(window.console, 'warn').mockImplementation()
-            vi.spyOn(window.console, 'error').mockImplementation()
+            vi.spyOn(window.console, 'warn').mockImplementation(() => {})
+            vi.spyOn(window.console, 'error').mockImplementation(() => {})
         })
 
         it('can set an xhr error handler', () => {

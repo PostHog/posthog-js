@@ -14,7 +14,7 @@ describe('RetryQueue', () => {
         vi.useFakeTimers()
         vi.setSystemTime(now)
         assignableWindow.POSTHOG_DEBUG = false
-        vi.spyOn(assignableWindow.console, 'warn').mockImplementation()
+        vi.spyOn(assignableWindow.console, 'warn').mockImplementation(() => {})
     })
 
     const fastForwardTimeAndRunTimer = (time = 3500) => {

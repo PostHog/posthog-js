@@ -27,7 +27,7 @@ describe(`Module-based loader in Node env`, () => {
 
         vi.useFakeTimers()
         vi.spyOn(posthog, '_send_request').mockReturnValue()
-        vi.spyOn(window!.console, 'log').mockImplementation()
+        vi.spyOn(window!.console, 'log').mockImplementation(() => {})
     })
 
     it('should load and capture the pageview event', () => {
@@ -137,7 +137,7 @@ describe('Snippet loader', () => {
 
     it('preserves the loaded instance and replays a shared queue once when array.js executes twice', () => {
         vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
-        vi.spyOn(console, 'warn').mockImplementation()
+        vi.spyOn(console, 'warn').mockImplementation(() => {})
 
         const queuedCall = vi.fn()
         const snippetPostHog = [queuedCall] as any

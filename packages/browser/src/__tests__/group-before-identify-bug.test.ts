@@ -4,8 +4,8 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
-vi.mock('@posthog/browser-common/utils/globals', () => {
-    const orig = vi.requireActual('@posthog/browser-common/utils/globals')
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
     const mockURLGetter = vi.fn()
     const mockReferrerGetter = vi.fn()
     return {

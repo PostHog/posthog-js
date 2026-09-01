@@ -11,14 +11,16 @@ const fromRoot = (relativePath: string): string => fileURLToPath(new URL(relativ
 export default defineConfig({
     resolve: {
         alias: [
-            { find: /\.css$/, replacement: require.resolve('identity-obj-proxy') },
-            { find: 'preact', replacement: path.join(preactRoot, 'dist/preact.js') },
+            { find: /^@\/(.*)$/, replacement: `${fromRoot('../core/src')}/$1` },
+            { find: /^.*\.css$/, replacement: require.resolve('identity-obj-proxy') },
+            { find: /^preact$/, replacement: path.join(preactRoot, 'dist/preact.js') },
             { find: 'preact/hooks', replacement: path.join(preactRoot, 'hooks/dist/hooks.js') },
             { find: 'preact/jsx-runtime', replacement: path.join(preactRoot, 'jsx-runtime/dist/jsxRuntime.js') },
+            { find: 'preact/jsx-dev-runtime', replacement: path.join(preactRoot, 'jsx-runtime/dist/jsxRuntime.js') },
             { find: 'preact/test-utils', replacement: path.join(preactRoot, 'test-utils/dist/testUtils.js') },
             { find: '@testing-library/preact', replacement: path.join(testingLibraryPreactCjs, 'index.js') },
             { find: '@posthog/rrweb-utils', replacement: fromRoot('../rrweb/utils/src/index.ts') },
-            { find: '@posthog/browser-common', replacement: fromRoot('../browser-common/src/index.ts') },
+            { find: /^@posthog\/browser-common$/, replacement: fromRoot('../browser-common/src/index.ts') },
             { find: '@posthog/browser-common/config', replacement: fromRoot('../browser-common/src/config.ts') },
             { find: '@posthog/browser-common/constants', replacement: fromRoot('../browser-common/src/constants.ts') },
             {
@@ -35,6 +37,7 @@ export default defineConfig({
                 replacement: `${fromRoot('../browser-common/src/utils')}/$1.ts`,
             },
             { find: '@posthog/core/surveys', replacement: fromRoot('../core/src/surveys/index.ts') },
+            { find: /^@posthog\/core$/, replacement: fromRoot('../core/src/index.ts') },
         ],
     },
     test: {

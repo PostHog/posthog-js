@@ -7,7 +7,7 @@ import { normalizeCaptureResult, standardVolatileCaptureProperties } from './hel
 
 vi.mock(
     '@posthog/browser-common/utils/globals',
-    () => vi.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
+    async () => (await import('./helpers/snapshot-test-globals')).snapshotTestGlobals
 )
 
 describe('identify()', () => {

@@ -11,7 +11,7 @@ describe('config', () => {
         let warnSpy: vi.SpyInstance
 
         beforeEach(() => {
-            warnSpy = vi.spyOn(console, 'warn').mockImplementation()
+            warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
         })
 
         afterEach(() => {

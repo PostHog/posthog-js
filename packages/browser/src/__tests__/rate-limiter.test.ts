@@ -17,7 +17,7 @@ describe('Rate Limiter', () => {
 
     beforeEach(() => {
         vi.useFakeTimers()
-        vi.spyOn(window!.console, 'error').mockImplementation()
+        vi.spyOn(window!.console, 'error').mockImplementation(() => {})
 
         const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
         systemTime = baseUTCDateTime.getTime()

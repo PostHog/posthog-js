@@ -27,8 +27,8 @@ vi.useFakeTimers()
 // eslint-disable-next-line no-var
 var mockLocation: vi.Mock
 
-vi.mock('@posthog/browser-common/utils/globals', () => {
-    const original = vi.requireActual('@posthog/browser-common/utils/globals')
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const original = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
     mockLocation = vi.fn().mockReturnValue({
         protocol: 'http:',
         host: 'localhost',

@@ -99,7 +99,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             { 'early-access-flag': true },
             { errorsLoading: undefined }
         )
-        const capture = vi.spyOn(posthog, 'capture').mockImplementation()
+        const capture = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
         posthog.getFeatureFlag('early-access-flag')
         expect(capture).toHaveBeenCalledWith(
             '$feature_flag_called',
@@ -288,7 +288,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it('does not start when the internal refresh interval is undefined', async () => {
             const featureFlags = await setupFeatureFlagsWithInternalInterval()
-            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             vi.advanceTimersByTime(defaultRefreshIntervalMs)
             document.dispatchEvent(new Event('visibilitychange'))
@@ -324,7 +324,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it.each([0, -1])('does not start when the public refresh interval is %s', async (interval) => {
             const featureFlags = await setupFeatureFlags(interval)
-            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             vi.advanceTimersByTime(defaultRefreshIntervalMs)
             document.dispatchEvent(new Event('visibilitychange'))
@@ -334,7 +334,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it('uses the existing five-minute default when the public option is undefined', async () => {
             const featureFlags = await setupFeatureFlags()
-            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             vi.advanceTimersByTime(defaultRefreshIntervalMs - 1)
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
@@ -348,7 +348,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                 loaded: (instance) => instance.set_config({ remote_config_refresh_interval_ms: refreshIntervalMs }),
             })
             featureFlags = posthog.featureFlags
-            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             vi.advanceTimersByTime(refreshIntervalMs)
 
@@ -362,7 +362,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                 remote_config_refresh_interval_ms: 0,
             })
             featureFlags = posthog.featureFlags
-            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             vi.advanceTimersByTime(defaultRefreshIntervalMs)
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
@@ -396,7 +396,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             const config = defaultConfig()
             config.remote_config_refresh_interval_ms = refreshIntervalMs
             featureFlags.updateConfig(config, false)
-            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             resolveInitialization?.()
             await setup
@@ -407,7 +407,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it('reloads flags on the configured interval while visible', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             vi.advanceTimersByTime(refreshIntervalMs - 1)
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
@@ -418,7 +418,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it('reloads due flags when a hidden page becomes visible', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             setVisibilityState('hidden')
             vi.advanceTimersByTime(refreshIntervalMs)
@@ -431,7 +431,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it('starts a full interval after a visibility refresh', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             setVisibilityState('hidden')
             vi.advanceTimersByTime(refreshIntervalMs + refreshIntervalMs / 2)
@@ -447,7 +447,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it('does not reload flags when the page becomes visible before the interval elapses', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             setVisibilityState('hidden')
             vi.advanceTimersByTime(refreshIntervalMs - 1)
@@ -459,7 +459,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it('keeps automatic refresh active after flag state resets', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             featureFlags.reset()
             vi.advanceTimersByTime(refreshIntervalMs)
@@ -469,7 +469,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it('stops automatic refresh on dispose', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             featureFlags.dispose()
             vi.advanceTimersByTime(refreshIntervalMs)
@@ -480,7 +480,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it('stops automatic refresh through the legacy destroy method', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             featureFlags.destroy()
             const config = defaultConfig()
@@ -506,7 +506,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             config.remote_config_refresh_interval_ms = refreshIntervalMs
             featureFlags.updateConfig(config, false)
             const setup = featureFlags.setup(client)
-            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             featureFlags.destroy()
             resolveInitialization?.()
@@ -523,8 +523,8 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             const addDocumentListener = vi.spyOn(document, 'addEventListener')
             setRefreshInterval.mockClear()
             addDocumentListener.mockClear()
-            vi.doMock('@posthog/browser-common/utils/globals', () => ({
-                ...vi.requireActual('@posthog/browser-common/utils/globals'),
+            vi.doMock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
+                ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
                 document: undefined,
             }))
 
@@ -560,7 +560,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
             try {
                 const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-                const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+                const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
                 vi.advanceTimersByTime(refreshIntervalMs)
 
@@ -604,7 +604,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const client = posthog._getBrowserClientAdapter()
         const sendRequest = vi.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: {} })
         vi.spyOn(client.logger, 'createLogger').mockReturnValue(client.logger)
-        const error = vi.spyOn(client.logger, 'error').mockImplementation()
+        const error = vi.spyOn(client.logger, 'error').mockImplementation(() => {})
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
         const handlerError = new Error('handler failed')
@@ -647,9 +647,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
     it('logs feature flag request failures through the scoped logger', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
-        const clientError = vi.spyOn(client.logger, 'error').mockImplementation()
+        const clientError = vi.spyOn(client.logger, 'error').mockImplementation(() => {})
         const scopedLogger = client.logger.createLogger('[FeatureFlags]')
-        const scopedError = vi.spyOn(scopedLogger, 'error').mockImplementation()
+        const scopedError = vi.spyOn(scopedLogger, 'error').mockImplementation(() => {})
         vi.spyOn(client.logger, 'createLogger').mockReturnValue(scopedLogger)
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
@@ -1053,7 +1053,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         featureFlags.setup(posthog._getBrowserClientAdapter())
         const callback = vi.fn()
         featureFlags.addFeatureFlagsHandler(callback)
-        vi.spyOn(console, 'log').mockImplementation()
+        vi.spyOn(console, 'log').mockImplementation(() => {})
 
         featureFlags.receivedFeatureFlags({ featureFlags: { 'test-flag': true } })
         expect(callback).toHaveBeenCalledTimes(1)
@@ -1085,7 +1085,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         featureFlags.setup(client)
         const callback = vi.fn()
         featureFlags.addFeatureFlagsHandler(callback)
-        const capture = vi.spyOn(posthog, 'capture').mockImplementation()
+        const capture = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
         const setPersistence = vi.spyOn(client.kv, 'set')
 
         featureFlags.updateEarlyAccessFeatureEnrollment('test-flag', true)
