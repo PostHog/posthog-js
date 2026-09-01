@@ -18,10 +18,6 @@ const POSTHOG_ANDROID_SKIP_ON_CONFLICT_PROPERTY = 'posthogReactNativeSkipOnConfl
 
 const POSTHOG_HERMES_RELEASE_MODE_GRADLE_PROPERTY = 'posthog.hermesReleaseMode'
 
-// Written by earlier versions, and read by com.posthog.android for the R8 mapping upload. The
-// prebuild removes it so the Hermes mode cannot reach that upload through a stale entry.
-const LEGACY_RELEASE_MODE_GRADLE_PROPERTY = 'posthog.releaseMode'
-
 /**
  * How the release a build belongs to gets associated with the exceptions it reports. This steers
  * the Hermes source map upload only. iOS dSYMs and Android R8 mappings always bind to the release
@@ -39,15 +35,17 @@ export type PostHogReleaseMode = 'symbol-set' | 'event'
 export const POSTHOG_RELEASE_MODES: PostHogReleaseMode[] = ['symbol-set', 'event']
 
 // Empty/whitespace-only values (easy to produce from templated app.config values) count as unset
-// and fall through to the next source. The prebuild writes one resolved mode into the bundle phase,
-// and that beats POSTHOG_RELEASE_MODE at build time, so this reads the variable rather than leaving
-// an Expo build with no way to opt out. An unrecognized value stops the prebuild rather than falling
-// back, so a typo cannot silently leave a build binding its maps to a release it meant to keep
-// independent.
-export function resolveReleaseModeProp(releaseMode?: string, environmentMode?: string): PostHogReleaseMode {
+// and fall through to the next source. A configured mode is written into the bundle phase, and that
+// beats POSTHOG_RELEASE_MODE at build time, so this reads the variable rather than leaving an Expo
+// build with no way to opt out. Undefined means nothing configured a mode: the prebuild then writes
+// nothing, and the build scripts apply the event default themselves, which they can soften to a
+// bound upload when the installed posthog-cli predates the flag. An unrecognized value stops the
+// prebuild rather than falling back, so a typo cannot silently leave a build binding its maps to a
+// release it meant to keep independent.
+export function resolveReleaseModeProp(releaseMode?: string, environmentMode?: string): PostHogReleaseMode | undefined {
   const trimmed = releaseMode?.trim() || environmentMode?.trim()
   if (!trimmed) {
-    return 'event'
+    return undefined
   }
   if (!POSTHOG_RELEASE_MODES.includes(trimmed as PostHogReleaseMode)) {
     throw new Error(
@@ -364,6 +362,45 @@ function composeDsymUploadShellScript(includeSource: boolean, skipOnConflict: bo
   return lines.join('\n')
 }
 
+// The release-mode block exactly as 4.64.0 through 4.66.x wrote it into the dSYM phase. Its
+// POSTHOG_NO_RELEASE_BIND export still steers the posthog-ios this plugin pins, so a phase carrying
+// the block must stay recognized and get rewritten to the block-free script. Verbatim on purpose.
+function legacyDsymReleaseModeLines(releaseMode?: PostHogReleaseMode): string[] {
+  return [
+    releaseMode
+      ? `POSTHOG_RESOLVED_RELEASE_MODE="${releaseMode}"`
+      : 'POSTHOG_RESOLVED_RELEASE_MODE="${POSTHOG_RELEASE_MODE:-}"',
+    'case "$POSTHOG_RESOLVED_RELEASE_MODE" in',
+    '  ""|symbol-set) ;;',
+    '  event)',
+    '    # Upload dSYMs without binding them to a release, so each crash resolves its own from the',
+    '    # app version and namespace the SDK sends. posthog-ios versions whose upload-symbols.sh',
+    '    # does not read this variable ignore it and keep binding the dSYMs.',
+    '    export POSTHOG_NO_RELEASE_BIND=1',
+    '    ;;',
+    '  *)',
+    "    echo \"error: posthog release mode must be 'symbol-set' or 'event', was '$POSTHOG_RESOLVED_RELEASE_MODE'\"",
+    '    exit 1',
+    '    ;;',
+    'esac',
+  ]
+}
+
+// The phase as the release-mode era wrote it: the current script with the mode block ahead of the
+// upload lines. Derived from composeDsymUploadShellScript, so the shared lines stay a compatibility
+// contract: a change to them needs the old text kept as a variant, or these phases go unrecognized.
+// The verbatim fixtures in expoconfig.spec.ts hold this derivation to the published 4.66.3 text.
+function buildLegacyReleaseModeDsymUploadShellScript(
+  includeSource: boolean,
+  skipOnConflict: boolean,
+  releaseMode?: PostHogReleaseMode
+): string {
+  const lines = composeDsymUploadShellScript(includeSource, skipOnConflict).split('\n')
+  const uploadIndex = lines.findIndex((line) => line.startsWith('PODS_SCRIPT='))
+  lines.splice(uploadIndex, 0, ...legacyDsymReleaseModeLines(releaseMode))
+  return lines.join('\n')
+}
+
 // xcode's addBuildPhase stores shellScript quote-escaped with literal newlines; in-place
 // refreshes must match or the stored pbxproj representation churns.
 function encodePbxShellScript(script: string): string {
@@ -386,7 +423,13 @@ function isPluginGeneratedDsymUploadBuildPhase(phase: any): boolean {
   }
   const stored = decodePbxShellScript(phase.shellScript)
   return [false, true].some((source) =>
-    [false, true].some((skip) => stored === buildDsymUploadShellScript(source, skip))
+    [false, true].some(
+      (skip) =>
+        stored === buildDsymUploadShellScript(source, skip) ||
+        [undefined, ...POSTHOG_RELEASE_MODES].some(
+          (mode) => stored === buildLegacyReleaseModeDsymUploadShellScript(source, skip, mode)
+        )
+    )
   )
 }
 
@@ -520,18 +563,15 @@ export function updateDotenvFileGradleProperties(
 
 // Managed posthog.hermesReleaseMode entry in android/gradle.properties, read by the SDK's
 // posthog.gradle hermes upload. The key is deliberately not posthog.releaseMode: com.posthog.android
-// reads that one for the R8 mapping upload, and the mode must not reach it. A legacy entry written
-// by an earlier version is removed, so a stale value cannot steer either upload.
+// reads that one for the R8 mapping upload, and the mode must not reach it. A posthog.releaseMode
+// entry is deprecated user-owned config, so the prebuild leaves it alone; posthog.gradle reads it
+// as a fallback with a warning, and com.posthog.android deprecates it on its own schedule.
 export function updateHermesReleaseModeGradleProperties(
   properties: GradlePropertiesItem[],
   releaseMode?: PostHogReleaseMode
 ): GradlePropertiesItem[] {
   const rest = properties.filter(
-    (item) =>
-      !(
-        item.type === 'property' &&
-        (item.key === POSTHOG_HERMES_RELEASE_MODE_GRADLE_PROPERTY || item.key === LEGACY_RELEASE_MODE_GRADLE_PROPERTY)
-      )
+    (item) => !(item.type === 'property' && item.key === POSTHOG_HERMES_RELEASE_MODE_GRADLE_PROPERTY)
   )
   if (!releaseMode) {
     return rest
@@ -623,10 +663,11 @@ type PostHogPluginProps = {
    * This steers the Hermes source map upload only. iOS dSYMs and Android R8 mappings always bind to
    * the release their build creates.
    *
-   * `event` (the default) uploads the maps release-independent, and each event resolves its own
-   * release from the `$app_namespace` / `$app_version` / `$app_build` the SDK sends. Use it
-   * when two releases can ship identical JavaScript: the map id comes from content, so in
-   * `symbol-set` mode both releases report whichever one uploaded first.
+   * `event` (the default; still EXPERIMENTAL while the rollout settles) uploads the maps
+   * release-independent, and each event resolves its own release from the `$app_namespace` /
+   * `$app_version` / `$app_build` the SDK sends. Use it when two releases can ship identical
+   * JavaScript: the map id comes from content, so in `symbol-set` mode both releases report
+   * whichever one uploaded first.
    *
    * Event mode's release link depends on those coordinates reaching each exception. The SDK reads
    * them from the optional `expo-application` or `react-native-device-info` module, and a plain
@@ -636,11 +677,15 @@ type PostHogPluginProps = {
    * exceptions to a release; `symbol-set` instead stamps the release onto the uploaded maps from the
    * build settings and does not need them.
    *
-   * Defaults to `POSTHOG_RELEASE_MODE` when this prop is absent. The prebuild writes the resolved
-   * mode into the bundle build phase, so set the variable before you run the prebuild.
+   * When this prop is absent, the prebuild reads `POSTHOG_RELEASE_MODE`; set the variable before
+   * you run the prebuild. A configured mode is written into the build files and beats the variable
+   * at build time. With neither configured, the prebuild writes nothing, the build scripts apply
+   * the `event` default at build time, and `POSTHOG_RELEASE_MODE` also still works there.
    *
-   * Needs posthog-cli >= 0.16.0, which carries `--release-mode` on the `hermes` commands. The build
-   * fails on an older one and names the upgrade. That floor lives in posthog-xcode.sh and
+   * Event mode needs posthog-cli >= 0.16.0, which carries `--release-mode` on the `hermes`
+   * commands. A configured `event` fails the build on an older one and names the upgrade. The
+   * unconfigured default softens instead: the build warns and uploads the maps bound to the
+   * release, as it did before the default changed. That floor lives in posthog-xcode.sh and
    * posthog.gradle: update them and this line together.
    */
   releaseMode?: PostHogReleaseMode

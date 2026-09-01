@@ -422,6 +422,106 @@ describe('addDsymUploadBuildPhase', () => {
     }
   )
 
+  // Verbatim release-mode block as posthog-react-native 4.64.0 through 4.66.3 wrote it, with the
+  // given first line. Kept as literals for the same reason as the 4.63 fixtures above: the
+  // migration in the plugin derives these variants from the current generator, and only a frozen
+  // copy of the published text can catch that derivation drifting.
+  const releaseModeDsymBlock = (modeLine: string): string[] => [
+    modeLine,
+    'case "$POSTHOG_RESOLVED_RELEASE_MODE" in',
+    '  ""|symbol-set) ;;',
+    '  event)',
+    '    # Upload dSYMs without binding them to a release, so each crash resolves its own from the',
+    '    # app version and namespace the SDK sends. posthog-ios versions whose upload-symbols.sh',
+    '    # does not read this variable ignore it and keep binding the dSYMs.',
+    '    export POSTHOG_NO_RELEASE_BIND=1',
+    '    ;;',
+    '  *)',
+    "    echo \"error: posthog release mode must be 'symbol-set' or 'event', was '$POSTHOG_RESOLVED_RELEASE_MODE'\"",
+    '    exit 1',
+    '    ;;',
+    'esac',
+  ]
+
+  const DSYM_PHASE_HEAD = [
+    '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
+    '# upload-symbols.sh ships inside the posthog-ios dependency.',
+  ]
+  const releaseModeDsymPhases: Array<[string, boolean, boolean, string[]]> = [
+    [
+      'event mode',
+      false,
+      false,
+      [
+        ...DSYM_PHASE_HEAD,
+        ...releaseModeDsymBlock('POSTHOG_RESOLVED_RELEASE_MODE="event"'),
+        ...LEGACY_DSYM_SCRIPT_TAIL,
+      ],
+    ],
+    [
+      'symbol-set mode',
+      false,
+      false,
+      [
+        ...DSYM_PHASE_HEAD,
+        ...releaseModeDsymBlock('POSTHOG_RESOLVED_RELEASE_MODE="symbol-set"'),
+        ...LEGACY_DSYM_SCRIPT_TAIL,
+      ],
+    ],
+    [
+      'environment-resolved mode',
+      false,
+      false,
+      [
+        ...DSYM_PHASE_HEAD,
+        ...releaseModeDsymBlock('POSTHOG_RESOLVED_RELEASE_MODE="${POSTHOG_RELEASE_MODE:-}"'),
+        ...LEGACY_DSYM_SCRIPT_TAIL,
+      ],
+    ],
+    [
+      'event mode with includeSource and skipOnConflict',
+      true,
+      true,
+      [
+        ...DSYM_PHASE_HEAD,
+        '# Also upload native source files for source-code context around crashes.',
+        'export POSTHOG_INCLUDE_SOURCE=1',
+        '# Skip dSYMs that already exist in PostHog with different content instead of failing the build.',
+        'export POSTHOG_SKIP_ON_CONFLICT=1',
+        ...releaseModeDsymBlock('POSTHOG_RESOLVED_RELEASE_MODE="event"'),
+        ...LEGACY_DSYM_SCRIPT_TAIL,
+      ],
+    ],
+  ]
+
+  it.each(releaseModeDsymPhases)(
+    'migrates a phase written by a release-mode SDK (%s) and stays idempotent',
+    (_case, includeSource, skipOnConflict, legacyLines) => {
+      // A phase left unrecognized would keep its POSTHOG_NO_RELEASE_BIND export, which the pinned
+      // posthog-ios still reads, so locked upgrades would keep uploading dSYMs unbound.
+      const existing: any = {
+        isa: 'PBXShellScriptBuildPhase',
+        shellScript: encodePbx(legacyLines.join('\n')),
+        inputPaths: ['"$(DWARF_DSYM_FOLDER_PATH)/$(DWARF_DSYM_FILE_NAME)/Contents/Resources/DWARF/$(EXECUTABLE_NAME)"'],
+      }
+      const xp = mockXcodeProjectForBuildPhase(existing)
+
+      addDsymUploadBuildPhase(xp, includeSource, skipOnConflict)
+
+      expect(xp.addBuildPhase).not.toHaveBeenCalled()
+      expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(includeSource, skipOnConflict)))
+      expect(existing.shellScript).not.toContain('POSTHOG_NO_RELEASE_BIND')
+
+      addDsymUploadBuildPhase(xp, includeSource, skipOnConflict)
+
+      expect(xp.addBuildPhase).not.toHaveBeenCalled()
+      expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(includeSource, skipOnConflict)))
+      expect(existing.inputPaths).toEqual([
+        '"$(DWARF_DSYM_FOLDER_PATH)/$(DWARF_DSYM_FILE_NAME)/Contents/Resources/DWARF/$(EXECUTABLE_NAME)"',
+      ])
+    }
+  )
+
   it('refreshes an existing plugin-generated phase script so option changes take effect', () => {
     const existing: any = {
       isa: 'PBXShellScriptBuildPhase',
@@ -769,13 +869,15 @@ describe('updateHermesReleaseModeGradleProperties', () => {
     expect(result).toEqual([...unrelated, { type: 'property', key: 'posthog.hermesReleaseMode', value: 'symbol-set' }])
   })
 
-  it('removes a legacy posthog.releaseMode entry', () => {
-    // An entry an earlier prebuild wrote would otherwise keep steering the R8 upload.
-    const legacy = [...unrelated, { type: 'property', key: 'posthog.releaseMode', value: 'event' }]
+  it('leaves a legacy posthog.releaseMode entry alone', () => {
+    // The legacy key is deprecated user-owned config, so the prebuild must not rewrite it. The
+    // gradle scripts warn about it and read it as a fallback instead.
+    const legacyEntry = { type: 'property', key: 'posthog.releaseMode', value: 'event' }
+    const legacy = [...unrelated, legacyEntry]
 
     const result = updateHermesReleaseModeGradleProperties(legacy, 'event')
 
-    expect(result.filter((item) => item.key === 'posthog.releaseMode')).toEqual([])
+    expect(result.filter((item) => item.key === 'posthog.releaseMode')).toEqual([legacyEntry])
     expect(result.filter((item) => item.key === 'posthog.hermesReleaseMode')).toEqual([
       { type: 'property', key: 'posthog.hermesReleaseMode', value: 'event' },
     ])
@@ -792,14 +894,16 @@ describe('updateHermesReleaseModeGradleProperties', () => {
 })
 
 describe('resolveReleaseModeProp', () => {
-  it('resolves an unset or blank prop to event', () => {
-    expect(resolveReleaseModeProp()).toBe('event')
-    expect(resolveReleaseModeProp('  ')).toBe('event')
+  it('treats an unset or blank prop as unconfigured', () => {
+    // Undefined makes the prebuild write nothing, so the build scripts own the event default and
+    // can soften it to a bound upload on a posthog-cli predating the flag.
+    expect(resolveReleaseModeProp()).toBeUndefined()
+    expect(resolveReleaseModeProp('  ')).toBeUndefined()
   })
 
   it('reads POSTHOG_RELEASE_MODE when the prop is absent', () => {
-    // The prebuild writes the resolved mode into the bundle phase, and that beats the variable at
-    // build time. Reading it here is what keeps the opt-out working for an Expo project.
+    // A configured mode is written into the bundle phase, and that beats the variable at build
+    // time. Reading it here is what keeps the prebuild-time opt-out working for an Expo project.
     expect(resolveReleaseModeProp(undefined, 'symbol-set')).toBe('symbol-set')
     expect(resolveReleaseModeProp('event', 'symbol-set')).toBe('event')
   })

@@ -33,6 +33,13 @@ print_command_error() {
 # WITH_ENVIRONMENT is executed by React Native
 
 POSTHOG_SKIP_ON_CONFLICT_ENABLED="${POSTHOG_SKIP_ON_CONFLICT:-}"
+# The mode is explicit when the environment or a --posthog-release-mode argument supplies it, and
+# implicit when only the event default applies. The difference decides how an old posthog-cli is
+# handled below: an explicit mode fails the build, the implicit default softens to a bound upload.
+POSTHOG_RELEASE_MODE_EXPLICIT=1
+if [ -z "${POSTHOG_RELEASE_MODE:-}" ]; then
+  POSTHOG_RELEASE_MODE_EXPLICIT=0
+fi
 POSTHOG_RELEASE_MODE_VALUE="${POSTHOG_RELEASE_MODE:-event}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -47,10 +54,12 @@ while [ "$#" -gt 0 ]; do
         exit 1
       fi
       POSTHOG_RELEASE_MODE_VALUE="$2"
+      POSTHOG_RELEASE_MODE_EXPLICIT=1
       shift 2
       ;;
     --posthog-release-mode=*)
       POSTHOG_RELEASE_MODE_VALUE="${1#*=}"
+      POSTHOG_RELEASE_MODE_EXPLICIT=1
       shift
       ;;
     --)
@@ -186,15 +195,27 @@ MIN_RELEASE_MODE_CLI_VERSION="0.16.0"
 # --release-mode flag they carry is never applied. Skip the floor check for it, otherwise the default
 # event mode fails such a build over a posthog-cli version it never exercises.
 if [ ${#POSTHOG_RELEASE_MODE_ARGS[@]} -gt 0 ] && [ "${POSTHOG_SKIP_CLI_VERSION_CHECK:-}" != "1" ] && [ -z "${SKIP_BUNDLING:-}" ]; then
-  if [ -z "$PH_CLI_VERSION" ]; then
-    echo "error: could not determine the posthog-cli version, which release mode '$POSTHOG_RELEASE_MODE_VALUE' needs. Upgrade: npm install -g @posthog/cli@latest"
-    exit 1
+  POSTHOG_CLI_SUPPORTS_RELEASE_MODE=0
+  if [ -n "$PH_CLI_VERSION" ]; then
+    # If the minimum sorts first, the installed version is at or above it.
+    PH_CLI_LOWEST=$(printf '%s\n%s\n' "$MIN_RELEASE_MODE_CLI_VERSION" "$PH_CLI_VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)
+    if [ "$PH_CLI_LOWEST" = "$MIN_RELEASE_MODE_CLI_VERSION" ]; then
+      POSTHOG_CLI_SUPPORTS_RELEASE_MODE=1
+    fi
   fi
-  # If the minimum sorts first, the installed version is at or above it.
-  PH_CLI_LOWEST=$(printf '%s\n%s\n' "$MIN_RELEASE_MODE_CLI_VERSION" "$PH_CLI_VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)
-  if [ "$PH_CLI_LOWEST" != "$MIN_RELEASE_MODE_CLI_VERSION" ]; then
-    echo "error: release mode '$POSTHOG_RELEASE_MODE_VALUE' needs posthog-cli >= ${MIN_RELEASE_MODE_CLI_VERSION} (found ${PH_CLI_VERSION}). Upgrade: npm install -g @posthog/cli@latest"
-    exit 1
+  if [ "$POSTHOG_CLI_SUPPORTS_RELEASE_MODE" != "1" ]; then
+    if [ "$POSTHOG_RELEASE_MODE_EXPLICIT" = "1" ]; then
+      if [ -z "$PH_CLI_VERSION" ]; then
+        echo "error: could not determine the posthog-cli version, which release mode '$POSTHOG_RELEASE_MODE_VALUE' needs. Upgrade: npm install -g @posthog/cli@latest"
+        exit 1
+      fi
+      echo "error: release mode '$POSTHOG_RELEASE_MODE_VALUE' needs posthog-cli >= ${MIN_RELEASE_MODE_CLI_VERSION} (found ${PH_CLI_VERSION}). Upgrade: npm install -g @posthog/cli@latest"
+      exit 1
+    fi
+    # Nothing configured the mode, so keep the old posthog-cli working: upload without the flag,
+    # which binds the maps to the release, as builds did before the event default existed.
+    echo "warning: posthog-cli ${PH_CLI_VERSION:-unknown} predates release mode '$POSTHOG_RELEASE_MODE_VALUE' (needs >= ${MIN_RELEASE_MODE_CLI_VERSION}). Uploading Hermes source maps bound to the release. Upgrade: npm install -g @posthog/cli@latest"
+    POSTHOG_RELEASE_MODE_ARGS=()
   fi
 fi
 
