@@ -5,8 +5,8 @@ import { cleanup, render, screen } from '@testing-library/react'
 // Minimal react-native shim — vi-expo's full preset chain pulls in
 // TurboModule code that explodes under jsdom. Styles are flattened onto the
 // DOM node so the resolved padding is readable from the rendered element.
-vi.mock('react-native', () => {
-  const RealReact = vi.requireActual('react')
+vi.mock('react-native', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   const flattenStyle = (style: any) => (Array.isArray(style) ? Object.assign({}, ...style) : style)
   const Box = ({ children, style, ...rest }: any) =>
     RealReact.createElement('div', { ...rest, style: flattenStyle(style) }, children)

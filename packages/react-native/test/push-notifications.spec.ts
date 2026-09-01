@@ -3,6 +3,7 @@ import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { setupFetch, waitForExpect, waitForNativePluginEvaluation } from './test-utils'
 
 vi.mock('../src/optional/OptionalPlugin', () => ({
+  OptionalReactNativePluginVersion: undefined,
   OptionalReactNativePlugin: {
     start: vi.fn(() => Promise.resolve()),
     setup: vi.fn(() => Promise.resolve()),
@@ -25,8 +26,8 @@ vi.mock('../src/optional/OptionalPlugin', () => ({
 // Read lazily off globalThis: the mock factory's functions run while modules are still
 // importing, before this file's const bindings initialize.
 const mockPlatform = ((globalThis as any).__pushTestPlatform = { macos: false, web: false })
-vi.mock('../src/utils', () => ({
-  ...vi.requireActual('../src/utils'),
+vi.mock('../src/utils', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/utils')>()),
   isMacOS: () => (globalThis as any).__pushTestPlatform?.macos ?? false,
   isWeb: () => (globalThis as any).__pushTestPlatform?.web ?? false,
 }))

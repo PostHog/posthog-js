@@ -6,8 +6,8 @@ import { Survey, SurveyQuestionType, SurveyType } from '@posthog/core'
 // Minimal react-native shim — vi-expo's full preset chain pulls in
 // TurboModule code that explodes under jsdom. We only need a handful of
 // primitives here, all rendering as plain divs so children appear in the DOM.
-vi.mock('react-native', () => {
-  const RealReact = vi.requireActual('react')
+vi.mock('react-native', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   const withoutNativeOnlyProps = (props: any) => {
     const domProps = { ...props }
     delete domProps.visible
@@ -54,8 +54,8 @@ vi.mock('react-native', () => {
 
 // Stub Questions / ConfirmationMessage / Cancel so we can assert exactly
 // which path SurveyModal is rendering, and trigger the submit/close callbacks.
-vi.mock('../src/surveys/components/Surveys', () => {
-  const RealReact = vi.requireActual('react')
+vi.mock('../src/surveys/components/Surveys', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   return {
     Questions: ({ onSubmit }: { onSubmit: () => void }) =>
       RealReact.createElement('div', { 'data-testid': 'questions-stub', onClick: onSubmit }, 'QUESTIONS_RENDERED'),
@@ -65,24 +65,24 @@ vi.mock('../src/surveys/components/Surveys', () => {
   }
 })
 
-vi.mock('../src/surveys/components/ConfirmationMessage', () => {
-  const RealReact = vi.requireActual('react')
+vi.mock('../src/surveys/components/ConfirmationMessage', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   return {
     ConfirmationMessage: ({ header }: { header: string }) =>
       RealReact.createElement('div', { 'data-testid': 'confirmation-stub' }, header),
   }
 })
 
-vi.mock('../src/surveys/components/IntroMessage', () => {
-  const RealReact = vi.requireActual('react')
+vi.mock('../src/surveys/components/IntroMessage', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   return {
     IntroMessage: ({ onStart }: { onStart: () => void }) =>
       RealReact.createElement('div', { 'data-testid': 'intro-stub', onClick: onStart }, 'INTRO_RENDERED'),
   }
 })
 
-vi.mock('../src/surveys/components/Cancel', () => {
-  const RealReact = vi.requireActual('react')
+vi.mock('../src/surveys/components/Cancel', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   return {
     Cancel: ({ onPress }: { onPress: () => void }) =>
       RealReact.createElement('div', { 'data-testid': 'cancel-stub', onClick: onPress }, 'X'),
@@ -235,13 +235,13 @@ describe('SurveyModal close behavior', () => {
     expect(queryByTestId('parent-unmounted')).not.toBeNull()
   })
 
-  it('notifies the parent on iOS via the fallback timer even when onDismiss never fires', () => {
+  it('notifies the parent on iOS via the fallback timer even when onDismiss never fires', async () => {
     // Regression: iOS used to notify the parent only through Modal.onDismiss. When Fabric
     // failed to fire onDismiss, the parent never cleared the active survey and this transparent
     // full-screen Modal stayed mounted swallowing every touch — the app appeared frozen. The
     // fallback timer guarantees the parent is still notified. The mocked Modal cannot fire
     // onDismiss, so this exercises exactly that failure mode.
-    const rn = vi.requireMock('react-native')
+    const rn = await import('react-native')
     const originalOS = rn.Platform.OS
     rn.Platform.OS = 'ios'
     try {

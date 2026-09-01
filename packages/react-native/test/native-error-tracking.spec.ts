@@ -3,6 +3,7 @@ import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { setupFetch, waitForExpect, waitForNativePluginEvaluation } from './test-utils'
 
 vi.mock('../src/optional/OptionalPlugin', () => ({
+  OptionalReactNativePluginVersion: undefined,
   OptionalReactNativePlugin: {
     start: vi.fn(() => Promise.resolve()),
     setup: vi.fn(() => Promise.resolve()),
@@ -142,9 +143,9 @@ describe('native error tracking', () => {
     expect(warnSpy.mock.calls.flat().join(' ')).toContain('Native error tracking is not available')
     expect(logSpy.mock.calls.flat().join(' ')).not.toContain('Native error tracking started')
 
+    await posthog.shutdown()
     warnSpy.mockRestore()
     logSpy.mockRestore()
-    await posthog.shutdown()
   })
 
   it('routes to error-tracking-only setup() when session replay is gated off by a linked flag', async () => {

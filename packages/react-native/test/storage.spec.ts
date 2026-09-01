@@ -196,7 +196,7 @@ describe('PostHog React Native', () => {
       )
 
       // Suppress console.warn for this test
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
       // Trigger a persist that will fail
       storage.setItem('test', 'value')
@@ -216,7 +216,7 @@ describe('PostHog React Native', () => {
         callCount += 1
         return callCount === 1 ? Promise.reject(new Error('first write failed')) : Promise.resolve()
       })
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
       storage.setItem('a', '1')
       await storage.waitForPersist()
@@ -244,7 +244,7 @@ describe('PostHog React Native', () => {
           },
         }
         const syncStorage = new PostHogRNStorage(syncThrowingStorage, '.test-sync.json')
-        const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
+        const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
         syncStorage.setItem('a', '1')
         vi.runOnlyPendingTimers()
@@ -319,7 +319,7 @@ describe('PostHog React Native', () => {
         },
       }
       const syncStorage = new PostHogRNStorage(syncThrowingStorage, '.test-sync.json')
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
       syncStorage.setItem('a', '1')
       await expect(syncStorage.waitForPersist()).resolves.toBeUndefined()

@@ -6,8 +6,8 @@ import { Survey, SurveyType } from '@posthog/core'
 // Minimal react-native shim — the full preset pulls in TurboModule code that
 // explodes under jsdom. The provider itself renders no RN primitives, but its
 // import chain (surveys-utils etc.) touches a few.
-vi.mock('react-native', () => {
-  const RealReact = vi.requireActual('react')
+vi.mock('react-native', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   const Box = RealReact.forwardRef(({ children, testID, ...rest }: any, ref: any) =>
     RealReact.createElement('div', { ref, 'data-testid': testID, ...rest }, children)
   )
@@ -27,8 +27,8 @@ vi.mock('../src/native-deps', () => ({ currentDeviceType: 'Mobile' }))
 
 // Stub the modal: mirror the real behavior (fires onShow once on mount, exposes
 // a close hook) without dragging in the SurveyModal render tree.
-vi.mock('../src/surveys/components/SurveyModal', () => {
-  const R = vi.requireActual('react')
+vi.mock('../src/surveys/components/SurveyModal', async () => {
+  const R = await vi.importActual<typeof import('react')>('react')
   return {
     SurveyModal: (props: any) => {
       R.useEffect(() => {

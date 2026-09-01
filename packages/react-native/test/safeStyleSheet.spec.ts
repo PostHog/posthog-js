@@ -20,14 +20,13 @@ describe('createSafeStyleSheet', () => {
     createSpy.mockRestore()
   })
 
-  it('falls back to the raw style map when StyleSheet is unavailable', () => {
-    vi.isolateModules(() => {
-      vi.doMock('react-native', () => ({ StyleSheet: undefined }))
-      // eslint-disable-next-line @typescript-eslint/no-require-imports -- isolated require exercises the no-runtime branch
-      const { createSafeStyleSheet: createWithoutRuntime } = require('../src/surveys/safeStyleSheet')
-      const input = { container: { padding: 10 } }
+  it('falls back to the raw style map when StyleSheet is unavailable', async () => {
+    vi.resetModules()
+    vi.doMock('react-native', () => ({ StyleSheet: undefined }))
+    const { createSafeStyleSheet: createWithoutRuntime } = await import('../src/surveys/safeStyleSheet')
+    const input = { container: { padding: 10 } }
 
-      expect(createWithoutRuntime(input)).toBe(input)
-    })
+    expect(createWithoutRuntime(input)).toBe(input)
+    vi.doUnmock('react-native')
   })
 })

@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`PostHog React Native event and request snapshots snapshots complete enriched analytics events at the decoded batch boundary 1`] = `
+exports[`PostHog React Native event and request snapshots > snapshots complete enriched analytics events at the decoded batch boundary 1`] = `
 {
   "body": {
     "api_key": "snapshot-project-token",
@@ -227,7 +227,7 @@ exports[`PostHog React Native event and request snapshots snapshots complete enr
 }
 `;
 
-exports[`PostHog React Native event and request snapshots snapshots the complete decoded feature flags request 1`] = `
+exports[`PostHog React Native event and request snapshots > snapshots the complete decoded feature flags request 1`] = `
 {
   "body": {
     "$anon_distinct_id": "<anonymous-id>",

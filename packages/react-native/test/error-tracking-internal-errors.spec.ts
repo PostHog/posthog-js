@@ -7,16 +7,19 @@ vi.mock('../src/error-tracking/utils', () => ({
   trackConsole: vi.fn(),
 }))
 
-vi.mock('../src/utils', () => ({
-  isHermes: vi.fn(() => false),
-  getRemoteConfigBool: vi.requireActual('../src/utils').getRemoteConfigBool,
-}))
+vi.mock('../src/utils', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/utils')>()
+  return {
+    ...actual,
+    isHermes: vi.fn(() => false),
+  }
+})
 
 // Mock core's guard so handler tests can simulate "this is a network error" without
 // spinning up a real PostHog to produce a genuine instance. The guard itself is
 // verified against a real core instance in error-tracking-internal-errors.integration.spec.ts.
-vi.mock('@posthog/core', () => ({
-  ...vi.requireActual('@posthog/core'),
+vi.mock('@posthog/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@posthog/core')>()),
   isPostHogFetchNetworkError: vi.fn(),
 }))
 

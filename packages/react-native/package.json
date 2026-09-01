@@ -71,6 +71,7 @@
     "expo-localization": "^11.0.0",
     "@testing-library/react": "catalog:",
     "metro": "0.83.1",
+    "@expo/config-plugins": "10.1.2",
     "@expo/metro-config": "~0.20.0",
     "@posthog/react-native-plugin": "workspace:*",
     "posthog-react-native-session-replay": "^1.6.0",

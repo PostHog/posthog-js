@@ -6,6 +6,7 @@ const fromRoot = (path: string): string => fileURLToPath(new URL(path, import.me
 export default defineConfig({
     resolve: {
         alias: {
+            '@/': fromRoot('../core/src/'),
             'react-native': fromRoot('./test/mocks/react-native.ts'),
             'expo-application': fromRoot('./test/mocks/expo-application.ts'),
             'expo-device': fromRoot('./test/mocks/expo-device.ts'),
@@ -13,6 +14,10 @@ export default defineConfig({
             'expo-file-system/legacy': fromRoot('./test/mocks/expo-file-system.ts'),
             'expo-localization': fromRoot('./test/mocks/expo-localization.ts'),
             '@posthog/core/surveys': fromRoot('../core/src/surveys/index.ts'),
+            '@posthog/core': fromRoot('../core/src/index.ts'),
+            '@posthog/types': fromRoot('../types/src/index.ts'),
+            '@posthog/react-native-plugin/package.json': fromRoot('../react-native-plugin/package.json'),
+            '@posthog/react-native-plugin': fromRoot('../react-native-plugin/src/index.ts'),
         },
     },
     test: {

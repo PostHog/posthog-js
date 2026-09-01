@@ -1008,6 +1008,9 @@ importers:
       '@babel/preset-typescript':
         specifier: 'catalog:'
         version: 7.28.5(@babel/core@7.28.5)
+      '@expo/config-plugins':
+        specifier: 10.1.2
+        version: 10.1.2
       '@expo/metro-config':
         specifier: ~0.20.0
         version: 0.20.17

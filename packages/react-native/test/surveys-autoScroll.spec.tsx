@@ -11,8 +11,8 @@ let scrollViewCallbacks: {
   onContentSizeChange?: (width: number, height: number) => void
 } = {}
 
-vi.mock('react-native', () => {
-  const RealReact = vi.requireActual('react')
+vi.mock('react-native', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   const strip = (props: any) => {
     const domProps = { ...props }
     delete domProps.keyboardShouldPersistTaps

@@ -2,9 +2,11 @@
 // and the new File/Paths API should be used instead.
 // See https://github.com/PostHog/posthog-js/issues/3151
 
-const mockFileWrite = vi.fn()
-const mockFileText = vi.fn().mockResolvedValue('stored-value')
-const mockDocument = { uri: 'file:///mock-doc-dir/' }
+const { mockFileWrite, mockFileText, mockDocument } = vi.hoisted(() => ({
+  mockFileWrite: vi.fn(),
+  mockFileText: vi.fn().mockResolvedValue('stored-value'),
+  mockDocument: { uri: 'file:///mock-doc-dir/' },
+}))
 
 // Mock expo-file-system as it appears in SDK 54 stable:
 // - Legacy methods exist but throw deprecation errors

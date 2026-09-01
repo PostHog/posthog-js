@@ -7,10 +7,13 @@ vi.mock('../src/error-tracking/utils', () => ({
   trackConsole: vi.fn(),
 }))
 
-vi.mock('../src/utils', () => ({
-  isHermes: vi.fn(() => false),
-  getRemoteConfigBool: vi.requireActual('../src/utils').getRemoteConfigBool,
-}))
+vi.mock('../src/utils', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/utils')>()
+  return {
+    ...actual,
+    isHermes: vi.fn(() => false),
+  }
+})
 
 import { createMockLogger, createMockPostHog } from './test-utils'
 

@@ -1,13 +1,7 @@
+import { resolveOptionalPlugin } from '../src/optional/OptionalPlugin'
+
 const PRIMARY = { __plugin: 'primary' }
 const LEGACY = { __plugin: 'legacy' }
-
-const mockOptional = (path: string, installed: boolean, value: unknown): void =>
-  vi.doMock(path, () => {
-    if (!installed) {
-      throw new Error('not installed')
-    }
-    return value
-  })
 
 type LoadedOptionalPlugin = {
   plugin: unknown
@@ -21,32 +15,30 @@ const loadOptionalPlugin = (
     primaryMetadataAvailable = true,
     legacyInstalled = true,
   }: { primaryInstalled?: boolean; primaryMetadataAvailable?: boolean; legacyInstalled?: boolean } = {}
-): LoadedOptionalPlugin => {
-  let loaded: LoadedOptionalPlugin = { plugin: undefined, version: undefined }
-  vi.isolateModules(() => {
-    vi.doMock('react-native', () => ({ Platform: { OS: os } }))
-    mockOptional('@posthog/react-native-plugin', primaryInstalled, PRIMARY)
-    mockOptional('@posthog/react-native-plugin/package.json', primaryMetadataAvailable, { version: '2.4.1' })
-    mockOptional('posthog-react-native-session-replay', legacyInstalled, LEGACY)
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- isolated require re-runs the module's platform-gated load under a fresh registry
-    const optionalPlugin = require('../src/optional/OptionalPlugin')
-    loaded = {
-      plugin: optionalPlugin.OptionalReactNativePlugin,
-      version: optionalPlugin.OptionalReactNativePluginVersion,
+): LoadedOptionalPlugin =>
+  resolveOptionalPlugin(os, (moduleName) => {
+    if (moduleName === '@posthog/react-native-plugin') {
+      if (!primaryInstalled) {
+        throw new Error('not installed')
+      }
+      return PRIMARY
     }
+    if (moduleName === '@posthog/react-native-plugin/package.json') {
+      if (!primaryMetadataAvailable) {
+        throw new Error('metadata not exported')
+      }
+      return { version: '2.4.1' }
+    }
+    if (moduleName === 'posthog-react-native-session-replay') {
+      if (!legacyInstalled) {
+        throw new Error('not installed')
+      }
+      return LEGACY
+    }
+    throw new Error(`unexpected module: ${moduleName}`)
   })
-  return loaded
-}
 
 describe('OptionalPlugin loader', () => {
-  afterEach(() => {
-    vi.resetModules()
-    vi.dontMock('react-native')
-    vi.dontMock('@posthog/react-native-plugin')
-    vi.dontMock('@posthog/react-native-plugin/package.json')
-    vi.dontMock('posthog-react-native-session-replay')
-  })
-
   it('loads the primary plugin on macOS', () => {
     expect(loadOptionalPlugin('macos').plugin).toBe(PRIMARY)
   })

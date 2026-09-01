@@ -684,7 +684,7 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
   })
 
   it('leaves contents unchanged and reports not present when there is no buildscript dependencies block', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const contents = 'plugins {\n  id "com.android.application"\n}'
     const result = addPostHogAndroidGradlePluginClasspath(contents)
     expect(result.contents).toBe(contents)
@@ -693,7 +693,7 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
   })
 
   it('does not place the classpath in a later block when buildscript has no dependencies block', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const contents = [
       'buildscript {',
       '    repositories { google() }',

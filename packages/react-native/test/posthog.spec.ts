@@ -94,7 +94,7 @@ describe('PostHog React Native', () => {
   let mockStorage: PostHogCustomStorage
   let cache: any = {}
 
-  vi.setTimeout(500)
+  vi.setConfig({ testTimeout: 500 })
   vi.useRealTimers()
 
   let posthog: PostHog

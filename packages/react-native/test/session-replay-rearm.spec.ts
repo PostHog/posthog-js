@@ -9,6 +9,7 @@ import { waitForExpect, wait } from './test-utils'
 // NOTE: the factory must be self-contained (vi hoists it above any const), so we
 // build the vi.fn()s inline and reach them through the imported module handle below.
 vi.mock('../src/optional/OptionalPlugin', () => ({
+  OptionalReactNativePluginVersion: undefined,
   OptionalReactNativePlugin: {
     start: vi.fn(async () => {}),
     startSession: vi.fn(async () => {}),

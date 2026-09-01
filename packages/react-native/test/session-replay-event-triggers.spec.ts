@@ -7,6 +7,7 @@ import { waitForExpect, wait } from './test-utils'
 // key, so the SDK takes the legacy start() path (same surface as the standalone
 // posthog-react-native-session-replay package).
 vi.mock('../src/optional/OptionalPlugin', () => ({
+  OptionalReactNativePluginVersion: undefined,
   OptionalReactNativePlugin: {
     start: vi.fn(async () => {}),
     startSession: vi.fn(async () => {}),
