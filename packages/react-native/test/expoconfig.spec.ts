@@ -8,6 +8,7 @@ import * as postHogExpoPluginModule from '../src/tooling/expoconfig'
 import {
   addDsymUploadBuildPhase,
   addPostHogAndroidGradlePluginClasspath,
+  findOutdatedPostHogAndroidPluginVersion,
   addPostHogWithBundledScriptsToBundleShellScript,
   applyDotenvFileBuildSetting,
   applyPostHogAndroidGradlePlugin,
@@ -697,6 +698,27 @@ describe('buildAndroidSkipOnConflictGradleLine', () => {
   })
 })
 
+describe('findOutdatedPostHogAndroidPluginVersion', () => {
+  it.each([
+    ['1.4.0', '1.4.0'],
+    ['0.9.9', '0.9.9'],
+  ])('reports %s, which ignores posthog.releaseMode', (pinned, expected) => {
+    const gradle = `classpath("com.posthog:posthog-android-gradle-plugin:${pinned}")`
+
+    expect(findOutdatedPostHogAndroidPluginVersion(gradle)).toBe(expected)
+  })
+
+  it.each([['1.5.0'], ['1.5.2'], ['2.0.0']])('accepts %s', (pinned) => {
+    const gradle = `classpath("com.posthog:posthog-android-gradle-plugin:${pinned}")`
+
+    expect(findOutdatedPostHogAndroidPluginVersion(gradle)).toBeUndefined()
+  })
+
+  it('reports nothing when the project pins no classpath', () => {
+    expect(findOutdatedPostHogAndroidPluginVersion('buildscript { dependencies { } }')).toBeUndefined()
+  })
+})
+
 describe('addPostHogAndroidGradlePluginClasspath', () => {
   const projectBuildGradle = [
     'buildscript {',
@@ -885,6 +907,21 @@ describe('resolveReleaseModeProp', () => {
   it('resolves an unset or blank prop to event', () => {
     expect(resolveReleaseModeProp()).toBe('event')
     expect(resolveReleaseModeProp('  ')).toBe('event')
+  })
+
+  it('reads POSTHOG_RELEASE_MODE when the prop is absent', () => {
+    // The prebuild writes the resolved mode into the Xcode phases and gradle.properties, and both
+    // beat the variable at build time. Reading it here is what keeps the documented opt-out.
+    expect(resolveReleaseModeProp(undefined, 'symbol-set')).toBe('symbol-set')
+    expect(resolveReleaseModeProp('  ', 'symbol-set')).toBe('symbol-set')
+  })
+
+  it('prefers the prop over POSTHOG_RELEASE_MODE', () => {
+    expect(resolveReleaseModeProp('event', 'symbol-set')).toBe('event')
+  })
+
+  it('rejects an unrecognized environment value', () => {
+    expect(() => resolveReleaseModeProp(undefined, 'evnet')).toThrow("was 'evnet'")
   })
 
   it('keeps an explicit symbol-set prop', () => {

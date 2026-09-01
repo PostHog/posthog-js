@@ -16,6 +16,19 @@ const resolvePostHogReactNativePackageJsonPath =
 
 const POSTHOG_ANDROID_SKIP_ON_CONFLICT_PROPERTY = 'posthogReactNativeSkipOnConflict'
 
+// The prebuild keeps a classpath the project already pins, at any version. A version below 1.5.0
+// ignores posthog.releaseMode, so its R8 mapping stays bound to a release while the Hermes upload
+// moves to event mode. Returns the pinned version when it is too old, so the caller can say so.
+export function findOutdatedPostHogAndroidPluginVersion(projectBuildGradle: string): string | undefined {
+  const match = /posthog-android-gradle-plugin:(\d+)\.(\d+)\.(\d+)/.exec(projectBuildGradle)
+  if (!match) {
+    return undefined
+  }
+  const [, major, minor] = match
+  const tooOld = Number(major) < 1 || (Number(major) === 1 && Number(minor) < 5)
+  return tooOld ? `${match[1]}.${match[2]}.${match[3]}` : undefined
+}
+
 /**
  * How the release a build belongs to gets associated with the exceptions it reports.
  * `symbol-set` stamps the release onto the uploaded source maps, dSYMs and mappings, and an
@@ -30,12 +43,13 @@ export type PostHogReleaseMode = 'symbol-set' | 'event'
 export const POSTHOG_RELEASE_MODES: PostHogReleaseMode[] = ['symbol-set', 'event']
 
 // Empty/whitespace-only values (easy to produce from templated app.config values) count as unset
-// and resolve to `event`. Resolving here rather than leaving the phases blank keeps a build off
-// whichever default the installed posthog-cli happens to carry. An unrecognized value stops the
-// prebuild rather than falling back, so a typo cannot silently leave a build binding its symbols
-// to a release it meant to keep independent.
-export function resolveReleaseModeProp(releaseMode?: string): PostHogReleaseMode {
-  const trimmed = releaseMode?.trim()
+// and fall through to the next source. The prebuild writes one resolved mode into the Xcode phases
+// and into gradle.properties, and those beat POSTHOG_RELEASE_MODE at build time, so this reads the
+// variable rather than leaving an Expo build with no way to opt out. An unrecognized value stops
+// the prebuild rather than falling back, so a typo cannot silently leave a build binding its
+// symbols to a release it meant to keep independent.
+export function resolveReleaseModeProp(releaseMode?: string, environmentMode?: string): PostHogReleaseMode {
+  const trimmed = releaseMode?.trim() || environmentMode?.trim()
   if (!trimmed) {
     return 'event'
   }
@@ -168,7 +182,7 @@ export function applyPostHogAndroidGradlePlugin(appBuildGradle: string): string 
   return appBuildGradle
 }
 
-const withAndroidNativeSymbolsPlugin = (config: any) => {
+const withAndroidNativeSymbolsPlugin = (config: any, releaseMode?: PostHogReleaseMode) => {
   // Couple the classpath and `apply plugin`: applying without the classpath breaks the build.
   // Expo evaluates mods in key-insertion order, so this plugin must register before anything
   // else touches appBuildGradle — otherwise the flag is read before projectBuildGradle sets it.
@@ -179,6 +193,18 @@ const withAndroidNativeSymbolsPlugin = (config: any) => {
       console.warn('Cannot configure the PostHog Android Gradle plugin because the project build.gradle is not groovy')
       return config
     }
+    // Read before the classpath is added, so the version this prebuild pins cannot match.
+    const outdated =
+      releaseMode === 'event' ? findOutdatedPostHogAndroidPluginVersion(config.modResults.contents) : undefined
+    if (outdated) {
+      console.warn(
+        `[posthog-react-native] This project pins com.posthog.android ${outdated}, which ignores ` +
+          'posthog.releaseMode. Its R8 mapping stays bound to a release while the Hermes source maps ' +
+          `upload release-independent. Move the classpath to ${POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION}, ` +
+          "or set releaseMode: 'symbol-set' to keep both halves on one mode."
+      )
+    }
+
     const result = addPostHogAndroidGradlePluginClasspath(config.modResults.contents)
     config.modResults.contents = result.contents
     classpathPresent = result.classpathPresent
@@ -695,15 +721,18 @@ type PostHogPluginProps = {
   /**
    * How the release a build belongs to gets associated with the exceptions it reports.
    *
-   * `symbol-set` (the default) stamps the release onto everything the build uploads — Hermes
-   * source maps, iOS dSYMs, Android R8 mappings — and an exception inherits the release of the
-   * symbols its frames resolved against.
+   * `event` (the default) uploads everything release-independent: Hermes source maps, iOS dSYMs
+   * and Android R8 mappings. Each event resolves its own release from the `$app_namespace` /
+   * `$app_version` / `$app_build` the SDK already sends. Nothing is injected into the app.
    *
-   * EXPERIMENTAL `event` uploads them release-independent, and each event resolves its own
-   * release from the `$app_namespace` / `$app_version` / `$app_build` the SDK already sends.
-   * Nothing is injected into the app in exchange. Use it when two releases can ship identical
-   * JavaScript or identical native code: symbol ids are derived from content, so in `symbol-set`
-   * mode both releases report whichever one uploaded first.
+   * `symbol-set` stamps the release onto everything the build uploads instead, and an exception
+   * inherits the release of the symbols its frames resolved against. Symbol ids are derived from
+   * content, so two releases that ship identical JavaScript or identical native code both report
+   * whichever one uploaded first.
+   *
+   * Defaults to `POSTHOG_RELEASE_MODE` when this prop is absent. The prebuild writes the resolved
+   * mode into the Xcode phases and into android/gradle.properties, so set the variable before you
+   * run the prebuild.
    *
    * Reaches every upload hook: iOS as `POSTHOG_RELEASE_MODE` in the bundle build phase (plus
    * `POSTHOG_NO_RELEASE_BIND` in the dSYM phase when `uploadNativeSymbols` is on), Android as a
@@ -804,7 +833,7 @@ const withPostHogPlugin = (config: any, rawProps: PostHogPluginProps = {}) => {
   const props = {
     ...rawProps,
     dotenvFile: resolveDotenvFileProp(rawProps.dotenvFile),
-    releaseMode: resolveReleaseModeProp(rawProps.releaseMode),
+    releaseMode: resolveReleaseModeProp(rawProps.releaseMode, process.env.POSTHOG_RELEASE_MODE),
   }
   // Must register first: it inserts the projectBuildGradle mod key ahead of appBuildGradle,
   // and expo evaluates mods in key-insertion order. Registering withAndroidPlugin first would
@@ -812,7 +841,7 @@ const withPostHogPlugin = (config: any, rawProps: PostHogPluginProps = {}) => {
   // false and `apply plugin: "com.posthog.android"` would silently never be written.
   // includeSource is iOS-only, so on Android we only care whether upload is enabled.
   if (resolveNativeSymbolUpload(props.uploadNativeSymbols).enabled) {
-    config = withAndroidNativeSymbolsPlugin(config)
+    config = withAndroidNativeSymbolsPlugin(config, props.releaseMode)
   }
   config = withAndroidPlugin(config, props.skipOnConflict === true)
   // Runs unconditionally so removing the prop also removes the managed entry.
@@ -836,6 +865,7 @@ module.exports.moveDsymUploadBuildPhaseToEnd = moveDsymUploadBuildPhaseToEnd
 module.exports.resolveNativeSymbolUpload = resolveNativeSymbolUpload
 module.exports.buildAndroidSkipOnConflictGradleLine = buildAndroidSkipOnConflictGradleLine
 module.exports.addPostHogAndroidGradlePluginClasspath = addPostHogAndroidGradlePluginClasspath
+module.exports.findOutdatedPostHogAndroidPluginVersion = findOutdatedPostHogAndroidPluginVersion
 module.exports.applyPostHogAndroidGradlePlugin = applyPostHogAndroidGradlePlugin
 module.exports.buildIosDotenvFileBuildSetting = buildIosDotenvFileBuildSetting
 module.exports.applyDotenvFileBuildSetting = applyDotenvFileBuildSetting
