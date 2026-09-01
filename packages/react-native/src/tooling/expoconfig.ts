@@ -595,11 +595,17 @@ type PostHogPluginProps = {
    * the release their build creates.
    *
    * `event` (the default) uploads the maps release-independent, and each event resolves its own
-   * release from the `$app_namespace` / `$app_version` / `$app_build` the SDK already sends. Use it
+   * release from the `$app_namespace` / `$app_version` / `$app_build` the SDK sends. Use it
    * when two releases can ship identical JavaScript: the map id comes from content, so in
    * `symbol-set` mode both releases report whichever one uploaded first.
    *
-   * `symbol-set` stamps the release onto the uploaded maps instead.
+   * Event mode's release link depends on those coordinates reaching each exception. The SDK reads
+   * them from the optional `expo-application` or `react-native-device-info` module, and a plain
+   * `customAppProperties` object replaces the defaults rather than merging. An install with neither
+   * module — or a `customAppProperties` that drops the keys — still symbolicates, but its JavaScript
+   * exceptions carry no release. Keep a metadata module (or those keys) to attribute event-mode
+   * exceptions to a release; `symbol-set` instead stamps the release onto the uploaded maps from the
+   * build settings and does not need them.
    *
    * Defaults to `POSTHOG_RELEASE_MODE` when this prop is absent. The prebuild writes the resolved
    * mode into the bundle build phase, so set the variable before you run the prebuild.
