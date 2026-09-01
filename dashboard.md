@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4724](https://github.com/PostHog/posthog-js/issues/4724) | Confirmed compatibility regression for consumers whose Webpack configuration processes dependency source maps. | javascript, web, team/client-libraries |  | no | 2026-09-01T14:06:55.827Z |
 | PostHog/posthog-js | [issue 4718](https://github.com/PostHog/posthog-js/issues/4718) | Confirmed TypeScript API-surface bug: request-scoped @posthog/next clients expose exception capture at runtime, but IPostHog omits both exception-capture methods. | node, frameworks/next-js, feature/error-tracking, team/client-libraries | https://github.com/PostHog/posthog-js/pull/4719 | no | 2026-09-01T12:02:45.670Z |
 | PostHog/posthog-js | [issue 4702](https://github.com/PostHog/posthog-js/issues/4702) | Valid browser SDK feature request; the current identify flow always merges the previous anonymous ID and also forwards it to the feature-flags request. | enhancement, feature/product-analytics, web, team/client-libraries |  | no | 2026-08-31T14:40:44.385Z |
 | PostHog/posthog-js | [issue 4695](https://github.com/PostHog/posthog-js/issues/4695) | Confirmed autocapture precedence bug: an ancestor's capture attribute overwrites the same attribute on the clicked element or its closest attributed ancestor. | feature/autocapture, web, team/client-libraries | https://github.com/PostHog/posthog-js/pull/4696 | no | 2026-08-31T02:16:17.290Z |
