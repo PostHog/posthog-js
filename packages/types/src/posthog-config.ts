@@ -630,8 +630,15 @@ export interface SessionRecordingOptions {
     maskTextClass?: string | RegExp
 
     /**
-     * Derived from `rrweb.record` options
+     * Derived from `rrweb.record` options. A CSS selector for non-input text to mask in session
+     * replay. Session replay masks input values by default (see `maskAllInputs`), but it does
+     * not mask other DOM text or images. This selector and the `ph-mask` class mask text content
+     * only — for example a rendered card number — and do not hide an image, whose `src` is still
+     * recorded. To redact a rendered image such as a scanned document, block the image or a
+     * container element with `ph-no-capture` (see `blockClass`/`blockSelector`), which replaces it
+     * with a placeholder and stops recording its subtree.
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @see https://posthog.com/docs/session-replay/privacy
      */
     maskTextSelector?: string | null
 
@@ -642,14 +649,26 @@ export interface SessionRecordingOptions {
     maskTextFn?: ((text: string, element?: HTMLElement) => string) | null
 
     /**
-     * Derived from `rrweb.record` options
+     * Derived from `rrweb.record` options. When `true` (the default) session replay masks the
+     * value of every input, except `hidden` and `file` inputs, whose values are recorded
+     * unmasked — block those with `ph-no-capture` or `blockSelector` if they hold sensitive data.
+     * Set it to `false` to record input values, which is not recommended
+     * for apps that handle sensitive data. A `session_recording` masking option set in
+     * `posthog.init` takes precedence over the project "Privacy and masking" setting; the SDK
+     * warns once when the two differ.
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @see https://posthog.com/docs/session-replay/privacy
+     * @default true
      */
     maskAllInputs?: boolean
 
     /**
-     * Derived from `rrweb.record` options
+     * Derived from `rrweb.record` options. Selects which input types to mask by input attribute,
+     * for use when `maskAllInputs` is `false`. Password inputs are always masked by default: the
+     * SDK adds `password: true` to a partial override, so set `password: false` explicitly if you
+     * must record password fields.
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @see https://posthog.com/docs/session-replay/privacy
      */
     maskInputOptions?: Partial<MaskInputOptions>
 
