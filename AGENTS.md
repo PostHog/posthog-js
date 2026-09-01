@@ -166,19 +166,15 @@ Turbo handles build orchestration and ensures packages are built in the correct 
 
 ## Code Style and Linting
 
-### ESLint
+### Oxlint and ESLint
 
-- Custom `eslint-plugin-posthog-js` for repository-specific rules
-- TypeScript support
-- React support
-- Prettier integration
+- Oxlint runs correctness rules across workspace packages
+- ESLint remains for custom `eslint-plugin-posthog-js` and plugin rules that have not been migrated
+- TypeScript and React support
 
 ### Automatic Formatting
 
-Pre-commit hooks (via lint-staged) automatically format code on commit:
-
-- TypeScript/JavaScript files: ESLint + Prettier
-- JSON/Markdown files: Prettier
+Oxfmt checks workspace package code during linting. Pre-commit hooks (via lint-staged) automatically format TypeScript, JavaScript, JSON, and Markdown files with Oxfmt.
 
 ## Release Process
 
@@ -239,8 +235,9 @@ When a PR containing a changeset is merged to `main`, the `release.yml` GitHub A
 - `pnpm-workspace.yaml` - Workspace definition and version catalogs
 - `turbo.json` - Build orchestration and task caching
 - `.nvmrc` - Node version specification
-- `.eslintrc.cjs` - ESLint configuration
-- `.prettierrc` - Code formatting rules
+- `.oxlintrc.json` - Oxlint configuration
+- `.eslintrc.cjs` - ESLint configuration for remaining custom and plugin rules
+- `.oxfmtrc.json` - Oxfmt configuration
 
 ### Documentation
 
