@@ -670,6 +670,7 @@
         "_removeAllTriggerListeners",
         "_removeDomEventHandlers",
         "_removeEventTriggerCaptureHook",
+        "_removeExtension",
         "_removeListeners",
         "_removePageViewCaptureHook",
         "_removeSurveyFromDom",

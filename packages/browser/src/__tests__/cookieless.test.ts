@@ -314,7 +314,10 @@ describe('cookieless', () => {
             const { posthog, beforeSendMock } = await setup({
                 cookieless_mode: 'on_reject',
             })
+            const detachedSessionRecording = posthog.sessionRecording!
+            const detachedRemoteConfig = jest.spyOn(detachedSessionRecording, 'onRemoteConfig')
             posthog.opt_out_capturing()
+            expect(posthog['_extensions']).not.toContain(detachedSessionRecording)
             posthog.register({ test: 'test' })
             posthog.capture(eventName, eventProperties)
             expect(beforeSendMock).toBeCalledTimes(2)
@@ -335,6 +338,43 @@ describe('cookieless', () => {
             expect(beforeSendMock.mock.calls[3][0].properties.$window_id).toMatch(uuidV7Pattern)
             expect(beforeSendMock.mock.calls[3][0].properties.$cookieless_mode).toEqual(undefined)
             expect(posthog.sessionRecording).toBeTruthy()
+
+            posthog._onRemoteConfig({ ok: false })
+            expect(detachedRemoteConfig).not.toHaveBeenCalled()
+        })
+
+        it('disposes the detached recorder when consent changes before opting in', async () => {
+            const { posthog } = await setup({
+                cookieless_mode: 'on_reject',
+            })
+            posthog.opt_in_capturing()
+            const detachedSessionRecording = posthog.sessionRecording!
+            const identityBeforeReplacement = {
+                distinctId: posthog.get_distinct_id(),
+                sessionId: posthog.get_session_id(),
+            }
+            let identityAtDisposal: typeof identityBeforeReplacement | undefined
+            const originalDispose = detachedSessionRecording.dispose.bind(detachedSessionRecording)
+            const disposeSessionRecording = jest
+                .spyOn(detachedSessionRecording, 'dispose')
+                .mockImplementation((options) => {
+                    identityAtDisposal = {
+                        distinctId: posthog.get_distinct_id(),
+                        sessionId: posthog.get_session_id(),
+                    }
+                    originalDispose(options)
+                })
+
+            // Consent persistence is shared across tabs and can change without this instance receiving opt_out_capturing().
+            posthog.consent.optInOut(false)
+            posthog.opt_in_capturing()
+
+            expect(disposeSessionRecording).toHaveBeenCalledWith({ discardBufferedEvents: true })
+            expect(identityAtDisposal).toEqual(identityBeforeReplacement)
+            expect(posthog.get_distinct_id()).not.toBe(identityBeforeReplacement.distinctId)
+            expect(posthog.get_session_id()).not.toBe(identityBeforeReplacement.sessionId)
+            expect(posthog.sessionRecording).not.toBe(detachedSessionRecording)
+            expect(posthog['_extensions']).not.toContain(detachedSessionRecording)
         })
 
         it('should reset when switching consent mode from opt in to opt out', async () => {
@@ -348,9 +388,25 @@ describe('cookieless', () => {
             expect(beforeSendMock).toBeCalledTimes(3)
             expect(beforeSendMock.mock.calls[2][0].properties.test).toBe('test')
 
+            const identityBeforeOptOut = {
+                distinctId: posthog.get_distinct_id(),
+                sessionId: posthog.get_session_id(),
+            }
+            let identityAtDisposal: typeof identityBeforeOptOut | undefined
+            const sessionRecording = posthog.sessionRecording!
+            const originalDispose = sessionRecording.dispose.bind(sessionRecording)
+            const disposeSessionRecording = jest.spyOn(sessionRecording, 'dispose').mockImplementation((options) => {
+                identityAtDisposal = {
+                    distinctId: posthog.get_distinct_id(),
+                    sessionId: posthog.get_session_id(),
+                }
+                originalDispose(options)
+            })
             posthog.opt_out_capturing()
             posthog.capture(eventName, eventProperties)
 
+            expect(disposeSessionRecording).toHaveBeenCalledWith({ discardBufferedEvents: true })
+            expect(identityAtDisposal).toEqual(identityBeforeOptOut)
             expect(beforeSendMock).toBeCalledTimes(4)
             expect(beforeSendMock.mock.calls[3][0].event).toBe(eventName)
             expect(beforeSendMock.mock.calls[3][0].properties.test).toBe(undefined)
