@@ -61,24 +61,25 @@ function checkTimeout(value: number | undefined, thresholdMs: number) {
 // a liveness transition only counts if it fired within the suppression window on one side of the
 // click. this is the single definition of "in window" — it gates every recorded delay, so once a
 // delay lands on a candidate `_checkClicks` can trust it is already in range.
-function livenessDelayInWindow(delay: number): number | undefined {
-    return delay >= 0 && delay < LIVENESS_SUPPRESSION_MS ? delay : undefined
+function livenessDelayInWindow(delay: number, windowMs = LIVENESS_SUPPRESSION_MS): number | undefined {
+    return delay >= 0 && delay < windowMs ? delay : undefined
 }
 
-// a liveness signal (visibility/focus) that fired shortly BEFORE the click — the click that woke
-// or refocused the tab. read once when the candidate is queued; only a change inside the
-// suppression window counts, so a long-ago transition can neither suppress the click nor (as it
-// once wrongly did) mark it dead. the AFTER-the-click direction is recorded separately, as the
-// event fires, by `_recordLivenessSignal`.
-function priorLivenessDelay(clickTimestamp: number, lastSeenAt: number | undefined): number | undefined {
-    return lastSeenAt ? livenessDelayInWindow(clickTimestamp - lastSeenAt) : undefined
+// a liveness signal that fired shortly BEFORE the click. read once when the candidate is queued;
+// only a change inside the suppression window counts, so a long-ago transition cannot affect it.
+function priorLivenessDelay(
+    clickTimestamp: number,
+    lastSeenAt: number | undefined,
+    windowMs = LIVENESS_SUPPRESSION_MS
+): number | undefined {
+    return isNumber(lastSeenAt) ? livenessDelayInWindow(clickTimestamp - lastSeenAt, windowMs) : undefined
 }
 
 // How dead-click detection works
 // ================================
 // A click (or swipe) is queued as a candidate, then re-examined ~1s later in `_checkClicks`. It is
-// reported as a `$dead_click` only if — after the click — NO liveness/suppression signal fired
-// within its window AND at least one timeout signal fired. In short: something-happened-fast wins
+// reported as a `$dead_click` only if NO liveness/suppression signal fired within its applicable
+// window AND at least one timeout signal fired. In short: something-happened-fast wins
 // (alive), otherwise nothing-happened-in-time loses (dead).
 //
 // Gate signals (checked in `_ignore` before the click is ever queued — never even a candidate):
@@ -89,21 +90,21 @@ function priorLivenessDelay(clickTimestamp: number, lastSeenAt: number | undefin
 //   - a modifier key is held (ctrl/meta/alt/shift) unless `capture_clicks_with_modifier_keys`
 //   - (clicks only) target is an anchor — a legitimate activation; swipes are still candidates
 //
-// Liveness / suppression signals (any one, within its window after the click => alive, dropped).
+// Liveness / suppression signals (any one, within its window => alive, dropped).
 // These say "the click did something", so they only ever suppress; none can mark a click dead:
 //   - mutation:   a DOM mutation           < mutation_threshold_ms (default 2500)
 //   - scroll:     the page/an element scrolled < scroll_threshold_ms (default 100)
-//   - selection:  a selectionchange        < selection_change_threshold_ms (default 100)
+//   - selection:  a selectionchange        < selection_change_threshold_ms (default 100) on either
+//                 side of the click
 //   - visibility: a visibilitychange (either direction — the tab going hidden because the click
 //                 opened a new tab, or becoming visible as the click woke/focused it)
 //                 < LIVENESS_SUPPRESSION_MS on either side of the click
 //   - focus:      a window focus/blur (a click that opened a new window/popup may only surface as
 //                 the current window losing focus) < LIVENESS_SUPPRESSION_MS on either side
-// visibility/focus are recorded onto each queued candidate the instant they fire (like scroll), not
-// read from a single shared timestamp when the click is checked. that matters because a click that
-// hides/blurs the tab suspends the ~1s `_checkClicks` timer while hidden; by the time it resumes the
-// tab has usually come back, and a shared timestamp would have been overwritten by that later
-// transition, losing the click-correlated one and misjudging the click as dead.
+// selection/visibility/focus are recorded on each candidate, not read from a single shared
+// timestamp when the click is checked. A pre-click selection is stored only inside its window;
+// post-click changes keep the closest delay. For visibility/focus this also matters because
+// hiding/blurring the tab can suspend the check until a later transition overwrites it.
 //
 // Timeout signals (a click with no liveness signal is dead if any one fired). Note visibility and
 // focus are deliberately absent here — they are liveness-only and never mark a click dead:
@@ -203,7 +204,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._mutationObserver = undefined
         assignableWindow.removeEventListener('click', this._onClick)
         assignableWindow.removeEventListener('scroll', this._onScroll, { capture: true })
-        assignableWindow.removeEventListener('selectionchange', this._onSelectionChange)
+        document?.removeEventListener('selectionchange', this._onSelectionChange)
         assignableWindow.removeEventListener('touchstart', this._onTouchStart, { capture: true })
         assignableWindow.removeEventListener('touchend', this._onTouchEnd, { capture: true })
         assignableWindow.removeEventListener('touchcancel', this._onTouchCancel, { capture: true })
@@ -231,10 +232,15 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._scheduleCheck()
     }
 
-    // queue a candidate, first recording any liveness signal that fired just BEFORE the click (the
-    // click that woke/refocused the tab). the AFTER-the-click direction is stamped later, as the
-    // event fires, by `_recordLivenessSignal`.
+    // Only store a pre-candidate selection delay when it is already inside the suppression window,
+    // so it can never feed the post-click selection timeout. Keep the candidate queued until the
+    // check so it can still deduplicate another click on the same node.
     private _queueCandidate(candidate: DeadClickCandidate): void {
+        candidate.selectionChangedDelayMs = priorLivenessDelay(
+            candidate.timestamp,
+            this._lastSelectionChanged,
+            this._config.selection_change_threshold_ms
+        )
         candidate.visibilityChangedDelayMs = priorLivenessDelay(candidate.timestamp, this._lastVisibilityChange)
         candidate.focusChangedDelayMs = priorLivenessDelay(candidate.timestamp, this._lastFocusChange)
         this._clicks.push(candidate)
@@ -276,11 +282,25 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _startSelectionChangedObserver() {
-        addEventListener(assignableWindow, 'selectionchange', this._onSelectionChange)
+        // Document selections fire selectionchange directly on document and the event does not bubble.
+        addEventListener(document, 'selectionchange', this._onSelectionChange)
     }
 
     private _onSelectionChange = (): void => {
-        this._lastSelectionChanged = Date.now()
+        const firedAt = Date.now()
+        this._lastSelectionChanged = firedAt
+
+        // Keep the closest selection change after each candidate. A nearby change suppresses the
+        // candidate; a later one retains the existing post-click timeout behavior.
+        this._clicks.forEach((candidate) => {
+            const delay = firedAt - candidate.timestamp
+            if (
+                delay >= 0 &&
+                (isUndefined(candidate.selectionChangedDelayMs) || delay < candidate.selectionChangedDelayMs)
+            ) {
+                candidate.selectionChangedDelayMs = delay
+            }
+        })
     }
 
     private _startVisibilityChangeObserver() {
@@ -486,15 +506,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                     ? this._lastMutation - click.timestamp
                     : undefined)
             click.absoluteDelayMs = Date.now() - click.timestamp
-            click.selectionChangedDelayMs =
-                this._lastSelectionChanged && click.timestamp <= this._lastSelectionChanged
-                    ? this._lastSelectionChanged - click.timestamp
-                    : undefined
-            // visibilityChangedDelayMs / focusChangedDelayMs are already recorded on the candidate as
-            // the events fire (see `_queueCandidate` for the before-the-click direction and
-            // `_recordLivenessSignal` for after) — nothing to compute here. both are liveness-only: a
-            // tab/window transition near a click is evidence the click did something, so they only
-            // ever _suppress_ a dead click and (unlike mutation/selection) feed no timeout branch.
+            // Selection/visibility/focus delays are recorded on each candidate as their events fire.
+            // The pre-candidate directions are handled in `_queueCandidate`. Nothing uses a shared
+            // timestamp here, so a later event cannot overwrite the change related to this candidate.
 
             const scrollTimeout = checkTimeout(click.scrollDelayMs, this._config.scroll_threshold_ms)
             const selectionChangedTimeout = checkTimeout(

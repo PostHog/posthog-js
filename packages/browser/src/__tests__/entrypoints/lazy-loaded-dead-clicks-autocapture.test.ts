@@ -103,6 +103,24 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].scrollDelayMs).toBe(50)
     })
 
+    it('tracks selection changes dispatched by document', () => {
+        expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBeUndefined()
+
+        jest.setSystemTime(1050)
+        document.dispatchEvent(new Event('selectionchange'))
+
+        expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBe(1050)
+    })
+
+    it('stops tracking document selection changes after stop', () => {
+        lazyLoadedDeadClicksAutocapture.stop()
+
+        jest.setSystemTime(1050)
+        document.dispatchEvent(new Event('selectionchange'))
+
+        expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBeUndefined()
+    })
+
     // i think there's some kind of jsdom fangling happening where the mutation observer
     // started by the detector isn't passed details of mutations made in the tests
     // js-dom supports mutation observer since v13.x but 🤷
@@ -331,12 +349,64 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
             })
-            lazyLoadedDeadClicksAutocapture['_lastSelectionChanged'] = 999
+
+            jest.setSystemTime(999)
+            document.dispatchEvent(new Event('selectionchange'))
+
+            // A later selection change must not overwrite the click-correlated one.
+            jest.setSystemTime(1200)
+            document.dispatchEvent(new Event('selectionchange'))
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
             expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('selection change just before a click suppresses it without bypassing repeated-click deduplication', () => {
+            jest.setSystemTime(900)
+            document.dispatchEvent(new Event('selectionchange'))
+
+            jest.setSystemTime(950)
+            triggerMouseEvent(document.body, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].selectionChangedDelayMs).toBe(50)
+
+            // The selection window has elapsed, but this is still a repeat click on the same node.
+            jest.setSystemTime(1051)
+            triggerMouseEvent(document.body, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('a stale pre-click selection change does not suppress or time out the click', () => {
+            jest.setSystemTime(500)
+            document.dispatchEvent(new Event('selectionchange'))
+
+            jest.setSystemTime(1000)
+            triggerMouseEvent(document.body, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].selectionChangedDelayMs).toBeUndefined()
+
+            jest.setSystemTime(4000)
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(fakeInstance.capture).toHaveBeenCalledWith(
+                '$dead_click',
+                expect.objectContaining({
+                    $dead_click_absolute_timeout: true,
+                    $dead_click_selection_changed_delay_ms: undefined,
+                    $dead_click_selection_changed_timeout: false,
+                }),
+                { timestamp: new Date(1000) }
+            )
         })
 
         it('visibility change shortly after click, not a dead click', () => {
@@ -502,8 +572,8 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
+                selectionChangedDelayMs: 100,
             })
-            lazyLoadedDeadClicksAutocapture['_lastSelectionChanged'] = 1000
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
