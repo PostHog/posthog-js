@@ -3195,6 +3195,10 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        if (!this._requirePersonProcessing('posthog.group')) {
+            return
+        }
+
         // Apply a sibling reset before reading or writing groups so this explicit
         // mutation is newer than the adopted cookie snapshot.
         this.persistence?.syncCookieProperties()
