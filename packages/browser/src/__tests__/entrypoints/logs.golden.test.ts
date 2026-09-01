@@ -13,9 +13,8 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
     let originalConsole: Console
     let mockCapture: vi.Mock
 
-    const initialize = (instance: PostHog = mockPostHog) => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        require('../../entrypoints/logs')
+    const initialize = async (instance: PostHog = mockPostHog): Promise<void> => {
+        await import('../../entrypoints/logs')
         assignableWindow.__PosthogExtensions__.logs.initializeLogs(instance)
     }
 
@@ -58,8 +57,8 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
         Object.assign(console, originalConsole)
     })
 
-    it('emits the exact record for a string log', () => {
-        initialize()
+    it('emits the exact record for a string log', async () => {
+        await initialize()
         assignableWindow.console.log('hello')
 
         expect(mockCapture).toHaveBeenCalledTimes(1)
@@ -79,8 +78,8 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
         ['warn', 'warn'],
         ['error', 'error'],
         ['debug', 'debug'],
-    ] as const)('maps console.%s to level %s', (method, level) => {
-        initialize()
+    ] as const)('maps console.%s to level %s', async (method, level) => {
+        await initialize()
         assignableWindow.console[method]('x')
 
         expect(mockCapture.mock.calls[0][0]).toMatchObject({
@@ -89,8 +88,8 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
         })
     })
 
-    it('emits the exact record for an object log, flattening the first arg into attributes', () => {
-        initialize()
+    it('emits the exact record for an object log, flattening the first arg into attributes', async () => {
+        await initialize()
         assignableWindow.console.warn({ user: { id: 5 }, msg: 'hi' })
 
         expect(mockCapture.mock.calls[0][0]).toEqual({
@@ -105,8 +104,8 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
         })
     })
 
-    it('does not include distinct_id or location.href — core adds posthogDistinctId/url.full', () => {
-        initialize()
+    it('does not include distinct_id or location.href — core adds posthogDistinctId/url.full', async () => {
+        await initialize()
         assignableWindow.console.log('hello')
 
         const attributes = mockCapture.mock.calls[0][0].attributes

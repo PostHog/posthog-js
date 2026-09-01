@@ -5,6 +5,7 @@ import { defaultPostHog } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHogConfig } from '../types'
 import { navigator } from '@posthog/browser-common/utils/globals'
+import * as globals from '@posthog/browser-common/utils/globals'
 
 describe('bot detection and pageview collection', () => {
     let posthog: PostHog
@@ -264,8 +265,7 @@ describe('bot detection and pageview collection', () => {
 
     describe('edge cases', () => {
         it('should handle missing navigator gracefully', async () => {
-            const originalNav = (global as any).navigator
-            ;(global as any).navigator = undefined
+            const navigatorSpy = vi.spyOn(globals, 'navigator', 'get').mockReturnValue(undefined)
 
             posthog = await createPostHog({ __preview_capture_bot_pageviews: true })
 
@@ -273,7 +273,7 @@ describe('bot detection and pageview collection', () => {
 
             expect(beforeSendMock).toHaveBeenCalled()
             expect(beforeSendMock.mock.calls[0][0].event).toBe('$pageview')
-            ;(global as any).navigator = originalNav
+            navigatorSpy.mockRestore()
         })
 
         it('should handle custom blocked user agents', async () => {

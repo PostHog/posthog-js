@@ -529,20 +529,19 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             }))
 
             try {
-                vi.isolateModules(() => {
-                    // eslint-disable-next-line @typescript-eslint/no-require-imports
-                    const { PostHogFeatureFlags: NoDocumentFeatureFlags } = require('../posthog-featureflags')
-                    const noDocumentFeatureFlags = new NoDocumentFeatureFlags({
-                        get: () => ({ ...config, refreshIntervalMs }),
-                    })
-
-                    noDocumentFeatureFlags.setup(posthog._getBrowserClientAdapter())
-
-                    expect(noDocumentFeatureFlags['_refreshInterval']).toBeUndefined()
-                    noDocumentFeatureFlags.dispose()
+                vi.resetModules()
+                const { PostHogFeatureFlags: NoDocumentFeatureFlags } = await import('../posthog-featureflags')
+                const noDocumentFeatureFlags = new NoDocumentFeatureFlags({
+                    get: () => ({ ...config, refreshIntervalMs }),
                 })
+
+                await noDocumentFeatureFlags.setup(posthog._getBrowserClientAdapter())
+
+                expect(noDocumentFeatureFlags['_refreshInterval']).toBeUndefined()
+                noDocumentFeatureFlags.dispose()
             } finally {
-                vi.dontMock('@posthog/browser-common/utils/globals')
+                vi.unmock('@posthog/browser-common/utils/globals')
+                vi.resetModules()
             }
 
             expect(setRefreshInterval).not.toHaveBeenCalled()
@@ -657,10 +656,10 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         vi.spyOn(client, 'sendRequest').mockRejectedValue(requestError)
 
         featureFlags._callFlagsEndpoint()
-        await Promise.resolve()
-        await Promise.resolve()
 
-        expect(scopedError).toHaveBeenCalledWith('Feature flag request failed', requestError)
+        await vi.waitFor(() => {
+            expect(scopedError).toHaveBeenCalledWith('Feature flag request failed', requestError)
+        })
         expect(clientError).not.toHaveBeenCalled()
         featureFlags.dispose()
     })
@@ -907,7 +906,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
 
-        const firstRequest = featureFlags._callFlagsEndpoint()
+        featureFlags._callFlagsEndpoint()
         distinctId = 'identified-id'
         featureFlags.setAnonymousDistinctId('anonymous-id')
         featureFlags.reloadFeatureFlags()
@@ -918,17 +917,19 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         expect(sendRequest).toHaveBeenCalledTimes(1)
 
         resolveRequests[0]({ statusCode: 200, json: { quotaLimited: ['feature_flags'] } })
-        await Promise.resolve()
 
-        expect(sendRequest).toHaveBeenCalledTimes(2)
+        await vi.waitFor(() => {
+            expect(sendRequest).toHaveBeenCalledTimes(2)
+        })
         expect(sendRequest.mock.calls[1][1]?.body).toMatchObject({
             distinct_id: 'identified-id',
             $anon_distinct_id: 'anonymous-id',
         })
 
         resolveRequests[1]({ statusCode: 200, json: { featureFlags: { current: true } } })
-        await firstRequest
-        expect(featureFlags.getFlagVariants()).toEqual({ current: true })
+        await vi.waitFor(() => {
+            expect(featureFlags.getFlagVariants()).toEqual({ current: true })
+        })
         featureFlags.dispose()
     })
 
@@ -949,7 +950,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const callback = vi.fn()
         featureFlags.addFeatureFlagsHandler(callback)
 
-        const firstRequest = featureFlags._callFlagsEndpoint()
+        featureFlags._callFlagsEndpoint()
         distinctId = 'reset-id'
         featureFlags.reset()
         featureFlags.reloadFeatureFlags()
@@ -958,17 +959,19 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         expect(sendRequest).toHaveBeenCalledTimes(1)
 
         resolveRequests[0]({ statusCode: 200, json: { featureFlags: { stale: true } } })
-        await Promise.resolve()
 
+        await vi.waitFor(() => {
+            expect(sendRequest).toHaveBeenCalledTimes(2)
+        })
         expect(callback).not.toHaveBeenCalled()
         expect(featureFlags.getFlagVariants()).toEqual({})
-        expect(sendRequest).toHaveBeenCalledTimes(2)
         expect(sendRequest.mock.calls[1][1]?.body).toMatchObject({ distinct_id: 'reset-id' })
 
         resolveRequests[1]({ statusCode: 200, json: { featureFlags: { current: true } } })
-        await firstRequest
-        expect(callback).toHaveBeenCalledTimes(1)
-        expect(featureFlags.getFlagVariants()).toEqual({ current: true })
+        await vi.waitFor(() => {
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(featureFlags.getFlagVariants()).toEqual({ current: true })
+        })
         featureFlags.dispose()
     })
 

@@ -3,6 +3,7 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { RemoteConfig, RemoteConfigResult } from '../types'
 import type { Client } from '@posthog/browser-common'
 import { PostHog } from '../posthog-core'
+import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 
 vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
     const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
@@ -33,8 +34,7 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
     }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter } = require('@posthog/browser-common/utils/globals')
+const { mockURLGetter, mockReferrerGetter } = mockedGlobals as any
 
 describe('deferred extension initialization', () => {
     beforeEach(() => {

@@ -194,28 +194,26 @@ describe('posthog core', () => {
         })
 
         it('respects opt_out_useragent_filter (default: false)', () => {
-            const originalNavigator = globals.navigator
-            ;(globals as any).navigator = {
+            const navigatorSpy = vi.spyOn(globals, 'navigator', 'get').mockReturnValue({
                 ...globals.navigator,
                 userAgent:
                     'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
-            }
+            } as Navigator)
             const hook = vi.fn()
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
 
             posthog.capture(eventName, {}, {})
             expect(hook).not.toHaveBeenCalledWith('$event')
-            ;(globals as any)['navigator'] = originalNavigator
+            navigatorSpy.mockRestore()
         })
 
         it('respects opt_out_useragent_filter', () => {
-            const originalNavigator = globals.navigator
-            ;(globals as any).navigator = {
+            const navigatorSpy = vi.spyOn(globals, 'navigator', 'get').mockReturnValue({
                 ...globals.navigator,
                 userAgent:
                     'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
-            }
+            } as Navigator)
 
             const hook = vi.fn().mockImplementation((event) => event)
             const posthog = posthogWith(
@@ -237,7 +235,7 @@ describe('posthog core', () => {
                 })
             )
             expect(event.properties['$browser_type']).toEqual('bot')
-            ;(globals as any)['navigator'] = originalNavigator
+            navigatorSpy.mockRestore()
         })
 
         it('truncates long properties', () => {

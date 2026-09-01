@@ -1,5 +1,6 @@
 import type { PostHogConfig } from '../types'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -55,13 +56,13 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
     }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockedCookieBox, mockedFetch, document } = require('@posthog/browser-common/utils/globals')
+const { mockURLGetter, mockedCookieBox, mockedFetch, document } = mockedGlobals as any
 
 const delay = (timeoutMs: number) => new Promise((resolve) => setTimeout(resolve, timeoutMs))
 
 describe('cookieless', () => {
     const eventName = 'custom_event'
+    const instances: Array<{ shutdown: (timeoutMs?: number) => Promise<void> }> = []
     const eventProperties = {
         event: 'prop',
     }
@@ -71,13 +72,20 @@ describe('cookieless', () => {
             ...config,
             before_send: beforeSendMock,
         })!
+        instances.push(posthog)
         return { posthog, beforeSendMock }
     }
 
     beforeEach(() => {
         mockURLGetter.mockImplementation(() => 'http://localhost')
         mockedCookieBox.cookie = ''
+        mockedFetch.mockReset()
         mockedFetch.mockResolvedValue({ status: 200, text: () => Promise.resolve('{"flags": {}}') })
+    })
+
+    afterEach(async () => {
+        await Promise.all(instances.splice(0).map((instance) => instance.shutdown(0)))
+        vi.useRealTimers()
     })
 
     describe('always mode', () => {

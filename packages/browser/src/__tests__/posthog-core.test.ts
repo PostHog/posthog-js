@@ -8,9 +8,15 @@ import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { beforeEach } from 'vitest'
 import { RateLimiter } from '../rate-limiter'
 import { normalizeCaptureResult } from './helpers/normalize-capture-result'
+import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 
-vi.mock('@posthog/browser-common/utils/globals', async () => {
-    const orig = (await import('./helpers/snapshot-test-globals')).snapshotTestGlobals
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const globals = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
+    const orig = {
+        ...globals,
+        userAgent:
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    }
     const mockURL = vi.fn().mockReturnValue('https://example.com')
     const mockReferrer = vi.fn().mockReturnValue('https://referrer.com')
     const mockHostName = vi.fn().mockReturnValue('example.com')
@@ -22,6 +28,8 @@ vi.mock('@posthog/browser-common/utils/globals', async () => {
         document: {
             ...orig.document,
             createElement: (...args: any[]) => orig.document.createElement(...args),
+            addEventListener: (...args: any[]) => orig.document.addEventListener(...args),
+            removeEventListener: (...args: any[]) => orig.document.removeEventListener(...args),
             get referrer() {
                 return mockReferrer()
             },
@@ -42,8 +50,7 @@ vi.mock('@posthog/browser-common/utils/globals', async () => {
     }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURL, mockReferrer, mockHostName } = require('@posthog/browser-common/utils/globals')
+const { mockURL, mockReferrer, mockHostName } = mockedGlobals as any
 
 describe('posthog core', () => {
     beforeEach(() => {

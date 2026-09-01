@@ -1,4 +1,5 @@
-vi.mock('@posthog/browser-common/utils/logger', () => ({
+vi.mock('@posthog/browser-common/utils/logger', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/browser-common/utils/logger')>()),
     createLogger: vi.fn().mockReturnValue({
         info: vi.fn(),
         warn: vi.fn(),

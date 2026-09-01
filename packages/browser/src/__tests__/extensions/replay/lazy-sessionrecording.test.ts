@@ -65,7 +65,15 @@ import {
 
 // Type and source defined here designate a non-user-generated recording event
 
-vi.mock('../../../config', () => ({ LIB_VERSION: '0.0.1', LIB_NAME: 'web' }))
+vi.mock('../../../config', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../../config')>()
+    return {
+        ...actual,
+        default: { ...actual.default, LIB_VERSION: '0.0.1', LIB_NAME: 'web' },
+        LIB_VERSION: '0.0.1',
+        LIB_NAME: 'web',
+    }
+})
 
 const mockRemoteConfigLoad = vi.fn()
 vi.mock('../../../remote-config', () => ({
@@ -2536,7 +2544,7 @@ describe('Lazy SessionRecording', () => {
                 it('an interaction after many idle rotations ships one session, not the held backlog', () => {
                     runExternalRotations(startingTimestamp, 1)
 
-                    const interactionTimestamp = vi.now() + 1000
+                    const interactionTimestamp = Date.now() + 1000
                     vi.setSystemTime(new Date(interactionTimestamp))
                     emitActiveEvent(interactionTimestamp)
                     vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
@@ -3194,7 +3202,7 @@ describe('Lazy SessionRecording', () => {
                 skip_client_rate_limiting: true,
             }
 
-            beforeEach(() => {
+            beforeEach(async () => {
                 posthog.config.session_recording.compress_events = true
                 sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
                 sessionRecording.onRemoteConfig(
@@ -3206,10 +3214,11 @@ describe('Lazy SessionRecording', () => {
                 )
                 // need to have active event to start recording
                 _emit(createIncrementalSnapshot({ type: 3 }))
+                await sessionRecording['_lazyLoadedSessionRecording']['_compressionQueue']
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
             })
 
-            it('compresses full snapshot data', () => {
+            it('compresses full snapshot data', async () => {
                 _emit(
                     createFullSnapshot({
                         data: {
@@ -3217,6 +3226,7 @@ describe('Lazy SessionRecording', () => {
                         },
                     })
                 )
+                await sessionRecording['_lazyLoadedSessionRecording']['_compressionQueue']
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
                 expect(posthog.capture).toHaveBeenCalledWith(
@@ -3254,11 +3264,12 @@ describe('Lazy SessionRecording', () => {
                         data.plugins = [{ instance: data }]
                     },
                 ],
-            ])('compresses full snapshot data containing %s without throwing', (_name, addCycle) => {
+            ])('compresses full snapshot data containing %s without throwing', async (_name, addCycle) => {
                 const data: Record<string, any> = { content: Array(30).fill(uuidv7()).join('') }
                 addCycle(data)
 
                 expect(() => _emit(createFullSnapshot({ data }))).not.toThrow()
+                await sessionRecording['_lazyLoadedSessionRecording']['_compressionQueue']
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
                 expect(posthog.capture).toHaveBeenCalledWith(
@@ -3282,8 +3293,9 @@ describe('Lazy SessionRecording', () => {
                 )
             })
 
-            it('compresses incremental snapshot mutation data', () => {
+            it('compresses incremental snapshot mutation data', async () => {
                 _emit(createIncrementalMutationEvent({ texts: [Array(30).fill(uuidv7()).join('')] }))
+                await sessionRecording['_lazyLoadedSessionRecording']['_compressionQueue']
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
                 expect(posthog.capture).toHaveBeenCalledWith(
@@ -3314,8 +3326,9 @@ describe('Lazy SessionRecording', () => {
                 )
             })
 
-            it('compresses incremental snapshot style data', () => {
+            it('compresses incremental snapshot style data', async () => {
                 _emit(createIncrementalStyleSheetEvent({ adds: [Array(30).fill(uuidv7()).join('')] }))
+                await sessionRecording['_lazyLoadedSessionRecording']['_compressionQueue']
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
                 expect(posthog.capture).toHaveBeenCalledWith(
@@ -3369,11 +3382,13 @@ describe('Lazy SessionRecording', () => {
                 )
             })
 
-            it('does not compress custom events', () => {
+            it('does not compress custom events', async () => {
                 _emit(createFullSnapshot())
+                await sessionRecording['_lazyLoadedSessionRecording']['_compressionQueue']
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
                 ;(posthog.capture as Mock).mockClear()
                 _emit(createCustomSnapshot(undefined, { tag: 'wat' }))
+                await sessionRecording['_lazyLoadedSessionRecording']['_compressionQueue']
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
                 expect(posthog.capture).toHaveBeenCalledWith(
@@ -3610,9 +3625,7 @@ describe('Lazy SessionRecording', () => {
                 await Promise.resolve()
 
                 const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
-                const pendingTrigger = vi
-                    .spyOn(lazyRecorder['_strategy']!, 'hasPendingTriggers')
-                    .mockReturnValue(true)
+                const pendingTrigger = vi.spyOn(lazyRecorder['_strategy']!, 'hasPendingTriggers').mockReturnValue(true)
                 try {
                     _emit(createMetaSnapshot({ data: { href: 'https://test.com/second' } }))
                     _emit(createFullSnapshot())

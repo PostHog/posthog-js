@@ -6,24 +6,40 @@ import { extendURLParams, request } from '../request'
 import { Compression, RequestWithOptions } from '../types'
 import { logger } from '@posthog/browser-common/utils/logger'
 
-vi.mock('@posthog/browser-common/utils/globals', () => ({
-    ...vi.requireActual('@posthog/browser-common/utils/globals'),
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
     fetch: vi.fn(),
     XMLHttpRequest: vi.fn(),
     navigator: {
         sendBeacon: vi.fn(),
     },
+    AbortController: globalThis.AbortController,
+    CompressionStream: undefined,
 }))
 
 import { fetch, XMLHttpRequest, navigator } from '@posthog/browser-common/utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
-vi.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45', LIB_NAME: 'web' }))
+vi.mock('../config', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../config')>()),
+    DEBUG: false,
+    LIB_VERSION: '1.23.45',
+    LIB_NAME: 'web',
+}))
 
 const flushPromises = async () => {
     vi.useRealTimers()
     await new Promise((res) => setTimeout(res, 0))
     vi.useRealTimers()
+}
+
+const readBlobAsText = (blob: Blob): Promise<string> => {
+    vi.useRealTimers()
+    return new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.readAsText(blob)
+    })
 }
 
 const invalidGzipBody = () => new Uint8Array([0, 1, 2]).buffer
@@ -490,11 +506,7 @@ describe('request', () => {
                     expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).toContain('compression=base64')
                     const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
                     expect(blob.type).toBe('application/x-www-form-urlencoded')
-                    const result = await new Promise<string>((resolve) => {
-                        const reader = new FileReader()
-                        reader.onload = () => resolve(reader.result as string)
-                        reader.readAsText(blob)
-                    })
+                    const result = await readBlobAsText(blob)
                     expect(result).toBe('data=eyJmb28iOiJiYXIifQ%3D%3D')
                 },
             ],
@@ -508,11 +520,20 @@ describe('request', () => {
 
         it('aborts with an identifiable reason on timeout and reports it via the callback', async () => {
             let capturedSignal: AbortSignal | undefined
+            let capturedAbortReason: Error | undefined
+            const originalAbort = globalThis.AbortController.prototype.abort
+            const abortSpy = vi.spyOn(globalThis.AbortController.prototype, 'abort').mockImplementation(function (
+                this: AbortController,
+                reason?: unknown
+            ) {
+                capturedAbortReason = reason as Error
+                return originalAbort.call(this, reason)
+            })
             mockedFetch.mockImplementation((_url: string, opts: any) => {
                 capturedSignal = opts.signal
                 return new Promise((_resolve, reject) => {
                     // eslint-disable-next-line posthog-js/no-add-event-listener
-                    opts.signal?.addEventListener('abort', () => reject(opts.signal.reason))
+                    opts.signal?.addEventListener('abort', () => reject(capturedAbortReason))
                 })
             })
 
@@ -527,7 +548,7 @@ describe('request', () => {
 
             expect(capturedSignal?.aborted).toBe(true)
 
-            const reason = capturedSignal?.reason
+            const reason = capturedSignal?.reason ?? capturedAbortReason
             // keeps name AbortError so existing timeout handling (e.g. feature flag timeout detection) keeps working
             expect(reason.name).toBe('AbortError')
             // ...but with a descriptive message so it is never a reason-less "signal is aborted without reason"
@@ -545,6 +566,7 @@ describe('request', () => {
 
             warnSpy.mockRestore()
             errorSpy.mockRestore()
+            abortSpy.mockRestore()
         })
 
         it('logs our own timeout at warn even when the browser does not propagate the abort reason', async () => {
@@ -981,11 +1003,7 @@ describe('request', () => {
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
                 expect(blob.type).toBe('application/x-www-form-urlencoded')
 
-                const reader = new FileReader()
-                const result = await new Promise((resolve) => {
-                    reader.onload = () => resolve(reader.result)
-                    reader.readAsText(blob)
-                })
+                const result = await readBlobAsText(blob)
 
                 expect(result).toMatchInlineSnapshot(`"data=eyJmb28iOiJiYXIifQ%3D%3D"`)
             })
@@ -1007,11 +1025,7 @@ describe('request', () => {
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
                 expect(blob.type).toBe('application/x-www-form-urlencoded')
 
-                const reader = new FileReader()
-                const result = await new Promise((resolve) => {
-                    reader.onload = () => resolve(reader.result)
-                    reader.readAsText(blob)
-                })
+                const result = await readBlobAsText(blob)
 
                 expect(result).toMatchInlineSnapshot(`"data=eyJmb28iOiJiYXIifQ%3D%3D"`)
             })
@@ -1032,11 +1046,7 @@ describe('request', () => {
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
                 expect(blob.type).toBe('text/plain')
-                const result = await new Promise<string>((resolve) => {
-                    const reader = new FileReader()
-                    reader.onload = () => resolve(reader.result as string)
-                    reader.readAsText(blob)
-                })
+                const result = await readBlobAsText(blob)
 
                 expect(result).toMatchInlineSnapshot(`
                 "�      �VJ��W�RJJ,R� ��+�
@@ -1108,11 +1118,7 @@ describe('request', () => {
 
                     const splitBodies = await Promise.all(
                         mockedNavigator!.sendBeacon.mock.calls.slice(1).map(async (call) => {
-                            const text = await new Promise<string>((resolve) => {
-                                const reader = new FileReader()
-                                reader.onload = () => resolve(reader.result as string)
-                                reader.readAsText(call[1] as Blob)
-                            })
+                            const text = await readBlobAsText(call[1] as Blob)
                             return JSON.parse(
                                 Buffer.from(decodeURIComponent(text.slice('data='.length)), 'base64').toString()
                             )
@@ -1146,11 +1152,7 @@ describe('request', () => {
 
                     const splitBodies = await Promise.all(
                         mockedNavigator!.sendBeacon.mock.calls.slice(1).map(async (call) => {
-                            const text = await new Promise<string>((resolve) => {
-                                const reader = new FileReader()
-                                reader.onload = () => resolve(reader.result as string)
-                                reader.readAsText(call[1] as Blob)
-                            })
+                            const text = await readBlobAsText(call[1] as Blob)
                             return JSON.parse(
                                 Buffer.from(decodeURIComponent(text.slice('data='.length)), 'base64').toString()
                             )
@@ -1285,8 +1287,8 @@ describe('request', () => {
             )
             mockedIsolatedGzipCompress = vi.fn()
 
-            vi.doMock('@posthog/browser-common/utils/globals', () => ({
-                ...vi.requireActual('@posthog/browser-common/utils/globals'),
+            vi.doMock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
+                ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
                 fetch: mockedIsolatedFetch,
                 XMLHttpRequest: vi.fn(),
                 navigator: {
@@ -1295,8 +1297,8 @@ describe('request', () => {
                 CompressionStream: vi.fn(),
             }))
 
-            vi.doMock('@posthog/core', () => ({
-                ...vi.requireActual('@posthog/core'),
+            vi.doMock('@posthog/core', async (importOriginal) => ({
+                ...(await importOriginal<typeof import('@posthog/core')>()),
                 gzipCompress: mockedIsolatedGzipCompress,
                 isNativeAsyncGzipError: (error: unknown) =>
                     error &&

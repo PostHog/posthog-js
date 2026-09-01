@@ -24,7 +24,7 @@ import {
     SurveyWidgetType,
 } from '../../posthog-surveys-types'
 
-import { afterAll, beforeAll, beforeEach } from 'vitest'
+import { beforeEach } from 'vitest'
 import '@testing-library/jest-dom'
 import * as Preact from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
@@ -37,6 +37,18 @@ import { SURVEY_IN_PROGRESS_PREFIX } from '../../utils/survey-utils'
 import { createMockPostHog } from '../helpers/posthog-instance'
 
 declare const global: any
+
+const realTimers = {
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout,
+    setInterval: globalThis.setInterval,
+    clearInterval: globalThis.clearInterval,
+}
+
+afterEach(() => {
+    vi.useRealTimers()
+    Object.assign(globalThis, realTimers)
+})
 
 describe('survey display logic', () => {
     beforeEach(() => {
@@ -511,9 +523,7 @@ describe('SurveyManager', () => {
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
                 getFeatureFlag: vi.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
-                isFeatureEnabled: vi
-                    .fn()
-                    .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
+                isFeatureEnabled: vi.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
             },
             surveys: {
                 getSurveys: vi.fn().mockImplementation((callback) => callback(mockSurveys)),
@@ -2238,13 +2248,8 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
     let originalPushState: typeof window.history.pushState
     let originalReplaceState: typeof window.history.replaceState
 
-    // Set up fake timers for all tests in this suite
-    beforeAll(() => {
+    beforeEach(() => {
         vi.useFakeTimers()
-    })
-
-    afterAll(() => {
-        vi.useRealTimers()
     })
 
     const createTestSurvey = (urlCondition?: { url: string; urlMatchType?: string }): Survey =>

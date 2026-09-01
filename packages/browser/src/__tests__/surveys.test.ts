@@ -218,9 +218,7 @@ describe('surveys', () => {
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
                 getFeatureFlag: vi.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
-                isFeatureEnabled: vi
-                    .fn()
-                    .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
+                isFeatureEnabled: vi.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
             },
         })
 
@@ -789,15 +787,13 @@ describe('surveys', () => {
 
             const userAgent =
                 'Mozilla/5.0 (Linux; U; Android-4.0.3; en-us; Galaxy Nexus Build/IML74K) AppleWebKit/535.7 (KHTML, like Gecko) CrMo/16.0.912.75 Mobile Safari/535.7'
-            // TS doesn't like it but we can assign userAgent
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            globals['userAgent'] = userAgent
+            const userAgentSpy = vi.spyOn(globals, 'userAgent', 'get').mockReturnValue(userAgent)
 
             // matching
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithMobileDeviceType])
             })
+            userAgentSpy.mockRestore()
         })
 
         it('returns surveys based on device types not matching', () => {
@@ -807,15 +803,13 @@ describe('surveys', () => {
 
             const userAgent =
                 'Mozilla/5.0 (Linux; U; Android-4.0.3; en-us; Galaxy Nexus Build/IML74K) AppleWebKit/535.7 (KHTML, like Gecko) CrMo/16.0.912.75 Mobile Safari/535.7'
-            // TS doesn't like it but we can assign userAgent
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            globals['userAgent'] = userAgent
+            const userAgentSpy = vi.spyOn(globals, 'userAgent', 'get').mockReturnValue(userAgent)
 
             // matching
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([])
             })
+            userAgentSpy.mockRestore()
         })
 
         it('returns surveys based on exclusion conditions', () => {

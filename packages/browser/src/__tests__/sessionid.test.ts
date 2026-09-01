@@ -40,9 +40,9 @@ describe('Session ID manager', () => {
         )
     }
 
-    const originalDate = Date
-
     beforeEach(() => {
+        vi.useRealTimers()
+        vi.useFakeTimers()
         timestamp = 1603107479471
         now = timestamp + 1000
 
@@ -59,11 +59,12 @@ describe('Session ID manager', () => {
             _disabled: false,
         }
         ;(sessionStore._is_supported as vi.Mock).mockReturnValue(true)
-        // @ts-expect-error - TS gets confused about the types here
-        vi.spyOn(global, 'Date').mockImplementation(() => new originalDate(now))
+        vi.setSystemTime(now)
         ;(uuidv7 as vi.Mock).mockReturnValue('newUUID')
         ;(uuid7ToTimestampMs as vi.Mock).mockReturnValue(timestamp)
     })
+
+    afterAll(() => vi.useRealTimers())
 
     describe('new session id manager', () => {
         it('generates an initial session id and window id, and saves them', () => {
@@ -769,23 +770,18 @@ describe('Session ID manager', () => {
         })
 
         it('clears the idle timer so a stale fire cannot rotate the reset session', () => {
-            vi.useFakeTimers()
-            try {
-                const sessionIdManager = sessionIdMgr(persistence)
-                ;(persistence.register as vi.Mock).mockClear()
+            const sessionIdManager = sessionIdMgr(persistence)
+            ;(persistence.register as vi.Mock).mockClear()
 
-                sessionIdManager.resetSessionId()
-                ;(persistence.register as vi.Mock).mockClear()
+            sessionIdManager.resetSessionId()
+            ;(persistence.register as vi.Mock).mockClear()
 
-                // Advance well past the idle timer's scheduled fire time.
-                // Without the clear, the queued timer would fire here and
-                // call resetSessionId again on a session that's already null.
-                vi.advanceTimersByTime(sessionIdManager.sessionTimeoutMs * 2)
+            // Advance well past the idle timer's scheduled fire time.
+            // Without the clear, the queued timer would fire here and
+            // call resetSessionId again on a session that's already null.
+            vi.advanceTimersByTime(sessionIdManager.sessionTimeoutMs * 2)
 
-                expect(persistence.register).not.toHaveBeenCalled()
-            } finally {
-                vi.useRealTimers()
-            }
+            expect(persistence.register).not.toHaveBeenCalled()
         })
         it('a new session id is generated when called', () => {
             persistence.props[SESSION_ID] = [null, null, null]
@@ -903,8 +899,6 @@ describe('Session ID manager', () => {
         })
 
         it('resets session when idle timeout is exceeded', async () => {
-            vi.useFakeTimers()
-
             const sessionIdManager = sessionIdMgr(persistence)
             const resetSpy = vi.spyOn(sessionIdManager, 'resetSessionId')
 
@@ -930,13 +924,9 @@ describe('Session ID manager', () => {
             expect(newSessionData.sessionId).toBe('newUUID')
             expect(newSessionData.sessionId).not.toEqual('oldSessionID')
             expect(newSessionData.changeReason?.noSessionId).toBe(true)
-
-            vi.useRealTimers()
         })
 
         it('timer checks current session activity before resetting', async () => {
-            vi.useFakeTimers()
-
             const sessionIdManager = sessionIdMgr(persistence)
             const resetSpy = vi.spyOn(sessionIdManager, 'resetSessionId')
 
@@ -963,15 +953,11 @@ describe('Session ID manager', () => {
 
             // The timer should NOT have reset the session because it found recent activity
             expect(resetSpy).not.toHaveBeenCalled()
-
-            vi.useRealTimers()
         })
     })
 
     describe('forcedIdleReset event emitter', () => {
         it('is safe when there are no handlers registered', async () => {
-            vi.useFakeTimers()
-
             const sessionIdManager = sessionIdMgr(persistence)
 
             // Start with a fresh session
@@ -987,13 +973,9 @@ describe('Session ID manager', () => {
                 const idleTimeoutMs = sessionIdManager.sessionTimeoutMs * 1.1
                 vi.advanceTimersByTime(idleTimeoutMs + 1000)
             }).not.toThrow()
-
-            vi.useRealTimers()
         })
 
         it('calls multiple handlers when forcedIdleReset occurs', async () => {
-            vi.useFakeTimers()
-
             const sessionIdManager = sessionIdMgr(persistence)
             const mockHandler1 = vi.fn()
             const mockHandler2 = vi.fn()
@@ -1019,8 +1001,6 @@ describe('Session ID manager', () => {
             expect(mockHandler1).toHaveBeenCalledTimes(1)
             expect(mockHandler2).toHaveBeenCalledTimes(1)
             expect(mockHandler3).toHaveBeenCalledTimes(1)
-
-            vi.useRealTimers()
         })
     })
 
@@ -1267,7 +1247,6 @@ describe('Session ID manager', () => {
         })
 
         it('idle timer does not re-arm after destroy()', async () => {
-            vi.useFakeTimers()
             const sessionIdManager = sessionIdMgr(persistence)
             sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
 
@@ -1285,7 +1264,6 @@ describe('Session ID manager', () => {
 
             // The destroyed instance must not have re-armed.
             expect(sessionIdManager['_enforceIdleTimeout']).toBeUndefined()
-            vi.useRealTimers()
         })
     })
 
@@ -1336,7 +1314,6 @@ describe('Session ID manager', () => {
 
     describe('destroy()', () => {
         it('clears the idle timeout timer', () => {
-            vi.useFakeTimers()
             const sessionIdManager = sessionIdMgr(persistence)
 
             // The timer is created in the constructor
@@ -1345,7 +1322,6 @@ describe('Session ID manager', () => {
             sessionIdManager.destroy()
 
             expect(sessionIdManager['_enforceIdleTimeout']).toBeUndefined()
-            vi.useRealTimers()
         })
 
         it('removes the beforeunload event listener', () => {
@@ -1379,7 +1355,6 @@ describe('Session ID manager', () => {
         })
 
         it('prevents timer from firing after destroy', async () => {
-            vi.useFakeTimers()
             const sessionIdManager = sessionIdMgr(persistence)
             const mockHandler = vi.fn()
 
@@ -1398,8 +1373,6 @@ describe('Session ID manager', () => {
 
             // Handler should NOT have been called since we destroyed the manager
             expect(mockHandler).not.toHaveBeenCalled()
-
-            vi.useRealTimers()
         })
     })
 })

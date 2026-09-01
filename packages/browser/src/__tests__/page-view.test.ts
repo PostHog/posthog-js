@@ -12,6 +12,15 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
 }))
 
 describe('PageView ID manager', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+        vi.runOnlyPendingTimers()
+        vi.useRealTimers()
+    })
+
     const firstTimestamp = new Date()
     const duration = 42
     const secondTimestamp = new Date(firstTimestamp.getTime() + duration * 1000)

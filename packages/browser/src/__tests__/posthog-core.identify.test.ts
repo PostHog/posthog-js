@@ -5,10 +5,11 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
 import { normalizeCaptureResult, standardVolatileCaptureProperties } from './helpers/normalize-capture-result'
 
-vi.mock(
-    '@posthog/browser-common/utils/globals',
-    async () => (await import('./helpers/snapshot-test-globals')).snapshotTestGlobals
-)
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
+    userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+}))
 
 describe('identify()', () => {
     let instance: PostHog
@@ -30,6 +31,7 @@ describe('identify()', () => {
             {
                 api_host: 'https://test.com',
                 before_send: beforeSendMock,
+                capture_pageview: false,
                 disable_surveys: true,
             },
             token
@@ -51,6 +53,10 @@ describe('identify()', () => {
         instance.persistence!.set_property(USER_STATE, 'anonymous')
         instance.persistence!.props['distinct_id'] = 'oldIdentity'
         instance.persistence!.props['$device_id'] = 'oldIdentity'
+    })
+
+    afterEach(async () => {
+        await instance.shutdown()
     })
 
     it('registers new user id and updates alias', () => {
@@ -83,9 +89,7 @@ describe('identify()', () => {
                 return true
             })
             .mockReturnValue(false)
-        vi.spyOn(instance.persistence!, 'consumeCookieIdentityChange')
-            .mockReturnValueOnce(true)
-            .mockReturnValue(false)
+        vi.spyOn(instance.persistence!, 'consumeCookieIdentityChange').mockReturnValueOnce(true).mockReturnValue(false)
         const resetFeatureFlags = instance.featureFlags!.reset as vi.Mock
         const setPersonPropertiesForFlags = instance.featureFlags!.setPersonPropertiesForFlags as vi.Mock
 

@@ -14,10 +14,11 @@ import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { PostHogConfig } from '../types'
 
-vi.mock(
-    '@posthog/browser-common/utils/globals',
-    async () => (await import('./helpers/snapshot-test-globals')).snapshotTestGlobals
-)
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
+    userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+}))
 
 const initPostHogInAPromise = (
     segment: any,
@@ -50,7 +51,7 @@ describe(`Segment integration`, () => {
     let segmentIntegration: SegmentPlugin
     let posthogName: string
 
-    vi.setTimeout(500)
+    vi.setConfig({ testTimeout: 500 })
 
     beforeEach(() => {
         // Clear localStorage to avoid state leakage between tests

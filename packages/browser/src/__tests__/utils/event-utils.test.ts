@@ -10,6 +10,8 @@ import * as globals from '@posthog/browser-common/utils/globals'
 import { isUndefined } from '@posthog/core'
 
 describe(`event-utils`, () => {
+    afterEach(() => vi.restoreAllMocks())
+
     describe('properties', () => {
         it('should have $host and $pathname in properties', () => {
             const properties = getEventProperties()
@@ -19,34 +21,30 @@ describe(`event-utils`, () => {
         })
 
         it('should have user agent in properties', () => {
-            // TS doesn't like it but we can assign userAgent
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            globals['userAgent'] = 'blah'
+            vi.spyOn(globals, 'userAgent', 'get').mockReturnValue('blah')
             const properties = getEventProperties()
             expect(properties['$raw_user_agent']).toBe('blah')
         })
 
         it('should truncate very long user agents in properties', () => {
-            // TS doesn't like it but we can assign userAgent
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            globals['userAgent'] = 'a'.repeat(1001)
+            vi.spyOn(globals, 'userAgent', 'get').mockReturnValue('a'.repeat(1001))
             const properties = getEventProperties()
             expect(properties['$raw_user_agent'].length).toBe(1000)
             expect(properties['$raw_user_agent'].substring(995)).toBe('aa...')
         })
 
         it('should mask out personal data from URL', () => {
-            // @ts-expect-error ok to set global in test
-            globals.location = { href: 'https://www.example.com/path?gclid=12345&other=true' }
+            vi.spyOn(globals, 'location', 'get').mockReturnValue({
+                href: 'https://www.example.com/path?gclid=12345&other=true',
+            } as Location)
             const properties = getEventProperties(true)
             expect(properties['$current_url']).toEqual('https://www.example.com/path?gclid=<masked>&other=true')
         })
 
         it('should mask out custom personal data', () => {
-            // @ts-expect-error ok to set global in test
-            globals.location = { href: 'https://www.example.com/path?gclid=12345&other=true' }
+            vi.spyOn(globals, 'location', 'get').mockReturnValue({
+                href: 'https://www.example.com/path?gclid=12345&other=true',
+            } as Location)
             const properties = getEventProperties(true, ['other'])
             expect(properties['$current_url']).toEqual('https://www.example.com/path?gclid=<masked>&other=<masked>')
         })
@@ -56,8 +54,9 @@ describe(`event-utils`, () => {
             ['when disable_capture_url_hashes is false', false, 'https://www.example.com/path?gclid=12345#section'],
             ['when disable_capture_url_hashes is true', true, 'https://www.example.com/path?gclid=12345'],
         ])('should handle hash in current URL %s', (_description, disableCaptureUrlHashes, expectedUrl) => {
-            // @ts-expect-error ok to set global in test
-            globals.location = { href: 'https://www.example.com/path?gclid=12345#section' }
+            vi.spyOn(globals, 'location', 'get').mockReturnValue({
+                href: 'https://www.example.com/path?gclid=12345#section',
+            } as Location)
             const properties = getEventProperties(false, undefined, undefined, disableCaptureUrlHashes)
             expect(properties['$current_url']).toEqual(expectedUrl)
         })
@@ -102,8 +101,7 @@ describe(`event-utils`, () => {
         }
 
         beforeEach(() => {
-            // @ts-expect-error ok to set global in test
-            globals['userAgent'] = androidTabletDesktopUA
+            vi.spyOn(globals, 'userAgent', 'get').mockReturnValue(androidTabletDesktopUA)
         })
 
         afterEach(() => {
@@ -204,8 +202,7 @@ describe(`event-utils`, () => {
         const originalBrave = Object.getOwnPropertyDescriptor(window.navigator, 'brave')
 
         beforeEach(() => {
-            // @ts-expect-error ok to set global in test
-            globals['userAgent'] = chromeMacOsUA
+            vi.spyOn(globals, 'userAgent', 'get').mockReturnValue(chromeMacOsUA)
         })
 
         afterEach(() => {

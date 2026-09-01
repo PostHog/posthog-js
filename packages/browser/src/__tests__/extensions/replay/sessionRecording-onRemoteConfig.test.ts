@@ -26,7 +26,15 @@ import { createMockPostHog, createMockConfig } from '../../helpers/posthog-insta
 
 // Type and source defined here designate a non-user-generated recording event
 
-vi.mock('../../../config', () => ({ LIB_VERSION: '0.0.1', LIB_NAME: 'web' }))
+vi.mock('../../../config', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../../config')>()
+    return {
+        ...actual,
+        default: { ...actual.default, LIB_VERSION: '0.0.1', LIB_NAME: 'web' },
+        LIB_VERSION: '0.0.1',
+        LIB_NAME: 'web',
+    }
+})
 
 const EMPTY_BUFFER = {
     data: [],

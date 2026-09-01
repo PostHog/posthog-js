@@ -2,6 +2,7 @@ import { mockLogger } from './helpers/mock-logger'
 
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
 import { RemoteConfig } from '../types'
 
@@ -104,8 +105,7 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
     }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter, document } = require('@posthog/browser-common/utils/globals')
+const { mockURLGetter, mockReferrerGetter, document } = mockedGlobals as any
 
 describe('person processing', () => {
     const distinctId = '123'

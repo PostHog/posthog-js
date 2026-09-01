@@ -5,6 +5,10 @@ import { patch as rrwebPatch } from '@posthog/rrweb-utils'
 import { LOGS_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import type { Client } from '@posthog/browser-common'
 
+const loadLogsEntrypoint = async (): Promise<void> => {
+    await import('../../entrypoints/logs')
+}
+
 describe('logs entrypoint', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
@@ -71,10 +75,7 @@ describe('logs entrypoint', () => {
     })
 
     describe('core capture routing', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('routes legacy PostHog capture through its historical console method with the mapped level', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
@@ -131,10 +132,7 @@ describe('logs entrypoint', () => {
     })
 
     describe('log truncation features', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('should truncate log body when it exceeds size limit', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
@@ -382,7 +380,8 @@ describe('logs entrypoint', () => {
 
             expect(() => assignableWindow.console.log(objectWithUnreadableProperties)).not.toThrow()
 
-            expect(originalConsoleLog).toHaveBeenCalledWith(objectWithUnreadableProperties)
+            expect(originalConsoleLog).toHaveBeenCalledTimes(1)
+            expect(originalConsoleLog.mock.calls[0][0]).toBe(objectWithUnreadableProperties)
             expect(mockEmit).toHaveBeenCalledWith(
                 expect.objectContaining({
                     body: '{"readable":"value"}',
@@ -586,10 +585,7 @@ describe('logs entrypoint', () => {
     })
 
     describe('console output safety', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('still calls the original console method when capture throws', () => {
             const originalConsoleLog = assignableWindow.console.log as vi.Mock
@@ -606,10 +602,7 @@ describe('logs entrypoint', () => {
     })
 
     describe('re-entrancy protection', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('exposes the original console method via __rrweb_original__ so the internal logger does not re-enter capture', () => {
             const originalConsoleLog = assignableWindow.console.log
@@ -675,10 +668,7 @@ describe('logs entrypoint', () => {
     })
 
     describe('consent / opt-out handling', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('should not emit logs when capturing is opted out', () => {
             const originalConsoleLog = assignableWindow.console.log as vi.Mock
@@ -731,10 +721,7 @@ describe('logs entrypoint', () => {
     })
 
     describe('performance tests', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('should not take more than 50ms to log a 2MB object with big body', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
@@ -829,10 +816,7 @@ describe('logs entrypoint', () => {
         })
     })
     describe('re-entrancy across multiple nested logs', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('keeps the guard held when a nested log skips capture', () => {
             // The capture path can write to the console more than once; the first nested
@@ -851,10 +835,7 @@ describe('logs entrypoint', () => {
     })
 
     describe('teardown under another console wrapper', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('splices itself out when a later wrapper sits on top', () => {
             const realLog = assignableWindow.console.log as vi.Mock
@@ -897,9 +878,8 @@ describe('logs entrypoint', () => {
         let realConsoleLog: vi.Mock
         let capturedBuffered: vi.Mock
 
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
+        beforeEach(async () => {
+            await loadLogsEntrypoint()
 
             realConsoleLog = assignableWindow.console.log as vi.Mock
             capturedBuffered = vi.fn()

@@ -276,10 +276,10 @@ describe('__extensionClasses enrollment', () => {
 
         posthog['_enrollExtension']({ name: 'logs', setup: vi.fn(), dispose } as any, initTasks)
         initTasks[0]?.()
-        await Promise.resolve()
-        await Promise.resolve()
 
-        expect(dispose).toHaveBeenCalledTimes(1)
+        await vi.waitFor(() => {
+            expect(dispose).toHaveBeenCalledTimes(1)
+        })
         expect(loggerError).toHaveBeenCalledWith('Failed to dispose browser extension "logs"', disposeError)
     })
 
