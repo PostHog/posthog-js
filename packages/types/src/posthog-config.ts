@@ -630,8 +630,13 @@ export interface SessionRecordingOptions {
     maskTextClass?: string | RegExp
 
     /**
-     * Derived from `rrweb.record` options
+     * Derived from `rrweb.record` options. A CSS selector for non-input content to mask in
+     * session replay. Session replay masks every input value by default (see `maskAllInputs`),
+     * but it does not mask other DOM text or images. Use this selector — or the `ph-mask` class
+     * on an element, or `ph-no-capture` to redact an element and its subtree — to hide rendered
+     * sensitive content such as card numbers or scanned documents.
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @see https://posthog.com/docs/session-replay/privacy
      */
     maskTextSelector?: string | null
 
@@ -642,14 +647,24 @@ export interface SessionRecordingOptions {
     maskTextFn?: ((text: string, element?: HTMLElement) => string) | null
 
     /**
-     * Derived from `rrweb.record` options
+     * Derived from `rrweb.record` options. When `true` (the default) session replay masks the
+     * value of every input. Set it to `false` to record input values, which is not recommended
+     * for apps that handle sensitive data. A `session_recording` masking option set in
+     * `posthog.init` takes precedence over the project "Privacy and masking" setting; the SDK
+     * warns once when the two differ.
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @see https://posthog.com/docs/session-replay/privacy
+     * @default true
      */
     maskAllInputs?: boolean
 
     /**
-     * Derived from `rrweb.record` options
+     * Derived from `rrweb.record` options. Selects which input types to mask by input attribute,
+     * for use when `maskAllInputs` is `false`. Password inputs are always masked by default: the
+     * SDK adds `password: true` to a partial override, so set `password: false` explicitly if you
+     * must record password fields.
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @see https://posthog.com/docs/session-replay/privacy
      */
     maskInputOptions?: Partial<MaskInputOptions>
 
