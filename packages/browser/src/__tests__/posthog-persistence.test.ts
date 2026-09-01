@@ -1624,6 +1624,7 @@ describe('persistence', () => {
             const persistenceKey = `ph_${token}_posthog`
             const posthog = new PostHog().init(token, {
                 persistence: 'sessionStorage',
+                bootstrap: { distinctID: 'test' },
             })
             posthog.register({ distinct_id: 'test', test_prop: 'test_val' })
             posthog.capture('test_event')
@@ -1637,6 +1638,7 @@ describe('persistence', () => {
             const persistenceKey = `ph_${token}_posthog`
             const posthog = new PostHog().init(token, {
                 persistence: 'memory',
+                bootstrap: { distinctID: 'test' },
             })
             posthog.register({ distinct_id: 'test', test_prop: 'test_val' })
             posthog.capture('test_event')

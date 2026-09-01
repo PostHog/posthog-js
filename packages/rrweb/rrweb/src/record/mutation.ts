@@ -603,17 +603,9 @@ export default class MutationBuffer {
       removes: this.removes,
       adds,
     };
-    // payload may be empty if the mutations happened in some blocked elements
-    if (
-      !payload.texts.length &&
-      !payload.attributes.length &&
-      !payload.removes.length &&
-      !payload.adds.length
-    ) {
-      return;
-    }
 
-    // reset
+    // Reset before the empty-payload return: these collections strongly
+    // reference DOM nodes, and payload holds its own references.
     this.texts = [];
     this.attributes = [];
     this.attributeMap = new WeakMap<Node, attributeCursor>();
@@ -624,6 +616,16 @@ export default class MutationBuffer {
     this.droppedSet = new Set<Node>();
     this.removesSubTreeCache = new Set<Node>();
     this.movedMap = {};
+
+    // payload may be empty if the mutations happened in some blocked elements
+    if (
+      !payload.texts.length &&
+      !payload.attributes.length &&
+      !payload.removes.length &&
+      !payload.adds.length
+    ) {
+      return;
+    }
 
     this.mutationCb(payload);
   };
