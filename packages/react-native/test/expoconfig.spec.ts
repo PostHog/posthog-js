@@ -22,7 +22,6 @@ import {
   resolveNativeSymbolUpload,
   resolveReleaseModeProp,
   updateDotenvFileGradleProperties,
-  updateReleaseModeGradleProperties,
 } from '../src/tooling/expoconfig'
 
 const postHogExpoPlugin = (postHogExpoPluginModule as any).default
@@ -457,30 +456,17 @@ describe('addDsymUploadBuildPhase', () => {
     }
   }
 
-  it('unbinds dSYM uploads when only the environment selects event mode', () => {
-    // The bundle phase reads POSTHOG_RELEASE_MODE from the environment, so a build configured that
-    // way and not through the plugin prop used to upload maps unbound and dSYMs bound.
+  it('never unbinds the dSYM upload, whatever the environment says', () => {
+    // The release mode steers the Hermes upload only. posthog-ios always binds its symbol sets, so
+    // this phase must not export POSTHOG_NO_RELEASE_BIND for any value it inherits.
     const script = buildDsymUploadShellScript()
 
-    expect(runDsymPhase(script, { POSTHOG_RELEASE_MODE: 'event' }).output).toContain('NO_RELEASE_BIND=1')
-    expect(runDsymPhase(script, { POSTHOG_RELEASE_MODE: 'symbol-set' }).output).toContain('NO_RELEASE_BIND=unset')
-    expect(runDsymPhase(script, {}).output).toContain('NO_RELEASE_BIND=unset')
-  })
+    for (const mode of ['event', 'symbol-set', 'evnet']) {
+      const result = runDsymPhase(script, { POSTHOG_RELEASE_MODE: mode })
 
-  it('keeps the plugin prop in charge when the environment disagrees', () => {
-    // The bundle phase exports the prop's mode, overriding what it inherited. The dSYM phase has
-    // to settle the same disagreement the same way, or one build binds half its symbols.
-    const script = buildDsymUploadShellScript(false, false, 'event')
-
-    expect(runDsymPhase(script, { POSTHOG_RELEASE_MODE: 'symbol-set' }).output).toContain('NO_RELEASE_BIND=1')
-  })
-
-  it('fails the build on a release mode it does not recognize', () => {
-    // Falling back would upload dSYMs bound to a release the user asked to keep independent.
-    const result = runDsymPhase(buildDsymUploadShellScript(), { POSTHOG_RELEASE_MODE: 'evnet' })
-
-    expect(result.status).toBe(1)
-    expect(result.output).toContain("was 'evnet'")
+      expect(result.status).toBe(0)
+      expect(result.output).toContain('NO_RELEASE_BIND=unset')
+    }
   })
 
   it('refreshes an existing plugin-generated phase script so option changes take effect', () => {
@@ -817,32 +803,17 @@ describe('updateDotenvFileGradleProperties', () => {
   })
 })
 
-describe('updateReleaseModeGradleProperties', () => {
-  const unrelated = [
-    { type: 'comment', value: 'Project-wide Gradle settings.' },
-    { type: 'property', key: 'android.useAndroidX', value: 'true' },
-  ]
-
-  it('adds the entry when set and removes it when the prop is dropped', () => {
-    const withEntry = updateReleaseModeGradleProperties([...unrelated], 'event')
-    expect(withEntry).toEqual([...unrelated, { type: 'property', key: 'posthog.releaseMode', value: 'event' }])
-
-    expect(updateReleaseModeGradleProperties(withEntry)).toEqual(unrelated)
-  })
-
-  it('replaces an existing entry instead of duplicating it', () => {
-    const withEntry = updateReleaseModeGradleProperties([...unrelated], 'event')
-    const result = updateReleaseModeGradleProperties(withEntry, 'symbol-set')
-    expect(result.filter((item) => item.key === 'posthog.releaseMode')).toEqual([
-      { type: 'property', key: 'posthog.releaseMode', value: 'symbol-set' },
-    ])
-  })
-})
-
 describe('resolveReleaseModeProp', () => {
-  it('treats an unset or blank prop as the posthog-cli default', () => {
-    expect(resolveReleaseModeProp()).toBeUndefined()
-    expect(resolveReleaseModeProp('  ')).toBeUndefined()
+  it('resolves an unset or blank prop to event', () => {
+    expect(resolveReleaseModeProp()).toBe('event')
+    expect(resolveReleaseModeProp('  ')).toBe('event')
+  })
+
+  it('reads POSTHOG_RELEASE_MODE when the prop is absent', () => {
+    // The prebuild writes the resolved mode into the bundle phase, and that beats the variable at
+    // build time. Reading it here is what keeps the opt-out working for an Expo project.
+    expect(resolveReleaseModeProp(undefined, 'symbol-set')).toBe('symbol-set')
+    expect(resolveReleaseModeProp('event', 'symbol-set')).toBe('event')
   })
 
   it('stops the prebuild on a typo rather than falling back to the default', () => {

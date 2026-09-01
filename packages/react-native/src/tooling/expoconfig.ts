@@ -17,11 +17,14 @@ const resolvePostHogReactNativePackageJsonPath =
 const POSTHOG_ANDROID_SKIP_ON_CONFLICT_PROPERTY = 'posthogReactNativeSkipOnConflict'
 
 /**
- * How the release a build belongs to gets associated with the exceptions it reports.
- * `symbol-set` stamps the release onto the uploaded source maps, dSYMs and mappings, and an
- * exception inherits the release of the symbols its frames resolved against. `event` uploads them
- * release-independent and lets each event resolve its own release from the app version and
- * namespace the SDK already sends.
+ * How the release a build belongs to gets associated with the exceptions it reports. This steers
+ * the Hermes source map upload only. iOS dSYMs and Android R8 mappings always bind to the release
+ * their build creates.
+ *
+ * `event`, the default, uploads the maps release-independent and lets each event resolve its own
+ * release from the app version and namespace the SDK already sends. `symbol-set` stamps the release
+ * onto the uploaded maps instead, and an exception inherits the release of the maps its frames
+ * resolved against.
  */
 export type PostHogReleaseMode = 'symbol-set' | 'event'
 
@@ -29,13 +32,16 @@ export type PostHogReleaseMode = 'symbol-set' | 'event'
 // dSYM phase to this list, because nothing else fails when they drift.
 export const POSTHOG_RELEASE_MODES: PostHogReleaseMode[] = ['symbol-set', 'event']
 
-// Empty/whitespace-only values (easy to produce from templated app.config values) count as unset.
-// An unrecognized value stops the prebuild rather than falling back, so a typo cannot silently
-// leave a build binding its symbols to a release it meant to keep independent.
-export function resolveReleaseModeProp(releaseMode?: string): PostHogReleaseMode | undefined {
-  const trimmed = releaseMode?.trim()
+// Empty/whitespace-only values (easy to produce from templated app.config values) count as unset
+// and fall through to the next source. The prebuild writes one resolved mode into the bundle phase,
+// and that beats POSTHOG_RELEASE_MODE at build time, so this reads the variable rather than leaving
+// an Expo build with no way to opt out. An unrecognized value stops the prebuild rather than falling
+// back, so a typo cannot silently leave a build binding its maps to a release it meant to keep
+// independent.
+export function resolveReleaseModeProp(releaseMode?: string, environmentMode?: string): PostHogReleaseMode {
+  const trimmed = releaseMode?.trim() || environmentMode?.trim()
   if (!trimmed) {
-    return undefined
+    return 'event'
   }
   if (!POSTHOG_RELEASE_MODES.includes(trimmed as PostHogReleaseMode)) {
     throw new Error(
@@ -310,28 +316,18 @@ const POSTHOG_DSYM_INPUT_PATH =
 // Shell script for the dSYM upload build phase. It locates and runs posthog-ios's
 // upload-symbols.sh (CocoaPods or SwiftPM) rather than re-implementing dSYM upload.
 // `includeSource` (iOS only) opts into POSTHOG_INCLUDE_SOURCE to also upload native source.
-export function buildDsymUploadShellScript(
-  includeSource = false,
-  skipOnConflict = false,
-  releaseMode?: PostHogReleaseMode
-): string {
-  return composeDsymUploadShellScript(includeSource, skipOnConflict, buildDsymReleaseModeLines(releaseMode))
+export function buildDsymUploadShellScript(includeSource = false, skipOnConflict = false): string {
+  return composeDsymUploadShellScript(includeSource, skipOnConflict)
 }
 
 // The phase as SDKs without release-mode support wrote it: the same script with no release-mode
-// block. isPluginGeneratedDsymUploadBuildPhase recognizes only text the plugin wrote, so this text
-// has to stay among its variants. Without it a project prebuilt by such an SDK keeps its old phase,
-// and event mode unbinds its Hermes maps but not its dSYMs. That makes the shared lines in
-// composeDsymUploadShellScript a compatibility contract: a change to them needs the old text kept
-// as a variant too.
-function buildLegacyDsymUploadShellScript(includeSource: boolean, skipOnConflict: boolean): string {
-  return composeDsymUploadShellScript(includeSource, skipOnConflict, [])
-}
-
+// block. isPluginGeneratedDsymUploadBuildPhase recognizes only text the plugin wrote, so every
+// shape the plugin has ever written has to stay among its variants. Without that, a project
+// prebuilt by an older SDK keeps its old phase and never picks up a change to this one.
 function composeDsymUploadShellScript(
   includeSource: boolean,
   skipOnConflict: boolean,
-  releaseModeLines: string[]
+  releaseModeLines: string[] = []
 ): string {
   const lines = [
     '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
@@ -369,12 +365,26 @@ function composeDsymUploadShellScript(
   return lines.join('\n')
 }
 
-// Resolved when the phase runs, not when it is generated. The bundle phase reads
-// POSTHOG_RELEASE_MODE out of the environment, so a build configured that way rather than
-// through the plugin prop would otherwise upload its maps release-independent and keep binding
-// its dSYMs. posthog-ios reads only POSTHOG_NO_RELEASE_BIND, and posthog-cli's `dsym upload`
-// binds no environment variable of its own, so the translation has to happen here.
-function buildDsymReleaseModeLines(releaseMode?: PostHogReleaseMode): string[] {
+// xcode's addBuildPhase stores shellScript quote-escaped with literal newlines; in-place
+// refreshes must match or the stored pbxproj representation churns.
+function encodePbxShellScript(script: string): string {
+  return '"' + script.replace(/"/g, '\\"') + '"'
+}
+
+// Undoes any quoted pbxproj encoding of shellScript. Handles both the literal-newline
+// form xcode's addBuildPhase writes and the \n-escaped form Xcode itself writes, so a
+// pristine phase is recognized regardless of which tool last serialized the project.
+function decodePbxShellScript(stored: string): string {
+  if (!stored.startsWith('"') || !stored.endsWith('"')) {
+    return stored
+  }
+  return stored.slice(1, -1).replace(/\\(.)/g, (_match, ch) => (ch === 'n' ? '\n' : ch === 't' ? '\t' : ch))
+}
+
+// The release-mode block the previous SDK wrote into this phase. It exported POSTHOG_NO_RELEASE_BIND
+// for event mode, which posthog-ios no longer reads. Kept so a project prebuilt by that SDK is still
+// recognized, and so the refresh replaces the block rather than leaving it in place.
+function buildPreviousDsymReleaseModeLines(releaseMode?: PostHogReleaseMode): string[] {
   return [
     releaseMode
       ? `POSTHOG_RESOLVED_RELEASE_MODE="${releaseMode}"`
@@ -395,22 +405,6 @@ function buildDsymReleaseModeLines(releaseMode?: PostHogReleaseMode): string[] {
   ]
 }
 
-// xcode's addBuildPhase stores shellScript quote-escaped with literal newlines; in-place
-// refreshes must match or the stored pbxproj representation churns.
-function encodePbxShellScript(script: string): string {
-  return '"' + script.replace(/"/g, '\\"') + '"'
-}
-
-// Undoes any quoted pbxproj encoding of shellScript. Handles both the literal-newline
-// form xcode's addBuildPhase writes and the \n-escaped form Xcode itself writes, so a
-// pristine phase is recognized regardless of which tool last serialized the project.
-function decodePbxShellScript(stored: string): string {
-  if (!stored.startsWith('"') || !stored.endsWith('"')) {
-    return stored
-  }
-  return stored.slice(1, -1).replace(/\\(.)/g, (_match, ch) => (ch === 'n' ? '\n' : ch === 't' ? '\t' : ch))
-}
-
 function isPluginGeneratedDsymUploadBuildPhase(phase: any): boolean {
   if (typeof phase?.shellScript !== 'string') {
     return false
@@ -419,8 +413,11 @@ function isPluginGeneratedDsymUploadBuildPhase(phase: any): boolean {
   return [false, true].some((source) =>
     [false, true].some(
       (skip) =>
-        stored === buildLegacyDsymUploadShellScript(source, skip) ||
-        [undefined, ...POSTHOG_RELEASE_MODES].some((mode) => stored === buildDsymUploadShellScript(source, skip, mode))
+        stored === buildDsymUploadShellScript(source, skip) ||
+        [undefined, ...POSTHOG_RELEASE_MODES].some(
+          (mode) =>
+            stored === composeDsymUploadShellScript(source, skip, buildPreviousDsymReleaseModeLines(mode))
+        )
     )
   )
 }
@@ -487,7 +484,6 @@ export function disableUserScriptSandboxing(xcodeProject: any): void {
 
 const POSTHOG_DOTENV_BUILD_SETTING = 'POSTHOG_CLI_DOTENV_FILE'
 const POSTHOG_DOTENV_GRADLE_PROPERTY = 'posthog.dotenvFile'
-const POSTHOG_RELEASE_MODE_GRADLE_PROPERTY = 'posthog.releaseMode'
 
 // Strips a leading ./ so relative props join cleanly onto their per-platform prefix.
 function normalizeDotenvFileProp(dotenvFile: string): string {
@@ -561,28 +557,9 @@ export function updateDotenvFileGradleProperties(
   return rest
 }
 
-// Managed posthog.releaseMode entry in android/gradle.properties. Both Android upload hooks read
-// it — the SDK's posthog.gradle hermes upload and the com.posthog.android R8 mapping upload — so
-// one entry keeps the JavaScript and native halves of a build on the same mode. Added when the
-// prop is set, removed when it isn't.
-export function updateReleaseModeGradleProperties(
-  properties: GradlePropertiesItem[],
-  releaseMode?: PostHogReleaseMode
-): GradlePropertiesItem[] {
-  const rest = properties.filter(
-    (item) => !(item.type === 'property' && item.key === POSTHOG_RELEASE_MODE_GRADLE_PROPERTY)
-  )
-  if (!releaseMode) {
-    return rest
-  }
-  rest.push({ type: 'property', key: POSTHOG_RELEASE_MODE_GRADLE_PROPERTY, value: releaseMode })
-  return rest
-}
-
-const withPostHogGradleProperties = (config: any, dotenvFile?: string, releaseMode?: PostHogReleaseMode) => {
+const withPostHogGradleProperties = (config: any, dotenvFile?: string) => {
   return withGradleProperties(config, (config: any) => {
     config.modResults = updateDotenvFileGradleProperties(config.modResults, dotenvFile)
-    config.modResults = updateReleaseModeGradleProperties(config.modResults, releaseMode)
     return config
   })
 }
@@ -659,29 +636,22 @@ type PostHogPluginProps = {
   /**
    * How the release a build belongs to gets associated with the exceptions it reports.
    *
-   * `symbol-set` (the default) stamps the release onto everything the build uploads — Hermes
-   * source maps, iOS dSYMs, Android R8 mappings — and an exception inherits the release of the
-   * symbols its frames resolved against.
+   * This steers the Hermes source map upload only. iOS dSYMs and Android R8 mappings always bind to
+   * the release their build creates.
    *
-   * EXPERIMENTAL `event` uploads them release-independent, and each event resolves its own
-   * release from the `$app_namespace` / `$app_version` / `$app_build` the SDK already sends.
-   * Nothing is injected into the app in exchange. Use it when two releases can ship identical
-   * JavaScript or identical native code: symbol ids are derived from content, so in `symbol-set`
-   * mode both releases report whichever one uploaded first.
+   * `event` (the default) uploads the maps release-independent, and each event resolves its own
+   * release from the `$app_namespace` / `$app_version` / `$app_build` the SDK already sends. Use it
+   * when two releases can ship identical JavaScript: the map id comes from content, so in
+   * `symbol-set` mode both releases report whichever one uploaded first.
    *
-   * Reaches every upload hook: iOS as `POSTHOG_RELEASE_MODE` in the bundle build phase (plus
-   * `POSTHOG_NO_RELEASE_BIND` in the dSYM phase when `uploadNativeSymbols` is on), Android as a
-   * `posthog.releaseMode` entry in android/gradle.properties.
+   * `symbol-set` stamps the release onto the uploaded maps instead.
    *
-   * Requires posthog-cli >= 0.13.0 and the `com.posthog.android` gradle plugin >= 1.5.0 for the
-   * Android mapping upload. Plugin 1.4.0 ignores `posthog.releaseMode` and keeps binding the
-   * mapping. A fresh prebuild injects a version that reads it, but a project whose
-   * android/build.gradle already carries the classpath line keeps its version: bump that line by
-   * hand or prebuild with `--clean`. The dSYM half needs posthog-cli >= 0.10.0 and
-   * posthog-ios >= 3.69.1; older ones ignore `POSTHOG_NO_RELEASE_BIND` and keep binding.
-   * The Hermes source map upload needs posthog-cli >= 0.16.0, which carries `--release-mode` on
-   * the `hermes` commands; the build fails on an older one and names the upgrade. That floor
-   * lives in posthog-xcode.sh and posthog.gradle: update them and this line together.
+   * Defaults to `POSTHOG_RELEASE_MODE` when this prop is absent. The prebuild writes the resolved
+   * mode into the bundle build phase, so set the variable before you run the prebuild.
+   *
+   * Needs posthog-cli >= 0.16.0, which carries `--release-mode` on the `hermes` commands. The build
+   * fails on an older one and names the upgrade. That floor lives in posthog-xcode.sh and
+   * posthog.gradle: update them and this line together.
    */
   releaseMode?: PostHogReleaseMode
 }
@@ -768,7 +738,7 @@ const withPostHogPlugin = (config: any, rawProps: PostHogPluginProps = {}) => {
   const props = {
     ...rawProps,
     dotenvFile: resolveDotenvFileProp(rawProps.dotenvFile),
-    releaseMode: resolveReleaseModeProp(rawProps.releaseMode),
+    releaseMode: resolveReleaseModeProp(rawProps.releaseMode, process.env.POSTHOG_RELEASE_MODE),
   }
   // Must register first: it inserts the projectBuildGradle mod key ahead of appBuildGradle,
   // and expo evaluates mods in key-insertion order. Registering withAndroidPlugin first would
@@ -780,7 +750,7 @@ const withPostHogPlugin = (config: any, rawProps: PostHogPluginProps = {}) => {
   }
   config = withAndroidPlugin(config, props.skipOnConflict === true)
   // Runs unconditionally so removing the prop also removes the managed entry.
-  config = withPostHogGradleProperties(config, props.dotenvFile, props.releaseMode)
+  config = withPostHogGradleProperties(config, props.dotenvFile)
   return withIosPlugin(config, props)
 }
 
@@ -808,4 +778,3 @@ module.exports.buildAndroidDotenvFileGradleValue = buildAndroidDotenvFileGradleV
 module.exports.updateDotenvFileGradleProperties = updateDotenvFileGradleProperties
 module.exports.POSTHOG_RELEASE_MODES = POSTHOG_RELEASE_MODES
 module.exports.resolveReleaseModeProp = resolveReleaseModeProp
-module.exports.updateReleaseModeGradleProperties = updateReleaseModeGradleProperties
