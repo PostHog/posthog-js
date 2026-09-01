@@ -93,6 +93,16 @@ describe('posthog-metrics', () => {
         expect(last.sum.dataPoints[0].asDouble).toBe(2)
     })
 
+    it('retains the window on a 408', async () => {
+        respondWithStatus(408)
+        metrics.count('a', 5)
+        await metrics.flush()
+
+        respondWithStatus(200)
+        await metrics.flush()
+        expect(sentRequests()[1].data.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0].asDouble).toBe(5)
+    })
+
     it('captures nothing when the instance is not capturing', async () => {
         ;(mockPostHog.is_capturing as jest.Mock).mockReturnValue(false)
         metrics.count('a', 1)

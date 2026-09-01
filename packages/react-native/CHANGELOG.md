@@ -1,5 +1,135 @@
 # posthog-react-native
 
+## 4.66.3
+
+### Patch Changes
+
+- [#4708](https://github.com/PostHog/posthog-js/pull/4708) [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Change `bigint` attributes on logs, metrics and spans to send as an int64 rather than as a string.
+  (2026-09-01)
+- Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a)]:
+  - @posthog/core@1.50.0
+
+## 4.66.2
+
+### Patch Changes
+
+- [#4677](https://github.com/PostHog/posthog-js/pull/4677) [`c984623`](https://github.com/PostHog/posthog-js/commit/c9846233872234a32050df3657836bf633ee82b6) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix Android builds failing to resolve a Kotlin compiler plugin when `uploadNativeSymbols` is enabled, by picking up `com.posthog:posthog-android-gradle-plugin` 1.5.2. Re-run `expo prebuild` to apply it.
+  (2026-08-28)
+- Updated dependencies [[`c984623`](https://github.com/PostHog/posthog-js/commit/c9846233872234a32050df3657836bf633ee82b6)]:
+  - @posthog/react-native-plugin@2.5.1
+
+## 4.66.1
+
+### Patch Changes
+
+- [#4673](https://github.com/PostHog/posthog-js/pull/4673) [`956d252`](https://github.com/PostHog/posthog-js/commit/956d252448f5bec49e6f87ac3f4e465f5e581aa9) Thanks [@github-actions](https://github.com/apps/github-actions)! - Survey question, intro and thank-you headers no longer run underneath the close button. Long headers now wrap before reaching the modal's top-right corner instead of being overlapped by it.
+  (2026-08-28)
+
+## 4.66.0
+
+### Minor Changes
+
+- [#4617](https://github.com/PostHog/posthog-js/pull/4617) [`b73d15e`](https://github.com/PostHog/posthog-js/commit/b73d15e80fbbf80a078b0fa7226541dea7c1b7e2) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Add experimental event release mode to React Native builds. Set `releaseMode: 'event'` on the `posthog-react-native/expo` config plugin (or export `POSTHOG_RELEASE_MODE=event`, or set `posthog.releaseMode=event` in `android/gradle.properties`) and the build uploads its Hermes source maps, iOS dSYMs and Android R8 mappings without binding them to a release. Each exception then resolves its own release from the `$app_namespace` / `$app_version` / `$app_build` the SDK already sends, instead of inheriting the release of the symbols its frames resolved against. Use it when two releases can ship identical JavaScript or identical native code: symbol ids are derived from content, so the default `symbol-set` mode makes both releases report whichever one uploaded first. An unrecognized mode fails the build rather than falling back. The Hermes upload needs posthog-cli 0.16.0 or newer, which carries `--release-mode` on its `hermes` commands; an older one fails the build and names the upgrade.
+
+  The Android mapping upload needs the `com.posthog.android` gradle plugin 1.5.0 or newer, which reads `posthog.releaseMode`. A fresh prebuild now injects 1.5.1. A project whose `android/build.gradle` already has the classpath line keeps its version, so bump that line to 1.5.0 or newer by hand, or prebuild with `--clean`. On 1.4.0 the mapping stays bound to a release while the Hermes maps do not. (2026-08-27)
+
+## 4.65.1
+
+### Patch Changes
+
+- [#4616](https://github.com/PostHog/posthog-js/pull/4616) [`7902e44`](https://github.com/PostHog/posthog-js/commit/7902e445d0a66b93bd4c7febce04cdf8836ea86b) Thanks [@shahidrogers](https://github.com/shahidrogers)! - Stop crashing when the environment's `Math.random()` misbehaves. The vendored UUIDv7 generator builds its random fields from a `Math.random()`-based `nextUint32()`, and a nonconformant implementation that returns a value of 1 or greater, or NaN, pushed those fields out of range, so `fromFieldsV7` threw `RangeError: invalid field value` on every event captured. On React Native this is not hypothetical: Hermes implements `Math.random` with C++ `std::uniform_real_distribution`, which is documented to occasionally return its upper bound, and affected Android devices crash-looped on startup during the SDK's internal event-queue flush — a path applications cannot wrap in a try/catch. `nextUint32()` now clamps its result to a valid unsigned 32-bit integer (`>>> 0`), so a bad random value degrades UUID entropy for that id instead of taking the app down; the timestamp bits are untouched and generated ids remain spec-valid UUIDv7.
+  (2026-08-27)
+- Updated dependencies [[`7902e44`](https://github.com/PostHog/posthog-js/commit/7902e445d0a66b93bd4c7febce04cdf8836ea86b), [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524)]:
+  - @posthog/core@1.48.12
+
+## 4.65.0
+
+### Minor Changes
+
+- [#4643](https://github.com/PostHog/posthog-js/pull/4643) [`35dcb94`](https://github.com/PostHog/posthog-js/commit/35dcb94877c086cd7a2f4a49f6d9c20a8b178ab1) Thanks [@ioannisj](https://github.com/ioannisj)! - Autocapture touches and clicks on React Native Web (including expo-router on web). Touch events there carry no `_targetInst` and every touch was silently dropped, so the element chain is now resolved by walking up from `e.target` to the nearest node carrying a React fiber. `captureTouches` also registers a capture-phase `click` listener on the document on web, emitted with `$event_type: 'click'`, since browsers fire `touchend` only for touch input (react-native-web's `Pressable` stops propagation, and `Modal` renders outside the provider's subtree). Autocapture no longer lets an exception escape into the host app's event dispatch.
+  (2026-08-26)
+
+### Patch Changes
+
+- [#4650](https://github.com/PostHog/posthog-js/pull/4650) [`e03f5d1`](https://github.com/PostHog/posthog-js/commit/e03f5d14a2e4938164aa40afb298c774ffa24b4c) Thanks [@marandaneto](https://github.com/marandaneto)! - Accept CSS-style survey positions such as `bottom-right` and align them with their canonical `SurveyPosition` values.
+  (2026-08-26)
+
+- [#4654](https://github.com/PostHog/posthog-js/pull/4654) [`aad1494`](https://github.com/PostHog/posthog-js/commit/aad14948feff3a62698d1e4321ba367b535ba448) Thanks [@marandaneto](https://github.com/marandaneto)! - Deduplicate unknown survey position warnings after normalizing equivalent position names.
+  (2026-08-26)
+
+- [#4649](https://github.com/PostHog/posthog-js/pull/4649) [`ec78dec`](https://github.com/PostHog/posthog-js/commit/ec78decc4aa982556566b31cb5ae1342f00cb05d) Thanks [@github-actions](https://github.com/apps/github-actions)! - Respect `ph-no-capture` on any ancestor of a touched or clicked element. Previously an interaction deep inside an opted-out subtree could still send an `$autocapture` event carrying that subtree's element text and props, so apps relying on a high-level `ph-no-capture` may see fewer `$autocapture` events after upgrading. Interactions more than 1000 elements deep in the view hierarchy now produce no `$autocapture` event rather than a truncated one. A non-numeric `maxElementsCaptured` now falls back to the default of 20 instead of being treated as no cap at all.
+  (2026-08-26)
+- Updated dependencies [[`ab1383a`](https://github.com/PostHog/posthog-js/commit/ab1383a8471b003124161c5839c15debacbc1e28), [`0d2cf49`](https://github.com/PostHog/posthog-js/commit/0d2cf4941d0e6306f51666305fbdaa8669a631d2)]:
+  - @posthog/types@1.406.2
+
+## 4.64.3
+
+### Patch Changes
+
+- [#4647](https://github.com/PostHog/posthog-js/pull/4647) [`3da18f9`](https://github.com/PostHog/posthog-js/commit/3da18f9a910eef497fb8141c05e7bed8ccbeb0fc) Thanks [@marandaneto](https://github.com/marandaneto)! - Ensure the Expo native-symbol upload phase runs last and declares the main app dSYM as an Xcode input, preventing EAS archives from uploading symbols before the dSYM is ready.
+  (2026-08-25)
+
+## 4.64.2
+
+### Patch Changes
+
+- [#4634](https://github.com/PostHog/posthog-js/pull/4634) [`e81d375`](https://github.com/PostHog/posthog-js/commit/e81d3755c019534b7d980106b5bad10a41e5f9fa) Thanks [@marandaneto](https://github.com/marandaneto)! - Use posthog-cli 0.15.1 and newer to read iOS release metadata directly from Info.plist during Hermes source map uploads.
+  (2026-08-25)
+
+- [#4611](https://github.com/PostHog/posthog-js/pull/4611) [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12) Thanks [@marandaneto](https://github.com/marandaneto)! - Share survey property matching between the browser and React Native SDKs while preserving their existing missing-value behavior.
+  (2026-08-25)
+- Updated dependencies [[`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+  - @posthog/core@1.48.11
+
+## 4.64.1
+
+### Patch Changes
+
+- [#4604](https://github.com/PostHog/posthog-js/pull/4604) [`42ffca6`](https://github.com/PostHog/posthog-js/commit/42ffca657f9056eaccdbaf8c6a7cbbb5af866709) Thanks [@AyobamiH](https://github.com/AyobamiH)! - Fix bare React Native Hermes sourcemap Chunk ID generation in the Metro serializer. Requires posthog-cli >= 0.14.1 to clone and upload the generated camel-case `chunkId` metadata.
+  (2026-08-24)
+
+## 4.64.0
+
+### Minor Changes
+
+- [#4529](https://github.com/PostHog/posthog-js/pull/4529) [`ad6d5c6`](https://github.com/PostHog/posthog-js/commit/ad6d5c6b4bbcac41c40eb9a775ae863f917740a4) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `sessionReplayConfig.verifyScreenshotMaskAlignment` for Android session replay. This option requires `@posthog/react-native-plugin`.
+  (2026-08-24)
+
+### Patch Changes
+
+- Updated dependencies [[`ad6d5c6`](https://github.com/PostHog/posthog-js/commit/ad6d5c6b4bbcac41c40eb9a775ae863f917740a4)]:
+  - @posthog/react-native-plugin@2.5.0
+
+## 4.63.9
+
+### Patch Changes
+
+- [#4623](https://github.com/PostHog/posthog-js/pull/4623) [`be299df`](https://github.com/PostHog/posthog-js/commit/be299dff71d2cf0c955efff1ca0b9cadc3b64713) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix buffered logs being dropped instead of retried after HTTP 408, 429 or 5xx
+  (2026-08-24)
+- Updated dependencies [[`be299df`](https://github.com/PostHog/posthog-js/commit/be299dff71d2cf0c955efff1ca0b9cadc3b64713)]:
+  - @posthog/core@1.48.10
+
+## 4.63.8
+
+### Patch Changes
+
+- [#4631](https://github.com/PostHog/posthog-js/pull/4631) [`1167239`](https://github.com/PostHog/posthog-js/commit/116723906ab68404fb6140d298bc648c5c330075) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix session replay started with `startRecording()` capturing nothing on Android by requiring `@posthog/react-native-plugin` 2.4.3 or newer.
+  (2026-08-24)
+
+## 4.63.7
+
+### Patch Changes
+
+- [#4602](https://github.com/PostHog/posthog-js/pull/4602) [`9e53f91`](https://github.com/PostHog/posthog-js/commit/9e53f91cf3e0e4c146ca8914925d775f7752c2ea) Thanks [@marandaneto](https://github.com/marandaneto)! - Use the iOS version reported by Info.plist when uploading Hermes source maps, including custom Xcode build settings. Matching native dSYM attribution requires @posthog/react-native-plugin 2.4.2 or later (PostHog/posthog-ios#776).
+  (2026-08-24)
+
+## 4.63.6
+
+### Patch Changes
+
+- [#4498](https://github.com/PostHog/posthog-js/pull/4498) [`9b2a1b1`](https://github.com/PostHog/posthog-js/commit/9b2a1b18db64f9f6b331cbded543c5ead3ccf0cb) Thanks [@posthog](https://github.com/apps/posthog)! - fix(react-native): warn when a local `sessionReplayConfig.sampleRate` overrides the project setting, warn when replay starts with no cached remote config, and log the native plugin version next to the replay config
+  (2026-08-24)
+
 ## 4.63.5
 
 ### Patch Changes

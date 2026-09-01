@@ -1,9 +1,13 @@
 import type {
+    PropertyMatchType,
     SurveyAppearance as CoreSurveyAppearance,
+    SurveyEventWithFilters,
     SurveyQuestionTranslation,
     SurveyTranslation,
     SurveyValidationRule,
 } from '@posthog/core'
+
+export type { PropertyFilters, PropertyMatchType, PropertyOperator, SurveyEventWithFilters } from '@posthog/core'
 
 export const SurveyEventType = {
     Activation: 'events',
@@ -101,23 +105,6 @@ export const DisplaySurveyType = {
     Inline: 'inline',
 } as const
 export type DisplaySurveyType = (typeof DisplaySurveyType)[keyof typeof DisplaySurveyType]
-
-export type PropertyMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
-
-/** Extended survey operator type with numeric comparisons. */
-export type PropertyOperator = PropertyMatchType | 'gt' | 'lt'
-
-export type PropertyFilters = {
-    [propertyName: string]: {
-        values: string[]
-        operator: PropertyOperator
-    }
-}
-
-export interface SurveyEventWithFilters {
-    name: string
-    propertyFilters?: PropertyFilters
-}
 
 export type SurveyQuestionDescriptionContentType = 'html' | 'text'
 

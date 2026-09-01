@@ -90,6 +90,7 @@ import {
     decodeSamplingDecision,
 } from './recording-strategies'
 import { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS } from '@posthog/browser-common/utils/event-utils'
+import { JSON_LD_EVENT_TAG, startJsonLdCapture } from './json-ld'
 
 const BASE_ENDPOINT = '/s/'
 const DEFAULT_CANVAS_QUALITY = 0.4
@@ -492,6 +493,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _forceAllowLocalhostNetworkCapture = false
     private _stopRrweb: listenerHandler | undefined = undefined
+    private _jsonLdCapture: ReturnType<typeof startJsonLdCapture> | undefined
+    private _jsonLdCaptureReady = false
     private _lastActivityTimestamp: number = Date.now()
     private _isActivatingTrigger: boolean = false
     /**
@@ -510,6 +513,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // Cleared only when a full snapshot actually passes the idle gate, so a failed
     // wake heal retries on the next wake instead of losing the signal
     private _eventsDroppedWhileIdle = 0
+    // attribute mutations the throttler dropped across this session, reported on captured
+    // events so the drop path is measurable in our own data
+    private _throttledMutationsDropped = 0
+    private _oversizedMutationsDropped = 0
+    private _oversizedMutationBytesDropped = 0
     // true while the current epoch has had no user interaction; a held epoch is
     // discarded (not shipped) by stop or a subsequent rotation
     private _holdFlushUntilInteraction = false
@@ -895,6 +903,37 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return this._tryRRWebMethod(newQueuedEvent(() => getRRWebRecord()!.addCustomEvent(tag, payload)))
     }
 
+    private _canCaptureJsonLd(): boolean {
+        return (
+            this._jsonLdCaptureReady &&
+            this._instance.config.session_recording?.captureJsonLd === true &&
+            !this._urlTriggerMatching.urlBlocked &&
+            this._isIdle !== true
+        )
+    }
+
+    private _tryAddJsonLdEvent(jsonLd: unknown): boolean {
+        if (!this._canCaptureJsonLd()) {
+            return false
+        }
+        try {
+            const rrwebRecord = getRRWebRecord()
+            if (!rrwebRecord) {
+                return false
+            }
+            rrwebRecord.addCustomEvent(JSON_LD_EVENT_TAG, jsonLd)
+            return this._canCaptureJsonLd()
+        } catch {
+            return false
+        }
+    }
+
+    private _scheduleJsonLdScan(force = false): void {
+        // Run the scan after the current rrweb event updates the JSON-LD capture state.
+        // eslint-disable-next-line compat/compat
+        Promise.resolve().then(() => this._jsonLdCapture?.scan(force))
+    }
+
     private _pageViewFallBack() {
         try {
             if (this._instance.config.capture_pageview || !window) {
@@ -997,6 +1036,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // so we might not get the below custom event, but events will report the paused status.
         // which will allow debugging of sessions that start on blocked pages
         this._urlTriggerMatching.urlBlocked = true
+        this._jsonLdCapture?.scan()
 
         // Clear the snapshot timer since we don't want new snapshots while paused
         clearInterval(this._fullSnapshotTimer)
@@ -1011,9 +1051,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        // Baseline JSON-LD while capture is suppressed so blocked-page mutations cannot emit after resume.
+        this._jsonLdCapture?.scan()
         this._urlTriggerMatching.urlBlocked = false
 
         this._tryTakeFullSnapshot()
+        this._scheduleJsonLdScan()
         this._scheduleFullSnapshot()
 
         this._tryAddCustomEvent('recording resumed', { reason: 'left blocked url' })
@@ -1427,6 +1470,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Clear any queued rrweb events to prevent memory leaks from closures
         this._queuedRRWebEvents = []
 
+        this._jsonLdCapture?.stop()
+        this._jsonLdCapture = undefined
+        this._jsonLdCaptureReady = false
         this._stopRrweb?.()
         this._stopRrweb = undefined
     }
@@ -1498,6 +1544,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // belongs to the old session) and before the new one takes its first snapshot
         this._slowestFullSnapshot = undefined
         this._lastSeenSnapshotCost = undefined
+        // the throttler drop counts are per-session too, so the new session starts at zero
+        this._throttledMutationsDropped = 0
+        this._oversizedMutationsDropped = 0
+        this._oversizedMutationBytesDropped = 0
         getRRWeb()?.resetSnapshotCostState?.()
         this.start('session_id_changed')
         this._holdFlushUntilInteraction = holdNextEpoch
@@ -1523,7 +1573,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._scheduleFlushBuffer()
     }
 
-    discard() {
+    discard({ discardProducerEvents = false }: { discardProducerEvents?: boolean } = {}) {
+        if (discardProducerEvents) {
+            // rrweb teardown can synchronously emit deferred stylesheet mutations.
+            // Clear first so those emissions cannot flush existing data, then clear them below too.
+            this._clearBuffer()
+            this._stopRecordingProducers()
+        }
         this._clearBuffer()
         this._teardown()
         logger.info('discarded')
@@ -1781,7 +1837,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // Clear the buffer if waiting for a trigger and only keep data from after the current full snapshot
-        if (rawEvent.type === EventType.FullSnapshot && this._strategy?.hasPendingTriggers(this.sessionId)) {
+        const jsonLdRemovedFromPendingBuffer =
+            rawEvent.type === EventType.FullSnapshot && this._strategy?.hasPendingTriggers(this.sessionId)
+        if (jsonLdRemovedFromPendingBuffer) {
             this._clearBufferBeforeMostRecentMeta()
         }
 
@@ -1867,6 +1925,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // which can artificially lengthen a session
             // we know when we detected it based on the payload and can correct the timestamp
             event.timestamp = sessionIdlePayload.lastActivityTimestamp + sessionIdlePayload.threshold
+        }
+
+        const jsonLdCaptureWasReady = this._jsonLdCaptureReady
+        this._jsonLdCaptureReady = true
+        if (jsonLdRemovedFromPendingBuffer) {
+            this._scheduleJsonLdScan(true)
+        } else if (!jsonLdCaptureWasReady) {
+            this._scheduleJsonLdScan()
         }
 
         const compressionEnabled = this._instance.config.session_recording.compress_events ?? true
@@ -2450,6 +2516,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 if (this._eventsDroppedWhileIdle > 0 && bufferCanShip) {
                     this._tryTakeFullSnapshot()
                 }
+                this._scheduleJsonLdScan()
                 this._scheduleFullSnapshot()
             }
         }
@@ -2502,6 +2569,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // the plausibility cap (see rrweb-snapshot snapshot-cost.ts): the duration
             // gauges above stay alert-safe, and the discard itself stays observable
             $sdk_debug_replay_discarded_duration_samples: getRRWeb()?.getDiscardedDurationSamples?.(),
+            // cumulative across the session: attribute mutations the throttler dropped, each
+            // of which risks the player showing DOM that already left the live page
+            $sdk_debug_replay_throttled_mutations_dropped: this._throttledMutationsDropped,
+            $sdk_debug_replay_oversized_mutations_dropped: this._oversizedMutationsDropped,
+            $sdk_debug_replay_oversized_mutation_bytes_dropped: this._oversizedMutationBytesDropped,
             $sdk_debug_replay_rrweb_error: this._rrwebError,
             [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
@@ -2570,6 +2642,17 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     // @ts-ignore
                     sessionRecordingOptions[key] = value
                 }
+            }
+        }
+
+        if (
+            userSessionRecordingOptions?.captureJsonLd === true &&
+            sessionRecordingOptions.slimDOMOptions !== true &&
+            sessionRecordingOptions.slimDOMOptions !== 'all'
+        ) {
+            sessionRecordingOptions.slimDOMOptions = {
+                ...sessionRecordingOptions.slimDOMOptions,
+                script: true,
             }
         }
 
@@ -2655,6 +2738,22 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
                     this.log(LOGGER_PREFIX + ' ' + message, 'warn')
                 },
+                onDroppedAttributeMutations: (count) => (this._throttledMutationsDropped += count),
+                bytesRefillRate: this._instance.config.session_recording.__mutationBytesRefillRate,
+                bytesBucketSize: this._instance.config.session_recording.__mutationBytesBucketSize,
+                resyncIntervalMs: this._fullSnapshotIntervalMillis,
+                onDroppedOversizedMutation: (bytes) => {
+                    if (this._oversizedMutationsDropped === 0) {
+                        this.log(
+                            LOGGER_PREFIX +
+                                ' Dropped an oversized DOM mutation to keep the recording playable. The recording will resync with a full snapshot.',
+                            'warn'
+                        )
+                    }
+                    this._oversizedMutationsDropped += 1
+                    this._oversizedMutationBytesDropped += bytes
+                },
+                requestFullSnapshot: () => this._tryTakeFullSnapshot(),
             })
 
         const activePlugins = this._gatherRRWebPlugins()
@@ -2688,6 +2787,30 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         this._rrwebError = false
+
+        if (
+            userSessionRecordingOptions?.captureJsonLd === true &&
+            document &&
+            window?.MutationObserver &&
+            !this._jsonLdCapture
+        ) {
+            this._jsonLdCapture = startJsonLdCapture(document, window.MutationObserver, {
+                blockClass: sessionRecordingOptions.blockClass,
+                blockSelector: sessionRecordingOptions.blockSelector,
+                maskTextClass: sessionRecordingOptions.maskTextClass,
+                maskTextSelector: sessionRecordingOptions.maskTextSelector,
+                getCaptureState: () =>
+                    this._instance.config.session_recording?.captureJsonLd !== true ||
+                    this._urlTriggerMatching.urlBlocked ||
+                    this._urlTriggerMatching.isCurrentUrlBlocked()
+                        ? null
+                        : this._canCaptureJsonLd(),
+                emit: (jsonLd) => this._tryAddJsonLdEvent(jsonLd),
+            })
+            if (this._urlTriggerMatching.isCurrentUrlBlocked()) {
+                this._jsonLdCapture.scan()
+            }
+        }
 
         // We reset the last activity timestamp, resetting the idle timer
         this._lastActivityTimestamp = Date.now()

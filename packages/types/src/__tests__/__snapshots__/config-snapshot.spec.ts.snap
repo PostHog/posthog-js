@@ -147,7 +147,24 @@ exports[`config snapshot for PostHogConfig 1`] = `
   "capture_pageview": [
     "false",
     "true",
-    "\\"history_change\\""
+    "\\"history_change\\"",
+    {
+      "path": [
+        "undefined",
+        "false",
+        "true"
+      ],
+      "search": [
+        "undefined",
+        "false",
+        "true"
+      ],
+      "hash": [
+        "undefined",
+        "false",
+        "true"
+      ]
+    }
   ],
   "capture_pageleave": [
     "false",
@@ -402,6 +419,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   "properties_string_max_length": "number",
   "defaults": [
+    "\\"2026-08-30\\"",
     "\\"2026-08-29\\"",
     "\\"2026-06-25\\"",
     "\\"2026-05-30\\"",
@@ -483,6 +501,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "Partial<SlimDOMOptions>",
       "\\"all\\""
     ],
+    "captureJsonLd": [
+      "undefined",
+      "false",
+      "true"
+    ],
     "collectFonts": [
       "undefined",
       "false",
@@ -561,6 +584,14 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "number"
     ],
     "__mutationThrottlerBucketSize": [
+      "undefined",
+      "number"
+    ],
+    "__mutationBytesRefillRate": [
+      "undefined",
+      "number"
+    ],
+    "__mutationBytesBucketSize": [
       "undefined",
       "number"
     ],
@@ -737,7 +768,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "web_vitals_attribution": [
         "undefined",
         "false",
-        "true"
+        "true",
+        "SupportedWebVitalsMetrics[]"
       ],
       "__preview_web_vitals_soft_navs": [
         "undefined",

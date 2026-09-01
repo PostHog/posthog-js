@@ -96,7 +96,7 @@ export interface AutocaptureConfig {
     element_attribute_ignorelist?: string[]
 
     /**
-     * When set to true, autocapture will capture the text of any element that is cut or copied.
+     * When true, autocapture captures cut, copy, and paste interactions. Paste events do not contain pasted text.
      */
     capture_copied_text?: boolean
 }
@@ -249,17 +249,17 @@ export interface PerformanceCaptureConfig {
     web_vitals_delayed_flush_ms?: number
 
     /**
-     * Whether to include attribution data in web vitals metrics.
-     * Attribution data includes additional debugging information like
-     * which elements caused layout shifts (CLS), timing breakdowns, etc.
+     * Which web vitals metrics include attribution data. Attribution names the
+     * cause of a metric, such as the slow interaction target for INP or the load-phase
+     * breakdown for LCP, which is what makes a slow number diagnosable.
      *
-     * Disabling this uses a lighter build of the web-vitals library
-     * which may help reduce memory usage in SPAs where elements
-     * causing layout shifts are removed during navigation.
+     * Pass `true` to attribute all metrics, `false` for none, or an array to name them.
+     * The default attributes INP and LCP only. CLS is excluded by default because its
+     * attribution holds detached DOM nodes and can leak memory in single-page apps.
      *
-     * @default false
+     * @default ['INP', 'LCP']
      */
-    web_vitals_attribution?: boolean
+    web_vitals_attribution?: boolean | SupportedWebVitalsMetrics[]
 
     /**
      * Scope web vitals metrics to the browser's Soft Navigation entries, so that
@@ -465,6 +465,7 @@ export interface HeatmapConfig {
  * Later dates include all earlier default changes.
  */
 export type ConfigDefaults =
+    | '2026-08-30'
     | '2026-08-29'
     | '2026-06-25'
     | '2026-05-30'
@@ -506,7 +507,9 @@ export interface ExceptionRateLimiterConfig {
 
 export interface ErrorTrackingOptions extends ExceptionRateLimiterConfig {
     /**
-     * Decide whether exceptions thrown by browser extensions should be captured
+     * Decide whether exceptions thrown by browser extensions or by scripts injected by the
+     * browser itself (for example Firefox for iOS and Chrome for iOS user scripts) should be
+     * captured. When false, both categories are dropped before capture.
      *
      * @default false
      */
@@ -683,6 +686,18 @@ export interface SessionRecordingOptions {
      * @default {}
      */
     slimDOMOptions?: true | Partial<SlimDOMOptions> | 'all'
+
+    /**
+     * Captures sanitized Schema.org JSON-LD as session replay custom events.
+     * JSON-LD inside a text mask or blocked element is never captured.
+     * The recorder keeps `@id` values without changes.
+     * The event tag is `$json_ld`. The payload is a JSON-LD object or array.
+     * The recorder removes all script nodes from snapshots when this option is enabled.
+     * The JSON-LD observer starts only when this option is true at recording start.
+     * @see https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/extensions/replay/external/json-ld.ts
+     * @default false before the `2026-08-30` defaults, otherwise true
+     */
+    captureJsonLd?: boolean
 
     /**
      * Derived from `rrweb.record` options
@@ -905,6 +920,26 @@ export interface SessionRecordingOptions {
     __mutationThrottlerBucketSize?: number
 
     /**
+     * ADVANCED: the sustained mutation byte budget, in bytes per second.
+     * Mutation events beyond the budget are dropped and the recording resyncs with a full snapshot.
+     * Only takes effect when `__mutationBytesBucketSize` is set.
+     * Normally only altered alongside posthog support guidance.
+     *
+     * @default 25600
+     */
+    __mutationBytesRefillRate?: number
+
+    /**
+     * ADVANCED: enables the mutation byte budget by setting its burst allowance, in bytes.
+     * Also the largest single mutation event that will be recorded.
+     * Unset (the default), the byte budget is off. 1048576 (1MB) is a sensible starting point.
+     * Normally only altered alongside posthog support guidance.
+     *
+     * @default undefined
+     */
+    __mutationBytesBucketSize?: number
+
+    /**
      * When true, minimum duration is checked against the actual buffer data (first to last timestamp)
      * rather than session duration. This ensures recordings are not sent until they contain the minimum
      * duration of actual data, even across page navigations.
@@ -1096,6 +1131,19 @@ export interface MetricsConfig {
 
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
 type NextOptions = { revalidate: false | 0 | number; tags: string[] }
+
+/**
+ * Selects which same-page URL changes automatically capture a `$pageview`.
+ * Each option defaults to `false` when omitted.
+ */
+export interface CapturePageviewOptions {
+    /** Capture a pageview when `location.pathname` changes. */
+    path?: boolean
+    /** Capture a pageview when `location.search` changes. */
+    search?: boolean
+    /** Capture a pageview when `location.hash` changes, unless `disable_capture_url_hashes` is enabled. */
+    hash?: boolean
+}
 
 /**
  * Configuration options for the PostHog JavaScript SDK.
@@ -1318,18 +1366,19 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should capture pageview events automatically.
      * Can be:
-     * - `true`: Capture regular pageviews (default)
+     * - `true`: Capture the initial pageview
      * - `false`: Don't capture any pageviews
-     * - `'history_change'`: Capture pageviews on the initial page load and on history API changes (pushState, replaceState, popstate)
+     * - `'history_change'`: Capture the initial pageview and pageviews when the pathname changes
+     * - An object: Capture the initial pageview and pageviews when any selected URL component changes
      *
      * @default true (or `'history_change'` when `defaults` is `'2025-05-24'` or later)
      */
-    capture_pageview: boolean | 'history_change'
+    capture_pageview: boolean | 'history_change' | CapturePageviewOptions
 
     /**
      * Determines whether PostHog should capture pageleave events.
      * If set to `true`, it will capture pageleave events for all pages.
-     * If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is also set to `true` or `'history_change'`.
+     * If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is enabled.
      *
      * @default 'if_capture_pageview'
      */
@@ -1695,6 +1744,7 @@ export interface PostHogConfig {
      * - `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces
      * - `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)
      * - `'2026-08-29'`: Defaults from '2026-06-25' plus `cookieWinsOnConflict` defaults to `true` (the shared cross-subdomain cookie wins over stale per-origin localStorage)
+     * - `'2026-08-30'`: Defaults from '2026-08-29' plus `session_recording.captureJsonLd` defaults to `true`
      *
      * @default 'unset'
      */
@@ -1961,7 +2011,7 @@ export interface PostHogConfig {
     surveys_request_timeout_ms: number
 
     /**
-     * Controls how often feature flags are automatically refreshed in long-running sessions after remote configuration has loaded.
+     * Controls how often feature flags are automatically refreshed in long-running sessions.
      *
      * By default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side
      * flag changes without requiring a page reload. This is useful for SPAs and long-running tabs.
@@ -1969,10 +2019,11 @@ export interface PostHogConfig {
      * **Tradeoffs:**
      * - **Shorter intervals**: Feature flag changes propagate faster, but increases network requests and server load.
      * - **Longer intervals**: Reduces network traffic (better for mobile/battery), but flag changes take longer to propagate.
-     * - **Disabled (0)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.
+     * - **Disabled (0 or any negative value)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.
      *   Use this if you control flag updates manually or have infrequent flag changes.
      *
-     * Note: Refreshes are automatically skipped when the browser tab is hidden or no document is available.
+     * Hidden pages skip scheduled refreshes and reload due flags when they become visible.
+     * This option does not reload remote config.
      *
      * @default 300000 (5 minutes)
      */

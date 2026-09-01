@@ -11,6 +11,7 @@ const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
+  featureFlagsPollingInterval: 3_600_000,
 }
 
 const flagsResponseFixture = (): PostHogV2FlagsResponse => ({
@@ -104,6 +105,16 @@ describe('evaluateFlags', () => {
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       const [url] = mockedFetch.mock.calls[0]
       expect(url).toMatch(/\/flags\/\?v=2(?:&|$)/)
+    })
+
+    it('treats a runtime null flagKeys value as evaluating all flags', async () => {
+      const flags = await posthog.evaluateFlags('user-1', { flagKeys: null } as any)
+
+      expect(flags.keys.sort()).toEqual(['boolean-flag', 'disabled-flag', 'variant-flag'])
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+      const [, init] = mockedFetch.mock.calls[0]
+      const body = JSON.parse((init as any).body as string)
+      expect(body.flag_keys_to_evaluate).toBeUndefined()
     })
 
     it('does not fire $feature_flag_called events for flags that are not accessed', async () => {
@@ -695,6 +706,111 @@ describe('evaluateFlags', () => {
 
       // No remote /flags request since local evaluation covered it.
       const remoteFlagCalls = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=2'))
+      expect(remoteFlagCalls).toHaveLength(0)
+    })
+
+    it('returns an empty snapshot without property setup or local/remote work for an empty key list', async () => {
+      await posthog.reloadFeatureFlags()
+      const poller = (posthog as any).featureFlagsPoller
+      const propertySetupSpy = jest.spyOn(posthog as any, 'addLocalPersonAndGroupProperties')
+      const contextSetupSpy = jest.spyOn(posthog as any, 'createFeatureFlagEvaluationContext')
+      const localEvaluationSpy = jest.spyOn(poller, 'getAllFlagsAndPayloads')
+      const definitionsLoadSpy = jest.spyOn(poller, 'loadFeatureFlags')
+      const definitionsReadSpy = jest.spyOn(poller, 'getFlagDefinitionsLoadedAt')
+      mockedFetch.mockClear()
+
+      const flags = await posthog.evaluateFlags('user-1', { flagKeys: [] })
+
+      expect(flags).toBeInstanceOf(FeatureFlagEvaluations)
+      expect(flags.keys).toEqual([])
+      expect(propertySetupSpy).not.toHaveBeenCalled()
+      expect(contextSetupSpy).not.toHaveBeenCalled()
+      expect(localEvaluationSpy).not.toHaveBeenCalled()
+      expect(definitionsLoadSpy).not.toHaveBeenCalled()
+      expect(definitionsReadSpy).not.toHaveBeenCalled()
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      expect(remoteFlagCalls).toHaveLength(0)
+    })
+
+    it('falls back once when a requested flag is missing from local definitions', async () => {
+      await posthog.shutdown()
+      mockedFetch.mockClear()
+
+      const remoteResponse = flagsResponseFixture()
+      remoteResponse.flags = {
+        ...remoteResponse.flags,
+        'local-flag': {
+          ...remoteResponse.flags['disabled-flag'],
+          key: 'local-flag',
+        },
+        'remote-only': {
+          ...remoteResponse.flags['boolean-flag'],
+          key: 'remote-only',
+        },
+      }
+      const localApi = apiImplementation({ localFlags: localFlagsFixture() })
+      const remoteApi = apiImplementationV4(remoteResponse)
+      mockedFetch.mockImplementation((url) =>
+        String(url).includes('flags/definitions') ? localApi(url) : remoteApi(url)
+      )
+      setup({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+
+      const flags = await posthog.evaluateFlags('user-1', {
+        flagKeys: ['local-flag', 'remote-only'],
+      })
+
+      expect(flags.keys.sort()).toEqual(['local-flag', 'remote-only'])
+      expect(flags.getFlag('local-flag')).toBe(true)
+      expect(flags.getFlag('remote-only')).toBe(true)
+
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      expect(remoteFlagCalls).toHaveLength(1)
+      const [, init] = remoteFlagCalls[0]
+      expect(JSON.parse((init as any).body as string).flag_keys_to_evaluate).toEqual(['local-flag', 'remote-only'])
+    })
+
+    it('falls back once per evaluation when the requested key is also missing remotely', async () => {
+      await posthog.shutdown()
+      mockedFetch.mockClear()
+
+      const remoteResponse = flagsResponseFixture()
+      remoteResponse.flags = {}
+      const localApi = apiImplementation({ localFlags: localFlagsFixture() })
+      const remoteApi = apiImplementationV4(remoteResponse)
+      mockedFetch.mockImplementation((url) =>
+        String(url).includes('flags/definitions') ? localApi(url) : remoteApi(url)
+      )
+      setup({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+
+      for (let i = 0; i < 2; i++) {
+        const flags = await posthog.evaluateFlags('user-1', {
+          flagKeys: ['local-flag', 'typo-flag'],
+        })
+
+        expect(flags.keys).toEqual(['local-flag'])
+        expect(flags.getFlag('local-flag')).toBe(true)
+        expect(flags.getFlag('typo-flag')).toBeUndefined()
+      }
+
+      // Node does not cache evaluateFlags() responses across calls. Each call still makes at most
+      // one scoped fallback and keeps the local value when the server cannot resolve the typo.
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      expect(remoteFlagCalls).toHaveLength(2)
+      for (const [, init] of remoteFlagCalls) {
+        expect(JSON.parse((init as any).body as string).flag_keys_to_evaluate).toEqual(['local-flag', 'typo-flag'])
+      }
+    })
+
+    it('does not fall back for a missing requested flag in local-only mode', async () => {
+      const flags = await posthog.evaluateFlags('user-1', {
+        flagKeys: ['local-flag', 'remote-only'],
+        onlyEvaluateLocally: true,
+      })
+
+      expect(flags.keys).toEqual(['local-flag'])
+      expect(flags.getFlag('local-flag')).toBe(true)
+      expect(flags.getFlag('remote-only')).toBeUndefined()
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
       expect(remoteFlagCalls).toHaveLength(0)
     })
 

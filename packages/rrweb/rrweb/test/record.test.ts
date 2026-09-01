@@ -610,16 +610,407 @@ describe('record', function (this: ISuite) {
     expect(addRules.length).toEqual(2);
     expect((addRules[0].data as styleSheetRuleData).adds).toEqual([
       {
+        index: 0,
         rule: 'body { color: #fff; }',
       },
     ]);
     expect((addRules[1].data as styleSheetRuleData).adds).toEqual([
       {
+        index: 0,
         rule: 'body { color: #ccc; }',
       },
     ]);
     expect(removeRuleCount).toEqual(1);
     await assertSnapshot(ctx.events);
+  });
+
+  it('does not emit stylesheet mutations when the native operation fails', async () => {
+    const exceptionNames = await ctx.page.evaluate(async () => {
+      const styleElement = document.createElement('style');
+      styleElement.textContent = 'body { color: black; }';
+      document.head.appendChild(styleElement);
+
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+
+      const sheet = styleElement.sheet!;
+      const names: string[] = [];
+      try {
+        sheet.insertRule('body { color: red; }', sheet.cssRules.length + 1);
+      } catch (error) {
+        names.push((error as DOMException).name);
+      }
+      try {
+        sheet.deleteRule(sheet.cssRules.length);
+      } catch (error) {
+        names.push((error as DOMException).name);
+      }
+      try {
+        await sheet.replace('body { color: blue; }');
+      } catch (error) {
+        names.push((error as DOMException).name);
+      }
+      try {
+        sheet.replaceSync('body { color: green; }');
+      } catch (error) {
+        names.push((error as DOMException).name);
+      }
+      return names;
+    });
+    await waitForRAF(ctx.page);
+
+    expect(exceptionNames).toEqual([
+      'IndexSizeError',
+      'IndexSizeError',
+      'NotAllowedError',
+      'NotAllowedError',
+    ]);
+    expect(
+      ctx.events.filter(
+        (event) =>
+          event.type === EventType.IncrementalSnapshot &&
+          event.data.source === IncrementalSource.StyleSheetRule,
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('does not expose recorder emission errors through CSSOM calls', async () => {
+    const threw = await ctx.page.evaluate(() => {
+      const sheet = new CSSStyleSheet();
+      document.adoptedStyleSheets = [sheet];
+
+      const { record } = (window as unknown as IWindow).rrweb;
+      let shouldThrow = false;
+      record({
+        emit() {
+          if (shouldThrow) throw new Error('emit failed');
+        },
+      });
+      shouldThrow = true;
+
+      try {
+        sheet.insertRule('body { color: blue; }');
+        return false;
+      } catch {
+        return true;
+      }
+    });
+
+    expect(threw).toBe(false);
+  });
+
+  it('captures consecutive stylesheet replacements', async () => {
+    await ctx.page.evaluate(async () => {
+      const sheet = new CSSStyleSheet();
+      document.adoptedStyleSheets = [sheet];
+
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+
+      await Promise.all([
+        sheet.replace('body { color: blue; }'),
+        sheet.replace('body { color: red; }'),
+      ]);
+    });
+    await waitForRAF(ctx.page);
+
+    expect(
+      ctx.events
+        .filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.StyleSheetRule,
+        )
+        .map((event) => (event.data as styleSheetRuleData).replace),
+    ).toEqual(['body { color: blue; }', 'body { color: red; }']);
+  });
+
+  it('records stylesheet replacement before immediately following rules', async () => {
+    await ctx.page.evaluate(async () => {
+      const sheet = new CSSStyleSheet();
+      document.adoptedStyleSheets = [sheet];
+
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+
+      const replacement = sheet.replace('body { color: blue; }');
+      sheet.insertRule('html { color: red; }');
+      await replacement;
+    });
+    await waitForRAF(ctx.page);
+
+    const operations = ctx.events
+      .filter(
+        (event) =>
+          event.type === EventType.IncrementalSnapshot &&
+          event.data.source === IncrementalSource.StyleSheetRule,
+      )
+      .map((event) => {
+        const data = event.data as styleSheetRuleData;
+        return data.replace ? 'replace' : data.adds ? 'insert' : 'other';
+      });
+
+    expect(operations).toEqual(['replace', 'insert']);
+  });
+
+  it('releases queued mutations when a replacement does not settle', async () => {
+    const capturedTimeout = await ctx.page.evaluate(() => {
+      const originalReplace = CSSStyleSheet.prototype.replace;
+      const originalSetTimeout = window.setTimeout;
+      try {
+        CSSStyleSheet.prototype.replace = function () {
+          return new Promise<CSSStyleSheet>(() => undefined);
+        };
+
+        const sheet = new CSSStyleSheet();
+        document.adoptedStyleSheets = [sheet];
+
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({ emit: (window as unknown as IWindow).emit });
+
+        let timeoutHandler: (() => void) | undefined;
+        window.setTimeout = ((handler: TimerHandler) => {
+          if (typeof handler === 'function') timeoutHandler = handler;
+          return 1;
+        }) as typeof window.setTimeout;
+
+        void sheet.replace('body { color: blue; }');
+        sheet.insertRule('html { color: red; }');
+        timeoutHandler?.();
+        return Boolean(timeoutHandler);
+      } finally {
+        window.setTimeout = originalSetTimeout;
+        CSSStyleSheet.prototype.replace = originalReplace;
+      }
+    });
+    await waitForRAF(ctx.page);
+
+    expect(capturedTimeout).toBe(true);
+    expect(
+      ctx.events
+        .filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.StyleSheetRule,
+        )
+        .map((event) => {
+          const data = event.data as styleSheetRuleData;
+          return data.replace ? 'replace' : data.adds ? 'insert' : 'other';
+        }),
+    ).toEqual(['insert']);
+  });
+
+  it('captures the final stylesheet when a replacement settles after the queue timeout', async () => {
+    await ctx.page.evaluate(async () => {
+      const originalReplace = CSSStyleSheet.prototype.replace;
+      const originalInsertRule = CSSStyleSheet.prototype.insertRule;
+      const originalSetTimeout = window.setTimeout;
+      try {
+        let resolveReplacement: (() => void) | undefined;
+        CSSStyleSheet.prototype.replace = function () {
+          return new Promise<CSSStyleSheet>((resolve) => {
+            resolveReplacement = () => {
+              originalInsertRule.call(this, 'body { color: blue; }');
+              resolve(this);
+            };
+          });
+        };
+
+        const sheet = new CSSStyleSheet();
+        document.adoptedStyleSheets = [sheet];
+
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({ emit: (window as unknown as IWindow).emit });
+
+        let timeoutHandler: (() => void) | undefined;
+        window.setTimeout = ((handler: TimerHandler) => {
+          if (typeof handler === 'function') timeoutHandler = handler;
+          return 1;
+        }) as typeof window.setTimeout;
+
+        const replacement = sheet.replace('body { color: blue; }');
+        sheet.insertRule('html { color: red; }');
+        timeoutHandler?.();
+        resolveReplacement?.();
+        await replacement;
+      } finally {
+        window.setTimeout = originalSetTimeout;
+        CSSStyleSheet.prototype.replace = originalReplace;
+      }
+    });
+    await waitForRAF(ctx.page);
+
+    const mutations = ctx.events.filter(
+      (event) =>
+        event.type === EventType.IncrementalSnapshot &&
+        event.data.source === IncrementalSource.StyleSheetRule,
+    );
+    expect(
+      mutations.map((event) => {
+        const data = event.data as styleSheetRuleData;
+        return data.replace ? 'replace' : data.adds ? 'insert' : 'other';
+      }),
+    ).toEqual(['insert', 'replace']);
+    expect((mutations[1].data as styleSheetRuleData).replace).toContain(
+      'html { color: red; }',
+    );
+    expect((mutations[1].data as styleSheetRuleData).replace).toContain(
+      'body { color: blue; }',
+    );
+  });
+
+  it('orders stylesheet declarations behind pending replacements', async () => {
+    await ctx.page.evaluate(async () => {
+      const sheet = new CSSStyleSheet();
+      document.adoptedStyleSheets = [sheet];
+
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+
+      const replacement = sheet.replace('body { color: blue; }');
+      const index = sheet.insertRule('html { color: red; }');
+      (sheet.cssRules[index] as CSSStyleRule).style.setProperty(
+        'background',
+        'black',
+      );
+      await replacement;
+    });
+    await waitForRAF(ctx.page);
+
+    expect(
+      ctx.events
+        .filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            (event.data.source === IncrementalSource.StyleSheetRule ||
+              event.data.source === IncrementalSource.StyleDeclaration),
+        )
+        .map((event) => event.data.source),
+    ).toEqual([
+      IncrementalSource.StyleSheetRule,
+      IncrementalSource.StyleSheetRule,
+      IncrementalSource.StyleDeclaration,
+    ]);
+  });
+
+  it('preserves the promise returned by a patched stylesheet replacement', async () => {
+    const preservesPromiseIdentity = await ctx.page.evaluate(async () => {
+      const originalReplace = CSSStyleSheet.prototype.replace;
+      try {
+        let nativeResult: Promise<CSSStyleSheet> | undefined;
+        CSSStyleSheet.prototype.replace = function (text: string) {
+          nativeResult = originalReplace.call(this, text);
+          return nativeResult;
+        };
+
+        const sheet = new CSSStyleSheet();
+        document.adoptedStyleSheets = [sheet];
+
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({ emit: (window as unknown as IWindow).emit });
+
+        const result = sheet.replace('body { color: blue; }');
+        const isSamePromise = result === nativeResult;
+        sheet.insertRule('html { color: red; }');
+        await result;
+        return isSamePromise;
+      } finally {
+        CSSStyleSheet.prototype.replace = originalReplace;
+      }
+    });
+    await waitForRAF(ctx.page);
+
+    expect(preservesPromiseIdentity).toBe(true);
+    expect(
+      ctx.events
+        .filter(
+          (event) =>
+            event.type === EventType.IncrementalSnapshot &&
+            event.data.source === IncrementalSource.StyleSheetRule,
+        )
+        .map((event) => {
+          const data = event.data as styleSheetRuleData;
+          return data.replace ? 'replace' : data.adds ? 'insert' : 'other';
+        }),
+    ).toEqual(['replace', 'insert']);
+  });
+
+  it('does not emit when a proxied stylesheet replacement rejects', async () => {
+    const result = await ctx.page.evaluate(async () => {
+      const originalReplace = CSSStyleSheet.prototype.replace;
+      try {
+        let patchedResult: Promise<CSSStyleSheet> | undefined;
+        const rejectReplacement = () => {
+          patchedResult = Promise.reject(
+            new DOMException('Replacement failed', 'NotAllowedError'),
+          );
+          return patchedResult;
+        };
+        CSSStyleSheet.prototype.replace = new Proxy(rejectReplacement, {});
+
+        const sheet = new CSSStyleSheet();
+        document.adoptedStyleSheets = [sheet];
+
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({ emit: (window as unknown as IWindow).emit });
+
+        const returnedResult = sheet.replace('body { color: blue; }');
+        let exceptionName: string | undefined;
+        try {
+          await returnedResult;
+        } catch (error) {
+          exceptionName = (error as DOMException).name;
+        }
+        return {
+          exceptionName,
+          preservesPromiseIdentity: returnedResult === patchedResult,
+        };
+      } finally {
+        CSSStyleSheet.prototype.replace = originalReplace;
+      }
+    });
+    await waitForRAF(ctx.page);
+
+    expect(result).toEqual({
+      exceptionName: 'NotAllowedError',
+      preservesPromiseIdentity: true,
+    });
+    expect(
+      ctx.events.filter(
+        (event) =>
+          event.type === EventType.IncrementalSnapshot &&
+          event.data.source === IncrementalSource.StyleSheetRule,
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('preserves non-promise stylesheet replacement return values', async () => {
+    const preservesReturnValue = await ctx.page.evaluate(() => {
+      const originalReplace = CSSStyleSheet.prototype.replace;
+      try {
+        const returnValue = {};
+        Object.defineProperty(returnValue, 'then', {
+          get() {
+            throw new Error('then getter failed');
+          },
+        });
+        CSSStyleSheet.prototype.replace = function () {
+          return returnValue as Promise<CSSStyleSheet>;
+        };
+
+        const sheet = new CSSStyleSheet();
+        document.adoptedStyleSheets = [sheet];
+
+        const { record } = (window as unknown as IWindow).rrweb;
+        record({ emit: (window as unknown as IWindow).emit });
+
+        return sheet.replace('body { color: blue; }') === returnValue;
+      } finally {
+        CSSStyleSheet.prototype.replace = originalReplace;
+      }
+    });
+
+    expect(preservesReturnValue).toBe(true);
   });
 
   it('captures stylesheet rules with deprecated addRule & removeRule properties', async () => {
@@ -887,6 +1278,96 @@ describe('record', function (this: ISuite) {
     });
     await waitForRAF(ctx.page);
     await assertSnapshot(ctx.events);
+  });
+
+  it('observes existing shadow roots discovered while serializing an added iframe', async () => {
+    await ctx.page.evaluate(async () => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({
+        maskTextSelector: '.mask-me',
+        emit: (window as unknown as IWindow).emit,
+      });
+
+      const iframe = document.createElement('iframe');
+      iframe.srcdoc = `
+        <div id="host"></div>
+        <script>
+          const root = document.querySelector('#host').attachShadow({ mode: 'open' });
+          root.innerHTML = '<span id="public">initial</span><span class="mask-me">' + atob('aW5pdGlhbC1wcml2YXRlLXRleHQ=') + '</span><input type="password" value="' + atob('aW5pdGlhbC1wcml2YXRlLXZhbHVl') + '">';
+        <\/script>
+      `;
+      const loaded = new Promise<void>((resolve) => {
+        iframe.addEventListener('load', () => resolve(), { once: true });
+      });
+      document.body.appendChild(iframe);
+      await loaded;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const attachedRoot = iframe.contentDocument!.querySelector('div')!.shadowRoot!;
+      attachedRoot.querySelector('#public')!.textContent =
+        'visible-shadow-mutation';
+      attachedRoot.querySelector('input')!.value = 'updated-private-value';
+    });
+    await waitForRAF(ctx.page);
+
+    const serializedEvents = JSON.stringify(ctx.events);
+    expect(serializedEvents).toContain('visible-shadow-mutation');
+    expect(serializedEvents).not.toContain('initial-private-text');
+    expect(serializedEvents).not.toContain('initial-private-value');
+    expect(serializedEvents).not.toContain('updated-private-value');
+  });
+
+  it('does not observe shadow roots on blocked hosts discovered during serialization', async () => {
+    await ctx.page.evaluate(() => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+
+      const host = document.createElement('div');
+      host.id = 'blocked-shadow-host';
+      host.className = 'rr-block';
+      host.attachShadow({ mode: 'open' });
+      document.body.appendChild(host);
+    });
+    await waitForRAF(ctx.page);
+
+    await ctx.page.evaluate(() => {
+      const host = document.querySelector('#blocked-shadow-host')!;
+      const privateNode = document.createElement('span');
+      privateNode.textContent = 'late-private-shadow-marker';
+      host.shadowRoot!.appendChild(privateNode);
+    });
+    await waitForRAF(ctx.page);
+
+    expect(JSON.stringify(ctx.events)).not.toContain(
+      'late-private-shadow-marker',
+    );
+  });
+
+  it('does not record setter values from blocked canvases', async () => {
+    await ctx.page.evaluate(() => {
+      const blockedCanvas = document.createElement('canvas');
+      blockedCanvas.className = 'rr-block';
+      const visibleCanvas = document.createElement('canvas');
+      document.body.append(blockedCanvas, visibleCanvas);
+
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({
+        recordCanvas: true,
+        emit: (window as unknown as IWindow).emit,
+      });
+
+      blockedCanvas.getContext('2d')!.fillStyle = 'private-canvas-marker';
+      visibleCanvas.getContext('2d')!.fillStyle = 'visible-canvas-marker';
+    });
+    await waitForRAF(ctx.page);
+
+    const canvasEvents = ctx.events.filter(
+      (event) =>
+        event.type === EventType.IncrementalSnapshot &&
+        event.data.source === IncrementalSource.CanvasMutation,
+    );
+    expect(JSON.stringify(canvasEvents)).toContain('visible-canvas-marker');
+    expect(JSON.stringify(canvasEvents)).not.toContain('private-canvas-marker');
   });
 
   it('captures adopted stylesheets in nested shadow doms and iframes', async () => {

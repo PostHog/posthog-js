@@ -42,5 +42,25 @@ module.exports = {
         'posthog-js/no-direct-window-check': 'off',
         'compat/compat': 'off',
     },
+    overrides: [
+        {
+            // The replayer rebuilds hosts with `createElement(tagName)`, so a host the
+            // browser refuses raises NotSupportedError. In the full-snapshot rebuild that
+            // is uncaught and ends playback; elsewhere it abandons the rest of the batch.
+            files: ['*/src/**/*.ts'],
+            excludedFiles: ['rrweb-snapshot/src/utils.ts', '**/*.spec.*', '**/*.test.*'],
+            rules: {
+                'no-restricted-syntax': [
+                    'error',
+                    {
+                        selector:
+                            "CallExpression[callee.property.name='attachShadow'][callee.object.type!='Super']",
+                        message:
+                            'Use `attachShadowRootSafely` from @posthog/rrweb-snapshot instead of calling attachShadow directly.',
+                    },
+                ],
+            },
+        },
+    ],
     ignorePatterns: ['dist/', 'node_modules/', '*.js', '*.cjs', '*.mjs'],
 }

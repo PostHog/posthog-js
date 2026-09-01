@@ -29,7 +29,7 @@ import type { MixedOutput, Module, ReadOnlyGraph } from 'metro'
 import type * as baseJSBundleType from 'metro/private/DeltaBundler/Serializers/baseJSBundle'
 import type * as sourceMapStringType from 'metro/private/DeltaBundler/Serializers/sourceMapString'
 import type * as bundleToStringType from 'metro/private/lib/bundleToString'
-import type { MetroSerializer } from '../../utils'
+import type { Bundle, MetroSerializer } from '../../utils'
 
 let baseJSBundleModule: any
 try {
@@ -78,6 +78,10 @@ type NewSourceMapStringExport = {
   sourceMapString: typeof sourceMapString
 }
 
+type PostHogSerializerOptions = Parameters<MetroSerializer>[3] & {
+  posthogBundleCallback?: (bundle: Bundle) => Bundle
+}
+
 /**
  * This function ensures that modules in source maps are sorted in the same
  * order as in a plain JS bundle.
@@ -113,6 +117,13 @@ export const createDefaultMetroSerializer = (): MetroSerializer => {
   return (entryPoint, premodules, graph, options) => {
     // baseJSBundle assigns IDs to modules in a consistent order
     let bundle = (baseJSBundle.default || baseJSBundle)(entryPoint, premodules, graph, options)
+    const serializerOptions = options as PostHogSerializerOptions
+
+    // Inject the final Chunk ID before both code rendering and source-map
+    // generation so they describe the same bundle bytes.
+    if (serializerOptions.posthogBundleCallback && !graph.transformOptions.hot) {
+      bundle = serializerOptions.posthogBundleCallback(bundle)
+    }
 
     const { code } = (bundleToString.default || bundleToString)(bundle)
     if (graph.transformOptions.hot) {

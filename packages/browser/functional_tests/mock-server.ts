@@ -20,7 +20,7 @@ const isGzipData = (data: Uint8Array): boolean => data[0] === 0x1f && data[1] ==
 
 const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposition, ctx: RestContext) => {
     let body = req.body
-    const rawBody = body
+    let bodyWrapper = '<unknown>'
 
     if (typeof body === 'string') {
         try {
@@ -28,8 +28,10 @@ const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposi
             const data = new Uint8Array(req._body)
             const gzipCompressed = isGzipData(data)
             if (b64Encoded) {
+                bodyWrapper = 'data=<base64>'
                 body = JSON.parse(Buffer.from(decodeURIComponent(body.split('=')[1]), 'base64').toString())
             } else if (gzipCompressed) {
+                bodyWrapper = '<gzip>'
                 const decoded = strFromU8(decompressSync(data))
                 body = JSON.parse(decoded)
             } else {
@@ -45,7 +47,7 @@ const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposi
 
     if (group === '/flags/') {
         capturedFlagsWireRequests.push({
-            bodyWrapper: typeof rawBody === 'string' && rawBody.startsWith('data=') ? 'data=<base64>' : '<unknown>',
+            bodyWrapper,
             compression: req.url.searchParams.get('compression'),
             contentType: req.headers.get('content-type'),
             decodedBody: body,

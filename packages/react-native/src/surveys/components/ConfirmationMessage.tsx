@@ -3,6 +3,7 @@ import { Text, View, ViewStyle } from 'react-native'
 
 import { createSafeStyleSheet } from '../safeStyleSheet'
 import {
+  closeButtonSize,
   defaultDescriptionOpacity,
   getContrastingTextColor,
   getMaxFontSizeMultiplier,
@@ -64,6 +65,7 @@ export function ConfirmationMessage({
 const styles = createSafeStyleSheet({
   thankYouMessageContainer: {
     padding: 10,
+    paddingRight: closeButtonSize,
   },
   thankYouMessageHeader: {
     fontSize: 18,

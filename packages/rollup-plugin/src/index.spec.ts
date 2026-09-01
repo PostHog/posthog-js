@@ -34,6 +34,10 @@ type TestPlugin = {
         order: 'post'
         handler: (code: string, chunk: { fileName: string }) => RenderChunkResult
     }
+    generateBundle: {
+        order: 'pre'
+        handler: (options: OutputOptions, bundle: Record<string, unknown>) => void
+    }
     writeBundle: {
         sequential: true
         handler: (options: OutputOptions, bundle: Record<string, unknown>) => Promise<void>
@@ -222,6 +226,49 @@ describe('posthogRollupPlugin', () => {
 
             expect(plugin.renderChunk.handler(code, { fileName: 'style.css' })).toBeNull()
             expect(disabled.renderChunk.handler(code, { fileName: 'index.js' })).toBeNull()
+        })
+    })
+
+    describe('generateBundle', () => {
+        const code = 'console.log("app");'
+        const preliminaryFileName = 'index-!~{001}~.js'
+        const fileName = 'index-abc123.js'
+
+        it('restores a chunk id comment removed after renderChunk', () => {
+            const plugin = testPlugin(options)
+            const rendered = plugin.renderChunk.handler(code, { fileName: preliminaryFileName })!
+            const chunkId = determineChunkIdFromSource(rendered.code)!
+            const minifiedCode = rendered.code.replace(createChunkIdComment(chunkId), '')
+            const bundle = {
+                [fileName]: { type: 'chunk', fileName, preliminaryFileName, code: minifiedCode },
+            }
+
+            plugin.generateBundle.handler({} as OutputOptions, bundle)
+
+            expect(determineChunkIdFromSource(bundle[fileName].code)).toBe(chunkId)
+        })
+
+        it('does not duplicate a chunk id comment that survived output minification', () => {
+            const plugin = testPlugin(options)
+            const rendered = plugin.renderChunk.handler(code, { fileName: preliminaryFileName })!
+            const bundle = {
+                [fileName]: { type: 'chunk', fileName, preliminaryFileName, code: rendered.code },
+            }
+
+            plugin.generateBundle.handler({} as OutputOptions, bundle)
+
+            expect(bundle[fileName].code.match(/\/\/# chunkId=/g)).toHaveLength(1)
+        })
+
+        it('does not add a chunk id to prebuilt chunks that skipped renderChunk', () => {
+            const plugin = testPlugin(options)
+            const bundle = {
+                [fileName]: { type: 'chunk', fileName, preliminaryFileName, code },
+            }
+
+            plugin.generateBundle.handler({} as OutputOptions, bundle)
+
+            expect(determineChunkIdFromSource(bundle[fileName].code)).toBeUndefined()
         })
     })
 

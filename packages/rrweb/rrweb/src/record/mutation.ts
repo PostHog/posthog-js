@@ -400,9 +400,20 @@ export default class MutationBuffer {
               currentN as HTMLLinkElement,
             );
           }
-          if (hasShadowRoot(n)) {
+          if (
+            hasShadowRoot(currentN) &&
+            !isBlocked(
+              currentN,
+              this.blockClass,
+              this.blockSelector,
+              true,
+            )
+          ) {
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            this.shadowDomManager.addShadowRoot(dom.shadowRoot(n)!, this.doc);
+            this.shadowDomManager.addShadowRoot(
+              dom.shadowRoot(currentN)!,
+              this.doc,
+            );
           }
         },
         onIframeLoad: (iframe, childSn) => {
@@ -592,17 +603,9 @@ export default class MutationBuffer {
       removes: this.removes,
       adds,
     };
-    // payload may be empty if the mutations happened in some blocked elements
-    if (
-      !payload.texts.length &&
-      !payload.attributes.length &&
-      !payload.removes.length &&
-      !payload.adds.length
-    ) {
-      return;
-    }
 
-    // reset
+    // Reset before the empty-payload return: these collections strongly
+    // reference DOM nodes, and payload holds its own references.
     this.texts = [];
     this.attributes = [];
     this.attributeMap = new WeakMap<Node, attributeCursor>();
@@ -613,6 +616,16 @@ export default class MutationBuffer {
     this.droppedSet = new Set<Node>();
     this.removesSubTreeCache = new Set<Node>();
     this.movedMap = {};
+
+    // payload may be empty if the mutations happened in some blocked elements
+    if (
+      !payload.texts.length &&
+      !payload.attributes.length &&
+      !payload.removes.length &&
+      !payload.adds.length
+    ) {
+      return;
+    }
 
     this.mutationCb(payload);
   };
@@ -943,8 +956,14 @@ export default class MutationBuffer {
  * that.
  */
 function deepDelete(addsSet: Set<Node>, n: Node) {
-  addsSet.delete(n);
-  dom.childNodes(n).forEach((childN) => deepDelete(addsSet, childN));
+  const stack = [n];
+
+  while (stack.length) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const next = stack.pop()!;
+    addsSet.delete(next);
+    dom.childNodes(next).forEach((childN) => stack.push(childN));
+  }
 }
 
 function processRemoves(n: Node, cache: Set<Node>) {
@@ -978,16 +997,11 @@ function _isParentRemoved(
 
 function isAncestorInSet(set: Set<Node>, n: Node): boolean {
   if (set.size === 0) return false;
-  return _isAncestorInSet(set, n);
-}
 
-function _isAncestorInSet(set: Set<Node>, n: Node): boolean {
-  const parent = dom.parentNode(n);
-  if (!parent) {
-    return false;
+  let parent = dom.parentNode(n);
+  while (parent) {
+    if (set.has(parent)) return true;
+    parent = dom.parentNode(parent);
   }
-  if (set.has(parent)) {
-    return true;
-  }
-  return _isAncestorInSet(set, parent);
+  return false;
 }

@@ -117,7 +117,7 @@ jobs:
         name: Notify Slack - Approval Needed
         needs: check-changesets
         if: needs.check-changesets.outputs.has-changesets == 'true'
-        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1
+        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@5ba5d24966f2c416ca792654638e4ce6f19f545b
         with:
             slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
             slack_user_group_id: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
@@ -420,13 +420,15 @@ jobs:
                   set -euo pipefail
                   release_sha=$(git rev-parse HEAD)
                   tag="$PACKAGE_NAME@$PACKAGE_VERSION"
+                  encoded_tag=$(jq -rn --arg tag "$tag" '$tag | @uri')
                   create_error=$(mktemp)
-                  if ! gh api "repos/${{ github.repository }}/git/ref/tags/$tag" >/dev/null 2>&1; then
-                      gh api "repos/${{ github.repository }}/git/refs" \
+                  if ! tag_sha=$(gh api "repos/${{ github.repository }}/git/ref/tags/$encoded_tag" --jq '.object.sha' 2>/dev/null); then
+                      tag_sha=$(gh api "repos/${{ github.repository }}/git/refs" \
                           -f "ref=refs/tags/$tag" \
-                          -f "sha=$release_sha" 2>"$create_error" || true
+                          -f "sha=$release_sha" \
+                          --jq '.object.sha' 2>"$create_error") || true
                   fi
-                  if ! tag_sha=$(gh api "repos/${{ github.repository }}/git/ref/tags/$tag" --jq '.object.sha'); then
+                  if [ -z "$tag_sha" ] && ! tag_sha=$(gh api "repos/${{ github.repository }}/git/ref/tags/$encoded_tag" --jq '.object.sha'); then
                       cat "$create_error" >&2
                       rm -f "$create_error"
                       echo "::error::Could not create or verify $tag."

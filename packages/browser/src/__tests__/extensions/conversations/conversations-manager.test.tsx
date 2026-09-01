@@ -197,6 +197,18 @@ describe('ConversationsManager', () => {
         })
     }
 
+    // Flush the async poll chain WITHOUT running timers. The poll loop schedules its
+    // next tick only after the (floating) request promise resolves, so tests that send
+    // and then advance timers in one function must drain microtasks in between.
+    // jest.runAllTimers() would loop forever here because the loop reschedules itself.
+    const flushMicrotasks = async () => {
+        await act(async () => {
+            for (let i = 0; i < 20; i++) {
+                await Promise.resolve()
+            }
+        })
+    }
+
     describe('initialization', () => {
         it('should initialize and render the widget when widgetEnabled is true', async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
@@ -989,17 +1001,18 @@ describe('ConversationsManager', () => {
         beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
             await flushPromises()
-            // Send a message to create a ticket
+            // Send a message to create a ticket, then let the poll loop schedule its next tick
             await act(async () => {
                 await manager.sendMessage('Hello!')
             })
+            await flushMicrotasks()
             jest.clearAllMocks()
         })
 
         it('should poll for messages at regular intervals', async () => {
-            // Advance time by poll interval (5 seconds)
+            // Widget is closed by default, so it polls at the slower 15s cadence
             act(() => {
-                jest.advanceTimersByTime(5000)
+                jest.advanceTimersByTime(15000)
             })
 
             // Should have made a getMessages request
@@ -1014,7 +1027,7 @@ describe('ConversationsManager', () => {
 
         it('should include widget_session_id in getMessages request', async () => {
             act(() => {
-                jest.advanceTimersByTime(5000)
+                jest.advanceTimersByTime(15000)
             })
 
             expect(mockPosthog._send_request).toHaveBeenCalledWith(
@@ -1026,7 +1039,7 @@ describe('ConversationsManager', () => {
 
         it('should not include distinct_id in getMessages request for security', async () => {
             act(() => {
-                jest.advanceTimersByTime(5000)
+                jest.advanceTimersByTime(15000)
             })
 
             const calls = (mockPosthog._send_request as jest.Mock).mock.calls
@@ -1038,7 +1051,7 @@ describe('ConversationsManager', () => {
             manager['_currentView'] = 'restore_request'
 
             act(() => {
-                jest.advanceTimersByTime(5000)
+                jest.advanceTimersByTime(15000)
             })
 
             expect(mockPosthog._send_request).not.toHaveBeenCalled()
@@ -1135,6 +1148,190 @@ describe('ConversationsManager', () => {
         })
     })
 
+    describe('polling backpressure', () => {
+        const getRequestUrls = (): string[] =>
+            (mockPosthog._send_request as jest.Mock).mock.calls.map((call) => call[0].url as string)
+
+        it('does not poll when there are no conversations', async () => {
+            // Default mock serves an empty ticket list, so the widget boots with
+            // nothing to poll and the loop should pause itself.
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+            jest.clearAllMocks()
+
+            act(() => {
+                jest.advanceTimersByTime(60000)
+            })
+
+            expect(mockPosthog._send_request).not.toHaveBeenCalled()
+        })
+
+        it('resumes polling after a message is sent', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            await act(async () => {
+                await manager.sendMessage('Hello!')
+            })
+            await flushMicrotasks()
+            jest.clearAllMocks()
+
+            // Loop was paused at boot (no tickets); sending must restart it.
+            act(() => {
+                jest.advanceTimersByTime(15000)
+            })
+
+            expect(getRequestUrls().some((url) => url.includes('/widget/messages/ticket-123'))).toBe(true)
+        })
+
+        it('polls at the faster open cadence while the widget is open', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            await act(async () => {
+                await manager.sendMessage('Hello!')
+            })
+
+            // Open the widget, then flush the immediate poll the state change triggers.
+            act(() => {
+                manager['_handleStateChange']('open')
+            })
+            await flushMicrotasks()
+            jest.clearAllMocks()
+
+            // 5s is enough while open, whereas a closed widget would need 15s.
+            act(() => {
+                jest.advanceTimersByTime(5000)
+            })
+
+            expect(getRequestUrls().some((url) => url.includes('/widget/messages/ticket-123'))).toBe(true)
+        })
+
+        it('backs off exponentially after repeated 429 poll responses and recovers on success', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            manager['_currentTicketId'] = 'ticket-123'
+            manager['_currentView'] = 'messages'
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 429, json: null })
+            })
+
+            await act(async () => {
+                await manager['_poll']()
+            })
+            expect(manager['_nextPollDelayMs']()).toBe(5000)
+
+            await act(async () => {
+                await manager['_poll']()
+            })
+            expect(manager['_nextPollDelayMs']()).toBe(10000)
+
+            await act(async () => {
+                await manager['_poll']()
+            })
+            expect(manager['_nextPollDelayMs']()).toBe(20000)
+
+            // A successful poll clears the backoff and returns to the normal cadence.
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 200, json: createMockGetMessagesResponse() })
+            })
+            await act(async () => {
+                await manager['_poll']()
+            })
+            expect(manager['_consecutivePollingRateLimitFailures']).toBe(0)
+            expect(manager['_nextPollDelayMs']()).toBe(15000)
+        })
+
+        it('does not spawn parallel poll loops when the widget is toggled rapidly', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            await act(async () => {
+                await manager.sendMessage('Hello!')
+            })
+            await flushMicrotasks()
+
+            // Toggle open/closed several times in one tick. Each toggle stops and
+            // restarts the loop; without generation guarding, the in-flight chains
+            // would each reschedule and we'd end up with multiple concurrent timers.
+            act(() => {
+                manager['_handleStateChange']('closed')
+                manager['_handleStateChange']('open')
+                manager['_handleStateChange']('closed')
+                manager['_handleStateChange']('open')
+            })
+            await flushMicrotasks()
+            jest.clearAllMocks()
+
+            // One open interval should produce exactly one poll, not several.
+            act(() => {
+                jest.advanceTimersByTime(5000)
+            })
+
+            const getMessagesCalls = (mockPosthog._send_request as jest.Mock).mock.calls.filter((call) =>
+                (call[0].url as string).includes('/widget/messages/ticket-123')
+            )
+            expect(getMessagesCalls).toHaveLength(1)
+        })
+
+        it('recovers immediately when the browser comes back online during a 429 backoff', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            await act(async () => {
+                await manager.sendMessage('Hello!')
+            })
+            await flushMicrotasks()
+
+            // Drive several 429s so the next poll is scheduled far out (backoff).
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 429, json: null })
+            })
+            for (let i = 0; i < 4; i++) {
+                await act(async () => {
+                    await manager['_poll']()
+                })
+            }
+            expect(manager['_nextPollDelayMs']()).toBeGreaterThan(15000)
+
+            // Server recovers; coming back online must poll now, not after the backoff.
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 200, json: createMockGetMessagesResponse() })
+            })
+            jest.clearAllMocks()
+            act(() => {
+                window.dispatchEvent(new Event('online'))
+            })
+            await flushMicrotasks()
+
+            const getMessagesCalls = (mockPosthog._send_request as jest.Mock).mock.calls.filter((call) =>
+                (call[0].url as string).includes('/widget/messages/ticket-123')
+            )
+            expect(getMessagesCalls.length).toBeGreaterThanOrEqual(1)
+            expect(manager['_consecutivePollingRateLimitFailures']).toBe(0)
+        })
+
+        it('caps the 429 backoff at one minute', async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            manager['_currentTicketId'] = 'ticket-123'
+            manager['_currentView'] = 'messages'
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 429, json: null })
+            })
+
+            for (let i = 0; i < 8; i++) {
+                await act(async () => {
+                    await manager['_poll']()
+                })
+            }
+
+            expect(manager['_nextPollDelayMs']()).toBe(60000)
+        })
+    })
+
     describe('identify handling', () => {
         beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
@@ -1222,11 +1419,12 @@ describe('ConversationsManager', () => {
                 await act(async () => {
                     await manager.sendMessage('Hello!')
                 })
+                await flushMicrotasks()
                 jest.clearAllMocks()
 
-                // Trigger poll
+                // Trigger poll (widget closed by default -> 15s cadence)
                 act(() => {
-                    jest.advanceTimersByTime(5000)
+                    jest.advanceTimersByTime(15000)
                 })
 
                 expect(mockPosthog._send_request).toHaveBeenCalledWith(

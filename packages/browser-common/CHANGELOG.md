@@ -1,5 +1,67 @@
 # @posthog/browser-common
 
+## 0.7.1
+
+### Patch Changes
+
+- [#4683](https://github.com/PostHog/posthog-js/pull/4683) [`6309cb2`](https://github.com/PostHog/posthog-js/commit/6309cb22e3f1b419d232f7bfbd1656917d4e24dc) Thanks [@posthog](https://github.com/apps/posthog)! - Harden the directly importable `getElementsChainString` utility against runtime JavaScript callers that pass a non-array value. It now returns an empty string instead of calling `.map` on malformed input.
+  (2026-09-01)
+- Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a)]:
+    - @posthog/core@1.50.0
+
+## 0.7.0
+
+### Minor Changes
+
+- [#4378](https://github.com/PostHog/posthog-js/pull/4378) [`a895e7e`](https://github.com/PostHog/posthog-js/commit/a895e7ecf78e434e43958052096ac03aa4670e9d) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add a direct pubsub export, isolate publisher listener failures, and make disposal terminal.
+  (2026-08-28)
+
+## 0.6.2
+
+### Patch Changes
+
+- [#4669](https://github.com/PostHog/posthog-js/pull/4669) [`d0279e5`](https://github.com/PostHog/posthog-js/commit/d0279e5bc8758d12825927f4565d981f21085288) Thanks [@posthog](https://github.com/apps/posthog)! - Autocapture no longer throws a `RangeError` into the host page when it sorts element attributes. It now sorts attribute keys with a plain lexical comparator instead of `localeCompare`, which can throw on browsers with faulty ICU data.
+  (2026-08-28)
+
+## 0.6.1
+
+### Patch Changes
+
+- [#4636](https://github.com/PostHog/posthog-js/pull/4636) [`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7) Thanks [@yfwmaniish](https://github.com/yfwmaniish)! - Narrow the `pinterest` entry in the bot-detection blocklist to `pinterestbot`, so real users on Pinterest's in-app browser (whose UA also contains the substring `pinterest`) are no longer misclassified as bots and silently excluded from analytics. The crawler's other UA variant remains covered by the existing generic `bot.htm` entry, so no bot-detection coverage is lost.
+  (2026-08-27)
+- Updated dependencies [[`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7)]:
+    - @posthog/core@1.49.1
+
+## 0.6.0
+
+### Minor Changes
+
+- [#4592](https://github.com/PostHog/posthog-js/pull/4592) [`ca540f9`](https://github.com/PostHog/posthog-js/commit/ca540f94f2c301f4ea8f5273a250ac2516292613) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add typed stable-name lookup for installed browser extensions and use it when independently loaded survey code resolves feature flags.
+  (2026-08-25)
+
+### Patch Changes
+
+- [#4533](https://github.com/PostHog/posthog-js/pull/4533) [`53fcb2d`](https://github.com/PostHog/posthog-js/commit/53fcb2d34eac1e83afbfa810ab7b9e9f691d6ce6) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Expose host capture permission to browser extensions.
+  (2026-08-25)
+- Updated dependencies [[`ed4dd97`](https://github.com/PostHog/posthog-js/commit/ed4dd97d461f9dd871507c8b929ab38cae376181)]:
+    - @posthog/types@1.406.1
+
+## 0.5.2
+
+### Patch Changes
+
+- [#4611](https://github.com/PostHog/posthog-js/pull/4611) [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12) Thanks [@marandaneto](https://github.com/marandaneto)! - Share survey property matching between the browser and React Native SDKs while preserving their existing missing-value behavior.
+  (2026-08-25)
+- Updated dependencies [[`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+    - @posthog/core@1.48.11
+
+## 0.5.1
+
+### Patch Changes
+
+- [#4532](https://github.com/PostHog/posthog-js/pull/4532) [`60ee0ac`](https://github.com/PostHog/posthog-js/commit/60ee0ac04c3c08a467717464b4936d74e7d1532e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Migrate surveys to the shared browser extension lifecycle.
+  (2026-08-24)
+
 ## 0.5.0
 
 ### Minor Changes

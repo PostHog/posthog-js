@@ -82,17 +82,13 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
         let stopReason: string | undefined
 
         const usage: {
-          inputTokens: number
-          outputTokens: number
+          inputTokens?: number
+          outputTokens?: number
           cacheCreationInputTokens?: number
           cacheReadInputTokens?: number
           webSearchCount?: number
           rawUsage?: unknown
         } = {
-          inputTokens: 0,
-          outputTokens: 0,
-          cacheCreationInputTokens: 0,
-          cacheReadInputTokens: 0,
           webSearchCount: 0,
         }
         let rawUsage: Record<string, unknown> = {}
@@ -256,19 +252,21 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 tools: availableTools,
               })
             } catch (error: unknown) {
+              // The final usage delta may never arrive; whatever raw usage did
+              // still belongs on the event.
+              if (Object.keys(rawUsage).length > 0) {
+                usage.rawUsage = rawUsage
+              }
               await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: anthropicParams.model,
                 provider: 'anthropic',
                 input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic'), this.phClient),
                 output: [],
-                latency: 0,
+                latency: (Date.now() - startTime) / 1000,
                 baseURL: this.baseURL,
                 modelParameters: getModelParams(body),
-                usage: {
-                  inputTokens: 0,
-                  outputTokens: 0,
-                },
+                usage,
                 error: error,
               })
               throw error
@@ -284,7 +282,10 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
         return value
       })
 
-      return preserveProviderPromise(parentPromise, wrappedPromise, { requestIdHeader: 'request-id' })
+      return preserveProviderPromise(parentPromise, wrappedPromise, {
+        requestIdHeader: 'request-id',
+        workspaceIdHeader: 'anthropic-workspace-id',
+      })
     } else {
       const parentPromise = super.create(anthropicParams, options)
       const wrappedPromise = parentPromise.then(
@@ -325,21 +326,21 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
             provider: 'anthropic',
             input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic'), this.phClient),
             output: [],
-            latency: 0,
+            latency: (Date.now() - startTime) / 1000,
             baseURL: this.baseURL,
             modelParameters: getModelParams(body),
             httpStatus: error?.status ? error.status : 500,
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
+            usage: {},
             error: error,
           })
           throw error
         }
       )
 
-      return preserveProviderPromise(parentPromise, wrappedPromise, { requestIdHeader: 'request-id' })
+      return preserveProviderPromise(parentPromise, wrappedPromise, {
+        requestIdHeader: 'request-id',
+        workspaceIdHeader: 'anthropic-workspace-id',
+      })
     }
   }
 }

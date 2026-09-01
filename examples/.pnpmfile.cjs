@@ -35,6 +35,11 @@ module.exports = {
                 verifyDepsBeforeRun: true,
                 minimumReleaseAge: 4320,
                 minimumReleaseAgeExclude: ['node-forge@1.3.2', 'dompurify@3.3.2', '@posthog/cli'],
+                overrides: {
+                    ...config.overrides,
+                    // 1.20.2 was published manually and fails the trusted-publisher policy.
+                    fastq: '1.20.1',
+                },
                 onlyBuiltDependencies: ['@posthog/cli'],
             })
         },

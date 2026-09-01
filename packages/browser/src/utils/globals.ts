@@ -1,8 +1,10 @@
 import { window as commonWindow } from '@posthog/browser-common/utils/globals'
+import type { Client } from '@posthog/browser-common'
 import type { DeferredStylesheetStats, MutationCost, SnapshotCost } from '@posthog/rrweb-record'
 import type { ErrorTracking } from '@posthog/core'
 
 import type { PostHog } from '../posthog-core'
+import type { BufferedConsoleEntry } from '../logs-types'
 import type { SessionIdManager } from '../sessionid'
 import type {
     DeadClicksAutoCaptureConfig,
@@ -175,17 +177,29 @@ export interface WebVitalsReportOpts {
     reportSoftNavs?: boolean
 }
 
+/**
+ * Options only the attribution build understands, so they are passed to attributed
+ * observers and never to the observers in the default bundle.
+ */
+export interface WebVitalsAttributionReportOpts extends WebVitalsReportOpts {
+    includeProcessedEventEntries?: boolean
+}
+
 export type WebVitalsCallbackFlavor =
     | 'web-vitals'
     | 'web-vitals-with-attribution'
     | 'web-vitals-soft-navs'
     | 'web-vitals-with-attribution-soft-navs'
 
-export type WebVitalsCallbacks = {
+export type WebVitalsMetricCallbacks = {
     onLCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onCLS: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onFCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onINP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+}
+
+export type WebVitalsCallbacks = WebVitalsMetricCallbacks & {
+    withoutAttribution?: WebVitalsMetricCallbacks
 }
 
 export type PostHogExtensionKind =
@@ -209,7 +223,7 @@ export type PostHogExtensionKind =
 export interface LazyLoadedSessionRecordingInterface {
     start: (startReason?: SessionStartReason) => void
     stop: () => void
-    discard: () => void
+    discard: (options?: { discardProducerEvents?: boolean }) => void
     sessionId: string
     status: SessionRecordingStatus
     onRRwebEmit: (rawEvent: eventWithTime) => void
@@ -283,7 +297,8 @@ interface PostHogExtensions {
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
     generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined
     logs?: {
-        initializeLogs?: (posthog: PostHog) => any | undefined
+        initializeLogs?: (host: PostHog | Client) => (() => void) | undefined
+        replayConsoleBuffer?: (host: PostHog | Client, entries: BufferedConsoleEntry[]) => void
     }
     /** @deprecated Use `postHogWebVitalsCallbacksByFlavor` to select callbacks explicitly. */
     postHogWebVitalsCallbacks?: WebVitalsCallbacks

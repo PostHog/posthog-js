@@ -6,6 +6,7 @@ import {
   Mirror,
   createMirror,
   toLowerCase,
+  attachShadowRootSafely,
 } from '@posthog/rrweb-snapshot';
 import {
   RRDocument,
@@ -1759,7 +1760,16 @@ export class Replayer {
       if (mutation.node.isShadow) {
         // If the parent is attached a shadow dom after it's created, it won't have a shadow root.
         if (!hasShadowRoot(parent)) {
-          (parent as Element | RRElement).attachShadow({ mode: 'open' });
+          // The parent can be a tag that refuses a shadow root — a real element
+          // the browser rejects, or an RRMediaElement while the virtual DOM is
+          // in use. Skip this subtree instead of letting attachShadow abandon
+          // the rest of the mutation batch.
+          if (!attachShadowRootSafely(parent as Element | RRElement)) {
+            return this.warn(
+              'Parent does not support shadow root, skipping mutation',
+              mutation,
+            );
+          }
           parent = (parent as Element | RRElement).shadowRoot! as Node | RRNode;
         } else parent = parent.shadowRoot as Node | RRNode;
         // adopt stylesheets whose event arrived before this shadow root existed
@@ -2044,6 +2054,8 @@ export class Replayer {
                   const newSn = mirror.getMeta(
                     target as Node & RRNode,
                   ) as serializedElementNodeWithId;
+                  const siblingNode = target.nextSibling;
+                  const parentNode = target.parentNode;
                   const newNode = buildNodeWithSN(
                     {
                       ...newSn,
@@ -2064,10 +2076,12 @@ export class Replayer {
                     newSn.attributes,
                     mutation.attributes as attributes,
                   );
-                  const siblingNode = target.nextSibling;
-                  const parentNode = target.parentNode;
                   if (newNode && parentNode) {
-                    parentNode.removeChild(target as Node & RRNode);
+                    // buildNodeWithSN already detached `target` when it rebuilt
+                    // the node; removeChild would throw into the catch below.
+                    if (target.parentNode === parentNode) {
+                      parentNode.removeChild(target as Node & RRNode);
+                    }
                     parentNode.insertBefore(
                       newNode as Node & RRNode,
                       siblingNode as (Node & RRNode) | null,

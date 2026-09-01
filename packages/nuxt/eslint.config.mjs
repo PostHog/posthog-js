@@ -1,5 +1,6 @@
 // @ts-check
 import { createConfigForNuxt } from '@nuxt/eslint-config/flat'
+import eslintConfigPrettier from 'eslint-config-prettier/flat'
 
 export default createConfigForNuxt({
   features: {
@@ -9,9 +10,12 @@ export default createConfigForNuxt({
   dirs: {
     src: ['./playground'],
   },
-}).append({
-  rules: {
-    '@stylistic/brace-style': 'off',
-    '@stylistic/operator-linebreak': 'off',
+}).append(
+  {
+    rules: {
+      '@stylistic/brace-style': 'off',
+      '@stylistic/operator-linebreak': 'off',
+    },
   },
-})
+  eslintConfigPrettier
+)

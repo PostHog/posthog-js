@@ -7,6 +7,21 @@ import fs from 'fs/promises'
 
 export * from './config'
 
+// webpack validates SourceMapDevToolPlugin options against its schema, so passing `debugIds` to a
+// webpack that predates the option fails the build outright. 5.97.0 added it; 5.104.0 fixed its
+// interplay with builds that suppress the sourceMappingURL comment (`append: false`, the
+// deleteAfterUpload default), so that's the floor.
+const DEBUG_IDS_MIN_MAJOR = 5
+const DEBUG_IDS_MIN_MINOR = 104
+
+function webpackSupportsDebugIds(version: string | undefined): boolean {
+    if (!version) {
+        return false
+    }
+    const [major = NaN, minor = NaN] = version.split('.').map((part) => Number.parseInt(part, 10))
+    return major > DEBUG_IDS_MIN_MAJOR || (major === DEBUG_IDS_MIN_MAJOR && minor >= DEBUG_IDS_MIN_MINOR)
+}
+
 export class PosthogWebpackPlugin {
     resolvedConfig: ResolvedPluginConfig
     logger: Logger
@@ -22,11 +37,18 @@ export class PosthogWebpackPlugin {
 
     apply(compiler: webpack.Compiler): void {
         if (this.resolvedConfig.sourcemaps.enabled) {
+            // In event release mode webpack stamps an ECMA-426 debug id into each chunk at
+            // compile time, and posthog-cli adopts it as the chunk id instead of deriving its
+            // own, so one id identifies the chunk across the whole toolchain. On webpacks
+            // without the option the CLI falls back to content-derived ids, which are equally
+            // stable — just not shared with other tooling.
+            const eventReleaseMode = this.resolvedConfig.sourcemaps.releaseMode === 'event'
             new compiler.webpack.SourceMapDevToolPlugin({
                 filename: '[file].map',
                 noSources: false,
                 moduleFilenameTemplate: '[resource-path]',
                 append: this.resolvedConfig.sourcemaps.deleteAfterUpload ? false : undefined,
+                ...(eventReleaseMode && webpackSupportsDebugIds(compiler.webpack.version) ? { debugIds: true } : {}),
             }).apply(compiler)
         }
 

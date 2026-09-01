@@ -4,6 +4,7 @@ const globallyReservedPrivateProperties = ['_addCaptureHook', '_send_request']
 const crossBundlePrivateProperties = [
     ...globallyReservedPrivateProperties,
     '_onIdentityChanged',
+    '_onOptOut',
     '_onIdentityCleared',
     '_originatedFromCaptureException',
     '_shouldDisableFlags',
@@ -17,6 +18,7 @@ const knownNonAbiOverlaps = [
     '_buffer',
     '_client',
     '_config',
+    '_disposed',
     '_enqueue',
     '_events',
     '_extends',
@@ -32,11 +34,9 @@ const knownNonAbiOverlaps = [
     '_onRemoteConfig',
     '_persistence',
     '_queue',
-    '_refreshInterval',
     '_remove',
     '_runBeforeSend',
     '_set',
-    '_startRefreshInterval',
 ]
 
 module.exports = {

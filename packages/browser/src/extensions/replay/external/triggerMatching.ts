@@ -49,7 +49,7 @@ export interface RecordingTriggersStatusV2 extends RecordingTriggersStatus {
 }
 
 export type TriggerType = 'url' | 'event'
-/* 
+/*
 triggers can have one of three statuses:
  * - trigger_activated: the trigger met conditions to start recording
  * - trigger_pending: the trigger is present, but the conditions are not yet met
@@ -315,6 +315,18 @@ export class URLTriggerMatching implements TriggerStatusMatching {
      */
     triggerStatusNoSideEffects(sessionId: string): TriggerStatus {
         return this._urlTriggerStatus(sessionId)
+    }
+
+    isCurrentUrlBlocked(): boolean {
+        const url = getTargetingUrl(this._instance)
+        if (!url) {
+            return false
+        }
+        try {
+            return sessionRecordingUrlTriggerMatches(url, this._urlBlocklist, this._compiledBlocklistRegexes)
+        } catch {
+            return true
+        }
     }
 
     /**

@@ -259,6 +259,162 @@ describe('PostHogExceptions', () => {
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
                 expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
             })
+
+            it('does not capture Safari extension exceptions with only masked frames', () => {
+                // uBlock Origin Lite content script: Safari masks every frame filename.
+                const exception = {
+                    type: 'TypeError',
+                    value: "undefined is not an object (evaluating 'isolatedAPI.contexts.topHostname')",
+                    stacktrace: {
+                        frames: [
+                            {
+                                filename: 'webkit-masked-url://hidden/',
+                                function: 'global code',
+                                platform: 'javascript:web',
+                                in_app: false,
+                            },
+                            {
+                                filename: 'webkit-masked-url://hidden/',
+                                function: 'uBOL_cssSpecific',
+                                platform: 'javascript:web',
+                                in_app: false,
+                            },
+                        ],
+                        type: 'raw',
+                    },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toBeCalledWith(
+                    '$exception',
+                    { $exception_list: [exception] },
+                    expect.anything()
+                )
+            })
+
+            it('captures ambiguous masked-only application exceptions', () => {
+                // Safari also masks blob, eval'd, and injected application code, so the masked URL
+                // is not sufficient evidence that the exception came from a browser extension.
+                const frame = {
+                    filename: 'webkit-masked-url://hidden/',
+                    function: 'applicationEval',
+                    platform: 'javascript:web',
+                    in_app: false,
+                }
+                const exception = {
+                    type: 'Error',
+                    value: 'application failure',
+                    stacktrace: { frames: [frame], type: 'raw' },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('does not capture Safari extension exceptions with only masked frames marked in_app', () => {
+                // The Sentry integration forwards Sentry's `in_app: true` for every browser frame,
+                // and Sentry does not rewrite the masked scheme, so a masked-only stack arrives with
+                // in_app: true. The masked frame must not count as the page's own code.
+                const exception = {
+                    type: 'TypeError',
+                    value: "undefined is not an object (evaluating 'isolatedAPI.contexts.topHostname')",
+                    stacktrace: {
+                        frames: [
+                            {
+                                filename: 'webkit-masked-url://hidden/',
+                                function: 'global code',
+                                platform: 'javascript:web',
+                                in_app: true,
+                            },
+                            {
+                                filename: 'webkit-masked-url://hidden/',
+                                function: 'uBOL_cssSpecific',
+                                platform: 'javascript:web',
+                                in_app: true,
+                            },
+                        ],
+                        type: 'raw',
+                    },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toBeCalledWith(
+                    '$exception',
+                    { $exception_list: [exception] },
+                    expect.anything()
+                )
+            })
+
+            it('captures exceptions where a masked frame sits alongside the page own code', () => {
+                const exception = {
+                    type: 'TypeError',
+                    value: 'first-party error',
+                    stacktrace: {
+                        frames: [
+                            { filename: 'webkit-masked-url://hidden/', platform: 'javascript:web', in_app: false },
+                            { filename: 'https://example.com/app.js', platform: 'javascript:web', in_app: true },
+                        ],
+                        type: 'raw',
+                    },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('captures Safari extension exceptions when enabled', () => {
+                exceptions.onRemoteConfig({
+                    ok: true,
+                    config: { errorTracking: { captureExtensionExceptions: true } } as RemoteConfig,
+                })
+                const frame = { filename: 'webkit-masked-url://hidden/', platform: 'javascript:web', in_app: false }
+                const exception = { stacktrace: { frames: [frame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+        })
+
+        describe('Injected browser script exceptions', () => {
+            const pageFrame = {
+                filename: 'https://example.com/project/566302/sessions/index.js',
+                platform: 'javascript:web',
+            }
+
+            it.each([
+                ['Firefox for iOS', { type: 'ReferenceError', value: "Can't find variable: __firefox__" }],
+                [
+                    'Chrome for iOS',
+                    { type: 'TypeError', value: "undefined is not an object (evaluating 'window.__gCrWeb.something')" },
+                ],
+            ])('does not capture exceptions thrown by %s injected scripts', (_browser, exceptionFields) => {
+                const exception = { ...exceptionFields, stacktrace: { frames: [pageFrame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toBeCalledWith(
+                    '$exception',
+                    { $exception_list: [exception] },
+                    expect.anything()
+                )
+            })
+
+            it('captures the exception when the value does not reference an injected global', () => {
+                const exception = {
+                    type: 'ReferenceError',
+                    value: 'something is not defined',
+                    stacktrace: { frames: [pageFrame], type: 'raw' },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('captures injected browser script exceptions when extension capture is enabled', () => {
+                exceptions.onRemoteConfig({
+                    ok: true,
+                    config: { errorTracking: { captureExtensionExceptions: true } } as RemoteConfig,
+                })
+                const exception = {
+                    type: 'ReferenceError',
+                    value: "Can't find variable: __firefox__",
+                    stacktrace: { frames: [pageFrame], type: 'raw' },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
         })
 
         describe('PostHog SDK exceptions', () => {

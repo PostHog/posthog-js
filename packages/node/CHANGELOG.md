@@ -1,5 +1,73 @@
 # posthog-node
 
+## 5.51.6
+
+### Patch Changes
+
+- [#4719](https://github.com/PostHog/posthog-js/pull/4719) [`56148bd`](https://github.com/PostHog/posthog-js/commit/56148bd4557e0d0b62a36c01069ef0dd07a9ec57) Thanks [@github-actions](https://github.com/apps/github-actions)! - Expose exception capture methods through the `IPostHog` interface.
+  (2026-09-01)
+
+## 5.51.5
+
+### Patch Changes
+
+- [#4661](https://github.com/PostHog/posthog-js/pull/4661) [`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b) Thanks [@marandaneto](https://github.com/marandaneto)! - Match local feature flag string operators, exact-value coercion, and JSON stringification with the flags service.
+  (2026-09-01)
+
+- [#4708](https://github.com/PostHog/posthog-js/pull/4708) [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Change `bigint` attributes on logs, metrics and spans to send as an int64 rather than as a string.
+  (2026-09-01)
+- Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a)]:
+  - @posthog/core@1.50.0
+
+## 5.51.4
+
+### Patch Changes
+
+- [#4636](https://github.com/PostHog/posthog-js/pull/4636) [`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7) Thanks [@yfwmaniish](https://github.com/yfwmaniish)! - Narrow the `pinterest` entry in the bot-detection blocklist to `pinterestbot`, so real users on Pinterest's in-app browser (whose UA also contains the substring `pinterest`) are no longer misclassified as bots and silently excluded from analytics. The crawler's other UA variant remains covered by the existing generic `bot.htm` entry, so no bot-detection coverage is lost.
+  (2026-08-27)
+
+- [#4660](https://github.com/PostHog/posthog-js/pull/4660) [`dfc3b59`](https://github.com/PostHog/posthog-js/commit/dfc3b59af4edf2b661626041134c79700c514853) Thanks [@posthog](https://github.com/apps/posthog)! - Honor `evaluationContexts` during local evaluation — flags whose evaluation contexts don't overlap the configured list are no longer evaluated locally and resolve to `undefined`.
+  (2026-08-27)
+- Updated dependencies [[`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7)]:
+  - @posthog/core@1.49.1
+
+## 5.51.3
+
+### Patch Changes
+
+- [#4651](https://github.com/PostHog/posthog-js/pull/4651) [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524) Thanks [@marandaneto](https://github.com/marandaneto)! - Treat omitted local evaluation properties as inconclusive for `is_not_set`.
+  (2026-08-27)
+- Updated dependencies [[`7902e44`](https://github.com/PostHog/posthog-js/commit/7902e445d0a66b93bd4c7febce04cdf8836ea86b), [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524)]:
+  - @posthog/core@1.48.12
+
+## 5.51.2
+
+### Patch Changes
+
+- [#4639](https://github.com/PostHog/posthog-js/pull/4639) [`1faeb74`](https://github.com/PostHog/posthog-js/commit/1faeb749974a0c49ad86a6cb68ac4cd5f6414084) Thanks [@marandaneto](https://github.com/marandaneto)! - Handle empty feature flag evaluation key scopes without running local or remote evaluation.
+  (2026-08-25)
+
+- [#4610](https://github.com/PostHog/posthog-js/pull/4610) [`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74) Thanks [@marandaneto](https://github.com/marandaneto)! - Share feature flag matching, hashing, variant, and payload evaluation helpers across the Node.js and Convex SDKs without changing their runtime-specific SemVer behavior.
+  (2026-08-25)
+- Updated dependencies [[`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+  - @posthog/core@1.48.11
+
+## 5.51.1
+
+### Patch Changes
+
+- [#4614](https://github.com/PostHog/posthog-js/pull/4614) [`3593c43`](https://github.com/PostHog/posthog-js/commit/3593c43e98269cbe0bc18e697d38b8c862419b09) Thanks [@iamomiid](https://github.com/iamomiid)! - The Node SDK now sends the raw gzip bytes as the request body instead of wrapping them in a `Blob`. On Node 24.16 and later, reading a `Blob` request body leaks a native `BlobReader` that is never released, so a service calling `capture()` and `flush()` once per request grew by roughly 2.3 KB of heap per event and never gave it back. This completes the work in #4423: switching to `node:zlib` removed the compression-time Blob reads, but the body itself was still a Blob and still got read once per request. Compression behaviour, headers and the wire format are unchanged, and the edge build keeps using `CompressionStream`.
+  (2026-08-24)
+- Updated dependencies [[`3593c43`](https://github.com/PostHog/posthog-js/commit/3593c43e98269cbe0bc18e697d38b8c862419b09)]:
+  - @posthog/core@1.48.9
+
+## 5.51.0
+
+### Minor Changes
+
+- [#4564](https://github.com/PostHog/posthog-js/pull/4564) [`233ac88`](https://github.com/PostHog/posthog-js/commit/233ac88afd0168476178bda66d9f823a95bac068) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back to remote evaluation when a requested flag is missing from loaded local definitions. This
+  changes scoped calls that previously omitted the flag without making a request. (2026-08-24)
+
 ## 5.50.0
 
 ### Minor Changes

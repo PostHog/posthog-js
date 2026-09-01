@@ -58,6 +58,7 @@ const parseFlagsResponse = (
 }
 
 const createFeatureFlags = (instance: any): PostHogFeatureFlags => {
+    instance.config.remote_config_refresh_interval_ms ??= 0
     instance._shouldDisableFlags ??= jest.fn(() => false)
     instance._registerExtensionEventProperties ??= jest.fn(() => () => {})
     instance.on ??= jest.fn(() => () => {})
@@ -77,6 +78,7 @@ const createFeatureFlags = (instance: any): PostHogFeatureFlags => {
             advanced_only_evaluate_survey_feature_flags: instance.config.advanced_only_evaluate_survey_feature_flags,
             advanced_feature_flags_dedup_per_session: instance.config.advanced_feature_flags_dedup_per_session,
             feature_flag_cache_ttl_ms: instance.config.feature_flag_cache_ttl_ms,
+            remote_config_refresh_interval_ms: instance.config.remote_config_refresh_interval_ms,
             feature_flag_request_timeout_ms: instance.config.feature_flag_request_timeout_ms,
             disable_compression: instance.config.disable_compression,
             evaluation_contexts: instance.config.evaluation_contexts,
@@ -2363,7 +2365,7 @@ describe('featureflags', () => {
             })
 
             // check right compression is sent
-            expect(instance._send_request.mock.calls[0][0].compression).toEqual('base64')
+            expect(instance._send_request.mock.calls[0][0].compression).toEqual('best-available')
 
             // check the request sent person properties
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
@@ -2818,6 +2820,7 @@ describe('featureflags', () => {
                         some: 'payload',
                     },
                     'alpha-feature-2': 200,
+                    'x-flag': 'stale-payload',
                 },
                 $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
                 $enabled_feature_flags: {
@@ -2893,6 +2896,10 @@ describe('featureflags', () => {
                 'disabled-flag': false,
                 'multivariate-flag': 'variant-1',
                 'x-flag': 'x-value', // new successful flag merged in
+            })
+            expect(featureFlags.getFlagPayloads()).toEqual({
+                'alpha-feature-2': 200,
+                'beta-feature': { some: 'payload' },
             })
         })
     })
@@ -3369,6 +3376,27 @@ describe('parseFlagsResponse', () => {
         )
     })
 
+    it('preserves falsy payloads from detailed flag responses', () => {
+        parseFlagsResponse(
+            {
+                flags: {
+                    'beta-feature': {
+                        key: 'beta-feature',
+                        enabled: true,
+                        metadata: { payload: false },
+                    },
+                },
+            },
+            persistence
+        )
+
+        expect(persistence.register).toHaveBeenCalledWith(
+            expect.objectContaining({
+                $feature_flag_payloads: { 'beta-feature': false },
+            })
+        )
+    })
+
     it('enables feature flag details from /flags?v=1 response', () => {
         const flagsResponse = {
             featureFlags: {
@@ -3732,6 +3760,16 @@ describe('parseFlagsResponse', () => {
                 expectedDetails: { 'survey-flag': surveyFlagDetail },
             },
             {
+                name: 'partial response removes stale payloads for reevaluated flags',
+                existingFlags: { 'survey-flag': false, 'other-flag': true },
+                existingPayloads: { 'survey-flag': 'stale-payload', 'other-flag': 'preserved-payload' },
+                existingDetails: {},
+                options: { partialResponse: true },
+                expectedFlags: { 'survey-flag': true, 'other-flag': true },
+                expectedPayloads: { 'other-flag': 'preserved-payload' },
+                expectedDetails: { 'survey-flag': surveyFlagDetail },
+            },
+            {
                 name: 'without partialResponse, response overwrites existing flags entirely',
                 existingFlags: { 'bootstrapped-flag': true, 'session-recording': true },
                 existingPayloads: {},
@@ -3836,6 +3874,7 @@ describe('getRemoteConfigPayload', () => {
             expect.objectContaining({
                 method: 'POST',
                 url: 'flags/flags/?v=2',
+                compression: 'best-available',
                 data: expect.objectContaining({
                     distinct_id: 'test-distinct-id',
                     token: 'test-token',

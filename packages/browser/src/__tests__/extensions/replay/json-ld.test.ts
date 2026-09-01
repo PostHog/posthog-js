@@ -1,0 +1,658 @@
+import { sanitizeJsonLd, startJsonLdCapture } from '../../../extensions/replay/external/json-ld'
+
+const GOOGLE_SEARCH_TYPES =
+    '3DModel Accommodation Action AdministrativeArea AggregateOffer AggregateRating AlignmentObject Answer Article BedDetails Blog BlogPosting Book BorrowAction Brand BreadcrumbList BroadcastEvent Car Certification Clip Comment ContactPoint Country Course CreativeWork CreativeWorkSeason CreativeWorkSeries CreditCard DataCatalog DataDownload DataFeed Dataset DaySpa DefinedRegion DiscussionForumPosting EducationalOccupationalCredential Electrician EmployerAggregateRating EntryPoint Episode Event Game GeoCoordinates GeoShape HealthClub Hotel HowTo HowToDirection HowToSection HowToStep HowToTip ImageObject InteractionCounter ItemList JobPosting LearningResource Library LibrarySystem ListItem LocalBusiness LocationFeatureSpecification Locksmith LodgingBusiness MathSolver MediaObject MemberProgram MemberProgramTier MerchantReturnPolicy MerchantReturnPolicySeasonalOverride Message MobileApplication MonetaryAmount Movie MusicPlaylist MusicRecording NewsArticle NutritionInformation OccupationalExperienceRequirements Offer OfferShippingDetails OnlineStore OpeningHoursSpecification Organization PeopleAudience PerformingGroup Person Pharmacy Place Plumber PostalAddress PriceSpecification Product ProductGroup ProfilePage PropertyValue QAPage QuantitativeValue Question Quiz Rating ReadAction Recipe Restaurant Review SeekToAction ServicePeriod ShippingConditions ShippingDeliveryTime ShippingRateSettings ShippingService SocialMediaPosting SoftwareApplication SolveMathAction SpeakableSpecification State Store Thing UnitPriceSpecification VacationRental VideoGame VideoObject WatchAction WebApplication WebPage WebPageElement'.split(
+        ' '
+    )
+const COMMON_SCHEMA_TYPES =
+    'AboutPage AudioObject AutoDealer Bakery BarOrPub BusinessEvent CafeOrCoffeeShop CollegeOrUniversity CollectionPage ContactPage Corporation Dentist EducationEvent EducationalOrganization FAQPage Festival FoodEstablishment GovernmentOrganization IndividualProduct LegalService MedicalBusiness MusicEvent NGO OfferCatalog Photograph Physician PodcastEpisode PodcastSeries ProductModel RealEstateAgent ScholarlyArticle School SearchAction SearchResultsPage Service SiteNavigationElement SportsEvent SportsOrganization TVEpisode TVSeries TechArticle TheaterEvent WebSite'.split(
+        ' '
+    )
+
+function jsonLdScript(value: unknown): HTMLScriptElement {
+    const script = document.createElement('script')
+    script.type = 'application/ld+json'
+    script.textContent = JSON.stringify(value)
+    return script
+}
+
+async function deliverMutations(): Promise<void> {
+    await Promise.resolve()
+    await Promise.resolve()
+}
+
+describe('JSON-LD replay capture', () => {
+    afterEach(() => {
+        document.body.replaceChildren()
+    })
+
+    it('accepts every Google-listed type', () => {
+        for (const type of GOOGLE_SEARCH_TYPES) {
+            expect(sanitizeJsonLd(JSON.stringify({ '@context': 'https://schema.org', '@type': type }))?.[0]).toEqual({
+                '@context': 'https://schema.org',
+                '@type': type,
+            })
+        }
+    })
+
+    it('accepts common Schema.org types outside the Google list', () => {
+        for (const type of COMMON_SCHEMA_TYPES) {
+            expect(sanitizeJsonLd(JSON.stringify({ '@context': 'https://schema.org', '@type': type }))?.[0]).toEqual({
+                '@context': 'https://schema.org',
+                '@type': type,
+            })
+        }
+    })
+
+    it('sanitizes root graphs and drops unsupported graph entities', () => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@graph': [
+                        {
+                            '@type': 'WebSite',
+                            datePublished: '2026-08-25',
+                            email: 'private@example.com',
+                            potentialAction: {
+                                '@type': 'SearchAction',
+                                actionStatus: 'https://schema.org/PotentialActionStatus',
+                                target: 'https://example.com/search?q={private}',
+                            },
+                        },
+                        {
+                            '@type': 'FAQPage',
+                            inLanguage: 'en',
+                            text: 'Private question and answer',
+                        },
+                        {
+                            '@type': 'Person',
+                            '@id': 'person-id',
+                            name: 'Private name',
+                        },
+                        {
+                            '@type': 'PrivateType',
+                            email: 'private@example.com',
+                        },
+                        'private@example.com',
+                    ],
+                })
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@graph': [
+                {
+                    '@type': 'WebSite',
+                    datePublished: '2026-08-25',
+                    potentialAction: {
+                        '@type': 'SearchAction',
+                        actionStatus: 'https://schema.org/PotentialActionStatus',
+                    },
+                },
+                {
+                    '@type': 'FAQPage',
+                    inLanguage: 'en',
+                },
+                {
+                    '@type': 'Person',
+                    '@id': 'person-id',
+                },
+            ],
+        })
+    })
+
+    it.each(['BreadcrumbList', 'ItemList'])('sanitizes nested items in %s', (type) => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': type,
+                    itemListElement: [
+                        {
+                            '@type': 'ListItem',
+                            position: 1,
+                            name: 'Private label',
+                            item: {
+                                '@type': 'Product',
+                                name: 'Camera',
+                                email: 'private@example.com',
+                            },
+                        },
+                        {
+                            '@type': 'Person',
+                            '@id': 'private-person',
+                        },
+                    ],
+                })
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@type': type,
+            itemListElement: [
+                {
+                    '@type': 'ListItem',
+                    position: 1,
+                    item: {
+                        '@type': 'Product',
+                        name: 'Camera',
+                    },
+                },
+            ],
+        })
+    })
+
+    it('sanitizes offer catalogs and services', () => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify([
+                    {
+                        '@context': 'https://schema.org',
+                        '@type': 'OfferCatalog',
+                        name: 'Services',
+                        itemListElement: {
+                            '@type': 'Offer',
+                            price: 100,
+                            email: 'private@example.com',
+                        },
+                    },
+                    {
+                        '@context': 'https://schema.org',
+                        '@type': 'Service',
+                        name: 'Installation',
+                        serviceType: 'Installation',
+                        email: 'private@example.com',
+                        provider: {
+                            '@type': 'EducationalOrganization',
+                            name: 'Acme',
+                            telephone: '+44 0000 000000',
+                        },
+                    },
+                ])
+            )?.[0]
+        ).toEqual([
+            {
+                '@context': 'https://schema.org',
+                '@type': 'OfferCatalog',
+                name: 'Services',
+                itemListElement: {
+                    '@type': 'Offer',
+                    price: 100,
+                },
+            },
+            {
+                '@context': 'https://schema.org',
+                '@type': 'Service',
+                name: 'Installation',
+                serviceType: 'Installation',
+                provider: {
+                    '@type': 'EducationalOrganization',
+                    name: 'Acme',
+                },
+            },
+        ])
+    })
+
+    it('sanitizes type arrays and full Schema.org type URLs', () => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': ['https://schema.org/Product', 'Car', 'PrivateType', 42],
+                    name: 'Camera',
+                    email: 'private@example.com',
+                })
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@type': ['Product', 'Car'],
+            name: 'Camera',
+        })
+
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': 'https://schema.org/Organization',
+                    name: 'Acme',
+                })
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@type': 'Organization',
+            name: 'Acme',
+        })
+    })
+
+    it('keeps only path-allowed properties and @id values', () => {
+        const sanitized = sanitizeJsonLd(
+            JSON.stringify({
+                '@context': 'http://schema.org/',
+                '@type': 'Product',
+                '@id': 'https://example.com/products/123',
+                name: 'Camera',
+                email: 'private@example.com',
+                manufacturer: {
+                    '@type': 'Organization',
+                    '@id': 'https://example.com/organizations/acme',
+                    name: 'Acme',
+                    email: 'private@example.com',
+                },
+                offers: {
+                    '@type': 'Offer',
+                    price: 100,
+                    seller: {
+                        '@type': 'Person',
+                        name: 'Private name',
+                    },
+                },
+            })
+        )
+
+        expect(sanitized?.[0]).toEqual({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            '@id': 'https://example.com/products/123',
+            name: 'Camera',
+            manufacturer: {
+                '@type': 'Organization',
+                '@id': 'https://example.com/organizations/acme',
+                name: 'Acme',
+            },
+            offers: {
+                '@type': 'Offer',
+                price: 100,
+            },
+        })
+    })
+
+    it('keeps scalar leaf values and drops non-scalar leaf values', () => {
+        const sanitized = sanitizeJsonLd(
+            JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: ['Camera', 2, true, null],
+                sku: { value: 'private' },
+                color: ['black', { value: 'private' }],
+                category: false,
+            })
+        )
+
+        expect(sanitized?.[0]).toEqual({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            name: ['Camera', 2, true, null],
+            category: false,
+        })
+    })
+
+    it('keeps non-PII leaf properties without a type-specific path', () => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': 'Thing',
+                    availability: 'https://schema.org/InStock',
+                    isAccessibleForFree: true,
+                    name: 'Private name',
+                    numberOfItems: 2,
+                    priceCurrency: 'GBP',
+                    ratingValue: 4.5,
+                })
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@type': 'Thing',
+            availability: 'https://schema.org/InStock',
+            isAccessibleForFree: true,
+            numberOfItems: 2,
+            priceCurrency: 'GBP',
+            ratingValue: 4.5,
+        })
+    })
+
+    it('sanitizes root and nested entity arrays', () => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify([
+                    {
+                        '@context': 'https://schema.org',
+                        '@type': 'Product',
+                        name: 'Camera',
+                        offers: [
+                            { '@type': 'Offer', price: 100, email: 'private@example.com' },
+                            { '@type': 'Person', '@id': 'private-person' },
+                        ],
+                    },
+                    { '@context': 'https://schema.org', '@type': 'Organization', name: 'Acme' },
+                ])
+            )?.[0]
+        ).toEqual([
+            {
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'Camera',
+                offers: [{ '@type': 'Offer', price: 100 }],
+            },
+            { '@context': 'https://schema.org', '@type': 'Organization', name: 'Acme' },
+        ])
+    })
+
+    it.each([
+        'not json',
+        JSON.stringify({ '@context': 'https://example.com', '@type': 'Product' }),
+        JSON.stringify({ '@context': 'https://schema.org', '@type': 'PrivateType' }),
+        JSON.stringify({ '@context': 'https://schema.org', '@type': ['PrivateType', 'OtherPrivateType'] }),
+        JSON.stringify({ '@context': 'https://schema.org', '@graph': [{ '@type': 'PrivateType' }] }),
+        JSON.stringify({ '@context': 'https://schema.org', '@type': 'constructor', '@id': 'private@example.com' }),
+        JSON.stringify({ '@context': 'https://schema.org', '@type': 'toString', '@id': 'private@example.com' }),
+        JSON.stringify({ '@context': 'https://schema.org', '@type': '__proto__', '@id': 'private@example.com' }),
+        JSON.stringify([
+            { '@context': 'https://schema.org', '@type': 'Product' },
+            { '@context': 'https://schema.org', '@type': 'PrivateType' },
+        ]),
+    ])('drops an invalid JSON-LD document', (value) => {
+        expect(sanitizeJsonLd(value)).toBeNull()
+    })
+
+    it.each(['ContactPoint', 'Person', 'PostalAddress'])('drops PII-bearing %s properties', (type) => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': type,
+                    '@id': 'entity-id',
+                    name: 'Private name',
+                    email: 'private@example.com',
+                    telephone: '+44 0000 000000',
+                    streetAddress: 'Private address',
+                })
+            )?.[0]
+        ).toEqual({
+            '@context': 'https://schema.org',
+            '@type': type,
+            '@id': 'entity-id',
+        })
+    })
+
+    it('ignores inherited JSON-LD properties', () => {
+        const properties = ['@context', '@type', '@id', 'name', 'ratingValue']
+        const values = ['https://schema.org', 'Product', 'private-id', 'private-name', 5]
+        const descriptors = properties.map((property) => Object.getOwnPropertyDescriptor(Object.prototype, property))
+        let inheritedContext: ReturnType<typeof sanitizeJsonLd>
+        let inheritedType: ReturnType<typeof sanitizeJsonLd>
+        let inheritedLeaves: ReturnType<typeof sanitizeJsonLd>
+
+        try {
+            properties.forEach((property, index) => {
+                Object.defineProperty(Object.prototype, property, {
+                    configurable: true,
+                    value: values[index],
+                })
+            })
+            inheritedContext = sanitizeJsonLd(JSON.stringify({ '@type': 'Product' }))
+            inheritedType = sanitizeJsonLd(JSON.stringify({ '@context': 'https://schema.org' }))
+            inheritedLeaves = sanitizeJsonLd(JSON.stringify({ '@context': 'https://schema.org', '@type': 'Product' }))
+        } finally {
+            properties.forEach((property, index) => {
+                const descriptor = descriptors[index]
+                if (descriptor) {
+                    Object.defineProperty(Object.prototype, property, descriptor)
+                } else {
+                    Reflect.deleteProperty(Object.prototype, property)
+                }
+            })
+        }
+
+        expect(inheritedContext).toBeNull()
+        expect(inheritedType).toBeNull()
+        expect(inheritedLeaves?.[0]).toEqual({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+        })
+    })
+
+    it('emits initial, added, and changed JSON-LD without duplicates', async () => {
+        const emit = jest.fn(() => true)
+        const initial = jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'One' })
+        document.body.appendChild(initial)
+
+        const capture = startJsonLdCapture(document, MutationObserver, {
+            blockClass: 'ph-no-capture',
+            maskTextClass: 'ph-mask',
+            emit,
+        })
+        capture.scan()
+
+        expect(emit).toHaveBeenCalledWith({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            name: 'One',
+        })
+
+        const added = jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'Two' })
+        document.body.appendChild(added)
+        await deliverMutations()
+
+        added.textContent = JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            name: 'Two',
+            email: 'private@example.com',
+        })
+        await deliverMutations()
+
+        added.textContent = JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            name: 'Three',
+        })
+        await deliverMutations()
+
+        expect(emit.mock.calls).toEqual([
+            [{ '@context': 'https://schema.org', '@type': 'Product', name: 'One' }],
+            [{ '@context': 'https://schema.org', '@type': 'Product', name: 'Two' }],
+            [{ '@context': 'https://schema.org', '@type': 'Product', name: 'Three' }],
+        ])
+
+        capture.stop()
+        document.body.appendChild(jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'Four' }))
+        await deliverMutations()
+        expect(emit).toHaveBeenCalledTimes(3)
+    })
+
+    it('does not scan subtrees for ordinary text changes', async () => {
+        const text = document.createTextNode('before')
+        document.body.append(text)
+        const querySelectorAll = jest.spyOn(Element.prototype, 'querySelectorAll')
+        const capture = startJsonLdCapture(document, MutationObserver, { emit: jest.fn(() => true) })
+        querySelectorAll.mockClear()
+
+        text.data = 'after'
+        await deliverMutations()
+
+        expect(querySelectorAll).not.toHaveBeenCalled()
+        querySelectorAll.mockRestore()
+        capture.stop()
+    })
+
+    it('limits the total JSON-LD emitted by one recorder', async () => {
+        for (let index = 0; index < 6; index++) {
+            document.body.appendChild(
+                jsonLdScript({
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    name: `${index}${'x'.repeat(19_000)}`,
+                })
+            )
+        }
+        const emit = jest.fn(() => true)
+
+        const capture = startJsonLdCapture(document, MutationObserver, { emit })
+        capture.scan()
+        const querySelectorAll = jest.spyOn(Element.prototype, 'querySelectorAll')
+        const container = document.createElement('div')
+        container.appendChild(jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product' }))
+        document.body.append(container)
+        await deliverMutations()
+
+        expect(emit).toHaveBeenCalledTimes(5)
+        expect(querySelectorAll).not.toHaveBeenCalled()
+        querySelectorAll.mockRestore()
+        capture.stop()
+    })
+
+    it('rescans after capture becomes enabled', () => {
+        let enabled = false
+        const emit = jest.fn(() => true)
+        document.body.appendChild(
+            jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' })
+        )
+        const capture = startJsonLdCapture(document, MutationObserver, {
+            emit,
+            getCaptureState: () => enabled,
+        })
+
+        expect(emit).not.toHaveBeenCalled()
+        enabled = true
+        capture.scan()
+        expect(emit).toHaveBeenCalledWith({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            name: 'Camera',
+        })
+        capture.stop()
+    })
+
+    it('drops scripts moved before capture into a masked shadow root or another document', async () => {
+        const emit = jest.fn(() => true)
+        const capture = startJsonLdCapture(document, MutationObserver, {
+            maskTextClass: 'ph-mask',
+            emit,
+        })
+        const shadowHost = document.createElement('div')
+        shadowHost.className = 'ph-mask'
+        const shadowRoot = shadowHost.attachShadow({ mode: 'open' })
+        document.body.append(shadowHost)
+        const shadowScript = jsonLdScript({
+            '@context': 'https://schema.org',
+            '@type': 'Person',
+            '@id': 'shadow-private',
+        })
+        document.body.append(shadowScript)
+        shadowRoot.append(shadowScript)
+
+        const iframe = document.createElement('iframe')
+        document.body.append(iframe)
+        const frameScript = jsonLdScript({
+            '@context': 'https://schema.org',
+            '@type': 'Person',
+            '@id': 'frame-private',
+        })
+        document.body.append(frameScript)
+        iframe.contentDocument!.body.append(frameScript)
+        await deliverMutations()
+
+        expect(emit).not.toHaveBeenCalled()
+        capture.stop()
+    })
+
+    it('drops JSON-LD inside text masks and blocked elements', async () => {
+        const emit = jest.fn(() => true)
+        document.body.innerHTML = '<div class="ph-mask"></div><div class="private"></div>'
+        document.body.children[0].appendChild(
+            jsonLdScript({ '@context': 'https://schema.org', '@type': 'Person', '@id': 'masked' })
+        )
+        document.body.children[1].appendChild(
+            jsonLdScript({ '@context': 'https://schema.org', '@type': 'Person', '@id': 'blocked' })
+        )
+
+        const capture = startJsonLdCapture(document, MutationObserver, {
+            blockClass: 'ph-no-capture',
+            blockSelector: '.private',
+            maskTextClass: 'ph-mask',
+            emit,
+        })
+        capture.scan()
+
+        expect(emit).not.toHaveBeenCalled()
+
+        document.body.children[0].appendChild(
+            jsonLdScript({ '@context': 'https://schema.org', '@type': 'Person', '@id': 'dynamic-masked' })
+        )
+        document.body.children[1].appendChild(
+            jsonLdScript({ '@context': 'https://schema.org', '@type': 'Person', '@id': 'dynamic-blocked' })
+        )
+        await deliverMutations()
+        expect(emit).not.toHaveBeenCalled()
+
+        const transient = jsonLdScript({ '@context': 'https://schema.org', '@type': 'Person', '@id': 'transient' })
+        document.body.children[0].appendChild(transient)
+        transient.remove()
+        await deliverMutations()
+        expect(emit).not.toHaveBeenCalled()
+        capture.stop()
+    })
+
+    it('ignores non-JSON-LD scripts until their type changes', async () => {
+        const emit = jest.fn(() => true)
+        const value = JSON.stringify({ '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' })
+        const scripts = ['', 'text/javascript', 'application/json'].map((type) => {
+            const script = document.createElement('script')
+            script.type = type
+            if (type === 'application/json') {
+                script.textContent = value
+            }
+            document.body.appendChild(script)
+            script.textContent = value
+            return script
+        })
+        const capture = startJsonLdCapture(document, MutationObserver, { emit })
+
+        capture.scan()
+        expect(emit).not.toHaveBeenCalled()
+
+        scripts[2].type = 'application/ld+json'
+        await deliverMutations()
+        expect(emit).toHaveBeenCalledWith({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            name: 'Camera',
+        })
+        capture.stop()
+    })
+
+    it('does not deduplicate an event that the recorder rejects', () => {
+        let acceptsEvents = false
+        const emit = jest.fn(() => acceptsEvents)
+        document.body.appendChild(
+            jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' })
+        )
+        const capture = startJsonLdCapture(document, MutationObserver, { emit })
+
+        capture.scan()
+        acceptsEvents = true
+        capture.scan()
+        capture.scan()
+
+        expect(emit).toHaveBeenCalledTimes(2)
+        capture.stop()
+    })
+
+    it('retries an event that a forced scan cannot emit', () => {
+        let acceptsEvents = true
+        const emit = jest.fn(() => acceptsEvents)
+        document.body.appendChild(
+            jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' })
+        )
+        const capture = startJsonLdCapture(document, MutationObserver, { emit })
+
+        capture.scan()
+        acceptsEvents = false
+        capture.scan(true)
+        acceptsEvents = true
+        capture.scan()
+
+        expect(emit).toHaveBeenCalledTimes(3)
+        capture.stop()
+    })
+})

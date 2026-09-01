@@ -234,8 +234,41 @@ describe('SurveyPopup', () => {
             posthog: mockPosthog,
             properties: undefined,
             surveyLanguage: undefined,
+            questionSnapshots: {
+                q1: 'Question 1',
+            },
         })
         expect(screen.getByText('Question 2')).toBeVisible()
+    })
+
+    test('preserves questionSnapshots when navigating back', () => {
+        const generatedId = 'newly-generated-id'
+        mockedGetInProgressSurveyState.mockReturnValue(null)
+        mockedUuidv7.mockReturnValue(generatedId)
+        const goBackSurvey = {
+            ...mockSurvey,
+            appearance: { ...mockSurvey.appearance, allowGoBack: true },
+        }
+        render(
+            <SurveyPopup
+                survey={goBackSurvey}
+                removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                isPopup={true}
+                posthog={mockPosthog as any}
+            />
+        )
+
+        fireEvent.input(screen.getByRole('textbox'), { target: { value: 'Answer Q1' } })
+        fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
+        expect(screen.getByText('Question 2')).toBeVisible()
+
+        fireEvent.click(screen.getByRole('button', { name: /go to previous question/i }))
+        expect(screen.getByText('Question 1')).toBeVisible()
+
+        const storageKey = Object.keys(localStorage).find((key) => key.includes(goBackSurvey.id))
+        expect(storageKey).toBeDefined()
+        const persisted = JSON.parse(localStorage.getItem(storageKey!)!)
+        expect(persisted.questionSnapshots).toEqual({ q1: 'Question 1' })
     })
 
     test('clears localStorage on final submission', async () => {
@@ -279,6 +312,10 @@ describe('SurveyPopup', () => {
             posthog: mockPosthog,
             properties: undefined,
             surveyLanguage: undefined,
+            questionSnapshots: {
+                q1: 'Question 1',
+                q2: 'Question 2',
+            },
         })
 
         // *** Manually dispatch the event that the real function would dispatch ***
@@ -289,6 +326,28 @@ describe('SurveyPopup', () => {
 
         // We've verified sendSurveyEvent was called with isSurveyCompleted=true,
         // implicitly testing that clearInProgressSurveyState would be called internally.
+    })
+
+    test('clears the auto-disappear timer when unmounted', () => {
+        const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+        const { unmount } = render(
+            <SurveyPopup
+                survey={{
+                    ...mockSurvey,
+                    appearance: { ...mockSurvey.appearance, autoDisappear: true },
+                }}
+                removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                isPopup={true}
+                posthog={mockPosthog as any}
+            />
+        )
+
+        window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: mockSurvey.id } }))
+        window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: mockSurvey.id } }))
+        unmount()
+
+        expect(clearTimeoutSpy).toHaveBeenCalledTimes(2)
+        clearTimeoutSpy.mockRestore()
     })
 
     test('clears localStorage on dismissal', async () => {

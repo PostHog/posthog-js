@@ -1,3 +1,4 @@
+import { getFeatureFlagHash, getFeatureFlagVariant, resolveFeatureFlagPayload } from '@posthog/core'
 import type {
   FeatureFlagCondition,
   FeatureFlagEvaluationContext,
@@ -7,18 +8,7 @@ import type {
   JsonType,
   PostHogFeatureFlag,
 } from './types.js'
-import { hashSHA1 } from './crypto.js'
 import { InconclusiveMatchError, RequiresServerEvaluation, matchCohort, matchProperty } from './match-property.js'
-
-// Matches posthog-node's hashing constant exactly; the value is larger than Number.MAX_SAFE_INTEGER
-// by design and we don't want the no-loss-of-precision rule to coerce it to a different number.
-// eslint-disable-next-line no-loss-of-precision
-const LONG_SCALE = 0xfffffffffffffff
-
-async function _hash(key: string, bucketingValue: string, salt: string = ''): Promise<number> {
-  const hashString = await hashSHA1(`${key}.${bucketingValue}${salt}`)
-  return parseInt(hashString.slice(0, 15), 16) / LONG_SCALE
-}
 
 export type EvaluationResult = {
   value: FeatureFlagValue
@@ -263,28 +253,7 @@ export class LocalFeatureFlagEvaluator {
   }
 
   private getPayloadForValue(key: string, flagValue: FeatureFlagValue): JsonType | null {
-    if (flagValue === false || flagValue === null || flagValue === undefined) return null
-
-    let payload: JsonType | null = null
-    const payloads = this.flagsByKey[key]?.filters?.payloads
-    if (!payloads) return null
-
-    if (typeof flagValue === 'boolean') {
-      payload = payloads[flagValue.toString()] || null
-    } else if (typeof flagValue === 'string') {
-      payload = payloads[flagValue] || null
-    }
-
-    if (payload == null) return null
-    if (typeof payload === 'object') return payload
-    if (typeof payload === 'string') {
-      try {
-        return JSON.parse(payload)
-      } catch {
-        return payload
-      }
-    }
-    return payload
+    return resolveFeatureFlagPayload(this.flagsByKey[key]?.filters?.payloads, flagValue)
   }
 
   private async evaluateFlagDependency(
@@ -434,27 +403,17 @@ export class LocalFeatureFlagEvaluator {
       if (rolloutPercentage == undefined) return true
     }
 
-    if (rolloutPercentage != undefined && (await _hash(flag.key, bucketingValue)) > rolloutPercentage / 100.0) {
+    if (
+      rolloutPercentage != undefined &&
+      (await getFeatureFlagHash(flag.key, bucketingValue)) > rolloutPercentage / 100.0
+    ) {
       return false
     }
     return true
   }
 
   private async getMatchingVariant(flag: PostHogFeatureFlag, bucketingValue: string): Promise<string | undefined> {
-    const hashValue = await _hash(flag.key, bucketingValue, 'variant')
-    return this.variantLookupTable(flag).find((v) => hashValue >= v.valueMin && hashValue < v.valueMax)?.key
-  }
-
-  private variantLookupTable(flag: PostHogFeatureFlag): { valueMin: number; valueMax: number; key: string }[] {
-    const table: { valueMin: number; valueMax: number; key: string }[] = []
-    let valueMin = 0
-    const multivariates = flag.filters?.multivariate?.variants || []
-    for (const variant of multivariates) {
-      const valueMax = valueMin + variant.rollout_percentage / 100.0
-      table.push({ valueMin, valueMax, key: variant.key })
-      valueMin = valueMax
-    }
-    return table
+    return getFeatureFlagVariant(flag.key, bucketingValue, flag.filters?.multivariate?.variants || [])
   }
 }
 

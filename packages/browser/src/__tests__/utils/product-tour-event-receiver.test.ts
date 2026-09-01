@@ -55,6 +55,24 @@ describe('product-tour-event-receiver', () => {
         instance.persistence?.clear()
     })
 
+    it('keeps earlier triggers when tours are registered incrementally', () => {
+        const firstTour = makeTour()
+        const secondTour = makeTour({
+            id: 'second-tour',
+            conditions: { events: { values: [{ name: 'second_trigger' }] } },
+        })
+        const { receiver, hook } = setup(firstTour)
+        ;(instance.productTours.getProductTours as jest.Mock).mockImplementation((callback) =>
+            callback([firstTour, secondTour])
+        )
+
+        receiver.register([secondTour])
+
+        hook('trigger_event')
+        hook('second_trigger')
+        expect(receiver.getTours()).toEqual(expect.arrayContaining(['lifecycle-tour', 'second-tour']))
+    })
+
     it('does not let an armed-but-unshown tour survive a reload', () => {
         const { receiver, hook } = setup(makeTour())
 

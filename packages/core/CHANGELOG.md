@@ -1,5 +1,95 @@
 # @posthog/core
 
+## 1.50.2
+
+### Patch Changes
+
+- [#4727](https://github.com/PostHog/posthog-js/pull/4727) [`ec9354c`](https://github.com/PostHog/posthog-js/commit/ec9354c367e70dde8ba98c60761f8d462b78b430) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Drop attributes with an empty key from exported logs and metrics instead of sending them. OTLP requires a non-empty key, and the server stored one verbatim, where it appeared as a nameless attribute that filters could not match.
+  (2026-09-01)
+
+## 1.50.1
+
+### Patch Changes
+
+- [#4710](https://github.com/PostHog/posthog-js/pull/4710) [`e87820a`](https://github.com/PostHog/posthog-js/commit/e87820a84d9a402b7db9b1c31c966e8028d0d65a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `os.name` and `os.version` resource attributes to logs from the browser SDK, overridable via `logs.resourceAttributes`
+  (2026-09-01)
+
+## 1.50.0
+
+### Minor Changes
+
+- [#4663](https://github.com/PostHog/posthog-js/pull/4663) [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3) Thanks [@pauldambra](https://github.com/pauldambra)! - Detect the Claude, Codex, and ChatGPT apps from their user agent markers: `$browser` now reports the app name instead of `Chrome`.
+
+  ChatGPT versions its apps differently per platform, so its `$browser_version` is not comparable across platforms. (2026-09-01)
+
+### Patch Changes
+
+- [#4661](https://github.com/PostHog/posthog-js/pull/4661) [`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b) Thanks [@marandaneto](https://github.com/marandaneto)! - Match local feature flag string operators, exact-value coercion, and JSON stringification with the flags service.
+  (2026-09-01)
+
+- [#4708](https://github.com/PostHog/posthog-js/pull/4708) [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Change `bigint` attributes on logs, metrics and spans to send as an int64 rather than as a string.
+  (2026-09-01)
+
+## 1.49.2
+
+### Patch Changes
+
+- [#4626](https://github.com/PostHog/posthog-js/pull/4626) [`3c650a1`](https://github.com/PostHog/posthog-js/commit/3c650a15f1d3eaf5add26b7e4c33cf4286af75f4) Thanks [@nandinitiw](https://github.com/nandinitiw)! - Re-translate popover surveys when the display language changes while the survey is on screen, either from a browser `languagechange` event or from `identify()` updating the `language` person property. In-progress answers are preserved. `$survey_questions[].question` and `$survey_language` on `survey sent` / `survey dismissed` now report the text and language the user saw when they answered, not the language active when the event fired. Feedback-button (widget) surveys are unchanged.
+  (2026-08-28)
+
+## 1.49.1
+
+### Patch Changes
+
+- [#4636](https://github.com/PostHog/posthog-js/pull/4636) [`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7) Thanks [@yfwmaniish](https://github.com/yfwmaniish)! - Narrow the `pinterest` entry in the bot-detection blocklist to `pinterestbot`, so real users on Pinterest's in-app browser (whose UA also contains the substring `pinterest`) are no longer misclassified as bots and silently excluded from analytics. The crawler's other UA variant remains covered by the existing generic `bot.htm` entry, so no bot-detection coverage is lost.
+  (2026-08-27)
+
+## 1.49.0
+
+### Minor Changes
+
+- [#4036](https://github.com/PostHog/posthog-js/pull/4036) [`718beee`](https://github.com/PostHog/posthog-js/commit/718beee86aa31026beef9af2c13b049e9b847721) Thanks [@emmayusufu](https://github.com/emmayusufu)! - Add `capturedAt` to `PostHogLogs.captureLog()` for stamping a record with the time and context of when the event occurred, and `PostHogLogs.clearQueue()` for dropping every queued record
+  (2026-08-27)
+
+### Patch Changes
+
+- [#4653](https://github.com/PostHog/posthog-js/pull/4653) [`712223a`](https://github.com/PostHog/posthog-js/commit/712223a8ffb43dd28cc78059301ff607021bc6be) Thanks [@posthog](https://github.com/apps/posthog)! - Fix request timeouts never firing on pages where a browser extension makes `Error.prototype.name` non-writable
+  (2026-08-27)
+
+## 1.48.12
+
+### Patch Changes
+
+- [#4616](https://github.com/PostHog/posthog-js/pull/4616) [`7902e44`](https://github.com/PostHog/posthog-js/commit/7902e445d0a66b93bd4c7febce04cdf8836ea86b) Thanks [@shahidrogers](https://github.com/shahidrogers)! - Stop crashing when the environment's `Math.random()` misbehaves. The vendored UUIDv7 generator builds its random fields from a `Math.random()`-based `nextUint32()`, and a nonconformant implementation that returns a value of 1 or greater, or NaN, pushed those fields out of range, so `fromFieldsV7` threw `RangeError: invalid field value` on every event captured. On React Native this is not hypothetical: Hermes implements `Math.random` with C++ `std::uniform_real_distribution`, which is documented to occasionally return its upper bound, and affected Android devices crash-looped on startup during the SDK's internal event-queue flush — a path applications cannot wrap in a try/catch. `nextUint32()` now clamps its result to a valid unsigned 32-bit integer (`>>> 0`), so a bad random value degrades UUID entropy for that id instead of taking the app down; the timestamp bits are untouched and generated ids remain spec-valid UUIDv7.
+  (2026-08-27)
+
+- [#4651](https://github.com/PostHog/posthog-js/pull/4651) [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524) Thanks [@marandaneto](https://github.com/marandaneto)! - Treat omitted local evaluation properties as inconclusive for `is_not_set`.
+  (2026-08-27)
+
+## 1.48.11
+
+### Patch Changes
+
+- [#4610](https://github.com/PostHog/posthog-js/pull/4610) [`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74) Thanks [@marandaneto](https://github.com/marandaneto)! - Share feature flag matching, hashing, variant, and payload evaluation helpers across the Node.js and Convex SDKs without changing their runtime-specific SemVer behavior.
+  (2026-08-25)
+
+- [#4611](https://github.com/PostHog/posthog-js/pull/4611) [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12) Thanks [@marandaneto](https://github.com/marandaneto)! - Share survey property matching between the browser and React Native SDKs while preserving their existing missing-value behavior.
+  (2026-08-25)
+
+## 1.48.10
+
+### Patch Changes
+
+- [#4623](https://github.com/PostHog/posthog-js/pull/4623) [`be299df`](https://github.com/PostHog/posthog-js/commit/be299dff71d2cf0c955efff1ca0b9cadc3b64713) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix buffered logs being dropped instead of retried after HTTP 408, 429 or 5xx
+  (2026-08-24)
+
+## 1.48.9
+
+### Patch Changes
+
+- [#4614](https://github.com/PostHog/posthog-js/pull/4614) [`3593c43`](https://github.com/PostHog/posthog-js/commit/3593c43e98269cbe0bc18e697d38b8c862419b09) Thanks [@iamomiid](https://github.com/iamomiid)! - The Node SDK now sends the raw gzip bytes as the request body instead of wrapping them in a `Blob`. On Node 24.16 and later, reading a `Blob` request body leaks a native `BlobReader` that is never released, so a service calling `capture()` and `flush()` once per request grew by roughly 2.3 KB of heap per event and never gave it back. This completes the work in #4423: switching to `node:zlib` removed the compression-time Blob reads, but the body itself was still a Blob and still got read once per request. Compression behaviour, headers and the wire format are unchanged, and the edge build keeps using `CompressionStream`.
+  (2026-08-24)
+
 ## 1.48.8
 
 ### Patch Changes
