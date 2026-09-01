@@ -24,10 +24,10 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.15",
-    "@anthropic-ai/sdk": "^0.117.1",
+    "@anthropic-ai/sdk": ">=0.112.3 <0.121.0",
     "@google/adk": "^2.0.0",
     "@google/genai": "^1.52.0",
-    "@langchain/core": "^1.2.8",
+    "@langchain/core": "^1.2.9",
     "openai": "^6.49.0",
     "@openai/agents": "^0.8.0",
     "@openai/agents-core": "^0.8.0",
@@ -41,7 +41,7 @@
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@types/jest": "catalog:",
     "jest": "catalog:",
-    "langchain": "^1.5.5",
+    "langchain": "^1.5.10",
     "node-fetch": "^3.3.2",
     "posthog-node": "workspace:^"
   },
@@ -64,7 +64,7 @@
     "zod": "^4.1.13"
   },
   "peerDependencies": {
-    "@anthropic-ai/sdk": "^0.112.3",
+    "@anthropic-ai/sdk": ">=0.112.3 <0.121.0",
     "@google/adk": "^2.0.0",
     "@google/genai": "^1.52.0",
     "@langchain/core": "^1.2.3",

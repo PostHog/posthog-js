@@ -2081,6 +2081,26 @@ describe('Autocapture system', () => {
     })
 
     describe('autocapturePropertiesForElement', () => {
+        it('prefers capture attributes from the closest ancestor', () => {
+            const dropdown = document.createElement('div')
+            dropdown.setAttribute('data-ph-capture-attribute-text-raw', 'Actions')
+            const button = document.createElement('button')
+            button.setAttribute('data-ph-capture-attribute-text-raw', 'Print')
+            const target = document.createElement('span')
+            button.appendChild(target)
+            dropdown.appendChild(button)
+
+            const { props } = autocapturePropertiesForElement(target, {
+                e: makeMouseEvent({ target, type: 'click' }),
+                maskAllElementAttributes: false,
+                maskAllText: false,
+                elementsChainAsString: true,
+                disableCaptureUrlHashes: false,
+            })
+
+            expect(props['text-raw']).toEqual('Print')
+        })
+
         it('terminates on a cyclic ancestor chain', () => {
             // a parentNode cycle is only possible when the page patches parentNode
             const a = document!.createElement('div')

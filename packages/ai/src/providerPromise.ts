@@ -7,6 +7,7 @@ interface ProviderPromise<T> extends Promise<T> {
     data: unknown
     response: Response
     request_id?: string | null
+    workspace_id?: string | null
   }>
 }
 
@@ -25,17 +26,33 @@ interface ProviderPromiseFacade<T> extends ProviderPromise<T> {
 
 interface PreserveProviderPromiseOptions {
   requestIdHeader?: string
+  workspaceIdHeader?: string
 }
 
-function addRequestId<Result>(result: Result, response: Response, requestIdHeader: string): Result {
+function addResponseIds<Result>(
+  result: Result,
+  response: Response,
+  requestIdHeader: string,
+  workspaceIdHeader?: string
+): Result {
   if (!result || typeof result !== 'object' || Array.isArray(result)) {
     return result
   }
 
-  return Object.defineProperty(result, '_request_id', {
-    value: response.headers.get(requestIdHeader),
-    enumerable: false,
-  })
+  const properties: PropertyDescriptorMap = {
+    _request_id: {
+      value: response.headers.get(requestIdHeader),
+      enumerable: false,
+    },
+  }
+  if (workspaceIdHeader) {
+    properties._workspace_id = {
+      value: response.headers.get(workspaceIdHeader),
+      enumerable: false,
+    }
+  }
+
+  return Object.defineProperties(result, properties)
 }
 
 function getResponsePropsPromise(parentPromise: object): Promise<ProviderResponseProps> | undefined {
@@ -50,6 +67,7 @@ function decorateProviderPromise<Output>(
   wrappedPromise: Promise<Output>,
   responsePropsPromise: Promise<ProviderResponseProps> | undefined,
   requestIdHeader: string,
+  workspaceIdHeader: string | undefined,
   preserveThenUnwrap: boolean
 ): ProviderPromiseFacade<Output> {
   const providerPromise = wrappedPromise as ProviderPromiseFacade<Output>
@@ -58,7 +76,12 @@ function decorateProviderPromise<Output>(
     providerPromise.asResponse = async () => (await responsePropsPromise).response
     providerPromise.withResponse = async () => {
       const [props, data] = await Promise.all([responsePropsPromise, wrappedPromise])
-      return { response: props.response, data, request_id: props.response.headers.get(requestIdHeader) }
+      return {
+        response: props.response,
+        data,
+        request_id: props.response.headers.get(requestIdHeader),
+        ...(workspaceIdHeader ? { workspace_id: props.response.headers.get(workspaceIdHeader) } : {}),
+      }
     }
   }
 
@@ -69,9 +92,9 @@ function decorateProviderPromise<Output>(
       }
 
       const transformedPromise = Promise.all([wrappedPromise, responsePropsPromise]).then(([data, props]) =>
-        addRequestId(transform(data, props), props.response, requestIdHeader)
+        addResponseIds(transform(data, props), props.response, requestIdHeader, workspaceIdHeader)
       )
-      return decorateProviderPromise(transformedPromise, responsePropsPromise, requestIdHeader, true)
+      return decorateProviderPromise(transformedPromise, responsePropsPromise, requestIdHeader, workspaceIdHeader, true)
     }
   }
 
@@ -105,6 +128,7 @@ export function preserveProviderPromise<Input, Output>(
     wrappedPromise,
     responsePropsPromise,
     options.requestIdHeader ?? 'x-request-id',
+    options.workspaceIdHeader,
     preserveThenUnwrap
   )
 

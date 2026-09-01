@@ -35,6 +35,7 @@ import {
     getCookiePersistedPropertiesMetadata,
     getCookiePersistedPropertiesMetadataName,
     localStore,
+    memoryStore,
     resetLocalStorageSupported,
     resetSessionStorageSupported,
     sessionStore,
@@ -1623,6 +1624,7 @@ describe('persistence', () => {
             const persistenceKey = `ph_${token}_posthog`
             const posthog = new PostHog().init(token, {
                 persistence: 'sessionStorage',
+                bootstrap: { distinctID: 'test' },
             })
             posthog.register({ distinct_id: 'test', test_prop: 'test_val' })
             posthog.capture('test_event')
@@ -1636,6 +1638,7 @@ describe('persistence', () => {
             const persistenceKey = `ph_${token}_posthog`
             const posthog = new PostHog().init(token, {
                 persistence: 'memory',
+                bootstrap: { distinctID: 'test' },
             })
             posthog.register({ distinct_id: 'test', test_prop: 'test_val' })
             posthog.capture('test_event')
@@ -2578,5 +2581,49 @@ describe('posthog instance persistence', () => {
 
         expect(sessionCalls.length).toBeGreaterThan(0)
         expect(localPlusCookieCalls.length).toBeGreaterThan(0)
+    })
+})
+
+describe('persistence fallback when no browser storage is available', () => {
+    afterEach(() => {
+        jest.restoreAllMocks()
+    })
+
+    // A page served from a `data:` URL -- a Figma plugin, for example -- has both
+    // localStorage and cookies disabled by Chrome. The selection chain used to end in
+    // an unconditional `store = cookieStore`, so every read and write silently failed.
+    it('degrades to memory rather than an unusable cookie store', () => {
+        jest.spyOn(localStore, '_is_supported').mockReturnValue(false)
+        jest.spyOn(cookieStore, '_is_supported').mockReturnValue(false)
+        const memorySet = jest.spyOn(memoryStore, '_set')
+
+        const lib = new PostHogPersistence(makePostHogConfig('no-storage', 'localStorage+cookie'))
+        lib.register({ distinct_id: 'in-memory-id' })
+
+        expect(memorySet).toHaveBeenCalled()
+        expect(lib.props.distinct_id).toEqual('in-memory-id')
+    })
+
+    it('still prefers cookies when only web storage is unavailable', () => {
+        jest.spyOn(localStore, '_is_supported').mockReturnValue(false)
+        jest.spyOn(cookieStore, '_is_supported').mockReturnValue(true)
+        const memorySet = jest.spyOn(memoryStore, '_set')
+
+        const lib = new PostHogPersistence(makePostHogConfig('cookies-only', 'localStorage+cookie'))
+        lib.register({ distinct_id: 'cookie-id' })
+
+        expect(memorySet).not.toHaveBeenCalled()
+    })
+
+    it('does not pick a cookie store for an explicit cookie config when cookies are unusable', () => {
+        jest.spyOn(localStore, '_is_supported').mockReturnValue(false)
+        jest.spyOn(cookieStore, '_is_supported').mockReturnValue(false)
+        const memorySet = jest.spyOn(memoryStore, '_set')
+
+        const lib = new PostHogPersistence(makePostHogConfig('explicit-cookie', 'cookie'))
+        lib.register({ distinct_id: 'explicit-id' })
+
+        expect(memorySet).toHaveBeenCalled()
+        expect(lib.props.distinct_id).toEqual('explicit-id')
     })
 })

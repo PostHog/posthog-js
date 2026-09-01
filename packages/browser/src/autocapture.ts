@@ -231,7 +231,12 @@ export function autocapturePropertiesForElement(
         )
 
         const augmentProperties = getAugmentPropertiesFromElement(el)
-        extend(autocaptureAugmentProperties, augmentProperties)
+        each(augmentProperties, (value, key) => {
+            // Elements are ordered from the target to its ancestors, so retain the closest value.
+            if (!Object.prototype.hasOwnProperty.call(autocaptureAugmentProperties, key)) {
+                autocaptureAugmentProperties[key] = value
+            }
+        })
     })
 
     if (explicitNoCapture) {
