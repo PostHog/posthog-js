@@ -1,3 +1,4 @@
+
 import yargs from 'yargs'
 import { hideBin } from 'yargs/helpers'
 import { spawnSync } from 'child_process'
@@ -98,17 +99,16 @@ const main = async () => {
     if (highestVersionToDeprecate) {
         if (compare(currentVersion, highestVersionToDeprecate, '<=')) {
             // should never be able to hit this, but be defensive
-            throw new Error('Dev error')
+            throw new Error("Dev error")
         }
 
-        console.log(
-            `Deprecating up to and including version ${highestVersionToDeprecate} released on ${format(highestVersionToDeprecateDate, 'yyyy-MM-dd')} ...`
-        )
+        console.log(`Deprecating up to and including version ${highestVersionToDeprecate} released on ${format(highestVersionToDeprecateDate, 'yyyy-MM-dd')} ...`)
         runNpmDeprecateBeforeOrEqualVersion(highestVersionToDeprecate)
     }
 }
 
-main().catch((e) => {
+
+main().catch(e => {
     console.error(e)
     process.exit(1)
 })

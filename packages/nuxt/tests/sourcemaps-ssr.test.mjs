@@ -39,7 +39,7 @@ const executableSource = source
   .replace(/const processOptions: string\[\] = /g, 'const processOptions = ')
   // `import.meta.url` is not available inside `new Function`; the value is
   // only fed to stubbed createResolver/fileURLToPath which ignore it.
-  .replace(/import\.meta\.url/g, "'file:///fake/module.ts'")
+  .replace(/import\.meta\.url/g, '\'file:///fake/module.ts\'')
   // Turn the module's `export default` into a value the wrapper returns.
   .replace('export default defineNuxtModule(', 'return defineNuxtModule(')
 
@@ -48,11 +48,11 @@ function loadModule({ failPublicUpload = false, nuxtVersion = '4.1.2' } = {}) {
   const pluginCalls = []
   const serverPluginCalls = []
   const stubs = {
-    defineNuxtModule: (config) => config,
-    addPlugin: (plugin) => pluginCalls.push(plugin),
-    addServerPlugin: (plugin) => serverPluginCalls.push(plugin),
+    defineNuxtModule: config => config,
+    addPlugin: plugin => pluginCalls.push(plugin),
+    addServerPlugin: plugin => serverPluginCalls.push(plugin),
     addImportsDir: () => {},
-    createResolver: () => ({ resolve: (p) => p }),
+    createResolver: () => ({ resolve: p => p }),
     getNuxtVersion: () => nuxtVersion,
     resolveBinaryPath: () => '/fake/posthog-cli',
     spawnLocal: async (bin, args) => {
@@ -62,8 +62,8 @@ function loadModule({ failPublicUpload = false, nuxtVersion = '4.1.2' } = {}) {
       }
       return { code: 0 }
     },
-    fileURLToPath: (u) => u,
-    dirname: (p) => p,
+    fileURLToPath: u => u,
+    dirname: p => p,
     console: { error: () => {} },
   }
   const factory = new Function(...Object.keys(stubs), executableSource)
@@ -89,7 +89,7 @@ async function runRegistration({ nuxtVersion, compatibilityVersion }) {
       clientConfig: {},
       serverConfig: {},
     },
-    nuxt
+    nuxt,
   )
 
   return { pluginCalls, serverPluginCalls }
@@ -137,7 +137,7 @@ async function runLifecycle({ ssr, deleteAfterUpload, failPublicUpload = false }
         deleteAfterUpload,
       },
     },
-    nuxt
+    nuxt,
   )
 
   // With `ssr: false` (client-only / SPA mode) Nitro still reports output
@@ -162,7 +162,7 @@ async function runLifecycle({ ssr, deleteAfterUpload, failPublicUpload = false }
 }
 
 function findCall(calls, op, directory) {
-  return calls.find((c) => c.args.includes(op) && c.args.includes('--directory') && c.args.includes(directory))
+  return calls.find(c => c.args.includes(op) && c.args.includes('--directory') && c.args.includes(directory))
 }
 
 // Both branches share the same assertion skeleton: did the server inject happen
@@ -175,7 +175,7 @@ const cases = [
 
 for (const { ssr, expectInject } of cases) {
   const calls = await runLifecycle({ ssr })
-  const dump = JSON.stringify(calls.map((c) => c.args))
+  const dump = JSON.stringify(calls.map(c => c.args))
   const injectCall = findCall(calls, 'inject', '/build/.output/server')
 
   if (expectInject) {
@@ -194,31 +194,31 @@ for (const { ssr, expectInject } of cases) {
   assert.ok(outputUploadCall, `ssr:${ssr}: expected sourcemap upload against outputDir. Got: ${dump}`)
   assert.ok(
     calls.indexOf(publicUploadCall) < calls.indexOf(outputUploadCall),
-    `ssr:${ssr}: expected public sourcemaps to be deleted before the final output upload. Got: ${dump}`
+    `ssr:${ssr}: expected public sourcemaps to be deleted before the final output upload. Got: ${dump}`,
   )
 }
 
 const retainedMapCalls = await runLifecycle({ ssr: true, deleteAfterUpload: false })
-const retainedMapDump = JSON.stringify(retainedMapCalls.map((c) => c.args))
+const retainedMapDump = JSON.stringify(retainedMapCalls.map(c => c.args))
 assert.equal(
   findCall(retainedMapCalls, 'upload', '/build/.output/public'),
   undefined,
-  `deleteAfterUpload:false: expected no early public upload. Got: ${retainedMapDump}`
+  `deleteAfterUpload:false: expected no early public upload. Got: ${retainedMapDump}`,
 )
 const retainedMapOutputUpload = findCall(retainedMapCalls, 'upload', '/build/.output')
 assert.ok(retainedMapOutputUpload, `deleteAfterUpload:false: expected final output upload. Got: ${retainedMapDump}`)
 assert.ok(
   !retainedMapOutputUpload.args.includes('--delete-after'),
-  `deleteAfterUpload:false: expected sourcemaps to be retained. Got: ${retainedMapDump}`
+  `deleteAfterUpload:false: expected sourcemaps to be retained. Got: ${retainedMapDump}`,
 )
 
 const failedPublicUploadCalls = await runLifecycle({ ssr: true, failPublicUpload: true })
-const failedPublicUploadDump = JSON.stringify(failedPublicUploadCalls.map((c) => c.args))
+const failedPublicUploadDump = JSON.stringify(failedPublicUploadCalls.map(c => c.args))
 const fallbackOutputUpload = findCall(failedPublicUploadCalls, 'upload', '/build/.output')
 assert.ok(fallbackOutputUpload, `failed public upload: expected final output upload. Got: ${failedPublicUploadDump}`)
 assert.ok(
   !fallbackOutputUpload.args.includes('--delete-after'),
-  `failed public upload: expected final upload to retain manifest-listed maps. Got: ${failedPublicUploadDump}`
+  `failed public upload: expected final upload to retain manifest-listed maps. Got: ${failedPublicUploadDump}`,
 )
 
 console.log('ok sourcemaps-ssr.test.mjs')

@@ -29,8 +29,9 @@ jest.retryTimes(3)
 
 describe('consentManager', () => {
     const createPostHog = async (config: Partial<PostHogConfig> = {}) => {
-        const posthog = await new Promise<PostHog>((resolve) =>
-            defaultPostHog().init('testtoken', { ...config, loaded: (posthog) => resolve(posthog) }, uuidv7())!
+        const posthog = await new Promise<PostHog>(
+            (resolve) =>
+                defaultPostHog().init('testtoken', { ...config, loaded: (posthog) => resolve(posthog) }, uuidv7())!
         )
         return posthog
     }
@@ -478,15 +479,16 @@ describe('consent storage when no browser storage is available', () => {
             jest.spyOn(cookieStore, '_is_supported').mockReturnValue(false)
             const memorySet = jest.spyOn(memoryStore, '_set')
 
-            const posthog = await new Promise<PostHog>((resolve) =>
-                defaultPostHog().init(
-                    'testtoken',
-                    {
-                        opt_out_capturing_persistence_type: persistenceType,
-                        loaded: (posthog) => resolve(posthog),
-                    },
-                    uuidv7()
-                )!
+            const posthog = await new Promise<PostHog>(
+                (resolve) =>
+                    defaultPostHog().init(
+                        'testtoken',
+                        {
+                            opt_out_capturing_persistence_type: persistenceType,
+                            loaded: (posthog) => resolve(posthog),
+                        },
+                        uuidv7()
+                    )!
             )
 
             posthog.opt_out_capturing()

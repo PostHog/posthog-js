@@ -19,5 +19,5 @@ Module._resolveFilename = function (request, ...args) {
 
 const { LangChainCallbackHandler } = require('../dist/langchain/index.cjs')
 if (typeof LangChainCallbackHandler !== 'function') {
-  throw new Error('LangChainCallbackHandler was not exported')
+    throw new Error('LangChainCallbackHandler was not exported')
 }
