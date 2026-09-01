@@ -1,4 +1,5 @@
 import * as React from 'react'
+import type { Mock } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { PostHogProvider, PostHog } from '../../context'
 import { useThumbSurvey } from '../useThumbSurvey'
@@ -9,8 +10,8 @@ vi.useFakeTimers()
 
 describe('useThumbSurvey hook', () => {
     let posthog: PostHog
-    let captureMock: vi.Mock
-    let displaySurveyMock: vi.Mock
+    let captureMock: Mock
+    let displaySurveyMock: Mock
     let wrapper: React.FC<{ children: React.ReactNode }>
 
     beforeEach(() => {

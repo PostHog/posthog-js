@@ -19,7 +19,7 @@ describe('clientCache.node waitUntil auto-detection', () => {
     })
 
     it('auto-detects @vercel/functions waitUntil and applies to new clients', async () => {
-        const { getOrCreateNodeClient } = require('../src/server/clientCache.node')
+        const { getOrCreateNodeClient } = await import('../src/server/clientCache.node')
 
         await getOrCreateNodeClient('phc_test', { host: 'https://test.com' })
 
@@ -30,7 +30,7 @@ describe('clientCache.node waitUntil auto-detection', () => {
     })
 
     it('explicit options.waitUntil takes priority over auto-detected', async () => {
-        const { getOrCreateNodeClient } = require('../src/server/clientCache.node')
+        const { getOrCreateNodeClient } = await import('../src/server/clientCache.node')
 
         const explicitWaitUntil = vi.fn()
         await getOrCreateNodeClient('phc_test3', { host: 'https://test3.com', waitUntil: explicitWaitUntil })

@@ -1,4 +1,5 @@
 import * as React from 'react'
+import type { Mock } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { PostHogProvider, PostHog } from '../../context'
 import { isUndefined } from '../../utils/type-utils'
@@ -313,7 +314,7 @@ describe('feature flag hooks', () => {
                     variant: undefined,
                     payload: undefined,
                 })
-                ;(client.getFeatureFlagResult as vi.Mock).mockReturnValue({
+                ;(client.getFeatureFlagResult as Mock).mockReturnValue({
                     key: 'flag',
                     enabled: true,
                     variant: 'new-variant',

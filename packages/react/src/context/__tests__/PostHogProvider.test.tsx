@@ -43,7 +43,7 @@ describe('PostHogProvider component', () => {
         })
 
         it('does not initialize when apiKey is missing', () => {
-            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
+            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
             render(
                 <PostHogProvider apiKey={undefined as any} options={initialOptions}>
@@ -107,7 +107,7 @@ describe('PostHogProvider component', () => {
         })
 
         it('should warn when attempting to change apiKey', () => {
-            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
+            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
             const newApiKey = 'different-api-key'
 
             const { rerender } = render(
@@ -139,7 +139,7 @@ describe('PostHogProvider component', () => {
         it('warns if posthogJs has been loaded elsewhere', () => {
             ;(posthogJs as any).__loaded = true
 
-            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
+            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
             render(
                 <PostHogProvider apiKey={apiKey} options={initialOptions}>
                     <div>Test</div>

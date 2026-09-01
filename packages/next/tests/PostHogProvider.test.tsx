@@ -1,5 +1,6 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
+import { cookies } from 'next/headers.js'
 import { PostHogProvider } from '../src/app/PostHogProvider'
 
 // Mock ClientPostHogProvider
@@ -15,10 +16,9 @@ vi.mock('next/headers.js', () => ({
     cookies: vi.fn(),
 }))
 
-// Mock clientCache.node — the mock fn must be declared with `var` so it's
-// hoisted and available inside the vi.mock factory (which Jest hoists above
-// `const`/`let` declarations).
-var mockGetAllFlagsAndPayloads = vi.fn()
+const { mockGetAllFlagsAndPayloads } = vi.hoisted(() => ({
+    mockGetAllFlagsAndPayloads: vi.fn(),
+}))
 
 vi.mock('../src/server/clientCache.node', () => ({
     getOrCreateNodeClient: vi.fn().mockImplementation(() => ({
@@ -136,8 +136,6 @@ describe('PostHogProvider', () => {
     })
 
     it('does not call cookies() when bootstrapFlags is off (static-safe)', async () => {
-        const { cookies } = require('next/headers.js')
-
         const element = await PostHogProvider({
             apiKey: 'phc_test123',
             children: <div>Child</div>,
@@ -259,8 +257,7 @@ describe('PostHogProvider', () => {
         const anonymousCookieValue = JSON.stringify({ distinct_id: 'device_xyz', $device_id: 'device_xyz' })
 
         function setupCookieMock(cookieValue: string) {
-            const { cookies } = require('next/headers.js')
-            cookies.mockResolvedValue({
+            vi.mocked(cookies).mockResolvedValue({
                 get: vi.fn((name: string) => {
                     if (name === 'ph_phc_test123_posthog') {
                         return { name, value: cookieValue }
@@ -474,11 +471,10 @@ describe('PostHogProvider', () => {
         })
 
         it('propagates errors from cookies() so Next.js can handle dynamic rendering control flow', async () => {
-            const { cookies } = require('next/headers.js')
             const dynamicUsageError = Object.assign(new Error('Dynamic server usage'), {
                 digest: 'DYNAMIC_SERVER_USAGE',
             })
-            cookies.mockRejectedValueOnce(dynamicUsageError)
+            vi.mocked(cookies).mockRejectedValueOnce(dynamicUsageError)
             const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
             await expect(
@@ -542,11 +538,10 @@ describe('PostHogProvider', () => {
             $user_state: 'identified',
         })
 
-        function setupCookiesWithConsent(cookies: Record<string, string>) {
-            const { cookies: cookiesFn } = require('next/headers.js')
-            cookiesFn.mockResolvedValue({
+        function setupCookiesWithConsent(cookieValues: Record<string, string>) {
+            vi.mocked(cookies).mockResolvedValue({
                 get: vi.fn((name: string) => {
-                    const value = cookies[name]
+                    const value = cookieValues[name]
                     return value !== undefined ? { name, value } : undefined
                 }),
             })

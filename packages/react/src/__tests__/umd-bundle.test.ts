@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import vm from 'node:vm'
+import React from 'react'
 import { renderHook } from '@testing-library/react'
 
 const mockPostHogInstance = {
@@ -5,15 +8,26 @@ const mockPostHogInstance = {
     isFeatureEnabled: vi.fn(),
 }
 
-vi.mock('posthog-js', () => ({
-    default: mockPostHogInstance,
-    posthog: mockPostHogInstance,
-}))
-
 describe('UMD bundle', () => {
     it('unwraps the posthog-js CommonJS namespace for the default instance', () => {
-        const { usePostHog } = vi.requireActual('../../dist/umd/index.js')
+        const module = { exports: {} as Record<string, unknown> }
+        const bundle = fs.readFileSync('dist/umd/index.js', 'utf8')
 
+        vm.runInNewContext(bundle, {
+            exports: module.exports,
+            module,
+            require: (id: string) => {
+                if (id === 'posthog-js') {
+                    return mockPostHogInstance
+                }
+                if (id === 'react') {
+                    return React
+                }
+                throw new Error(`Unexpected UMD dependency: ${id}`)
+            },
+        })
+
+        const { usePostHog } = module.exports as { usePostHog: () => typeof mockPostHogInstance }
         const { result } = renderHook(() => usePostHog())
 
         expect(result.current).toBe(mockPostHogInstance)

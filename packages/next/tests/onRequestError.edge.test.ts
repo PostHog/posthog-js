@@ -1,7 +1,10 @@
-const mockCaptureExceptionImmediate = vi.fn().mockResolvedValue(undefined)
-const mockPostHog = vi.fn().mockImplementation(() => ({
-    captureExceptionImmediate: mockCaptureExceptionImmediate,
-}))
+const { mockCaptureExceptionImmediate, mockPostHog } = vi.hoisted(() => {
+    const mockCaptureExceptionImmediate = vi.fn().mockResolvedValue(undefined)
+    return {
+        mockCaptureExceptionImmediate,
+        mockPostHog: vi.fn().mockImplementation(() => ({ captureExceptionImmediate: mockCaptureExceptionImmediate })),
+    }
+})
 
 vi.mock('posthog-node', () => ({
     PostHog: mockPostHog,

@@ -1,4 +1,7 @@
+import { PostHog } from 'posthog-node'
 import { getServerSidePostHog } from '../src/pages/getServerSidePostHog'
+
+vi.mock('@vercel/functions', () => ({}))
 
 const mockEnterContext = vi.fn()
 const mockWithContext = vi.fn((_, fn) => fn())
@@ -37,7 +40,6 @@ describe('getServerSidePostHog', () => {
     })
 
     it('returns a posthog client', async () => {
-        const { PostHog } = require('posthog-node')
         const ctx = createMockContext({
             ph_phc_test123_posthog: JSON.stringify({
                 distinct_id: 'user_abc',
@@ -98,7 +100,6 @@ describe('getServerSidePostHog', () => {
     })
 
     it('warns and returns a disabled client when no apiKey provided and env not set', async () => {
-        const { PostHog } = require('posthog-node')
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         const ctx = createMockContext({})
 
@@ -116,7 +117,6 @@ describe('getServerSidePostHog', () => {
     })
 
     it('trims apiKey and host before creating the node client', async () => {
-        const { PostHog } = require('posthog-node')
         const ctx = createMockContext({})
 
         await getServerSidePostHog(ctx, '  phc_test123\n', { host: '  https://custom.posthog.com/\t ' })
@@ -127,7 +127,6 @@ describe('getServerSidePostHog', () => {
     })
 
     it('defaults host when it is omitted', async () => {
-        const { PostHog } = require('posthog-node')
         const ctx = createMockContext({})
 
         await getServerSidePostHog(ctx, 'phc_default_host_test')
