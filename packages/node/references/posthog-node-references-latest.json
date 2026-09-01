@@ -1448,7 +1448,7 @@
         },
         {
           "category": "Traces",
-          "description": "Runs a callback with a span active for its duration and ends the span for you — at return for a sync callback, at settle for an async one.\nSpans started inside the callback nest under it automatically. If the callback throws or rejects, the span records the exception and the original error is rethrown unchanged.\nSpans nest across `await` only on the Node runtime, which tracks the active span with `AsyncLocalStorage`. The edge build restores the active span when the callback returns its promise, so spans started after an `await` there begin a new trace.\n\nSubject to change in a minor release.",
+          "description": "Runs a callback with a span active for its duration and ends the span for you — at return for a sync callback, at settle for an async one. Takes an optional `StartSpanOptions` between the name and the callback: `withSpan(name, fn)` or `withSpan(name, options, fn)`.\nSpans started inside the callback nest under it automatically. If the callback throws or rejects, the span records the exception and the original error is rethrown unchanged. A callback that ends the span itself gets the rethrow but not the recording, since the span is already exported by then.\nSpans nest across `await` only on the Node runtime, which tracks the active span with `AsyncLocalStorage`. The edge build restores the active span when the callback returns its promise, so spans started after an `await` there begin a new trace.\n\nSubject to change in a minor release.",
           "details": null,
           "id": "withSpan",
           "showDocs": true,
