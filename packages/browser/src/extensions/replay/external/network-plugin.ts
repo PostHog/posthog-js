@@ -627,9 +627,6 @@ export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number)
 
         function cancel(): void {
             try {
-                // cancel() returns a promise that rejects on some browsers (e.g. Safari) when the
-                // underlying transfer already died. Attach a no-op handler so that rejection can never
-                // escape this never-reject helper as an uncaught error.
                 void reader?.cancel().catch(() => {})
             } catch {
                 // the reader may already be released; nothing to clean up
