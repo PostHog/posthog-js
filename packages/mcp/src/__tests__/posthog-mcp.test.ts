@@ -238,6 +238,7 @@ describe('PostHogMCP', () => {
       for (const tool of prepared) {
         expect(tool.inputSchema?.properties?.context).toMatchObject({ type: 'string' })
         expect(tool.inputSchema?.required).toContain('context')
+        expect(tool.inputSchema?.properties).not.toHaveProperty('llm_model')
       }
     })
 
@@ -275,6 +276,80 @@ describe('PostHogMCP', () => {
       expect(client.prepareToolCall('posthog_find_tools', { context: 'x' }).isMissingCapability).toBe(true)
       expect(client.prepareToolCall(GET_MORE_TOOLS_NAME, { context: 'x' }).isMissingCapability).toBe(false)
       await client.shutdown()
+    })
+
+    it('injects and extracts a self-reported model when captureModel is enabled', async () => {
+      const client = newClient({ captureModel: true })
+      try {
+        const prepared = client.prepareToolList(tools)
+        expect(prepared[0].inputSchema?.properties?.llm_model).toMatchObject({ type: 'string' })
+        expect(prepared[0].inputSchema?.required).toContain('llm_model')
+
+        const call = client.prepareToolCall('execute-sql', {
+          query: 'select 1',
+          context: 'Counting signups',
+          llm_model: 'claude-sonnet-4-20250514',
+        })
+        expect(call.args).toEqual({ query: 'select 1' })
+        expect(call.llmModel).toBe('claude-sonnet-4-20250514')
+        expect(call.llmModelSource).toBe('self_reported')
+
+        client.captureToolCall({
+          toolName: 'execute-sql',
+          distinctId: 'user-123',
+          isError: false,
+          llmModel: call.llmModel,
+          llmModelSource: call.llmModelSource,
+        })
+        await tick()
+
+        const properties = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties
+        expect(properties[PostHogMCPAnalyticsProperty.LlmModel]).toBe('claude-sonnet-4-20250514')
+        expect(properties[PostHogMCPAnalyticsProperty.LlmModelSource]).toBe('self_reported')
+      } finally {
+        await client.shutdown()
+      }
+    })
+
+    it('leaves an application-owned llm_model argument untouched and uncaptured', async () => {
+      const client = newClient({ captureModel: true })
+      const ownedTools = [
+        {
+          name: 'route-model',
+          inputSchema: {
+            type: 'object',
+            properties: { llm_model: { type: 'string', description: 'Application routing model' } },
+            required: ['llm_model'],
+          },
+        },
+      ]
+      try {
+        const prepared = client.prepareToolList(ownedTools)
+        expect(prepared[0].inputSchema.properties.llm_model).toEqual({
+          type: 'string',
+          description: 'Application routing model',
+        })
+
+        const call = client.prepareToolCall('route-model', { llm_model: 'application-owned-value' })
+        expect(call.args).toEqual({ llm_model: 'application-owned-value' })
+        expect(call.llmModel).toBeUndefined()
+        expect(call.llmModelSource).toBeUndefined()
+      } finally {
+        await client.shutdown()
+      }
+    })
+
+    it('drops an unknown self-reported model', async () => {
+      const client = newClient({ captureModel: true })
+      try {
+        client.prepareToolList(tools)
+        const call = client.prepareToolCall('execute-sql', { query: 'select 1', llm_model: ' unknown ' })
+        expect(call.args).toEqual({ query: 'select 1' })
+        expect(call.llmModel).toBeUndefined()
+        expect(call.llmModelSource).toBeUndefined()
+      } finally {
+        await client.shutdown()
+      }
     })
   })
 

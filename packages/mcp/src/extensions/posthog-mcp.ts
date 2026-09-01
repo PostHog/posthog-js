@@ -3,6 +3,7 @@ import { PostHog, type PostHogOptions } from 'posthog-node'
 import type {
   InitializeCaptureData,
   JsonRecord,
+  MCPAnalyticsOptions,
   McpCaptureCommon,
   McpEvent,
   MissingCapabilityCaptureData,
@@ -11,6 +12,7 @@ import type {
   ToolCallCaptureData,
   ToolsListCaptureData,
 } from '../types'
+import { analyticsOwnsParameter, stripOwnedAnalyticsArguments } from './analytics-parameters'
 import {
   addContextParameterToTools,
   getContextDescription,
@@ -22,6 +24,13 @@ import { captureException } from './exceptions'
 import { normalizeHeaderString } from './headers'
 import { applyMcpLibIdentity } from './lib-identity'
 import { log } from './logger'
+import {
+  addModelParameterToTools,
+  getModelArgument,
+  getModelDescription,
+  isCaptureModelEnabled,
+  setEventModel,
+} from './model-parameters'
 import { McpEventSink } from './sink'
 import { GET_MORE_TOOLS_NAME, getReportMissingToolDescriptor } from './tools'
 
@@ -37,6 +46,11 @@ export interface PostHogMCPOptions extends PostHogOptions {
    * can't drift. Defaults to `get_more_tools`.
    */
   missingCapabilityToolName?: string
+  /**
+   * Inject a required `llm_model` argument into advertised tools and capture
+   * the agent's self-reported value. Off by default.
+   */
+  captureModel?: MCPAnalyticsOptions['captureModel']
 }
 
 /**
@@ -57,7 +71,10 @@ export interface PostHogMCPOptions extends PostHogOptions {
  * ```ts
  * import { PostHogMCP } from "@posthog/mcp"
  *
- * const posthog = new PostHogMCP("phc_your_project_token", { host: "https://us.i.posthog.com" })
+ * const posthog = new PostHogMCP("phc_your_project_token", {
+ *   host: "https://us.i.posthog.com",
+ *   captureModel: true,
+ * })
  *
  * posthog.captureToolCall({
  *   toolName: "search_docs",
@@ -78,10 +95,13 @@ export class PostHogMCP extends PostHog {
   // The get_more_tools name lives here (not on the per-call options) so that
   // prepareToolList (inject) and prepareToolCall (detect) always agree.
   readonly #missingCapabilityToolName: string
+  readonly #captureModel: MCPAnalyticsOptions['captureModel']
+  readonly #modelParameterOwnership = new Map<string, boolean>()
 
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
     super(apiKey, options)
     this.#missingCapabilityToolName = options.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
+    this.#captureModel = options.captureModel
     applyMcpLibIdentity(this)
   }
 
@@ -97,6 +117,10 @@ export class PostHogMCP extends PostHog {
     event.isError = data.isError
     event.errorType = data.errorType
     applyIntent(event, data.intent, data.intentSource)
+    setEventModel(event, data.llmModel)
+    if (event.llmModel && data.llmModelSource) {
+      event.llmModelSource = data.llmModelSource
+    }
     if (data.isError) {
       event.error = captureException(data.error ?? `Tool ${data.toolName} returned an error`)
     }
@@ -137,9 +161,9 @@ export class PostHogMCP extends PostHog {
   /**
    * Decorate your `tools/list` response with PostHog's analytics affordances:
    * injects the `context` argument into every tool (so agents state their intent,
-   * captured as `$mcp_intent`) and, when `reportMissing` is on, appends the
-   * `get_more_tools` virtual tool (rename it via the `missingCapabilityToolName`
-   * constructor option). Returns a new array; your tools are untouched.
+   * captured as `$mcp_intent`), injects `llm_model` when the constructor's
+   * `captureModel` option is enabled, and appends `get_more_tools` when
+   * `reportMissing` is on. Returns a new array; your tools are untouched.
    *
    * The appended `get_more_tools` descriptor carries only the base MCP tool fields
    * (name, description, input schema) — not any framework-specific fields your
@@ -165,16 +189,30 @@ export class PostHogMCP extends PostHog {
     if (options.reportMissing && !prepared.some((tool) => tool?.name === this.#missingCapabilityToolName)) {
       prepared = [...prepared, getReportMissingToolDescriptor(this.#missingCapabilityToolName) as TTool]
     }
+
+    if (isCaptureModelEnabled(this.#captureModel)) {
+      const ownershipByName = new Map<string, boolean>()
+      for (const tool of prepared) {
+        if (typeof tool.name !== 'string') {
+          continue
+        }
+        const ownsModel = analyticsOwnsParameter(tool.inputSchema, 'llm_model')
+        ownershipByName.set(tool.name, (ownershipByName.get(tool.name) ?? true) && ownsModel)
+      }
+      for (const [toolName, ownsModel] of ownershipByName) {
+        this.#modelParameterOwnership.set(toolName, ownsModel)
+      }
+      prepared = addModelParameterToTools(prepared, getModelDescription(this.#captureModel))
+    }
     return prepared
   }
 
   /**
-   * Read an incoming `tools/call` before you dispatch it: pulls the agent's
-   * intent off the injected `context` argument, strips `context` from the
-   * arguments (so your handler and its schema validation never see it), and flags
+   * Read an incoming `tools/call` before you dispatch it: pulls analytics values
+   * from SDK-owned arguments, strips those arguments before validation, and flags
    * whether the call targeted the `get_more_tools` virtual tool.
    *
-   * Pass the returned `intent` / `intentSource` to {@link captureToolCall}, and
+   * Pass the returned intent and model fields to {@link captureToolCall}, and
    * dispatch the returned `args` to your tool.
    *
    * This only extracts the explicit `context` argument (`intentSource:
@@ -197,10 +235,21 @@ export class PostHogMCP extends PostHog {
   prepareToolCall(name: string, args?: Record<string, unknown>): PreparedToolCall {
     const rawContext = args?.context
     const intent = typeof rawContext === 'string' && rawContext.trim() ? rawContext.trim() : undefined
+    const ownsModel = this.#modelParameterOwnership.get(name) === true
+    const llmModel = ownsModel ? getModelArgument({ params: { arguments: args } }) : undefined
+    const strippedArgs = stripContext(args)
     return {
       intent,
       intentSource: intent ? 'context_parameter' : undefined,
-      args: stripContext(args),
+      llmModel,
+      llmModelSource: llmModel ? 'self_reported' : undefined,
+      args: ownsModel
+        ? (stripOwnedAnalyticsArguments(strippedArgs, {
+            context: false,
+            conversationId: false,
+            llmModel: true,
+          }) as Record<string, unknown> | undefined)
+        : strippedArgs,
       isMissingCapability: name === this.#missingCapabilityToolName,
     }
   }

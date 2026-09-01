@@ -511,6 +511,13 @@ export interface ToolCallCaptureData extends McpCaptureCommon {
    * the host derived it. Defaults to `context_parameter` when an intent is set.
    */
   intentSource?: MCPAnalyticsIntentSource
+  /**
+   * The calling agent's self-reported model id -> `$mcp_llm_model`. On the
+   * custom-dispatcher path, read it from {@link PostHogMCP.prepareToolCall}.
+   */
+  llmModel?: string
+  /** How the model id was obtained -> `$mcp_llm_model_source`. */
+  llmModelSource?: MCPAnalyticsModelSource
   /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
   parameters?: unknown
   /** Captured tool result → `$mcp_response` (sanitized + truncated). */
@@ -597,6 +604,10 @@ export interface PreparedToolCall {
   intent?: string
   /** Where the intent came from. Always `context_parameter` here when set. */
   intentSource?: MCPAnalyticsIntentSource
+  /** The agent's self-reported model id, when `captureModel` is enabled and owned by the SDK. */
+  llmModel?: string
+  /** How the model id was obtained. Always `self_reported` when present. */
+  llmModelSource?: MCPAnalyticsModelSource
   /** The call arguments with the injected `context` key stripped out. */
   args?: Record<string, unknown>
   /** True when `name` is the `get_more_tools` virtual tool. */
