@@ -1368,7 +1368,8 @@ export interface PostHogConfig {
      * Can be:
      * - `true`: Capture the initial pageview
      * - `false`: Don't capture any pageviews
-     * - `'history_change'`: Capture the initial pageview and pageviews when the pathname changes
+     * - `'history_change'`: Capture the initial pageview and pageviews when the path, query string, or hash changes.
+     *   `disable_capture_url_hashes` still suppresses hash-only changes.
      * - An object: Capture the initial pageview and pageviews when any selected URL component changes
      *
      * @default true (or `'history_change'` when `defaults` is `'2025-05-24'` or later)

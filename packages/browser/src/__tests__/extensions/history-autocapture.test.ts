@@ -171,13 +171,14 @@ describe('HistoryAutocapture', () => {
             expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
         })
 
-        it('should not capture when only the query string changes with history_change', () => {
+        it('should capture when only the query string changes with history_change', () => {
             capture.mockClear()
 
             mockLocation.search = '?param=value'
             window.history.pushState({ page: 1 }, 'Test Page', '/initial?param=value')
 
-            expect(capture).not.toHaveBeenCalled()
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
         })
 
         it('should not capture pageview when capture_pageview is disabled', () => {
@@ -201,8 +202,19 @@ describe('HistoryAutocapture', () => {
             expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'replaceState' })
         })
 
-        it('should not capture when only the hash changes with history_change', () => {
+        it('should capture when only the hash changes with history_change', () => {
             capture.mockClear()
+
+            mockLocation.hash = '#section'
+            window.history.replaceState({ page: 2 }, 'Test Page 2', '/initial#section')
+
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'replaceState' })
+        })
+
+        it('should not capture hash-only changes with history_change when disable_capture_url_hashes is set', () => {
+            posthog.config.disable_capture_url_hashes = true
+            restartWithCapturePageview('history_change')
 
             mockLocation.hash = '#section'
             window.history.replaceState({ page: 2 }, 'Test Page 2', '/initial#section')
@@ -309,13 +321,14 @@ describe('HistoryAutocapture', () => {
     })
 
     describe('hashchange events', () => {
-        it('should not capture direct hash changes with history_change', () => {
+        it('should capture direct hash changes with history_change', () => {
             capture.mockClear()
 
             mockLocation.hash = '#section'
             window.dispatchEvent(new Event('hashchange'))
 
-            expect(capture).not.toHaveBeenCalled()
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'hashchange' })
         })
 
         it('should capture direct hash changes when hash is enabled', () => {
@@ -398,14 +411,15 @@ describe('HistoryAutocapture', () => {
             expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
         })
 
-        it('should not capture with history_change when only query and hash change together', () => {
+        it('should capture once with history_change when query and hash change together', () => {
             capture.mockClear()
 
             mockLocation.search = '?filter=new'
             mockLocation.hash = '#results'
             window.history.pushState({ page: 1 }, 'Filter Results', '/initial?filter=new#results')
 
-            expect(capture).not.toHaveBeenCalled()
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
         })
     })
 
