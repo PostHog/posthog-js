@@ -6,6 +6,22 @@ describe('resolveTracesConfig', () => {
       flushIntervalMs: 5000,
       maxExportBatchSize: 512,
       maxQueueSize: 2048,
+      maxLiveSpans: 10_000,
+      maxSpanAgeMs: 3_600_000,
+    })
+  })
+
+  it('honours explicit live-span bounds', () => {
+    expect(resolveTracesConfig({ maxLiveSpans: 50, maxSpanAgeMs: 30_000 })).toMatchObject({
+      maxLiveSpans: 50,
+      maxSpanAgeMs: 30_000,
+    })
+  })
+
+  it.each([0, -1, Number.NaN])('falls back to the defaults for unusable live-span bounds (%p)', (value) => {
+    expect(resolveTracesConfig({ maxLiveSpans: value, maxSpanAgeMs: value })).toMatchObject({
+      maxLiveSpans: 10_000,
+      maxSpanAgeMs: 3_600_000,
     })
   })
 

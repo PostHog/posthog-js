@@ -1,6 +1,6 @@
 import type { LogCaptureOptions } from '@posthog/types'
 import type { ResolvedPostHogLogsConfig } from '@posthog/core'
-import { detectOS, isUndefined } from '@posthog/core'
+import { detectOS, isUndefined, osResourceAttributes } from '@posthog/core'
 import { navigator } from '@posthog/browser-common/utils/globals'
 
 const DEFAULT_FLUSH_INTERVAL_MS = 3000
@@ -28,10 +28,7 @@ function defaultResourceAttributes(): Record<string, string> {
             ;[osName, osVersion] = detectOS(userAgent)
         }
     } catch {}
-    return {
-        ...(osName ? { 'os.name': osName } : {}),
-        ...(osVersion ? { 'os.version': osVersion } : {}),
-    }
+    return osResourceAttributes(osName, osVersion)
 }
 
 /**

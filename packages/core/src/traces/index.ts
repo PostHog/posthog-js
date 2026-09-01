@@ -8,7 +8,7 @@ import type {
   TraceSdkContext,
   TracesHost,
 } from './types'
-import { NOOP_SPAN, PostHogSpan, describeError } from './span'
+import { NOOP_SPAN, PostHogSpan, describeError, monotonicNow } from './span'
 import { newSpanId, newTraceId } from './ids'
 import { parseTraceparent, sanitizeTracestate } from './traceparent'
 import { assignUserAttributes, resolveStartTime, sanitizeName } from './sanitize'
@@ -26,6 +26,11 @@ const MAX_FLUSH_BACKOFF_EXPONENT = 6
 const MAX_FLUSH_BACKOFF_MS = 30_000
 
 type SpanCallback<T> = (span: Span) => T
+
+/** Monotonic where the platform has one, wall clock otherwise. Both are ms, and a platform never switches. */
+function clockNow(): number {
+  return monotonicNow() ?? Date.now()
+}
 
 /** `instanceof` and property access both throw on a hostile proxy; `startSpan` must not. */
 function isOwnSpan(value: unknown): value is PostHogSpan {
@@ -76,6 +81,11 @@ export class PostHogTraces {
   private _headBatchSize = 0
   // Bumped by reset(); a pass whose generation is stale abandons the queue.
   private _generation = 0
+  // Live-span accounting: span id -> monotonic start. Ids and numbers only,
+  // never the span itself, so a handle the caller drops is still collectable
+  // and the bound can be generous. Insertion order is start order, so the
+  // oldest entries are at the front and eviction stops at the first live one.
+  private _liveSpans = new Map<string, number>()
 
   constructor(
     private readonly _instance: TracesHost,
@@ -112,13 +122,28 @@ export class PostHogTraces {
 
     const parent = this._resolveParent(options)
 
+    // Swept before the bound is read, so a process that has leaked its way to
+    // the bound recovers on the first `startSpan` after the leaks age out.
+    this._evictAgedSpans()
+    if (this._liveSpans.size >= this._config.maxLiveSpans) {
+      this._recordDrop(
+        1,
+        `the live-span limit (${this._config.maxLiveSpans}) was reached — spans are being started and never ended`
+      )
+      return NOOP_SPAN
+    }
+
     const now = Date.now()
     const startTime = resolveStartTime(options?.startTime, now, this._logger)
+    const spanId = newSpanId()
+    // Read here rather than from the span: age is elapsed time since this call,
+    // so a backdated `startTime` neither ages a span early nor exempts it.
+    this._liveSpans.set(spanId, clockNow())
 
     return new PostHogSpan(
       {
         traceId: parent?.traceId ?? newTraceId(),
-        spanId: newSpanId(),
+        spanId,
         parentSpanId: parent?.parentSpanId,
         traceState: parent?.traceState,
         name: sanitizeName(name, 'Span name', this._logger),
@@ -223,6 +248,7 @@ export class PostHogTraces {
   reset(): void {
     this._clearFlushTimer()
     this._queue = []
+    this._liveSpans.clear()
     this._flushPromise = null
     // Abandons any in-flight pass, which would otherwise splice out spans it never sent.
     this._generation++
@@ -311,7 +337,34 @@ export class PostHogTraces {
     }
   }
 
+  /**
+   * Drops live accounting for spans older than `maxSpanAgeMs`. An evicted span
+   * is never exported — its `end()` finds no entry — so one leak returns its
+   * slot instead of disabling tracing for the rest of the process.
+   */
+  private _evictAgedSpans(): void {
+    const cutoff = clockNow() - this._config.maxSpanAgeMs
+    let evicted = 0
+    for (const [spanId, startedAt] of this._liveSpans) {
+      // Insertion order is start order, so the first entry inside the bound ends the sweep.
+      if (startedAt > cutoff) {
+        break
+      }
+      this._liveSpans.delete(spanId)
+      evicted++
+    }
+    if (evicted) {
+      this._recordDrop(evicted, `they were still live after ${this._config.maxSpanAgeMs}ms`)
+    }
+  }
+
   private _onSpanEnd(record: SpanRecord): void {
+    // Deleted before any other gate, so an opted-out span still returns its slot.
+    if (!this._liveSpans.delete(record.spanId)) {
+      // Evicted for age while live: never exported, and already counted as a drop.
+      return
+    }
+
     // Re-checked at end: opting out mid-trace must stop the span exporting.
     if (this._instance.isDisabled || this._instance.optedOut) {
       return

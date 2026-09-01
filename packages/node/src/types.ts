@@ -476,6 +476,36 @@ export interface IPostHog {
   captureImmediate({ distinctId, event, properties, groups, flags, sendFeatureFlags }: EventMessage): Promise<void>
 
   /**
+   * @description Capture an exception as a $exception event.
+   * @param error The error to capture.
+   * @param distinctId Optional user distinct ID.
+   * @param additionalProperties Optional additional properties to include.
+   * @param uuid Optional event UUID.
+   * @param flags Optional `FeatureFlagEvaluations` snapshot to attach to the event.
+   */
+  captureException(
+    error: unknown,
+    distinctId?: string,
+    additionalProperties?: Record<string | number, any>,
+    uuid?: EventMessage['uuid'],
+    flags?: FeatureFlagEvaluations
+  ): void
+
+  /**
+   * @description Capture an exception as a $exception event immediately.
+   * @param error The error to capture.
+   * @param distinctId Optional user distinct ID.
+   * @param additionalProperties Optional additional properties to include.
+   * @param flags Optional `FeatureFlagEvaluations` snapshot to attach to the event.
+   */
+  captureExceptionImmediate(
+    error: unknown,
+    distinctId?: string,
+    additionalProperties?: Record<string | number, any>,
+    flags?: FeatureFlagEvaluations
+  ): Promise<void>
+
+  /**
    * @description Capture an AI event on the dedicated AI capture endpoint.
    * Beta: the signature is stable; operational limits (per-event size cap, batching, endpoint) may change without notice. Delivery is async, and no redaction or truncation is applied to the payload.
    * @param distinctId which uniquely identifies your user

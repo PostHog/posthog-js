@@ -18,6 +18,8 @@ const resolveForTest = (partial?: Partial<ResolvedTracesConfig>): ResolvedTraces
   flushIntervalMs: 5000,
   maxExportBatchSize: 512,
   maxQueueSize: 2048,
+  maxLiveSpans: 10000,
+  maxSpanAgeMs: 3600000,
   ...partial,
 })
 
@@ -1177,6 +1179,68 @@ describe('PostHogTraces', () => {
       await traces.flush()
 
       expect(sentSpans()).toHaveLength(1)
+    })
+  })
+
+  describe('live span bounds', () => {
+    it('returns an inert handle once maxLiveSpans spans are live', async () => {
+      const traces = createTraces({ maxLiveSpans: 2 })
+
+      traces.startSpan('live-a')
+      traces.startSpan('live-b')
+      const refused = traces.startSpan('refused')
+      refused.end()
+      await traces.flush()
+
+      expect(sentSpans()).toHaveLength(0)
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('the live-span limit (2) was reached'))
+    })
+
+    it('frees the slot when a span ends', async () => {
+      const traces = createTraces({ maxLiveSpans: 1 })
+
+      traces.startSpan('first').end()
+      traces.startSpan('second').end()
+      await traces.flush()
+
+      expect(sentSpans().map((s) => s.name)).toEqual(['first', 'second'])
+    })
+
+    it('never exports a span evicted for exceeding maxSpanAgeMs', async () => {
+      const traces = createTraces({ maxSpanAgeMs: 60_000 })
+      const leaked = traces.startSpan('leaked')
+
+      await jest.advanceTimersByTimeAsync(61_000)
+      // Eviction is lazy: the next startSpan sweeps.
+      traces.startSpan('later').end()
+      leaked.end()
+      await traces.flush()
+
+      expect(sentSpans().map((s) => s.name)).toEqual(['later'])
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('still live after 60000ms'))
+    })
+
+    it('returns the slot on age eviction so a leak cannot disable tracing', async () => {
+      const traces = createTraces({ maxLiveSpans: 1, maxSpanAgeMs: 60_000 })
+      traces.startSpan('leaked-forever')
+
+      await jest.advanceTimersByTimeAsync(61_000)
+      traces.startSpan('after-the-leak').end()
+      await traces.flush()
+
+      expect(sentSpans().map((s) => s.name)).toEqual(['after-the-leak'])
+    })
+
+    it('ages from startSpan, not from a caller-supplied startTime', async () => {
+      const traces = createTraces({ maxSpanAgeMs: 60_000 })
+      // Backdated an hour: aging off the supplied time would evict it immediately.
+      const backdated = traces.startSpan('backdated', { startTime: Date.now() - 3_600_000 })
+
+      traces.startSpan('sweep-trigger').end()
+      backdated.end()
+      await traces.flush()
+
+      expect(sentSpans().map((s) => s.name)).toEqual(['sweep-trigger', 'backdated'])
     })
   })
 

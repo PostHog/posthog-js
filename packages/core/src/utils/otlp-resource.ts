@@ -39,3 +39,56 @@ export function buildOtlpResourceAttributes<TAttributeValue>(
     'telemetry.sdk.version': sdkVersion,
   }
 }
+
+/**
+ * OTLP `os.name` values, keyed by the spellings the JS SDKs detect natively:
+ * `node:os` `platform()` identifiers and the names `detectOS` reads out of a
+ * user agent.
+ *
+ * OpenTelemetry defines `os.name` as the human-readable OS name; the lowercase
+ * identifiers (`darwin`, `win32`) are `node:os` `platform()` values, not
+ * `os.name` values.
+ * The values match what `posthog-ios` and `posthog-android` send for the
+ * platforms they cover.
+ */
+const OS_NAMES: Record<string, string> = {
+  // node:os platform()
+  darwin: 'macOS',
+  win32: 'Windows',
+  linux: 'Linux',
+  android: 'Android',
+  freebsd: 'FreeBSD',
+  openbsd: 'OpenBSD',
+  sunos: 'SunOS',
+  aix: 'AIX',
+  // detectOS
+  'Mac OS X': 'macOS',
+}
+
+/**
+ * Normalizes a natively-detected OS name against the table above.
+ * Unrecognized names pass through: a wrong-looking value beats dropping an OS
+ * we have not mapped yet.
+ *
+ * @internal Shared within this SDK; not part of the stable public API.
+ */
+export function normalizeOsName(name: string | undefined): string | undefined {
+  if (!name) {
+    return undefined
+  }
+  return Object.prototype.hasOwnProperty.call(OS_NAMES, name) ? OS_NAMES[name] : name
+}
+
+/**
+ * The `os.name` / `os.version` resource attribute pair, with either key omitted
+ * rather than emitted empty when the host cannot determine it.
+ *
+ * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
+ */
+export function osResourceAttributes(name: string | undefined, version: string | undefined): Record<string, string> {
+  const osName = normalizeOsName(name)
+  return {
+    ...(osName ? { 'os.name': osName } : {}),
+    ...(version ? { 'os.version': version } : {}),
+  }
+}

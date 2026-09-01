@@ -9,7 +9,7 @@ import { isError } from '../utils'
  * A monotonic millisecond reading where the platform has one, so an NTP
  * correction mid-span can't produce a negative duration.
  */
-function monotonicNow(): number | undefined {
+export function monotonicNow(): number | undefined {
   const perf = (globalThis as { performance?: { now?: () => number } }).performance
   return typeof perf?.now === 'function' ? perf.now() : undefined
 }

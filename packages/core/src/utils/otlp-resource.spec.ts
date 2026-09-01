@@ -4,6 +4,7 @@ import { buildMetricsResourceAttributes } from '../metrics/metrics-utils'
 import type { ResolvedPostHogMetricsConfig } from '../metrics/types'
 import { buildTracesResourceAttributes } from '../traces/otlp'
 import type { ResolvedTracesConfig } from '../traces/types'
+import { normalizeOsName, osResourceAttributes } from './otlp-resource'
 
 const shared = {
   serviceName: 'checkout',
@@ -79,5 +80,51 @@ describe('shared OTLP resource attributes', () => {
         'telemetry.sdk.version': '1.0.0',
       })
     }
+  })
+})
+
+describe('osResourceAttributes', () => {
+  it.each([
+    // node:os platform() identifiers rather than os.name values
+    ['darwin', 'macOS'],
+    ['win32', 'Windows'],
+    ['linux', 'Linux'],
+    ['android', 'Android'],
+    ['freebsd', 'FreeBSD'],
+    // detectOS spellings
+    ['Mac OS X', 'macOS'],
+    ['iOS', 'iOS'],
+    ['Android', 'Android'],
+    ['Windows', 'Windows'],
+    ['Linux', 'Linux'],
+  ])('normalizes %s to %s', (raw, expected) => {
+    expect(normalizeOsName(raw)).toBe(expected)
+  })
+
+  it('passes an unmapped name through rather than dropping it', () => {
+    expect(normalizeOsName('Haiku')).toBe('Haiku')
+    expect(normalizeOsName('constructor')).toBe('constructor')
+  })
+
+  it.each([undefined, ''])('returns undefined for %p', (raw) => {
+    expect(normalizeOsName(raw)).toBeUndefined()
+  })
+
+  it('agrees with the names posthog-ios and posthog-android already send', () => {
+    // Both SDKs ship these values today; a divergence here splits one filter in two.
+    expect(normalizeOsName('darwin')).toBe('macOS')
+    expect(normalizeOsName('Mac OS X')).toBe('macOS')
+    expect(normalizeOsName('iOS')).toBe('iOS')
+    expect(normalizeOsName('Android')).toBe('Android')
+  })
+
+  it('omits either key rather than emitting it empty', () => {
+    expect(osResourceAttributes('darwin', undefined)).toEqual({ 'os.name': 'macOS' })
+    expect(osResourceAttributes(undefined, '14.0')).toEqual({ 'os.version': '14.0' })
+    expect(osResourceAttributes('', '')).toEqual({})
+    expect(osResourceAttributes('win32', '10.0.26100')).toEqual({
+      'os.name': 'Windows',
+      'os.version': '10.0.26100',
+    })
   })
 })

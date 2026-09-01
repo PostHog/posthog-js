@@ -231,6 +231,28 @@ export interface TracesConfig {
      * @default 2048
      */
     maxQueueSize?: number
+
+    /**
+     * Bound on how many spans may be live (started but not ended) at once. At
+     * the bound `startSpan` returns an inert handle, so code that leaks spans
+     * cannot grow the SDK's bookkeeping without limit. The SDK tracks only an
+     * id and a timestamp per live span, never the span itself, so a high bound
+     * is inexpensive.
+     *
+     * @default 10000
+     */
+    maxLiveSpans?: number
+
+    /**
+     * How long a span may stay live before the SDK stops accounting for it, in
+     * milliseconds. An evicted span is never exported, and its slot is returned
+     * so one leak cannot disable tracing for the rest of the process. Measured
+     * as monotonic elapsed time since `startSpan`, so a caller-supplied
+     * `startTime` neither ages a span early nor exempts it.
+     *
+     * @default 3600000
+     */
+    maxSpanAgeMs?: number
 }
 
 // ============================================================================

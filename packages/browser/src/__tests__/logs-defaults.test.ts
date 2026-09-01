@@ -120,15 +120,27 @@ describe('resolveLogsConfig', () => {
             delete window.navigator.userAgent
         })
 
-        it('attaches the detected OS', () => {
+        it('attaches the detected OS under the name the other PostHog SDKs use', () => {
             setUserAgent(
                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             )
 
+            // `detectOS` reads the user agent's "Mac OS X"; posthog-ios reports the
+            // same OS as "macOS", and one filter has to match both.
             expect(resolveLogsConfig(undefined).resourceAttributes).toEqual({
-                'os.name': 'Mac OS X',
+                'os.name': 'macOS',
                 'os.version': '10.15.7',
             })
+        })
+
+        it.each([
+            ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15', 'iOS'],
+            ['Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile', 'Android'],
+            ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0', 'Windows'],
+        ])('reports %s as os.name %s, matching the native SDKs', (userAgent, expected) => {
+            setUserAgent(userAgent)
+
+            expect(resolveLogsConfig(undefined).resourceAttributes?.['os.name']).toBe(expected)
         })
 
         it('lets user resourceAttributes override the detected OS', () => {

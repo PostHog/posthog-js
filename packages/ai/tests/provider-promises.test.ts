@@ -77,12 +77,17 @@ const posthogClient = (): PostHog =>
     privacy_mode: false,
   }) as unknown as PostHog
 
-const jsonResponse = (body: unknown, requestIDHeader = 'x-request-id'): Response =>
+const jsonResponse = (
+  body: unknown,
+  requestIDHeader = 'x-request-id',
+  additionalHeaders: Record<string, string> = {}
+): Response =>
   new Response(JSON.stringify(body), {
     status: 200,
     headers: {
       'content-type': 'application/json',
       [requestIDHeader]: 'req_provider_promise',
+      ...additionalHeaders,
     },
   })
 
@@ -264,7 +269,9 @@ describe('provider promise compatibility with real SDK resources', () => {
   })
 
   test('Anthropic create promises retain raw-response helpers and transformed data', async () => {
-    const fetch = jest.fn(async () => jsonResponse(anthropicMessage, 'request-id'))
+    const fetch = jest.fn(async () =>
+      jsonResponse(anthropicMessage, 'request-id', { 'anthropic-workspace-id': 'wrkspc_provider_promise' })
+    )
     const client = new PostHogAnthropic({ apiKey: 'test', posthog: posthogClient(), fetch })
 
     const promise = client.messages.create({
@@ -272,18 +279,25 @@ describe('provider promise compatibility with real SDK resources', () => {
       messages: [{ role: 'user', content: 'Hello' }],
       max_tokens: 32,
     })
+    const transformedPromise = promise._thenUnwrap(() => ({ transformed: true }))
 
     expect(typeof promise.asResponse).toBe('function')
     expect(typeof promise.withResponse).toBe('function')
     const rawResponse = await promise.asResponse()
-    const { data, request_id } = await promise.withResponse()
+    const { data, request_id, workspace_id } = await promise.withResponse()
+    const transformed = await transformedPromise
 
     expect(rawResponse.status).toBe(200)
     expect(rawResponse.headers.get('request-id')).toBe('req_provider_promise')
     expect(rawResponse.bodyUsed).toBe(true)
     await expect(rawResponse.json()).rejects.toThrow()
     expect(data.id).toBe(anthropicMessage.id)
+    expect((data as typeof data & { _workspace_id?: string })._workspace_id).toBe('wrkspc_provider_promise')
+    expect(Object.keys(data)).not.toContain('_workspace_id')
     expect(request_id).toBe('req_provider_promise')
+    expect(workspace_id).toBe('wrkspc_provider_promise')
+    expect(transformed._workspace_id).toBe('wrkspc_provider_promise')
+    expect(Object.keys(transformed)).not.toContain('_workspace_id')
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 })
