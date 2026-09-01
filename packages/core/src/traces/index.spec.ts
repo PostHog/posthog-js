@@ -556,6 +556,18 @@ describe('PostHogTraces', () => {
       await traces.flush()
       expect(instance._sendTracesBatch).not.toHaveBeenCalled()
     })
+
+    it('counts a span dropped at the end-time gate', async () => {
+      const instance = createMockInstance()
+      const traces = createTraces({}, instance)
+      const span = traces.startSpan('checkout')
+
+      instance.optedOut = true
+      span.end()
+      await traces.flush()
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('the user has opted out'))
+    })
   })
 
   describe('export', () => {
@@ -930,6 +942,19 @@ describe('PostHogTraces', () => {
       await traces.flush()
 
       expect(instance._sendTracesBatch).not.toHaveBeenCalled()
+    })
+
+    it('counts spans discarded from the queue when consent is withdrawn', async () => {
+      const instance = createMockInstance()
+      const traces = createTraces({}, instance)
+      traces.startSpan('a').end()
+      traces.startSpan('b').end()
+
+      instance.optedOut = true
+      await traces.flush()
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('2 span(s)'))
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('the user has opted out'))
     })
   })
 
