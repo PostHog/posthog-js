@@ -104,10 +104,7 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
-        usage: {
-          inputTokens: 0,
-          outputTokens: 0,
-        },
+        usage: {},
         error,
       })
       throw error
@@ -123,11 +120,10 @@ export class WrappedModels {
     let firstTokenTime: number | undefined
     let stopReason: string | undefined
     let usage: TokenUsage = {
-      inputTokens: 0,
-      outputTokens: 0,
       webSearchCount: 0,
       rawUsage: undefined,
     }
+    let errored = false
 
     try {
       const stream = await this.client.models.generateContentStream(geminiParams as GenerateContentParameters)
@@ -210,35 +206,8 @@ export class WrappedModels {
         }
         yield chunk
       }
-
-      const latency = (Date.now() - startTime) / 1000
-      const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
-
-      const availableTools = extractAvailableToolCalls('gemini', geminiParams)
-
-      // Format output similar to formatResponseGemini
-      const output = accumulatedContent.length > 0 ? [{ role: 'assistant', content: accumulatedContent }] : []
-
-      await captureAiGeneration(this.phClient, {
-        ...posthogParams,
-        model: geminiParams.model,
-        provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams),
-        output,
-        latency,
-        timeToFirstToken,
-        baseURL: 'https://generativelanguage.googleapis.com',
-        modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
-        httpStatus: 200,
-        usage: {
-          ...usage,
-          webSearchCount: usage.webSearchCount,
-          rawUsage: usage.rawUsage,
-        },
-        stopReason,
-        tools: availableTools,
-      })
     } catch (error: unknown) {
+      errored = true
       const latency = (Date.now() - startTime) / 1000
       await captureAiGeneration(this.phClient, {
         ...posthogParams,
@@ -249,13 +218,43 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
-        usage: {
-          inputTokens: 0,
-          outputTokens: 0,
-        },
+        usage,
         error,
       })
       throw error
+    } finally {
+      // A consumer that stops iterating resumes the pending yield as a return,
+      // skipping both the loop tail and the catch. Only a finally runs then, so
+      // the success capture lives here to cover completion and cancellation.
+      if (!errored) {
+        const latency = (Date.now() - startTime) / 1000
+        const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
+
+        const availableTools = extractAvailableToolCalls('gemini', geminiParams)
+
+        // Format output similar to formatResponseGemini
+        const output = accumulatedContent.length > 0 ? [{ role: 'assistant', content: accumulatedContent }] : []
+
+        await captureAiGeneration(this.phClient, {
+          ...posthogParams,
+          model: geminiParams.model,
+          provider: 'gemini',
+          input: this.formatInputForPostHog(geminiParams),
+          output,
+          latency,
+          timeToFirstToken,
+          baseURL: 'https://generativelanguage.googleapis.com',
+          modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
+          httpStatus: 200,
+          usage: {
+            ...usage,
+            webSearchCount: usage.webSearchCount,
+            rawUsage: usage.rawUsage,
+          },
+          stopReason,
+          tools: availableTools,
+        })
+      }
     }
   }
 
@@ -298,9 +297,7 @@ export class WrappedModels {
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as EmbedContentParameters & MonitoringParams),
-        usage: {
-          inputTokens: 0,
-        },
+        usage: {},
         error,
       })
       throw error
