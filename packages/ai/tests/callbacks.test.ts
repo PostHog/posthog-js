@@ -246,7 +246,7 @@ describe('LangChainCallbackHandler', () => {
             output_tokens: 10,
             total_tokens: 40,
           },
-          response_metadata: { status: 'completed' },
+          response_metadata: { status: 'completed', incomplete_details: null },
         }),
       },
       expectedInputTokens: 30,
@@ -273,6 +273,27 @@ describe('LangChainCallbackHandler', () => {
       expectedInputTokens: 33,
       expectedOutputTokens: 11,
       expectedStopReason: 'max_output_tokens',
+    },
+    {
+      name: 'Responses API non-terminal status is not a stop reason',
+      serializedId: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'],
+      runId: 'run_responses_api_queued',
+      model: 'gpt-4o',
+      provider: 'openai',
+      generation: {
+        message: new AIMessage({
+          content: '',
+          usage_metadata: {
+            input_tokens: 5,
+            output_tokens: 0,
+            total_tokens: 5,
+          },
+          response_metadata: { status: 'queued', incomplete_details: null },
+        }),
+      },
+      expectedInputTokens: 5,
+      expectedOutputTokens: 0,
+      expectedStopReason: undefined,
     },
     {
       name: 'finish_reason over a Responses-style status',
