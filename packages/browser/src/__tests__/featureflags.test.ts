@@ -2820,6 +2820,7 @@ describe('featureflags', () => {
                         some: 'payload',
                     },
                     'alpha-feature-2': 200,
+                    'x-flag': 'stale-payload',
                 },
                 $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
                 $enabled_feature_flags: {
@@ -2895,6 +2896,10 @@ describe('featureflags', () => {
                 'disabled-flag': false,
                 'multivariate-flag': 'variant-1',
                 'x-flag': 'x-value', // new successful flag merged in
+            })
+            expect(featureFlags.getFlagPayloads()).toEqual({
+                'alpha-feature-2': 200,
+                'beta-feature': { some: 'payload' },
             })
         })
     })
@@ -3371,6 +3376,27 @@ describe('parseFlagsResponse', () => {
         )
     })
 
+    it('preserves falsy payloads from detailed flag responses', () => {
+        parseFlagsResponse(
+            {
+                flags: {
+                    'beta-feature': {
+                        key: 'beta-feature',
+                        enabled: true,
+                        metadata: { payload: false },
+                    },
+                },
+            },
+            persistence
+        )
+
+        expect(persistence.register).toHaveBeenCalledWith(
+            expect.objectContaining({
+                $feature_flag_payloads: { 'beta-feature': false },
+            })
+        )
+    })
+
     it('enables feature flag details from /flags?v=1 response', () => {
         const flagsResponse = {
             featureFlags: {
@@ -3731,6 +3757,16 @@ describe('parseFlagsResponse', () => {
                 options: { partialResponse: true },
                 expectedFlags: { 'survey-flag': true, 'other-flag': true },
                 expectedPayloads: {},
+                expectedDetails: { 'survey-flag': surveyFlagDetail },
+            },
+            {
+                name: 'partial response removes stale payloads for reevaluated flags',
+                existingFlags: { 'survey-flag': false, 'other-flag': true },
+                existingPayloads: { 'survey-flag': 'stale-payload', 'other-flag': 'preserved-payload' },
+                existingDetails: {},
+                options: { partialResponse: true },
+                expectedFlags: { 'survey-flag': true, 'other-flag': true },
+                expectedPayloads: { 'other-flag': 'preserved-payload' },
                 expectedDetails: { 'survey-flag': surveyFlagDetail },
             },
             {

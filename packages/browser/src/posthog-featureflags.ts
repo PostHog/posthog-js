@@ -166,8 +166,15 @@ export const parseFlagsResponse = (
         // The response is intentionally partial (e.g., only survey flags were requested via
         // advanced_only_evaluate_survey_feature_flags). Merge with existing flags so that
         // bootstrapped or previously loaded non-survey flags are preserved.
+        const evaluatedFlagKeys = Object.keys(newFeatureFlags)
+        const evaluatedPayloads = newFeatureFlagPayloads || {}
         newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
-        newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
+        newFeatureFlagPayloads = { ...currentFlagPayloads, ...evaluatedPayloads }
+        evaluatedFlagKeys.forEach((key) => {
+            if (!(key in evaluatedPayloads)) {
+                delete newFeatureFlagPayloads?.[key]
+            }
+        })
         newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
     } else if (response.errorsWhileComputingFlags) {
         // if not all flags were computed, we upsert flags instead of replacing them
@@ -179,12 +186,18 @@ export const parseFlagsResponse = (
                 ...currentFlags,
                 ...Object.fromEntries(Object.entries(newFeatureFlags).filter(([key]) => successfulKeys.has(key))),
             }
+            const successfulPayloads = Object.fromEntries(
+                Object.entries(newFeatureFlagPayloads || {}).filter(([key]) => successfulKeys.has(key))
+            )
             newFeatureFlagPayloads = {
                 ...currentFlagPayloads,
-                ...Object.fromEntries(
-                    Object.entries(newFeatureFlagPayloads || {}).filter(([key]) => successfulKeys.has(key))
-                ),
+                ...successfulPayloads,
             }
+            successfulKeys.forEach((key) => {
+                if (!(key in successfulPayloads)) {
+                    delete newFeatureFlagPayloads?.[key]
+                }
+            })
             newFeatureFlagDetails = {
                 ...currentFlagDetails,
                 ...Object.fromEntries(
@@ -227,7 +240,7 @@ const normalizeFlagsResponse = (response: Partial<FlagsResponse>, responseLogger
         const featureFlagPayloads = Object.fromEntries(
             Object.keys(flagDetails)
                 .filter((flag) => flagDetails[flag].enabled)
-                .filter((flag) => flagDetails[flag].metadata?.payload)
+                .filter((flag) => !isUndefined(flagDetails[flag].metadata?.payload))
                 .map((flag) => [flag, flagDetails[flag].metadata?.payload])
         )
         return { ...response, featureFlags, featureFlagPayloads }
@@ -258,6 +271,7 @@ export class PostHogFeatureFlags implements Extension {
     private _initializingClient?: Client
     private _logger: Client['logger'] = logger
     private _dynamicProperties?: Disposable
+    private _crossTabPersistenceUnsubscribe?: () => void
     private _baseEventProperties: Record<string, unknown> = {}
     private _eventPropertiesWithFlagValues: Record<string, unknown> = {}
     private _reloadingHandlers: Array<() => void> = []
@@ -275,6 +289,7 @@ export class PostHogFeatureFlags implements Extension {
     private _lastRefreshAt?: number
     private readonly _configSource: FeatureFlagsConfigSource
     private readonly _mutableConfigSource?: MutableFeatureFlagsConfigSource
+    private readonly _instance?: PostHog
 
     constructor(instance: PostHog)
     constructor(configSource: FeatureFlagsConfigSource)
@@ -282,6 +297,7 @@ export class PostHogFeatureFlags implements Extension {
         if ('get' in instanceOrConfigSource) {
             this._configSource = instanceOrConfigSource
         } else {
+            this._instance = instanceOrConfigSource
             this._mutableConfigSource = new MutableFeatureFlagsConfigSource(
                 instanceOrConfigSource.config,
                 instanceOrConfigSource._shouldDisableFlags()
@@ -321,6 +337,10 @@ export class PostHogFeatureFlags implements Extension {
         this._dynamicProperties = client.registerDynamicEventProperties(() =>
             this._isCacheStale() ? this._baseEventProperties : this._eventPropertiesWithFlagValues
         )
+        this._crossTabPersistenceUnsubscribe = this._instance?.persistence?.onCrossTabFeatureFlagChange(() => {
+            this._rebuildEventProperties()
+            this._fireFeatureFlagsCallbacks()
+        })
         this._rebuildEventProperties()
         return this.initialize()
     }
@@ -420,6 +440,8 @@ export class PostHogFeatureFlags implements Extension {
         this._clearDebouncer()
         this._dynamicProperties?.dispose()
         this._dynamicProperties = undefined
+        this._crossTabPersistenceUnsubscribe?.()
+        this._crossTabPersistenceUnsubscribe = undefined
         this._reloadingHandlers = []
         window?.removeEventListener('online', this._onOnline)
         this._client = undefined
@@ -435,6 +457,59 @@ export class PostHogFeatureFlags implements Extension {
 
     private _set(properties: FeatureFlagsState): void {
         this._persist(() => this._client?.kv.set(properties))
+    }
+
+    private _markCrossTabFeatureFlagSnapshot(
+        statePatch: FeatureFlagsState,
+        response: Partial<FlagsResponse>,
+        partialResponse: boolean
+    ): void {
+        if (!this._instance?.persistence || !statePatch[ENABLED_FEATURE_FLAGS]) {
+            return
+        }
+
+        const previousFlags = this._prop(ENABLED_FEATURE_FLAGS) || {}
+        const nextFlags = statePatch[ENABLED_FEATURE_FLAGS] || {}
+        const responseFlags = response.flags || response.featureFlags
+        const successfulResponseFlagKeys = response.flags
+            ? Object.entries(response.flags)
+                  .filter(([, detail]) => !detail?.failed)
+                  .map(([key]) => key)
+            : []
+        const isIncompleteResponse = !!response.errorsWhileComputingFlags && !!response.flags
+        const ownedFlagKeys = isIncompleteResponse
+            ? successfulResponseFlagKeys
+            : partialResponse && !isArray(responseFlags)
+              ? Object.keys(responseFlags || {})
+              : Array.from(new Set([...Object.keys(previousFlags), ...Object.keys(nextFlags)]))
+        const previousPayloads = this._prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS) || {}
+        const nextPayloads = statePatch[PERSISTENCE_FEATURE_FLAG_PAYLOADS] || {}
+        const ownedPayloadKeys =
+            isIncompleteResponse || partialResponse
+                ? ownedFlagKeys
+                : Array.from(new Set([...Object.keys(previousPayloads), ...Object.keys(nextPayloads)]))
+        const ownsCompleteSnapshot = !isIncompleteResponse && !partialResponse
+        const flagOwnership = ownsCompleteSnapshot ? true : ownedFlagKeys
+        const payloadOwnership = ownsCompleteSnapshot ? true : ownedPayloadKeys
+        const changes: Record<string, readonly string[] | true> = {
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: flagOwnership,
+            [ENABLED_FEATURE_FLAGS]: flagOwnership,
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: payloadOwnership,
+        }
+        if (statePatch[PERSISTENCE_FEATURE_FLAG_DETAILS]) {
+            changes[PERSISTENCE_FEATURE_FLAG_DETAILS] = flagOwnership
+        }
+        for (const key of [
+            PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+            PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+            PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
+        ] as const) {
+            if (!isUndefined(statePatch[key])) {
+                changes[key] = true
+            }
+        }
+
+        this._instance.persistence.markCrossTabFeatureFlagChanges(changes)
     }
 
     private _remove(keys: keyof FeatureFlagsState | readonly (keyof FeatureFlagsState)[]): void {
@@ -1309,6 +1384,7 @@ export class PostHogFeatureFlags implements Extension {
             this._logger
         )
         if (statePatch) {
+            this._markCrossTabFeatureFlagSnapshot(statePatch, response, !!options?.partialResponse)
             this._set(statePatch)
         }
         // Reset stale refresh flag when we successfully receive fresh flags
@@ -1483,6 +1559,11 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
+        this._instance?.persistence?.markCrossTabFeatureFlagChanges({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: [key],
+            [ENABLED_FEATURE_FLAGS]: [key],
+            [STORED_PERSON_PROPERTIES_KEY]: Object.keys(enrollmentPersonProp),
+        })
         this._set({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFlags)),
             [ENABLED_FEATURE_FLAGS]: newFlags,
