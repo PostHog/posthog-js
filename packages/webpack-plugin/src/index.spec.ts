@@ -6,9 +6,9 @@ import { runSourcemapCli } from '@posthog/plugin-utils'
 import { PosthogWebpackPlugin } from './index'
 import type { ResolvedPluginConfig } from './config'
 
-const mockLoggerError = jest.fn()
+const mockLoggerError = vi.fn()
 
-jest.mock(
+vi.mock(
     '@posthog/core',
     () => ({
         createLogger: () => ({ error: mockLoggerError }),
@@ -16,11 +16,11 @@ jest.mock(
     { virtual: true }
 )
 
-jest.mock('@posthog/plugin-utils', () => ({
-    runSourcemapCli: jest.fn().mockResolvedValue(undefined),
+vi.mock('@posthog/plugin-utils', () => ({
+    runSourcemapCli: vi.fn().mockResolvedValue(undefined),
 }))
 
-const runSourcemapCliMock = runSourcemapCli as jest.MockedFunction<typeof runSourcemapCli>
+const runSourcemapCliMock = runSourcemapCli as vi.MockedFunction<typeof runSourcemapCli>
 
 const config: ResolvedPluginConfig = {
     personalApiKey: 'phx_test',
@@ -57,12 +57,12 @@ async function exists(filePath: string): Promise<boolean> {
 
 function createCompiler(version: string | undefined): {
     compiler: webpack.Compiler
-    sourceMapDevToolPlugin: jest.Mock
+    sourceMapDevToolPlugin: vi.Mock
 } {
-    const sourceMapDevToolPlugin = jest.fn().mockImplementation(() => ({ apply: jest.fn() }))
+    const sourceMapDevToolPlugin = vi.fn().mockImplementation(() => ({ apply: vi.fn() }))
     const compiler = {
         webpack: { SourceMapDevToolPlugin: sourceMapDevToolPlugin, version },
-        hooks: { done: { tapAsync: jest.fn() } },
+        hooks: { done: { tapAsync: vi.fn() } },
     } as unknown as webpack.Compiler
     return { compiler, sourceMapDevToolPlugin }
 }
@@ -77,7 +77,7 @@ describe('PosthogWebpackPlugin', () => {
     })
 
     afterEach(async () => {
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
         await fs.rm(outputDirectory, { force: true, recursive: true })
     })
 
@@ -180,7 +180,7 @@ describe('PosthogWebpackPlugin', () => {
         await fs.writeFile(failedCssSourceMap, '{}')
         await fs.writeFile(deletedCssSourceMap, '{}')
 
-        jest.spyOn(fs, 'rm').mockImplementation(async (filePath, options) => {
+        vi.spyOn(fs, 'rm').mockImplementation(async (filePath, options) => {
             if (filePath === failedCssSourceMap) {
                 throw new Error('permission denied')
             }

@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-import { expect, it, describe, beforeEach, afterEach, jest } from '@jest/globals'
+import { expect, it, describe, beforeEach, afterEach, vi } from 'vitest'
 import { render } from 'preact'
 import { act } from 'preact/test-utils'
 import { SURVEYS, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
@@ -183,7 +183,7 @@ describe('surveys', () => {
     beforeEach(() => {
         surveysResponse = { surveys: firstSurveys }
 
-        const loadScriptMock = jest.fn()
+        const loadScriptMock = vi.fn()
 
         loadScriptMock.mockImplementation((_ph, _path, callback) => {
             assignableWindow.__PosthogExtensions__ = assignableWindow.__Posthog__ || {}
@@ -204,21 +204,21 @@ describe('surveys', () => {
             config: config,
             persistence: new PostHogPersistence(config),
             requestRouter: new RequestRouter({ config } as any),
-            _addCaptureHook: jest.fn(),
+            _addCaptureHook: vi.fn(),
             register: (props: Properties) => instance.persistence?.register(props),
             unregister: (key: string) => instance.persistence?.unregister(key),
             get_property: (key: string) => instance.persistence?.props[key],
-            _send_request: jest
+            _send_request: vi
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse })),
-            onFeatureFlags: jest.fn().mockReturnValue(() => {}),
+            onFeatureFlags: vi.fn().mockReturnValue(() => {}),
             featureFlags: {
                 hasLoadedFlags: true,
-                _send_request: jest
+                _send_request: vi
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
-                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
-                isFeatureEnabled: jest
+                getFeatureFlag: vi.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
+                isFeatureEnabled: vi
                     .fn()
                     .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
             },
@@ -237,7 +237,7 @@ describe('surveys', () => {
 
         // mock loadIfEnabled so posthog.surveys.loadIfEnabled() doesn't call _send_request
         // and it instantiates the survey event receiver
-        const loadIfEnabledMock = jest.fn()
+        const loadIfEnabledMock = vi.fn()
         loadIfEnabledMock.mockImplementation(() => {
             surveys._surveyEventReceiver = new SurveyEventReceiver(instance)
         })
@@ -285,8 +285,8 @@ describe('surveys', () => {
     })
 
     it('disposes automatic display polling and visibility handling', () => {
-        instance.getSurveys = jest.fn((callback) => callback([]))
-        const removeEventListener = jest.spyOn(document, 'removeEventListener')
+        instance.getSurveys = vi.fn((callback) => callback([]))
+        const removeEventListener = vi.spyOn(document, 'removeEventListener')
         const surveyManager = generateSurveys(instance, true)
 
         surveyManager?.dispose()
@@ -325,7 +325,7 @@ describe('surveys', () => {
 
     it('unmounts surveys rendered through the public popover helper on dispose', () => {
         const survey = firstSurveys[0]
-        const removeEventListener = jest.spyOn(window, 'removeEventListener')
+        const removeEventListener = vi.spyOn(window, 'removeEventListener')
         const surveyManager = new SurveyManager(instance)
 
         act(() => surveyManager.renderPopover(survey))
@@ -409,7 +409,7 @@ describe('surveys', () => {
 
     describe('getActiveMatchingSurveys', () => {
         beforeEach(() => {
-            surveys.getSurveys = jest.fn((callback) =>
+            surveys.getSurveys = vi.fn((callback) =>
                 callback(instance.get_property(SURVEYS) ?? surveysResponse.surveys ?? [])
             )
         })
@@ -691,7 +691,7 @@ describe('surveys', () => {
         ])('returns a cached-eligible API survey to a one-shot caller when flags $state', ({ hasLoadedFlags }) => {
             instance.featureFlags.hasLoadedFlags = hasLoadedFlags
             instance.persistence?.register({ $surveys: [apiSurveyWithCachedTargetingFlags] })
-            const callback = jest.fn()
+            const callback = vi.fn()
 
             surveys.getActiveMatchingSurveys(callback)
 
@@ -959,9 +959,9 @@ describe('surveys', () => {
 
         it('should render in-app surveys (popover, widget, api)', () => {
             instance.persistence?.register({ [SURVEYS]: [inAppSurvey] })
-            const mockRenderSurvey = jest.fn()
+            const mockRenderSurvey = vi.fn()
             ;(surveys as any)._surveyManager = { renderSurvey: mockRenderSurvey }
-            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+            const loggerWarnSpy = vi.spyOn(logger, 'warn')
 
             surveys.renderSurvey('in-app-survey', '#test-survey-container')
 
@@ -975,9 +975,9 @@ describe('surveys', () => {
 
         it('should not render external surveys and show warning', () => {
             instance.persistence?.register({ [SURVEYS]: [externalSurvey] })
-            const mockRenderSurvey = jest.fn()
+            const mockRenderSurvey = vi.fn()
             ;(surveys as any)._surveyManager = { renderSurvey: mockRenderSurvey }
-            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+            const loggerWarnSpy = vi.spyOn(logger, 'warn')
 
             surveys.renderSurvey('external-survey', '#test-survey-container')
 
@@ -987,7 +987,7 @@ describe('surveys', () => {
 
         it('should warn when survey manager is not initialized', () => {
             ;(surveys as any)._surveyManager = null
-            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+            const loggerWarnSpy = vi.spyOn(logger, 'warn')
 
             surveys.renderSurvey('test-survey', '#test-survey-container')
 
@@ -996,8 +996,8 @@ describe('surveys', () => {
 
         it('should warn when survey is not found', () => {
             instance.persistence?.register({ [SURVEYS]: [] })
-            ;(surveys as any)._surveyManager = { renderSurvey: jest.fn() }
-            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+            ;(surveys as any)._surveyManager = { renderSurvey: vi.fn() }
+            const loggerWarnSpy = vi.spyOn(logger, 'warn')
 
             surveys.renderSurvey('non-existent-survey', '#test-survey-container')
 
@@ -1006,8 +1006,8 @@ describe('surveys', () => {
 
         it('should warn when target element is not found', () => {
             instance.persistence?.register({ [SURVEYS]: [inAppSurvey] })
-            ;(surveys as any)._surveyManager = { renderSurvey: jest.fn() }
-            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+            ;(surveys as any)._surveyManager = { renderSurvey: vi.fn() }
+            const loggerWarnSpy = vi.spyOn(logger, 'warn')
 
             surveys.renderSurvey('in-app-survey', '#non-existent-element')
 
@@ -1095,7 +1095,7 @@ describe('surveys', () => {
 
         it('correctly converts truthy/falsy flag values to boolean', () => {
             // Mock different return values
-            const mockIsFeatureEnabled = jest.fn()
+            const mockIsFeatureEnabled = vi.fn()
             instance.featureFlags.isFeatureEnabled = mockIsFeatureEnabled
 
             // Test truthy values
@@ -1778,7 +1778,7 @@ describe('surveys', () => {
             }) as unknown as Survey
 
         beforeEach(() => {
-            ;(instance.capture as jest.Mock).mockClear()
+            ;(instance.capture as vi.Mock).mockClear()
         })
 
         it('does not send a survey sent event for an incomplete prefill when partial responses are off', () => {
@@ -1809,7 +1809,7 @@ describe('surveys', () => {
 
             expect(surveyManager._handleInitialResponses(survey, { 0: 0, 1: 1 })).toBe(false)
 
-            const [, properties] = (instance.capture as jest.Mock).mock.calls.find(([event]) => event === 'survey sent')
+            const [, properties] = (instance.capture as vi.Mock).mock.calls.find(([event]) => event === 'survey sent')
             expect(properties).toEqual(
                 expect.objectContaining({ $survey_completed: false, $survey_response_q1: 'yes' })
             )
@@ -1874,13 +1874,13 @@ describe('surveys', () => {
 
         beforeEach(() => {
             surveyManager = (surveys as any)._surveyManager
-            instance.get_property = jest.fn().mockReturnValue([frSurvey])
-            instance.onFeatureFlags = jest.fn().mockReturnValue(() => {})
+            instance.get_property = vi.fn().mockReturnValue([frSurvey])
+            instance.onFeatureFlags = vi.fn().mockReturnValue(() => {})
         })
 
         it('updates _currentLanguage and re-renders when languagechange fires and language differs', () => {
             // Spy on _translateSurveyForRendering to return French translation
-            ;(surveyManager as any)._translateSurveyForRendering = jest
+            ;(surveyManager as any)._translateSurveyForRendering = vi
                 .fn()
                 .mockReturnValue({ survey: frSurvey, language: 'fr' })
             ;(surveyManager as any)._surveyInFocus = frSurvey.id
@@ -1894,7 +1894,7 @@ describe('surveys', () => {
         })
 
         it('does not re-render when language is unchanged', () => {
-            ;(surveyManager as any)._translateSurveyForRendering = jest
+            ;(surveyManager as any)._translateSurveyForRendering = vi
                 .fn()
                 .mockReturnValue({ survey: frSurvey, language: 'fr' })
             ;(surveyManager as any)._surveyInFocus = frSurvey.id
@@ -1909,7 +1909,7 @@ describe('surveys', () => {
         })
 
         it('does nothing when no survey is in focus', () => {
-            const translateSpy = jest.fn()
+            const translateSpy = vi.fn()
             ;(surveyManager as any)._translateSurveyForRendering = translateSpy
             ;(surveyManager as any)._surveyInFocus = null
 
@@ -1921,8 +1921,8 @@ describe('surveys', () => {
         it('tracks the language flip but does not re-render while the survey is still pending delay', () => {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             const preactModule = require('preact')
-            const renderSpy = jest.spyOn(preactModule, 'render')
-            const translateSpy = jest.fn().mockReturnValue({ survey: frSurvey, language: 'fr' })
+            const renderSpy = vi.spyOn(preactModule, 'render')
+            const translateSpy = vi.fn().mockReturnValue({ survey: frSurvey, language: 'fr' })
             ;(surveyManager as any)._translateSurveyForRendering = translateSpy
 
             // Survey is queued (focus set) but the delay timer has not fired yet
@@ -1952,7 +1952,7 @@ describe('surveys', () => {
         })
 
         it('removes languagechange listener on dispose', () => {
-            const removeListenerSpy = jest.spyOn(window, 'removeEventListener')
+            const removeListenerSpy = vi.spyOn(window, 'removeEventListener')
             surveyManager.dispose()
             expect(removeListenerSpy).toHaveBeenCalledWith('languagechange', expect.any(Function))
         })

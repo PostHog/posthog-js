@@ -190,7 +190,7 @@ describe('createLocalPlusCookieStore', () => {
         cookieStore._set(name, { distinct_id: 'anonymous' })
         const store = createLocalPlusCookieStore(['custom_property'], true)
         const cookieSet = cookieStore._set
-        const setSpy = jest
+        const setSpy = vi
             .spyOn(cookieStore, '_set')
             .mockImplementation((cookieName, ...args) =>
                 cookieName === getCookiePersistedPropertiesMetadataName(name) ? false : cookieSet(cookieName, ...args)
@@ -205,7 +205,7 @@ describe('createLocalPlusCookieStore', () => {
     it('reports the localStorage write succeeded even when the cookie mirror throws', () => {
         const store = createLocalPlusCookieStore()
         // distinct_id is a cookie-persisted property, so the cookie path runs
-        const cookieSpy = jest.spyOn(cookieStore, '_set').mockImplementation(() => {
+        const cookieSpy = vi.spyOn(cookieStore, '_set').mockImplementation(() => {
             throw new Error('cookie write blew up')
         })
 
@@ -223,7 +223,7 @@ describe('cookieStore._is_supported', () => {
     })
 
     afterEach(() => {
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
         resetCookieStorageSupported()
     })
 
@@ -235,7 +235,7 @@ describe('cookieStore._is_supported', () => {
         // Chrome disables cookies in a `data:` URL and throws SecurityError on access.
         // Before this check existed, _is_supported was `() => !!document`, which is true
         // here, so persistence selected a cookie store that could never store anything.
-        jest.spyOn(document, 'cookie', 'get').mockImplementation(() => {
+        vi.spyOn(document, 'cookie', 'get').mockImplementation(() => {
             throw new Error('SecurityError: Storage is disabled inside data: URLs')
         })
 
@@ -243,7 +243,7 @@ describe('cookieStore._is_supported', () => {
     })
 
     it('returns false when cookie writes are silently dropped', () => {
-        jest.spyOn(document, 'cookie', 'get').mockReturnValue('')
+        vi.spyOn(document, 'cookie', 'get').mockReturnValue('')
 
         expect(cookieStore._is_supported()).toEqual(false)
     })
@@ -258,7 +258,7 @@ describe('cookieStore._is_supported', () => {
     })
 
     it('caches the result so the probe cookie is only written once', () => {
-        const getter = jest.spyOn(document, 'cookie', 'get')
+        const getter = vi.spyOn(document, 'cookie', 'get')
         cookieStore._is_supported()
         const callsAfterFirst = getter.mock.calls.length
         cookieStore._is_supported()

@@ -18,7 +18,7 @@ const EXPECTED_EXPORTS = [
 
 describe('customizations entrypoints', () => {
     beforeEach(() => {
-        jest.resetModules()
+        vi.resetModules()
         delete assignableWindow.posthogCustomizations
     })
 
@@ -42,14 +42,14 @@ describe('customizations entrypoints', () => {
     })
 
     it('initializes the shared config with the posthog-js identity', () => {
-        jest.isolateModules(() => {
-            const Config = jest.requireActual<typeof import('@posthog/browser-common/config')>(
+        vi.isolateModules(() => {
+            const Config = vi.requireActual<typeof import('@posthog/browser-common/config')>(
                 '@posthog/browser-common/config'
             ).default
             Config.LIB_NAME = 'test-sentinel'
             Config.LIB_VERSION = '0.0.0-test'
 
-            jest.requireActual('../../entrypoints/customizations.es')
+            vi.requireActual('../../entrypoints/customizations.es')
 
             expect(Config).toMatchObject({
                 LIB_NAME: 'web',

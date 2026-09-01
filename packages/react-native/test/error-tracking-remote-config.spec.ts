@@ -1,15 +1,15 @@
 import { ErrorTracking } from '../src/error-tracking'
 
 // Mock the utils to prevent actual global handler registration
-jest.mock('../src/error-tracking/utils', () => ({
-  trackUncaughtExceptions: jest.fn(),
-  trackUnhandledRejections: jest.fn(),
-  trackConsole: jest.fn(),
+vi.mock('../src/error-tracking/utils', () => ({
+  trackUncaughtExceptions: vi.fn(),
+  trackUnhandledRejections: vi.fn(),
+  trackConsole: vi.fn(),
 }))
 
-jest.mock('../src/utils', () => ({
-  isHermes: jest.fn(() => false),
-  getRemoteConfigBool: jest.requireActual('../src/utils').getRemoteConfigBool,
+vi.mock('../src/utils', () => ({
+  isHermes: vi.fn(() => false),
+  getRemoteConfigBool: vi.requireActual('../src/utils').getRemoteConfigBool,
 }))
 
 import { trackUncaughtExceptions, trackUnhandledRejections, trackConsole } from '../src/error-tracking/utils'
@@ -20,7 +20,7 @@ const mockLogger = createMockLogger()
 
 describe('ErrorTracking remote config', () => {
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   describe('onRemoteConfig', () => {
@@ -28,7 +28,7 @@ describe('ErrorTracking remote config', () => {
       const et = new ErrorTracking(mockPostHog, { autocapture: true }, mockLogger as any)
 
       // Get reference to the uncaught exception handler
-      const handler = (trackUncaughtExceptions as jest.Mock).mock.calls[0][0]
+      const handler = (trackUncaughtExceptions as vi.Mock).mock.calls[0][0]
 
       // Should capture before remote config
       handler(new Error('test'), false)
@@ -44,7 +44,7 @@ describe('ErrorTracking remote config', () => {
 
     it('does not change state when errorTracking is null', () => {
       const et = new ErrorTracking(mockPostHog, { autocapture: true }, mockLogger as any)
-      const handler = (trackUncaughtExceptions as jest.Mock).mock.calls[0][0]
+      const handler = (trackUncaughtExceptions as vi.Mock).mock.calls[0][0]
 
       et.onRemoteConfig(null as any)
       handler(new Error('test'), false)
@@ -53,7 +53,7 @@ describe('ErrorTracking remote config', () => {
 
     it('disables autocapture when errorTracking is false', () => {
       const et = new ErrorTracking(mockPostHog, { autocapture: true }, mockLogger as any)
-      const handler = (trackUncaughtExceptions as jest.Mock).mock.calls[0][0]
+      const handler = (trackUncaughtExceptions as vi.Mock).mock.calls[0][0]
 
       et.onRemoteConfig(false)
       handler(new Error('test'), false)
@@ -62,7 +62,7 @@ describe('ErrorTracking remote config', () => {
 
     it('enables autocapture when errorTracking is true', () => {
       const et = new ErrorTracking(mockPostHog, { autocapture: true }, mockLogger as any)
-      const handler = (trackUncaughtExceptions as jest.Mock).mock.calls[0][0]
+      const handler = (trackUncaughtExceptions as vi.Mock).mock.calls[0][0]
 
       // First disable
       et.onRemoteConfig(false)
@@ -77,7 +77,7 @@ describe('ErrorTracking remote config', () => {
 
     it('enables autocapture when errorTracking map has autocaptureExceptions=true', () => {
       const et = new ErrorTracking(mockPostHog, { autocapture: true }, mockLogger as any)
-      const handler = (trackUncaughtExceptions as jest.Mock).mock.calls[0][0]
+      const handler = (trackUncaughtExceptions as vi.Mock).mock.calls[0][0]
 
       et.onRemoteConfig({ autocaptureExceptions: true })
       handler(new Error('test'), false)
@@ -86,7 +86,7 @@ describe('ErrorTracking remote config', () => {
 
     it('disables autocapture when errorTracking map has autocaptureExceptions=false', () => {
       const et = new ErrorTracking(mockPostHog, { autocapture: true }, mockLogger as any)
-      const handler = (trackUncaughtExceptions as jest.Mock).mock.calls[0][0]
+      const handler = (trackUncaughtExceptions as vi.Mock).mock.calls[0][0]
 
       et.onRemoteConfig({ autocaptureExceptions: false })
       handler(new Error('test'), false)
@@ -95,7 +95,7 @@ describe('ErrorTracking remote config', () => {
 
     it('disables autocapture when errorTracking map is missing autocaptureExceptions key', () => {
       const et = new ErrorTracking(mockPostHog, { autocapture: true }, mockLogger as any)
-      const handler = (trackUncaughtExceptions as jest.Mock).mock.calls[0][0]
+      const handler = (trackUncaughtExceptions as vi.Mock).mock.calls[0][0]
 
       et.onRemoteConfig({ otherKey: 'value' })
       handler(new Error('test'), false)
@@ -104,7 +104,7 @@ describe('ErrorTracking remote config', () => {
 
     it('gates unhandled rejection handler on remote config', () => {
       const et = new ErrorTracking(mockPostHog, { autocapture: { unhandledRejections: true } }, mockLogger as any)
-      const handler = (trackUnhandledRejections as jest.Mock).mock.calls[0][0]
+      const handler = (trackUnhandledRejections as vi.Mock).mock.calls[0][0]
 
       // Enabled by default
       handler(new Error('test'))
@@ -119,10 +119,10 @@ describe('ErrorTracking remote config', () => {
 
     it('gates console handler on remote config', () => {
       const et = new ErrorTracking(mockPostHog, { autocapture: { console: ['error'] } }, mockLogger as any)
-      const handler = (trackConsole as jest.Mock).mock.calls[0][0]
+      const handler = (trackConsole as vi.Mock).mock.calls[0][0]
 
       // trackConsole is called with (level, handler), get the handler
-      const consoleHandler = (trackConsole as jest.Mock).mock.calls[0][1]
+      const consoleHandler = (trackConsole as vi.Mock).mock.calls[0][1]
 
       // Enabled by default
       consoleHandler(new Error('test'), false)

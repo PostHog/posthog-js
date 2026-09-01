@@ -20,7 +20,7 @@ describe('__extensionClasses enrollment', () => {
 
     beforeEach(() => {
         savedDefaults = PostHog.__defaultExtensionClasses
-        console.error = jest.fn()
+        console.error = vi.fn()
     })
 
     afterEach(() => {
@@ -102,8 +102,8 @@ describe('__extensionClasses enrollment', () => {
     it('preserves the PostHog lifecycle contract for custom feature flags classes', async () => {
         PostHog.__defaultExtensionClasses = {}
         const posthog = new PostHog()
-        const initialize = jest.fn()
-        const destroy = jest.fn()
+        const initialize = vi.fn()
+        const destroy = vi.fn()
         let constructorArgument: PostHog | undefined
 
         class LegacyFeatureFlags {
@@ -132,8 +132,8 @@ describe('__extensionClasses enrollment', () => {
 
     it('preserves the PostHog constructor and initialize contract for custom surveys classes', async () => {
         PostHog.__defaultExtensionClasses = {}
-        const initialize = jest.fn()
-        const setup = jest.fn()
+        const initialize = vi.fn()
+        const setup = vi.fn()
         let constructorArgument: PostHog | undefined
 
         class LegacySurveys {
@@ -163,8 +163,8 @@ describe('__extensionClasses enrollment', () => {
 
     it('enrolls shared surveys exactly once through the shared lifecycle', async () => {
         PostHog.__defaultExtensionClasses = {}
-        const setup = jest.fn()
-        const initialize = jest.fn()
+        const setup = vi.fn()
+        const initialize = vi.fn()
         let constructorArgument: PostHog | undefined
 
         class SharedSurveys {
@@ -202,8 +202,8 @@ describe('__extensionClasses enrollment', () => {
 
     it('preserves the PostHog constructor and initialize contract for custom logs classes', async () => {
         PostHog.__defaultExtensionClasses = {}
-        const initialize = jest.fn()
-        const setup = jest.fn()
+        const initialize = vi.fn()
+        const setup = vi.fn()
         let constructorArgument: PostHog | undefined
 
         class LegacyLogs {
@@ -233,8 +233,8 @@ describe('__extensionClasses enrollment', () => {
 
     it('enrolls shared logs exactly once through the shared lifecycle', async () => {
         PostHog.__defaultExtensionClasses = {}
-        const setup = jest.fn()
-        const initialize = jest.fn()
+        const setup = vi.fn()
+        const initialize = vi.fn()
         let constructorArgument: PostHog | undefined
 
         class SharedLogs {
@@ -267,14 +267,14 @@ describe('__extensionClasses enrollment', () => {
     it('logs cleanup errors when shared extension enrollment fails', async () => {
         const posthog = new PostHog()
         const disposeError = new Error('dispose failed')
-        const dispose = jest.fn(() => {
+        const dispose = vi.fn(() => {
             throw disposeError
         })
-        const loggerError = jest.spyOn(logger, 'error').mockImplementation()
-        jest.spyOn(posthog._getBrowserClientAdapter(), 'add').mockRejectedValue(new Error('enrollment failed'))
+        const loggerError = vi.spyOn(logger, 'error').mockImplementation()
+        vi.spyOn(posthog._getBrowserClientAdapter(), 'add').mockRejectedValue(new Error('enrollment failed'))
         const initTasks: Array<() => void> = []
 
-        posthog['_enrollExtension']({ name: 'logs', setup: jest.fn(), dispose } as any, initTasks)
+        posthog['_enrollExtension']({ name: 'logs', setup: vi.fn(), dispose } as any, initTasks)
         initTasks[0]?.()
         await Promise.resolve()
         await Promise.resolve()
@@ -294,7 +294,7 @@ describe('__extensionClasses enrollment', () => {
 
     it('preserves the PostHog constructor and initialize contract for custom autocapture classes', async () => {
         PostHog.__defaultExtensionClasses = {}
-        const initialize = jest.fn()
+        const initialize = vi.fn()
         let constructorArgument: PostHog | undefined
 
         class LegacyAutocapture {
@@ -345,7 +345,7 @@ describe('__extensionClasses enrollment', () => {
     })
 
     it('preserves feature flag reloading subscriptions across slim initialization', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
             PostHog.__defaultExtensionClasses = {}
             const token = uuidv7()
@@ -354,7 +354,7 @@ describe('__extensionClasses enrollment', () => {
             } as any
 
             const posthog = new PostHog()
-            const beforeInitCallback = jest.fn()
+            const beforeInitCallback = vi.fn()
             const unsubscribeBeforeInit = posthog.on('featureFlagsReloading', beforeInitCallback)
 
             expect(posthog.featureFlags).toBeUndefined()
@@ -364,7 +364,7 @@ describe('__extensionClasses enrollment', () => {
                 capture_pageview: false,
                 remote_config_refresh_interval_ms: 0,
                 loaded: (instance) => {
-                    instance._send_request = jest.fn(({ callback }) =>
+                    instance._send_request = vi.fn(({ callback }) =>
                         callback?.({ statusCode: 200, json: { flags: [] } })
                     )
                 },
@@ -375,10 +375,10 @@ describe('__extensionClasses enrollment', () => {
             expect(beforeInitCallback).toHaveBeenCalledTimes(1)
             expect(beforeInitCallback).toHaveBeenLastCalledWith(true)
 
-            const afterInitCallback = jest.fn()
+            const afterInitCallback = vi.fn()
             const unsubscribeAfterInit = posthog.on('featureFlagsReloading', afterInitCallback)
 
-            await jest.advanceTimersByTimeAsync(10)
+            await vi.advanceTimersByTimeAsync(10)
             posthog.reloadFeatureFlags()
 
             expect(beforeInitCallback).toHaveBeenCalledTimes(2)
@@ -386,7 +386,7 @@ describe('__extensionClasses enrollment', () => {
             expect(afterInitCallback).toHaveBeenCalledTimes(1)
             expect(afterInitCallback).toHaveBeenLastCalledWith(true)
 
-            await jest.advanceTimersByTimeAsync(10)
+            await vi.advanceTimersByTimeAsync(10)
             unsubscribeBeforeInit()
             posthog.reloadFeatureFlags()
 
@@ -394,7 +394,7 @@ describe('__extensionClasses enrollment', () => {
             expect(afterInitCallback).toHaveBeenCalledTimes(2)
             expect(afterInitCallback).toHaveBeenLastCalledWith(true)
 
-            await jest.advanceTimersByTimeAsync(10)
+            await vi.advanceTimersByTimeAsync(10)
             unsubscribeAfterInit()
             posthog.reloadFeatureFlags()
 
@@ -402,13 +402,13 @@ describe('__extensionClasses enrollment', () => {
             expect(afterInitCallback).toHaveBeenCalledTimes(2)
             posthog.featureFlags.reset()
         } finally {
-            jest.clearAllTimers()
-            jest.useRealTimers()
+            vi.clearAllTimers()
+            vi.useRealTimers()
         }
     })
 
     it('emits feature flag reloading once for default extensions after init', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
             PostHog.__defaultExtensionClasses = AllExtensions
             const token = uuidv7()
@@ -421,14 +421,14 @@ describe('__extensionClasses enrollment', () => {
                 capture_pageview: false,
                 remote_config_refresh_interval_ms: 0,
                 loaded: (instance) => {
-                    instance._send_request = jest.fn(({ callback }) =>
+                    instance._send_request = vi.fn(({ callback }) =>
                         callback?.({ statusCode: 200, json: { flags: [] } })
                     )
                 },
             })
-            await jest.advanceTimersByTimeAsync(10)
+            await vi.advanceTimersByTimeAsync(10)
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             posthog.on('featureFlagsReloading', callback)
             posthog.reloadFeatureFlags()
 
@@ -436,22 +436,22 @@ describe('__extensionClasses enrollment', () => {
             expect(callback).toHaveBeenCalledWith(true)
             posthog.featureFlags.reset()
         } finally {
-            jest.clearAllTimers()
-            jest.useRealTimers()
+            vi.clearAllTimers()
+            vi.useRealTimers()
         }
     })
 
     it('keeps one reloading bridge when feature flags are enrolled repeatedly', () => {
         PostHog.__defaultExtensionClasses = FeatureFlagsExtensions
         const posthog = new PostHog()
-        const add = jest.fn().mockResolvedValue(undefined)
-        posthog._getBrowserClientAdapter = jest.fn().mockReturnValue({ add }) as any
+        const add = vi.fn().mockResolvedValue(undefined)
+        posthog._getBrowserClientAdapter = vi.fn().mockReturnValue({ add }) as any
 
         const enrollFeatureFlags = () => (posthog as any)._enrollFeatureFlags()
         enrollFeatureFlags()
         enrollFeatureFlags()
 
-        const callback = jest.fn()
+        const callback = vi.fn()
         posthog.on('featureFlagsReloading', callback)
         posthog.featureFlags.reloadFeatureFlags()
 
@@ -491,7 +491,7 @@ describe('extension lifecycle', () => {
 
     beforeEach(() => {
         savedDefaults = PostHog.__defaultExtensionClasses
-        console.error = jest.fn()
+        console.error = vi.fn()
     })
 
     afterEach(() => {
@@ -530,7 +530,7 @@ describe('extension lifecycle', () => {
         it('calls initialize() on extensions that define it', async () => {
             PostHog.__defaultExtensionClasses = {}
 
-            const initializeSpy = jest.fn()
+            const initializeSpy = vi.fn()
 
             class SpyExtension {
                 constructor() {}
@@ -567,8 +567,8 @@ describe('extension lifecycle', () => {
 
         it('does not treat a legacy setup method as the shared lifecycle without a name', async () => {
             PostHog.__defaultExtensionClasses = {}
-            const setup = jest.fn()
-            const initialize = jest.fn()
+            const setup = vi.fn()
+            const initialize = vi.fn()
 
             class LegacyExtension {
                 setup(): void {
@@ -592,8 +592,8 @@ describe('extension lifecycle', () => {
 
         it('enrolls an extension with name and setup through the shared lifecycle', async () => {
             PostHog.__defaultExtensionClasses = {}
-            const setup = jest.fn()
-            const initialize = jest.fn()
+            const setup = vi.fn()
+            const initialize = vi.fn()
 
             class SharedExtension {
                 readonly name = 'autocapture'
@@ -622,7 +622,7 @@ describe('extension lifecycle', () => {
         it('calls onRemoteConfig on all extensions that define it', async () => {
             PostHog.__defaultExtensionClasses = {}
 
-            const onRemoteConfigSpy = jest.fn()
+            const onRemoteConfigSpy = vi.fn()
 
             class SpyExtension {
                 constructor() {}
@@ -661,7 +661,7 @@ describe('extension lifecycle', () => {
                 capture_pageview: false,
             })
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             posthog.onSurveysLoaded(callback)
 
             expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Surveys module not available' })
@@ -675,7 +675,7 @@ describe('extension lifecycle', () => {
                 capture_pageview: false,
             })
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             posthog.getSurveys(callback)
 
             expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Surveys module not available' })
@@ -689,7 +689,7 @@ describe('extension lifecycle', () => {
                 capture_pageview: false,
             })
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             posthog.getActiveMatchingSurveys(callback)
 
             expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Surveys module not available' })
@@ -714,7 +714,7 @@ describe('extension lifecycle', () => {
                 capture_pageview: false,
             })
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             const unsubscribe = posthog.onFeatureFlags(callback)
 
             expect(callback).toHaveBeenCalledWith([], {}, { errorsLoading: true })

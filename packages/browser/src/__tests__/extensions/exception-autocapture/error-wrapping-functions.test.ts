@@ -4,7 +4,7 @@ import { ErrorTracking } from '@posthog/core'
 const { wrapOnError, wrapUnhandledRejection, wrapConsoleError } = posthogErrorWrappingFunctions
 
 describe('error wrapping functions', () => {
-    const captureFn = jest.fn<void, [ErrorTracking.ErrorProperties]>()
+    const captureFn = vi.fn<void, [ErrorTracking.ErrorProperties]>()
     const win = window as any
 
     afterEach(() => {
@@ -29,7 +29,7 @@ describe('error wrapping functions', () => {
         })
 
         it('still chains to a callable original handler', () => {
-            const original = jest.fn().mockReturnValue(true)
+            const original = vi.fn().mockReturnValue(true)
             win.onerror = original
             unwrap = wrapOnError(captureFn)
 
@@ -76,7 +76,7 @@ describe('error wrapping functions', () => {
         })
 
         it('still chains to a callable original handler', () => {
-            const original = jest.fn().mockReturnValue(true)
+            const original = vi.fn().mockReturnValue(true)
             win.onunhandledrejection = original
             unwrap = wrapUnhandledRejection(captureFn)
 
@@ -107,7 +107,7 @@ describe('error wrapping functions', () => {
 
         it('still chains to a callable original handler', () => {
             const con = console as any
-            const original = jest.fn()
+            const original = vi.fn()
             con.error = original
             unwrap = wrapConsoleError(captureFn)
 

@@ -310,7 +310,7 @@ describe('getNextSurveyStep', () => {
         { type: SurveyQuestionType.Open, question: 'Question 2' },
       ])
 
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
 
       // Test invalid string response
       let result = getNextSurveyStep(survey, 0, 'invalid')
@@ -372,7 +372,7 @@ describe('getNextSurveyStep', () => {
         { type: SurveyQuestionType.Open, question: 'Question 3' },
       ])
 
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
 
       // Test out-of-range low value
       let result = getNextSurveyStep(survey, 0, 0)
@@ -403,7 +403,7 @@ describe('getNextSurveyStep', () => {
         { type: SurveyQuestionType.Open, question: 'Question 2' },
       ])
 
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
 
       const result = getNextSurveyStep(survey, 0, 2)
       expect(result).toBe(SurveyQuestionBranchingType.End) // Should use neutral bucket
@@ -424,7 +424,7 @@ describe('getNextSurveyStep', () => {
         { type: SurveyQuestionType.Open, question: 'Question 2' },
       ])
 
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
       const result = getNextSurveyStep(survey, 0, 'response')
 
       expect(result).toBe(1)
@@ -443,7 +443,7 @@ describe('getNextSurveyStep', () => {
         { type: SurveyQuestionType.Open, question: 'Question 2' },
       ])
 
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
       const result = getNextSurveyStep(survey, 0, 'response')
 
       expect(result).toBe(1)

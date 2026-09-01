@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`PostHog RN session replay request headers snapshots the complete legacy native start envelope 1`] = `
 {

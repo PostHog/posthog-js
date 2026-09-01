@@ -2,29 +2,29 @@ import { PostHog, PostHogCustomStorage, PostHogPersistedProperty } from '../src'
 import { Linking, AppState } from 'react-native'
 import { wait } from './test-utils'
 
-Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
-AppState.addEventListener = jest.fn()
+Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
+AppState.addEventListener = vi.fn()
 
 describe('PostHog RN disableRemoteFeatureFlags and updateFlags', () => {
-  jest.useRealTimers()
+  vi.useRealTimers()
 
   let posthog: PostHog
   let cache: any = {}
   let mockStorage: PostHogCustomStorage
 
   const flagsCalls = (): any[][] =>
-    ((globalThis as any).window.fetch as jest.Mock).mock.calls.filter(([url]: [string]) =>
+    ((globalThis as any).window.fetch as vi.Mock).mock.calls.filter(([url]: [string]) =>
       String(url).includes('/flags')
     )
 
   // Remote config is served from the /array/<token>/config endpoint.
   const configCalls = (): any[][] =>
-    ((globalThis as any).window.fetch as jest.Mock).mock.calls.filter(([url]: [string]) =>
+    ((globalThis as any).window.fetch as vi.Mock).mock.calls.filter(([url]: [string]) =>
       String(url).includes('/array/')
     )
 
   beforeEach(() => {
-    ;(globalThis as any).window.fetch = jest.fn(async (url: string) => {
+    ;(globalThis as any).window.fetch = vi.fn(async (url: string) => {
       let res: any = { status: 'ok' }
       if (url.includes('/flags')) {
         // The mocked flags endpoint still returns values, proving the SDK never calls it
@@ -112,7 +112,7 @@ describe('PostHog RN disableRemoteFeatureFlags and updateFlags', () => {
       expect(flags).toEqual({ 'local-flag': true, 'variant-flag': 'variant-a' })
 
       await posthog.shutdown()
-      ;((globalThis as any).window.fetch as jest.Mock).mockClear()
+      ;((globalThis as any).window.fetch as vi.Mock).mockClear()
 
       // "restart": a new instance over the same storage reads the flags with no network
       posthog = new PostHog('test-token', {
@@ -141,7 +141,7 @@ describe('PostHog RN disableRemoteFeatureFlags and updateFlags', () => {
       await posthog.ready()
       await wait(50)
 
-      const configCalls = ((globalThis as any).window.fetch as jest.Mock).mock.calls.filter(([url]: [string]) =>
+      const configCalls = ((globalThis as any).window.fetch as vi.Mock).mock.calls.filter(([url]: [string]) =>
         String(url).includes('/array/')
       )
       expect(configCalls).toHaveLength(1)

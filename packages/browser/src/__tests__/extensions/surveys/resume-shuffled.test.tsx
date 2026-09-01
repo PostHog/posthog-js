@@ -3,16 +3,16 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/preact'
 import { SurveyPopup } from '../../../extensions/surveys'
 import { Survey, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
 
-jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
-    ...jest.requireActual('../../../extensions/surveys/surveys-extension-utils'),
-    sendSurveyEvent: jest.fn(),
-    dismissedSurveyEvent: jest.fn(),
+vi.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
+    ...vi.requireActual('../../../extensions/surveys/surveys-extension-utils'),
+    sendSurveyEvent: vi.fn(),
+    dismissedSurveyEvent: vi.fn(),
 }))
 
 const mockPosthog = {
-    capture: jest.fn(),
-    get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
-    reloadFeatureFlags: jest.fn(),
+    capture: vi.fn(),
+    get_session_replay_url: vi.fn().mockReturnValue('http://example.com/replay'),
+    reloadFeatureFlags: vi.fn(),
 } as any
 
 const survey = {
@@ -41,22 +41,22 @@ const survey = {
 
 // Sort keys drive shuffle(); the two orders below differ so a reshuffle on resume is detectable.
 const shuffleTo = (a: number, b: number, c: number) =>
-    jest.spyOn(Math, 'random').mockReturnValueOnce(a).mockReturnValueOnce(b).mockReturnValueOnce(c).mockReturnValue(0)
+    vi.spyOn(Math, 'random').mockReturnValueOnce(a).mockReturnValueOnce(b).mockReturnValueOnce(c).mockReturnValue(0)
 
 const currentQuestion = () => document.querySelector('.survey-question')?.textContent
 
 const show = () =>
-    render(<SurveyPopup survey={survey} removeSurveyFromFocus={jest.fn()} isPopup posthog={mockPosthog} />)
+    render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog} />)
 
 describe('Surveys: resuming a shuffled survey', () => {
     beforeEach(() => {
         cleanup()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         localStorage.clear()
-        HTMLFormElement.prototype.submit = jest.fn()
+        HTMLFormElement.prototype.submit = vi.fn()
     })
 
-    afterEach(() => jest.restoreAllMocks())
+    afterEach(() => vi.restoreAllMocks())
 
     test('resumes on the question the respondent left off on', () => {
         shuffleTo(0.5, 0.1, 0.9)
@@ -66,7 +66,7 @@ describe('Surveys: resuming a shuffled survey', () => {
         const leftOffOn = currentQuestion()
         unmount()
         cleanup()
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
 
         shuffleTo(0.9, 0.5, 0.1)
         show()
@@ -83,7 +83,7 @@ describe('Surveys: resuming a shuffled survey', () => {
         startingOrder.push(currentQuestion())
         unmount()
         cleanup()
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
 
         shuffleTo(0.9, 0.5, 0.1)
         show()

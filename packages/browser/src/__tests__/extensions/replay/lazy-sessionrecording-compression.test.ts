@@ -3,7 +3,7 @@ import { gzipSync, strToU8 } from 'fflate'
 
 type SetupOptions = {
     gzipSupported: boolean
-    gzipCompress?: jest.Mock
+    gzipCompress?: vi.Mock
 }
 
 const createFullSnapshot = (data: Record<string, unknown> = {}) => ({
@@ -28,16 +28,16 @@ const createCustomSnapshot = () => ({
 })
 
 async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: SetupOptions) {
-    jest.resetModules()
+    vi.resetModules()
 
     const gzipCompressMock =
         gzipCompress ??
-        jest.fn(async (input: string) => {
+        vi.fn(async (input: string) => {
             return new Blob([gzipSync(strToU8(input))])
         })
 
-    jest.doMock('@posthog/core', () => {
-        const actual = jest.requireActual('@posthog/core')
+    vi.doMock('@posthog/core', () => {
+        const actual = vi.requireActual('@posthog/core')
         return {
             ...actual,
             gzipCompress: gzipCompressMock,
@@ -47,7 +47,7 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
 
     const context: Record<string, any> = {}
 
-    jest.isolateModules(() => {
+    vi.isolateModules(() => {
         const {
             LazyLoadedSessionRecording,
         } = require('../../../extensions/replay/external/lazy-loaded-session-recorder')
@@ -80,44 +80,44 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
         })
 
         const sessionManager = new SessionIdManager(
-            createMockPostHog({ config, persistence, register: jest.fn() }),
-            jest.fn(() => 'sessionId'),
-            jest.fn(() => 'windowId')
+            createMockPostHog({ config, persistence, register: vi.fn() }),
+            vi.fn(() => 'sessionId'),
+            vi.fn(() => 'windowId')
         )
 
         const simpleEventEmitter = new SimpleEventEmitter()
         const posthog = {
             get_property: (propertyKey: string) => persistence.props[propertyKey],
             config,
-            capture: jest.fn(),
+            capture: vi.fn(),
             persistence,
             sessionManager,
             requestRouter: new RequestRouter({ config } as any),
             consent: { isOptedOut: () => false },
-            register_for_session: jest.fn(),
+            register_for_session: vi.fn(),
             _internalEventEmitter: simpleEventEmitter,
-            on: jest.fn((event, cb) => simpleEventEmitter.on(event, cb)),
+            on: vi.fn((event, cb) => simpleEventEmitter.on(event, cb)),
         }
 
         let emit: (event: any) => void = () => {}
-        const stopRrweb = jest.fn()
+        const stopRrweb = vi.fn()
         assignableWindow.__PosthogExtensions__ = {
             rrweb: {
-                record: jest.fn(({ emit: rrwebEmit }) => {
+                record: vi.fn(({ emit: rrwebEmit }) => {
                     emit = rrwebEmit
                     return stopRrweb
                 }),
                 version: 'fake',
-                wasMaxDepthReached: jest.fn(() => false),
-                resetMaxDepthState: jest.fn(),
+                wasMaxDepthReached: vi.fn(() => false),
+                resetMaxDepthState: vi.fn(),
             },
             rrwebPlugins: {
                 getRecordConsolePlugin: undefined,
                 getRecordNetworkPlugin: undefined,
             },
         }
-        assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn()
-        assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = jest.fn()
+        assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = vi.fn()
+        assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = vi.fn()
 
         const lazyLoadedSessionRecording = new LazyLoadedSessionRecording(posthog)
         lazyLoadedSessionRecording.start()
@@ -135,14 +135,14 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
         emit: context.emit as (event: any) => void,
         posthog: context.posthog,
         lazyLoadedSessionRecording: context.lazyLoadedSessionRecording,
-        stopRrweb: context.stopRrweb as jest.Mock,
+        stopRrweb: context.stopRrweb as vi.Mock,
     }
 }
 
 describe('LazyLoadedSessionRecording compression paths', () => {
     afterEach(() => {
-        jest.dontMock('@posthog/core')
-        jest.resetModules()
+        vi.dontMock('@posthog/core')
+        vi.resetModules()
     })
 
     it.each([
@@ -165,7 +165,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         const compressionGate = new Promise<void>((resolve) => {
             releaseCompression = resolve
         })
-        const gzipCompress = jest.fn(async (input: string) => {
+        const gzipCompress = vi.fn(async (input: string) => {
             await compressionGate
             return new Blob([gzipSync(strToU8(input))])
         })
@@ -216,7 +216,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         const compressionGate = new Promise<void>((resolve) => {
             releaseCompression = resolve
         })
-        const gzipCompress = jest.fn(async (input: string) => {
+        const gzipCompress = vi.fn(async (input: string) => {
             await compressionGate
             return new Blob([gzipSync(strToU8(input))])
         })
@@ -250,7 +250,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         const compressionGate = new Promise<void>((resolve) => {
             releaseCompression = resolve
         })
-        const gzipCompress = jest.fn(async (input: string) => {
+        const gzipCompress = vi.fn(async (input: string) => {
             await compressionGate
             return new Blob([gzipSync(strToU8(input))])
         })
@@ -299,7 +299,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         const compressionGate = new Promise<void>((resolve) => {
             releaseCompression = resolve
         })
-        const gzipCompress = jest.fn(async (input: string) => {
+        const gzipCompress = vi.fn(async (input: string) => {
             await compressionGate
             return new Blob([gzipSync(strToU8(input))])
         })

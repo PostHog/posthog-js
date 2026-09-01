@@ -64,7 +64,8 @@
         "rollup-plugin-visualizer": "^5.14.0",
         "ts-node": "^10.9.2",
         "turbo": "^2.9.16",
-        "typescript": "catalog:"
+        "typescript": "catalog:",
+        "vitest": "catalog:"
     },
     "lint-staged": {
         "*.{ts,tsx,js,jsx,mjs,cjs}": [

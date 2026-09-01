@@ -2,7 +2,7 @@ const PRIMARY = { __plugin: 'primary' }
 const LEGACY = { __plugin: 'legacy' }
 
 const mockOptional = (path: string, installed: boolean, value: unknown): void =>
-  jest.doMock(path, () => {
+  vi.doMock(path, () => {
     if (!installed) {
       throw new Error('not installed')
     }
@@ -23,8 +23,8 @@ const loadOptionalPlugin = (
   }: { primaryInstalled?: boolean; primaryMetadataAvailable?: boolean; legacyInstalled?: boolean } = {}
 ): LoadedOptionalPlugin => {
   let loaded: LoadedOptionalPlugin = { plugin: undefined, version: undefined }
-  jest.isolateModules(() => {
-    jest.doMock('react-native', () => ({ Platform: { OS: os } }))
+  vi.isolateModules(() => {
+    vi.doMock('react-native', () => ({ Platform: { OS: os } }))
     mockOptional('@posthog/react-native-plugin', primaryInstalled, PRIMARY)
     mockOptional('@posthog/react-native-plugin/package.json', primaryMetadataAvailable, { version: '2.4.1' })
     mockOptional('posthog-react-native-session-replay', legacyInstalled, LEGACY)
@@ -40,11 +40,11 @@ const loadOptionalPlugin = (
 
 describe('OptionalPlugin loader', () => {
   afterEach(() => {
-    jest.resetModules()
-    jest.dontMock('react-native')
-    jest.dontMock('@posthog/react-native-plugin')
-    jest.dontMock('@posthog/react-native-plugin/package.json')
-    jest.dontMock('posthog-react-native-session-replay')
+    vi.resetModules()
+    vi.dontMock('react-native')
+    vi.dontMock('@posthog/react-native-plugin')
+    vi.dontMock('@posthog/react-native-plugin/package.json')
+    vi.dontMock('posthog-react-native-session-replay')
   })
 
   it('loads the primary plugin on macOS', () => {

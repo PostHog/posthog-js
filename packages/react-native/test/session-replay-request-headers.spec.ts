@@ -6,29 +6,29 @@ import { waitForExpect } from './test-utils'
 // Mock the native plugin bridge so we can assert which native calls happen. No `setup`
 // key, so the SDK takes the legacy start() path (same surface as the standalone
 // posthog-react-native-session-replay package).
-jest.mock('../src/optional/OptionalPlugin', () => ({
+vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePlugin: {
-    start: jest.fn(async () => {}),
-    startSession: jest.fn(async () => {}),
-    endSession: jest.fn(async () => {}),
-    isEnabled: jest.fn(async () => false),
-    identify: jest.fn(async () => {}),
-    startRecording: jest.fn(async () => {}),
-    stopRecording: jest.fn(async () => {}),
+    start: vi.fn(async () => {}),
+    startSession: vi.fn(async () => {}),
+    endSession: vi.fn(async () => {}),
+    isEnabled: vi.fn(async () => false),
+    identify: vi.fn(async () => {}),
+    startRecording: vi.fn(async () => {}),
+    stopRecording: vi.fn(async () => {}),
   },
 }))
 
 const replay = OptionalReactNativePlugin as unknown as {
-  start: jest.Mock
-  isEnabled: jest.Mock
-  setup?: jest.Mock
+  start: vi.Mock
+  isEnabled: vi.Mock
+  setup?: vi.Mock
 }
 
-Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
-AppState.addEventListener = jest.fn()
+Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
+AppState.addEventListener = vi.fn()
 
 describe('PostHog RN session replay request headers', () => {
-  jest.useRealTimers()
+  vi.useRealTimers()
 
   let posthog: PostHog
   let cache: any = {}
@@ -38,7 +38,7 @@ describe('PostHog RN session replay request headers', () => {
     replay.start.mockClear()
     replay.isEnabled.mockImplementation(async () => false)
     replay.start.mockImplementation(async () => {})
-    ;(globalThis as any).window.fetch = jest.fn(async (url: string) => {
+    ;(globalThis as any).window.fetch = vi.fn(async (url: string) => {
       const res = url.includes('flags') ? { featureFlags: {}, sessionRecording: { endpoint: '/s/' } } : { status: 'ok' }
       return { status: 200, json: () => Promise.resolve(res) }
     })
@@ -99,7 +99,7 @@ describe('PostHog RN session replay request headers', () => {
 
   it('snapshots the complete native setup envelope used by session replay', async () => {
     // Adding a `setup` mock switches the SDK to the modern setup() dispatch path.
-    replay.setup = jest.fn(async () => {})
+    replay.setup = vi.fn(async () => {})
 
     posthog = new PostHog('test-token', {
       persistence: 'memory',

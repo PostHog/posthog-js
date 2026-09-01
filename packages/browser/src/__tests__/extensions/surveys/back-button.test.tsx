@@ -5,22 +5,22 @@ import * as surveyUtils from '../../../extensions/surveys/surveys-extension-util
 import { Survey, SurveyQuestionBranchingType, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
 import * as uuid from '@posthog/browser-common/utils/uuidv7'
 
-jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
-    ...jest.requireActual('../../../extensions/surveys/surveys-extension-utils'),
-    getInProgressSurveyState: jest.fn(),
-    setInProgressSurveyState: jest.fn(),
-    sendSurveyEvent: jest.fn(),
-    dismissedSurveyEvent: jest.fn(),
+vi.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
+    ...vi.requireActual('../../../extensions/surveys/surveys-extension-utils'),
+    getInProgressSurveyState: vi.fn(),
+    setInProgressSurveyState: vi.fn(),
+    sendSurveyEvent: vi.fn(),
+    dismissedSurveyEvent: vi.fn(),
 }))
 
-const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as jest.Mock
+const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as vi.Mock
 
-jest.mock('@posthog/browser-common/utils/uuidv7')
+vi.mock('@posthog/browser-common/utils/uuidv7')
 
 const mockPosthog = {
-    capture: jest.fn(),
-    get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
-    reloadFeatureFlags: jest.fn(),
+    capture: vi.fn(),
+    get_session_replay_url: vi.fn().mockReturnValue('http://example.com/replay'),
+    reloadFeatureFlags: vi.fn(),
 }
 
 const baseSurvey: Survey = {
@@ -52,17 +52,17 @@ const baseSurvey: Survey = {
     schedule: null,
 }
 
-const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as jest.Mock
-const mockedSetInProgressSurveyState = surveyUtils.setInProgressSurveyState as jest.Mock
-const mockedUuidv7 = uuid.uuidv7 as jest.Mock
+const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as vi.Mock
+const mockedSetInProgressSurveyState = surveyUtils.setInProgressSurveyState as vi.Mock
+const mockedUuidv7 = uuid.uuidv7 as vi.Mock
 
 describe('Surveys: back button', () => {
     beforeEach(() => {
         cleanup()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         mockedUuidv7.mockReturnValue('generated-uuid')
         mockedGetInProgressSurveyState.mockReturnValue(null)
-        HTMLFormElement.prototype.submit = jest.fn()
+        HTMLFormElement.prototype.submit = vi.fn()
     })
 
     afterEach(() => {
@@ -71,7 +71,7 @@ describe('Surveys: back button', () => {
 
     test('back button is hidden on the first question', () => {
         render(
-            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={jest.fn()} isPopup posthog={mockPosthog as any} />
+            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />
         )
 
         expect(screen.getByText('Question 1')).toBeVisible()
@@ -80,7 +80,7 @@ describe('Surveys: back button', () => {
 
     test('back button is hidden when allowGoBack is not set', async () => {
         const survey = { ...baseSurvey, appearance: { ...baseSurvey.appearance, allowGoBack: false } }
-        render(<SurveyPopup survey={survey} removeSurveyFromFocus={jest.fn()} isPopup posthog={mockPosthog as any} />)
+        render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a' } })
         fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
@@ -91,7 +91,7 @@ describe('Surveys: back button', () => {
 
     test('back button appears after advancing and returns to the previous question with prior answer prefilled', async () => {
         render(
-            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={jest.fn()} isPopup posthog={mockPosthog as any} />
+            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />
         )
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'first answer' } })
@@ -111,7 +111,7 @@ describe('Surveys: back button', () => {
     test('navigation history survives a re-render (resume from persisted state)', async () => {
         // First mount: advance Q1 -> Q2, capture whatever state the SDK persisted.
         const { unmount } = render(
-            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={jest.fn()} isPopup posthog={mockPosthog as any} />
+            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />
         )
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'first answer' } })
@@ -124,7 +124,7 @@ describe('Surveys: back button', () => {
         // Second mount: feed the captured state back in (simulating a reload).
         mockedGetInProgressSurveyState.mockReturnValue(persistedState)
         render(
-            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={jest.fn()} isPopup posthog={mockPosthog as any} />
+            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />
         )
 
         // Behavior: we resume on Q2 AND the back button is available because Q1 is in history.
@@ -154,7 +154,7 @@ describe('Surveys: back button', () => {
         render(
             <SurveyPopup
                 survey={branchedSurvey}
-                removeSurveyFromFocus={jest.fn()}
+                removeSurveyFromFocus={vi.fn()}
                 isPopup
                 posthog={mockPosthog as any}
             />
@@ -178,7 +178,7 @@ describe('Surveys: back button', () => {
         })
 
         render(
-            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={jest.fn()} isPopup posthog={mockPosthog as any} />
+            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />
         )
 
         expect(screen.getByText('Question 2')).toBeVisible()
@@ -209,7 +209,7 @@ describe('Surveys: back button', () => {
         render(
             <SurveyPopup
                 survey={branchedSurvey}
-                removeSurveyFromFocus={jest.fn()}
+                removeSurveyFromFocus={vi.fn()}
                 isPopup
                 posthog={mockPosthog as any}
             />
@@ -248,7 +248,7 @@ describe('Surveys: back button', () => {
             ...baseSurvey,
             appearance: { ...baseSurvey.appearance, backButtonText: 'Previous' },
         }
-        render(<SurveyPopup survey={survey} removeSurveyFromFocus={jest.fn()} isPopup posthog={mockPosthog as any} />)
+        render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a' } })
         fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
@@ -261,7 +261,7 @@ describe('Surveys: back button', () => {
         render(
             <SurveyPopup
                 survey={baseSurvey}
-                removeSurveyFromFocus={jest.fn()}
+                removeSurveyFromFocus={vi.fn()}
                 previewPageIndex={0}
                 posthog={mockPosthog as any}
             />
@@ -276,7 +276,7 @@ describe('Surveys: back button', () => {
         render(
             <SurveyPopup
                 survey={survey}
-                removeSurveyFromFocus={jest.fn()}
+                removeSurveyFromFocus={vi.fn()}
                 previewPageIndex={1}
                 posthog={mockPosthog as any}
             />
@@ -287,11 +287,11 @@ describe('Surveys: back button', () => {
     })
 
     test('preview mode: clicking back delegates to onPreviewBack instead of mutating local state', () => {
-        const onPreviewBack = jest.fn()
+        const onPreviewBack = vi.fn()
         render(
             <SurveyPopup
                 survey={baseSurvey}
-                removeSurveyFromFocus={jest.fn()}
+                removeSurveyFromFocus={vi.fn()}
                 previewPageIndex={1}
                 onPreviewBack={onPreviewBack}
                 posthog={mockPosthog as any}
@@ -310,7 +310,7 @@ describe('Surveys: back button', () => {
         render(
             <SurveyPopup
                 survey={survey}
-                removeSurveyFromFocus={jest.fn()}
+                removeSurveyFromFocus={vi.fn()}
                 previewPageIndex={1}
                 posthog={mockPosthog as any}
             />

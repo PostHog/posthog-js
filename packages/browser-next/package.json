@@ -41,7 +41,7 @@
         "lint:fix": "eslint src tests fixtures playwright playwright.config.ts scripts/*.mjs --fix",
         "build": "rslib build",
         "dev": "rslib build -w",
-        "test:unit": "jest -c jest.config.cjs && rslib build && node scripts/check-mixed-module-delivery.mjs",
+        "test:unit": "vitest run && rslib build && node scripts/check-mixed-module-delivery.mjs",
         "test:browser": "playwright test --config playwright.config.ts",
         "test:capture-v1-live": "pnpm build && node scripts/check-capture-v1-live.mjs",
         "test:mixed-modules": "rslib build && node scripts/check-mixed-module-delivery.mjs",
@@ -56,10 +56,8 @@
         "@playwright/test": "1.52.0",
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
-        "@types/jest": "catalog:",
         "esbuild": "^0.25.0",
-        "jest": "catalog:",
-        "ts-jest": "catalog:",
-        "typescript": "catalog:"
+        "typescript": "catalog:",
+        "vitest": "catalog:"
     }
 }

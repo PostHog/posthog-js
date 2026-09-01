@@ -1,15 +1,15 @@
 // Test for Expo SDK 55 where both the new File/Paths API and a working legacy subpath exist.
 // The new API should always be preferred over the legacy subpath.
 
-const mockFileWrite = jest.fn()
-const mockFileText = jest.fn().mockResolvedValue('stored-value')
+const mockFileWrite = vi.fn()
+const mockFileText = vi.fn().mockResolvedValue('stored-value')
 const mockDocument = { uri: 'file:///mock-doc-dir/' }
 
-const mockLegacyReadAsStringAsync = jest.fn()
-const mockLegacyWriteAsStringAsync = jest.fn()
+const mockLegacyReadAsStringAsync = vi.fn()
+const mockLegacyWriteAsStringAsync = vi.fn()
 
 // Mock expo-file-system main module (SDK 55): has new File/Paths API + deprecated legacy stubs
-jest.mock('../src/optional/OptionalExpoFileSystem', () => ({
+vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
   OptionalExpoFileSystem: {
     // Deprecated legacy methods that throw at runtime
     readAsStringAsync: () => {
@@ -23,7 +23,7 @@ jest.mock('../src/optional/OptionalExpoFileSystem', () => ({
     Paths: {
       document: mockDocument,
     },
-    File: jest.fn().mockImplementation((_dir: any, _key: string) => ({
+    File: vi.fn().mockImplementation((_dir: any, _key: string) => ({
       text: mockFileText,
       write: mockFileWrite,
     })),
@@ -31,7 +31,7 @@ jest.mock('../src/optional/OptionalExpoFileSystem', () => ({
 }))
 
 // Mock expo-file-system/legacy subpath (SDK 55): has working legacy methods
-jest.mock('../src/optional/OptionalExpoFileSystemLegacy', () => ({
+vi.mock('../src/optional/OptionalExpoFileSystemLegacy', () => ({
   OptionalExpoFileSystemLegacy: {
     readAsStringAsync: mockLegacyReadAsStringAsync,
     writeAsStringAsync: mockLegacyWriteAsStringAsync,
@@ -39,11 +39,11 @@ jest.mock('../src/optional/OptionalExpoFileSystemLegacy', () => ({
   },
 }))
 
-jest.mock('../src/optional/OptionalAsyncStorage', () => ({
+vi.mock('../src/optional/OptionalAsyncStorage', () => ({
   OptionalAsyncStorage: undefined,
 }))
 
-jest.mock('react-native', () => ({
+vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }))
 
@@ -51,10 +51,10 @@ import { buildOptimisticAsyncStorage } from '../src/native-deps'
 import { OptionalExpoFileSystem } from '../src/optional/OptionalExpoFileSystem'
 
 describe('Expo SDK 55 - prefers new File API over working legacy subpath', () => {
-  jest.useRealTimers()
+  vi.useRealTimers()
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     mockFileText.mockResolvedValue('stored-value')
   })
 

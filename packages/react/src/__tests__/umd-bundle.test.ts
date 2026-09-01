@@ -1,18 +1,18 @@
 import { renderHook } from '@testing-library/react'
 
 const mockPostHogInstance = {
-    capture: jest.fn(),
-    isFeatureEnabled: jest.fn(),
+    capture: vi.fn(),
+    isFeatureEnabled: vi.fn(),
 }
 
-jest.mock('posthog-js', () => ({
+vi.mock('posthog-js', () => ({
     default: mockPostHogInstance,
     posthog: mockPostHogInstance,
 }))
 
 describe('UMD bundle', () => {
     it('unwraps the posthog-js CommonJS namespace for the default instance', () => {
-        const { usePostHog } = jest.requireActual('../../dist/umd/index.js')
+        const { usePostHog } = vi.requireActual('../../dist/umd/index.js')
 
         const { result } = renderHook(() => usePostHog())
 

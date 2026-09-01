@@ -1,17 +1,17 @@
 // Mock posthog-node
-const mockCapture = jest.fn()
-const mockIdentify = jest.fn()
-const mockIsFeatureEnabled = jest.fn()
-const mockGetFeatureFlag = jest.fn()
-const mockGetFeatureFlagPayload = jest.fn()
-const mockGetAllFlags = jest.fn()
-const mockGetAllFlagsAndPayloads = jest.fn()
-const mockShutdown = jest.fn()
-const mockEnterContext = jest.fn()
-const mockWithContext = jest.fn((_, fn) => fn())
+const mockCapture = vi.fn()
+const mockIdentify = vi.fn()
+const mockIsFeatureEnabled = vi.fn()
+const mockGetFeatureFlag = vi.fn()
+const mockGetFeatureFlagPayload = vi.fn()
+const mockGetAllFlags = vi.fn()
+const mockGetAllFlagsAndPayloads = vi.fn()
+const mockShutdown = vi.fn()
+const mockEnterContext = vi.fn()
+const mockWithContext = vi.fn((_, fn) => fn())
 
-jest.mock('posthog-node', () => ({
-    PostHog: jest.fn().mockImplementation(() => ({
+vi.mock('posthog-node', () => ({
+    PostHog: vi.fn().mockImplementation(() => ({
         capture: mockCapture,
         identify: mockIdentify,
         isFeatureEnabled: mockIsFeatureEnabled,
@@ -28,12 +28,12 @@ jest.mock('posthog-node', () => ({
 // Mock next/headers cookies()
 function createMockCookies(entries: Record<string, string>) {
     return {
-        get: jest.fn((name: string) => {
+        get: vi.fn((name: string) => {
             const value = entries[name]
             return value !== undefined ? { name, value } : undefined
         }),
-        getAll: jest.fn(() => Object.entries(entries).map(([name, value]) => ({ name, value }))),
-        has: jest.fn((name: string) => name in entries),
+        getAll: vi.fn(() => Object.entries(entries).map(([name, value]) => ({ name, value }))),
+        has: vi.fn((name: string) => name in entries),
     }
 }
 
@@ -41,19 +41,19 @@ const mockCookieStore = createMockCookies({})
 
 function createMockHeaders(entries: Record<string, string>) {
     return {
-        get: jest.fn((name: string) => entries[name.toLowerCase()] ?? null),
+        get: vi.fn((name: string) => entries[name.toLowerCase()] ?? null),
     }
 }
 
 const mockHeaderStore = createMockHeaders({})
 
-jest.mock('next/headers.js', () => ({
-    cookies: jest.fn(() => Promise.resolve(mockCookieStore)),
-    headers: jest.fn(() => Promise.resolve(mockHeaderStore)),
+vi.mock('next/headers.js', () => ({
+    cookies: vi.fn(() => Promise.resolve(mockCookieStore)),
+    headers: vi.fn(() => Promise.resolve(mockHeaderStore)),
 }))
 
 // Mock clientCache.node to avoid cross-test cache pollution
-const mockGetOrCreateNodeClient = jest.fn().mockImplementation(() => ({
+const mockGetOrCreateNodeClient = vi.fn().mockImplementation(() => ({
     capture: mockCapture,
     identify: mockIdentify,
     isFeatureEnabled: mockIsFeatureEnabled,
@@ -66,7 +66,7 @@ const mockGetOrCreateNodeClient = jest.fn().mockImplementation(() => ({
     withContext: mockWithContext,
 }))
 
-jest.mock('../src/server/clientCache.node', () => ({
+vi.mock('../src/server/clientCache.node', () => ({
     getOrCreateNodeClient: (...args: unknown[]) => mockGetOrCreateNodeClient(...args),
 }))
 
@@ -77,15 +77,15 @@ describe('createPostHog().getPostHog', () => {
     const originalEnv = process.env
 
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         process.env = { ...originalEnv }
         process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_env_key'
 
         // Reset to empty cookies and headers by default
         const emptyCookies = createMockCookies({})
-        ;(cookies as jest.Mock).mockResolvedValue(emptyCookies)
+        ;(cookies as vi.Mock).mockResolvedValue(emptyCookies)
         const emptyHeaders = createMockHeaders({})
-        ;(headers as jest.Mock).mockResolvedValue(emptyHeaders)
+        ;(headers as vi.Mock).mockResolvedValue(emptyHeaders)
     })
 
     afterAll(() => {
@@ -108,7 +108,7 @@ describe('createPostHog().getPostHog', () => {
                 $sesid: [1708700000000, 'session-123', 1708700000000],
             }),
         })
-        ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+        ;(cookies as vi.Mock).mockResolvedValue(cookieStore)
 
         const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
         client.capture({ distinctId: 'user_abc', event: 'test_event' })
@@ -126,7 +126,7 @@ describe('createPostHog().getPostHog', () => {
 
     it('wraps method calls with withContext with undefined identity when no cookie exists', async () => {
         const cookieStore = createMockCookies({})
-        ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+        ;(cookies as vi.Mock).mockResolvedValue(cookieStore)
 
         const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
         client.capture({ distinctId: 'anon', event: 'test_event' })
@@ -163,7 +163,7 @@ describe('createPostHog().getPostHog', () => {
 
     it('warns and returns a disabled client when no apiKey provided and env var missing', async () => {
         delete process.env.NEXT_PUBLIC_POSTHOG_KEY
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
         const client = await createPostHog().getPostHog()
 
@@ -222,7 +222,7 @@ describe('createPostHog().getPostHog', () => {
                 distinct_id: 'user_abc',
             }),
         })
-        ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+        ;(cookies as vi.Mock).mockResolvedValue(cookieStore)
 
         const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
         client.capture({ distinctId: 'user_abc', event: 'test_event' })
@@ -240,13 +240,13 @@ describe('createPostHog().getPostHog', () => {
     describe('tracing headers', () => {
         it('uses tracing headers when present and no cookie exists', async () => {
             const cookieStore = createMockCookies({})
-            ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+            ;(cookies as vi.Mock).mockResolvedValue(cookieStore)
             const headerStore = createMockHeaders({
                 'x-posthog-session-id': 'header-session-456',
                 'x-posthog-distinct-id': 'header-user-789',
                 'x-posthog-window-id': 'window-abc',
             })
-            ;(headers as jest.Mock).mockResolvedValue(headerStore)
+            ;(headers as vi.Mock).mockResolvedValue(headerStore)
 
             const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
             client.capture({ distinctId: 'header-user-789', event: 'test_event' })
@@ -272,12 +272,12 @@ describe('createPostHog().getPostHog', () => {
                     $sesid: [1708700000000, 'cookie-session', 1708700000000],
                 }),
             })
-            ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+            ;(cookies as vi.Mock).mockResolvedValue(cookieStore)
             const headerStore = createMockHeaders({
                 'x-posthog-session-id': 'header-session',
                 'x-posthog-distinct-id': 'header-user',
             })
-            ;(headers as jest.Mock).mockResolvedValue(headerStore)
+            ;(headers as vi.Mock).mockResolvedValue(headerStore)
 
             const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
             client.capture({ distinctId: 'header-user', event: 'test_event' })
@@ -303,9 +303,9 @@ describe('createPostHog().getPostHog', () => {
                     $sesid: [1708700000000, 'cookie-session', 1708700000000],
                 }),
             })
-            ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+            ;(cookies as vi.Mock).mockResolvedValue(cookieStore)
             const headerStore = createMockHeaders({})
-            ;(headers as jest.Mock).mockResolvedValue(headerStore)
+            ;(headers as vi.Mock).mockResolvedValue(headerStore)
 
             const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
             client.capture({ distinctId: 'cookie-user', event: 'test_event' })
@@ -331,11 +331,11 @@ describe('createPostHog().getPostHog', () => {
                     $sesid: [1708700000000, 'cookie-session', 1708700000000],
                 }),
             })
-            ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+            ;(cookies as vi.Mock).mockResolvedValue(cookieStore)
             const headerStore = createMockHeaders({
                 'x-posthog-window-id': 'window-123',
             })
-            ;(headers as jest.Mock).mockResolvedValue(headerStore)
+            ;(headers as vi.Mock).mockResolvedValue(headerStore)
 
             const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
             client.capture({ distinctId: 'cookie-user', event: 'test_event' })
@@ -364,7 +364,7 @@ describe('createPostHog().getPostHog', () => {
                 }),
                 __ph_opt_in_out_phc_test123: '0',
             })
-            ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+            ;(cookies as vi.Mock).mockResolvedValue(cookieStore)
 
             const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
             expect(client).toBeDefined()
@@ -381,7 +381,7 @@ describe('createPostHog().getPostHog', () => {
                 }),
                 __ph_opt_in_out_phc_test123: '1',
             })
-            ;(cookies as jest.Mock).mockResolvedValue(cookieStore)
+            ;(cookies as vi.Mock).mockResolvedValue(cookieStore)
 
             const client = await createPostHog({ apiKey: 'phc_test123' }).getPostHog()
             client.capture({ distinctId: 'user_abc', event: 'test_event' })

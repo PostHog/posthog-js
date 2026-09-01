@@ -43,7 +43,7 @@
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "lint:fix": "eslint \"**/*.{js,ts,tsx}\" --fix",
     "typecheck": "tsc",
-    "test:unit": "jest --passWithNoTests && node scripts/check-spm-manifest.mjs",
+    "test:unit": "vitest run --passWithNoTests && node scripts/check-spm-manifest.mjs",
     "test": "pnpm test:unit",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
     "build": "bob build",
@@ -68,27 +68,17 @@
   "homepage": "https://github.com/PostHog/posthog-js/tree/main/packages/react-native-plugin#readme",
   "devDependencies": {
     "@react-native-community/cli": "20.0.0",
-    "@types/jest": "catalog:",
     "@types/react": "^18.2.44",
     "del-cli": "^5.1.0",
-    "jest": "catalog:",
     "react": "18.3.1",
     "react-native": "0.75.3",
     "react-native-builder-bob": "^0.30.2",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "react": "*",
     "react-native": "*"
-  },
-  "jest": {
-    "modulePathIgnorePatterns": [
-      "<rootDir>/lib/"
-    ],
-    "testPathIgnorePatterns": [
-      "/node_modules/",
-      "<rootDir>/lib/"
-    ]
   },
   "react-native-builder-bob": {
     "source": "src",

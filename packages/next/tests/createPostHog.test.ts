@@ -1,9 +1,9 @@
-const mockCapture = jest.fn()
-const mockWithContext = jest.fn((_, fn) => fn())
-const mockEnterContext = jest.fn()
+const mockCapture = vi.fn()
+const mockWithContext = vi.fn((_, fn) => fn())
+const mockEnterContext = vi.fn()
 
-jest.mock('posthog-node', () => ({
-    PostHog: jest.fn().mockImplementation(() => ({
+vi.mock('posthog-node', () => ({
+    PostHog: vi.fn().mockImplementation(() => ({
         capture: mockCapture,
         withContext: mockWithContext,
         enterContext: mockEnterContext,
@@ -12,34 +12,34 @@ jest.mock('posthog-node', () => ({
 
 function createMockCookies(entries: Record<string, string>) {
     return {
-        get: jest.fn((name: string) => {
+        get: vi.fn((name: string) => {
             const value = entries[name]
             return value !== undefined ? { name, value } : undefined
         }),
-        getAll: jest.fn(() => Object.entries(entries).map(([name, value]) => ({ name, value }))),
-        has: jest.fn((name: string) => name in entries),
+        getAll: vi.fn(() => Object.entries(entries).map(([name, value]) => ({ name, value }))),
+        has: vi.fn((name: string) => name in entries),
     }
 }
 
 function createMockHeaders(entries: Record<string, string>) {
     return {
-        get: jest.fn((name: string) => entries[name.toLowerCase()] ?? null),
+        get: vi.fn((name: string) => entries[name.toLowerCase()] ?? null),
     }
 }
 
-jest.mock('next/headers.js', () => ({
-    cookies: jest.fn(() => Promise.resolve(createMockCookies({}))),
-    headers: jest.fn(() => Promise.resolve(createMockHeaders({}))),
+vi.mock('next/headers.js', () => ({
+    cookies: vi.fn(() => Promise.resolve(createMockCookies({}))),
+    headers: vi.fn(() => Promise.resolve(createMockHeaders({}))),
 }))
 
 // Mock clientCache.node to avoid cross-test cache pollution
-const mockGetOrCreateNodeClient = jest.fn().mockImplementation(() => ({
+const mockGetOrCreateNodeClient = vi.fn().mockImplementation(() => ({
     capture: mockCapture,
     withContext: mockWithContext,
     enterContext: mockEnterContext,
 }))
 
-jest.mock('../src/server/clientCache.node', () => ({
+vi.mock('../src/server/clientCache.node', () => ({
     getOrCreateNodeClient: (...args: unknown[]) => mockGetOrCreateNodeClient(...args),
 }))
 
@@ -51,11 +51,11 @@ describe('createPostHog', () => {
     const originalEnv = process.env
 
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         process.env = { ...originalEnv }
         process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_env_key'
-        ;(cookies as jest.Mock).mockResolvedValue(createMockCookies({}))
-        ;(headers as jest.Mock).mockResolvedValue(createMockHeaders({}))
+        ;(cookies as vi.Mock).mockResolvedValue(createMockCookies({}))
+        ;(headers as vi.Mock).mockResolvedValue(createMockHeaders({}))
     })
 
     afterAll(() => {
@@ -76,7 +76,7 @@ describe('createPostHog', () => {
     })
 
     it('behaves like getPostHog when no getDistinctId is configured', async () => {
-        ;(cookies as jest.Mock).mockResolvedValue(
+        ;(cookies as vi.Mock).mockResolvedValue(
             createMockCookies({
                 ph_phc_test123_posthog: JSON.stringify({ distinct_id: 'cookie-user' }),
             })
@@ -94,7 +94,7 @@ describe('createPostHog', () => {
 
     describe('getDistinctId resolver', () => {
         it('server-resolved distinct id overrides cookie identity', async () => {
-            ;(cookies as jest.Mock).mockResolvedValue(
+            ;(cookies as vi.Mock).mockResolvedValue(
                 createMockCookies({
                     ph_phc_test123_posthog: JSON.stringify({
                         distinct_id: 'cookie-user',
@@ -122,7 +122,7 @@ describe('createPostHog', () => {
         })
 
         it('server-resolved distinct id overrides tracing headers', async () => {
-            ;(headers as jest.Mock).mockResolvedValue(
+            ;(headers as vi.Mock).mockResolvedValue(
                 createMockHeaders({
                     'x-posthog-distinct-id': 'header-user',
                     'x-posthog-session-id': 'header-session',
@@ -159,7 +159,7 @@ describe('createPostHog', () => {
         it.each([null, undefined, '', '   '])(
             'falls back to client identity when the resolver returns %p',
             async (resolved) => {
-                ;(cookies as jest.Mock).mockResolvedValue(
+                ;(cookies as vi.Mock).mockResolvedValue(
                     createMockCookies({
                         ph_phc_test123_posthog: JSON.stringify({ distinct_id: 'cookie-user' }),
                     })
@@ -180,8 +180,8 @@ describe('createPostHog', () => {
         )
 
         it('warns and falls back to client identity when the resolver throws', async () => {
-            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-            ;(cookies as jest.Mock).mockResolvedValue(
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
+            ;(cookies as vi.Mock).mockResolvedValue(
                 createMockCookies({
                     ph_phc_test123_posthog: JSON.stringify({ distinct_id: 'cookie-user' }),
                 })
@@ -225,7 +225,7 @@ describe('createPostHog', () => {
         })
 
         it('converts a numeric distinct id to a string with a warning', async () => {
-            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
             const { getPostHog } = createPostHog({
                 apiKey: 'phc_test123',
@@ -245,8 +245,8 @@ describe('createPostHog', () => {
         })
 
         it('warns and falls back to client identity when the resolver returns a non-string object', async () => {
-            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-            ;(cookies as jest.Mock).mockResolvedValue(
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
+            ;(cookies as vi.Mock).mockResolvedValue(
                 createMockCookies({
                     ph_phc_test123_posthog: JSON.stringify({ distinct_id: 'cookie-user' }),
                 })
@@ -270,12 +270,12 @@ describe('createPostHog', () => {
         })
 
         it('does not call the resolver when the user is opted out', async () => {
-            ;(cookies as jest.Mock).mockResolvedValue(
+            ;(cookies as vi.Mock).mockResolvedValue(
                 createMockCookies({
                     __ph_opt_in_out_phc_test123: '0',
                 })
             )
-            const getDistinctId = jest.fn(() => 'server-user')
+            const getDistinctId = vi.fn(() => 'server-user')
 
             const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
             const client = await getPostHog()
@@ -287,8 +287,8 @@ describe('createPostHog', () => {
 
         it('does not call the resolver when no apiKey is available', async () => {
             delete process.env.NEXT_PUBLIC_POSTHOG_KEY
-            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-            const getDistinctId = jest.fn(() => 'server-user')
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
+            const getDistinctId = vi.fn(() => 'server-user')
 
             const { getPostHog } = createPostHog({ getDistinctId })
             await getPostHog()
@@ -298,7 +298,7 @@ describe('createPostHog', () => {
         })
 
         it('does not re-run the resolver per captured event', async () => {
-            const getDistinctId = jest.fn(() => 'server-user')
+            const getDistinctId = vi.fn(() => 'server-user')
 
             const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
             const client = await getPostHog()
@@ -309,7 +309,7 @@ describe('createPostHog', () => {
         })
 
         it('resolves identity once per request across multiple getPostHog() calls', async () => {
-            const getDistinctId = jest.fn(() => 'server-user')
+            const getDistinctId = vi.fn(() => 'server-user')
 
             const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
             const client1 = await getPostHog()
@@ -333,7 +333,7 @@ describe('createPostHog', () => {
             const resolverStarted = new Promise<void>((resolve) => {
                 markResolverStarted = resolve
             })
-            const getDistinctId = jest.fn(() => {
+            const getDistinctId = vi.fn(() => {
                 markResolverStarted()
                 return distinctIdPromise
             })
@@ -359,11 +359,11 @@ describe('createPostHog', () => {
         })
 
         it('resolves identity again for a new request', async () => {
-            const getDistinctId = jest.fn(() => 'server-user')
+            const getDistinctId = vi.fn(() => 'server-user')
 
             const { getPostHog } = createPostHog({ apiKey: 'phc_test123', getDistinctId })
             await getPostHog()
-            ;(headers as jest.Mock).mockResolvedValue(createMockHeaders({}))
+            ;(headers as vi.Mock).mockResolvedValue(createMockHeaders({}))
             await getPostHog()
 
             expect(getDistinctId).toHaveBeenCalledTimes(2)
@@ -446,7 +446,7 @@ describe('createPostHog', () => {
         })
 
         it('does not call the resolver when the user is opted out', async () => {
-            const getDistinctId = jest.fn(() => 'server-user')
+            const getDistinctId = vi.fn(() => 'server-user')
             const ctx = createMockPagesContext({ __ph_opt_in_out_phc_test123: '0' })
 
             const { getPostHog } = createPagesPostHog({ apiKey: 'phc_test123', getDistinctId })

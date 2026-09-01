@@ -6,33 +6,33 @@ import { waitForExpect, wait } from './test-utils'
 // Mock the native plugin bridge so we can assert which native calls happen. No `setup`
 // key, so the SDK takes the legacy start() path (same surface as the standalone
 // posthog-react-native-session-replay package).
-jest.mock('../src/optional/OptionalPlugin', () => ({
+vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePlugin: {
-    start: jest.fn(async () => {}),
-    startSession: jest.fn(async () => {}),
-    endSession: jest.fn(async () => {}),
-    isEnabled: jest.fn(async () => false),
-    identify: jest.fn(async () => {}),
-    startRecording: jest.fn(async () => {}),
-    stopRecording: jest.fn(async () => {}),
+    start: vi.fn(async () => {}),
+    startSession: vi.fn(async () => {}),
+    endSession: vi.fn(async () => {}),
+    isEnabled: vi.fn(async () => false),
+    identify: vi.fn(async () => {}),
+    startRecording: vi.fn(async () => {}),
+    stopRecording: vi.fn(async () => {}),
   },
 }))
 
 const replay = OptionalReactNativePlugin as unknown as {
-  start: jest.Mock
-  startSession: jest.Mock
-  endSession: jest.Mock
-  isEnabled: jest.Mock
-  identify: jest.Mock
-  startRecording: jest.Mock
-  stopRecording: jest.Mock
+  start: vi.Mock
+  startSession: vi.Mock
+  endSession: vi.Mock
+  isEnabled: vi.Mock
+  identify: vi.Mock
+  startRecording: vi.Mock
+  stopRecording: vi.Mock
 }
 
-Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
-AppState.addEventListener = jest.fn()
+Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
+AppState.addEventListener = vi.fn()
 
 describe('PostHog RN session replay event triggers', () => {
-  jest.useRealTimers()
+  vi.useRealTimers()
 
   let posthog: PostHog
   let cache: any = {}
@@ -55,7 +55,7 @@ describe('PostHog RN session replay event triggers', () => {
 
     currentFlags = {}
     currentSessionRecording = {}
-    ;(globalThis as any).window.fetch = jest.fn(async (url: string) => {
+    ;(globalThis as any).window.fetch = vi.fn(async (url: string) => {
       let res: any = { status: 'ok' }
       if (url.includes('flags')) {
         res = {

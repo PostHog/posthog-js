@@ -1,11 +1,11 @@
-jest.mock('@posthog/browser-common/utils/logger', () => ({
-    createLogger: jest.fn().mockReturnValue({
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
+vi.mock('@posthog/browser-common/utils/logger', () => ({
+    createLogger: vi.fn().mockReturnValue({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
     }),
 }))
-jest.useFakeTimers()
+vi.useFakeTimers()
 
 import { SURVEYS, SURVEYS_CACHE_TTL_MS, SURVEYS_LOADED_AT, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { SurveyManager } from '../extensions/surveys'
@@ -18,7 +18,7 @@ import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../utils/survey-u
 import { createMockPostHog } from './helpers/posthog-instance'
 import { createSurveysClient } from './helpers/surveys-client'
 
-const mockLogger = jest.requireMock('@posthog/browser-common/utils/logger').createLogger.mock.results[0].value
+const mockLogger = vi.requireMock('@posthog/browser-common/utils/logger').createLogger.mock.results[0].value
 
 const flushPromises = async (): Promise<void> => {
     await Promise.resolve()
@@ -28,12 +28,12 @@ const flushPromises = async (): Promise<void> => {
 describe('posthog-surveys', () => {
     describe('BrowserSurveys Class', () => {
         let mockPostHog: PostHog & {
-            get_property: jest.Mock
-            _send_request: jest.Mock
+            get_property: vi.Mock
+            _send_request: vi.Mock
         }
         let surveys: BrowserSurveys
-        let mockGenerateSurveys: jest.Mock
-        let mockLoadExternalDependency: jest.Mock
+        let mockGenerateSurveys: vi.Mock
+        let mockLoadExternalDependency: vi.Mock
 
         const survey: Survey = {
             id: 'completed-survey',
@@ -88,7 +88,7 @@ describe('posthog-surveys', () => {
 
         beforeEach(() => {
             // Reset mocks
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             // Clear localStorage
             localStorage.clear()
@@ -101,51 +101,51 @@ describe('posthog-surveys', () => {
                     surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
                 },
                 persistence: {
-                    register: jest.fn(),
+                    register: vi.fn(),
                     props: {},
                 },
                 requestRouter: {
-                    endpointFor: jest.fn().mockReturnValue('https://test.com/api/surveys'),
+                    endpointFor: vi.fn().mockReturnValue('https://test.com/api/surveys'),
                 },
-                _send_request: jest.fn(),
-                get_property: jest.fn(),
+                _send_request: vi.fn(),
+                get_property: vi.fn(),
                 consent: {
                     _instance: {} as any,
                     _config: {} as any,
                     consent: {} as any,
-                    isOptedIn: jest.fn().mockReturnValue(true),
-                    isOptedOut: jest.fn().mockReturnValue(false),
-                    hasOptedInBefore: jest.fn().mockReturnValue(false),
-                    hasOptedOutBefore: jest.fn().mockReturnValue(false),
-                    optInCapturing: jest.fn(),
-                    optOutCapturing: jest.fn(),
-                    reset: jest.fn(),
-                    onConsentChange: jest.fn(),
+                    isOptedIn: vi.fn().mockReturnValue(true),
+                    isOptedOut: vi.fn().mockReturnValue(false),
+                    hasOptedInBefore: vi.fn().mockReturnValue(false),
+                    hasOptedOutBefore: vi.fn().mockReturnValue(false),
+                    optInCapturing: vi.fn(),
+                    optOutCapturing: vi.fn(),
+                    reset: vi.fn(),
+                    onConsentChange: vi.fn(),
                 },
-                onFeatureFlags: jest.fn().mockReturnValue(() => {}),
+                onFeatureFlags: vi.fn().mockReturnValue(() => {}),
                 featureFlags: {
                     hasLoadedFlags: true,
-                    _send_request: jest
+                    _send_request: vi
                         .fn()
                         .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
-                    getFeatureFlag: jest
+                    getFeatureFlag: vi
                         .fn()
                         .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
-                    isFeatureEnabled: jest
+                    isFeatureEnabled: vi
                         .fn()
                         .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
                 },
             }) as PostHog & {
-                get_property: jest.Mock
-                _send_request: jest.Mock
+                get_property: vi.Mock
+                _send_request: vi.Mock
             }
 
             // Create surveys instance
             surveys = new BrowserSurveys(mockPostHog as PostHog)
 
             // Mock window.__PosthogExtensions__
-            mockGenerateSurveys = jest.fn()
-            mockLoadExternalDependency = jest.fn()
+            mockGenerateSurveys = vi.fn()
+            mockLoadExternalDependency = vi.fn()
             assignableWindow.__PosthogExtensions__ = {
                 generateSurveys: mockGenerateSurveys,
                 loadExternalDependency: mockLoadExternalDependency,
@@ -163,7 +163,7 @@ describe('posthog-surveys', () => {
 
         describe('reset', () => {
             it('does not throw when localStorage access throws (e.g. cross-origin iframe)', () => {
-                const removeItemSpy = jest.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+                const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
                     throw new Error('storage unavailable')
                 })
 
@@ -506,7 +506,7 @@ describe('posthog-surveys', () => {
             it('should call the callback with the surveys when they are loaded', () => {
                 surveys['_isSurveysEnabled'] = true
                 mockGenerateSurveys.mockReturnValue({})
-                const callback = jest.fn()
+                const callback = vi.fn()
                 const mockSurveys = [{ id: 'test-survey' }]
                 mockPostHog.get_property.mockReturnValue(mockSurveys)
 
@@ -529,7 +529,7 @@ describe('posthog-surveys', () => {
                 mockGenerateSurveys.mockImplementation(() => {
                     throw new Error('Error initializing surveys')
                 })
-                const callback = jest.fn()
+                const callback = vi.fn()
 
                 surveys.onSurveysLoaded(callback)
                 expect(() => surveys.loadIfEnabled()).toThrow('Error initializing surveys')
@@ -553,7 +553,7 @@ describe('posthog-surveys', () => {
                 // 4. When the fetch completes, all callbacks receive the surveys
 
                 const mockSurveys = [{ id: 'test-survey' }]
-                const callback = jest.fn()
+                const callback = vi.fn()
 
                 // No cached surveys (simulating first page load)
                 mockPostHog.get_property.mockReturnValue(undefined)
@@ -578,7 +578,7 @@ describe('posthog-surveys', () => {
                 surveys.loadIfEnabled()
 
                 // Let the async fetch complete
-                jest.advanceTimersByTime(100)
+                vi.advanceTimersByTime(100)
 
                 await flushPromises()
 
@@ -588,7 +588,7 @@ describe('posthog-surveys', () => {
 
             it('should not load surveys in cookieless mode without consent', () => {
                 mockPostHog.config.cookieless_mode = 'on_reject'
-                const mockIsOptedOut = mockPostHog.consent.isOptedOut as jest.Mock
+                const mockIsOptedOut = mockPostHog.consent.isOptedOut as vi.Mock
                 mockIsOptedOut.mockReturnValue(true)
                 surveys['_isSurveysEnabled'] = true
 
@@ -600,7 +600,7 @@ describe('posthog-surveys', () => {
 
             it('should load surveys in cookieless mode after consent is given', () => {
                 mockPostHog.config.cookieless_mode = 'on_reject'
-                const mockIsOptedOut = mockPostHog.consent.isOptedOut as jest.Mock
+                const mockIsOptedOut = mockPostHog.consent.isOptedOut as vi.Mock
                 mockIsOptedOut.mockReturnValue(false)
                 surveys['_isSurveysEnabled'] = true
                 mockGenerateSurveys.mockReturnValue({})
@@ -613,7 +613,7 @@ describe('posthog-surveys', () => {
         })
 
         describe('getSurveys', () => {
-            const mockCallback = jest.fn()
+            const mockCallback = vi.fn()
             const mockSurveys = [{ id: 'test-survey' }]
 
             beforeEach(() => {
@@ -623,7 +623,7 @@ describe('posthog-surveys', () => {
             it('should return cached surveys before shared extension setup', () => {
                 const uninitializedSurveys = new BrowserSurveys(mockPostHog)
                 mockPostHog.get_property.mockReturnValue(mockSurveys)
-                const callback = jest.fn()
+                const callback = vi.fn()
 
                 uninitializedSurveys.getSurveys(callback)
 
@@ -650,8 +650,8 @@ describe('posthog-surveys', () => {
                     }, 100)
                 })
 
-                const callback1 = jest.fn()
-                const callback2 = jest.fn()
+                const callback1 = vi.fn()
+                const callback2 = vi.fn()
 
                 // First call starts the fetch
                 surveys.getSurveys(callback1)
@@ -662,7 +662,7 @@ describe('posthog-surveys', () => {
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
 
                 // Complete the request
-                jest.advanceTimersByTime(100)
+                vi.advanceTimersByTime(100)
 
                 await flushPromises()
 
@@ -680,15 +680,15 @@ describe('posthog-surveys', () => {
                     }, 100)
                 })
 
-                const callback1 = jest.fn()
-                const callback2 = jest.fn()
+                const callback1 = vi.fn()
+                const callback2 = vi.fn()
 
                 // Both callers subscribe to the same in-flight request
                 surveys.getSurveys(callback1)
                 surveys.getSurveys(callback2)
 
                 // Complete the request with error
-                jest.advanceTimersByTime(100)
+                vi.advanceTimersByTime(100)
                 await flushPromises()
 
                 // Both callbacks should receive the error
@@ -701,7 +701,7 @@ describe('posthog-surveys', () => {
                 mockPostHog._send_request.mockImplementation(({ callback }) => {
                     callback({ statusCode: 200, json: { surveys: mockSurveys } })
                 })
-                const callback = jest.fn()
+                const callback = vi.fn()
 
                 surveys.getSurveys(callback)
                 expect(callback).not.toHaveBeenCalled()
@@ -844,7 +844,7 @@ describe('posthog-surveys', () => {
                 expect(surveys['_getSurveysInFlightPromise']).not.toBeNull()
 
                 // After the response comes in
-                jest.advanceTimersByTime(100)
+                vi.advanceTimersByTime(100)
                 await flushPromises()
 
                 expect(surveys['_getSurveysInFlightPromise']).toBeNull()

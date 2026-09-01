@@ -3,25 +3,25 @@ import { render, screen } from '@testing-library/react'
 import { PostHogProvider } from '../src/app/PostHogProvider'
 
 // Mock ClientPostHogProvider
-const mockClientProvider = jest.fn(({ children }: { children: React.ReactNode }) => (
+const mockClientProvider = vi.fn(({ children }: { children: React.ReactNode }) => (
     <div data-testid="client-provider">{children}</div>
 ))
-jest.mock('../src/client/ClientPostHogProvider', () => ({
+vi.mock('../src/client/ClientPostHogProvider', () => ({
     ClientPostHogProvider: (props: any) => mockClientProvider(props),
 }))
 
 // Mock next/headers
-jest.mock('next/headers.js', () => ({
-    cookies: jest.fn(),
+vi.mock('next/headers.js', () => ({
+    cookies: vi.fn(),
 }))
 
 // Mock clientCache.node — the mock fn must be declared with `var` so it's
-// hoisted and available inside the jest.mock factory (which Jest hoists above
+// hoisted and available inside the vi.mock factory (which Jest hoists above
 // `const`/`let` declarations).
-var mockGetAllFlagsAndPayloads = jest.fn()
+var mockGetAllFlagsAndPayloads = vi.fn()
 
-jest.mock('../src/server/clientCache.node', () => ({
-    getOrCreateNodeClient: jest.fn().mockImplementation(() => ({
+vi.mock('../src/server/clientCache.node', () => ({
+    getOrCreateNodeClient: vi.fn().mockImplementation(() => ({
         getAllFlagsAndPayloads: (...args: any[]) => mockGetAllFlagsAndPayloads(...args),
     })),
 }))
@@ -149,7 +149,7 @@ describe('PostHogProvider', () => {
 
     it('warns and renders children without ClientPostHogProvider when apiKey is empty and env var is not set', async () => {
         delete process.env.NEXT_PUBLIC_POSTHOG_KEY
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
         const element = await PostHogProvider({
             apiKey: '',
@@ -164,7 +164,7 @@ describe('PostHogProvider', () => {
     })
 
     it('warns when apiKey does not start with phc_', async () => {
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         const element = await PostHogProvider({
             apiKey: 'not_a_valid_key',
             children: <div>Child</div>,
@@ -175,7 +175,7 @@ describe('PostHogProvider', () => {
     })
 
     it('does not warn when apiKey starts with phc_', async () => {
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         const element = await PostHogProvider({
             apiKey: 'phc_test123',
             children: <div>Child</div>,
@@ -261,7 +261,7 @@ describe('PostHogProvider', () => {
         function setupCookieMock(cookieValue: string) {
             const { cookies } = require('next/headers.js')
             cookies.mockResolvedValue({
-                get: jest.fn((name: string) => {
+                get: vi.fn((name: string) => {
                     if (name === 'ph_phc_test123_posthog') {
                         return { name, value: cookieValue }
                     }
@@ -479,7 +479,7 @@ describe('PostHogProvider', () => {
                 digest: 'DYNAMIC_SERVER_USAGE',
             })
             cookies.mockRejectedValueOnce(dynamicUsageError)
-            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
             await expect(
                 PostHogProvider({
@@ -496,7 +496,7 @@ describe('PostHogProvider', () => {
 
         it('renders without bootstrap when flag evaluation fails', async () => {
             mockGetAllFlagsAndPayloads.mockRejectedValue(new Error('network timeout'))
-            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
             const element = await PostHogProvider({
                 apiKey: 'phc_test123',
@@ -516,7 +516,7 @@ describe('PostHogProvider', () => {
 
         it('does not disable first flag load when bootstrap fails', async () => {
             mockGetAllFlagsAndPayloads.mockRejectedValue(new Error('network timeout'))
-            jest.spyOn(console, 'warn').mockImplementation()
+            vi.spyOn(console, 'warn').mockImplementation()
 
             const element = await PostHogProvider({
                 apiKey: 'phc_test123',
@@ -545,7 +545,7 @@ describe('PostHogProvider', () => {
         function setupCookiesWithConsent(cookies: Record<string, string>) {
             const { cookies: cookiesFn } = require('next/headers.js')
             cookiesFn.mockResolvedValue({
-                get: jest.fn((name: string) => {
+                get: vi.fn((name: string) => {
                     const value = cookies[name]
                     return value !== undefined ? { name, value } : undefined
                 }),

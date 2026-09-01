@@ -5,15 +5,15 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types'
 import { ProductTourEventName, ProductTourEventProperties } from '../posthog-product-tours-types'
 import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
-import { beforeEach } from '@jest/globals'
+import { beforeEach } from 'vitest'
 import { RateLimiter } from '../rate-limiter'
 import { normalizeCaptureResult } from './helpers/normalize-capture-result'
 
-jest.mock('@posthog/browser-common/utils/globals', () => {
-    const orig = jest.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
-    const mockURL = jest.fn().mockReturnValue('https://example.com')
-    const mockReferrer = jest.fn().mockReturnValue('https://referrer.com')
-    const mockHostName = jest.fn().mockReturnValue('example.com')
+vi.mock('@posthog/browser-common/utils/globals', () => {
+    const orig = vi.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
+    const mockURL = vi.fn().mockReturnValue('https://example.com')
+    const mockReferrer = vi.fn().mockReturnValue('https://referrer.com')
+    const mockHostName = vi.fn().mockReturnValue('example.com')
     return {
         ...orig,
         mockURL,
@@ -51,7 +51,7 @@ describe('posthog core', () => {
         mockURL.mockReturnValue('https://example.com')
         mockHostName.mockReturnValue('example.com')
         // otherwise surveys code logs an error and fails the test
-        console.error = jest.fn()
+        console.error = vi.fn()
     })
 
     it('exposes the version', () => {
@@ -60,9 +60,9 @@ describe('posthog core', () => {
 
     describe('posthog debug logging', () => {
         beforeEach(() => {
-            console.error = jest.fn()
-            console.log = jest.fn()
-            console.warn = jest.fn()
+            console.error = vi.fn()
+            console.log = vi.fn()
+            console.warn = vi.fn()
         })
 
         it('log when setting debug to false', () => {
@@ -96,7 +96,7 @@ describe('posthog core', () => {
             event: 'prop',
         }
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
-            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
             const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
             return { posthog, beforeSendMock }
         }
@@ -175,10 +175,10 @@ describe('posthog core', () => {
             })
 
             it('does not capture if rate limit is in place', () => {
-                jest.useFakeTimers()
-                jest.setSystemTime(Date.now())
+                vi.useFakeTimers()
+                vi.setSystemTime(Date.now())
 
-                console.error = jest.fn()
+                console.error = vi.fn()
                 const { posthog, beforeSendMock } = setup()
                 for (let i = 0; i < 100; i++) {
                     posthog.capture(eventName, eventProperties)
@@ -199,8 +199,8 @@ describe('posthog core', () => {
             })
 
             it('does not reintroduce denylisted page or session context into a warning', () => {
-                jest.useFakeTimers()
-                jest.setSystemTime(Date.now())
+                vi.useFakeTimers()
+                vi.setSystemTime(Date.now())
                 mockURL.mockReturnValue('https://example.com/users/alice@example.com/private?token=secret#private')
                 const { posthog, beforeSendMock } = setup({
                     rate_limiting: { events_per_second: 1, events_burst_limit: 1 },
@@ -224,10 +224,10 @@ describe('posthog core', () => {
             })
 
             it('keeps the persisted tally across a rate limiter reload', () => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
                 const now = Date.now()
-                jest.setSystemTime(now)
-                console.error = jest.fn()
+                vi.setSystemTime(now)
+                console.error = vi.fn()
                 const { posthog, beforeSendMock } = setup({
                     rate_limiting: { events_per_second: 1, events_burst_limit: 1 },
                 })
@@ -241,7 +241,7 @@ describe('posthog core', () => {
 
                 beforeSendMock.mockClear()
                 posthog.rateLimiter = new RateLimiter(posthog)
-                jest.setSystemTime(now + 1000)
+                vi.setSystemTime(now + 1000)
                 posthog.capture(eventName, eventProperties)
                 posthog.capture(eventName, eventProperties)
 
@@ -254,9 +254,9 @@ describe('posthog core', () => {
             })
 
             it('resets the tally only after before_send accepts the warning', () => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
                 const now = Date.now()
-                jest.setSystemTime(now)
+                vi.setSystemTime(now)
                 const { posthog, beforeSendMock } = setup({
                     rate_limiting: { events_per_second: 1, events_burst_limit: 1 },
                 })
@@ -272,7 +272,7 @@ describe('posthog core', () => {
                 posthog.capture(eventName, eventProperties)
                 posthog.capture(eventName, eventProperties) // warning rejected, dropped tally is 1
                 posthog.capture(eventName, eventProperties) // another drop, tally is 2
-                jest.setSystemTime(now + 1000)
+                vi.setSystemTime(now + 1000)
                 posthog.capture(eventName, eventProperties) // token refilled
                 posthog.capture(eventName, eventProperties) // accepted warning reports all 3 drops
 
@@ -520,7 +520,7 @@ describe('posthog core', () => {
 
                 // act
                 posthog.capture('$pageview')
-                const registerSpy = jest.spyOn(posthog.sessionPersistence!, 'register')
+                const registerSpy = vi.spyOn(posthog.sessionPersistence!, 'register')
                 mockURL.mockReturnValue('https://www.example.com/some/path?gclid=abc')
                 posthog.capture('$pageview')
                 posthog.capture('$pageview')
@@ -654,7 +654,7 @@ describe('posthog core', () => {
 
     describe('product tour capture()', () => {
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
-            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
             const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
             return { posthog, beforeSendMock }
         }
@@ -700,7 +700,7 @@ describe('posthog core', () => {
 
     describe('setInternalOrTestUser()', () => {
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
-            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
             const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
             return { posthog, beforeSendMock }
         }
@@ -837,7 +837,7 @@ describe('posthog core', () => {
 
         it('should execute methods normally when no Proxy interference', () => {
             const posthog = defaultPostHog()
-            const captureSpy = jest.spyOn(posthog, 'capture').mockImplementation()
+            const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation()
 
             posthog.push(['capture', 'test-event', { foo: 'bar' }])
 
@@ -847,8 +847,8 @@ describe('posthog core', () => {
 
         it('should handle _execute_array with array of commands', () => {
             const posthog = defaultPostHog()
-            const registerSpy = jest.spyOn(posthog, 'register').mockImplementation()
-            const captureSpy = jest.spyOn(posthog, 'capture').mockImplementation()
+            const registerSpy = vi.spyOn(posthog, 'register').mockImplementation()
+            const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation()
 
             posthog._execute_array([
                 ['register', { key: 'value' }],
@@ -863,7 +863,7 @@ describe('posthog core', () => {
 
         it('should not abort queued calls when one call throws', () => {
             const posthog = defaultPostHog()
-            const captureSpy = jest.spyOn(posthog, 'capture').mockImplementation()
+            const captureSpy = vi.spyOn(posthog, 'capture').mockImplementation()
             ;(posthog as any).parseInvalidJson = (payload: string) => JSON.parse(payload)
 
             expect(() => {

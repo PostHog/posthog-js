@@ -3,9 +3,9 @@ import { PostHog } from '../posthog-core'
 import { ScrollManager } from '../scroll-manager'
 import { SessionIdChangedCallback } from '../types'
 
-const mockWindowGetter = jest.fn()
-jest.mock('@posthog/browser-common/utils/globals', () => ({
-    ...jest.requireActual('@posthog/browser-common/utils/globals'),
+const mockWindowGetter = vi.fn()
+vi.mock('@posthog/browser-common/utils/globals', () => ({
+    ...vi.requireActual('@posthog/browser-common/utils/globals'),
     get window() {
         return mockWindowGetter()
     },
@@ -134,7 +134,7 @@ describe('PageView ID manager', () => {
         let sessionIdCallback: SessionIdChangedCallback
 
         beforeEach(() => {
-            const mockOnSessionId = jest.fn((callback: SessionIdChangedCallback) => {
+            const mockOnSessionId = vi.fn((callback: SessionIdChangedCallback) => {
                 sessionIdCallback = callback
                 return () => {} // unsubscribe function
             })
@@ -145,8 +145,8 @@ describe('PageView ID manager', () => {
                     onSessionId: mockOnSessionId,
                 },
                 scrollManager: {
-                    resetContext: jest.fn(),
-                    getContext: jest.fn(),
+                    resetContext: vi.fn(),
+                    getContext: vi.fn(),
                 },
             } as unknown as PostHog
 
@@ -260,13 +260,13 @@ describe('PageView ID manager', () => {
         })
 
         it('should cleanup subscription on destroy', () => {
-            const unsubscribe = jest.fn()
-            const mockOnSessionId = jest.fn(() => unsubscribe)
+            const unsubscribe = vi.fn()
+            const mockOnSessionId = vi.fn(() => unsubscribe)
 
             instance = {
                 config: {},
                 sessionManager: { onSessionId: mockOnSessionId },
-                scrollManager: { resetContext: jest.fn(), getContext: jest.fn() },
+                scrollManager: { resetContext: vi.fn(), getContext: vi.fn() },
             } as unknown as PostHog
 
             pageViewManager = new PageViewManager(instance)
@@ -280,7 +280,7 @@ describe('PageView ID manager', () => {
             instance = {
                 config: {},
                 sessionManager: undefined,
-                scrollManager: { resetContext: jest.fn(), getContext: jest.fn() },
+                scrollManager: { resetContext: vi.fn(), getContext: vi.fn() },
             } as unknown as PostHog
 
             // Should not throw
@@ -299,13 +299,13 @@ describe('PageView ID manager', () => {
         })
 
         it('should handle destroy being called multiple times', () => {
-            const unsubscribe = jest.fn()
-            const mockOnSessionId = jest.fn(() => unsubscribe)
+            const unsubscribe = vi.fn()
+            const mockOnSessionId = vi.fn(() => unsubscribe)
 
             instance = {
                 config: {},
                 sessionManager: { onSessionId: mockOnSessionId },
-                scrollManager: { resetContext: jest.fn(), getContext: jest.fn() },
+                scrollManager: { resetContext: vi.fn(), getContext: vi.fn() },
             } as unknown as PostHog
 
             pageViewManager = new PageViewManager(instance)

@@ -6,24 +6,24 @@ import { extendURLParams, request } from '../request'
 import { Compression, RequestWithOptions } from '../types'
 import { logger } from '@posthog/browser-common/utils/logger'
 
-jest.mock('@posthog/browser-common/utils/globals', () => ({
-    ...jest.requireActual('@posthog/browser-common/utils/globals'),
-    fetch: jest.fn(),
-    XMLHttpRequest: jest.fn(),
+vi.mock('@posthog/browser-common/utils/globals', () => ({
+    ...vi.requireActual('@posthog/browser-common/utils/globals'),
+    fetch: vi.fn(),
+    XMLHttpRequest: vi.fn(),
     navigator: {
-        sendBeacon: jest.fn(),
+        sendBeacon: vi.fn(),
     },
 }))
 
 import { fetch, XMLHttpRequest, navigator } from '@posthog/browser-common/utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
-jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45', LIB_NAME: 'web' }))
+vi.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45', LIB_NAME: 'web' }))
 
 const flushPromises = async () => {
-    jest.useRealTimers()
+    vi.useRealTimers()
     await new Promise((res) => setTimeout(res, 0))
-    jest.useRealTimers()
+    vi.useRealTimers()
 }
 
 const invalidGzipBody = () => new Uint8Array([0, 1, 2]).buffer
@@ -38,14 +38,14 @@ const arrayOfBodyData = (n: number) => {
 const veryLargeBodyData = arrayOfBodyData(8024)
 
 describe('request', () => {
-    const mockedFetch: jest.MockedFunction<any> = fetch as jest.MockedFunction<any>
-    const mockedXMLHttpRequest: jest.MockedFunction<any> = XMLHttpRequest as jest.MockedFunction<any>
-    const mockedNavigator: jest.Mocked<typeof navigator> = navigator as jest.Mocked<typeof navigator>
+    const mockedFetch: vi.MockedFunction<any> = fetch as vi.MockedFunction<any>
+    const mockedXMLHttpRequest: vi.MockedFunction<any> = XMLHttpRequest as vi.MockedFunction<any>
+    const mockedNavigator: vi.Mocked<typeof navigator> = navigator as vi.Mocked<typeof navigator>
     let mockedXHR = {
-        open: jest.fn(),
-        setRequestHeader: jest.fn(),
-        onreadystatechange: jest.fn(),
-        send: jest.fn(),
+        open: vi.fn(),
+        setRequestHeader: vi.fn(),
+        onreadystatechange: vi.fn(),
+        send: vi.fn(),
         readyState: 4,
         responseText: JSON.stringify('something here'),
         status: 200,
@@ -54,16 +54,16 @@ describe('request', () => {
 
     const now = 1700000000000
 
-    const mockCallback = jest.fn()
+    const mockCallback = vi.fn()
     let createRequest: (overrides?: Partial<RequestWithOptions>) => RequestWithOptions
     let transport: RequestWithOptions['transport']
 
     beforeEach(() => {
         mockedXHR = {
-            open: jest.fn(),
-            setRequestHeader: jest.fn(),
-            onreadystatechange: jest.fn(),
-            send: jest.fn(),
+            open: vi.fn(),
+            setRequestHeader: vi.fn(),
+            onreadystatechange: vi.fn(),
+            send: vi.fn(),
             readyState: 4,
             responseText: JSON.stringify('something here'),
             status: 200,
@@ -71,8 +71,8 @@ describe('request', () => {
         }
         mockedXMLHttpRequest.mockImplementation(() => mockedXHR)
 
-        jest.useFakeTimers()
-        jest.setSystemTime(now)
+        vi.useFakeTimers()
+        vi.setSystemTime(now)
 
         createRequest = (overrides) => ({
             url: 'https://any.posthog-instance.com',
@@ -114,7 +114,7 @@ describe('request', () => {
         })
 
         it('calls the callback even if json parsing fails', () => {
-            //cannot use an auto-mock from jest as the code checks if onError is a Function
+            //cannot use an auto-mock from vi as the code checks if onError is a Function
             request(createRequest())
             mockedXHR.status = 502
             mockedXHR.responseText = '{wat'
@@ -133,8 +133,8 @@ describe('request', () => {
 
         it('reports JSON serialization failures through the callback instead of throwing', () => {
             const error = new RangeError('Invalid string length')
-            const callback = jest.fn()
-            const stringifySpy = jest.spyOn(JSON, 'stringify').mockImplementation(() => {
+            const callback = vi.fn()
+            const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation(() => {
                 throw error
             })
 
@@ -289,7 +289,7 @@ describe('request', () => {
         })
 
         it('adds the same sent_at to every recording in a batched session recording body', () => {
-            const toISOString = jest
+            const toISOString = vi
                 .spyOn(Date.prototype, 'toISOString')
                 .mockReturnValueOnce('2023-11-14T22:13:20.000Z')
                 .mockReturnValue('2023-11-14T22:13:21.000Z')
@@ -408,7 +408,7 @@ describe('request', () => {
             request(createRequest())
             await flushPromises()
 
-            //cannot use an auto-mock from jest as the code checks if onError is a Function
+            //cannot use an auto-mock from vi as the code checks if onError is a Function
             expect(mockedFetch).toHaveBeenCalledTimes(1)
 
             expect(mockCallback).toHaveBeenCalledWith({
@@ -433,7 +433,7 @@ describe('request', () => {
 
         it('falls back to JSON if gzip encoding throws before fetch send', async () => {
             const error = new Error('gzip failed')
-            const gzipSpy = jest.spyOn(fflate, 'gzipSync').mockImplementation(() => {
+            const gzipSpy = vi.spyOn(fflate, 'gzipSync').mockImplementation(() => {
                 throw error
             })
 
@@ -516,13 +516,13 @@ describe('request', () => {
                 })
             })
 
-            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
-            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             request(createRequest({ callback, timeout: 8000 }))
 
-            jest.advanceTimersByTime(8000)
+            vi.advanceTimersByTime(8000)
             await flushPromises()
 
             expect(capturedSignal?.aborted).toBe(true)
@@ -560,13 +560,13 @@ describe('request', () => {
                 })
             })
 
-            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
-            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             request(createRequest({ callback, timeout: 8000 }))
 
-            jest.advanceTimersByTime(8000)
+            vi.advanceTimersByTime(8000)
             await flushPromises()
 
             expect(warnSpy).toHaveBeenCalledWith(nativeAbortError)
@@ -584,10 +584,10 @@ describe('request', () => {
             foreignAbortError.name = 'AbortError'
             mockedFetch.mockImplementation(() => Promise.reject(foreignAbortError))
 
-            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
-            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             request(createRequest({ callback, timeout: 8000 }))
 
             await flushPromises()
@@ -611,10 +611,10 @@ describe('request', () => {
             const networkError = new TypeError(message)
             mockedFetch.mockImplementation(() => Promise.reject(networkError))
 
-            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
-            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             request(createRequest({ callback }))
 
             await flushPromises()
@@ -633,10 +633,10 @@ describe('request', () => {
             const genuineError = new TypeError("Cannot read properties of undefined (reading 'x')")
             mockedFetch.mockImplementation(() => Promise.reject(genuineError))
 
-            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
-            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             request(createRequest({ callback }))
 
             await flushPromises()
@@ -662,10 +662,10 @@ describe('request', () => {
                 throw networkError
             })
 
-            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
-            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             expect(() => request(createRequest({ callback }))).not.toThrow()
 
             expect(warnSpy).toHaveBeenCalledWith(networkError)
@@ -682,10 +682,10 @@ describe('request', () => {
                 throw genuineError
             })
 
-            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
-            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             expect(() => request(createRequest({ callback }))).not.toThrow()
 
             expect(errorSpy).toHaveBeenCalledWith(genuineError)
@@ -1045,7 +1045,7 @@ describe('request', () => {
             })
 
             it('falls back to base64 if gzip encoding throws before the beacon send', () => {
-                const gzipSpy = jest.spyOn(fflate, 'gzipSync').mockImplementation(() => {
+                const gzipSpy = vi.spyOn(fflate, 'gzipSync').mockImplementation(() => {
                     throw new Error('gzip failed')
                 })
 
@@ -1075,10 +1075,10 @@ describe('request', () => {
                     payload: 'x'.repeat(8 * 1024),
                     properties: { token: 'testtoken' },
                 })
-                let warnSpy: jest.SpyInstance
+                let warnSpy: vi.SpyInstance
 
                 beforeEach(() => {
-                    warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+                    warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
                     mockedFetch.mockImplementation(() =>
                         Promise.resolve({ status: 200, text: () => Promise.resolve('{}') })
                     )
@@ -1208,7 +1208,7 @@ describe('request', () => {
             })
 
             it('warns instead of throwing when the beacon call itself throws', () => {
-                const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+                const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
                 mockedNavigator!.sendBeacon.mockImplementation(() => {
                     throw new Error('boom')
                 })
@@ -1268,35 +1268,35 @@ describe('request', () => {
     describe('native async gzip retry flow', () => {
         let isolatedRequestModule: any
         let isolatedCompression: typeof Compression
-        let mockedIsolatedFetch: jest.Mock
-        let mockedIsolatedGzipCompress: jest.Mock
+        let mockedIsolatedFetch: vi.Mock
+        let mockedIsolatedGzipCompress: vi.Mock
 
         beforeEach(async () => {
-            jest.resetModules()
-            jest.clearAllMocks()
-            jest.useFakeTimers()
-            jest.setSystemTime(now)
+            vi.resetModules()
+            vi.clearAllMocks()
+            vi.useFakeTimers()
+            vi.setSystemTime(now)
 
-            mockedIsolatedFetch = jest.fn(() =>
+            mockedIsolatedFetch = vi.fn(() =>
                 Promise.resolve({
                     status: 200,
                     text: () => Promise.resolve('{ "a": 1 }'),
                 })
             )
-            mockedIsolatedGzipCompress = jest.fn()
+            mockedIsolatedGzipCompress = vi.fn()
 
-            jest.doMock('@posthog/browser-common/utils/globals', () => ({
-                ...jest.requireActual('@posthog/browser-common/utils/globals'),
+            vi.doMock('@posthog/browser-common/utils/globals', () => ({
+                ...vi.requireActual('@posthog/browser-common/utils/globals'),
                 fetch: mockedIsolatedFetch,
-                XMLHttpRequest: jest.fn(),
+                XMLHttpRequest: vi.fn(),
                 navigator: {
-                    sendBeacon: jest.fn(),
+                    sendBeacon: vi.fn(),
                 },
-                CompressionStream: jest.fn(),
+                CompressionStream: vi.fn(),
             }))
 
-            jest.doMock('@posthog/core', () => ({
-                ...jest.requireActual('@posthog/core'),
+            vi.doMock('@posthog/core', () => ({
+                ...vi.requireActual('@posthog/core'),
                 gzipCompress: mockedIsolatedGzipCompress,
                 isNativeAsyncGzipError: (error: unknown) =>
                     error &&
@@ -1331,7 +1331,7 @@ describe('request', () => {
             const onUnhandledRejection = (reason: unknown) => unhandledRejections.push(reason)
             process.on('unhandledRejection', onUnhandledRejection)
 
-            const callback = jest.fn()
+            const callback = vi.fn()
             try {
                 isolatedRequestModule.request({
                     url: 'https://any.posthog-instance.com',
@@ -1362,7 +1362,7 @@ describe('request', () => {
                 url: 'https://any.posthog-instance.com/e/',
                 data: event,
                 headers: {},
-                callback: jest.fn(),
+                callback: vi.fn(),
                 transport: 'fetch',
                 method: 'POST',
                 compression: isolatedCompression.GZipJS,
@@ -1386,7 +1386,7 @@ describe('request', () => {
                 url: 'https://any.posthog-instance.com',
                 data: { foo: 'baz' },
                 headers: {},
-                callback: jest.fn(),
+                callback: vi.fn(),
                 transport: 'fetch',
                 method: 'POST',
                 compression: isolatedCompression.GZipJS,
@@ -1407,7 +1407,7 @@ describe('request', () => {
                 url: 'https://any.posthog-instance.com',
                 data: { foo: 'bar' },
                 headers: {},
-                callback: jest.fn(),
+                callback: vi.fn(),
                 transport: 'fetch',
                 method: 'POST',
                 compression: isolatedCompression.GZipJS,
@@ -1426,7 +1426,7 @@ describe('request', () => {
                 url: 'https://any.posthog-instance.com',
                 data: { foo: 'baz' },
                 headers: {},
-                callback: jest.fn(),
+                callback: vi.fn(),
                 transport: 'fetch',
                 method: 'POST',
                 compression: isolatedCompression.GZipJS,
@@ -1449,7 +1449,7 @@ describe('request', () => {
                 url: 'https://any.posthog-instance.com',
                 data: { foo: 'bar' },
                 headers: {},
-                callback: jest.fn(),
+                callback: vi.fn(),
                 transport: 'fetch',
                 method: 'POST',
                 compression: isolatedCompression.GZipJS,
@@ -1472,7 +1472,7 @@ describe('request', () => {
                 url: 'https://any.posthog-instance.com',
                 data: { foo: 'baz' },
                 headers: {},
-                callback: jest.fn(),
+                callback: vi.fn(),
                 transport: 'fetch',
                 method: 'POST',
                 compression: isolatedCompression.GZipJS,

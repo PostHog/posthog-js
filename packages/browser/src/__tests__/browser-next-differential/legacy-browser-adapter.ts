@@ -30,7 +30,7 @@ const createInstance = async (
     } as typeof assignableWindow._POSTHOG_REMOTE_CONFIG
 
     let publicPostHog: PostHog | undefined
-    await jest.isolateModulesAsync(async () => {
+    await vi.isolateModulesAsync(async () => {
         publicPostHog = (await import('../../entrypoints/module.es')).default
     })
     if (!publicPostHog) {

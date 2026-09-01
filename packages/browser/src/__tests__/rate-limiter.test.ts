@@ -10,14 +10,14 @@ describe('Rate Limiter', () => {
 
     const moveTimeForward = (milliseconds: number) => {
         systemTime += milliseconds
-        jest.setSystemTime(systemTime)
+        vi.setSystemTime(systemTime)
     }
 
     const range = (n: number) => Array.from({ length: n }, (_, i) => i)
 
     beforeEach(() => {
-        jest.useFakeTimers()
-        jest.spyOn(window!.console, 'error').mockImplementation()
+        vi.useFakeTimers()
+        vi.spyOn(window!.console, 'error').mockImplementation()
 
         const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
         systemTime = baseUTCDateTime.getTime()
@@ -35,13 +35,13 @@ describe('Rate Limiter', () => {
                 property_denylist: [],
             },
             persistence: {
-                get_property: jest.fn((key) => persistedBucket[key]),
-                set_property: jest.fn((key, value) => {
+                get_property: vi.fn((key) => persistedBucket[key]),
+                set_property: vi.fn((key, value) => {
                     persistedBucket[key] = value
                 }),
             },
-            capture: jest.fn(() => ({})),
-            get_session_id: jest.fn(() => 'session-id'),
+            capture: vi.fn(() => ({})),
+            get_session_id: vi.fn(() => 'session-id'),
         }
 
         rateLimiter = new RateLimiter(mockPostHog as any)
@@ -186,7 +186,7 @@ describe('Rate Limiter', () => {
         })
 
         it('omits the page and session when they are unavailable', () => {
-            mockPostHog.get_session_id = jest.fn(() => '')
+            mockPostHog.get_session_id = vi.fn(() => '')
 
             range(200).forEach(() => rateLimiter.clientRateLimitContext())
 
@@ -362,7 +362,7 @@ describe('Rate Limiter', () => {
             })
 
             const firstRetryValue = rateLimiter.serverLimits.events
-            jest.advanceTimersByTime(1000)
+            vi.advanceTimersByTime(1000)
 
             rateLimiter.checkForLimiting({
                 statusCode: 200,

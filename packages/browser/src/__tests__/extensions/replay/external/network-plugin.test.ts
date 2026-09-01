@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-import { expect } from '@jest/globals'
+import { expect } from 'vitest'
 import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'util'
 import { buildNetworkRequestOptions } from '../../../../extensions/replay/external/config'
 import { CapturedNetworkRequest, NetworkRecordOptions } from '../../../../types'
@@ -319,7 +319,7 @@ describe('network plugin', () => {
 
     describe('network observer lifecycle', () => {
         it('emits URL-less initial timing metadata when a method-gated mask filters it', () => {
-            jest.isolateModules(() => {
+            vi.isolateModules(() => {
                 // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                 const { mockWindow, performanceEntries } = createMockWindow()
@@ -331,9 +331,9 @@ describe('network plugin', () => {
                     5
                 ) as PerformanceEntry
                 performanceEntries.push(entry)
-                const callback = jest.fn()
+                const callback = vi.fn()
                 const posthogConfig = defaultConfig()
-                const maskCapturedNetworkRequestFn = jest.fn((request: CapturedNetworkRequest) =>
+                const maskCapturedNetworkRequestFn = vi.fn((request: CapturedNetworkRequest) =>
                     request.method === 'GET' ? request : undefined
                 )
                 posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
@@ -363,7 +363,7 @@ describe('network plugin', () => {
         })
 
         it('drops initial server timings when the current mask filters only their parent URL', () => {
-            jest.isolateModules(() => {
+            vi.isolateModules(() => {
                 // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                 // Use the config module from this isolated module registry so its private fallback tracking is shared.
@@ -378,9 +378,9 @@ describe('network plugin', () => {
                     5
                 ) as PerformanceEntry
                 performanceEntries.push(entry)
-                const callback = jest.fn()
+                const callback = vi.fn()
                 const posthogConfig = defaultConfig()
-                const maskCapturedNetworkRequestFn = jest.fn((request: CapturedNetworkRequest) =>
+                const maskCapturedNetworkRequestFn = vi.fn((request: CapturedNetworkRequest) =>
                     request.name === entry.name ? null : request
                 )
                 posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
@@ -409,7 +409,7 @@ describe('network plugin', () => {
         })
 
         it('drops initial server timings when the deprecated mask filters only their parent URL', () => {
-            jest.isolateModules(() => {
+            vi.isolateModules(() => {
                 // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                 // Use the config module from this isolated module registry so its private fallback tracking is shared.
@@ -424,9 +424,9 @@ describe('network plugin', () => {
                     5
                 ) as PerformanceEntry
                 performanceEntries.push(entry)
-                const callback = jest.fn()
+                const callback = vi.fn()
                 const posthogConfig = defaultConfig()
-                const maskNetworkRequestFn = jest.fn(({ url }: { url: string }) =>
+                const maskNetworkRequestFn = vi.fn(({ url }: { url: string }) =>
                     url === entry.name ? null : { url }
                 )
                 posthogConfig.session_recording.maskNetworkRequestFn = maskNetworkRequestFn
@@ -455,13 +455,13 @@ describe('network plugin', () => {
         })
 
         it('drops server timings derived from a masked PostHog ingestion request', () => {
-            jest.isolateModules(() => {
+            vi.isolateModules(() => {
                 // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                 const { mockWindow, observerCallbacks } = createMockWindow()
                 global.PerformanceObserver = mockWindow.PerformanceObserver
 
-                const callback = jest.fn()
+                const callback = vi.fn()
                 const networkOptions = buildNetworkRequestOptions(
                     { ...defaultConfig(), api_host: 'https://example.com/ingest' },
                     { recordPerformance: true }
@@ -478,13 +478,13 @@ describe('network plugin', () => {
         })
 
         it('does not let a dropped parent suppress the next request in a performance observer batch', () => {
-            jest.isolateModules(() => {
+            vi.isolateModules(() => {
                 // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                 const { mockWindow, observerCallbacks } = createMockWindow()
                 global.PerformanceObserver = mockWindow.PerformanceObserver
 
-                const callback = jest.fn()
+                const callback = vi.fn()
                 const networkOptions = buildNetworkRequestOptions(
                     { ...defaultConfig(), api_host: 'https://example.com/ingest' },
                     { recordPerformance: true }
@@ -508,7 +508,7 @@ describe('network plugin', () => {
 
         describe('singleton initialization and cleanup', () => {
             it('should initialize successfully on first call', () => {
-                jest.isolateModules(() => {
+                vi.isolateModules(() => {
                     // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                     const { mockWindow, observerCallbacks } = createMockWindow()
@@ -523,7 +523,7 @@ describe('network plugin', () => {
             })
 
             it('should allow re-initialization after cleanup', () => {
-                jest.isolateModules(() => {
+                vi.isolateModules(() => {
                     // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                     const { mockWindow, observerCallbacks } = createMockWindow()
@@ -545,7 +545,7 @@ describe('network plugin', () => {
             })
 
             it('should handle multiple cleanup calls safely', () => {
-                jest.isolateModules(() => {
+                vi.isolateModules(() => {
                     // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                     const { mockWindow, observerCallbacks } = createMockWindow()
@@ -570,7 +570,7 @@ describe('network plugin', () => {
             let xhr: any
 
             beforeEach(() => {
-                jest.isolateModules(() => {
+                vi.isolateModules(() => {
                     // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                     const mock = createMockWindow()
@@ -651,7 +651,7 @@ describe('network plugin', () => {
             })
 
             it('XHR open still delegates to the host when Request construction throws', () => {
-                jest.isolateModules(() => {
+                vi.isolateModules(() => {
                     // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                     const { mockWindow } = createMockWindow()
@@ -693,7 +693,7 @@ describe('network plugin', () => {
                 }
 
                 let patchedFetch: (...args: any[]) => Promise<any> = mockWindow.fetch
-                jest.isolateModules(() => {
+                vi.isolateModules(() => {
                     // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                     const plugin = getRecordNetworkPlugin({ recordBody: true })
@@ -738,7 +738,7 @@ describe('network plugin', () => {
                 } as any
 
                 let patchedFetch: (...args: any[]) => Promise<any> = mockWindow.fetch
-                jest.isolateModules(() => {
+                vi.isolateModules(() => {
                     // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                     const plugin = getRecordNetworkPlugin({ recordBody: { request: true, response: false } })
@@ -861,7 +861,7 @@ describe('network plugin', () => {
             }
             process.on('unhandledRejection', onRejection)
             try {
-                const cancel = jest.fn(() => Promise.reject(new TypeError('Load failed')))
+                const cancel = vi.fn(() => Promise.reject(new TypeError('Load failed')))
                 const r = fakeStreamingBody([encode('hello')], { cancel })
                 await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('hello')
                 expect(cancel).toHaveBeenCalled()
@@ -874,16 +874,16 @@ describe('network plugin', () => {
         })
 
         it('times out a hung stream and cancels the reader so it stops being read', async () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             try {
-                const cancel = jest.fn(() => Promise.resolve())
+                const cancel = vi.fn(() => Promise.resolve())
                 const r = fakeStreamingBody([], { readNeverResolves: true, cancel })
                 const result = _tryReadBodyStreaming(r, 1000)
-                jest.advanceTimersByTime(500)
+                vi.advanceTimersByTime(500)
                 await expect(result).resolves.toBe('[SessionReplay] Timeout while trying to read body')
                 expect(cancel).toHaveBeenCalled()
             } finally {
-                jest.useRealTimers()
+                vi.useRealTimers()
             }
         })
     })

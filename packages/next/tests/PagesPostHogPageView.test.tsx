@@ -2,14 +2,14 @@ import React from 'react'
 import { render } from '@testing-library/react'
 import { PostHogPageView } from '../src/pages/PostHogPageView'
 
-const mockCapture = jest.fn()
-const mockUsePostHog = jest.fn(() => ({ capture: mockCapture, config: { disable_capture_url_hashes: false } }))
-jest.mock('@posthog/react', () => ({
+const mockCapture = vi.fn()
+const mockUsePostHog = vi.fn(() => ({ capture: mockCapture, config: { disable_capture_url_hashes: false } }))
+vi.mock('@posthog/react', () => ({
     usePostHog: () => mockUsePostHog(),
 }))
 
 let mockRouter = { asPath: '/initial', pathname: '/initial', isReady: true }
-jest.mock('next/router.js', () => ({
+vi.mock('next/router.js', () => ({
     useRouter: () => mockRouter,
 }))
 

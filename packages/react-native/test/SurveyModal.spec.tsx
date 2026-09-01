@@ -1,13 +1,13 @@
-/** @jest-environment jsdom */
+/** @vitest-environment jsdom */
 import React from 'react'
 import { act, fireEvent, render, cleanup } from '@testing-library/react'
 import { Survey, SurveyQuestionType, SurveyType } from '@posthog/core'
 
-// Minimal react-native shim — jest-expo's full preset chain pulls in
+// Minimal react-native shim — vi-expo's full preset chain pulls in
 // TurboModule code that explodes under jsdom. We only need a handful of
 // primitives here, all rendering as plain divs so children appear in the DOM.
-jest.mock('react-native', () => {
-  const RealReact = jest.requireActual('react')
+vi.mock('react-native', () => {
+  const RealReact = vi.requireActual('react')
   const withoutNativeOnlyProps = (props: any) => {
     const domProps = { ...props }
     delete domProps.visible
@@ -39,7 +39,7 @@ jest.mock('react-native', () => {
     Pressable,
     TouchableOpacity: Pressable,
     Text: Box,
-    Keyboard: { dismiss: jest.fn(), addListener: () => ({ remove: jest.fn() }) },
+    Keyboard: { dismiss: vi.fn(), addListener: () => ({ remove: vi.fn() }) },
     // Use Android so the timer-based close-notification path runs (iOS would
     // rely on Modal.onDismiss, which the mocked Modal cannot fire).
     Platform: { OS: 'android', select: (o: any) => o.android ?? o.default },
@@ -54,35 +54,35 @@ jest.mock('react-native', () => {
 
 // Stub Questions / ConfirmationMessage / Cancel so we can assert exactly
 // which path SurveyModal is rendering, and trigger the submit/close callbacks.
-jest.mock('../src/surveys/components/Surveys', () => {
-  const RealReact = jest.requireActual('react')
+vi.mock('../src/surveys/components/Surveys', () => {
+  const RealReact = vi.requireActual('react')
   return {
     Questions: ({ onSubmit }: { onSubmit: () => void }) =>
       RealReact.createElement('div', { 'data-testid': 'questions-stub', onClick: onSubmit }, 'QUESTIONS_RENDERED'),
-    sendSurveyShownEvent: jest.fn(),
-    dismissedSurveyEvent: jest.fn(),
-    sendSurveyEvent: jest.fn(),
+    sendSurveyShownEvent: vi.fn(),
+    dismissedSurveyEvent: vi.fn(),
+    sendSurveyEvent: vi.fn(),
   }
 })
 
-jest.mock('../src/surveys/components/ConfirmationMessage', () => {
-  const RealReact = jest.requireActual('react')
+vi.mock('../src/surveys/components/ConfirmationMessage', () => {
+  const RealReact = vi.requireActual('react')
   return {
     ConfirmationMessage: ({ header }: { header: string }) =>
       RealReact.createElement('div', { 'data-testid': 'confirmation-stub' }, header),
   }
 })
 
-jest.mock('../src/surveys/components/IntroMessage', () => {
-  const RealReact = jest.requireActual('react')
+vi.mock('../src/surveys/components/IntroMessage', () => {
+  const RealReact = vi.requireActual('react')
   return {
     IntroMessage: ({ onStart }: { onStart: () => void }) =>
       RealReact.createElement('div', { 'data-testid': 'intro-stub', onClick: onStart }, 'INTRO_RENDERED'),
   }
 })
 
-jest.mock('../src/surveys/components/Cancel', () => {
-  const RealReact = jest.requireActual('react')
+vi.mock('../src/surveys/components/Cancel', () => {
+  const RealReact = vi.requireActual('react')
   return {
     Cancel: ({ onPress }: { onPress: () => void }) =>
       RealReact.createElement('div', { 'data-testid': 'cancel-stub', onClick: onPress }, 'X'),
@@ -118,7 +118,7 @@ const appearanceWithoutThankYou: SurveyAppearanceTheme = {
 
 // Mount SurveyModal with the standard test fixture. Returns the rendered
 // result plus the onClose spy so tests can assert against either.
-const renderSurveyModal = (onClose: jest.Mock = jest.fn()) => {
+const renderSurveyModal = (onClose: vi.Mock = vi.fn()) => {
   const result = render(
     <SurveyModal
       survey={baseSurvey}
@@ -143,7 +143,7 @@ describe('SurveyModal close behavior', () => {
   })
 
   it('does not flash Questions when appearance loses thankYouMessageHeader after submit', () => {
-    const onClose = jest.fn()
+    const onClose = vi.fn()
     const { queryByTestId, getByTestId, rerender } = render(
       <SurveyModal
         survey={baseSurvey}
@@ -195,7 +195,7 @@ describe('SurveyModal close behavior', () => {
     expect(onClose).not.toHaveBeenCalled()
 
     act(() => {
-      jest.runAllTimers()
+      vi.runAllTimers()
     })
     expect(onClose).toHaveBeenCalled()
   })
@@ -228,7 +228,7 @@ describe('SurveyModal close behavior', () => {
     expect(queryByTestId('parent-unmounted')).toBeNull()
 
     act(() => {
-      jest.runAllTimers()
+      vi.runAllTimers()
     })
 
     // After the fade duration, the parent's onClose fires and it unmounts.
@@ -241,7 +241,7 @@ describe('SurveyModal close behavior', () => {
     // full-screen Modal stayed mounted swallowing every touch — the app appeared frozen. The
     // fallback timer guarantees the parent is still notified. The mocked Modal cannot fire
     // onDismiss, so this exercises exactly that failure mode.
-    const rn = jest.requireMock('react-native')
+    const rn = vi.requireMock('react-native')
     const originalOS = rn.Platform.OS
     rn.Platform.OS = 'ios'
     try {
@@ -251,7 +251,7 @@ describe('SurveyModal close behavior', () => {
       expect(onClose).not.toHaveBeenCalled()
 
       act(() => {
-        jest.runAllTimers()
+        vi.runAllTimers()
       })
       expect(onClose).toHaveBeenCalledTimes(1)
     } finally {
@@ -268,13 +268,13 @@ describe('SurveyModal close behavior', () => {
     // Let the requestAnimationFrame run so the fallback timer is scheduled, but keep the fade
     // duration (250ms) from elapsing so the timer is still pending at unmount.
     act(() => {
-      jest.advanceTimersByTime(50)
+      vi.advanceTimersByTime(50)
     })
     expect(onClose).not.toHaveBeenCalled()
 
     unmount()
     act(() => {
-      jest.runAllTimers()
+      vi.runAllTimers()
     })
 
     expect(onClose).not.toHaveBeenCalled()
@@ -289,7 +289,7 @@ describe('SurveyModal close behavior', () => {
       fireEvent.click(getByTestId('cancel-stub'))
     })
     act(() => {
-      jest.runAllTimers()
+      vi.runAllTimers()
     })
 
     expect(onClose).toHaveBeenCalledTimes(1)
@@ -315,7 +315,7 @@ describe('SurveyModal intro screen', () => {
         surveyLanguage={null}
         appearance={appearance}
         onShow={() => {}}
-        onClose={jest.fn()}
+        onClose={vi.fn()}
       />
     )
 

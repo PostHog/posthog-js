@@ -127,7 +127,7 @@ describe('@posthog/browser automatic analytics', () => {
 
     it('lets an explicit analytics extension own delivery without loading a duplicate', async () => {
         const requests: SentRequest[] = []
-        const load = jest.fn(async () => analytics({ flushAt: 1, flushInterval: 0 }))
+        const load = vi.fn(async () => analytics({ flushAt: 1, flushInterval: 0 }))
         const posthog = await createPostHogCore(
             {
                 projectToken: 'ph_test',
@@ -152,8 +152,8 @@ describe('@posthog/browser automatic analytics', () => {
     })
 
     it('loads eager analytics under denial but does not lazy-load for rejected capture', async () => {
-        const eagerLoad = jest.fn(async () => analytics())
-        const lazyLoad = jest.fn(async () => analytics())
+        const eagerLoad = vi.fn(async () => analytics())
+        const lazyLoad = vi.fn(async () => analytics())
         const denied = await createPostHogCore(
             {
                 projectToken: 'ph_test_denied',
@@ -201,7 +201,7 @@ describe('@posthog/browser automatic analytics', () => {
     it('shares one load across concurrent captures', async () => {
         const requests: SentRequest[] = []
         const extension = deferred<Extension>()
-        const load = jest.fn(() => extension.promise)
+        const load = vi.fn(() => extension.promise)
         const posthog = await createPostHogCore(
             {
                 projectToken: 'ph_test',
@@ -226,7 +226,7 @@ describe('@posthog/browser automatic analytics', () => {
 
     it('retains events after a load failure and retries loading on explicit flush', async () => {
         const requests: SentRequest[] = []
-        const load = jest
+        const load = vi
             .fn<Promise<Extension>, [AnalyticsOptions]>()
             .mockRejectedValueOnce(new Error('chunk unavailable'))
             .mockResolvedValueOnce(analytics({ flushAt: 100, flushInterval: 0 }))
@@ -259,7 +259,7 @@ describe('@posthog/browser automatic analytics', () => {
         const requests: SentRequest[] = []
         const first = deferred<Extension>()
         const retry = deferred<Extension>()
-        const load = jest.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(retry.promise)
+        const load = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(retry.promise)
         const posthog = await createPostHogCore(
             {
                 projectToken: 'ph_test',
@@ -297,7 +297,7 @@ describe('@posthog/browser automatic analytics', () => {
     it('installs an in-flight analytics extension after revocation without sending purged work', async () => {
         const requests: SentRequest[] = []
         const extension = deferred<Extension>()
-        const load = jest.fn(() => extension.promise)
+        const load = vi.fn(() => extension.promise)
         const posthog = await createPostHogCore(
             {
                 projectToken: 'ph_test',
@@ -351,14 +351,14 @@ describe('@posthog/browser automatic analytics', () => {
     })
 
     it('disposes an automatic extension once when shutdown wins asynchronous setup', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
             const setupStarted = deferred<void>()
             const releaseSetup = deferred<void>()
             const extension = analytics()
             const setup = extension.setup.bind(extension)
             const disposeExtension = extension.dispose?.bind(extension)
-            const dispose = jest.fn(() => disposeExtension?.())
+            const dispose = vi.fn(() => disposeExtension?.())
             extension.setup = async (client) => {
                 setupStarted.resolve()
                 await releaseSetup.promise
@@ -381,7 +381,7 @@ describe('@posthog/browser automatic analytics', () => {
             await setupStarted.promise
 
             const shutdown = posthog.shutdown(5)
-            await jest.advanceTimersByTimeAsync(5)
+            await vi.advanceTimersByTimeAsync(5)
             await shutdown
 
             expect(dispose).toHaveBeenCalledTimes(1)
@@ -391,14 +391,14 @@ describe('@posthog/browser automatic analytics', () => {
             await Promise.resolve()
             expect(dispose).toHaveBeenCalledTimes(1)
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
     it('bounds shutdown while an automatic import remains pending', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
-            const load = jest.fn(() => new Promise<Extension>(() => {}))
+            const load = vi.fn(() => new Promise<Extension>(() => {}))
             const posthog = await createPostHogCore(
                 {
                     projectToken: 'ph_test',
@@ -412,12 +412,12 @@ describe('@posthog/browser automatic analytics', () => {
             await posthog.capture('pending')
 
             const shutdown = posthog.shutdown(5)
-            await jest.advanceTimersByTimeAsync(5)
+            await vi.advanceTimersByTimeAsync(5)
             await shutdown
 
             expect(load).toHaveBeenCalledTimes(1)
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 })

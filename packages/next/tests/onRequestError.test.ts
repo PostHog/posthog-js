@@ -1,11 +1,11 @@
-jest.mock('server-only', () => ({}))
+vi.mock('server-only', () => ({}))
 
-const mockCaptureExceptionImmediate = jest.fn().mockResolvedValue(undefined)
-const mockGetOrCreateNodeClient = jest.fn().mockResolvedValue({
+const mockCaptureExceptionImmediate = vi.fn().mockResolvedValue(undefined)
+const mockGetOrCreateNodeClient = vi.fn().mockResolvedValue({
     captureExceptionImmediate: mockCaptureExceptionImmediate,
 })
 
-jest.mock('../src/server/clientCache.node', () => ({
+vi.mock('../src/server/clientCache.node', () => ({
     getOrCreateNodeClient: (...args: unknown[]) => mockGetOrCreateNodeClient(...args),
 }))
 
@@ -15,7 +15,7 @@ describe('Next.js onRequestError', () => {
     const originalEnv = process.env
 
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         process.env = { ...originalEnv }
         process.env.NEXT_RUNTIME = 'nodejs'
         process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_test123'
@@ -88,7 +88,7 @@ describe('Next.js onRequestError', () => {
         })
         const error = new Error('route handler failed')
         const cookie = postHogCookie('phc_custom', { distinct_id: 'user_custom' })
-        const headers = { get: jest.fn((name: string) => (name === 'cookie' ? cookie : null)) }
+        const headers = { get: vi.fn((name: string) => (name === 'cookie' ? cookie : null)) }
 
         await handler(error, { method: 'GET', url: 'https://example.com/api/items?id=1#details', headers }, {})
 
@@ -161,7 +161,7 @@ describe('Next.js onRequestError', () => {
     })
 
     it('does not throw or capture when beforeCapture throws', async () => {
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         const handler = createOnRequestError({
             beforeCapture: () => {
                 throw new Error('beforeCapture failed')
@@ -202,7 +202,7 @@ describe('Next.js onRequestError', () => {
             assertCapture: () => undefined,
         },
     ])('does not throw when $name', async ({ captureError, setup, run, assertCapture }) => {
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         setup(captureError)
 
         try {

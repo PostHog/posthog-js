@@ -1,15 +1,15 @@
 import { ErrorTracking } from '../src/error-tracking'
 
 // Prevent the autocapture handlers from registering real global handlers.
-jest.mock('../src/error-tracking/utils', () => ({
-  trackUncaughtExceptions: jest.fn(),
-  trackUnhandledRejections: jest.fn(),
-  trackConsole: jest.fn(),
+vi.mock('../src/error-tracking/utils', () => ({
+  trackUncaughtExceptions: vi.fn(),
+  trackUnhandledRejections: vi.fn(),
+  trackConsole: vi.fn(),
 }))
 
-jest.mock('../src/utils', () => ({
-  isHermes: jest.fn(() => false),
-  getRemoteConfigBool: jest.requireActual('../src/utils').getRemoteConfigBool,
+vi.mock('../src/utils', () => ({
+  isHermes: vi.fn(() => false),
+  getRemoteConfigBool: vi.requireActual('../src/utils').getRemoteConfigBool,
 }))
 
 import { createMockLogger, createMockPostHog } from './test-utils'
@@ -22,7 +22,7 @@ describe('ErrorTracking exception steps', () => {
   let logger: ReturnType<typeof createMockLogger>
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     logger = createMockLogger()
   })
 

@@ -6,35 +6,35 @@ import { waitForExpect, wait } from './test-utils'
 // Mock the native plugin bridge so we can assert which native calls happen. No `setup`
 // key, so the SDK takes the legacy start() path (same surface as the standalone
 // posthog-react-native-session-replay package).
-// NOTE: the factory must be self-contained (jest hoists it above any const), so we
-// build the jest.fn()s inline and reach them through the imported module handle below.
-jest.mock('../src/optional/OptionalPlugin', () => ({
+// NOTE: the factory must be self-contained (vi hoists it above any const), so we
+// build the vi.fn()s inline and reach them through the imported module handle below.
+vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePlugin: {
-    start: jest.fn(async () => {}),
-    startSession: jest.fn(async () => {}),
-    endSession: jest.fn(async () => {}),
-    isEnabled: jest.fn(async () => false),
-    identify: jest.fn(async () => {}),
-    startRecording: jest.fn(async () => {}),
-    stopRecording: jest.fn(async () => {}),
+    start: vi.fn(async () => {}),
+    startSession: vi.fn(async () => {}),
+    endSession: vi.fn(async () => {}),
+    isEnabled: vi.fn(async () => false),
+    identify: vi.fn(async () => {}),
+    startRecording: vi.fn(async () => {}),
+    stopRecording: vi.fn(async () => {}),
   },
 }))
 
 const replay = OptionalReactNativePlugin as unknown as {
-  start: jest.Mock
-  startSession: jest.Mock
-  endSession: jest.Mock
-  isEnabled: jest.Mock
-  identify: jest.Mock
-  startRecording: jest.Mock
-  stopRecording: jest.Mock
+  start: vi.Mock
+  startSession: vi.Mock
+  endSession: vi.Mock
+  isEnabled: vi.Mock
+  identify: vi.Mock
+  startRecording: vi.Mock
+  stopRecording: vi.Mock
 }
 
-Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
-AppState.addEventListener = jest.fn()
+Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
+AppState.addEventListener = vi.fn()
 
 describe('PostHog RN session replay re-arm after flags reload', () => {
-  jest.useRealTimers()
+  vi.useRealTimers()
 
   let posthog: PostHog
   let cache: any = {}
@@ -57,7 +57,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
 
     currentFlags = {}
     currentSessionRecording = {}
-    ;(globalThis as any).window.fetch = jest.fn(async (url: string) => {
+    ;(globalThis as any).window.fetch = vi.fn(async (url: string) => {
       let res: any = { status: 'ok' }
       if (url.includes('flags')) {
         res = {
@@ -243,7 +243,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     await wait(50)
     await warmup.shutdown()
     replay.start.mockClear()
-    ;((globalThis as any).window.fetch as jest.Mock).mockClear()
+    ;((globalThis as any).window.fetch as vi.Mock).mockClear()
 
     // Next launch never evaluates flags itself: the cached linked flag (false) gates bootstrap.
     posthog = new PostHog('test-token', {
@@ -261,7 +261,7 @@ describe('PostHog RN session replay re-arm after flags reload', () => {
     await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
 
     // The SDK never hits the flags endpoint when remote feature flags are disabled.
-    const flagsCalls = ((globalThis as any).window.fetch as jest.Mock).mock.calls.filter(([url]: [string]) =>
+    const flagsCalls = ((globalThis as any).window.fetch as vi.Mock).mock.calls.filter(([url]: [string]) =>
       String(url).includes('/flags')
     )
     expect(flagsCalls).toHaveLength(0)

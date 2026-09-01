@@ -10,7 +10,7 @@ import {
     useActiveFeatureFlags,
 } from '../index'
 
-jest.useFakeTimers()
+vi.useFakeTimers()
 
 const ACTIVE_FEATURE_FLAGS = ['example_feature_true', 'multivariate_feature', 'example_feature_payload']
 
@@ -287,7 +287,7 @@ describe('feature flag hooks', () => {
             it('re-renders when onFeatureFlags fires', () => {
                 let capturedCallback: (() => void) | undefined
                 const client = {
-                    getFeatureFlagResult: jest.fn().mockReturnValue({
+                    getFeatureFlagResult: vi.fn().mockReturnValue({
                         key: 'flag',
                         enabled: true,
                         variant: undefined,
@@ -313,7 +313,7 @@ describe('feature flag hooks', () => {
                     variant: undefined,
                     payload: undefined,
                 })
-                ;(client.getFeatureFlagResult as jest.Mock).mockReturnValue({
+                ;(client.getFeatureFlagResult as vi.Mock).mockReturnValue({
                     key: 'flag',
                     enabled: true,
                     variant: 'new-variant',
@@ -335,7 +335,7 @@ describe('feature flag hooks', () => {
 
         describe('cleanup', () => {
             it('unsubscribes from onFeatureFlags on unmount', () => {
-                const unsubscribe = jest.fn()
+                const unsubscribe = vi.fn()
                 const client = {
                     getFeatureFlagResult: () => undefined,
                     onFeatureFlags: () => unsubscribe,

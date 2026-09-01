@@ -14,7 +14,7 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import { type fullSnapshotEvent, type metaEvent } from '../../../extensions/replay/types/rrweb-types'
-import Mock = jest.Mock
+import Mock = vi.Mock
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import { AndTriggerMatching, OrTriggerMatching } from '../../../extensions/replay/external/triggerMatching'
@@ -26,7 +26,7 @@ import { createMockPostHog, createMockConfig } from '../../helpers/posthog-insta
 
 // Type and source defined here designate a non-user-generated recording event
 
-jest.mock('../../../config', () => ({ LIB_VERSION: '0.0.1', LIB_NAME: 'web' }))
+vi.mock('../../../config', () => ({ LIB_VERSION: '0.0.1', LIB_NAME: 'web' }))
 
 const EMPTY_BUFFER = {
     data: [],
@@ -59,9 +59,9 @@ function makeFlagsResponse(partialResponse: Partial<FlagsResponse>): RemoteConfi
 const originalLocation = window!.location
 
 describe('SessionRecording', () => {
-    const _addCustomEvent = jest.fn()
-    const loadScriptMock = jest.fn()
-    const registerForSessionMock = jest.fn()
+    const _addCustomEvent = vi.fn()
+    const loadScriptMock = vi.fn()
+    const registerForSessionMock = vi.fn()
     let _emit: any
     let posthog: PostHog
     let sessionRecording: SessionRecording
@@ -75,25 +75,25 @@ describe('SessionRecording', () => {
 
     const addRRwebToWindow = () => {
         assignableWindow.__PosthogExtensions__.rrweb = {
-            record: jest.fn(({ emit }) => {
+            record: vi.fn(({ emit }) => {
                 _emit = emit
                 return () => {}
             }),
             version: 'fake',
         }
-        assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn(() => {
+        assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = vi.fn(() => {
             // we pretend to be rrweb and call emit
             _emit(createFullSnapshot())
         })
         assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = _addCustomEvent
 
         assignableWindow.__PosthogExtensions__.rrwebPlugins = {
-            getRecordConsolePlugin: jest.fn(),
+            getRecordConsolePlugin: vi.fn(),
         }
     }
 
     beforeEach(() => {
-        removePageviewCaptureHookMock = jest.fn()
+        removePageviewCaptureHookMock = vi.fn()
         sessionId = 'sessionId' + uuidv7()
 
         config = createMockConfig({
@@ -116,14 +116,14 @@ describe('SessionRecording', () => {
             },
         }
 
-        sessionIdGeneratorMock = jest.fn().mockImplementation(() => sessionId)
-        windowIdGeneratorMock = jest.fn().mockImplementation(() => 'windowId')
+        sessionIdGeneratorMock = vi.fn().mockImplementation(() => sessionId)
+        windowIdGeneratorMock = vi.fn().mockImplementation(() => 'windowId')
 
         const postHogPersistence = new PostHogPersistence(config)
         postHogPersistence.clear()
 
         sessionManager = new SessionIdManager(
-            createMockPostHog({ config, persistence: postHogPersistence, register: jest.fn() }),
+            createMockPostHog({ config, persistence: postHogPersistence, register: vi.fn() }),
             sessionIdGeneratorMock,
             windowIdGeneratorMock
         )
@@ -135,9 +135,9 @@ describe('SessionRecording', () => {
                 return postHogPersistence?.['props'][property_key]
             },
             config: config,
-            capture: jest.fn(),
+            capture: vi.fn(),
             persistence: postHogPersistence,
-            register: jest.fn(),
+            register: vi.fn(),
             onFeatureFlags: (): (() => void) => {
                 return () => {}
             },
@@ -149,9 +149,9 @@ describe('SessionRecording', () => {
                 },
             } as unknown as ConsentManager,
             register_for_session: registerForSessionMock,
-            _onRemoteConfig: jest.fn(),
+            _onRemoteConfig: vi.fn(),
             _internalEventEmitter: simpleEventEmitter,
-            on: jest.fn().mockImplementation((event, cb) => {
+            on: vi.fn().mockImplementation((event, cb) => {
                 const unsubscribe = simpleEventEmitter.on(event, cb)
                 return removePageviewCaptureHookMock.mockImplementation(unsubscribe)
             }),
@@ -182,7 +182,7 @@ describe('SessionRecording', () => {
 
     describe('onRemoteConfig()', () => {
         beforeEach(() => {
-            jest.spyOn(sessionRecording, 'startIfEnabledOrStop')
+            vi.spyOn(sessionRecording, 'startIfEnabledOrStop')
         })
 
         it('loads script based on script config', () => {
@@ -240,7 +240,7 @@ describe('SessionRecording', () => {
         })
 
         it.each([
-            ['consent is opted out', () => jest.spyOn(posthog.consent, 'isOptedOut').mockReturnValue(true)],
+            ['consent is opted out', () => vi.spyOn(posthog.consent, 'isOptedOut').mockReturnValue(true)],
             ['the session manager is unavailable', () => (posthog.sessionManager = undefined)],
             ['the session manager is replaced', () => (posthog.sessionManager = new SessionIdManager(posthog))],
         ])('does not initialize after %s while the recorder script is loading', (_condition, disableRecording) => {
@@ -248,7 +248,7 @@ describe('SessionRecording', () => {
             loadScriptMock.mockImplementation((_ph, _path, callback) => {
                 finishLoading = callback
             })
-            const initSessionRecording = jest.fn(() => new LazyLoadedSessionRecording(posthog))
+            const initSessionRecording = vi.fn(() => new LazyLoadedSessionRecording(posthog))
             assignableWindow.__PosthogExtensions__.initSessionRecording = initSessionRecording
 
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
@@ -433,8 +433,8 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('active')
 
             const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
-            const discardSpy = jest.spyOn(lazyRecorder!, 'discard')
-            const flushSpy = jest.spyOn(lazyRecorder as any, '_flushBuffer')
+            const discardSpy = vi.spyOn(lazyRecorder!, 'discard')
+            const flushSpy = vi.spyOn(lazyRecorder as any, '_flushBuffer')
 
             // Server responds with recording disabled
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: false }))
@@ -642,8 +642,8 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('buffering')
 
             const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
-            const clearBufferSpy = jest.spyOn(lazyRecorder as any, '_clearBuffer')
-            const flushBufferSpy = jest.spyOn(lazyRecorder as any, '_flushBuffer')
+            const clearBufferSpy = vi.spyOn(lazyRecorder as any, '_clearBuffer')
+            const flushBufferSpy = vi.spyOn(lazyRecorder as any, '_flushBuffer')
 
             // Trigger beforeunload
             window.dispatchEvent(new Event('beforeunload'))

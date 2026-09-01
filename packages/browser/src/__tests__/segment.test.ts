@@ -6,7 +6,7 @@
  *   - Enrich Segment events with PostHog event properties.
  */
 
-import { beforeEach, describe, expect, it, jest } from '@jest/globals'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { USER_STATE } from '../constants'
 import { SegmentContext, SegmentPlugin } from '../extensions/segment-integration'
@@ -14,9 +14,9 @@ import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { PostHogConfig } from '../types'
 
-jest.mock(
+vi.mock(
     '@posthog/browser-common/utils/globals',
-    () => jest.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
+    () => vi.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
 )
 
 const initPostHogInAPromise = (
@@ -43,14 +43,14 @@ const initPostHogInAPromise = (
 }
 
 // sometimes flakes because of unexpected console.logs
-jest.retryTimes(6)
+vi.retryTimes(6)
 
 describe(`Segment integration`, () => {
     let segment: any
     let segmentIntegration: SegmentPlugin
     let posthogName: string
 
-    jest.setTimeout(500)
+    vi.setTimeout(500)
 
     beforeEach(() => {
         // Clear localStorage to avoid state leakage between tests
@@ -90,7 +90,7 @@ describe(`Segment integration`, () => {
         }
 
         // logging of network requests during init causes this to flake
-        console.error = jest.fn()
+        console.error = vi.fn()
     })
 
     it('should call loaded after the segment integration has been set up', async () => {
@@ -109,7 +109,7 @@ describe(`Segment integration`, () => {
 
     it('enriches Segment track events with PostHog properties', async () => {
         // Segment supplies a stable identity, so memory persistence should not trigger the volatile-identity warning.
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         await initPostHogInAPromise(segment, posthogName, { persistence: 'memory' })
         expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         warnSpy.mockRestore()

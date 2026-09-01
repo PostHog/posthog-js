@@ -1,8 +1,8 @@
 // Mock OptionalExpoFileSystem with legacy APIs (readAsStringAsync)
-jest.mock('../src/optional/OptionalExpoFileSystem', () => ({
+vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
   OptionalExpoFileSystem: {
-    readAsStringAsync: jest.fn(),
-    writeAsStringAsync: jest.fn(),
+    readAsStringAsync: vi.fn(),
+    writeAsStringAsync: vi.fn(),
     documentDirectory: '/mock-doc-dir/',
   },
 }))
@@ -11,14 +11,14 @@ import { PostHogRNStorage, createEventsStorage } from '../src/storage'
 import { buildOptimisticAsyncStorage } from '../src/native-deps'
 import { OptionalExpoFileSystem } from '../src/optional/OptionalExpoFileSystem'
 
-const mockedOptionalFileSystem = jest.mocked(OptionalExpoFileSystem, true)
+const mockedOptionalFileSystem = vi.mocked(OptionalExpoFileSystem, true)
 
-jest.mock('react-native', () => ({
+vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }))
 
 describe('PostHog React Native', () => {
-  jest.useRealTimers()
+  vi.useRealTimers()
 
   describe('storage', () => {
     let storage: PostHogRNStorage
@@ -196,7 +196,7 @@ describe('PostHog React Native', () => {
       )
 
       // Suppress console.warn for this test
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
 
       // Trigger a persist that will fail
       storage.setItem('test', 'value')
@@ -216,7 +216,7 @@ describe('PostHog React Native', () => {
         callCount += 1
         return callCount === 1 ? Promise.reject(new Error('first write failed')) : Promise.resolve()
       })
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
 
       storage.setItem('a', '1')
       await storage.waitForPersist()
@@ -235,7 +235,7 @@ describe('PostHog React Native', () => {
       // (async function semantics), so we exercise this path with a
       // directly-constructed instance over a sync stub, firing the timer with
       // fake timers.
-      jest.useFakeTimers()
+      vi.useFakeTimers()
       try {
         const syncThrowingStorage = {
           getItem: () => null,
@@ -244,15 +244,15 @@ describe('PostHog React Native', () => {
           },
         }
         const syncStorage = new PostHogRNStorage(syncThrowingStorage, '.test-sync.json')
-        const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
 
         syncStorage.setItem('a', '1')
-        jest.runOnlyPendingTimers()
+        vi.runOnlyPendingTimers()
 
         expect(consoleSpy).toHaveBeenCalledWith('PostHog storage scheduled persist threw:', expect.any(Error))
         consoleSpy.mockRestore()
       } finally {
-        jest.useRealTimers()
+        vi.useRealTimers()
       }
     })
 
@@ -319,7 +319,7 @@ describe('PostHog React Native', () => {
         },
       }
       const syncStorage = new PostHogRNStorage(syncThrowingStorage, '.test-sync.json')
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation()
 
       syncStorage.setItem('a', '1')
       await expect(syncStorage.waitForPersist()).resolves.toBeUndefined()
@@ -332,7 +332,7 @@ describe('PostHog React Native', () => {
       // Every other test forces the write via waitForPersist() — this one lets
       // the timer fire so a regression that broke timer-driven persistence
       // (e.g. schedulePersist never arming) wouldn't pass silently.
-      jest.useFakeTimers()
+      vi.useFakeTimers()
       try {
         const cache: Record<string, string> = {}
         const sync = new PostHogRNStorage(
@@ -346,10 +346,10 @@ describe('PostHog React Native', () => {
         )
         sync.setItem('a', '1')
         expect(cache['.test-timer.json']).toBeUndefined()
-        jest.advanceTimersByTime(100)
+        vi.advanceTimersByTime(100)
         expect(JSON.parse(cache['.test-timer.json']).content.a).toBe('1')
       } finally {
-        jest.useRealTimers()
+        vi.useRealTimers()
       }
     })
 
@@ -358,7 +358,7 @@ describe('PostHog React Native', () => {
       // clears-and-reschedules on every mutation would push the write out
       // indefinitely under a continuous stream — this test would fail under that
       // shape.
-      jest.useFakeTimers()
+      vi.useFakeTimers()
       try {
         const cache: Record<string, string> = {}
         const sync = new PostHogRNStorage(
@@ -371,13 +371,13 @@ describe('PostHog React Native', () => {
           '.test-bound.json'
         )
         sync.setItem('a', '1')
-        jest.advanceTimersByTime(50)
+        vi.advanceTimersByTime(50)
         sync.setItem('a', '2')
-        jest.advanceTimersByTime(50) // 100ms total from the first mutation
+        vi.advanceTimersByTime(50) // 100ms total from the first mutation
         // Fired within one window of the first mutation with the latest value.
         expect(JSON.parse(cache['.test-bound.json']).content.a).toBe('2')
       } finally {
-        jest.useRealTimers()
+        vi.useRealTimers()
       }
     })
   })

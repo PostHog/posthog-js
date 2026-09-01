@@ -1,4 +1,4 @@
-// Copied from: https://github.com/keajs/kea-test-utils/blob/master/src/jest.ts
+// Copied from: https://github.com/keajs/kea-test-utils/blob/master/src/vi.ts
 
 export class AsymmetricMatcher<T> {
     protected sample: T
@@ -6,7 +6,7 @@ export class AsymmetricMatcher<T> {
     inverse?: boolean
 
     constructor(sample: T) {
-        this.$$typeof = Symbol.for('jest.asymmetricMatcher')
+        this.$$typeof = Symbol.for('vi.asymmetricMatcher')
         this.sample = sample
     }
 }

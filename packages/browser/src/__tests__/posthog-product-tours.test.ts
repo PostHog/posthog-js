@@ -1,12 +1,12 @@
-jest.mock('@posthog/browser-common/utils/logger', () => {
-    const childLogger: Record<string, jest.Mock> = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        critical: jest.fn(),
+vi.mock('@posthog/browser-common/utils/logger', () => {
+    const childLogger: Record<string, vi.Mock> = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        critical: vi.fn(),
     }
-    childLogger.createLogger = jest.fn().mockReturnValue(childLogger)
+    childLogger.createLogger = vi.fn().mockReturnValue(childLogger)
     return {
         createLogger: childLogger.createLogger,
         logger: childLogger,
@@ -19,13 +19,13 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PRODUCT_TOURS, PRODUCT_TOURS_ENABLED_SERVER_SIDE } from '../constants'
 import { RemoteConfig } from '../types'
 
-const mockLogger = jest.requireMock('@posthog/browser-common/utils/logger').createLogger.mock.results[0].value
+const mockLogger = vi.requireMock('@posthog/browser-common/utils/logger').createLogger.mock.results[0].value
 
 describe('PostHogProductTours', () => {
     let instance: PostHog
 
     beforeEach(async () => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         instance = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
             token: 'testtoken',
@@ -117,10 +117,10 @@ describe('PostHogProductTours', () => {
 
         it('ignores an in-flight tours response that lands after product tours is disabled', () => {
             const requests: { callback: (response: any) => void }[] = []
-            instance._send_request = jest.fn((req) => requests.push(req)) as any
+            instance._send_request = vi.fn((req) => requests.push(req)) as any
             instance.persistence?.register({ [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true })
 
-            const consumer = jest.fn()
+            const consumer = vi.fn()
             instance.productTours.getProductTours(consumer, true)
             expect(requests).toHaveLength(1)
             expect(requests[0]).toEqual(expect.objectContaining({ method: 'GET', timestampMode: 'query' }))
@@ -135,12 +135,12 @@ describe('PostHogProductTours', () => {
 
         it('does not re-log status-zero failures already handled by the request layer', () => {
             instance.persistence?.register({ [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true })
-            instance._send_request = jest.fn(({ callback }) =>
+            instance._send_request = vi.fn(({ callback }) =>
                 callback({ statusCode: 0, error: new TypeError('Failed to fetch') })
             ) as any
 
-            const consumer = jest.fn()
-            jest.clearAllMocks()
+            const consumer = vi.fn()
+            vi.clearAllMocks()
             instance.productTours.getProductTours(consumer, true)
 
             expect(consumer).toHaveBeenCalledWith([], {
@@ -153,10 +153,10 @@ describe('PostHogProductTours', () => {
 
         it('warns once for a bare status-zero response', () => {
             instance.persistence?.register({ [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true })
-            instance._send_request = jest.fn(({ callback }) => callback({ statusCode: 0 })) as any
+            instance._send_request = vi.fn(({ callback }) => callback({ statusCode: 0 })) as any
 
-            jest.clearAllMocks()
-            instance.productTours.getProductTours(jest.fn(), true)
+            vi.clearAllMocks()
+            instance.productTours.getProductTours(vi.fn(), true)
 
             expect(mockLogger.warn).toHaveBeenCalledWith('Product Tours API could not be loaded, status: 0')
             expect(mockLogger.error).not.toHaveBeenCalled()
@@ -164,16 +164,16 @@ describe('PostHogProductTours', () => {
 
         it('keeps HTTP failures at error severity', () => {
             instance.persistence?.register({ [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true })
-            instance._send_request = jest.fn(({ callback }) => callback({ statusCode: 500 })) as any
+            instance._send_request = vi.fn(({ callback }) => callback({ statusCode: 500 })) as any
 
-            jest.clearAllMocks()
-            instance.productTours.getProductTours(jest.fn(), true)
+            vi.clearAllMocks()
+            instance.productTours.getProductTours(vi.fn(), true)
 
             expect(mockLogger.error).toHaveBeenCalledWith('Product Tours API could not be loaded, status: 500')
         })
 
         it('stops a running tour manager when product tours is disabled mid-session', () => {
-            const stop = jest.fn()
+            const stop = vi.fn()
             ;(instance.productTours as any)._productTourManager = { stop }
             instance.persistence?.register({ [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true })
 

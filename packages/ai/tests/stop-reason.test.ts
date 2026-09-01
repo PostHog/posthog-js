@@ -18,15 +18,15 @@ import type {
 
 // --- Mocks ---
 
-jest.mock('posthog-node', () => ({
-  PostHog: jest.fn().mockImplementation(() => ({
-    capture: jest.fn(),
-    captureImmediate: jest.fn(),
+vi.mock('posthog-node', () => ({
+  PostHog: vi.fn().mockImplementation(() => ({
+    capture: vi.fn(),
+    captureImmediate: vi.fn(),
     privacy_mode: false,
   })),
 }))
 
-jest.mock('openai', () => {
+vi.mock('openai', () => {
   class MockCompletions {
     create(..._args: any[]): any {
       return undefined
@@ -67,10 +67,10 @@ jest.mock('openai', () => {
     responses: any
     audio: any
     constructor() {
-      this.chat = { completions: { create: jest.fn() } }
-      this.embeddings = { create: jest.fn() }
-      this.responses = { create: jest.fn() }
-      this.audio = { transcriptions: { create: jest.fn() } }
+      this.chat = { completions: { create: vi.fn() } }
+      this.embeddings = { create: vi.fn() }
+      this.responses = { create: vi.fn() }
+      this.audio = { transcriptions: { create: vi.fn() } }
     }
     static Chat = MockChat
     static Responses = MockResponses
@@ -89,7 +89,7 @@ jest.mock('openai', () => {
   }
 })
 
-jest.mock('@anthropic-ai/sdk', () => {
+vi.mock('@anthropic-ai/sdk', () => {
   class MockMessages {
     create(..._args: any[]): any {
       return undefined
@@ -105,13 +105,13 @@ jest.mock('@anthropic-ai/sdk', () => {
   return { __esModule: true, default: MockAnthropic }
 })
 
-jest.mock('@google/genai', () => {
+vi.mock('@google/genai', () => {
   class MockGoogleGenAI {
     models: any
     constructor() {
       this.models = {
-        generateContent: jest.fn(),
-        generateContentStream: jest.fn(),
+        generateContent: vi.fn(),
+        generateContentStream: vi.fn(),
       }
     }
   }
@@ -136,7 +136,7 @@ const createMockAsyncIterator = <T>(chunks: T[]): MockAsyncIterator<T> => {
 }
 
 const getCapturedProperties = (client: PostHog): Record<string, any> => {
-  const captureMock = client.capture as jest.Mock
+  const captureMock = client.capture as vi.Mock
   expect(captureMock).toHaveBeenCalledTimes(1)
   return captureMock.mock.calls[0][0].properties
 }
@@ -147,7 +147,7 @@ describe('$ai_stop_reason extraction', () => {
   let mockPostHogClient: PostHog
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     mockPostHogClient = new (PostHog as any)()
   })
 
@@ -179,7 +179,7 @@ describe('$ai_stop_reason extraction', () => {
       }
 
       const ChatMock: any = openaiModule.Chat
-      ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(mockResponse)
+      ;(ChatMock.Completions as any).prototype.create = vi.fn().mockResolvedValue(mockResponse)
 
       await client.chat.completions.create({
         model: 'gpt-4',
@@ -209,7 +209,7 @@ describe('$ai_stop_reason extraction', () => {
       }
 
       const ChatMock: any = openaiModule.Chat
-      ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(mockResponse)
+      ;(ChatMock.Completions as any).prototype.create = vi.fn().mockResolvedValue(mockResponse)
 
       await client.chat.completions.create({
         model: 'gpt-4',
@@ -241,7 +241,7 @@ describe('$ai_stop_reason extraction', () => {
       ]
 
       const ChatMock: any = openaiModule.Chat
-      ;(ChatMock.Completions as any).prototype.create = jest.fn().mockImplementation(() => {
+      ;(ChatMock.Completions as any).prototype.create = vi.fn().mockImplementation(() => {
         return Promise.resolve(createMockAsyncIterator(chunks))
       })
 
@@ -298,7 +298,7 @@ describe('$ai_stop_reason extraction', () => {
       }
 
       const ResponsesMock: any = openaiModule.Responses
-      ResponsesMock.prototype.create = jest.fn().mockResolvedValue(mockResponse)
+      ResponsesMock.prototype.create = vi.fn().mockResolvedValue(mockResponse)
 
       await client.responses.create({
         model: 'gpt-4o',
@@ -344,7 +344,7 @@ describe('$ai_stop_reason extraction', () => {
       ]
 
       const ResponsesMock: any = openaiModule.Responses
-      ResponsesMock.prototype.create = jest.fn().mockImplementation(() => {
+      ResponsesMock.prototype.create = vi.fn().mockImplementation(() => {
         return Promise.resolve(createMockAsyncIterator(chunks))
       })
 
@@ -388,8 +388,8 @@ describe('$ai_stop_reason extraction', () => {
         usage: { input_tokens: 10, output_tokens: 5 },
       }
 
-      const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
-      ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockResolvedValue(mockResponse)
+      const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+      ;(MessagesMock.prototype.create as vi.Mock) = vi.fn().mockResolvedValue(mockResponse)
 
       await client.messages.create({
         model: 'claude-3-opus-20240229',
@@ -414,8 +414,8 @@ describe('$ai_stop_reason extraction', () => {
         usage: { input_tokens: 10, output_tokens: 100 },
       }
 
-      const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
-      ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockResolvedValue(mockResponse)
+      const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+      ;(MessagesMock.prototype.create as vi.Mock) = vi.fn().mockResolvedValue(mockResponse)
 
       await client.messages.create({
         model: 'claude-3-opus-20240229',
@@ -459,8 +459,8 @@ describe('$ai_stop_reason extraction', () => {
         { type: 'message_stop' },
       ]
 
-      const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
-      ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockImplementation(() => {
+      const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
+      ;(MessagesMock.prototype.create as vi.Mock) = vi.fn().mockImplementation(() => {
         return Promise.resolve(createMockAsyncIterator(chunks))
       })
 
@@ -509,7 +509,7 @@ describe('$ai_stop_reason extraction', () => {
         },
       }
 
-      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockResponse)
+      ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue(mockResponse)
 
       await client.models.generateContent({
         model: 'gemini-2.0-flash-001',
@@ -537,7 +537,7 @@ describe('$ai_stop_reason extraction', () => {
         },
       }
 
-      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockResponse)
+      ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue(mockResponse)
 
       await client.models.generateContent({
         model: 'gemini-2.0-flash-001',
@@ -568,7 +568,7 @@ describe('$ai_stop_reason extraction', () => {
         },
       ]
 
-      ;(client as any).client.models.generateContentStream = jest.fn().mockImplementation(() => {
+      ;(client as any).client.models.generateContentStream = vi.fn().mockImplementation(() => {
         return (async function* () {
           for (const chunk of streamChunks) {
             yield chunk
@@ -598,7 +598,7 @@ describe('$ai_stop_reason extraction', () => {
         provider: 'openai',
         modelId: 'gpt-4',
         supportedUrls: {},
-        doGenerate: jest.fn().mockResolvedValue({
+        doGenerate: vi.fn().mockResolvedValue({
           text: 'Hello!',
           usage: { inputTokens: 10, outputTokens: 5 },
           content: [{ type: 'text', text: 'Hello!' }],
@@ -607,7 +607,7 @@ describe('$ai_stop_reason extraction', () => {
           finishReason: 'stop',
           warnings: [],
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       }
 
       const model = withTracing(baseModel, mockPostHogClient, {
@@ -628,7 +628,7 @@ describe('$ai_stop_reason extraction', () => {
         provider: 'openai',
         modelId: 'gpt-4',
         supportedUrls: {},
-        doGenerate: jest.fn().mockResolvedValue({
+        doGenerate: vi.fn().mockResolvedValue({
           text: 'Hello!',
           usage: {
             inputTokens: { total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
@@ -640,7 +640,7 @@ describe('$ai_stop_reason extraction', () => {
           finishReason: { unified: 'stop', raw: undefined },
           warnings: [],
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       }
 
       const model = withTracing(baseModel, mockPostHogClient, {
@@ -670,8 +670,8 @@ describe('$ai_stop_reason extraction', () => {
         provider: 'openai',
         modelId: 'gpt-4',
         supportedUrls: {},
-        doGenerate: jest.fn(),
-        doStream: jest.fn().mockImplementation(async () => {
+        doGenerate: vi.fn(),
+        doStream: vi.fn().mockImplementation(async () => {
           const stream = new ReadableStream({
             async start(controller) {
               for (const part of streamParts) {
@@ -722,8 +722,8 @@ describe('$ai_stop_reason extraction', () => {
         provider: 'openai',
         modelId: 'gpt-4',
         supportedUrls: {},
-        doGenerate: jest.fn(),
-        doStream: jest.fn().mockImplementation(async () => {
+        doGenerate: vi.fn(),
+        doStream: vi.fn().mockImplementation(async () => {
           const stream = new ReadableStream({
             async start(controller) {
               for (const part of streamParts) {
@@ -919,7 +919,7 @@ describe('$ai_stop_reason extraction', () => {
       })
 
       const ChatMock: any = openaiModule.Chat
-      ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(mockResponse)
+      ;(ChatMock.Completions as any).prototype.create = vi.fn().mockResolvedValue(mockResponse)
 
       await client.chat.completions.create({
         model: 'gpt-4',

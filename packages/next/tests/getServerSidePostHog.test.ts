@@ -1,12 +1,12 @@
 import { getServerSidePostHog } from '../src/pages/getServerSidePostHog'
 
-const mockEnterContext = jest.fn()
-const mockWithContext = jest.fn((_, fn) => fn())
-const mockGetAllFlags = jest.fn()
-const mockGetAllFlagsAndPayloads = jest.fn()
+const mockEnterContext = vi.fn()
+const mockWithContext = vi.fn((_, fn) => fn())
+const mockGetAllFlags = vi.fn()
+const mockGetAllFlagsAndPayloads = vi.fn()
 
-jest.mock('posthog-node', () => ({
-    PostHog: jest.fn().mockImplementation(() => ({
+vi.mock('posthog-node', () => ({
+    PostHog: vi.fn().mockImplementation(() => ({
         enterContext: mockEnterContext,
         withContext: mockWithContext,
         getAllFlags: mockGetAllFlags,
@@ -32,7 +32,7 @@ function createMockContext(cookies: Record<string, string> = {}, extraHeaders: R
 
 describe('getServerSidePostHog', () => {
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         delete process.env.NEXT_PUBLIC_POSTHOG_KEY
     })
 
@@ -99,7 +99,7 @@ describe('getServerSidePostHog', () => {
 
     it('warns and returns a disabled client when no apiKey provided and env not set', async () => {
         const { PostHog } = require('posthog-node')
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         const ctx = createMockContext({})
 
         const posthog = await getServerSidePostHog(ctx)

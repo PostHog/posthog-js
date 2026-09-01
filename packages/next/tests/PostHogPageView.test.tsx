@@ -2,9 +2,9 @@ import React from 'react'
 import { render } from '@testing-library/react'
 import { PostHogPageView } from '../src/client/PostHogPageView'
 
-const mockCapture = jest.fn()
-const mockUsePostHog = jest.fn(() => ({ capture: mockCapture }))
-jest.mock('@posthog/react', () => ({
+const mockCapture = vi.fn()
+const mockUsePostHog = vi.fn(() => ({ capture: mockCapture }))
+vi.mock('@posthog/react', () => ({
     usePostHog: () => mockUsePostHog(),
 }))
 
@@ -12,7 +12,7 @@ let mockPathname = '/initial'
 let mockSearchParams = new URLSearchParams()
 let mockParams: Record<string, string | string[] | undefined> = {}
 let mockUseParams: (() => Record<string, string | string[] | undefined>) | undefined = () => mockParams
-jest.mock('next/navigation.js', () => ({
+vi.mock('next/navigation.js', () => ({
     usePathname: () => mockPathname,
     useSearchParams: () => mockSearchParams,
     get useParams() {
@@ -81,7 +81,7 @@ describe('PostHogPageView', () => {
 
     it('falls back to ordinary pageview capture when useParams is unavailable', () => {
         mockUseParams = undefined
-        const consoleWarn = jest.spyOn(console, 'warn').mockImplementation()
+        const consoleWarn = vi.spyOn(console, 'warn').mockImplementation()
 
         try {
             const { rerender } = render(<PostHogPageView captureRouteTemplate />)

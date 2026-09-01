@@ -2,7 +2,7 @@
 // These tests require a real GEMINI_API_KEY and proper ESM transform configuration.
 // They are skipped entirely when no API key is present.
 //
-// To run: GEMINI_API_KEY=<key> jest --testPathPattern=gemini.integration \
+// To run: GEMINI_API_KEY=<key> vi --testPathPattern=gemini.integration \
 //   --transformIgnorePatterns='node_modules/(?!(@google/genai|p-retry|is-network-error)/)'
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
@@ -15,10 +15,10 @@ if (!GEMINI_API_KEY) {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { PostHog } = require('posthog-node')
 
-  jest.mock('posthog-node', () => ({
-    PostHog: jest.fn().mockImplementation(() => ({
-      capture: jest.fn(),
-      captureImmediate: jest.fn(),
+  vi.mock('posthog-node', () => ({
+    PostHog: vi.fn().mockImplementation(() => ({
+      capture: vi.fn(),
+      captureImmediate: vi.fn(),
       privacyMode: false,
     })),
   }))

@@ -2,14 +2,14 @@
 // and the new File/Paths API should be used instead.
 // See https://github.com/PostHog/posthog-js/issues/3151
 
-const mockFileWrite = jest.fn()
-const mockFileText = jest.fn().mockResolvedValue('stored-value')
+const mockFileWrite = vi.fn()
+const mockFileText = vi.fn().mockResolvedValue('stored-value')
 const mockDocument = { uri: 'file:///mock-doc-dir/' }
 
 // Mock expo-file-system as it appears in SDK 54 stable:
 // - Legacy methods exist but throw deprecation errors
 // - New File/Paths API is available
-jest.mock('../src/optional/OptionalExpoFileSystem', () => ({
+vi.mock('../src/optional/OptionalExpoFileSystem', () => ({
   OptionalExpoFileSystem: {
     // Legacy methods that throw deprecation errors (SDK 54 stable behavior)
     readAsStringAsync: () => {
@@ -24,22 +24,22 @@ jest.mock('../src/optional/OptionalExpoFileSystem', () => ({
       document: mockDocument,
     },
     // File constructor accepts (Directory, ...strings) and joins them
-    File: jest.fn().mockImplementation((_dir: any, _key: string) => ({
+    File: vi.fn().mockImplementation((_dir: any, _key: string) => ({
       text: mockFileText,
       write: mockFileWrite,
     })),
   },
 }))
 
-jest.mock('../src/optional/OptionalExpoFileSystemLegacy', () => ({
+vi.mock('../src/optional/OptionalExpoFileSystemLegacy', () => ({
   OptionalExpoFileSystemLegacy: undefined,
 }))
 
-jest.mock('../src/optional/OptionalAsyncStorage', () => ({
+vi.mock('../src/optional/OptionalAsyncStorage', () => ({
   OptionalAsyncStorage: undefined,
 }))
 
-jest.mock('react-native', () => ({
+vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }))
 
@@ -47,10 +47,10 @@ import { buildOptimisticAsyncStorage } from '../src/native-deps'
 import { OptionalExpoFileSystem } from '../src/optional/OptionalExpoFileSystem'
 
 describe('Expo SDK 54 stable - new File API detection', () => {
-  jest.useRealTimers()
+  vi.useRealTimers()
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     mockFileText.mockResolvedValue('stored-value')
   })
 

@@ -5,17 +5,17 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
 import { normalizeCaptureResult, standardVolatileCaptureProperties } from './helpers/normalize-capture-result'
 
-jest.mock(
+vi.mock(
     '@posthog/browser-common/utils/globals',
-    () => jest.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
+    () => vi.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
 )
 
 describe('identify()', () => {
     let instance: PostHog
-    let beforeSendMock: jest.Mock
+    let beforeSendMock: vi.Mock
 
     beforeEach(() => {
-        beforeSendMock = jest.fn().mockImplementation((e) => e)
+        beforeSendMock = vi.fn().mockImplementation((e) => e)
         const token = uuidv7()
         // NOTE: Temporary change whilst testing remote config
         assignableWindow._POSTHOG_REMOTE_CONFIG = {
@@ -36,16 +36,16 @@ describe('identify()', () => {
         )
 
         instance = Object.assign(posthog, {
-            register: jest.fn(),
+            register: vi.fn(),
             featureFlags: {
-                setAnonymousDistinctId: jest.fn(),
-                setPersonPropertiesForFlags: jest.fn(),
-                unsetPersonPropertiesForFlags: jest.fn(),
-                reloadFeatureFlags: jest.fn(),
-                reset: jest.fn(),
-                resetFlagCallReported: jest.fn(),
+                setAnonymousDistinctId: vi.fn(),
+                setPersonPropertiesForFlags: vi.fn(),
+                unsetPersonPropertiesForFlags: vi.fn(),
+                reloadFeatureFlags: vi.fn(),
+                reset: vi.fn(),
+                resetFlagCallReported: vi.fn(),
             },
-            unregister: jest.fn(),
+            unregister: vi.fn(),
         })
 
         instance.persistence!.set_property(USER_STATE, 'anonymous')
@@ -62,7 +62,7 @@ describe('identify()', () => {
 
     it('reloads flags when synchronization adopts the requested identity', () => {
         instance.config.cookieWinsOnConflict = true
-        jest.spyOn(instance.persistence!, 'syncCookieProperties').mockImplementation(() => {
+        vi.spyOn(instance.persistence!, 'syncCookieProperties').mockImplementation(() => {
             instance.persistence!.props.distinct_id = 'a-new-id'
             instance.persistence!.props.$user_state = 'identified'
             return true
@@ -76,18 +76,18 @@ describe('identify()', () => {
 
     it('cleans an adopted cookie identity before applying explicit identify properties', () => {
         instance.config.cookieWinsOnConflict = true
-        jest.spyOn(instance.persistence!, 'syncCookieProperties')
+        vi.spyOn(instance.persistence!, 'syncCookieProperties')
             .mockImplementationOnce(() => {
                 instance.persistence!.props.distinct_id = 'sibling-anonymous-id'
                 instance.persistence!.props.$user_state = 'anonymous'
                 return true
             })
             .mockReturnValue(false)
-        jest.spyOn(instance.persistence!, 'consumeCookieIdentityChange')
+        vi.spyOn(instance.persistence!, 'consumeCookieIdentityChange')
             .mockReturnValueOnce(true)
             .mockReturnValue(false)
-        const resetFeatureFlags = instance.featureFlags!.reset as jest.Mock
-        const setPersonPropertiesForFlags = instance.featureFlags!.setPersonPropertiesForFlags as jest.Mock
+        const resetFeatureFlags = instance.featureFlags!.reset as vi.Mock
+        const setPersonPropertiesForFlags = instance.featureFlags!.setPersonPropertiesForFlags as vi.Mock
 
         instance.identify('a-new-id', { plan: 'pro' })
 
@@ -99,10 +99,10 @@ describe('identify()', () => {
 
     it('releases suppression without publishing a final snapshot when identify throws', () => {
         instance.config.cookieWinsOnConflict = true
-        jest.spyOn(instance.persistence!, '_beginCookieSyncSuppression').mockReturnValue(true)
-        const endSuppression = jest.spyOn(instance.persistence!, '_endCookieSyncSuppression')
-        const publish = jest.spyOn(instance.persistence!, '_publishSuppressedCookieSnapshot')
-        jest.spyOn(instance.persistence!, 'set_property').mockImplementation(() => {
+        vi.spyOn(instance.persistence!, '_beginCookieSyncSuppression').mockReturnValue(true)
+        const endSuppression = vi.spyOn(instance.persistence!, '_endCookieSyncSuppression')
+        const publish = vi.spyOn(instance.persistence!, '_publishSuppressedCookieSnapshot')
+        vi.spyOn(instance.persistence!, 'set_property').mockImplementation(() => {
             throw new Error('persistence failed')
         })
 
@@ -113,8 +113,8 @@ describe('identify()', () => {
 
     it('publishes the identified snapshot before capturing the identify event', () => {
         instance.config.cookieWinsOnConflict = true
-        const publish = jest.spyOn(instance.persistence!, '_publishSuppressedCookieSnapshot')
-        const capture = jest.spyOn(instance, 'capture')
+        const publish = vi.spyOn(instance.persistence!, '_publishSuppressedCookieSnapshot')
+        const capture = vi.spyOn(instance, 'capture')
 
         instance.identify('a-new-id')
 
@@ -377,8 +377,8 @@ describe('identify()', () => {
 
     describe('invalid id passed', () => {
         it('does not update user', () => {
-            console.error = jest.fn()
-            console.log = jest.fn()
+            console.error = vi.fn()
+            console.log = vi.fn()
 
             instance.debug()
 
@@ -393,8 +393,8 @@ describe('identify()', () => {
         })
 
         it('does not update user when distinct ID is $posthog_cookieless', () => {
-            console.error = jest.fn()
-            console.log = jest.fn()
+            console.error = vi.fn()
+            console.log = vi.fn()
 
             instance.debug()
 
