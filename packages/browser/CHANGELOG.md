@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.423.1
+
+### Patch Changes
+
+- [#4560](https://github.com/PostHog/posthog-js/pull/4560) [`5931638`](https://github.com/PostHog/posthog-js/commit/5931638f0cb01348ed23f9755d5412a359cce80a) Thanks [@skvark](https://github.com/skvark)! - Prevent stale session recorders from initializing after consent or session teardown, and dispose of recorders when switching to cookieless mode.
+  (2026-09-01)
+
 ## 1.423.0
 
 ### Minor Changes

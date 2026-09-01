@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.51.6
+
+### Patch Changes
+
+- [#4719](https://github.com/PostHog/posthog-js/pull/4719) [`56148bd`](https://github.com/PostHog/posthog-js/commit/56148bd4557e0d0b62a36c01069ef0dd07a9ec57) Thanks [@github-actions](https://github.com/apps/github-actions)! - Expose exception capture methods through the `IPostHog` interface.
+  (2026-09-01)
+
 ## 5.51.5
 
 ### Patch Changes
