@@ -8,13 +8,9 @@ import type { ResolvedPluginConfig } from './config'
 
 const mockLoggerError = vi.fn()
 
-vi.mock(
-    '@posthog/core',
-    () => ({
-        createLogger: () => ({ error: mockLoggerError }),
-    }),
-    { virtual: true }
-)
+vi.mock('@posthog/core', () => ({
+    createLogger: () => ({ error: mockLoggerError }),
+}))
 
 vi.mock('@posthog/plugin-utils', () => ({
     runSourcemapCli: vi.fn().mockResolvedValue(undefined),

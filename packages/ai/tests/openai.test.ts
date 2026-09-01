@@ -19,31 +19,23 @@ let mockOpenAiParsedResponse: ParsedResponse<any> = {} as ParsedResponse<any>
 let mockOpenAiEmbeddingResponse: any = {}
 let mockStreamChunks: ChatCompletionChunk[] = []
 
-vi.mock(
-  'posthog-node',
-  () => {
-    return {
-      PostHog: vi.fn().mockImplementation(() => {
-        return {
-          capture: vi.fn(),
-          captureImmediate: vi.fn(),
-          privacy_mode: false,
-        }
-      }),
-    }
-  },
-  { virtual: true }
-)
+vi.mock('posthog-node', () => {
+  return {
+    PostHog: vi.fn().mockImplementation(() => {
+      return {
+        capture: vi.fn(),
+        captureImmediate: vi.fn(),
+        privacy_mode: false,
+      }
+    }),
+  }
+})
 
-vi.mock(
-  '@posthog/core',
-  () => ({
-    uuidv7: vi.fn(() => 'uuid-v7'),
-    ErrorTracking: {},
-    toJsonSafeValue: vi.fn((value) => value),
-  }),
-  { virtual: true }
-)
+vi.mock('@posthog/core', () => ({
+  uuidv7: vi.fn(() => 'uuid-v7'),
+  ErrorTracking: {},
+  toJsonSafeValue: vi.fn((value) => value),
+}))
 
 vi.mock('openai', () => {
   // Mock Completions class – `create` is declared on the prototype so that

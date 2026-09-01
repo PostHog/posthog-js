@@ -389,7 +389,7 @@ describe('$ai_stop_reason extraction', () => {
       }
 
       const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
-      ;(MessagesMock.prototype.create as vi.Mock) = vi.fn().mockResolvedValue(mockResponse)
+      ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockResolvedValue(mockResponse)
 
       await client.messages.create({
         model: 'claude-3-opus-20240229',
@@ -415,7 +415,7 @@ describe('$ai_stop_reason extraction', () => {
       }
 
       const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
-      ;(MessagesMock.prototype.create as vi.Mock) = vi.fn().mockResolvedValue(mockResponse)
+      ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockResolvedValue(mockResponse)
 
       await client.messages.create({
         model: 'claude-3-opus-20240229',
@@ -460,7 +460,7 @@ describe('$ai_stop_reason extraction', () => {
       ]
 
       const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
-      ;(MessagesMock.prototype.create as vi.Mock) = vi.fn().mockImplementation(() => {
+      ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockImplementation(() => {
         return Promise.resolve(createMockAsyncIterator(chunks))
       })
 

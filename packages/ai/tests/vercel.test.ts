@@ -1027,7 +1027,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
     it.each(['v2', 'v3'] as const)('should not fail %s streams when immediate telemetry rejects', async (version) => {
       const telemetryError = new Error('telemetry delivery failed')
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined as never)
       ;(mockPostHogClient.captureImmediate as vi.Mock).mockRejectedValue(telemetryError)
       const streamParts = [{ type: 'text-delta' as const, id: 'text-1', delta: 'unchanged' }]
       const baseModel = createMockStreamingModel(version, streamParts as any)

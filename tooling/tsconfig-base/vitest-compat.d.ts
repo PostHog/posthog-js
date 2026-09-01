@@ -1,5 +1,4 @@
 import type {
-    Mock as VitestMock,
     Mocked as VitestMocked,
     MockedClass as VitestMockedClass,
     MockedFunction as VitestMockedFunction,
@@ -8,7 +7,8 @@ import type {
 
 declare global {
     namespace vi {
-        type Mock<Result = any, Args extends any[] = any[]> = VitestMock<Args, Result>
+        type Mock<Result = any, Args extends any[] = any[]> = VitestSpyInstance<Args, Result> &
+            ((...args: Args) => Result)
         type SpyInstance<Result = any, Args extends any[] = any[]> = VitestSpyInstance<Args, Result>
         type Mocked<T> = VitestMocked<T>
         type MockedClass<T extends new (...args: any[]) => any> = VitestMockedClass<T>

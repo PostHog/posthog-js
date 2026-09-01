@@ -350,7 +350,7 @@ describe('PostHogAnthropic', () => {
 
     // Mock the create method
     const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
-    ;(MessagesMock.prototype.create as vi.Mock) = vi.fn().mockImplementation((params: any) => {
+    ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockImplementation((params: any) => {
       if (params.stream) {
         const mockStream = createMockAsyncIterator(mockStreamChunks)
         return Promise.resolve(mockStream)
@@ -915,7 +915,7 @@ describe('PostHogAnthropic', () => {
     test('preserves the provider error when captureImmediate rejects', async () => {
       const providerError = new Error('provider failed')
       const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
-      ;(MessagesMock.prototype.create as vi.Mock) = vi.fn().mockRejectedValue(providerError)
+      ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockRejectedValue(providerError)
       ;(mockPostHogClient.captureImmediate as vi.Mock).mockRejectedValue(new Error('telemetry failed'))
 
       const rejection = await client.messages
@@ -938,7 +938,7 @@ describe('PostHogAnthropic', () => {
       apiError.status = 429
 
       const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
-      ;(MessagesMock.prototype.create as vi.Mock) = vi.fn().mockRejectedValue(apiError)
+      ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockRejectedValue(apiError)
 
       await expect(
         client.messages.create({
@@ -975,7 +975,7 @@ describe('PostHogAnthropic', () => {
       }
 
       const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
-      ;(MessagesMock.prototype.create as vi.Mock) = vi.fn().mockResolvedValue(errorStream)
+      ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockResolvedValue(errorStream)
 
       const stream = await client.messages.create({
         model: 'claude-3-opus-20240229',
@@ -1266,7 +1266,7 @@ describe('PostHogAnthropic', () => {
 describe('PostHogAnthropic - $ai_base_url', () => {
   it('emits the wrapped client base URL', async () => {
     const ph = new (PostHog as any)()
-    ;(AnthropicOriginal.Messages.prototype.create as vi.Mock) = vi
+    ;(AnthropicOriginal.Messages.prototype.create as unknown as vi.Mock) = vi
       .fn()
       .mockResolvedValue(createMockResponse({ content: 'hi' }))
 
@@ -1329,7 +1329,7 @@ describe('PostHogAnthropic - streaming error safety', () => {
     }, sourceController)
 
     const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
-    ;(MessagesMock.prototype.create as vi.Mock) = vi.fn().mockResolvedValue(source)
+    ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi.fn().mockResolvedValue(source)
     const stream = await safetyClient.messages.create({
       model: 'claude-3-5-sonnet-20240620',
       max_tokens: 100,
@@ -1370,7 +1370,7 @@ describe('PostHogAnthropic - streaming error safety', () => {
     })
 
     const MessagesMock = AnthropicOriginal.Messages as vi.MockedClass<typeof AnthropicOriginal.Messages>
-    ;(MessagesMock.prototype.create as vi.Mock) = vi
+    ;(MessagesMock.prototype.create as unknown as vi.Mock) = vi
       .fn()
       .mockImplementation(() => Promise.resolve(createErroringIterator()))
 
