@@ -152,9 +152,8 @@ describe('posthog-xcode.sh bundle command composition', () => {
         DERIVED_FILE_DIR: derivedDir,
         HOME: homeDir,
         NODE_BINARY: process.execPath,
-        // This stub reports no version, and event mode is the default, so the floor check would
-        // stop the run before it composes anything.
-        POSTHOG_SKIP_CLI_VERSION_CHECK: '1',
+        // This stub reports no version, but SKIP_BUNDLING exits the wrapper before the event-mode
+        // floor check runs, so the run succeeds without POSTHOG_SKIP_CLI_VERSION_CHECK.
         SKIP_BUNDLING: '1',
         TRACE_PATH: tracePath,
       }
@@ -568,6 +567,15 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
     expect(status).toBe(0)
     expect(invocations).toHaveLength(2)
     expect(invocations[0]).toContain('--release-mode event')
+  })
+
+  it('does not apply the event-mode floor to a SKIP_BUNDLING build', () => {
+    // A native-only compile sets SKIP_BUNDLING and never uploads maps, so the default event mode
+    // must not fail it over an old posthog-cli it never exercises.
+    const { status, invocations } = runWrapper([], { SKIP_BUNDLING: '1' }, undefined, CLI_TOO_OLD)
+
+    expect(status).toBe(0)
+    expect(invocations.join('\n')).not.toContain('hermes')
   })
 
   it('passes the flag by default so a build that configures nothing uploads release-independent', () => {

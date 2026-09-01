@@ -182,7 +182,10 @@ fi
 # posthog-cli 0.16.0 added --release-mode to the hermes commands (PostHog/posthog#87660). Keep this
 # in step with PostHogCli.MIN_RELEASE_MODE_VERSION in posthog.gradle.
 MIN_RELEASE_MODE_CLI_VERSION="0.16.0"
-if [ ${#POSTHOG_RELEASE_MODE_ARGS[@]} -gt 0 ] && [ "${POSTHOG_SKIP_CLI_VERSION_CHECK:-}" != "1" ]; then
+# A SKIP_BUNDLING build (a native-only compile) exits before the hermes clone/upload below, so the
+# --release-mode flag they carry is never applied. Skip the floor check for it, otherwise the default
+# event mode fails such a build over a posthog-cli version it never exercises.
+if [ ${#POSTHOG_RELEASE_MODE_ARGS[@]} -gt 0 ] && [ "${POSTHOG_SKIP_CLI_VERSION_CHECK:-}" != "1" ] && [ -z "${SKIP_BUNDLING:-}" ]; then
   if [ -z "$PH_CLI_VERSION" ]; then
     echo "error: could not determine the posthog-cli version, which release mode '$POSTHOG_RELEASE_MODE_VALUE' needs. Upgrade: npm install -g @posthog/cli@latest"
     exit 1
