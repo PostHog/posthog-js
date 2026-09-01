@@ -2,15 +2,16 @@ import type {
   CaptureLogOptions,
   LogAttributeValue,
   LogSeverityLevel,
-  OtlpAnyValue,
-  OtlpKeyValue,
   OtlpLogRecord,
   OtlpLogsPayload,
   OtlpSeverityEntry,
   OtlpSeverityText,
 } from '@posthog/types'
+import type { Logger } from '../types'
 import type { LogSdkContext, ResolvedPostHogLogsConfig } from './types'
-import { isArray, isBoolean, isNull, isNullish, isUndefined } from '../utils'
+import { isNullish, isNumber, isUndefined } from '../utils'
+import { sanitizeString, UNSERIALIZABLE_VALUE } from '../utils/json-utils'
+import { toOtlpKeyValueList } from '../utils/otlp-any-value'
 
 // ============================================================================
 // Severity mapping
@@ -36,69 +37,18 @@ export function getOtlpSeverityNumber(level: LogSeverityLevel): number {
 }
 
 // ============================================================================
-// OTLP AnyValue conversion
-// ============================================================================
-
-export function toOtlpAnyValue(value: LogAttributeValue): OtlpAnyValue {
-  if (isBoolean(value)) {
-    return { boolValue: value }
-  }
-  // NOTE: typeof check (not core's isNumber) so NaN is included. core's
-  // isNumber explicitly excludes NaN via the `x === x` guard, which would
-  // route NaN through the JSON.stringify branch below — JSON has no
-  // representation for non-finite floats and JSON.stringify turns them into
-  // `null`, losing the value server-side. proto3 JSON mapping (which OTLP/HTTP
-  // rides) requires the literal strings; we encode them as stringValue to keep
-  // the human-readable signal regardless of which downstream parser sees them.
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) {
-      return { stringValue: String(value) }
-    }
-    if (Number.isInteger(value)) {
-      return { intValue: value }
-    }
-    return { doubleValue: value }
-  }
-  if (typeof value === 'string') {
-    return { stringValue: value }
-  }
-  if (isArray(value)) {
-    return { arrayValue: { values: value.map((v) => toOtlpAnyValue(v as LogAttributeValue)) } }
-  }
-  // Objects fall back to JSON. OTLP supports kvlistValue but the encoder
-  // stays flat for simplicity.
-  try {
-    return { stringValue: JSON.stringify(value) }
-  } catch {
-    return { stringValue: String(value) }
-  }
-}
-
-export function toOtlpKeyValueList(attrs: Record<string, LogAttributeValue>): OtlpKeyValue[] {
-  const result: OtlpKeyValue[] = []
-  for (const key in attrs) {
-    const value = attrs[key]
-    if (isNull(value) || isUndefined(value)) {
-      continue
-    }
-    result.push({ key, value: toOtlpAnyValue(value) })
-  }
-  return result
-}
-
-// ============================================================================
 // OTLP LogRecord construction
 // ============================================================================
 
 /**
- * Returns the current wall-clock time as a unix-nanos string.
+ * Returns `timestampMs` (default: now) as a unix-nanos string.
  *
  * OTLP requires nanoseconds as a string (uint64 doesn't fit in JS Number).
  * `Date.now() * 1_000_000` would exceed Number.MAX_SAFE_INTEGER, so we
  * concatenate instead of multiplying.
  */
-function timestampToUnixNano(): string {
-  return String(Date.now()) + '000000'
+function timestampToUnixNano(timestampMs: number = Date.now()): string {
+  return String(timestampMs) + '000000'
 }
 
 /**
@@ -110,11 +60,31 @@ function timestampToUnixNano(): string {
  * `screenName` / `appState`), so a missing field never adds a stray attribute.
  *
  * User-provided `options.attributes` always wins on conflicts.
+ *
+ * `occurredAtMs` is when the event happened, for a host that records an event earlier
+ * than it can build the record; it stamps both OTLP timestamps, which the logs spec
+ * requires to be equal.
  */
-export function buildOtlpLogRecord(options: CaptureLogOptions, sdkContext: LogSdkContext): OtlpLogRecord {
+// `body` is only typed as a string. An untyped caller — or a `beforeSend` that
+// rewrites it — can pass anything, and `String()` throws on a value whose
+// `toString` does, or on a null-prototype object.
+function encodeBody(body: string): string {
+  try {
+    return sanitizeString(String(body))
+  } catch {
+    return UNSERIALIZABLE_VALUE
+  }
+}
+
+export function buildOtlpLogRecord(
+  options: CaptureLogOptions,
+  sdkContext: LogSdkContext,
+  logger?: Logger,
+  occurredAtMs?: number
+): OtlpLogRecord {
   const level: LogSeverityLevel = options.level || 'info'
   const { text: severityText, number: severityNumber } = OTLP_SEVERITY_MAP[level] || DEFAULT_OTLP_SEVERITY
-  const now = timestampToUnixNano()
+  const eventTimeNano = timestampToUnixNano(isNumber(occurredAtMs) ? occurredAtMs : undefined)
 
   const autoAttributes: Record<string, LogAttributeValue> = {}
 
@@ -146,18 +116,37 @@ export function buildOtlpLogRecord(options: CaptureLogOptions, sdkContext: LogSd
     autoAttributes.feature_flags = sdkContext.activeFeatureFlags
   }
 
-  const mergedAttributes = {
-    ...autoAttributes,
-    ...(options.attributes || {}),
+  // Read key by key rather than spreading: a getter over a disposed store or a
+  // revoked proxy throws on the read itself, before the encoder's guards see it.
+  const mergedAttributes: Record<string, LogAttributeValue> = { ...autoAttributes }
+  const userAttributes = options.attributes
+  if (userAttributes) {
+    let keys: string[] = []
+    try {
+      keys = Object.keys(userAttributes)
+    } catch {
+      keys = []
+    }
+    for (const key of keys) {
+      let value: LogAttributeValue
+      try {
+        value = userAttributes[key]
+      } catch {
+        value = UNSERIALIZABLE_VALUE
+      }
+      // defineProperty, not assignment: `attributes['__proto__'] = v` hits the
+      // prototype setter and the attribute vanishes.
+      Object.defineProperty(mergedAttributes, key, { value, enumerable: true, writable: true, configurable: true })
+    }
   }
 
   const record: OtlpLogRecord = {
-    timeUnixNano: now,
-    observedTimeUnixNano: now,
+    timeUnixNano: eventTimeNano,
+    observedTimeUnixNano: eventTimeNano,
     severityNumber,
     severityText,
-    body: { stringValue: options.body },
-    attributes: toOtlpKeyValueList(mergedAttributes),
+    body: { stringValue: encodeBody(options.body) },
+    attributes: toOtlpKeyValueList(mergedAttributes, logger),
   }
 
   if (options.trace_id) {

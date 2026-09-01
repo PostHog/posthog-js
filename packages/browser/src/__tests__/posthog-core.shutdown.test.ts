@@ -36,14 +36,6 @@ describe('shutdown()', () => {
         expect(retryQueueUnload).toHaveBeenCalledTimes(1)
     })
 
-    it('stops periodic remote config refreshes', async () => {
-        const remoteConfigStop = jest.spyOn(instance._remoteConfigLoader!, 'stop')
-
-        await instance.shutdown()
-
-        expect(remoteConfigStop).toHaveBeenCalledTimes(1)
-    })
-
     it('disposes session recording visibility tracking', async () => {
         const sessionRecordingDispose = jest.spyOn(instance.sessionRecording!, 'dispose')
 
@@ -58,6 +50,16 @@ describe('shutdown()', () => {
         await instance.shutdown()
 
         expect(featureFlagsDispose).toHaveBeenCalledTimes(1)
+    })
+
+    it('destroys persistence storage listeners', async () => {
+        const persistenceDestroy = jest.spyOn(instance.persistence!, 'destroy')
+        const sessionPersistenceDestroy = jest.spyOn(instance.sessionPersistence!, 'destroy')
+
+        await instance.shutdown()
+
+        expect(persistenceDestroy).toHaveBeenCalledTimes(1)
+        expect(sessionPersistenceDestroy).toHaveBeenCalledTimes(1)
     })
 
     it('isolates extension cleanup failures and continues queue flushing', async () => {

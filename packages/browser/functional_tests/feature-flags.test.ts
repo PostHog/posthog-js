@@ -4,6 +4,7 @@ import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance
 import { waitFor } from '@testing-library/dom'
 import { getFlagsWireRequests, getRequests, resetRequests } from './mock-server'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { Compression } from '@posthog/core'
 
 async function shortWait() {
     // no need to worry about ie11 compat in tests
@@ -22,16 +23,25 @@ describe('FunctionalTests / Feature Flags', () => {
         token = 'flags-wire-snapshot-token'
         resetRequests(token)
 
-        await createPosthogInstance(token, { advanced_disable_flags: false, before_send: (cr) => cr })
+        const posthog = await createPosthogInstance(
+            token,
+            {
+                advanced_disable_flags: false,
+                advanced_disable_feature_flags_on_first_load: true,
+                before_send: (cr) => cr,
+            },
+            { supportedCompression: [Compression.GZipJS] }
+        )
+        posthog.reloadFeatureFlags()
 
         await waitFor(() => expect(getFlagsWireRequests(token)).toHaveLength(1))
 
         const wireRequest = getFlagsWireRequests(token)[0]
         expect(wireRequest).toMatchObject({
-            bodyWrapper: 'data=<base64>',
-            compression: 'base64',
-            contentType: 'application/x-www-form-urlencoded',
-            path: '/flags/?v=2&compression=base64',
+            bodyWrapper: '<gzip>',
+            compression: null,
+            contentType: 'text/plain',
+            path: '/flags/?v=2',
         })
         expect(wireRequest.decodedBody.$device_id).toEqual(expect.any(String))
         expect(wireRequest.decodedBody.distinct_id).toEqual(expect.any(String))

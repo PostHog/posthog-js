@@ -3,7 +3,9 @@ import type { Properties } from '@posthog/types'
 
 import type { Compression } from './types/compression'
 import type { Disposable } from './disposable'
+import type { Extension } from './extension'
 import type { KeyValueStore } from './persistence'
+import type { ExtensionToken } from './token'
 import type { Listener } from './pubsub'
 import type { RemoteConfigResult } from './types/remote-config'
 
@@ -74,7 +76,10 @@ export interface SendRequestInit {
     query?: Record<string, string>
     /** Additional headers merged with the host SDK's configured request headers. */
     headers?: Record<string, string>
-    /** Browser transport to prefer. `sendBeacon` returns a best-effort response immediately. */
+    /**
+     * Browser transport to prefer. Fetch is the normal runtime transport. Use `sendBeacon` only for an eligible
+     * best-effort teardown POST. Its response confirms browser handoff, not delivery.
+     */
     transport?: RequestTransport
     /** Abort the request if it does not complete within this many milliseconds. */
     timeoutMs?: number
@@ -104,6 +109,8 @@ export interface Client {
     readonly groups: DeepReadonly<Record<string, string>>
     /** The current session, created on first read if needed. */
     readonly session: SessionContext
+    /** Whether the host currently permits data capture. */
+    readonly canCapture: boolean
 
     /** Records an analytics event through the client's normal pipeline. */
     capture(event: string, properties?: Properties | null, options?: CaptureOptions): Promise<void>
@@ -111,10 +118,15 @@ export interface Client {
     /** Registers a synchronous producer of properties merged into every captured event. */
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable
 
+    /** Returns the extension registered under a typed stable name, or `undefined` when it is not installed. */
+    getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
+    /** Returns the extension registered under a stable name, or `undefined` when it is not installed. */
+    getExtension<T extends Extension = Extension>(name: string): T | undefined
+
     /** Fires for every captured event through a deeply readonly view. */
     readonly onEvent: Listener<CapturedEventInfo>
 
-    /** Replays the latest remote-config outcome on subscription and fires for subsequent outcomes. */
+    /** Replays the latest available remote-config outcome and fires subsequent outcomes when the host makes them available. */
     readonly onRemoteConfig: Listener<DeepReadonly<RemoteConfigResult>>
 
     /** Public project token used to authenticate endpoint-specific requests. */

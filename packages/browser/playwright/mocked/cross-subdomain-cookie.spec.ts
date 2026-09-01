@@ -1,6 +1,7 @@
 import { BrowserContext, Page, Request } from '@playwright/test'
 import { expect, test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
+import { decompressSync, strFromU8 } from 'fflate'
 
 const options = {
     waitForFlags: true,
@@ -39,12 +40,19 @@ async function startOnSubdomain(page: Page, context: BrowserContext, subdomain: 
 }
 
 function getFlagsPayload(request: Request): Record<string, any> {
-    const body = request.postData()
-    const data = body?.match(/data=(.*)/)?.[1]
+    const data = request.postDataBuffer()
     if (!data) {
-        throw new Error('Expected an encoded flags payload')
+        throw new Error('Expected flags request body')
     }
-    return JSON.parse(Buffer.from(decodeURIComponent(data), 'base64').toString())
+    if (data[0] === 0x1f && data[1] === 0x8b) {
+        return JSON.parse(strFromU8(decompressSync(data)))
+    }
+
+    const encodedData = new URLSearchParams(data.toString()).get('data')
+    if (!encodedData) {
+        throw new Error('Expected a gzip or Base64 encoded flags payload')
+    }
+    return JSON.parse(Buffer.from(encodedData, 'base64').toString())
 }
 
 async function distinctId(page: Page): Promise<string | undefined> {

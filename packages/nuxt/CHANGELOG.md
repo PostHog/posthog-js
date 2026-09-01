@@ -1,5 +1,14 @@
 # @posthog/nuxt
 
+## 1.7.86
+
+### Patch Changes
+
+- [#4563](https://github.com/PostHog/posthog-js/pull/4563) [`530d88b`](https://github.com/PostHog/posthog-js/commit/530d88b8821acecd2dcf6d43e5fd07a2275348ee) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Bump `@posthog/cli` to `~0.14.1`, which makes `sourcemap inject --release-mode=event` adopt a bundler-emitted ECMA-426 debug id as the chunk id instead of deriving its own, so the ids webpack stamps into each chunk are the ones the CLI uploads against.
+  (2026-08-24)
+- Updated dependencies [[`ca030a6`](https://github.com/PostHog/posthog-js/commit/ca030a66bacd0f084845838e19c0f0b18d54e468), [`325870a`](https://github.com/PostHog/posthog-js/commit/325870a3b6473b1dd302fa66b9a98a02287eb825)]:
+  - posthog-js@1.418.11
+
 ## 1.7.85
 
 ### Patch Changes

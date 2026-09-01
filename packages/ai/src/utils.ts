@@ -275,6 +275,8 @@ export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
             arguments: item.arguments || {},
           },
         })
+      } else if (item.type === 'image_generation_call' && item.result) {
+        content.push({ type: 'image', image: item.result })
       }
     }
 

@@ -38,14 +38,20 @@ describe('property utils', () => {
             ).toBe(true)
         })
 
-        it('treats missing properties as matching negative operators only', () => {
-            expect(
-                matchTriggerPropertyFilters(
-                    [{ key: '$geoip_country_code', value: 'US', operator: 'is_not' }],
-                    {},
-                    undefined
-                )
-            ).toBe(true)
+        it.each(['is_not', 'not_icontains', 'not_regex'] as const)(
+            'treats missing and null properties as matching %s, unlike the map-level matcher',
+            (operator) => {
+                const triggerFilter = [{ key: '$geoip_country_code', value: 'US', operator }]
+                const propertyFilter = { $geoip_country_code: { values: ['US'], operator } }
+
+                expect(matchTriggerPropertyFilters(triggerFilter, {}, undefined)).toBe(true)
+                expect(matchTriggerPropertyFilters(triggerFilter, { $geoip_country_code: null }, undefined)).toBe(true)
+                expect(matchPropertyFilters(propertyFilter, {})).toBe(false)
+                expect(matchPropertyFilters(propertyFilter, { $geoip_country_code: null })).toBe(false)
+            }
+        )
+
+        it('treats missing properties as non-matches for positive operators', () => {
             expect(
                 matchTriggerPropertyFilters(
                     [{ key: '$geoip_country_code', value: 'US', operator: 'exact' }],

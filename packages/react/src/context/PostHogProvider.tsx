@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import type { PostHogConfig } from 'posthog-js'
 
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { ReactElement, useEffect, useMemo, useRef } from 'react'
 import { PostHog, PostHogContext } from './PostHogContext'
 import { getDefaultPostHogInstance } from './posthog-default'
 import { isDeepEqual } from '../utils/object-utils'
@@ -39,7 +39,12 @@ type PostHogProviderProps =
  * have changed and only call `posthogJs.set_config` if they have, but it's better to
  * avoid unnecessary re-renders in the first place.
  */
-export function PostHogProvider({ children, client, apiKey, options }: WithOptionalChildren<PostHogProviderProps>) {
+export function PostHogProvider({
+    children,
+    client,
+    apiKey,
+    options,
+}: WithOptionalChildren<PostHogProviderProps>): ReactElement<any, any> {
     // Used to detect if the client was already initialized
     // This is used to prevent double initialization when running under React.StrictMode
     // We're not storing a simple boolean here because we want to be able to detect if the

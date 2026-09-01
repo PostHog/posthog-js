@@ -7,13 +7,14 @@
  * single-page app the measurement window restarts on client-side route changes
  * instead of accumulating against the original hard-navigation timestamp.
  *
- * This is loaded lazily only when both `web_vitals_attribution` and
- * `__preview_web_vitals_soft_navs` are enabled. The feature relies on Chrome's experimental
- * Soft Navigation Detection API.
+ * This is loaded lazily when soft navigations are enabled and at least one metric
+ * uses attribution. The bundle includes unattributed observers as well, allowing
+ * the SDK to keep CLS and FCP unattributed by default. The feature relies on Chrome's
+ * experimental Soft Navigation Detection API.
  *
- * Note: as with the non-soft-navs attribution build, attribution can cause memory
- * issues in SPAs because the onCLS callback holds references to DOM elements that
- * may be detached during navigation.
+ * Note: as with the non-soft-navs attribution build, attributed onCLS can cause memory
+ * issues in SPAs because it holds references to DOM elements that may be detached
+ * during navigation.
  *
  * @see web-vitals-soft-navs.ts for the lighter soft-navs bundle
  * @see web-vitals-with-attribution.ts for the default attribution bundle
@@ -30,12 +31,14 @@ import {
     onCLS as onCLSWithAttribution,
     onFCP as onFCPWithAttribution,
 } from 'web-vitals-soft-navs/attribution'
+import { onINP, onLCP, onCLS, onFCP } from 'web-vitals-soft-navs'
 
 const postHogWebVitalsCallbacks: WebVitalsCallbacks = {
     onLCP: onLCPWithAttribution,
     onCLS: onCLSWithAttribution,
     onFCP: onFCPWithAttribution,
     onINP: onINPWithAttribution,
+    withoutAttribution: { onLCP, onCLS, onFCP, onINP },
 }
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}

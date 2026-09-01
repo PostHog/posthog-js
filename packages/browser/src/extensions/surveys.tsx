@@ -30,6 +30,8 @@ import {
 } from '../utils/survey-utils'
 import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
 import { Properties } from '../types'
+import { FeatureFlagsExtension } from '../extension-tokens'
+import type { PostHogFeatureFlags } from '../posthog-featureflags'
 import { SURVEYS } from '../constants'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
@@ -52,6 +54,7 @@ import {
     doesSurveyMatchSelector,
     doesSurveyUrlMatch,
     getDisplayOrderQuestions,
+    getQuestionOrder,
     getInProgressSurveyState,
     getSurveyContainerClass,
     getSurveyResponseKey,
@@ -140,12 +143,88 @@ export class SurveyManager {
     private _surveyTimeouts: Map<string, ReturnType<Window['setTimeout']>> = new Map()
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
+    private _renderedTargets: Map<ShadowRoot, Element> = new Map()
     private _prefillHandledSurveys: Set<string> = new Set()
+    private _automaticDisplayDispose?: () => void
+    private _currentLanguage: string | null = null
+    private _surveyIsRendered: boolean = false
+    private _languageChangeListener: (() => void) | null = null
+    private _unsubscribeFeatureFlags: (() => void) | null = null
+    private _surveyPopupProps: SurveyPopupProps | null = null
+    // Preserved so a language change can re-derive the survey from the fresh translation and
+    // re-apply the same display overrides, rather than reusing the overridden survey from the
+    // original render (which would go stale if the underlying survey definition changes).
+    private _displayOptions: DisplaySurveyPopoverOptions | undefined
 
     constructor(posthog: PostHog) {
         this._posthog = posthog
         // This is used to track the survey that is currently in focus. We only show one survey at a time.
         this._surveyInFocus = null
+
+        this._languageChangeListener = () => this._onLanguageChange()
+        addEventListener(window, 'languagechange', this._languageChangeListener)
+
+        // Re-translate when identify() or setPersonPropertiesForFlags() reloads flags,
+        // which may have updated the 'language' person property.
+        this._unsubscribeFeatureFlags = posthog.onFeatureFlags(() => this._onLanguageChange())
+    }
+
+    private _onLanguageChange(): void {
+        if (isNull(this._surveyInFocus)) {
+            return
+        }
+        const surveys = this._posthog.get_property(SURVEYS) as Survey[] | undefined
+        const survey = surveys?.find((s) => s.id === this._surveyInFocus)
+        if (!survey) {
+            return
+        }
+        const { survey: translatedSurvey, language: newLanguage } = this._translateSurveyForRendering(survey)
+        if (newLanguage === this._currentLanguage) {
+            return
+        }
+        this._currentLanguage = newLanguage
+        if (!this._surveyIsRendered) {
+            // Nothing on screen yet (survey is still counting down its popup delay) — just
+            // record the language flip. renderAfterDelay re-translates from scratch when the
+            // delay elapses, so it always picks up whatever _currentLanguage ends up being,
+            // rather than the language in effect when the delay started.
+            return
+        }
+        // Translate from the raw survey (so a language with no translation still falls back to
+        // the original), then re-apply the same display overrides handlePopoverSurvey used —
+        // otherwise a survey shown via displaySurvey(id, { position, selector }) would snap back
+        // to its configured appearance on the first language change.
+        const overriddenSurvey = this._applyDisplayOverrides(translatedSurvey, this._displayOptions)
+        const { shadow } = retrieveSurveyShadow(overriddenSurvey, this._posthog)
+        render(
+            <SurveyPopup
+                {...this._surveyPopupProps}
+                posthog={this._posthog}
+                survey={overriddenSurvey}
+                removeSurveyFromFocus={this._removeSurveyFromFocus}
+                surveyLanguage={newLanguage}
+            />,
+            shadow
+        )
+    }
+
+    private get _featureFlags(): PostHogFeatureFlags | undefined {
+        // A newly deployed surveys bundle can still be loaded by an older cached core.
+        return this._posthog.getExtension?.(FeatureFlagsExtension) ?? this._posthog.featureFlags
+    }
+
+    // apply overrides for position / selector (needed for thumb surveys)
+    private _applyDisplayOverrides(survey: Survey, options?: DisplaySurveyPopoverOptions): Survey {
+        return options?.position || options?.selector
+            ? {
+                  ...survey,
+                  appearance: {
+                      ...survey.appearance,
+                      ...(options.position && { position: options.position }),
+                      ...(options.selector && { widgetSelector: options.selector }),
+                  },
+              }
+            : survey
     }
 
     public handlePageUnload = (): void => {
@@ -187,7 +266,38 @@ export class SurveyManager {
         // "focus" != "survey is displayed"
         if (this._surveyInFocus === surveyId) {
             this._surveyInFocus = null
+            // Mirror _removeSurveyFromFocus's cleanup: a cancelled survey never rendered, so
+            // there's no display state to keep around for it either.
+            this._currentLanguage = null
+            this._surveyIsRendered = false
+            this._surveyPopupProps = null
+            this._displayOptions = undefined
         }
+    }
+
+    public setAutomaticDisplayDispose(dispose: () => void): void {
+        this._automaticDisplayDispose = dispose
+    }
+
+    public dispose(): void {
+        this._automaticDisplayDispose?.()
+        this._automaticDisplayDispose = undefined
+        if (this._languageChangeListener) {
+            window.removeEventListener('languagechange', this._languageChangeListener)
+            this._languageChangeListener = null
+        }
+        if (this._unsubscribeFeatureFlags) {
+            this._unsubscribeFeatureFlags()
+            this._unsubscribeFeatureFlags = null
+        }
+        this._surveyTimeouts.forEach((_timeout, surveyId) => this._clearSurveyTimeout(surveyId))
+        this._widgetSelectorListeners.forEach((_listener, surveyId) => this._detachWidgetSelectorListener(surveyId))
+        this._renderedTargets.forEach((container, target) => {
+            render(null, target)
+            container?.remove()
+        })
+        this._renderedTargets.clear()
+        this._surveyInFocus = null
     }
 
     /**
@@ -202,19 +312,11 @@ export class SurveyManager {
         { resumeDelayFromActivation = false }: { resumeDelayFromActivation?: boolean } = {}
     ): void => {
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(surveyParam)
+        this._currentLanguage = surveyLanguage
+        this._surveyPopupProps = null
+        this._displayOptions = options
 
-        // apply overrides for position / selector (needed for thumb surveys)
-        const survey =
-            options?.position || options?.selector
-                ? {
-                      ...translatedSurvey,
-                      appearance: {
-                          ...translatedSurvey.appearance,
-                          ...(options.position && { position: options.position }),
-                          ...(options.selector && { widgetSelector: options.selector }),
-                      },
-                  }
-                : translatedSurvey
+        const survey = this._applyDisplayOverrides(translatedSurvey, options)
 
         this._clearSurveyTimeout(survey.id)
 
@@ -246,6 +348,7 @@ export class SurveyManager {
 
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
         const { shadow } = retrieveSurveyShadow(survey, this._posthog)
+        this._renderedTargets.set(shadow, shadow.host)
 
         const surveyPopupProps: SurveyPopupProps = {
             posthog: this._posthog,
@@ -257,26 +360,44 @@ export class SurveyManager {
             skipShownEvent: options?.skipShownEvent,
             surveyLanguage,
         }
+        this._surveyPopupProps = surveyPopupProps
 
         if (delaySeconds <= 0) {
+            this._surveyIsRendered = true
             return render(<SurveyPopup {...surveyPopupProps} />, shadow)
         }
 
         // rendering with surveyPopupDelaySeconds = 0 because the delay is handled here, not in the popup
-        const renderAfterDelay = () =>
+        const renderAfterDelay = () => {
+            this._surveyIsRendered = true
+            // Re-translate from the original survey rather than reusing the `survey` captured
+            // when the delay started — the display language can change while the delay counts
+            // down (see _onLanguageChange), and without this the popup would render in
+            // whatever language was active at the start of the delay instead of the current one.
+            const { survey: freshlyTranslated, language: freshLanguage } =
+                this._translateSurveyForRendering(surveyParam)
+            this._currentLanguage = freshLanguage
+            const freshSurvey = this._applyDisplayOverrides(freshlyTranslated, options)
+            const freshPopupProps: SurveyPopupProps = {
+                ...surveyPopupProps,
+                survey: freshSurvey,
+                surveyLanguage: freshLanguage,
+            }
+            this._surveyPopupProps = freshPopupProps
             render(
                 <SurveyPopup
-                    {...surveyPopupProps}
+                    {...freshPopupProps}
                     survey={{
-                        ...survey,
+                        ...freshSurvey,
                         appearance: {
-                            ...survey.appearance,
+                            ...freshSurvey.appearance,
                             surveyPopupDelaySeconds: 0,
                         },
                     }}
                 />,
                 shadow
             )
+        }
 
         // Re-check the full display predicate, not just the URL: eligibility can change
         // while the delay runs down (e.g. identify() reloads flags and the internal targeting flag
@@ -322,6 +443,7 @@ export class SurveyManager {
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         // Ensure widget container exists if it doesn't
         const { shadow, isNewlyCreated } = retrieveSurveyShadow(translatedSurvey, this._posthog)
+        this._renderedTargets.set(shadow, shadow.host)
 
         // If the widget is already rendered, do nothing. Otherwise the widget will be re-rendered every second
         if (!isNewlyCreated) {
@@ -465,6 +587,7 @@ export class SurveyManager {
     public renderPopover = (survey: Survey): void => {
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         const { shadow } = retrieveSurveyShadow(translatedSurvey, this._posthog)
+        this._renderedTargets.set(shadow, shadow.host)
         render(
             <SurveyPopup
                 posthog={this._posthog}
@@ -522,13 +645,26 @@ export class SurveyManager {
             return false
         }
 
-        const { responses, submissionId, isSurveyCompleted, skippedResponses } = result
+        this._autoSubmitPrefilledResponses(survey, result, properties, surveyLanguage)
 
-        /**
-         * auto-submit some survey events on pageload only if:
-         * 1) survey is complete, OR
-         * 2) partial responses are enabled AND the skipped questions were set to auto-submit
-         */
+        // Mark this survey as having been prefilled
+        this._prefillHandledSurveys.add(survey.id)
+
+        return result.isSurveyCompleted
+    }
+
+    /**
+     * On load, capture a response for prefilled questions only when:
+     * 1) the survey is complete, OR
+     * 2) partial responses are enabled AND the skipped questions were set to auto-submit.
+     */
+    private _autoSubmitPrefilledResponses(
+        survey: Survey,
+        result: NonNullable<ReturnType<SurveyManager['_processPrefillData']>>,
+        properties?: Properties,
+        surveyLanguage?: string | null
+    ): void {
+        const { responses, submissionId, isSurveyCompleted, skippedResponses } = result
         const shouldAutoSubmitPrefilled = Object.keys(skippedResponses).length > 0 && survey.enable_partial_responses
         if (shouldAutoSubmitPrefilled || isSurveyCompleted) {
             sendSurveyEvent({
@@ -541,11 +677,6 @@ export class SurveyManager {
                 surveyLanguage,
             })
         }
-
-        // Mark this survey as having been prefilled
-        this._prefillHandledSurveys.add(survey.id)
-
-        return isSurveyCompleted
     }
 
     /**
@@ -572,20 +703,9 @@ export class SurveyManager {
             return false
         }
 
-        const { responses, submissionId, isSurveyCompleted } = result
+        this._autoSubmitPrefilledResponses(survey, result, properties, surveyLanguage)
 
-        // always capture immediately
-        sendSurveyEvent({
-            responses,
-            survey,
-            surveySubmissionId: submissionId,
-            posthog: this._posthog,
-            isSurveyCompleted,
-            properties,
-            surveyLanguage,
-        })
-
-        return isSurveyCompleted
+        return result.isSurveyCompleted
     }
 
     private _processPrefillData(
@@ -622,6 +742,7 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 responses: responses,
                 lastQuestionIndex: startQuestionIndex,
+                questionOrder: getQuestionOrder(survey.questions),
                 // Mark auto-advanced questions visited so a manual submit doesn't prune their answers.
                 visitedIndices: skippedIndices,
                 surveyLanguage,
@@ -640,12 +761,13 @@ export class SurveyManager {
         if (!flagKey) {
             return true
         }
-        const isFeatureEnabled = !!this._posthog.featureFlags?.isFeatureEnabled(flagKey, {
+        const featureFlags = this._featureFlags
+        const isFeatureEnabled = !!featureFlags?.isFeatureEnabled(flagKey, {
             send_event: !flagKey.startsWith(SURVEY_TARGETING_FLAG_PREFIX),
         })
         let flagVariantCheck = true
         if (flagVariant) {
-            const flagVariantValue = this._posthog.featureFlags?.getFeatureFlag(flagKey, { send_event: false })
+            const flagVariantValue = featureFlags?.getFeatureFlag(flagKey, { send_event: false })
             flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
         }
         return isFeatureEnabled && flagVariantCheck
@@ -688,7 +810,7 @@ export class SurveyManager {
         if (
             survey.internal_targeting_flag_key &&
             isSurveyIterationBased(survey) &&
-            !this._posthog.featureFlags?.hasLoadedFlags
+            !this._featureFlags?.hasLoadedFlags
         ) {
             return {
                 satisfied: false,
@@ -896,6 +1018,7 @@ export class SurveyManager {
             const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
             if (shadowContainer?.shadowRoot) {
                 render(null, shadowContainer.shadowRoot)
+                this._renderedTargets.delete(shadowContainer.shadowRoot)
             }
             shadowContainer?.remove()
         } catch (error) {
@@ -909,6 +1032,10 @@ export class SurveyManager {
         }
         this._clearSurveyTimeout(survey.id)
         this._surveyInFocus = null
+        this._currentLanguage = null
+        this._surveyIsRendered = false
+        this._surveyPopupProps = null
+        this._displayOptions = undefined
         this._removeSurveyFromDom(survey)
     }
 
@@ -925,6 +1052,9 @@ export class SurveyManager {
             sortSurveysByAppearanceDelay: this._sortSurveysByAppearanceDelay,
             checkFlags: this._checkFlags.bind(this),
             isSurveyFeatureFlagEnabled: this._isSurveyFeatureFlagEnabled.bind(this),
+            onLanguageChange: this._onLanguageChange.bind(this),
+            currentLanguage: this._currentLanguage,
+            surveyIsRendered: this._surveyIsRendered,
         }
     }
 }
@@ -1039,13 +1169,18 @@ export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean | un
 
     startInterval()
 
-    addEventListener(document, 'visibilitychange', () => {
+    const onVisibilityChange = () => {
         if (document.hidden) {
             stopInterval()
         } else {
             surveyManager.callSurveysAndEvaluateDisplayLogic(false)
             startInterval()
         }
+    }
+    addEventListener(document, 'visibilitychange', onVisibilityChange)
+    surveyManager.setAutomaticDisplayDispose(() => {
+        stopInterval()
+        document.removeEventListener('visibilitychange', onVisibilityChange)
     })
 
     return surveyManager
@@ -1217,6 +1352,7 @@ export function usePopupVisibility(
             return
         }
 
+        let autoDisappearTimeout: ReturnType<typeof setTimeout> | undefined
         const handleSurveySent = (event: CustomEvent) => {
             if (event.detail.surveyId !== survey.id) {
                 return
@@ -1226,9 +1362,10 @@ export function usePopupVisibility(
             }
             setIsSurveySent(true)
             if (survey.appearance?.autoDisappear) {
-                setTimeout(() => {
-                    hidePopupWithAnimation()
-                }, 5000)
+                if (autoDisappearTimeout) {
+                    clearTimeout(autoDisappearTimeout)
+                }
+                autoDisappearTimeout = setTimeout(hidePopupWithAnimation, 5000)
             }
         }
 
@@ -1259,22 +1396,20 @@ export function usePopupVisibility(
         addEventListener(window, 'PHSurveyClosed', handleSurveyClosed as EventListener)
         addEventListener(window, 'PHSurveySent', handleSurveySent as EventListener)
 
-        if (millisecondDelay > 0) {
-            // This path is only used for direct usage of SurveyPopup,
-            // not for surveys managed by SurveyManager
-            const timeoutId = setTimeout(showSurvey, millisecondDelay)
-            return () => {
-                clearTimeout(timeoutId)
-                window.removeEventListener('PHSurveyClosed', handleSurveyClosed as EventListener)
-                window.removeEventListener('PHSurveySent', handleSurveySent as EventListener)
-            }
-        } else {
-            // This is the path used for surveys managed by SurveyManager
+        // The delay path is only used for direct usage of SurveyPopup, not surveys managed by SurveyManager.
+        const showTimeout = millisecondDelay > 0 ? setTimeout(showSurvey, millisecondDelay) : undefined
+        if (isUndefined(showTimeout)) {
             showSurvey()
-            return () => {
-                window.removeEventListener('PHSurveyClosed', handleSurveyClosed as EventListener)
-                window.removeEventListener('PHSurveySent', handleSurveySent as EventListener)
+        }
+        return () => {
+            if (!isUndefined(showTimeout)) {
+                clearTimeout(showTimeout)
             }
+            if (!isUndefined(autoDisappearTimeout)) {
+                clearTimeout(autoDisappearTimeout)
+            }
+            window.removeEventListener('PHSurveyClosed', handleSurveyClosed as EventListener)
+            window.removeEventListener('PHSurveySent', handleSurveySent as EventListener)
         }
     }, [])
 
@@ -1538,7 +1673,34 @@ export function Questions({
             (index) => index >= 0 && index < survey.questions.length
         )
     })
-    const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
+    const [questionSnapshots, setQuestionSnapshots] = useState<Record<string, string>>(() => {
+        const inProgressSurveyData = getInProgressSurveyState(survey)
+        return inProgressSurveyData?.questionSnapshots ?? {}
+    })
+    // A shuffled survey's display order (and any random shuffle) must stay fixed across a
+    // language re-translation. Re-translating gives `survey` a new object identity on every
+    // render, so keying this off `survey` directly would recompute — and for a shuffled survey,
+    // reshuffle — the order on every language change. Compute the order once per survey.id from
+    // question ids, then map those ids onto whatever the current (possibly re-translated)
+    // question objects are, so text updates but order holds.
+    const questionOrderIds = useMemo(
+        () => getQuestionOrder(getDisplayOrderQuestions(survey, initialInProgressState)),
+        [survey.id, initialInProgressState]
+    )
+    const surveyQuestions = useMemo(() => {
+        // Some questions lack an id (older data), or two questions share one (seen in a couple
+        // of playwright fixtures) — either way a Map keyed by id can't disambiguate positions,
+        // so fall back to recomputing fresh each time rather than mapping id -> question.
+        const hasUsableIds = !!questionOrderIds && new Set(questionOrderIds).size === questionOrderIds.length
+        if (!hasUsableIds) {
+            return getDisplayOrderQuestions(survey, initialInProgressState)
+        }
+        const byId = new Map(survey.questions.map((question) => [question.id, question]))
+        const mapped = questionOrderIds
+            .map((id) => byId.get(id))
+            .filter((question): question is SurveyQuestion => !!question)
+        return mapped.length === questionOrderIds.length ? mapped : survey.questions
+    }, [questionOrderIds, survey.questions, survey, initialInProgressState])
 
     // Sync preview state. Negative sentinels (the intro screen page) are rendered by SurveyPopup
     // instead of Questions, so they must never reach currentQuestionIndex.
@@ -1572,6 +1734,15 @@ export function Questions({
         const newResponses = { ...questionsResponses, [responseKey]: res }
         setQuestionsResponses(newResponses)
 
+        // Snapshot the question text as it appeared to the user right now, so that
+        // $survey_questions[].question in sent/dismissed events reflects the language
+        // the user saw when they answered, not the language active at event-fire time.
+        const currentQuestion = surveyQuestions[displayQuestionIndex]
+        const newSnapshots = currentQuestion?.id
+            ? { ...questionSnapshots, [currentQuestion.id]: currentQuestion.question }
+            : questionSnapshots
+        setQuestionSnapshots(newSnapshots)
+
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
         const isSurveyCompleted = nextStep === SurveyQuestionBranchingType.End
         const newVisitedIndices = [...visitedIndices, displayQuestionIndex]
@@ -1583,8 +1754,10 @@ export function Questions({
                 surveySubmissionId: surveySubmissionId,
                 responses: newResponses,
                 lastQuestionIndex: nextStep,
+                questionOrder: getQuestionOrder(surveyQuestions),
                 visitedIndices: newVisitedIndices,
                 surveyLanguage,
+                questionSnapshots: newSnapshots,
             })
         }
 
@@ -1610,6 +1783,7 @@ export function Questions({
                 posthog,
                 properties,
                 surveyLanguage,
+                questionSnapshots: newSnapshots,
             })
         }
     }
@@ -1631,8 +1805,10 @@ export function Questions({
             surveySubmissionId,
             responses: questionsResponses,
             lastQuestionIndex: previousIndex,
+            questionOrder: getQuestionOrder(surveyQuestions),
             visitedIndices: newVisitedIndices,
             surveyLanguage,
+            questionSnapshots,
         })
     }
 
@@ -1696,6 +1872,7 @@ export function FeedbackWidget({
     const [isFeedbackButtonVisible, setIsFeedbackButtonVisible] = useState(true)
     const [showSurvey, setShowSurvey] = useState(false)
     const [styleOverrides, setStyleOverrides] = useState<JSX.CSSProperties>({})
+    const resetTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
     const toggleSurvey = () => {
         setShowSurvey(!showSurvey)
@@ -1728,8 +1905,11 @@ export function FeedbackWidget({
 
         addEventListener(window, DISPATCH_FEEDBACK_WIDGET_EVENT, handleShowSurvey)
 
-        // Cleanup listener on component unmount
         return () => {
+            if (!isUndefined(resetTimeout.current)) {
+                clearTimeout(resetTimeout.current)
+                resetTimeout.current = undefined
+            }
             window.removeEventListener(DISPATCH_FEEDBACK_WIDGET_EVENT, handleShowSurvey)
         }
     }, [
@@ -1757,7 +1937,11 @@ export function FeedbackWidget({
             setIsFeedbackButtonVisible(false)
         }
         // important so our view transition has time to run
-        setTimeout(() => {
+        if (!isUndefined(resetTimeout.current)) {
+            clearTimeout(resetTimeout.current)
+        }
+        resetTimeout.current = setTimeout(() => {
+            resetTimeout.current = undefined
             setShowSurvey(false)
         }, 200)
     }

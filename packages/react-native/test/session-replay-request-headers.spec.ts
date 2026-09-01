@@ -82,6 +82,7 @@ describe('PostHog RN session replay request headers', () => {
     expect(sdkOptions.anonymousId).not.toBe('')
     expect(sdkOptions.distinctId).toBe(sdkOptions.anonymousId)
     expect(sdkOptions.requestHeaders).toEqual({ Authorization: 'Bearer test-jwt' })
+    expect(pluginConfig.verifyScreenshotMaskAlignment).toBe(false)
 
     expect({
       sessionId: '<session-id>',
@@ -115,6 +116,7 @@ describe('PostHog RN session replay request headers', () => {
         captureNetworkTelemetry: false,
         maskAllImages: false,
         maskAllTextInputs: true,
+        verifyScreenshotMaskAlignment: true,
         screenshotModeBackgroundCapture: true,
         throttleDelayMs: 250,
       },
@@ -131,6 +133,7 @@ describe('PostHog RN session replay request headers', () => {
     expect(typeof sdkOptions.sdkVersion).toBe('string')
     expect(sdkOptions.sdkVersion).not.toBe('')
     expect(sdkOptions.requestHeaders).toEqual({ Authorization: 'Bearer test-jwt' })
+    expect(pluginConfig.sessionReplay.sdkReplayConfig.verifyScreenshotMaskAlignment).toBe(true)
 
     expect({
       sessionId: '<session-id>',

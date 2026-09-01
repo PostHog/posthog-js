@@ -8,6 +8,25 @@ export {
   minimizeFlagCalledEventProperties,
 } from './featureFlagUtils'
 export {
+  getFeatureFlagHash,
+  getFeatureFlagVariant,
+  getFeatureFlagVariantLookupTable,
+  hashSHA1,
+  InconclusiveMatchError,
+  matchFeatureFlagProperty,
+  parseFeatureFlagSemver,
+  relativeDateParseForFeatureFlagMatching,
+  resolveFeatureFlagPayload,
+} from './featureFlagLocalEvaluation'
+export type {
+  FeatureFlagProperty,
+  FeatureFlagPropertyValue,
+  FeatureFlagSemverParsingPolicy,
+  FeatureFlagVariant,
+  FeatureFlagVariantLookupEntry,
+  MatchFeatureFlagPropertyOptions,
+} from './featureFlagLocalEvaluation'
+export {
   gzipCompress,
   isGzipData,
   isGzipRequest,
@@ -23,9 +42,8 @@ export {
   buildResourceAttributes,
   getOtlpSeverityNumber,
   getOtlpSeverityText,
-  toOtlpAnyValue,
-  toOtlpKeyValueList,
 } from './logs/logs-utils'
+export { toOtlpAnyValue, toOtlpKeyValueList } from './utils/otlp-any-value'
 export { PostHogLogs } from './logs'
 export type {
   BeforeSendLogFn,

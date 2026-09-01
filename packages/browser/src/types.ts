@@ -25,7 +25,7 @@ import type { SessionRecording } from './extensions/replay/session-recording'
 import type { Heatmaps } from './heatmaps'
 import type { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
-import type { PostHogSurveys } from './posthog-surveys'
+import type { BrowserSurveys } from './browser-surveys'
 import type { Toolbar } from './extensions/toolbar'
 import type { PostHogExceptions } from './posthog-exceptions'
 import type { WebExperiments } from './web-experiments'
@@ -101,6 +101,7 @@ export type {
     SessionRecordingSamplingConfig,
     SessionRecordingOptions,
     RequestQueueConfig,
+    CapturePageviewOptions,
 } from '@posthog/types'
 
 // Toolbar types
@@ -219,7 +220,7 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
         webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>
         exceptionObserver?: ExtensionConstructor<ExceptionObserver>
         deadClicksAutocapture?: ExtensionConstructor<DeadClicksAutocapture>
-        surveys?: ExtensionConstructor<PostHogSurveys>
+        surveys?: ExtensionConstructor<BrowserSurveys>
         toolbar?: ExtensionConstructor<Toolbar>
         experiments?: ExtensionConstructor<WebExperiments>
         conversations?: ExtensionConstructor<PostHogConversations>
@@ -245,6 +246,8 @@ export interface RequestWithOptions {
     noRetries?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
     compression?: Compression | 'best-available'
+    /** Used when best-available compression negotiation does not select a format. */
+    compressionFallback?: Compression
     /**
      * Controls where the request dispatch time is sent.
      * - `body` adds ISO `sent_at` to the request object, or every object in an array (for example, flags and recordings).

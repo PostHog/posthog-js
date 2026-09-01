@@ -4,7 +4,7 @@ import * as globals from '@posthog/browser-common/utils/globals'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
-import { isUndefined } from '@posthog/core'
+import { Compression, isUndefined } from '@posthog/core'
 import {
     AUTOCAPTURE_DISABLED_SERVER_SIDE,
     ENABLE_PERSON_PROCESSING,
@@ -444,7 +444,6 @@ describe('posthog core', () => {
     describe('_onRemoteConfig failure dispatch', () => {
         it('passes the failure result to every extension', async () => {
             const posthog = await createPosthogInstance()
-            const autocaptureResult = jest.spyOn(posthog.autocapture!, 'onRemoteConfig')
             const heatmapsResult = jest.spyOn(posthog.heatmaps!, 'onRemoteConfig')
 
             // the test helper delivers a successful config during init; clear that
@@ -456,7 +455,6 @@ describe('posthog core', () => {
 
             // autocapture keeps waiting for a server verdict: stays disabled,
             // with no server opt-out value persisted
-            expect(autocaptureResult).toHaveBeenCalledWith({ ok: false })
             expect(posthog.autocapture!.isEnabled).toBe(false)
             expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBeUndefined()
 
@@ -470,7 +468,7 @@ describe('posthog core', () => {
         it('reaches every registered extension and no failure branch throws', async () => {
             const posthog = await createPosthogInstance()
             const handlers = (posthog as any)._extensions.filter((ext: any) => ext.onRemoteConfig)
-            expect(handlers.length).toBeGreaterThanOrEqual(10)
+            expect(handlers.length).toBeGreaterThanOrEqual(9)
             const spies = handlers.map((ext: any) => jest.spyOn(ext, 'onRemoteConfig'))
 
             expect(() => posthog._onRemoteConfig({ ok: false })).not.toThrow()
@@ -530,7 +528,11 @@ describe('posthog core', () => {
         })
 
         it('does not enable compression from flags response if compression is disabled', () => {
-            const posthog = posthogWith({ disable_compression: true, persistence: 'memory' })
+            const posthog = posthogWith({
+                disable_compression: true,
+                persistence: 'memory',
+                bootstrap: { distinctID: 'test-id' },
+            })
 
             posthog._onRemoteConfig({
                 ok: true,
@@ -972,6 +974,21 @@ describe('posthog core', () => {
             expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
         })
 
+        it('captures $pageleave when capture_pageview uses granular options', () => {
+            const posthog = posthogWith(
+                {
+                    capture_pageview: { search: true },
+                    capture_pageleave: 'if_capture_pageview',
+                    request_batching: true,
+                },
+                { capture: jest.fn() }
+            )
+
+            posthog._handle_unload()
+
+            expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
+        })
+
         it('does not capture $pageleave when capture_pageview=false and capture_pageleave=if_capture_pageview', () => {
             const posthog = posthogWith(
                 {
@@ -1213,10 +1230,14 @@ describe('posthog core', () => {
         })
 
         it('does nothing when empty', () => {
+            // memory persistence with an empty bootstrap is the exact volatile-identity case the init
+            // warning covers, so allow that console.warn here instead of failing on it.
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
             const posthog = posthogWith({
                 bootstrap: {},
                 persistence: 'memory',
             })
+            warnSpy.mockRestore()
 
             expect(posthog.get_distinct_id()).not.toBe('abcd')
             expect(posthog.get_distinct_id()).not.toEqual(undefined)
@@ -1525,6 +1546,7 @@ describe('posthog core', () => {
                 'testtoken',
                 {
                     persistence: 'memory',
+                    bootstrap: { distinctID: 'test-id' },
                 },
                 uuidv7()
             )!
@@ -1559,6 +1581,7 @@ describe('posthog core', () => {
                 'testtoken',
                 {
                     persistence: 'memory',
+                    bootstrap: { distinctID: 'test-id' },
                 },
                 uuidv7()
             )!
@@ -1688,6 +1711,7 @@ describe('posthog core', () => {
                     'testtoken',
                     {
                         persistence: 'memory',
+                        bootstrap: { distinctID: 'test-id' },
                     },
                     uuidv7()
                 )!
@@ -2009,5 +2033,19 @@ describe('_send_request', () => {
         const eventRequest = { url: 'http://localhost/e/' }
         posthog._send_request(eventRequest)
         expect(eventRequest.url).toBe('http://localhost/e/')
+    })
+
+    it('uses the configured fallback when best-available compression is unavailable', async () => {
+        const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
+        posthog.compression = undefined
+        const requestOptions = {
+            url: 'http://localhost/flags/',
+            compression: 'best-available' as const,
+            compressionFallback: Compression.Base64,
+        }
+
+        posthog._send_request(requestOptions)
+
+        expect(requestOptions.compression).toBe(Compression.Base64)
     })
 })

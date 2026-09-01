@@ -1,18 +1,20 @@
 import { FeatureFlagCondition, FlagProperty, FlagPropertyValue, PostHogFeatureFlag, PropertyGroup } from '../../types'
 import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
-import { raceWithTimeout, safeSetTimeout } from '@posthog/core'
-import { hashSHA1 } from './crypto'
+import {
+  getFeatureFlagHash,
+  getFeatureFlagVariant,
+  getFeatureFlagVariantLookupTable,
+  InconclusiveMatchError,
+  matchFeatureFlagProperty,
+  parseFeatureFlagSemver,
+  raceWithTimeout,
+  relativeDateParseForFeatureFlagMatching,
+  resolveFeatureFlagPayload,
+  safeSetTimeout,
+} from '@posthog/core'
 import { FlagDefinitionCacheProvider, FlagDefinitionCacheData } from './cache'
 
 const SIXTY_SECONDS = 60 * 1000
-
-// eslint-disable-next-line
-const LONG_SCALE = 0xfffffffffffffff
-
-// Operators that should still run their switch case when the property value is null/undefined.
-// `is_not` may legitimately compare against null; `is_set` only cares about key presence and
-// must not be short-circuited by the null guard in `matchProperty`.
-const NULL_VALUES_ALLOWED_OPERATORS = ['is_not', 'is_set']
 
 // Outcome of evaluating a single condition group. `out_of_rollout_bound` means the group's property
 // filters matched (or there were none) but the rollout percentage excluded the user — the only case
@@ -36,13 +38,6 @@ function setCustomErrorPrototype(error: Error, constructor: new (message: string
   // https://www.dannyguo.com/blog/how-to-fix-instanceof-not-working-for-custom-errors-in-typescript/
   // this is the workaround
   Object.setPrototypeOf(error, constructor.prototype)
-}
-
-class InconclusiveMatchError extends Error {
-  constructor(message: string) {
-    super(message)
-    setCustomErrorPrototype(this, InconclusiveMatchError)
-  }
 }
 
 class RequiresServerEvaluation extends Error {
@@ -71,6 +66,11 @@ type FeatureFlagsPollerOptions = {
   customHeaders?: { [key: string]: string }
   cacheProvider?: FlagDefinitionCacheProvider
   strictLocalEvaluation?: boolean
+  /**
+   * When set, the poller keeps only flags whose evaluation contexts are empty or share at
+   * least one entry with this list. Flags with no evaluation contexts are always kept.
+   */
+  evaluationContexts?: readonly string[]
 }
 
 export type FeatureFlagEvaluationContext = {
@@ -113,6 +113,11 @@ class FeatureFlagsPoller {
   private strictLocalEvaluation: boolean
   private flagDefinitionsLoadedAt?: number
   private onMinimalFlagCalledEvents?: (enabled: boolean) => void
+  private evaluationContexts?: readonly string[]
+  // Keys present in the definitions payload but dropped by evaluation-context filtering. A kept
+  // flag may still depend on one of these; the remote evaluator pre-seeds such flags as false,
+  // so dependency evaluation mirrors that instead of throwing "Missing flag dependency".
+  private filteredOutFlagKeys: Set<string> = new Set()
 
   constructor({
     pollingInterval,
@@ -141,6 +146,7 @@ class FeatureFlagsPoller {
     this.onMinimalFlagCalledEvents = options.onMinimalFlagCalledEvents
     this.cacheProvider = options.cacheProvider
     this.strictLocalEvaluation = options.strictLocalEvaluation ?? false
+    this.evaluationContexts = options.evaluationContexts
     void this.loadFeatureFlags()
   }
 
@@ -378,34 +384,7 @@ class FeatureFlagsPoller {
   }
 
   private getFeatureFlagPayload(key: string, flagValue: FeatureFlagValue): JsonType | null {
-    let payload: JsonType | null = null
-
-    if (flagValue !== false && flagValue !== null && flagValue !== undefined) {
-      if (typeof flagValue == 'boolean') {
-        payload = this.featureFlagsByKey?.[key]?.filters?.payloads?.[flagValue.toString()] || null
-      } else if (typeof flagValue == 'string') {
-        payload = this.featureFlagsByKey?.[key]?.filters?.payloads?.[flagValue] || null
-      }
-
-      if (payload !== null && payload !== undefined) {
-        // If payload is already an object, return it directly
-        if (typeof payload === 'object') {
-          return payload
-        }
-        // If payload is a string, try to parse it as JSON
-        if (typeof payload === 'string') {
-          try {
-            return JSON.parse(payload)
-          } catch {
-            // If parsing fails, return the string as is
-            return payload
-          }
-        }
-        // For other types, return as is
-        return payload
-      }
-    }
-    return null
+    return resolveFeatureFlagPayload(this.featureFlagsByKey?.[key]?.filters?.payloads, flagValue)
   }
 
   private async evaluateFlagDependency(
@@ -449,8 +428,15 @@ class FeatureFlagsPoller {
         // Need to evaluate this dependency first
         const depFlag = this.featureFlagsByKey[depFlagKey]
         if (!depFlag) {
-          // Missing flag dependency - cannot evaluate locally
-          throw new InconclusiveMatchError(`Missing flag dependency '${depFlagKey}' for flag '${targetFlagKey}'`)
+          if (this.filteredOutFlagKeys.has(depFlagKey)) {
+            // Dependency was dropped by evaluation-context filtering, not genuinely missing. The
+            // remote evaluator pre-seeds context-filtered flags as false so conditions like
+            // `flag_evaluates_to=false` still match; do the same here instead of throwing.
+            evaluationCache[depFlagKey] = false
+          } else {
+            // Missing flag dependency - cannot evaluate locally
+            throw new InconclusiveMatchError(`Missing flag dependency '${depFlagKey}' for flag '${targetFlagKey}'`)
+          }
         } else if (!depFlag.active) {
           // Inactive flag evaluates to false
           evaluationCache[depFlagKey] = false
@@ -565,11 +551,11 @@ class FeatureFlagsPoller {
           break
         } else if (earlyExitEnabled && matchResult === 'out_of_rollout_bound') {
           // The condition's property filters (if any) matched and only the rollout check failed,
-          // so re-evaluating later groups can't change the outcome. Return a deterministic false,
-          // mirroring the server-side engine. `isInconclusive` could theoretically be true here
-          // (an earlier group threw InconclusiveMatchError while this group evaluated cleanly), but
-          // in practice early_exit is only set on flags whose groups are all locally evaluable, so
-          // this combination does not arise.
+          // so re-evaluating later groups can't change the outcome. If an earlier condition was
+          // inconclusive, stop here but preserve that result so the caller can fall back remotely.
+          if (isInconclusive) {
+            break
+          }
           return false
         }
       } catch (e) {
@@ -640,7 +626,10 @@ class FeatureFlagsPoller {
 
     // Property filters (if any) matched; only the rollout check remains. A failure here means the
     // user was targeted but excluded by rollout — the server-side engine's `OutOfRolloutBound`.
-    if (rolloutPercentage != undefined && (await _hash(flag.key, bucketingValue)) > rolloutPercentage / 100.0) {
+    if (
+      rolloutPercentage != undefined &&
+      (await getFeatureFlagHash(flag.key, bucketingValue)) > rolloutPercentage / 100.0
+    ) {
       return 'out_of_rollout_bound'
     }
 
@@ -648,44 +637,51 @@ class FeatureFlagsPoller {
   }
 
   async getMatchingVariant(flag: PostHogFeatureFlag, bucketingValue: string): Promise<FeatureFlagValue | undefined> {
-    const hashValue = await _hash(flag.key, bucketingValue, 'variant')
-    const matchingVariant = this.variantLookupTable(flag).find((variant) => {
-      return hashValue >= variant.valueMin && hashValue < variant.valueMax
-    })
-
-    if (matchingVariant) {
-      return matchingVariant.key
-    }
-    return undefined
+    return getFeatureFlagVariant(flag.key, bucketingValue, flag.filters?.multivariate?.variants || [])
   }
 
   variantLookupTable(flag: PostHogFeatureFlag): { valueMin: number; valueMax: number; key: string }[] {
-    const lookupTable: { valueMin: number; valueMax: number; key: string }[] = []
-    let valueMin = 0
-    let valueMax = 0
-    const flagFilters = flag.filters || {}
-    const multivariates: {
-      key: string
-      rollout_percentage: number
-    }[] = flagFilters.multivariate?.variants || []
-
-    multivariates.forEach((variant) => {
-      valueMax = valueMin + variant.rollout_percentage / 100.0
-      lookupTable.push({ valueMin, valueMax, key: variant.key })
-      valueMin = valueMax
-    })
-    return lookupTable
+    return getFeatureFlagVariantLookupTable(flag.filters?.multivariate?.variants || [])
   }
 
   /**
    * Updates the internal flag state with the provided flag data.
    */
+  /**
+   * Keeps only the flags this SDK instance should evaluate for its configured evaluation
+   * contexts. A flag with no evaluation contexts is always kept. A flag with contexts is
+   * kept only when it shares at least one with the configured list. Matching is exact, to
+   * mirror the remote `/flags` evaluation path. Returns all flags when no contexts are set.
+   * Older servers report the flag's contexts under the legacy `evaluation_tags` key, which is
+   * read as a fallback.
+   */
+  private filterFlagsByEvaluationContexts(flags: PostHogFeatureFlag[]): PostHogFeatureFlag[] {
+    if (!this.evaluationContexts || this.evaluationContexts.length === 0) {
+      return flags
+    }
+
+    const contexts = new Set(this.evaluationContexts)
+    return flags.filter((flag) => {
+      // Older servers (pre-2026-03-11) send the same list under the legacy `evaluation_tags` key.
+      const tags = flag.evaluation_contexts ?? flag.evaluation_tags
+      if (!tags || tags.length === 0) {
+        return true
+      }
+      return tags.some((tag) => contexts.has(tag))
+    })
+  }
+
   private updateFlagState(flagData: FlagDefinitionCacheData): void {
-    this.featureFlags = flagData.flags
-    this.featureFlagsByKey = flagData.flags.reduce<Record<string, PostHogFeatureFlag>>(
+    const flags = this.filterFlagsByEvaluationContexts(flagData.flags)
+    this.featureFlags = flags
+    this.featureFlagsByKey = flags.reduce<Record<string, PostHogFeatureFlag>>(
       (acc, curr) => ((acc[curr.key] = curr), acc),
       {}
     )
+    // Remember which definitions were dropped by context filtering so dependency evaluation can
+    // treat them as false (mirroring the remote path) rather than as genuinely missing.
+    const keptKeys = new Set(flags.map((flag) => flag.key))
+    this.filteredOutFlagKeys = new Set(flagData.flags.filter((flag) => !keptKeys.has(flag.key)).map((flag) => flag.key))
     this.groupTypeMapping = flagData.groupTypeMapping
     this.cohorts = flagData.cohorts
     this.loadedSuccessfullyOnce = true
@@ -733,7 +729,9 @@ class FeatureFlagsPoller {
         this.updateFlagState(cached)
         this.logMsgIfDebug(() => console.debug(`[FEATURE FLAGS] ${debugMessage} (${cached.flags.length} flags)`))
         this.onLoad?.(this.featureFlags.length)
-        this.warnAboutExperienceContinuityFlags(cached.flags)
+        // Warn only about flags this instance actually evaluates locally; context-filtered flags
+        // are absent from the kept set and never take the server-fallback path.
+        this.warnAboutExperienceContinuityFlags(this.featureFlags)
         return true
       }
       return false
@@ -904,6 +902,7 @@ class FeatureFlagsPoller {
           )
           this.featureFlags = []
           this.featureFlagsByKey = {}
+          this.filteredOutFlagKeys = new Set()
           this.groupTypeMapping = {}
           this.cohorts = {}
           this.onMinimalFlagCalledEvents?.(false)
@@ -961,7 +960,8 @@ class FeatureFlagsPoller {
           }
 
           this.onLoad?.(this.featureFlags.length)
-          this.warnAboutExperienceContinuityFlags(flagData.flags)
+          // Warn only about the kept (context-filtered) flags, not the full payload.
+          this.warnAboutExperienceContinuityFlags(this.featureFlags)
           break
         }
 
@@ -1078,176 +1078,16 @@ class FeatureFlagsPoller {
   }
 }
 
-// # This function takes a bucketing identifier and a feature flag key and returns a float between 0 and 1.
-// # Given the same bucketing identifier and key, it'll always return the same float. These floats are
-// # uniformly distributed between 0 and 1, so if we want to show this feature to 20% of traffic
-// # we can do _hash(key, bucketing_identifier) < 0.2
-async function _hash(key: string, bucketingValue: string, salt: string = ''): Promise<number> {
-  const hashString = await hashSHA1(`${key}.${bucketingValue}${salt}`)
-  return parseInt(hashString.slice(0, 15), 16) / LONG_SCALE
-}
-
 function matchProperty(
   property: FeatureFlagCondition['properties'][number],
   propertyValues: Record<string, any>,
   warnFunction?: (msg: string) => void
 ): boolean {
-  const key = property.key
-  const value = property.value
-  const operator = property.operator || 'exact'
+  return matchFeatureFlagProperty(property, propertyValues, { warnFunction })
+}
 
-  if (!(key in propertyValues)) {
-    // When the property is genuinely absent we can answer `is_not_set` locally — no need to
-    // bail out as inconclusive and force the flag to return undefined.
-    if (operator === 'is_not_set') {
-      return true
-    }
-    throw new InconclusiveMatchError(`Property ${key} not found in propertyValues`)
-  } else if (operator === 'is_not_set') {
-    return false
-  }
-
-  const overrideValue = propertyValues[key]
-  if (overrideValue == null && !NULL_VALUES_ALLOWED_OPERATORS.includes(operator)) {
-    // if the value is null, just fail the feature flag comparison
-    // this isn't an InconclusiveMatchError because the property value was provided.
-    if (warnFunction) {
-      warnFunction(`Property ${key} cannot have a value of null/undefined with the ${operator} operator`)
-    }
-
-    return false
-  }
-
-  function computeExactMatch(value: any, overrideValue: any): boolean {
-    if (Array.isArray(value)) {
-      return value.map((val) => String(val).toLowerCase()).includes(String(overrideValue).toLowerCase())
-    }
-    return String(value).toLowerCase() === String(overrideValue).toLowerCase()
-  }
-
-  function compare(lhs: any, rhs: any, operator: string): boolean {
-    if (operator === 'gt') {
-      return lhs > rhs
-    } else if (operator === 'gte') {
-      return lhs >= rhs
-    } else if (operator === 'lt') {
-      return lhs < rhs
-    } else if (operator === 'lte') {
-      return lhs <= rhs
-    } else {
-      throw new Error(`Invalid operator: ${operator}`)
-    }
-  }
-
-  switch (operator) {
-    case 'exact':
-      return computeExactMatch(value, overrideValue)
-    case 'is_not':
-      return !computeExactMatch(value, overrideValue)
-    case 'is_set':
-      return key in propertyValues
-    case 'icontains':
-      return String(overrideValue).toLowerCase().includes(String(value).toLowerCase())
-    case 'not_icontains':
-      return !String(overrideValue).toLowerCase().includes(String(value).toLowerCase())
-    case 'starts_with':
-      return String(overrideValue).toLowerCase().startsWith(String(value).toLowerCase())
-    case 'not_starts_with':
-      return !String(overrideValue).toLowerCase().startsWith(String(value).toLowerCase())
-    case 'ends_with':
-      return String(overrideValue).toLowerCase().endsWith(String(value).toLowerCase())
-    case 'not_ends_with':
-      return !String(overrideValue).toLowerCase().endsWith(String(value).toLowerCase())
-    case 'regex':
-      return isValidRegex(String(value)) && String(overrideValue).match(String(value)) !== null
-    case 'not_regex':
-      return isValidRegex(String(value)) && String(overrideValue).match(String(value)) === null
-    case 'gt':
-    case 'gte':
-    case 'lt':
-    case 'lte': {
-      // Try a numeric comparison first; only fall back to lexicographic when one side genuinely
-      // isn't a number. `parseFloat` returns NaN for non-numeric strings, so `Number.isFinite`
-      // is the right guard — `NaN != null` would slip through and produce nonsense comparisons
-      // like `NaN > 5`. Likewise, when a person property arrives as the string `"10"` we want
-      // `"10" > "9"` to evaluate numerically (true), not lexicographically (false).
-      const parsedValue = typeof value === 'number' ? value : parseFloat(String(value))
-      let parsedOverride: number
-      if (typeof overrideValue === 'number') {
-        parsedOverride = overrideValue
-      } else if (overrideValue != null) {
-        parsedOverride = parseFloat(String(overrideValue))
-      } else {
-        parsedOverride = NaN
-      }
-      if (Number.isFinite(parsedValue) && Number.isFinite(parsedOverride)) {
-        return compare(parsedOverride, parsedValue, operator)
-      }
-      return compare(String(overrideValue), String(value), operator)
-    }
-    case 'is_date_after':
-    case 'is_date_before': {
-      // Boolean values should never be used with date operations
-      if (typeof value === 'boolean') {
-        throw new InconclusiveMatchError(`Date operations cannot be performed on boolean values`)
-      }
-
-      let parsedDate = relativeDateParseForFeatureFlagMatching(String(value))
-      if (parsedDate == null) {
-        parsedDate = convertToDateTime(value)
-      }
-
-      if (parsedDate == null) {
-        throw new InconclusiveMatchError(`Invalid date: ${value}`)
-      }
-      const overrideDate = convertToDateTime(overrideValue)
-      if (['is_date_before'].includes(operator)) {
-        return overrideDate < parsedDate
-      }
-      return overrideDate > parsedDate
-    }
-    case 'semver_eq': {
-      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
-      return cmp === 0
-    }
-    case 'semver_neq': {
-      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
-      return cmp !== 0
-    }
-    case 'semver_gt': {
-      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
-      return cmp > 0
-    }
-    case 'semver_gte': {
-      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
-      return cmp >= 0
-    }
-    case 'semver_lt': {
-      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
-      return cmp < 0
-    }
-    case 'semver_lte': {
-      const cmp = compareSemverTuples(parseSemver(String(overrideValue)), parseSemver(String(value)))
-      return cmp <= 0
-    }
-    case 'semver_tilde': {
-      const overrideParsed = parseSemver(String(overrideValue))
-      const { lower, upper } = computeTildeBounds(String(value))
-      return compareSemverTuples(overrideParsed, lower) >= 0 && compareSemverTuples(overrideParsed, upper) < 0
-    }
-    case 'semver_caret': {
-      const overrideParsed = parseSemver(String(overrideValue))
-      const { lower, upper } = computeCaretBounds(String(value))
-      return compareSemverTuples(overrideParsed, lower) >= 0 && compareSemverTuples(overrideParsed, upper) < 0
-    }
-    case 'semver_wildcard': {
-      const overrideParsed = parseSemver(String(overrideValue))
-      const { lower, upper } = computeWildcardBounds(String(value))
-      return compareSemverTuples(overrideParsed, lower) >= 0 && compareSemverTuples(overrideParsed, upper) < 0
-    }
-    default:
-      throw new InconclusiveMatchError(`Unknown operator: ${operator}`)
-  }
+function parseSemver(value: string): [number, number, number] {
+  return parseFeatureFlagSemver(value, 'strict')
 }
 
 function checkCohortExists(cohortId: string, cohortProperties: FeatureFlagsPoller['cohorts']): void {
@@ -1393,204 +1233,6 @@ async function matchPropertyGroup(
 
     // if we get here, all matched in AND case, or none matched in OR case
     return propertyGroupType === 'AND'
-  }
-}
-
-function isValidRegex(regex: string): boolean {
-  try {
-    new RegExp(regex)
-    return true
-  } catch (err) {
-    return false
-  }
-}
-
-type SemverTuple = [number, number, number]
-
-/**
- * Parse a single numeric identifier from a semver string.
- * Per semver 2.0.0 §2, numeric identifiers MUST NOT include leading zeros.
- */
-function parseSemverNumericIdentifier(part: string, raw: string): number {
-  if (!/^\d+$/.test(part)) {
-    throw new InconclusiveMatchError(`Invalid semver: ${raw}`)
-  }
-  if (part.length > 1 && part[0] === '0') {
-    throw new InconclusiveMatchError(`Invalid semver: ${raw}`)
-  }
-  return parseInt(part, 10)
-}
-
-/**
- * Parse a version string into a [major, minor, patch] tuple.
- * - Strips leading/trailing whitespace
- * - Strips 'v' or 'V' prefix
- * - Strips pre-release and build metadata (-alpha, +build)
- * - Defaults missing components to 0
- * - Ignores extra components beyond the third
- * - Throws InconclusiveMatchError for invalid input
- */
-function parseSemver(value: string): SemverTuple {
-  const text = String(value).trim().replace(/^[vV]/, '')
-
-  // Strip pre-release and build metadata
-  const baseVersion = text.split('-')[0].split('+')[0]
-
-  if (!baseVersion || baseVersion.startsWith('.')) {
-    throw new InconclusiveMatchError(`Invalid semver: ${value}`)
-  }
-
-  const parts = baseVersion.split('.')
-
-  const parsePart = (part: string | undefined): number => {
-    if (part === undefined || part === '') {
-      return 0
-    }
-    return parseSemverNumericIdentifier(part, value)
-  }
-
-  const major = parsePart(parts[0])
-  const minor = parsePart(parts[1])
-  const patch = parsePart(parts[2])
-
-  return [major, minor, patch]
-}
-
-/**
- * Compare two semver tuples.
- * Returns -1 if a < b, 0 if a == b, 1 if a > b
- */
-function compareSemverTuples(a: SemverTuple, b: SemverTuple): number {
-  for (let i = 0; i < 3; i++) {
-    if (a[i] < b[i]) return -1
-    if (a[i] > b[i]) return 1
-  }
-  return 0
-}
-
-/**
- * Compute bounds for tilde operator: ~X.Y.Z means >=X.Y.Z and <X.(Y+1).0
- */
-function computeTildeBounds(value: string): { lower: SemverTuple; upper: SemverTuple } {
-  const parsed = parseSemver(value)
-  const lower: SemverTuple = [parsed[0], parsed[1], parsed[2]]
-  const upper: SemverTuple = [parsed[0], parsed[1] + 1, 0]
-  return { lower, upper }
-}
-
-/**
- * Compute bounds for caret operator:
- * - ^X.Y.Z where X > 0: >=X.Y.Z <(X+1).0.0
- * - ^0.Y.Z where Y > 0: >=0.Y.Z <0.(Y+1).0
- * - ^0.0.Z: >=0.0.Z <0.0.(Z+1)
- */
-function computeCaretBounds(value: string): { lower: SemverTuple; upper: SemverTuple } {
-  const parsed = parseSemver(value)
-  const [major, minor, patch] = parsed
-  const lower: SemverTuple = [major, minor, patch]
-
-  let upper: SemverTuple
-  if (major > 0) {
-    upper = [major + 1, 0, 0]
-  } else if (minor > 0) {
-    upper = [0, minor + 1, 0]
-  } else {
-    upper = [0, 0, patch + 1]
-  }
-
-  return { lower, upper }
-}
-
-/**
- * Compute bounds for wildcard operator:
- * - "X.*" or "X" with wildcard: >=X.0.0 <(X+1).0.0
- * - "X.Y.*": >=X.Y.0 <X.(Y+1).0
- */
-function computeWildcardBounds(value: string): { lower: SemverTuple; upper: SemverTuple } {
-  const text = String(value).trim().replace(/^[vV]/, '')
-
-  // Remove trailing .* or *
-  const cleanedText = text.replace(/\.\*$/, '').replace(/\*$/, '')
-
-  if (!cleanedText) {
-    throw new InconclusiveMatchError(`Invalid wildcard semver: ${value}`)
-  }
-
-  const parts = cleanedText.split('.')
-  const parseWildcardPart = (part: string): number => {
-    try {
-      return parseSemverNumericIdentifier(part, value)
-    } catch {
-      throw new InconclusiveMatchError(`Invalid wildcard semver: ${value}`)
-    }
-  }
-  const major = parseWildcardPart(parts[0])
-
-  let lower: SemverTuple
-  let upper: SemverTuple
-
-  if (parts.length === 1) {
-    // X.* pattern
-    lower = [major, 0, 0]
-    upper = [major + 1, 0, 0]
-  } else {
-    // X.Y.* pattern
-    const minor = parseWildcardPart(parts[1])
-    lower = [major, minor, 0]
-    upper = [major, minor + 1, 0]
-  }
-
-  return { lower, upper }
-}
-
-function convertToDateTime(value: FlagPropertyValue | Date): Date {
-  if (value instanceof Date) {
-    return value
-  } else if (typeof value === 'string' || typeof value === 'number') {
-    const date = new Date(value)
-    if (!isNaN(date.valueOf())) {
-      return date
-    }
-    throw new InconclusiveMatchError(`${value} is in an invalid date format`)
-  } else {
-    throw new InconclusiveMatchError(`The date provided ${value} must be a string, number, or date object`)
-  }
-}
-
-function relativeDateParseForFeatureFlagMatching(value: string): Date | null {
-  const regex = /^-?(?<number>[0-9]+)(?<interval>[a-z])$/
-  const match = value.match(regex)
-  const parsedDt = new Date(new Date().toISOString())
-
-  if (match) {
-    if (!match.groups) {
-      return null
-    }
-
-    const number = parseInt(match.groups['number'])
-
-    if (number >= 10000) {
-      // Guard against overflow, disallow numbers greater than 10_000
-      return null
-    }
-    const interval = match.groups['interval']
-    if (interval == 'h') {
-      parsedDt.setUTCHours(parsedDt.getUTCHours() - number)
-    } else if (interval == 'd') {
-      parsedDt.setUTCDate(parsedDt.getUTCDate() - number)
-    } else if (interval == 'w') {
-      parsedDt.setUTCDate(parsedDt.getUTCDate() - number * 7)
-    } else if (interval == 'm') {
-      parsedDt.setUTCMonth(parsedDt.getUTCMonth() - number)
-    } else if (interval == 'y') {
-      parsedDt.setUTCFullYear(parsedDt.getUTCFullYear() - number)
-    } else {
-      return null
-    }
-
-    return parsedDt
-  } else {
-    return null
   }
 }
 

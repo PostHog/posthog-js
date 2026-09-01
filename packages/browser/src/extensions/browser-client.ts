@@ -7,6 +7,7 @@ import type {
     DeepReadonly,
     Disposable,
     Extension,
+    ExtensionToken,
     KeyValueStore,
     Listener,
     SendRequestInit,
@@ -14,7 +15,7 @@ import type {
 } from '@posthog/browser-common'
 import { ExtensionRuntime } from '@posthog/browser-common/extension-runtime'
 import { logger } from '@posthog/browser-common/utils/logger'
-import { isUndefined, type Logger } from '@posthog/core'
+import { Compression, isUndefined, type Logger } from '@posthog/core'
 
 import Config from '../config'
 import { DEVICE_ID } from '../constants'
@@ -150,12 +151,22 @@ export class BrowserClientAdapter implements Client, Disposable {
         }
     }
 
+    get canCapture(): boolean {
+        return this.instance.is_capturing()
+    }
+
     get projectToken(): string {
         return this.instance.config.token
     }
 
     add(extension: Extension): Promise<void> {
         return this._runtime.add(extension)
+    }
+
+    getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
+    getExtension<T extends Extension = Extension>(name: string): T | undefined
+    getExtension<T extends Extension = Extension>(name: string): T | undefined {
+        return this._runtime.getExtension<T>(name)
     }
 
     async capture(event: string, properties?: Properties | null, options?: BrowserCommonCaptureOptions): Promise<void> {
@@ -197,6 +208,8 @@ export class BrowserClientAdapter implements Client, Disposable {
             fireCallbackOnDrop: true,
             transport: init.transport,
             compression: init.compression,
+            compressionFallback:
+                init.target === 'flags' && init.compression === 'best-available' ? Compression.Base64 : undefined,
             timestampMode: init.sentAt,
         }
 

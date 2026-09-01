@@ -46,8 +46,9 @@ describe('capture v1 wiring (Node SDK)', () => {
     let originalCompressionStream: PropertyDescriptor | undefined
     let compressionStreamSpy: jest.Mock
 
-    const readCompressedBody = async (body: Blob): Promise<any> => {
-      return JSON.parse(gunzipSync(Buffer.from(await body.arrayBuffer())).toString())
+    const readCompressedBody = async (body: Blob | Uint8Array): Promise<any> => {
+      const bytes = body instanceof Uint8Array ? Buffer.from(body) : Buffer.from(await body.arrayBuffer())
+      return JSON.parse(gunzipSync(bytes).toString())
     }
 
     beforeEach(() => {
@@ -77,7 +78,7 @@ describe('capture v1 wiring (Node SDK)', () => {
 
       const [, options] = callsTo('/batch/')[0]
       expect(options.headers['Content-Encoding']).toBe('gzip')
-      expect(options.body).toBeInstanceOf(Blob)
+      expect(options.body).toBeInstanceOf(Uint8Array)
       expect((await readCompressedBody(options.body)).batch[0].event).toBe('custom')
       expect(compressionStreamSpy).not.toHaveBeenCalled()
     })
@@ -89,7 +90,7 @@ describe('capture v1 wiring (Node SDK)', () => {
 
       const [, options] = callsTo('/i/v1/analytics/events')[0]
       expect(options.headers['Content-Encoding']).toBe('gzip')
-      expect(options.body).toBeInstanceOf(Blob)
+      expect(options.body).toBeInstanceOf(Uint8Array)
       expect((await readCompressedBody(options.body)).batch[0].event).toBe('custom')
       expect(compressionStreamSpy).not.toHaveBeenCalled()
     })
@@ -107,7 +108,7 @@ describe('capture v1 wiring (Node SDK)', () => {
       expect(outcome).toEqual({ kind: 'ok' })
       const [, options] = callsTo(path)[0]
       expect(options.headers['Content-Encoding']).toBe('gzip')
-      expect(options.body).toBeInstanceOf(Blob)
+      expect(options.body).toBeInstanceOf(Uint8Array)
       expect((await readCompressedBody(options.body))[payloadKey]).toEqual([])
       expect(compressionStreamSpy).not.toHaveBeenCalled()
     })

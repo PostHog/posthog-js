@@ -52,7 +52,7 @@ jobs:
 
       - name: Install JDK
         if: steps.is-affected.outputs.is-affected == 'true'
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: 'zulu'
           java-version: '17'
@@ -85,11 +85,11 @@ jobs:
         run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted
         working-directory: ${{ env.EXAMPLE_DIR }}
 
-      - name: Build example for Android
+      - name: Build example and test plugin for Android
         if: steps.is-affected.outputs.is-affected == 'true'
         env:
           JAVA_OPTS: '-XX:MaxHeapSize=6g'
-        run: ./gradlew assembleDebug --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a
+        run: ./gradlew assembleDebug :posthog_react-native-plugin:testDebugUnitTest --no-daemon --console=plain -PreactNativeArchitectures=arm64-v8a
         working-directory: ${{ env.EXAMPLE_DIR }}/android
 
   build-ios-static-lib:
@@ -235,7 +235,7 @@ jobs:
             --filter=posthog-react-native... \
             --filter=@posthog/react-native-plugin
 
-      - name: Install React Native 0.87 example dependencies
+      - name: Install React Native 0.87.1 example dependencies
         run: pnpm install --lockfile=false --config.node-linker=hoisted
         working-directory: ${{ env.SPM_EXAMPLE_DIR }}
 
@@ -244,18 +244,8 @@ jobs:
         working-directory: ${{ env.SPM_EXAMPLE_DIR }}
 
       - name: Convert the iOS project to React Native full SwiftPM
-        run: |
-          npx react-native spm add --deintegrate --yes
-          hermesc="$PWD/../node_modules/hermes-compiler/hermesc/osx-bin/hermesc"
-          sed -i '' -E "s#HERMES_CLI_PATH = .*;#HERMES_CLI_PATH = \"$hermesc\";#" \
-            PosthogReactNativeSpmExample.xcodeproj/project.pbxproj
+        run: npx react-native spm add --deintegrate --yes
         working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
-
-      - name: Verify the pinned Hermes compiler matches SwiftPM Hermes
-        run: |
-          hermesc=node_modules/hermes-compiler/hermesc/osx-bin/hermesc
-          "$hermesc" -version | grep 'HBC bytecode version: 99'
-        working-directory: ${{ env.SPM_EXAMPLE_DIR }}
 
       - name: Build Debug with SwiftPM
         run: |

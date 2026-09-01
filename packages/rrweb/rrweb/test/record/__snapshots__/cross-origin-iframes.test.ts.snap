@@ -2894,7 +2894,8 @@ exports[`cross origin iframes > move-node.html > captures mutations on adopted s
       \\"styleId\\": 2,
       \\"adds\\": [
         {
-          \\"rule\\": \\"h2 { color: red; }\\"
+          \\"rule\\": \\"h2 { color: red; }\\",
+          \\"index\\": 0
         }
       ]
     }
@@ -3247,7 +3248,8 @@ exports[`cross origin iframes > move-node.html > captures mutations on styleshee
       \\"id\\": 33,
       \\"adds\\": [
         {
-          \\"rule\\": \\"div { color: yellow; }\\"
+          \\"rule\\": \\"div { color: yellow; }\\",
+          \\"index\\": 0
         }
       ]
     }
@@ -3259,7 +3261,8 @@ exports[`cross origin iframes > move-node.html > captures mutations on styleshee
       \\"id\\": 34,
       \\"adds\\": [
         {
-          \\"rule\\": \\"h1 { color: blue; }\\"
+          \\"rule\\": \\"h1 { color: blue; }\\",
+          \\"index\\": 0
         }
       ]
     }
@@ -3313,7 +3316,8 @@ exports[`cross origin iframes > move-node.html > captures mutations on styleshee
       \\"id\\": 34,
       \\"adds\\": [
         {
-          \\"rule\\": \\"h2 { color: red; }\\"
+          \\"rule\\": \\"h2 { color: red; }\\",
+          \\"index\\": 0
         }
       ]
     }

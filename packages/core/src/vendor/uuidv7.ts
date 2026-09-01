@@ -429,9 +429,15 @@ const getDefaultRandom = (): { nextUint32(): number } => {
 //     };
 //   }
   return {
+    // Clamp to a valid uint32: a nonconformant Math.random() that returns >= 1 or NaN
+    // (e.g. Hermes on Android implements Math.random with C++ std::uniform_real_distribution,
+    // which is documented to occasionally return its upper bound) would otherwise overflow the
+    // field ranges and make fromFieldsV7 throw `RangeError: invalid field value` on every
+    // generate call, crashing React Native apps during the internal event-queue flush.
     nextUint32: (): number =>
-      Math.trunc(Math.random() * 0x1_0000) * 0x1_0000 +
-      Math.trunc(Math.random() * 0x1_0000),
+      (Math.trunc(Math.random() * 0x1_0000) * 0x1_0000 +
+        Math.trunc(Math.random() * 0x1_0000)) >>>
+      0,
   };
 };
 

@@ -1,5 +1,15 @@
 # @posthog/rollup-plugin
 
+## 1.5.1
+
+### Patch Changes
+
+- [#4563](https://github.com/PostHog/posthog-js/pull/4563) [`530d88b`](https://github.com/PostHog/posthog-js/commit/530d88b8821acecd2dcf6d43e5fd07a2275348ee) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Bump `@posthog/cli` to `~0.14.1`, which makes `sourcemap inject --release-mode=event` adopt a bundler-emitted ECMA-426 debug id as the chunk id instead of deriving its own, so the ids webpack stamps into each chunk are the ones the CLI uploads against.
+  (2026-08-24)
+
+- [#4601](https://github.com/PostHog/posthog-js/pull/4601) [`a54efda`](https://github.com/PostHog/posthog-js/commit/a54efda6ab09d1e6293d9857a731e8cb36620e9b) Thanks [@marandaneto](https://github.com/marandaneto)! - Restore chunk ID comments after Vite 8 output minification so client source maps are uploaded.
+  (2026-08-24)
+
 ## 1.5.0
 
 ### Minor Changes

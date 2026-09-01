@@ -43,6 +43,7 @@ Fixtures import `@posthog/mcp` through Node self-reference, which resolves to
 | each SDK lane          | `dual-era/probe-late-handlers.mjs --major v1\|v2` | handlers registered _after_ `instrument()` — the mcp-nest/adapter ordering. Each lane runs only its own major's half, so a red probe names the stack                                      |
 | `official SDK v2` only | `dual-era/probe-first-call-error.mjs`             | the **first** call of a conversation fails, with `conversation_id` on (v2-only by construction: on v1 the thrown error is captured before the appended result, so the bug is unreachable) |
 | each SDK lane          | `dual-era/probe-pagination.mjs --major v1\|v2`    | a **two-page** tool catalogue: `nextCursor`, `ttlMs`, `cacheScope` and result `_meta` survive the listing wrapper                                                                         |
+| each SDK lane          | `dual-era/probe-mcp-apps.mjs --major v1\|v2`      | a real MCP App tool and `ui://` resource: app metadata, HTML/CSP, structured results and result `_meta` survive instrumentation; self-reported model capture still works                  |
 | `mcp-nest (SDK v1)`    | `nest-v1/verify.mjs`                              | NestJS + `@rekog/mcp-nest` 1.9 + SDK v1, stateless — 16 assertions × `LEVEL=high\|low`                                                                                                    |
 | `mcp-nest (SDK v2)`    | `nest-v2/verify.mjs`                              | NestJS + `@rekog/mcp-nest` 2.0 + SDK v2, stateless, both eras — 37 assertions × `LEVEL=high\|low`                                                                                         |
 
@@ -103,6 +104,36 @@ node client/run.mjs --url http://localhost:3222 --sdk v2 --lane 2026 --conv on
 | `--conv on`         | client-side: expect the injected parameter and echo the handle           |
 
 Same shape for a Nest harness: `LEVEL=low node harness/nest-v2/verify.mjs`.
+
+### MCP Apps playground
+
+Run the Apps probe directly while iterating on protocol compatibility:
+
+```bash
+node packages/mcp/harness/dual-era/probe-mcp-apps.mjs
+```
+
+Or keep its instrumented v2 server running for MCP Inspector or another local
+MCP Apps host:
+
+```bash
+PORT=3001 node packages/mcp/harness/dual-era/probe-mcp-apps.mjs --serve
+```
+
+Connect the host to `http://localhost:3001/mcp`. The in-memory PostHog recorder
+is available at `http://localhost:3001/__events`, so this mode needs no API key
+and sends no analytics over the network.
+
+It uses the stable MCP Apps `2026-01-26` server contract on both the SDK v1
+`2025-11-25` lane and the SDK v2 `2026-07-28` lane. The probe verifies the part
+of an App that server instrumentation can affect: discovery metadata, the app
+resource, tool results, and captured analytics. Browser rendering and
+app-to-host `postMessage` traffic are host-side concerns and are intentionally
+outside this server harness.
+
+The final informational line reports how many resource analytics events were
+observed. That count is not a compatibility assertion yet: automatic
+`resources/list` and `resources/read` capture is a separate SDK feature.
 
 ## Why it is built this way
 

@@ -1,11 +1,13 @@
+import type { Client } from '@posthog/browser-common'
+
 import { assignableWindow } from '../../utils/globals'
+import { LogsExtension } from '../../extension-tokens'
 import { PostHog } from '../../posthog-core'
 
 describe('logs entrypoint', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
-    // Console capture routes through the core pipeline via
-    // `posthog.logs._captureConsoleLog`; assert against that seam.
+    // Console capture routes through the core logs API; assert against that seam.
     let mockEmit: jest.Mock
 
     beforeEach(() => {
@@ -34,7 +36,8 @@ describe('logs entrypoint', () => {
             },
             get_distinct_id: jest.fn(() => 'user-123'),
             is_capturing: jest.fn(() => true),
-            logs: { _captureConsoleLog: mockEmit },
+            version: '1.392.0',
+            logs: { captureLog: mockEmit, captureConsoleLog: mockEmit, le: mockEmit },
         } as unknown as PostHog
 
         // Mock assignableWindow
@@ -118,6 +121,28 @@ describe('logs entrypoint', () => {
             expect(assignableWindow.console.debug).not.toBe(originalMethods.debug)
         })
 
+        it('should restore the console methods it wrapped', () => {
+            const originalMethods = {
+                log: assignableWindow.console.log,
+                info: assignableWindow.console.info,
+                warn: assignableWindow.console.warn,
+                error: assignableWindow.console.error,
+                debug: assignableWindow.console.debug,
+            }
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+
+            const dispose = initializeLogs(mockPostHog)
+            dispose()
+            assignableWindow.console.log('after dispose')
+
+            expect(assignableWindow.console.log).toBe(originalMethods.log)
+            expect(assignableWindow.console.info).toBe(originalMethods.info)
+            expect(assignableWindow.console.warn).toBe(originalMethods.warn)
+            expect(assignableWindow.console.error).toBe(originalMethods.error)
+            expect(assignableWindow.console.debug).toBe(originalMethods.debug)
+            expect(mockEmit).not.toHaveBeenCalled()
+        })
+
         it('should not throw when called without a session manager', () => {
             const postHogWithoutSession = {
                 ...mockPostHog,
@@ -138,6 +163,92 @@ describe('logs entrypoint', () => {
             initializeLogs(postHogWithoutLogs)
 
             expect(() => assignableWindow.console.log('test')).not.toThrow()
+            expect(mockEmit).not.toHaveBeenCalled()
+        })
+
+        it.each(['1.391.3', '1.410.5-canary', '1.410.11', '1.418.10-invalid', '1.418.18', '1.419.3', '1.420.0'])(
+            'should not select a capture method for unsupported PostHog version %s',
+            (version) => {
+                const captures = {
+                    captureLog: jest.fn(),
+                    captureConsoleLog: jest.fn(),
+                    le: jest.fn(),
+                    de: jest.fn(),
+                    he: jest.fn(),
+                    ui: jest.fn(),
+                    ci: jest.fn(),
+                    vi: jest.fn(),
+                }
+                const legacyPostHog = {
+                    ...mockPostHog,
+                    version,
+                    logs: captures,
+                } as unknown as PostHog
+                const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+                initializeLogs(legacyPostHog)
+
+                assignableWindow.console.warn('not captured')
+
+                for (const capture of Object.values(captures)) {
+                    expect(capture).not.toHaveBeenCalled()
+                }
+            }
+        )
+
+        it('should resolve the console capture path from a shared client', () => {
+            const captureLog = jest.fn()
+            const captureConsoleLog = jest.fn()
+            const client = {
+                canCapture: true,
+                getExtension: jest.fn(() => ({ captureLog, captureConsoleLog })),
+            } as unknown as Client
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(client)
+
+            assignableWindow.console.warn('from shared client')
+
+            expect(client.getExtension).toHaveBeenCalledWith(LogsExtension)
+            expect(captureConsoleLog).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    level: 'warn',
+                    body: '"from shared client"',
+                })
+            )
+            expect(captureLog).not.toHaveBeenCalled()
+            expect(mockPostHog.is_capturing).not.toHaveBeenCalled()
+        })
+
+        it('should skip extension lookup for empty and re-entrant console calls', () => {
+            const captureConsoleLog = jest.fn(() => {
+                assignableWindow.console.warn('nested call')
+            })
+            const client = {
+                canCapture: true,
+                getExtension: jest.fn(() => ({ captureConsoleLog })),
+            } as unknown as Client
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(client)
+
+            assignableWindow.console.warn()
+            expect(client.getExtension).not.toHaveBeenCalled()
+
+            assignableWindow.console.warn('outer call')
+            expect(client.getExtension).toHaveBeenCalledTimes(1)
+            expect(client.getExtension).toHaveBeenCalledWith(LogsExtension)
+            expect(captureConsoleLog).toHaveBeenCalledTimes(1)
+        })
+
+        it('should not resolve the logs extension when a shared client cannot capture', () => {
+            const client = {
+                canCapture: false,
+                getExtension: jest.fn(() => mockPostHog.logs),
+            } as unknown as Client
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+            initializeLogs(client)
+
+            assignableWindow.console.log('not captured')
+
+            expect(client.getExtension).not.toHaveBeenCalled()
             expect(mockEmit).not.toHaveBeenCalled()
         })
     })
@@ -514,20 +625,58 @@ describe('logs entrypoint', () => {
             await import('../../entrypoints/logs')
         })
 
-        it('should route console capture through posthog.logs._captureConsoleLog', () => {
+        it.each([
+            ['1.392.0', 'le'],
+            ['1.410.4', 'le'],
+            ['1.410.5', 'de'],
+            ['1.410.10', 'de'],
+            ['1.411.0', 'he'],
+            ['1.418.3', 'he'],
+            ['1.418.4', 'ui'],
+            ['1.418.10', 'ui'],
+            ['1.418.11', 'ci'],
+            ['1.418.14', 'ci'],
+            ['1.418.15', 'vi'],
+            ['1.418.17', 'vi'],
+            ['1.419.0', 'vi'],
+            ['1.419.2', 'vi'],
+        ] as const)('should route PostHog %s through the historical %s console method', (version, expectedName) => {
+            const captureLog = jest.fn()
+            const currentConsoleCapture = jest.fn()
+            const historicalCaptures = {
+                le: jest.fn(),
+                de: jest.fn(),
+                he: jest.fn(),
+                ui: jest.fn(),
+                ci: jest.fn(),
+                vi: jest.fn(),
+            }
+            mockPostHog.version = version
+            mockPostHog.logs = {
+                captureLog,
+                captureConsoleLog: currentConsoleCapture,
+                ...historicalCaptures,
+            } as unknown as NonNullable<PostHog['logs']>
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
             assignableWindow.console.log('Test message')
 
-            expect(mockEmit).toHaveBeenCalledTimes(1)
-            expect(mockEmit).toHaveBeenCalledWith({
+            expect(captureLog).not.toHaveBeenCalled()
+            expect(currentConsoleCapture).not.toHaveBeenCalled()
+            expect(historicalCaptures[expectedName]).toHaveBeenCalledTimes(1)
+            expect(historicalCaptures[expectedName]).toHaveBeenCalledWith({
                 level: 'info',
                 body: '"Test message"',
                 attributes: expect.objectContaining({
                     'log.source': 'console.log',
                 }),
             })
+            for (const [name, capture] of Object.entries(historicalCaptures)) {
+                if (name !== expectedName) {
+                    expect(capture).not.toHaveBeenCalled()
+                }
+            }
         })
 
         it('should not set distinct_id or location.href — core adds posthogDistinctId/url.full', () => {

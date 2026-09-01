@@ -3,7 +3,7 @@ import { TouchableOpacity } from 'react-native'
 import { CancelSVG } from '../icons'
 
 import { createSafeStyleSheet } from '../safeStyleSheet'
-import { SurveyAppearanceTheme } from '../surveys-utils'
+import { closeButtonSize, SurveyAppearanceTheme } from '../surveys-utils'
 
 export function Cancel({
   onPress,
@@ -21,9 +21,9 @@ export function Cancel({
 
 const styles = createSafeStyleSheet({
   cancelBtnWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: closeButtonSize,
+    height: closeButtonSize,
+    borderRadius: closeButtonSize / 2,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',

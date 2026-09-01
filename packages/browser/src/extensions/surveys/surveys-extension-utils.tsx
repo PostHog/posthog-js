@@ -416,6 +416,8 @@ interface SendSurveyEventArgs {
     properties?: Properties
     /** The language that was applied to the survey. */
     surveyLanguage?: string | null
+    /** Question text as displayed to the user at answer time, keyed by question id. */
+    questionSnapshots?: Record<string, string>
 }
 
 export const sendSurveyEvent = ({
@@ -426,6 +428,7 @@ export const sendSurveyEvent = ({
     isSurveyCompleted,
     properties,
     surveyLanguage,
+    questionSnapshots,
 }: SendSurveyEventArgs) => {
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
@@ -441,7 +444,7 @@ export const sendSurveyEvent = ({
         [SurveyEventProperties.SURVEY_COMPLETED]: isSurveyCompleted,
         ...(surveyLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: surveyLanguage }),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        ...buildSurveyResponseProperties(responses, survey),
+        ...buildSurveyResponseProperties(responses, survey, questionSnapshots),
         ...properties,
         $set: {
             [getSurveyInteractionProperty(survey, 'responded')]: true,
@@ -473,7 +476,7 @@ const _buildSurveyEventProperties = (
     }),
     sessionRecordingUrl: posthog.get_session_replay_url?.(),
     [SurveyEventProperties.SURVEY_SUBMISSION_ID]: inProgressSurvey?.surveySubmissionId,
-    ...buildSurveyResponseProperties(inProgressSurvey?.responses, survey),
+    ...buildSurveyResponseProperties(inProgressSurvey?.responses, survey, inProgressSurvey?.questionSnapshots),
 })
 
 export const dismissedSurveyEvent = (
@@ -491,9 +494,15 @@ export const dismissedSurveyEvent = (
     }
 
     const inProgressSurvey = getInProgressSurveyState(survey)
+    // Prefer the language snapshotted when the user last answered (answer-time language),
+    // which is legitimately `null` when no translation matched at answer time — that must not
+    // fall through to the current display language. Only fall back to the current display
+    // language when no in-progress state exists at all (i.e. the survey was dismissed without
+    // answering any question), so check for the record's presence, not its value.
+    const effectiveLanguage = inProgressSurvey ? inProgressSurvey.surveyLanguage : surveyLanguage
     posthog.capture(SurveyEventName.DISMISSED, {
         ..._buildSurveyEventProperties(survey, inProgressSurvey, posthog),
-        ...(surveyLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: surveyLanguage }),
+        ...(effectiveLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: effectiveLanguage }),
         $set: {
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
         },
@@ -574,7 +583,58 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
     return shuffledOptions
 }
 
-export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
+const hasBranching = (survey: Survey): boolean => survey.questions.some((question) => !!question.branching?.type)
+
+/**
+ * Restores the question order a persisted record's indices point into, so a resumed survey reads
+ * them against the same order that produced them. Returns null when the record predates the stored
+ * order, or when it no longer describes this survey's questions.
+ */
+const restorePersistedOrder = (survey: Survey, questionOrder: string[] | undefined): SurveyQuestion[] | null => {
+    if (!questionOrder || questionOrder.length !== survey.questions.length) {
+        return null
+    }
+
+    const questionsById = new Map(survey.questions.map((question) => [question.id, question]))
+    const restored: SurveyQuestion[] = []
+    for (const id of questionOrder) {
+        const question = questionsById.get(id)
+        if (!question) {
+            return null
+        }
+        restored.push(question)
+    }
+
+    return restored
+}
+
+/** Question ids in the given order, or undefined when any question lacks an id to record. */
+export const getQuestionOrder = (questions: SurveyQuestion[]): string[] | undefined => {
+    const ids = questions.map((question) => question.id)
+    return ids.every((id): id is string => !!id) ? ids : undefined
+}
+
+/**
+ * Branching rules hold the position of their target question in survey.questions, so a survey that
+ * uses branching is always read in the configured order. The API rejects surveys that set both
+ * shuffleQuestions and branching, so that covers rows predating the validation.
+ *
+ * A survey the respondent has already started keeps the order its persisted indices point into.
+ * Without a recorded order those indices came from a build that did not store one, and the order
+ * that produced them is unknowable, so the configured order is the only safe reading.
+ */
+export const getDisplayOrderQuestions = (
+    survey: Survey,
+    inProgressState?: InProgressSurveyState | null
+): SurveyQuestion[] => {
+    if (hasBranching(survey)) {
+        return survey.questions
+    }
+
+    if (inProgressState) {
+        return restorePersistedOrder(survey, inProgressState.questionOrder) ?? survey.questions
+    }
+
     if (!survey.appearance || !survey.appearance.shuffleQuestions || survey.enable_partial_responses) {
         return survey.questions
     }
@@ -694,11 +754,18 @@ export function doesSurveyMatchSelector(survey: Survey): boolean {
 interface InProgressSurveyState {
     surveySubmissionId: string
     lastQuestionIndex: number
+    // Question ids in the order the persisted indices point into. Optional for backwards compat with
+    // state written before the order was recorded.
+    questionOrder?: string[]
     // Indices the respondent has visited, in order, excluding the current one. Pushed on next, popped on back.
     // Optional for backwards compat with state persisted before the back-navigation feature.
     visitedIndices?: number[]
     responses: SurveyResponses
     surveyLanguage?: string | null
+    // Maps question id → the question text displayed when the user answered it. Used so that
+    // $survey_questions[].question in sent/dismissed events reflects the language the user saw,
+    // not the language active at event-fire time after a mid-session switch.
+    questionSnapshots?: Record<string, string>
 }
 
 const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {

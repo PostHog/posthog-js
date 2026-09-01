@@ -50,6 +50,11 @@
             "inputs": ["src/**", "tsconfig.json", "tsconfig.build.json", "package.json", "rslib.config.ts"],
             "outputs": ["dist/**"]
         },
+        "@posthog/browser#build": {
+            "dependsOn": ["^build"],
+            "inputs": ["src/**", "tsconfig.json", "tsconfig.build.json", "package.json", "rslib.config.ts"],
+            "outputs": ["dist/**"]
+        },
         "lint": {
             "dependsOn": []
         },
@@ -61,6 +66,9 @@
             "cache": false
         },
         "test:functional": {},
+        "@posthog/rollup-plugin#test:functional": {
+            "dependsOn": ["build"]
+        },
         "test:e2e": {},
         "test": {
             "dependsOn": ["lint", "test:unit", "test:functional", "test:e2e"]

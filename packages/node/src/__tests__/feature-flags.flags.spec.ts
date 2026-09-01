@@ -730,6 +730,39 @@ describe('getFeatureFlagResult', () => {
     expect(result?.payload).toBeUndefined()
   })
 
+  it('normalizes null variant from the API to undefined', async () => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {
+        'boolean-flag': {
+          key: 'boolean-flag',
+          enabled: true,
+          // The flags API serializes missing variants as null
+          variant: null as unknown as undefined,
+          reason: undefined,
+          metadata: undefined,
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: '0152a345-295f-4fba-adac-2e6ea9c91082',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+
+    const result = await posthog.getFeatureFlagResult('boolean-flag', 'some-distinct-id')
+
+    expect(result).toEqual({
+      key: 'boolean-flag',
+      enabled: true,
+      variant: undefined,
+      payload: undefined,
+    })
+  })
+
   it('returns disabled result when conditions do not match', async () => {
     const flagsResponse: PostHogV2FlagsResponse = {
       flags: {

@@ -3,6 +3,7 @@ import { isFunction, type Logger } from '@posthog/core'
 import type { Client } from './client'
 import type { Disposable } from './disposable'
 import type { Extension } from './extension'
+import type { ExtensionToken } from './token'
 
 /** Shared setup and lifecycle registry for browser extension hosts. */
 export class ExtensionRuntime implements Disposable {
@@ -40,6 +41,14 @@ export class ExtensionRuntime implements Disposable {
                 this._disposeExtension(extension)
             }
         }
+    }
+
+    /** Returns a registered extension by its typed stable name, including while setup is in progress. */
+    getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
+    /** Returns a registered extension by its stable name, including while setup is in progress. */
+    getExtension<T extends Extension = Extension>(name: string): T | undefined
+    getExtension<T extends Extension = Extension>(name: string): T | undefined {
+        return this._extensions.get(name) as T | undefined
     }
 
     /** Releases every registered extension once in reverse registration order without waiting for pending setup. */

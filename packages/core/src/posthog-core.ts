@@ -53,8 +53,11 @@ interface FlagsAsyncOptions {
 }
 
 interface PendingFlagsRequest extends FlagsAsyncOptions {
-  resolve: (value: PostHogFeatureFlagsResponse | undefined) => void
-  reject: (reason?: unknown) => void
+  // every caller displaced from this slot, so none is settled against a request it did not make
+  waiters: {
+    resolve: (value: PostHogFeatureFlagsResponse | undefined) => void
+    reject: (reason?: unknown) => void
+  }[]
 }
 
 export abstract class PostHogCore extends PostHogCoreStateless {
@@ -651,16 +654,20 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       return undefined
     }
     if (this._flagsResponsePromise) {
-      // Queue the reload request instead of dropping it
-      // This ensures that requests with $anon_distinct_id (from identify()) are not lost
+      // Queue rather than drop, so an identity-changing reload still reaches the server. Displaced
+      // callers are carried over rather than settled against the in-flight request: that request
+      // was issued before their context changed, so it cannot reflect it. Options are merged so
+      // the single queued request satisfies every caller behind it — one caller asking for the
+      // remote config or for $anon_distinct_id is enough for the re-issued request to carry it.
       this._logger.info('Feature flags are being loaded already, queuing reload.')
-      // Resolve any existing pending promise with the in-flight request's result to avoid hanging promises
-      if (this._pendingFlagsRequest) {
-        this._flagsResponsePromise.then(this._pendingFlagsRequest.resolve).catch(this._pendingFlagsRequest.reject)
-      }
-      // Return a promise that resolves when the pending request completes
+      const pending = this._pendingFlagsRequest
       return new Promise((resolve, reject) => {
-        this._pendingFlagsRequest = { sendAnonDistinctId, fetchConfig, triggerOnRemoteConfig, resolve, reject }
+        this._pendingFlagsRequest = {
+          sendAnonDistinctId: sendAnonDistinctId || !!pending?.sendAnonDistinctId,
+          fetchConfig: fetchConfig || !!pending?.fetchConfig,
+          triggerOnRemoteConfig: triggerOnRemoteConfig || !!pending?.triggerOnRemoteConfig,
+          waiters: [...(pending?.waiters ?? []), { resolve, reject }],
+        }
       })
     }
     return this._flagsAsync({ sendAnonDistinctId, fetchConfig, triggerOnRemoteConfig })
@@ -911,8 +918,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             fetchConfig: pendingRequest.fetchConfig,
             triggerOnRemoteConfig: pendingRequest.triggerOnRemoteConfig,
           })
-            .then(pendingRequest.resolve)
-            .catch(pendingRequest.reject)
+            .then((res) => pendingRequest.waiters.forEach((w) => w.resolve(res)))
+            .catch((e) => pendingRequest.waiters.forEach((w) => w.reject(e)))
         }
       })
     return this._flagsResponsePromise

@@ -1,16 +1,19 @@
 /// <reference lib="dom" />
 
 import { expect, it, describe, beforeEach, afterEach, jest } from '@jest/globals'
-import { SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
+import { render } from 'preact'
+import { act } from 'preact/test-utils'
+import { SURVEYS, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { generateSurveys, getNextSurveyStep, SurveyManager } from '../extensions/surveys'
 import {
     canActivateRepeatedly,
     getDisplayOrderChoices,
     getDisplayOrderQuestions,
+    getSurveyContainerClass,
 } from '../extensions/surveys/surveys-extension-utils'
 import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
-import { PostHogSurveys } from '../posthog-surveys'
+import { BrowserSurveys } from '../browser-surveys'
 import {
     MultipleSurveyQuestion,
     RatingSurveyQuestion,
@@ -29,13 +32,16 @@ import { RequestRouter } from '../utils/request-router'
 import { SurveyEventReceiver } from '../utils/survey-event-receiver'
 import { SURVEY_LOGGER as logger } from '../utils/survey-utils'
 import { createMockPostHog, createMockConfig } from './helpers/posthog-instance'
+import { createSurveysClient } from './helpers/surveys-client'
 
 describe('surveys', () => {
     let config: PostHogConfig
     let instance: PostHog
-    let surveys: PostHogSurveys
+    let surveys: BrowserSurveys
     let surveysResponse: { status?: number; surveys?: Survey[] }
     const originalWindowLocation = assignableWindow.location
+    const getSurveys = (forceReload = false): Promise<Survey[]> =>
+        new Promise((resolve) => surveys.getSurveys(resolve, forceReload))
 
     const flagsResponse = {
         featureFlags: {
@@ -205,6 +211,7 @@ describe('surveys', () => {
             _send_request: jest
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse })),
+            onFeatureFlags: jest.fn().mockReturnValue(() => {}),
             featureFlags: {
                 hasLoadedFlags: true,
                 _send_request: jest
@@ -221,7 +228,8 @@ describe('surveys', () => {
             loadExternalDependency: loadScriptMock,
         }
 
-        surveys = new PostHogSurveys(instance)
+        surveys = new BrowserSurveys(instance)
+        surveys.setup(createSurveysClient(instance))
         instance.surveys = surveys
         // all being squashed into a mock posthog so...
         instance.getActiveMatchingSurveys = instance.surveys.getActiveMatchingSurveys.bind(instance.surveys)
@@ -255,15 +263,14 @@ describe('surveys', () => {
         })
     })
 
-    it('getSurveys gets a list of surveys if not present already', () => {
-        surveys.getSurveys((data) => {
-            expect(data).toEqual(firstSurveys)
-        })
+    it('getSurveys gets a list of surveys if not present already', async () => {
+        expect(await getSurveys()).toEqual(firstSurveys)
         expect(instance._send_request).toHaveBeenCalledWith({
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
             timeout: SURVEYS_REQUEST_TIMEOUT_MS,
             method: 'GET',
             timestampMode: 'query',
+            fireCallbackOnDrop: true,
             callback: expect.any(Function),
         })
         expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -277,6 +284,60 @@ describe('surveys', () => {
         expect(instance._send_request).toHaveBeenCalledTimes(1)
     })
 
+    it('disposes automatic display polling and visibility handling', () => {
+        instance.getSurveys = jest.fn((callback) => callback([]))
+        const removeEventListener = jest.spyOn(document, 'removeEventListener')
+        const surveyManager = generateSurveys(instance, true)
+
+        surveyManager?.dispose()
+        surveyManager?.dispose()
+
+        expect(removeEventListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function))
+        removeEventListener.mockRestore()
+    })
+
+    it('removes rendered survey DOM after a force reload replaces the persisted definitions', () => {
+        const survey = firstSurveys[0]
+        const surveyManager = new SurveyManager(instance)
+        surveyManager.handlePopoverSurvey(survey)
+        expect(document.querySelector(getSurveyContainerClass(survey, true))).not.toBeNull()
+
+        instance.persistence?.register({ [SURVEYS]: secondSurveys })
+        surveyManager.dispose()
+
+        expect(document.querySelector(getSurveyContainerClass(survey, true))).toBeNull()
+    })
+
+    it('does not retain caller-owned inline survey targets for disposal', () => {
+        const survey = firstSurveys[0]
+        const target = document.createElement('div')
+        document.body.appendChild(target)
+        const surveyManager = new SurveyManager(instance)
+
+        act(() => surveyManager.renderSurvey(survey, target))
+
+        expect(target.childElementCount).toBeGreaterThan(0)
+        expect(surveyManager['_renderedTargets'].size).toBe(0)
+
+        act(() => render(null, target))
+        target.remove()
+    })
+
+    it('unmounts surveys rendered through the public popover helper on dispose', () => {
+        const survey = firstSurveys[0]
+        const removeEventListener = jest.spyOn(window, 'removeEventListener')
+        const surveyManager = new SurveyManager(instance)
+
+        act(() => surveyManager.renderPopover(survey))
+        expect(document.querySelector(getSurveyContainerClass(survey, true))).not.toBeNull()
+
+        act(() => surveyManager.dispose())
+
+        expect(document.querySelector(getSurveyContainerClass(survey, true))).toBeNull()
+        expect(removeEventListener).toHaveBeenCalledWith('PHSurveyClosed', expect.any(Function))
+        removeEventListener.mockRestore()
+    })
+
     it('posthog.reset() removes surveys tracking properties from storage', () => {
         localStorage.setItem('seenSurvey_XYZ', '1')
         localStorage.setItem('seenSurvey_ABC', '1')
@@ -287,12 +348,10 @@ describe('surveys', () => {
         expect(localStorage.getItem('seenSurvey_ABC')).toBeNull()
     })
 
-    it('getSurveys registers the survey event receiver if a survey has events', () => {
+    it('getSurveys registers the survey event receiver if a survey has events', async () => {
         surveysResponse = { surveys: surveysWithEvents }
         surveys.loadIfEnabled()
-        surveys.getSurveys((data) => {
-            expect(data).toEqual(surveysWithEvents)
-        }, true)
+        expect(await getSurveys(true)).toEqual(surveysWithEvents)
 
         const registry = surveys._surveyEventReceiver?.getEventToSurveys()
         expect(registry.has('user_subscribed')).toBeTruthy()
@@ -302,15 +361,14 @@ describe('surveys', () => {
         expect(registry.get('address_changed')).toEqual(['third-survey'])
     })
 
-    it('getSurveys force reloads when called with true', () => {
-        surveys.getSurveys((data) => {
-            expect(data).toEqual(firstSurveys)
-        })
+    it('getSurveys force reloads when called with true', async () => {
+        expect(await getSurveys()).toEqual(firstSurveys)
         expect(instance._send_request).toHaveBeenCalledWith({
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
             timeout: SURVEYS_REQUEST_TIMEOUT_MS,
             method: 'GET',
             timestampMode: 'query',
+            fireCallbackOnDrop: true,
             callback: expect.any(Function),
         })
         expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -318,18 +376,14 @@ describe('surveys', () => {
 
         surveysResponse = { surveys: secondSurveys }
 
-        surveys.getSurveys((data) => {
-            expect(data).toEqual(secondSurveys)
-        }, true)
+        expect(await getSurveys(true)).toEqual(secondSurveys)
         expect(instance.persistence?.props.$surveys).toEqual(secondSurveys)
         expect(instance._send_request).toHaveBeenCalledTimes(2)
     })
 
-    it('getSurveys returns empty array if surveys are undefined', () => {
+    it('getSurveys returns empty array if surveys are undefined', async () => {
         surveysResponse = { status: 0 }
-        surveys.getSurveys((data) => {
-            expect(data).toEqual([])
-        })
+        expect(await getSurveys()).toEqual([])
     })
 
     it('getSurveys returns empty array if surveys are disabled', () => {
@@ -354,6 +408,12 @@ describe('surveys', () => {
     })
 
     describe('getActiveMatchingSurveys', () => {
+        beforeEach(() => {
+            surveys.getSurveys = jest.fn((callback) =>
+                callback(instance.get_property(SURVEYS) ?? surveysResponse.surveys ?? [])
+            )
+        })
+
         const draftSurvey: Survey = {
             name: 'draft survey',
             description: 'draft survey description',
@@ -898,7 +958,7 @@ describe('surveys', () => {
         })
 
         it('should render in-app surveys (popover, widget, api)', () => {
-            surveysResponse = { surveys: [inAppSurvey] }
+            instance.persistence?.register({ [SURVEYS]: [inAppSurvey] })
             const mockRenderSurvey = jest.fn()
             ;(surveys as any)._surveyManager = { renderSurvey: mockRenderSurvey }
             const loggerWarnSpy = jest.spyOn(logger, 'warn')
@@ -914,7 +974,7 @@ describe('surveys', () => {
         })
 
         it('should not render external surveys and show warning', () => {
-            surveysResponse = { surveys: [externalSurvey] }
+            instance.persistence?.register({ [SURVEYS]: [externalSurvey] })
             const mockRenderSurvey = jest.fn()
             ;(surveys as any)._surveyManager = { renderSurvey: mockRenderSurvey }
             const loggerWarnSpy = jest.spyOn(logger, 'warn')
@@ -935,7 +995,7 @@ describe('surveys', () => {
         })
 
         it('should warn when survey is not found', () => {
-            surveysResponse = { surveys: [] }
+            instance.persistence?.register({ [SURVEYS]: [] })
             ;(surveys as any)._surveyManager = { renderSurvey: jest.fn() }
             const loggerWarnSpy = jest.spyOn(logger, 'warn')
 
@@ -945,7 +1005,7 @@ describe('surveys', () => {
         })
 
         it('should warn when target element is not found', () => {
-            surveysResponse = { surveys: [inAppSurvey] }
+            instance.persistence?.register({ [SURVEYS]: [inAppSurvey] })
             ;(surveys as any)._surveyManager = { renderSurvey: jest.fn() }
             const loggerWarnSpy = jest.spyOn(logger, 'warn')
 
@@ -1110,6 +1170,62 @@ describe('surveys', () => {
             expect(surveyWithShufflingQuestions.questions).not.toEqual(
                 getDisplayOrderQuestions(surveyWithShufflingQuestions)
             )
+        })
+
+        const inProgress = (questionOrder?: string[]) =>
+            ({ surveySubmissionId: 'sub', responses: {}, lastQuestionIndex: 0, questionOrder }) as any
+
+        it('should restore the recorded question order for a survey already in progress', () => {
+            const order = surveyWithShufflingQuestions.questions.map((q) => q.id).reverse() as string[]
+
+            expect(getDisplayOrderQuestions(surveyWithShufflingQuestions, inProgress(order)).map((q) => q.id)).toEqual(
+                order
+            )
+        })
+
+        it('should use the configured order for state persisted without a question order', () => {
+            expect(getDisplayOrderQuestions(surveyWithShufflingQuestions, inProgress())).toEqual(
+                surveyWithShufflingQuestions.questions
+            )
+        })
+
+        it('should use the configured order when a recorded question is no longer in the survey', () => {
+            const ids = surveyWithShufflingQuestions.questions.map((q) => q.id) as string[]
+            const orderWithRemovedQuestion = [...ids.slice(0, -1), 'removed-question-id']
+
+            expect(
+                getDisplayOrderQuestions(surveyWithShufflingQuestions, inProgress(orderWithRemovedQuestion)).map(
+                    (q) => q.id
+                )
+            ).toEqual(ids)
+        })
+
+        it('should use the configured order when the recorded order covers only some of the questions', () => {
+            const ids = surveyWithShufflingQuestions.questions.map((q) => q.id) as string[]
+
+            expect(
+                getDisplayOrderQuestions(surveyWithShufflingQuestions, inProgress(ids.slice(0, -1))).map((q) => q.id)
+            ).toEqual(ids)
+        })
+
+        it('should not shuffle questions if any question has branching', () => {
+            const surveyWithBranching = {
+                ...surveyWithShufflingQuestions,
+                questions: surveyWithShufflingQuestions.questions.map((question, index) =>
+                    index === 1 ? { ...question, branching: { type: SurveyQuestionBranchingType.End } } : question
+                ),
+            } as unknown as Survey
+
+            expect(getDisplayOrderQuestions(surveyWithBranching)).toEqual(surveyWithBranching.questions)
+        })
+
+        it('should shuffle questions when branching is present but has no type', () => {
+            const surveyWithEmptyBranching = {
+                ...surveyWithShufflingQuestions,
+                questions: surveyWithShufflingQuestions.questions.map((question) => ({ ...question, branching: {} })),
+            } as unknown as Survey
+
+            expect(getDisplayOrderQuestions(surveyWithEmptyBranching)).not.toEqual(surveyWithEmptyBranching.questions)
         })
 
         it('should be able to find the original question from its ID', () => {
@@ -1635,7 +1751,7 @@ describe('surveys', () => {
         })
 
         it('can be disabled by config despite results of onRemoteConfig', () => {
-            surveys['_instance'].config.disable_surveys = true
+            instance.config.disable_surveys = true
             surveys.onRemoteConfig({
                 ok: true,
                 config: {
@@ -1643,6 +1759,202 @@ describe('surveys', () => {
                 } as Partial<RemoteConfig> as RemoteConfig,
             })
             expect(surveys['_isSurveysEnabled']).toBe(undefined)
+        })
+    })
+
+    describe('prefill initial responses', () => {
+        const singleChoiceSurvey = (overrides: Partial<Survey>): Survey =>
+            ({
+                id: 'prefill-gate-survey',
+                name: 'Prefill gate survey',
+                type: SurveyType.Popover,
+                questions: [
+                    { type: SurveyQuestionType.SingleChoice, question: 'Q1', id: 'q1', choices: ['yes', 'no'] },
+                    { type: SurveyQuestionType.SingleChoice, question: 'Q2', id: 'q2', choices: ['yes', 'no'] },
+                ],
+                current_iteration: null,
+                current_iteration_start_date: null,
+                ...overrides,
+            }) as unknown as Survey
+
+        beforeEach(() => {
+            ;(instance.capture as jest.Mock).mockClear()
+        })
+
+        it('does not send a survey sent event for an incomplete prefill when partial responses are off', () => {
+            const surveyManager = (surveys as any)._surveyManager
+            const survey = singleChoiceSurvey({ enable_partial_responses: false })
+
+            const completed = surveyManager._handleInitialResponses(survey, { 0: 0 })
+
+            expect(completed).toBe(false)
+            expect(instance.capture).not.toHaveBeenCalledWith('survey sent', expect.anything())
+        })
+
+        it('sends a partial survey sent event when partial responses are on and the prefill auto-submits', () => {
+            const surveyManager = (surveys as any)._surveyManager
+            const survey = singleChoiceSurvey({
+                enable_partial_responses: true,
+                questions: [
+                    {
+                        type: SurveyQuestionType.SingleChoice,
+                        question: 'Q1',
+                        id: 'q1',
+                        choices: ['yes', 'no'],
+                        skipSubmitButton: true,
+                    },
+                    { type: SurveyQuestionType.SingleChoice, question: 'Q2', id: 'q2', choices: ['yes', 'no'] },
+                ],
+            } as Partial<Survey>)
+
+            expect(surveyManager._handleInitialResponses(survey, { 0: 0, 1: 1 })).toBe(false)
+
+            const [, properties] = (instance.capture as jest.Mock).mock.calls.find(([event]) => event === 'survey sent')
+            expect(properties).toEqual(
+                expect.objectContaining({ $survey_completed: false, $survey_response_q1: 'yes' })
+            )
+            expect(properties).not.toHaveProperty('$survey_response_q2')
+        })
+
+        it('does not send a partial event when the prefilled question does not auto-submit', () => {
+            const surveyManager = (surveys as any)._surveyManager
+            const survey = singleChoiceSurvey({ enable_partial_responses: true })
+
+            expect(surveyManager._handleInitialResponses(survey, { 0: 0 })).toBe(false)
+            expect(instance.capture).not.toHaveBeenCalledWith('survey sent', expect.anything())
+        })
+
+        it('sends a completed survey sent event when the prefill answers every question', () => {
+            const surveyManager = (surveys as any)._surveyManager
+            const survey = singleChoiceSurvey({
+                enable_partial_responses: false,
+                questions: [
+                    {
+                        type: SurveyQuestionType.SingleChoice,
+                        question: 'Q1',
+                        id: 'q1',
+                        choices: ['yes', 'no'],
+                        skipSubmitButton: true,
+                    },
+                ],
+            } as Partial<Survey>)
+
+            const completed = surveyManager._handleInitialResponses(survey, { 0: 0 })
+
+            expect(completed).toBe(true)
+            expect(instance.capture).toHaveBeenCalledWith(
+                'survey sent',
+                expect.objectContaining({ $survey_completed: true })
+            )
+        })
+    })
+
+    describe('language change re-translation', () => {
+        let surveyManager: SurveyManager
+        const frSurvey: Survey = {
+            id: 'survey-lang-1',
+            name: 'Lang Survey',
+            type: SurveyType.Popover,
+            questions: [
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'Hello?',
+                    id: 'q1',
+                    description: '',
+                    translations: { fr: { question: 'Bonjour?' } },
+                },
+            ],
+            appearance: null,
+            conditions: null,
+            start_date: '2024-01-01T00:00:00Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+        } as unknown as Survey
+
+        beforeEach(() => {
+            surveyManager = (surveys as any)._surveyManager
+            instance.get_property = jest.fn().mockReturnValue([frSurvey])
+            instance.onFeatureFlags = jest.fn().mockReturnValue(() => {})
+        })
+
+        it('updates _currentLanguage and re-renders when languagechange fires and language differs', () => {
+            // Spy on _translateSurveyForRendering to return French translation
+            ;(surveyManager as any)._translateSurveyForRendering = jest
+                .fn()
+                .mockReturnValue({ survey: frSurvey, language: 'fr' })
+            ;(surveyManager as any)._surveyInFocus = frSurvey.id
+            ;(surveyManager as any)._currentLanguage = 'en'
+            ;(surveyManager as any)._surveyIsRendered = true
+
+            window.dispatchEvent(new Event('languagechange'))
+
+            expect((surveyManager as any)._currentLanguage).toBe('fr')
+            expect((surveyManager as any)._translateSurveyForRendering).toHaveBeenCalledWith(frSurvey)
+        })
+
+        it('does not re-render when language is unchanged', () => {
+            ;(surveyManager as any)._translateSurveyForRendering = jest
+                .fn()
+                .mockReturnValue({ survey: frSurvey, language: 'fr' })
+            ;(surveyManager as any)._surveyInFocus = frSurvey.id
+            ;(surveyManager as any)._currentLanguage = 'fr'
+            ;(surveyManager as any)._surveyIsRendered = true
+
+            const languageBefore = (surveyManager as any)._currentLanguage
+            window.dispatchEvent(new Event('languagechange'))
+
+            // _translateSurveyForRendering should still be called (to detect), but language shouldn't change
+            expect((surveyManager as any)._currentLanguage).toBe(languageBefore)
+        })
+
+        it('does nothing when no survey is in focus', () => {
+            const translateSpy = jest.fn()
+            ;(surveyManager as any)._translateSurveyForRendering = translateSpy
+            ;(surveyManager as any)._surveyInFocus = null
+
+            window.dispatchEvent(new Event('languagechange'))
+
+            expect(translateSpy).not.toHaveBeenCalled()
+        })
+
+        it('tracks the language flip but does not re-render while the survey is still pending delay', () => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const preactModule = require('preact')
+            const renderSpy = jest.spyOn(preactModule, 'render')
+            const translateSpy = jest.fn().mockReturnValue({ survey: frSurvey, language: 'fr' })
+            ;(surveyManager as any)._translateSurveyForRendering = translateSpy
+
+            // Survey is queued (focus set) but the delay timer has not fired yet
+            ;(surveyManager as any)._surveyInFocus = frSurvey.id
+            ;(surveyManager as any)._currentLanguage = 'en'
+            ;(surveyManager as any)._surveyIsRendered = false
+
+            window.dispatchEvent(new Event('languagechange'))
+
+            // The language flip is still detected and tracked — renderAfterDelay reads
+            // _currentLanguage fresh when the delay elapses, so this must stay accurate even
+            // though nothing is on screen yet to actually re-render.
+            expect(translateSpy).toHaveBeenCalledWith(frSurvey)
+            expect((surveyManager as any)._currentLanguage).toBe('fr')
+            expect(renderSpy).not.toHaveBeenCalled()
+
+            renderSpy.mockRestore()
+        })
+
+        it('clears _currentLanguage when survey is removed from focus', () => {
+            ;(surveyManager as any)._surveyInFocus = frSurvey.id
+            ;(surveyManager as any)._currentLanguage = 'fr'
+
+            surveyManager.getTestAPI().removeSurveyFromFocus(frSurvey as any)
+
+            expect(surveyManager.getTestAPI().currentLanguage).toBeNull()
+        })
+
+        it('removes languagechange listener on dispose', () => {
+            const removeListenerSpy = jest.spyOn(window, 'removeEventListener')
+            surveyManager.dispose()
+            expect(removeListenerSpy).toHaveBeenCalledWith('languagechange', expect.any(Function))
         })
     })
 })

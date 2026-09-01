@@ -8,6 +8,7 @@ import { isNull } from '@posthog/core'
 import { document, navigator } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
 import { PostHogConfig } from '../types'
+import { cookieStore, localStore, memoryStore } from '../storage'
 
 const DEFAULT_PERSISTENCE_PREFIX = `__ph_opt_in_out_`
 const CUSTOM_PERSISTENCE_PREFIX = `𝓶𝓶𝓶𝓬𝓸𝓸𝓴𝓲𝓮𝓼`
@@ -300,12 +301,42 @@ describe('consentManager', () => {
             ;(navigator as any).doNotTrack = '1'
         })
 
+        afterEach(() => {
+            ;(navigator as any).doNotTrack = undefined
+        })
+
         it('should respect it if explicitly set', async () => {
             posthog = await createPostHog({ respect_dnt: true })
             expect(posthog.has_opted_in_capturing()).toBe(false)
         })
 
         it('should not respect it if not explicitly set', () => {
+            expect(posthog.has_opted_in_capturing()).toBe(true)
+        })
+    })
+
+    describe('with global privacy control setting', () => {
+        beforeEach(() => {
+            ;(navigator as any).globalPrivacyControl = true
+        })
+
+        afterEach(() => {
+            ;(navigator as any).globalPrivacyControl = undefined
+        })
+
+        it('should respect it if respect_dnt is explicitly set', async () => {
+            posthog = await createPostHog({ respect_dnt: true })
+            expect(posthog.has_opted_in_capturing()).toBe(false)
+            expect(posthog.get_explicit_consent_status()).toBe('denied')
+        })
+
+        it('should not respect it if respect_dnt is not explicitly set', () => {
+            expect(posthog.has_opted_in_capturing()).toBe(true)
+        })
+
+        it('should not treat globalPrivacyControl false as opted out', async () => {
+            ;(navigator as any).globalPrivacyControl = false
+            posthog = await createPostHog({ respect_dnt: true })
             expect(posthog.has_opted_in_capturing()).toBe(true)
         })
     })
@@ -431,4 +462,39 @@ describe('consentManager', () => {
             expect(document!.cookie).toContain(consentKey + '=0')
         })
     })
+})
+
+describe('consent storage when no browser storage is available', () => {
+    afterEach(() => {
+        jest.restoreAllMocks()
+    })
+
+    // A Figma plugin loads its UI from a `data:` URL, where Chrome disables both
+    // localStorage and cookies. Consent used to pick one of them unconditionally, so
+    // every capture logged a SecurityError and the opt-out state was never readable.
+    it.each(['localStorage', 'cookie'] as const)(
+        'keeps opt-out working in memory when %s is unusable',
+        async (persistenceType) => {
+            jest.spyOn(localStore, '_is_supported').mockReturnValue(false)
+            jest.spyOn(cookieStore, '_is_supported').mockReturnValue(false)
+            const memorySet = jest.spyOn(memoryStore, '_set')
+
+            const posthog = await new Promise<PostHog>(
+                (resolve) =>
+                    defaultPostHog().init(
+                        'testtoken',
+                        {
+                            opt_out_capturing_persistence_type: persistenceType,
+                            loaded: (posthog) => resolve(posthog),
+                        },
+                        uuidv7()
+                    )!
+            )
+
+            posthog.opt_out_capturing()
+
+            expect(memorySet).toHaveBeenCalled()
+            expect(posthog.has_opted_out_capturing()).toBe(true)
+        }
+    )
 })

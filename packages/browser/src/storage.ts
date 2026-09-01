@@ -105,9 +105,35 @@ export function chooseCookieDomain(hostname: string, cross_subdomain: boolean | 
     return ''
 }
 
+let cookieStorageSupported: boolean | null = null
+// helper to allow tests to clear this "cache"
+export const resetCookieStorageSupported = () => {
+    cookieStorageSupported = null
+}
+
 // Methods partially borrowed from quirksmode.org/js/cookies.html
 export const cookieStore: PersistentStore = {
-    _is_supported: () => !!document,
+    _is_supported: function () {
+        if (!isNull(cookieStorageSupported)) {
+            return cookieStorageSupported
+        }
+        // `document` existing is not enough: a page served from a `data:` URL has a
+        // document but reading or writing `document.cookie` throws, and some embedded
+        // contexts silently drop every cookie. Round-trip a probe cookie instead, the
+        // same way localStore and sessionStore establish support.
+        cookieStorageSupported = false
+        if (document) {
+            try {
+                const key = `__ph_cookie_support_${uuidv7()}`
+                cookieStore._set(key, 'xyz')
+                cookieStorageSupported = getCookieValue(key) === '"xyz"'
+                cookieStore._remove(key)
+            } catch {
+                cookieStorageSupported = false
+            }
+        }
+        return cookieStorageSupported
+    },
 
     _error: function (msg) {
         logger.error('cookieStore error: ' + msg)
@@ -545,6 +571,9 @@ export const createLocalPlusCookieStore = (
 const memoryStorage: Properties = {}
 
 // Storage that only lasts the length of the pageview if we don't want to use cookies
+// NB: reads use an `in` check rather than `||` so a stored falsy value survives.
+// Consent writes `0` to mean "opted out", and returning null for it would read back
+// as "no decision recorded".
 export const memoryStore: PersistentStore = {
     _is_supported: function () {
         return true
@@ -555,11 +584,11 @@ export const memoryStore: PersistentStore = {
     },
 
     _get: function (name) {
-        return memoryStorage[name] || null
+        return name in memoryStorage ? memoryStorage[name] : null
     },
 
     _parse: function (name) {
-        return memoryStorage[name] || null
+        return name in memoryStorage ? memoryStorage[name] : null
     },
 
     _set: function (name, value) {

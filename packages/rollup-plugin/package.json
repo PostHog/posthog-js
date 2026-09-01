@@ -1,6 +1,6 @@
 {
     "name": "@posthog/rollup-plugin",
-    "version": "1.5.0",
+    "version": "1.5.1",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -17,9 +17,10 @@
     "scripts": {
         "build": "rslib build",
         "clean": "rimraf dist",
-        "lint": "eslint src",
-        "lint:fix": "eslint src --fix",
+        "lint": "eslint src 'test/*.mjs'",
+        "lint:fix": "eslint src 'test/*.mjs' --fix",
         "test:unit": "jest --passWithNoTests",
+        "test:functional": "node --test test/*.test.mjs",
         "dev": "rslib build --watch",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
@@ -41,6 +42,7 @@
         "@rslib/core": "catalog:",
         "@types/jest": "catalog:",
         "jest": "catalog:",
-        "rollup": "~4.53.2"
+        "rollup": "~4.53.2",
+        "vite": "^8.0.16"
     }
 }

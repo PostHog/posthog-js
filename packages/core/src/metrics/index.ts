@@ -10,7 +10,7 @@ import type {
 } from '@posthog/types'
 import type { Logger } from '../types'
 import { isArray, safeSetTimeout } from '../utils'
-import { toOtlpKeyValueList } from '../logs/logs-utils'
+import { toOtlpKeyValueList } from '../utils/otlp-any-value'
 import {
   DEFAULT_HISTOGRAM_BOUNDS,
   bucketIndexFor,
@@ -374,7 +374,7 @@ export class PostHogMetrics {
         byMetric.set(metricKey, metric)
       }
 
-      const attributes = toOtlpKeyValueList(state.attributes ?? {})
+      const attributes = toOtlpKeyValueList(state.attributes ?? {}, this._logger)
       const startNano = msToUnixNano(state.windowStartMs)
 
       if (state.type === 'count') {

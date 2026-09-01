@@ -11,7 +11,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  affected:
+    uses: ./.github/workflows/check-affected.yml
+    with:
+      package-name: posthog-js
+      additional-paths: |
+        .agents/skills/replay-incident-risk/
+        .github/workflows/replay-incident-risk.yml
+        .github/workflows/check-affected.yml
+        .github/actions/is-affected/action.yaml
+
   check:
+    needs: affected
+    if: needs.affected.outputs.is-affected == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 10
 

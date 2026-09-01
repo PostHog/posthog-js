@@ -17,6 +17,7 @@ import {
   stripOwnedAnalyticsArguments,
 } from './analytics-parameters'
 import { isContextEnabled } from './context-parameters'
+import { isCaptureModelEnabled } from './model-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import type { LoggerFn } from './logger'
@@ -27,6 +28,7 @@ import {
   handleListToolsRequest,
   patchRequestHandlers,
   captureToolCall,
+  getVirtualToolParameterOwnership,
   isToolAdvertised,
   readToolMetaCategory,
   type HandlerPatch,
@@ -189,6 +191,7 @@ function addTracingToToolCallbackInternal(
     const cleanedArgs = stripOwnedAnalyticsArguments(args, {
       context: isContextEnabled(options?.context) && analyticsOwnsParameter(inputSchema, 'context'),
       conversationId: options?.enableConversationId === true && analyticsOwnsParameter(inputSchema, 'conversation_id'),
+      llmModel: isCaptureModelEnabled(options?.captureModel) && analyticsOwnsParameter(inputSchema, 'llm_model'),
     })
     try {
       if (cleanedArgs === undefined) {
@@ -247,6 +250,7 @@ async function handleToolCallRequest(
       extra,
       eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
+      parameterOwnership: getVirtualToolParameterOwnership(data, toolName),
       execute: async () => handleReportMissing({ context }, data.logger),
     })
   }

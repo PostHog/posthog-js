@@ -46,6 +46,13 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
     // which is a different release.
     let releaseIdPromise: Promise<string | undefined> | undefined
     let warnedAboutMissingRelease = false
+    const chunkIdsByPreliminaryFileName = new Map<string, Set<string>>()
+
+    function rememberChunkId(preliminaryFileName: string, chunkId: string) {
+        const chunkIds = chunkIdsByPreliminaryFileName.get(preliminaryFileName) ?? new Set<string>()
+        chunkIds.add(chunkId)
+        chunkIdsByPreliminaryFileName.set(preliminaryFileName, chunkIds)
+    }
 
     function injectChunkId(code: string, chunkId: string, releaseId?: string) {
         const magicString = new MagicString(code)
@@ -64,6 +71,7 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
         buildStart() {
             releaseIdPromise = undefined
             warnedAboutMissingRelease = false
+            chunkIdsByPreliminaryFileName.clear()
         },
 
         config() {
@@ -98,7 +106,9 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                 if (!posthogOptions.sourcemaps.enabled) return null
                 if (!JS_CHUNK_REGEX.test(chunk.fileName)) return null
                 // Already carries an id (watch-mode re-render, another tool)
-                if (determineChunkIdFromSource(code)) {
+                const existingChunkId = determineChunkIdFromSource(code)
+                if (existingChunkId) {
+                    rememberChunkId(chunk.fileName, existingChunkId)
                     if (eventReleaseMode) {
                         console.warn(
                             `PostHog: ${chunk.fileName} already carries a chunk id, so no release id was injected — its exceptions will report no release`
@@ -108,7 +118,9 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                 }
 
                 if (!eventReleaseMode) {
-                    return injectChunkId(code, createChunkId())
+                    const chunkId = createChunkId()
+                    rememberChunkId(chunk.fileName, chunkId)
+                    return injectChunkId(code, chunkId)
                 }
 
                 // Event mode carries the release inside the chunk, which means resolving it before
@@ -116,6 +128,7 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                 // id (and its symbol set) across rebuilds.
                 releaseIdPromise ??= resolveReleaseId(posthogOptions)
                 const chunkId = createStableChunkId(code)
+                rememberChunkId(chunk.fileName, chunkId)
                 return releaseIdPromise.then((releaseId) => {
                     // A build that identifies no release still symbolicates from its chunk ids, so
                     // this warns rather than failing, matching what posthog-cli does in the same
@@ -128,6 +141,30 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                     }
                     return injectChunkId(code, chunkId, releaseId)
                 })
+            },
+        },
+
+        // Vite 8's Oxc output minifier runs after renderChunk and removes the CLI-facing comment,
+        // while preserving the executable snippet. Restore the same comment once output minification
+        // is complete. preliminaryFileName links the final OutputChunk back to its RenderedChunk even
+        // when Rollup replaces a [hash] placeholder. Matching against the tracked id avoids treating
+        // unrelated bundled `_posthogChunkIds` strings as injected chunks.
+        generateBundle: {
+            order: 'pre',
+            handler(_options, bundle) {
+                for (const chunk of Object.values(bundle)) {
+                    if (chunk.type !== 'chunk' || !JS_CHUNK_REGEX.test(chunk.fileName)) continue
+                    if (determineChunkIdFromSource(chunk.code)) continue
+
+                    const chunkId = Array.from(chunkIdsByPreliminaryFileName.get(chunk.preliminaryFileName) ?? []).find(
+                        (candidate) => chunk.code.includes(candidate)
+                    )
+                    if (chunkId) {
+                        // This only appends an unmapped trailing comment, so existing source-map
+                        // positions remain valid. `order: pre` also lets SRI plugins hash final code.
+                        chunk.code += createChunkIdComment(chunkId)
+                    }
+                }
             },
         },
 

@@ -6,6 +6,7 @@ import {
   Mirror,
   createMirror,
   toLowerCase,
+  attachShadowRootSafely,
 } from '@posthog/rrweb-snapshot';
 import {
   RRDocument,
@@ -173,7 +174,7 @@ export class Replayer {
   private lastMouseDownEvent: [Node, Event] | null = null;
 
   // Keep the rootNode of the last hovered element. So  when hovering a new element, we can remove the last hovered element's :hover style.
-  private lastHoveredRootNode: Document | ShadowRoot;
+  private lastHoveredRootNode: Document | ShadowRoot | undefined;
 
   // In the fast-forward mode, only the last selection data needs to be applied.
   private lastSelectionData: selectionData | null = null;
@@ -1759,7 +1760,16 @@ export class Replayer {
       if (mutation.node.isShadow) {
         // If the parent is attached a shadow dom after it's created, it won't have a shadow root.
         if (!hasShadowRoot(parent)) {
-          (parent as Element | RRElement).attachShadow({ mode: 'open' });
+          // The parent can be a tag that refuses a shadow root — a real element
+          // the browser rejects, or an RRMediaElement while the virtual DOM is
+          // in use. Skip this subtree instead of letting attachShadow abandon
+          // the rest of the mutation batch.
+          if (!attachShadowRootSafely(parent as Element | RRElement)) {
+            return this.warn(
+              'Parent does not support shadow root, skipping mutation',
+              mutation,
+            );
+          }
           parent = (parent as Element | RRElement).shadowRoot! as Node | RRNode;
         } else parent = parent.shadowRoot as Node | RRNode;
         // adopt stylesheets whose event arrived before this shadow root existed
@@ -2044,6 +2054,8 @@ export class Replayer {
                   const newSn = mirror.getMeta(
                     target as Node & RRNode,
                   ) as serializedElementNodeWithId;
+                  const siblingNode = target.nextSibling;
+                  const parentNode = target.parentNode;
                   const newNode = buildNodeWithSN(
                     {
                       ...newSn,
@@ -2064,10 +2076,12 @@ export class Replayer {
                     newSn.attributes,
                     mutation.attributes as attributes,
                   );
-                  const siblingNode = target.nextSibling;
-                  const parentNode = target.parentNode;
                   if (newNode && parentNode) {
-                    parentNode.removeChild(target as Node & RRNode);
+                    // buildNodeWithSN already detached `target` when it rebuilt
+                    // the node; removeChild would throw into the catch below.
+                    if (target.parentNode === parentNode) {
+                      parentNode.removeChild(target as Node & RRNode);
+                    }
                     parentNode.insertBefore(
                       newNode as Node & RRNode,
                       siblingNode as (Node & RRNode) | null,
@@ -2377,14 +2391,20 @@ export class Replayer {
         .map((styleId) => this.styleMirror.getStyle(styleId))
         .filter((style) => style !== null) as CSSStyleSheet[];
       let adopted = false;
-      if (hasShadowRoot(targetHost)) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        (targetHost as HTMLElement).shadowRoot!.adoptedStyleSheets =
-          stylesToAdopt;
-        adopted = true;
-      } else if (targetHost.nodeName === '#document') {
-        (targetHost as Document).adoptedStyleSheets = stylesToAdopt;
-        adopted = true;
+      try {
+        if (hasShadowRoot(targetHost)) {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          (targetHost as HTMLElement).shadowRoot!.adoptedStyleSheets =
+            stylesToAdopt;
+          adopted = true;
+        } else if (targetHost.nodeName === '#document') {
+          (targetHost as Document).adoptedStyleSheets = stylesToAdopt;
+          adopted = true;
+        }
+      } catch (e) {
+        // A constructed sheet can only be adopted by the document that built it,
+        // so a sheet held across a document swap is rejected by every engine.
+        // Keep whatever is already adopted rather than killing playback.
       }
       // remember hosts that can't adopt yet so applyMutation can finish the
       // adoption when it attaches the shadow root, independent of the
@@ -2465,7 +2485,7 @@ export class Replayer {
     if (!isSync) {
       this.drawMouseTail({ x: _x, y: _y });
     }
-    this.hoverElements(target as Element);
+    this.hoverElements(target);
   }
 
   private drawMouseTail(position: { x: number; y: number }) {
@@ -2504,18 +2524,28 @@ export class Replayer {
     }, duration / this.speedService.state.context.timer.speed);
   }
 
-  private hoverElements(el: Element) {
+  private hoverElements(el: Node) {
     (this.lastHoveredRootNode || this.iframe.contentDocument)
       ?.querySelectorAll('.\\:hover')
       .forEach((hoveredEl) => {
         hoveredEl.classList.remove(':hover');
       });
-    this.lastHoveredRootNode = el.getRootNode() as Document | ShadowRoot;
-    let currentEl: Element | null = el;
+    // A detached node's getRootNode() is the node itself, which may not expose
+    // querySelectorAll, so only cache it when it really is a root.
+    const rootNode = el.getRootNode();
+    if (
+      rootNode.nodeType === Node.DOCUMENT_NODE ||
+      rootNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+    ) {
+      this.lastHoveredRootNode = rootNode as Document | ShadowRoot;
+    } else {
+      this.lastHoveredRootNode = undefined;
+    }
+    // Text and comment nodes cannot hold a class, so start at the nearest ancestor element.
+    let currentEl: Element | null =
+      el.nodeType === Node.ELEMENT_NODE ? (el as Element) : el.parentElement;
     while (currentEl) {
-      if (currentEl.classList) {
-        currentEl.classList.add(':hover');
-      }
+      currentEl.classList.add(':hover');
       currentEl = currentEl.parentElement;
     }
   }

@@ -1,5 +1,35 @@
 # @posthog/convex
 
+## 2.1.4
+
+### Patch Changes
+
+- [#4661](https://github.com/PostHog/posthog-js/pull/4661) [`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b) Thanks [@marandaneto](https://github.com/marandaneto)! - Match local feature flag string operators, exact-value coercion, and JSON stringification with the flags service.
+  (2026-09-01)
+- Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a)]:
+  - @posthog/core@1.50.0
+  - posthog-node@5.51.5
+
+## 2.1.3
+
+### Patch Changes
+
+- [#4651](https://github.com/PostHog/posthog-js/pull/4651) [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524) Thanks [@marandaneto](https://github.com/marandaneto)! - Treat omitted local evaluation properties as inconclusive for `is_not_set`.
+  (2026-08-27)
+- Updated dependencies [[`7902e44`](https://github.com/PostHog/posthog-js/commit/7902e445d0a66b93bd4c7febce04cdf8836ea86b), [`e899b1c`](https://github.com/PostHog/posthog-js/commit/e899b1cdc6fbe748b8adc59e3b6bebe24f3b0524)]:
+  - @posthog/core@1.48.12
+  - posthog-node@5.51.3
+
+## 2.1.2
+
+### Patch Changes
+
+- [#4610](https://github.com/PostHog/posthog-js/pull/4610) [`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74) Thanks [@marandaneto](https://github.com/marandaneto)! - Share feature flag matching, hashing, variant, and payload evaluation helpers across the Node.js and Convex SDKs without changing their runtime-specific SemVer behavior.
+  (2026-08-25)
+- Updated dependencies [[`1faeb74`](https://github.com/PostHog/posthog-js/commit/1faeb749974a0c49ad86a6cb68ac4cd5f6414084), [`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
+  - posthog-node@5.51.2
+  - @posthog/core@1.48.11
+
 ## 2.1.1
 
 ### Patch Changes

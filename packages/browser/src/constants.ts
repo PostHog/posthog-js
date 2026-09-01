@@ -20,6 +20,7 @@ export const ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS = '$error_tracking_capt
 export const WEB_VITALS_ENABLED_SERVER_SIDE = '$web_vitals_enabled_server_side'
 export const DEAD_CLICKS_ENABLED_SERVER_SIDE = '$dead_clicks_enabled_server_side'
 export const PRODUCT_TOURS_ENABLED_SERVER_SIDE = '$product_tours_enabled_server_side'
+export const LOGS_CAPTURE_ENABLED_SERVER_SIDE = '$logs_capture_enabled_server_side'
 export const WEB_VITALS_ALLOWED_METRICS = '$web_vitals_allowed_metrics'
 export const SESSION_RECORDING_REMOTE_CONFIG = '$session_recording_remote_config'
 // @deprecated can be removed along with eager loaded replay
@@ -108,6 +109,7 @@ export const SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED = '$sdk_debug_recording_scrip
 export const SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS = '$sdk_debug_replay_event_trigger_status'
 export const SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS = '$sdk_debug_replay_linked_flag_trigger_status'
 export const SDK_DEBUG_REPLAY_MATCHED_RECORDING_TRIGGER_GROUPS = '$sdk_debug_replay_matched_recording_trigger_groups'
+export const SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS = '$sdk_debug_replay_pending_trigger_conditions'
 export const SDK_DEBUG_REPLAY_REMOTE_TRIGGER_MATCHING_CONFIG = '$sdk_debug_replay_remote_trigger_matching_config'
 export const SDK_DEBUG_REPLAY_TRIGGER_GROUPS_COUNT = '$sdk_debug_replay_trigger_groups_count'
 export const SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS = '$sdk_debug_replay_url_trigger_status'

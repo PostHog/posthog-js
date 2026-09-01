@@ -2,7 +2,7 @@ import { PostHog } from './posthog-core'
 import { COOKIELESS_ALWAYS, COOKIELESS_ON_REJECT } from './constants'
 import { navigator } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
-import { cookieStore, localStore } from './storage'
+import { cookieStore, localStore, memoryStore } from './storage'
 import { PersistentStore } from './types'
 import { isNoLike, isYesLike } from '@posthog/core'
 
@@ -101,7 +101,12 @@ export class ConsentManager {
         // access (e.g. init() called after _dom_loaded() fires in bundled apps) is picked
         // up and any value already stored under the old backend is migrated across.
         const persistenceType = this._config.opt_out_capturing_persistence_type
-        const expectedStore = persistenceType === 'localStorage' ? localStore : cookieStore
+        const preferredStore = persistenceType === 'localStorage' ? localStore : cookieStore
+        // Neither backend exists in contexts like a `data:` URL, where Chrome disables
+        // localStorage and cookies alike. Consent reads and writes there could only ever
+        // fail, logging SecurityError noise on every capture, so fall back to in-memory
+        // consent for the pageview instead of a store that cannot hold anything.
+        const expectedStore = preferredStore._is_supported() ? preferredStore : memoryStore
 
         if (!this._persistentStore || this._persistentStore !== expectedStore) {
             this._persistentStore = expectedStore
@@ -128,6 +133,8 @@ export class ConsentManager {
             navigator?.doNotTrack, // standard
             (navigator as any)?.['msDoNotTrack'],
             assignableWindow['doNotTrack'],
+            // DNT replacement, EFF Privacy Badger, Firefox 120+. Possibly legally required
+            (navigator as any)?.globalPrivacyControl,
         ].some((dntValue) => isYesLike(dntValue))
     }
 }

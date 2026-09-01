@@ -1,6 +1,7 @@
 import {
   type FetchLike,
   type PostHogEventProperties,
+  type PostHogFetchBodyBytes,
   type PostHogFetchOptions,
   type PostHogFetchResponse,
   gzipCompress,
@@ -47,7 +48,7 @@ export interface V1CaptureSenderHooks {
   now?: () => number
   sleep?: (ms: number) => Promise<void>
   generateRequestId?: () => string
-  compress?: (payload: string, isDebug?: boolean) => Promise<Blob | null>
+  compress?: (payload: string, isDebug?: boolean) => Promise<Blob | PostHogFetchBodyBytes | null>
 }
 
 interface V1CaptureAttempt {
@@ -77,7 +78,7 @@ export class V1CaptureSender {
   private readonly now: () => number
   private readonly sleep: (ms: number) => Promise<void>
   private readonly generateRequestId: () => string
-  private readonly compress: (payload: string, isDebug?: boolean) => Promise<Blob | null>
+  private readonly compress: (payload: string, isDebug?: boolean) => Promise<Blob | PostHogFetchBodyBytes | null>
 
   constructor(config: V1CaptureSenderConfig, hooks: V1CaptureSenderHooks) {
     this.config = config
@@ -187,7 +188,7 @@ export class V1CaptureSender {
 
   private async sendOnce(url: string, payload: string, attempt: number, requestId: string): Promise<V1CaptureAttempt> {
     const headers = this.buildHeaders(attempt, requestId)
-    let body: string | Blob = payload
+    let body: string | Blob | PostHogFetchBodyBytes = payload
     if (this.config.compressionEnabled) {
       const compressed = await this.compress(payload, this.config.isDebug)
       if (compressed !== null) {

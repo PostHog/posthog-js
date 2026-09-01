@@ -1747,7 +1747,8 @@ exports[`record > captures mutations on adopted stylesheets 1`] = `
       \\"styleId\\": 2,
       \\"adds\\": [
         {
-          \\"rule\\": \\"h2 { color: red; }\\"
+          \\"rule\\": \\"h2 { color: red; }\\",
+          \\"index\\": 0
         }
       ]
     }
@@ -2164,7 +2165,8 @@ exports[`record > captures stylesheet rules 1`] = `
       \\"id\\": 9,
       \\"adds\\": [
         {
-          \\"rule\\": \\"body { color: #fff; }\\"
+          \\"rule\\": \\"body { color: #fff; }\\",
+          \\"index\\": 0
         }
       ]
     }
@@ -2188,7 +2190,8 @@ exports[`record > captures stylesheet rules 1`] = `
       \\"id\\": 9,
       \\"adds\\": [
         {
-          \\"rule\\": \\"body { color: #ccc; }\\"
+          \\"rule\\": \\"body { color: #ccc; }\\",
+          \\"index\\": 0
         }
       ]
     }
@@ -3899,7 +3902,8 @@ exports[`record iframes > captures stylesheet mutations in iframes 1`] = `
       \\"id\\": 15,
       \\"adds\\": [
         {
-          \\"rule\\": \\"body { color: #fff; }\\"
+          \\"rule\\": \\"body { color: #fff; }\\",
+          \\"index\\": 0
         }
       ]
     }

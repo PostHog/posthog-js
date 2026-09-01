@@ -130,6 +130,20 @@ export interface MCPAnalyticsOptions {
   /** Inject a required `context` parameter on every tool to capture user intent. */
   context?: boolean | MCPAnalyticsContextOptions
   /**
+   * Inject a required `llm_model` parameter on every tool so the calling agent
+   * self-reports the model it runs as, captured as `$mcp_llm_model` with
+   * `$mcp_llm_model_source = "self_reported"`. Off by default.
+   *
+   * The MCP wire deliberately carries no model identity, so self-report is the
+   * only capture path — harnesses inject the model id into the agent's system
+   * prompt, and agents restate it accurately. Like `clientInfo` in the MCP
+   * spec, the value is unverified: use it for per-model quality analytics, not
+   * billing or security. An honest `"unknown"` from the agent is dropped
+   * rather than captured. Reasoning effort is intentionally not collected —
+   * agents don't reliably know it, so it would only ever be noise.
+   */
+  captureModel?: boolean | MCPAnalyticsModelOptions
+  /**
    * Identify the calling user. Returning a non-null value sets `distinct_id` and `$set`
    * on subsequent events for the session. Object form is treated as a static identity.
    * A standalone `$identify` event is published once per session — at `initialize`, or
@@ -172,8 +186,13 @@ export interface MCPAnalyticsContextOptions {
   description?: string
 }
 
+export interface MCPAnalyticsModelOptions {
+  description?: string
+}
+
 export type MaybePromise<T> = T | Promise<T>
 export type MCPAnalyticsIntentSource = 'context_parameter' | 'inferred'
+export type MCPAnalyticsModelSource = 'self_reported'
 
 export type ToolCallback =
   | ((
@@ -225,6 +244,14 @@ export interface Event {
   eventId?: string
   eventType: MCPAnalyticsEventType
   groups?: Record<string, string>
+  /**
+   * The calling agent's self-reported model id → `$mcp_llm_model`. Read off
+   * the SDK-injected `llm_model` argument (`captureModel` option); unverified
+   * by design, like the MCP spec's own `clientInfo`.
+   */
+  llmModel?: string
+  /** How the model id was obtained → `$mcp_llm_model_source`. Always `self_reported` today. */
+  llmModelSource?: MCPAnalyticsModelSource
   /**
    * Explicit PostHog event name. When set (via `capture(server, { event })`) it
    * overrides the built-in name derived from `eventType`, so callers can emit any
@@ -380,6 +407,7 @@ export interface SessionInfo {
 export interface AnalyticsParameterOwnership {
   context: boolean
   conversationId: boolean
+  llmModel: boolean
   /**
    * True when we declared `_mcp_instructions` on this tool's advertised output
    * schema, so writing that key into `structuredContent` will validate. False

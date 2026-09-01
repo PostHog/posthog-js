@@ -18,3 +18,4 @@ export {
 } from './translations'
 export { canSurveyActivateRepeatedly, doesSurveyActivateByEvent, isSurveyIterationBased } from './activation'
 export { getSurveyIterationKey, isSurveyKeyForSurvey, type SurveyWithIteration } from './keys'
+export { isMatchingRegex, isValidRegex, matchPropertyFilters, propertyComparisons } from './property-matching'

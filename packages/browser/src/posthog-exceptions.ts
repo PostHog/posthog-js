@@ -8,10 +8,32 @@ import { isString, isArray, isObject, ErrorTracking, isNullish } from '@posthog/
 
 const logger = createLogger('[Error tracking]')
 
+// Safari masks the URL of extension content scripts as `webkit-masked-url://hidden/`. It masks
+// some of the page's own scripts the same way, so a masked frame alone does not prove the
+// exception came from an extension (see _isExtensionException).
+const MASKED_URL_PREFIX = 'webkit-masked-url:'
+
+// Safari's masked URL is ambiguous, so require a value that identifies the reported extension
+// failure before filtering a stack made entirely of masked frames.
+const MASKED_EXTENSION_EXCEPTION_VALUE = 'isolatedAPI.contexts.topHostname'
+
 // Browser extensions serve their content scripts from these schemes. `safari-extension:` and
 // `safari-web-extension:` are synthesised by the stack parser (see extractSafariExtensionDetails)
 // rather than being real URLs, but they mark the frame just as definitively.
-const EXTENSION_URL_PREFIXES = ['chrome-extension://', 'moz-extension://', 'safari-extension:', 'safari-web-extension:']
+const EXTENSION_URL_PREFIXES = [
+    'chrome-extension://',
+    'moz-extension://',
+    'safari-extension:',
+    'safari-web-extension:',
+    MASKED_URL_PREFIX,
+]
+
+// Some mobile browsers inject their own user scripts into every page. These scripts read
+// browser-private globals, and when a script runs before its global exists it throws. The
+// browser attributes the injected script to the host document, so the frame filename is the
+// page URL and EXTENSION_URL_PREFIXES cannot catch it. We match the private global in the
+// exception value instead. No page or SDK code references these names.
+const INJECTED_BROWSER_SCRIPT_GLOBALS = ['__firefox__', '__gCrWeb']
 
 export function buildErrorPropertiesBuilder() {
     return new ErrorTracking.ErrorPropertiesBuilder(
@@ -133,6 +155,12 @@ export class PostHogExceptions implements Extension {
                 if (!this._captureExtensionExceptions && this._isExtensionException(exceptionList)) {
                     this._addDroppedExceptionStep('Exception dropped: thrown by a browser extension')
                     logger.info('Skipping exception capture because it was thrown by an extension')
+                    return
+                }
+
+                if (!this._captureExtensionExceptions && this._isInjectedBrowserScriptException(exceptionList)) {
+                    this._addDroppedExceptionStep('Exception dropped: thrown by an injected browser script')
+                    logger.info('Skipping exception capture because it was thrown by an injected browser script')
                     return
                 }
 
@@ -266,8 +294,36 @@ export class PostHogExceptions implements Extension {
 
     private _isExtensionException(exceptionList: ErrorTracking.ExceptionList): boolean {
         const frames = exceptionList.flatMap((e) => e.stacktrace?.frames ?? [])
-        return frames.some(({ filename }) => {
-            return !!filename && EXTENSION_URL_PREFIXES.some((prefix) => filename.startsWith(prefix))
+        const extensionFrames = frames.filter(
+            ({ filename }) => !!filename && EXTENSION_URL_PREFIXES.some((prefix) => filename.startsWith(prefix))
+        )
+        if (extensionFrames.length === 0) {
+            return false
+        }
+
+        // Safari also masks blob, eval'd, and injected application code, so a masked URL alone does
+        // not prove the exception came from an extension. For an all-masked stack, require a known
+        // extension-only value and no remaining page frame. Ignore masked frames when checking for
+        // page code because the Sentry integration may forward them with `in_app: true`.
+        const onlyMaskedExtensionFrames = extensionFrames.every(
+            ({ filename }) => !!filename && filename.startsWith(MASKED_URL_PREFIX)
+        )
+        if (onlyMaskedExtensionFrames) {
+            const hasKnownExtensionValue = exceptionList.some(
+                ({ value }) => isString(value) && value.includes(MASKED_EXTENSION_EXCEPTION_VALUE)
+            )
+            return (
+                hasKnownExtensionValue &&
+                !frames.some(({ in_app, filename }) => in_app && !filename?.startsWith(MASKED_URL_PREFIX))
+            )
+        }
+
+        return true
+    }
+
+    private _isInjectedBrowserScriptException(exceptionList: ErrorTracking.ExceptionList): boolean {
+        return exceptionList.some(({ value }) => {
+            return isString(value) && INJECTED_BROWSER_SCRIPT_GLOBALS.some((global) => value.includes(global))
         })
     }
 
