@@ -1,4 +1,19 @@
 {
   "version": 1,
-  "items": []
+  "items": [
+    {
+      "id": "issue-4724-auto-none-no-comment-no-close-1788271525899",
+      "kind": "issue",
+      "number": 4724,
+      "mode": "auto",
+      "commandMention": "@posthog-watcher",
+      "enqueuedAt": "2026-09-01T14:05:25.898Z",
+      "source": {
+        "eventName": "issues",
+        "runId": 33517330383,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/33517330383"
+      },
+      "attempts": 0
+    }
+  ]
 }
