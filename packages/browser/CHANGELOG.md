@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.423.2
+
+### Patch Changes
+
+- [#4716](https://github.com/PostHog/posthog-js/pull/4716) [`6ebd765`](https://github.com/PostHog/posthog-js/commit/6ebd76538292a64203fa8bfc4afd12341d718c5f) Thanks [@adboio](https://github.com/adboio)! - Sanitize legacy product tour HTML before rendering
+  (2026-09-01)
+
 ## 1.423.1
 
 ### Patch Changes
