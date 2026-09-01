@@ -49,7 +49,7 @@ export interface RecordingTriggersStatusV2 extends RecordingTriggersStatus {
 }
 
 export type TriggerType = 'url' | 'event'
-/* 
+/*
 triggers can have one of three statuses:
  * - trigger_activated: the trigger met conditions to start recording
  * - trigger_pending: the trigger is present, but the conditions are not yet met

@@ -25,6 +25,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `pnpm lint` - Lint source and playwright code
 - `pnpm lint:fix` - Auto-fix linting issues
 - `pnpm format` - Format code with Oxfmt
+- `pnpm format:check` - Check code formatting with Oxfmt
 - `pnpm typecheck` - TypeScript type checking
 
 ### E2E Testing

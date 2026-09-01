@@ -22,6 +22,7 @@
         "lint": "eslint src && eslint playwright",
         "lint:fix": "eslint src --fix && eslint playwright --fix",
         "format": "oxfmt --write src/ functional_tests/ playwright/",
+        "format:check": "oxfmt --check src/ functional_tests/ playwright/",
         "prepublishOnly": "pnpm check-react",
         "check-react": "[ -d 'react/dist' ] || { echo '@posthog/react has not been built'; exit 1; }",
         "test": "pnpm test:unit && pnpm test:functional",
