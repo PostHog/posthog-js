@@ -174,7 +174,7 @@ Turbo handles build orchestration and ensures packages are built in the correct 
 
 ### Automatic Formatting
 
-Oxfmt formats workspace package code through `pnpm format:fix`. Pre-commit hooks (via lint-staged) automatically format TypeScript, JavaScript, JSON, and Markdown files with Oxfmt.
+Oxfmt checks workspace package code during linting. Pre-commit hooks (via lint-staged) automatically format TypeScript, JavaScript, JSON, and Markdown files with Oxfmt.
 
 ## Release Process
 
