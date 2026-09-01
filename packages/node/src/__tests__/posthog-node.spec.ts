@@ -1,5 +1,6 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import ErrorTracking from '@/extensions/error-tracking'
+import type { IPostHog } from '@/types'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending, wait, waitForPromises } from './utils'
 import { randomUUID } from 'crypto'
 import { UUID_REGEX } from '@posthog/core'
@@ -91,6 +92,13 @@ describe('PostHog Node.js', () => {
   })
 
   describe('core methods', () => {
+    it('exposes exception capture methods through IPostHog', () => {
+      const client: IPostHog = posthog
+
+      expect(typeof client.captureException).toBe('function')
+      expect(typeof client.captureExceptionImmediate).toBe('function')
+    })
+
     it('should capture an event to shared queue', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
       posthog.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' }, groups: { org: 123 } })

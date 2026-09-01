@@ -255,6 +255,27 @@ describe('PostHogGemini - Jest test suite', () => {
     })
   })
 
+  test('captures accumulated usage when the consumer stops reading the stream', async () => {
+    const stream = client.models.generateContentStream({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Write a short poem',
+      posthogDistinctId: 'test-id',
+    })
+
+    for await (const chunk of stream) {
+      void chunk
+      break
+    }
+
+    // Breaking out of the loop returns the generator, which must still capture
+    // what the stream reported before the consumer walked away.
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    expect(properties['$ai_input_tokens']).toBe(15)
+    expect(properties['$ai_output_tokens']).toBe(2)
+    expect(properties['$ai_is_error']).toBeUndefined()
+  })
+
   test('groups', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
@@ -393,8 +414,8 @@ describe('PostHogGemini - Jest test suite', () => {
 
     expect(properties['$ai_is_error']).toBe(true)
     expect(properties['$ai_http_status']).toBe(400)
-    expect(properties['$ai_input_tokens']).toBe(0)
-    expect(properties['$ai_output_tokens']).toBe(0)
+    expect(properties['$ai_input_tokens']).toBeUndefined()
+    expect(properties['$ai_output_tokens']).toBeUndefined()
   })
 
   test('array contents input', async () => {
@@ -1234,7 +1255,7 @@ describe('PostHogGemini - Jest test suite', () => {
       const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
       expect(captureArgs[0].event).toBe('$ai_embedding')
       expect(captureArgs[0].properties['$ai_is_error']).toBe(true)
-      expect(captureArgs[0].properties['$ai_input_tokens']).toBe(0)
+      expect(captureArgs[0].properties['$ai_input_tokens']).toBeUndefined()
     })
 
     test('passes config through to underlying call', async () => {

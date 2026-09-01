@@ -1,5 +1,33 @@
 # posthog-ai
 
+## 8.9.3
+
+### Patch Changes
+
+- [#4700](https://github.com/PostHog/posthog-js/pull/4700) [`a105b77`](https://github.com/PostHog/posthog-js/commit/a105b77cf1c61df8e8e4f547f5bbe467893644c3) Thanks [@bernatixer](https://github.com/bernatixer)! - Capture `$ai_stop_reason` from LangChain runs that use the OpenAI Responses API.
+
+  The callback only understood Chat Completions vocabulary (`finish_reason` / `stop_reason`), so Responses API runs, which report `status` and `incomplete_details.reason` instead, never carried a stop reason. The Chat Completions keys keep priority, and `incomplete_details.reason` outranks `status`, so an early stop names its cause (for example `max_output_tokens`) instead of just `incomplete`. (2026-09-01)
+
+- Updated dependencies [[`e87820a`](https://github.com/PostHog/posthog-js/commit/e87820a84d9a402b7db9b1c31c966e8028d0d65a)]:
+  - @posthog/core@1.50.1
+
+## 8.9.2
+
+### Patch Changes
+
+- [#4664](https://github.com/PostHog/posthog-js/pull/4664) [`86fe9da`](https://github.com/PostHog/posthog-js/commit/86fe9dab9faf3d8e259d250f914e1cbbaa2a0b17) Thanks [@bernatixer](https://github.com/bernatixer)! - Interrupted or cancelled streams now report the token usage and latency they actually observed, instead of zeros, across the OpenAI, Anthropic, Gemini, Azure and Vercel wrappers. When usage was never reported, token counts and override costs are omitted entirely, so `$ai_input_tokens` can be absent where it was previously always `0`.
+  (2026-09-01)
+
+## 8.9.1
+
+### Patch Changes
+
+- [#4698](https://github.com/PostHog/posthog-js/pull/4698) [`5ae5c29`](https://github.com/PostHog/posthog-js/commit/5ae5c2992d0f06dd9416fc453011214e4e36046b) Thanks [@dependabot](https://github.com/apps/dependabot)! - Preserve Anthropic workspace IDs on wrapped provider promises and support `@anthropic-ai/sdk` versions from 0.112.3 through 0.120.x.
+  (2026-09-01)
+- Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a)]:
+  - @posthog/core@1.50.0
+  - posthog-node@5.51.5
+
 ## 8.9.0
 
 ### Minor Changes

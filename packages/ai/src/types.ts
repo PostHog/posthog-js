@@ -87,7 +87,13 @@ export interface FormattedMessage {
 }
 
 /**
- * Token usage information for AI model responses
+ * Token usage reported by the provider.
+ *
+ * The counts are optional because an absent count means the provider never reported one, which is
+ * not the same as zero: a failed or cancelled call can consume its prompt without ever reporting
+ * usage. Error paths pass whatever arrived before the failure, or `{}` when nothing did, and never
+ * substitute zeros. Costs follow the same rule, so a configured price applies only to a count that
+ * exists.
  */
 export interface TokenUsage {
   inputTokens?: number

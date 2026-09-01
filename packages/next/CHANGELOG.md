@@ -1,5 +1,19 @@
 # @posthog/next
 
+## 0.9.0
+
+### Minor Changes
+
+- [#4656](https://github.com/PostHog/posthog-js/pull/4656) [`39aa650`](https://github.com/PostHog/posthog-js/commit/39aa650d4acf4d669916e846364c13ce5cd28197) Thanks [@marandaneto](https://github.com/marandaneto)! - Add opt-in `$route` template capture for App Router and Pages Router pageviews.
+  (2026-09-01)
+
+### Patch Changes
+
+- Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`aa72a36`](https://github.com/PostHog/posthog-js/commit/aa72a36930f09f8db0971e9077e852d1c76f3879), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6309cb2`](https://github.com/PostHog/posthog-js/commit/6309cb22e3f1b419d232f7bfbd1656917d4e24dc), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a), [`ec550b8`](https://github.com/PostHog/posthog-js/commit/ec550b82797caafb79cdd87bde1a59c7991f37f6), [`6d6091e`](https://github.com/PostHog/posthog-js/commit/6d6091e0b335d27b1aa94ea725fec0842aaa9463), [`0cddefe`](https://github.com/PostHog/posthog-js/commit/0cddefe2e84d0bd8c85cf53f5d65b5fd4318d9cf), [`cee2280`](https://github.com/PostHog/posthog-js/commit/cee22804dfbedae447808d1615b5b27315d08f45), [`5874d1c`](https://github.com/PostHog/posthog-js/commit/5874d1c9f1e8cb9bf70600698a102498f876c24a), [`1406e04`](https://github.com/PostHog/posthog-js/commit/1406e04745d3828528a3709377810015927ba036), [`e7f5733`](https://github.com/PostHog/posthog-js/commit/e7f5733c368f83795e88572ba16e736176460e67), [`5c6ab6f`](https://github.com/PostHog/posthog-js/commit/5c6ab6f8372edacb1500d3d459b713f622b6a993)]:
+    - @posthog/core@1.50.0
+    - posthog-node@5.51.5
+    - posthog-js@1.423.0
+
 ## 0.8.6
 
 ### Patch Changes
