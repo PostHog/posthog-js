@@ -245,7 +245,7 @@ describe('PostHog React Native', () => {
         return properties
       },
     })
-    await posthog.ready()
+    await posthog2.ready()
 
     expect(posthog2.getCommonEventProperties()).toEqual({
       $lib: 'posthog-react-native',

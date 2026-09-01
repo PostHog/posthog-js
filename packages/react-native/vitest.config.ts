@@ -7,6 +7,7 @@ export default defineConfig({
     resolve: {
         alias: {
             '@/': fromRoot('../core/src/'),
+            './version': fromRoot('./test/mocks/version.ts'),
             'react-native': fromRoot('./test/mocks/react-native.ts'),
             'expo-application': fromRoot('./test/mocks/expo-application.ts'),
             'expo-device': fromRoot('./test/mocks/expo-device.ts'),
@@ -26,11 +27,6 @@ export default defineConfig({
         environment: 'node',
         exclude: [...configDefaults.exclude, 'lib/**', 'examples/**'],
         setupFiles: ['../../tooling/vitest/setup-fake-timers.ts', './test/setup.ts'],
-        poolOptions: {
-            threads: {
-                singleThread: true,
-            },
-        },
         coverage: {
             enabled: true,
             provider: 'v8',
