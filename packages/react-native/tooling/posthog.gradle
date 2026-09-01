@@ -360,9 +360,9 @@ abstract class PostHogCli {
         }
         if (explicit) {
             if (cliVersion == null) {
-                throw new GradleException("Could not determine the posthog-cli version, which posthog.hermesReleaseMode '${mode}' needs. Upgrade: npm install -g @posthog/cli@latest")
+                throw new org.gradle.api.GradleException("Could not determine the posthog-cli version, which posthog.hermesReleaseMode '${mode}' needs. Upgrade: npm install -g @posthog/cli@latest")
             }
-            throw new GradleException("posthog.hermesReleaseMode '${mode}' needs posthog-cli >= ${MIN_RELEASE_MODE_VERSION} (found ${cliVersion}). Upgrade: npm install -g @posthog/cli@latest")
+            throw new org.gradle.api.GradleException("posthog.hermesReleaseMode '${mode}' needs posthog-cli >= ${MIN_RELEASE_MODE_VERSION} (found ${cliVersion}). Upgrade: npm install -g @posthog/cli@latest")
         }
         logger.warn("[PostHog] posthog-cli ${cliVersion ?: 'unknown'} predates release mode '${mode}' (needs >= ${MIN_RELEASE_MODE_VERSION}). Uploading Hermes source maps bound to the release. Upgrade: npm install -g @posthog/cli@latest")
         return []
