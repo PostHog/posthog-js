@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.50.2
+
+### Patch Changes
+
+- [#4727](https://github.com/PostHog/posthog-js/pull/4727) [`ec9354c`](https://github.com/PostHog/posthog-js/commit/ec9354c367e70dde8ba98c60761f8d462b78b430) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Drop attributes with an empty key from exported logs and metrics instead of sending them. OTLP requires a non-empty key, and the server stored one verbatim, where it appeared as a nameless attribute that filters could not match.
+  (2026-09-01)
+
 ## 1.50.1
 
 ### Patch Changes
