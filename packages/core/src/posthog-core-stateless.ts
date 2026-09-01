@@ -51,6 +51,41 @@ import {
   createDefaultStackParser,
 } from './error-tracking'
 
+/**
+ * Longest `Retry-After` the SDK will wait. A rate-limit window can legitimately
+ * be long, but nothing upstream of the SDK bounds this header — it is as likely
+ * to come from a proxy or CDN as from PostHog — and an unbounded value would
+ * strand a queue for hours, so the wait is capped and the retry happens early.
+ */
+const MAX_RETRY_AFTER_MS = 5 * 60_000
+
+/**
+ * `Retry-After` as milliseconds from now. The header is either delta-seconds or
+ * an HTTP-date; anything else, a date already in the past, or a negative delta
+ * yields `undefined` so the caller keeps its own backoff.
+ *
+ * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
+ */
+export function parseRetryAfterMs(value: string | null | undefined, now: number = Date.now()): number | undefined {
+  if (!value) {
+    return undefined
+  }
+  const trimmed = value.trim()
+  // Integer seconds. Not parseFloat: "10 minutes" must not read as 10 seconds.
+  const seconds = /^\d+$/.test(trimmed) ? Number(trimmed) : Number.NaN
+  if (!Number.isFinite(seconds) && /^[+-]?[\d.]+$/.test(trimmed)) {
+    // Numeric but not delta-seconds, so it is malformed. `Date.parse` reads
+    // "-5", "+5" and "5.5" as dates in 2001 rather than rejecting them, which
+    // on a device whose clock predates that would surface as a real wait.
+    return undefined
+  }
+  const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(trimmed) - now
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return undefined
+  }
+  return Math.min(ms, MAX_RETRY_AFTER_MS)
+}
+
 class PostHogFetchHttpError extends Error {
   name = 'PostHogFetchHttpError'
   private responseBodyTextPromise?: Promise<string>
@@ -68,6 +103,17 @@ class PostHogFetchHttpError extends Error {
 
   get status(): number {
     return this.response.status
+  }
+
+  /** The response's `Retry-After` as milliseconds from now, when it sent a usable one. */
+  get retryAfterMs(): number | undefined {
+    try {
+      return parseRetryAfterMs(this.response.headers?.get('retry-after'))
+    } catch {
+      // `headers.get` is injected transport code; a throwing one must not turn a
+      // retriable failure into an unhandled rejection.
+      return undefined
+    }
   }
 
   get bodyReadTimedOut(): boolean {
@@ -206,6 +252,32 @@ function isRetryableFlagsFetchError(
   return code !== 'ECONNREFUSED'
 }
 
+/**
+ * The ingestion service's request body limit — `MAX_REQUEST_BODY_SIZE_BYTES`,
+ * which defaults to 2 MB and is applied to the body after the endpoint
+ * decompresses it, not to the compressed bytes on the wire.
+ *
+ * Used as a floor, never as a promise: the deployment can raise it, and a proxy
+ * in front can lower it. A body over this size cannot be accepted, so sending it
+ * only buys a 413; one under it is sent and may still be refused.
+ */
+const OTLP_MAX_BODY_BYTES = 2 * 1024 * 1024
+
+/** A request body's size on the wire. `Buffer` where it exists, `TextEncoder` elsewhere. */
+function byteLengthOf(body: string | Blob | Uint8Array): number {
+  if (body instanceof Blob) {
+    return body.size
+  }
+  if (body instanceof Uint8Array) {
+    return body.byteLength
+  }
+  try {
+    return Buffer.byteLength(body, STRING_FORMAT)
+  } catch {
+    return new TextEncoder().encode(body).length
+  }
+}
+
 export function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHttpError & { status: 413 } {
   return typeof err === 'object' && err instanceof PostHogFetchHttpError && err.status === 413
 }
@@ -234,7 +306,7 @@ function isPostHogEventProperties(value: JsonType | undefined): value is PostHog
 export type SendLogsBatchOutcome =
   | { kind: 'ok' }
   | { kind: 'too-large' }
-  | { kind: 'retry-later'; error: unknown }
+  | { kind: 'retry-later'; error: unknown; retryAfterMs?: number }
   | { kind: 'fatal'; error: unknown }
 
 /**
@@ -245,7 +317,7 @@ export type SendLogsBatchOutcome =
 type SendOtlpBatchOutcome =
   | { kind: 'ok' }
   | { kind: 'too-large' }
-  | { kind: 'retry-later'; error: unknown }
+  | { kind: 'retry-later'; error: unknown; retryAfterMs?: number }
   | { kind: 'fatal'; error: unknown }
 
 export enum QuotaLimitedFeature {
@@ -1671,7 +1743,24 @@ export abstract class PostHogCoreStateless {
         ? `${this.host}/i/v1/${path}`
         : `${this.host}/i/v1/${path}?token=${encodeURIComponent(this.apiKey)}`
 
+    // Measured before compression: the endpoint decompresses the body and applies
+    // its limit to what comes out, so a payload that gzips small is still refused
+    // on its decompressed size. A batch the endpoint cannot accept is reported
+    // without being sent, so the caller halves it — and ultimately isolates and
+    // drops the one oversized record — without spending a request on each attempt.
+    const payloadBytes = byteLengthOf(serialized)
+    if (payloadBytes > OTLP_MAX_BODY_BYTES) {
+      this.logMsgIfDebug(() =>
+        console.warn(
+          `[PostHog] Not sending a ${path} batch of ${payloadBytes} bytes: the endpoint accepts at most ${OTLP_MAX_BODY_BYTES}`
+        )
+      )
+      return { kind: 'too-large' }
+    }
+
     const gzippedPayload = !this.disableCompression ? await this.compressPayload(serialized) : null
+    const body = gzippedPayload || serialized
+
     const fetchOptions: PostHogFetchOptions = {
       method: 'POST',
       headers: {
@@ -1680,7 +1769,7 @@ export abstract class PostHogCoreStateless {
         ...(auth === 'bearer' && { Authorization: `Bearer ${this.apiKey}` }),
         ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
       },
-      body: gzippedPayload || serialized,
+      body,
     }
 
     try {
@@ -1693,6 +1782,12 @@ export abstract class PostHogCoreStateless {
             if (isPostHogFetchContentTooLargeError(err)) {
               return false
             }
+            if (err instanceof PostHogFetchHttpError && err.retryAfterMs !== undefined) {
+              // The endpoint named a wait. This loop retries on a fixed short
+              // delay, so retrying here would spend every attempt inside the
+              // window; hand it to the queue's backoff instead.
+              return false
+            }
             return isPostHogFetchRetryableError(err)
           },
         }
@@ -1703,7 +1798,8 @@ export abstract class PostHogCoreStateless {
         return { kind: 'too-large' }
       }
       if (isPostHogFetchRetryableError(err)) {
-        return { kind: 'retry-later', error: err }
+        const retryAfterMs = err instanceof PostHogFetchHttpError ? err.retryAfterMs : undefined
+        return { kind: 'retry-later', error: err, ...(retryAfterMs !== undefined && { retryAfterMs }) }
       }
       return { kind: 'fatal', error: err }
     }
@@ -1751,25 +1847,7 @@ export abstract class PostHogCoreStateless {
     requestTimeout?: number
   ): Promise<T | void> {
     const body = options.body ? options.body : ''
-    let reqByteLength = -1
-    try {
-      if (body instanceof Blob) {
-        reqByteLength = body.size
-      } else if (body instanceof Uint8Array) {
-        reqByteLength = body.byteLength
-      } else {
-        reqByteLength = Buffer.byteLength(body, STRING_FORMAT)
-      }
-    } catch {
-      if (body instanceof Blob) {
-        reqByteLength = body.size
-      } else if (body instanceof Uint8Array) {
-        reqByteLength = body.byteLength
-      } else {
-        const encoded = new TextEncoder().encode(body)
-        reqByteLength = encoded.length
-      }
-    }
+    const reqByteLength = byteLengthOf(body)
 
     const retriableOptions = { ...this._retryOptions, ...retryOptions }
     let attempt = 0

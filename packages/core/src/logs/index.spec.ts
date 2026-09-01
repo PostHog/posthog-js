@@ -1166,6 +1166,122 @@ describe('PostHogLogs', () => {
       expect(readQueue(mockInstance)).toHaveLength(0)
     })
 
+    it('waits out Retry-After even when a capture re-arms the timer mid-flush', async () => {
+      // The capture that lands while the send is in flight arms a timer at the
+      // plain interval; the 429 then asks for far longer. The earlier timer must
+      // not fire first, or the SDK sends inside the window it was told to skip.
+      mockInstance._sendLogsBatch = jest.fn(async () => {
+        logs.captureLog({ body: 'arrived mid-flush' })
+        return { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }
+      })
+
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+
+      await jest.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await jest.advanceTimersByTimeAsync(6000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await jest.advanceTimersByTimeAsync(300_000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not let the size trigger send inside a Retry-After window', async () => {
+      mockInstance._sendLogsBatch = jest.fn(() =>
+        Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      )
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000, maxBufferSize: 2 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      // Enough records to trip the size trigger, well inside the window.
+      logs.captureLog({ body: 'second' })
+      logs.captureLog({ body: 'third' })
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await jest.advanceTimersByTimeAsync(300_000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not let onReconnect send inside a Retry-After window', async () => {
+      // `online` fires on every network handover; it says nothing about the
+      // rate-limit window the endpoint set.
+      mockInstance._sendLogsBatch = jest.fn(() =>
+        Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      )
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      logs.onReconnect()
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+    })
+
+    it('flushes on reconnect once the Retry-After window has passed', async () => {
+      const outcomes: any[] = [{ kind: 'retry-later', error: new Error('429'), retryAfterMs: 5000 }]
+      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await jest.advanceTimersByTimeAsync(5000)
+      logs.onReconnect()
+      await jest.advanceTimersByTimeAsync(1)
+      expect(mockInstance._sendLogsBatch.mock.calls.length).toBeGreaterThan(1)
+    })
+
+    it('keeps flushing on the interval while captures keep arriving', async () => {
+      // Every capture arms the timer. Re-arming a pending one would push the
+      // flush out for as long as logs keep coming, stranding a steady stream
+      // that never reaches the size trigger.
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 10_000, maxBufferSize: 100 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+
+      for (let i = 0; i < 30; i++) {
+        logs.captureLog({ body: `line ${i}` })
+        await jest.advanceTimersByTimeAsync(2000)
+      }
+
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalled()
+      expect(readQueue(mockInstance)).toHaveLength(0)
+    })
+
     it('stops re-arming once the queue is empty', async () => {
       const logs = new PostHogLogs(
         mockInstance,

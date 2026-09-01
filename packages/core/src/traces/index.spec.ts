@@ -1261,6 +1261,115 @@ describe('PostHogTraces', () => {
     })
   })
 
+  describe('Retry-After', () => {
+    it('waits at least as long as the endpoint asked', async () => {
+      mockInstance._sendTracesBatch.mockResolvedValue({
+        kind: 'retry-later',
+        error: new Error('throttled'),
+        retryAfterMs: 90_000,
+      })
+      const traces = createTraces({ flushIntervalMs: 1000, maxExportBatchSize: 1 })
+      traces.startSpan('held').end()
+
+      // One attempt, then a wait longer than the 30s exponential cap would give.
+      while (mockInstance._sendTracesBatch.mock.calls.length < 1) {
+        await jest.advanceTimersByTimeAsync(1000)
+      }
+      await jest.advanceTimersByTimeAsync(60_000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      await jest.advanceTimersByTimeAsync(31_000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps its own backoff when the endpoint asks for less', async () => {
+      mockInstance._sendTracesBatch.mockResolvedValue({
+        kind: 'retry-later',
+        error: new Error('down'),
+        retryAfterMs: 10,
+      })
+      const traces = createTraces({ flushIntervalMs: 5000, maxExportBatchSize: 1 })
+      traces.startSpan('held').end()
+
+      while (mockInstance._sendTracesBatch.mock.calls.length < 1) {
+        await jest.advanceTimersByTimeAsync(1000)
+      }
+      // A 10ms Retry-After must not turn the retry loop into a hot loop: the
+      // next attempt still waits out the queue's own backoff, not 10ms.
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      await jest.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('waits out Retry-After even when a span ends mid-flush', async () => {
+      // The span that ends while the send is in flight arms a timer at the plain
+      // interval; the 429 then asks for far longer. The earlier timer must not
+      // fire first, or the SDK sends inside the window it was told to skip.
+      mockInstance._sendTracesBatch.mockImplementation(() => {
+        traces.startSpan('arrived mid-flush').end()
+        return Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      })
+      const traces = createTraces({ flushIntervalMs: 1000 })
+      traces.startSpan('first').end()
+
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      await jest.advanceTimersByTimeAsync(10_000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+    })
+
+    it('clears Retry-After on an outcome that is not a retry', async () => {
+      // Only a retriable outcome carries a wait. A stale one left set here would
+      // pin every later flush at the server's old window.
+      const outcomes: SendTracesBatchOutcome[] = [
+        { kind: 'retry-later', error: new Error('throttled'), retryAfterMs: 300_000 },
+        { kind: 'fatal', error: new Error('400') },
+      ]
+      mockInstance._sendTracesBatch.mockImplementation(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const traces = createTraces({ flushIntervalMs: 1000, maxExportBatchSize: 1 })
+      traces.startSpan('first').end()
+
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      // The wait elapses, the retry lands a 400, and that ends the wait.
+      await jest.advanceTimersByTimeAsync(300_000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
+      expect((traces as any)._retryAfterMs).toBe(0)
+
+      traces.startSpan('second').end()
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(3)
+    })
+
+    it('stops honouring a stale Retry-After after a success', async () => {
+      let attempt = 0
+      mockInstance._sendTracesBatch.mockImplementation(() => {
+        attempt++
+        return Promise.resolve(
+          attempt === 1 ? { kind: 'retry-later', error: new Error('throttled'), retryAfterMs: 120_000 } : { kind: 'ok' }
+        )
+      })
+      const traces = createTraces({ flushIntervalMs: 1000, maxExportBatchSize: 1 })
+      traces.startSpan('first').end()
+      await jest.advanceTimersByTimeAsync(200_000)
+
+      traces.startSpan('second').end()
+      await traces.flush()
+      expect(sentSpans().map((s) => s.name)).toContain('second')
+
+      // The wait is gone, so a later failure falls back to the plain interval.
+      mockInstance._sendTracesBatch.mockResolvedValue({ kind: 'retry-later', error: new Error('down') })
+      traces.startSpan('third').end()
+      const before = mockInstance._sendTracesBatch.mock.calls.length
+      await jest.advanceTimersByTimeAsync(2000)
+      expect(mockInstance._sendTracesBatch.mock.calls.length).toBeGreaterThan(before)
+    })
+  })
+
   describe('live span bounds', () => {
     it('returns an inert handle once maxLiveSpans spans are live', async () => {
       const traces = createTraces({ maxLiveSpans: 2 })

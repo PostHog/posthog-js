@@ -27,6 +27,12 @@ export class PostHogLogs {
   // A batch captures this when it is assembled, so it can tell that the records it is
   // holding no longer correspond to anything queued.
   private _queueGeneration = 0
+  // Absolute deadline from a `Retry-After` the endpoint sent, so every path that
+  // can start a send checks it — not just the retry timer. Cleared on the next
+  // success so one throttled response cannot pin the delay for the rest of the
+  // process.
+  private _retryAfterUntil = 0
+  private _flushTimerFiresAt = 0
   // Consecutive failed flushes; drives exponential backoff on the retry timer.
   // A successful flush resets it to 0.
   private _consecutiveFlushFailures = 0
@@ -91,14 +97,21 @@ export class PostHogLogs {
     this._intervalLogCount = 0
     this._droppedWarned = false
     this._consecutiveFlushFailures = 0
+    this._retryAfterUntil = 0
     this._maxBatchRecordsPerPost = this._config.maxBatchRecordsPerPost
   }
 
   // Call when connectivity is restored: clear the failure backoff and flush now,
   // so records don't wait out a (possibly minutes-long) backoff delay after the
   // network returns. The host owns connectivity detection (web: `online` event).
+  // A `Retry-After` window survives this: the network coming back says nothing
+  // about the rate limit the endpoint set, and browsers fire `online` on every
+  // network handover.
   onReconnect(): void {
     this._consecutiveFlushFailures = 0
+    if (this._isWaitingOutRetryAfter()) {
+      return
+    }
     this._flushInBackground()
   }
 
@@ -292,7 +305,7 @@ export class PostHogLogs {
       if (outcome.kind === 'too-large' && batch.length > 1) {
         this._maxBatchRecordsPerPost = Math.max(1, Math.floor(batch.length / 2))
         this._logger.warn(
-          `Received 413 when sending logs batch of size ${batch.length}, reducing batch size to ${this._maxBatchRecordsPerPost}`
+          `Logs batch of size ${batch.length} was too large for the ingestion endpoint, reducing batch size to ${this._maxBatchRecordsPerPost}`
         )
         // Don't advance the queue — retry the same records with the smaller cap.
         continue
@@ -301,6 +314,7 @@ export class PostHogLogs {
       if (outcome.kind === 'retry-later') {
         // Transient failure: keep records in the queue for the next flush cycle
         // and surface the error so the caller can log/react.
+        this._retryAfterUntil = outcome.retryAfterMs ? Date.now() + outcome.retryAfterMs : 0
         throw outcome.error
       }
 
@@ -364,22 +378,40 @@ export class PostHogLogs {
     this._instance.setPersistedProperty(PostHogPersistedProperty.LogsQueue, queue)
 
     // Flush trigger: drain now rather than waiting for the timer. The queue may
-    // grow past this up to the eviction cap while the flush is in flight.
-    if (queue.length >= this._maxBufferSize) {
+    // grow past this up to the eviction cap while the flush is in flight. Not
+    // while the endpoint has asked us to wait: the size trigger is the dominant
+    // one on a busy host, so sending here would ignore the window entirely.
+    if (queue.length >= this._maxBufferSize && !this._isWaitingOutRetryAfter()) {
       this._flushInBackground()
       return
     }
 
-    // Arm one timer at a time; re-arming within the window would push the flush out.
+    // Arm one timer at a time; re-arming on every enqueue would push the flush out.
     this._armFlushTimer()
   }
 
   // Arms the flush timer if none is pending. One-shot: the callback clears the
   // handle so the next enqueue (or a flush that left records) schedules again.
-  private _armFlushTimer(delayMs: number = this._flushIntervalMs): void {
+  private _armFlushTimer(): void {
     if (this._flushTimer) {
       return
     }
+    this._setFlushTimer(this._flushIntervalMs)
+  }
+
+  // Backoff and `Retry-After` are floors, so a timer already armed at the plain
+  // interval has to give way to a longer one — otherwise a capture landing
+  // mid-flush would send inside the window the server asked us to skip.
+  private _armFlushTimerNoEarlierThan(delayMs: number): void {
+    if (this._flushTimer && Date.now() + delayMs <= this._flushTimerFiresAt) {
+      return
+    }
+    this._clearFlushTimer()
+    this._setFlushTimer(delayMs)
+  }
+
+  private _setFlushTimer(delayMs: number): void {
+    this._flushTimerFiresAt = Date.now() + delayMs
     this._flushTimer = safeSetTimeout(() => {
       this._flushTimer = undefined
       this._flushInBackground()
@@ -391,7 +423,17 @@ export class PostHogLogs {
   // retried every interval.
   private _nextFlushDelay(): number {
     const exponent = Math.min(Math.max(0, this._consecutiveFlushFailures - 1), MAX_FLUSH_BACKOFF_EXPONENT)
-    return this._flushIntervalMs * 2 ** exponent
+    // `Retry-After` is a floor, not a replacement: never retry before the server
+    // asked, and never more often than our own backoff would have.
+    return Math.max(this._flushIntervalMs * 2 ** exponent, this._retryAfterRemainingMs())
+  }
+
+  private _retryAfterRemainingMs(): number {
+    return Math.max(0, this._retryAfterUntil - Date.now())
+  }
+
+  private _isWaitingOutRetryAfter(): boolean {
+    return this._retryAfterRemainingMs() > 0
   }
 
   private _hasQueuedRecords(): boolean {
@@ -449,6 +491,7 @@ export class PostHogLogs {
       .then(
         () => {
           this._consecutiveFlushFailures = 0
+          this._retryAfterUntil = 0
         },
         (err) => {
           this._consecutiveFlushFailures++
@@ -460,7 +503,7 @@ export class PostHogLogs {
         // sit undelivered on a quiet page; re-arm so the timer retries them, backing
         // off on consecutive failures.
         if (!this._instance.isDisabled && this._hasQueuedRecords()) {
-          this._armFlushTimer(this._nextFlushDelay())
+          this._armFlushTimerNoEarlierThan(this._nextFlushDelay())
         }
       })
   }

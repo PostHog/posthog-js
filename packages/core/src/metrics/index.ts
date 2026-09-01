@@ -73,6 +73,10 @@ export class PostHogMetrics {
   // types under one name produces charts that blend both series.
   private _typeByName = new Map<string, MetricType>()
   private _typeCollisionWarned = new Set<string>()
+  // Set from a `Retry-After` the endpoint sent; cleared on any other outcome so
+  // one throttled response cannot pin the delay for the rest of the process.
+  private _retryAfterMs = 0
+  private _flushTimerFiresAt = 0
   // Bumped by reset(). A flush that was in flight when reset() ran (e.g. it
   // lost a shutdown race) sees a stale generation when its send settles and
   // discards its window instead of merging it back and re-arming the timer.
@@ -136,6 +140,7 @@ export class PostHogMetrics {
   /** Clears the flush timer, drops the current window, and invalidates in-flight flushes. */
   reset(): void {
     this._generation++
+    this._retryAfterMs = 0
     this._clearFlushTimer()
     this._series = new Map()
     this._flushPromise = null
@@ -284,16 +289,41 @@ export class PostHogMetrics {
     return result
   }
 
+  // Arms the flush timer if none is pending. Every capture calls this, so it
+  // must leave a pending timer alone: re-arming on each one would push the
+  // flush out for as long as metrics keep arriving.
   private _armFlushTimer(): void {
     if (this._flushTimer) {
       return
     }
+    this._setFlushTimer(this._nextFlushDelay())
+  }
+
+  // `Retry-After` is a floor, so a timer already armed at the flush interval has
+  // to give way to a longer one rather than firing inside the window the server
+  // asked us to skip.
+  private _armFlushTimerNoEarlierThan(delayMs: number): void {
+    if (this._flushTimer && Date.now() + delayMs <= this._flushTimerFiresAt) {
+      return
+    }
+    this._clearFlushTimer()
+    this._setFlushTimer(delayMs)
+  }
+
+  // `Retry-After` is a floor, not a replacement: never retry before the server
+  // asked, and never more often than the flush interval.
+  private _nextFlushDelay(): number {
+    return Math.max(this._config.flushIntervalMs, this._retryAfterMs)
+  }
+
+  private _setFlushTimer(delayMs: number): void {
+    this._flushTimerFiresAt = Date.now() + delayMs
     this._flushTimer = safeSetTimeout(() => {
       this._flushTimer = undefined
       this.flush().catch((e) => {
         this._logger.error('Metrics flush failed:', e)
       })
-    }, this._config.flushIntervalMs)
+    }, delayMs)
   }
 
   private _clearFlushTimer(): void {
@@ -323,6 +353,9 @@ export class PostHogMetrics {
       // reconfigured, so this window is dropped whatever the outcome was.
       return
     }
+    // Only a retriable outcome carries a wait; anything else ends it, or a stale
+    // one would pin every later flush at the window the server has moved on from.
+    this._retryAfterMs = outcome.kind === 'retry-later' ? (outcome.retryAfterMs ?? 0) : 0
     switch (outcome.kind) {
       case 'ok':
         return
@@ -331,7 +364,7 @@ export class PostHogMetrics {
         // the next flush instead of being lost — and re-arm the timer, since
         // with no new captures nothing else would schedule that flush.
         this._mergeWindowBack(window)
-        this._armFlushTimer()
+        this._armFlushTimerNoEarlierThan(this._nextFlushDelay())
         return
       case 'too-large':
         this._logger.warn('Metrics batch exceeded the server size limit and was dropped')

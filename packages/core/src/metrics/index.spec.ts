@@ -243,6 +243,78 @@ describe('PostHogMetrics', () => {
       expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(1)
     })
 
+    it('keeps flushing on the interval while captures keep arriving', async () => {
+      // Every capture arms the timer, and metrics have no size trigger to fall
+      // back on: re-arming a pending one would stop the window ever being sent.
+      const metrics = createMetrics({ flushIntervalMs: 10_000 })
+
+      for (let i = 0; i < 60; i++) {
+        metrics.count('orders_created', 1)
+        await jest.advanceTimersByTimeAsync(1000)
+      }
+
+      expect(mockInstance._sendMetricsBatch).toHaveBeenCalled()
+    })
+
+    it('waits out Retry-After even when a flush timer is already pending', async () => {
+      // The capture arms a timer at the flush interval; the failed flush then asks
+      // for far longer. The pending timer must not fire first.
+      const instance = createMockInstance({
+        _sendMetricsBatch: jest.fn((): Promise<SendMetricsBatchOutcome> =>
+          Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+        ),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
+      metrics.count('orders_created', 1)
+      await metrics.flush()
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      await jest.advanceTimersByTimeAsync(11_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      await jest.advanceTimersByTimeAsync(300_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('clears Retry-After on an outcome that is not a retry', async () => {
+      // Only a retriable outcome carries a wait. A stale one left set here would
+      // pin every later flush at the server's old window forever.
+      const outcomes: SendMetricsBatchOutcome[] = [
+        { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 },
+        { kind: 'fatal', error: new Error('400') },
+      ]
+      const instance = createMockInstance({
+        _sendMetricsBatch: jest.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' })),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
+      metrics.count('orders_created', 1)
+      await metrics.flush()
+
+      // The wait elapses, the retry lands a 400, and that ends the wait.
+      await jest.advanceTimersByTimeAsync(300_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
+
+      metrics.count('orders_created', 1)
+      await jest.advanceTimersByTimeAsync(10_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(3)
+    })
+
+    it('drops a Retry-After wait on reset', async () => {
+      const instance = createMockInstance({
+        _sendMetricsBatch: jest.fn((): Promise<SendMetricsBatchOutcome> =>
+          Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+        ),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
+      metrics.count('orders_created', 1)
+      await metrics.flush()
+
+      metrics.reset()
+      metrics.count('orders_created', 1)
+      await jest.advanceTimersByTimeAsync(10_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
+    })
+
     it('does not send when the window is empty', async () => {
       createMetrics({ flushIntervalMs: 5000 })
       await jest.advanceTimersByTimeAsync(15000)

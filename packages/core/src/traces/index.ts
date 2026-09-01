@@ -73,6 +73,10 @@ export class PostHogTraces {
   private _lastDropWarningAt = 0
   private _dropReasons = new Set<string>()
   private _consecutiveFlushFailures = 0
+  // Set from a `Retry-After` the endpoint sent; cleared on any other outcome so
+  // one throttled response cannot pin the delay for the rest of the process.
+  private _retryAfterMs = 0
+  private _flushTimerFiresAt = 0
   // Separate from the backoff counter: this one belongs to whatever batch is at
   // the head, and resets whenever that batch is removed or shrunk.
   private _headBatchFailures = 0
@@ -241,7 +245,7 @@ export class PostHogTraces {
       if (this._flushPromise === promise) {
         this._flushPromise = null
       }
-      this._armFlushTimerIfQueued()
+      this._armFlushTimerIfQueuedNoEarlierThan()
     })
     this._flushPromise = promise
     return promise
@@ -260,6 +264,7 @@ export class PostHogTraces {
     this._dropReasons.clear()
     this._lastDropWarningAt = 0
     this._consecutiveFlushFailures = 0
+    this._retryAfterMs = 0
     this._headBatchFailures = 0
   }
 
@@ -499,6 +504,11 @@ export class PostHogTraces {
           return removed
         }
 
+        // Only a retriable outcome carries a wait; anything else ends it, or a
+        // stale one would pin every later flush at the window the server has
+        // moved on from.
+        this._retryAfterMs = outcome.kind === 'retry-later' ? (outcome.retryAfterMs ?? 0) : 0
+
         if (outcome.kind === 'ok') {
           this._consecutiveFlushFailures = 0
           this._headBatchFailures = 0
@@ -518,7 +528,7 @@ export class PostHogTraces {
             this._queue.splice(0, 1)
             remaining -= 1
             removed += 1
-            this._recordDrop(1, 'the ingestion endpoint rejected it as too large')
+            this._recordDrop(1, 'it is too large for the ingestion endpoint')
             this._headBatchFailures = 0
             continue
           }
@@ -587,18 +597,41 @@ export class PostHogTraces {
         this._backgroundFlush = undefined
         // A trigger that arrived while this drain was finishing found the guard
         // set and the queue empty, so neither path armed a timer.
-        this._armFlushTimerIfQueued()
+        this._armFlushTimerIfQueuedNoEarlierThan()
       })
   }
 
+  // Arms the flush timer if none is pending. Every span end can reach this, so
+  // it must leave a pending timer alone rather than pushing the flush out.
   private _armFlushTimerIfQueued(): void {
     if (this._flushTimer || !this._queue.length) {
       return
     }
+    this._setFlushTimer(this._nextFlushDelay())
+  }
+
+  // Backoff and `Retry-After` are floors, so a timer a span end armed at the
+  // plain interval while the send was in flight has to give way to a longer
+  // one — otherwise the retry lands inside the window the server asked us to
+  // skip.
+  private _armFlushTimerIfQueuedNoEarlierThan(): void {
+    if (!this._queue.length) {
+      return
+    }
+    const delayMs = this._nextFlushDelay()
+    if (this._flushTimer && Date.now() + delayMs <= this._flushTimerFiresAt) {
+      return
+    }
+    this._clearFlushTimer()
+    this._setFlushTimer(delayMs)
+  }
+
+  private _setFlushTimer(delayMs: number): void {
+    this._flushTimerFiresAt = Date.now() + delayMs
     this._flushTimer = safeSetTimeout(() => {
       this._flushTimer = undefined
       this._flushInBackground()
-    }, this._nextFlushDelay())
+    }, delayMs)
   }
 
   // Retry delay: base interval, doubling, capped at 30s — never below an interval
@@ -606,7 +639,10 @@ export class PostHogTraces {
   private _nextFlushDelay(): number {
     const exponent = Math.min(Math.max(0, this._consecutiveFlushFailures - 1), MAX_FLUSH_BACKOFF_EXPONENT)
     const delay = this._config.flushIntervalMs * 2 ** exponent
-    return Math.min(delay, Math.max(MAX_FLUSH_BACKOFF_MS, this._config.flushIntervalMs))
+    const capped = Math.min(delay, Math.max(MAX_FLUSH_BACKOFF_MS, this._config.flushIntervalMs))
+    // `Retry-After` is a floor, not a replacement: never retry before the server
+    // asked, and never more often than our own backoff would have.
+    return Math.max(capped, this._retryAfterMs)
   }
 
   private _clearFlushTimer(): void {
