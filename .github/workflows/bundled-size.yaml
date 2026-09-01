@@ -7,7 +7,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  affected_posthog_js:
+    uses: ./.github/workflows/check-affected.yml
+    with:
+      package-name: posthog-js
+      additional-paths: |
+        .github/workflows/bundled-size.yaml
+        .github/workflows/check-affected.yml
+        .github/actions/is-affected/action.yaml
+
+  affected_browser:
+    uses: ./.github/workflows/check-affected.yml
+    with:
+      package-name: "@posthog/browser"
+      additional-paths: |
+        .github/workflows/bundled-size.yaml
+        .github/workflows/check-affected.yml
+        .github/actions/is-affected/action.yaml
+
   build:
+    needs: [affected_posthog_js, affected_browser]
+    if: needs.affected_posthog_js.outputs.is-affected == 'true' || needs.affected_browser.outputs.is-affected == 'true'
     runs-on: ubuntu-22.04
 
     permissions:
