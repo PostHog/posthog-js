@@ -261,6 +261,12 @@ describe('Lazy SessionRecording', () => {
             _emit(createFullSnapshot())
         })
         assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = _addCustomEvent
+        const capturedNodes = (): Element[] => Array.from(document.querySelectorAll('*'))
+        assignableWindow.__PosthogExtensions__.rrweb.record.mirror = {
+            getId: (node) => capturedNodes().indexOf(node as Element),
+            getIds: () => capturedNodes().map((_, index) => index),
+            getNode: (id) => capturedNodes()[id] ?? null,
+        }
 
         assignableWindow.__PosthogExtensions__.rrwebPlugins = {
             getRecordConsolePlugin: jest.fn(),
@@ -3475,12 +3481,15 @@ describe('Lazy SessionRecording', () => {
         })
 
         it('emits sanitized JSON-LD only while capture is enabled', async () => {
+            const target = document.createElement('div')
+            target.id = 'product-123'
+            document.body.appendChild(target)
             const script = document.createElement('script')
             script.type = 'application/ld+json'
             script.textContent = JSON.stringify({
                 '@context': 'https://schema.org',
                 '@type': 'Product',
-                '@id': 'https://example.com/products/123',
+                '@id': 'https://example.com/products/123#product-123',
                 name: 'Camera',
                 email: 'private@example.com',
             })
@@ -3497,7 +3506,7 @@ describe('Lazy SessionRecording', () => {
                 expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
                     '@context': 'https://schema.org',
                     '@type': 'Product',
-                    '@id': 'https://example.com/products/123',
+                    '@id': 'product-123',
                     name: 'Camera',
                 })
 
@@ -3518,6 +3527,7 @@ describe('Lazy SessionRecording', () => {
                     expect.objectContaining({ name: 'After disable' })
                 )
             } finally {
+                target.remove()
                 document.querySelectorAll('script[type="application/ld+json"]').forEach((element) => element.remove())
             }
         })

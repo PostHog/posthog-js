@@ -54,6 +54,7 @@
     "files": [
         "lib/*",
         "dist/*",
+        "test-fixtures/*.json",
         "react/dist/**",
         "react/package.json",
         "react/surveys/package.json",

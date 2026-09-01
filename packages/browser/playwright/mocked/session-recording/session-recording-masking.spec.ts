@@ -67,15 +67,33 @@ test.describe('Session recording - masking', () => {
                 script.append(document.createComment('PRIVATE_COMMENT'))
                 document.head.append(script)
             }
+            const appendCapturedDomId = (id: string) => {
+                const element = document.createElement('div')
+                element.id = id
+                element.hidden = true
+                document.head.append(element)
+            }
             const appendInitialJsonLd = () => {
+                for (const id of [
+                    'ALLOWED_PRODUCT_ID',
+                    'ALLOWED_PRIVATE_GRAPH_ID',
+                    'DROPPED_CUSTOM_CHILD_ID',
+                    'DROPPED_ID_ONLY_NODE_ID',
+                ]) {
+                    appendCapturedDomId(id)
+                }
                 appendJsonLd({
                     '@context': 'https://schema.org',
                     '@type': 'Product',
-                    '@id': 'ALLOWED_PRODUCT_ID',
+                    '@id': 'https://private.example/products?token=PRIVATE_ID_URL#ALLOWED_PRODUCT_ID',
                     name: 'ALLOWED_INITIAL_PRODUCT',
                     email: 'PRIVATE_UNAPPROVED_EMAIL',
                     description: 'PRIVATE_DESCRIPTION',
                     url: 'https://example.com/?token=PRIVATE_URL_TOKEN',
+                    'PRIVATE_PROPERTY_NAME@example.com': {
+                        '@type': 'CustomMetadata',
+                        priceCurrency: 'ALLOWED_REDACTED_PROPERTY_DESCENDANT',
+                    },
                     brand: {
                         '@type': 'Person',
                         name: 'PRIVATE_NESTED_PERSON',
@@ -92,12 +110,23 @@ test.describe('Session recording - masking', () => {
                     '@graph': [
                         {
                             '@type': 'WebSite',
+                            '@id': 'https://private.example/#PRIVATE_MISSING_DOM_ID',
                             inLanguage: 'ALLOWED_GRAPH_LANGUAGE',
                             email: 'PRIVATE_GRAPH_EMAIL',
                         },
                         {
                             '@type': 'PrivateType',
+                            '@id': '#ALLOWED_PRIVATE_GRAPH_ID',
                             name: 'PRIVATE_GRAPH_ENTITY',
+                            customChild: {
+                                '@type': 'CustomChild',
+                                '@id': '/custom#DROPPED_CUSTOM_CHILD_ID',
+                                privateValue: 'PRIVATE_CUSTOM_CHILD_VALUE',
+                                idOnlyNode: {
+                                    '@id': 'DROPPED_ID_ONLY_NODE_ID',
+                                    privateValue: 'PRIVATE_ID_ONLY_NODE_VALUE',
+                                },
+                            },
                         },
                     ],
                 })
@@ -165,12 +194,20 @@ test.describe('Session recording - masking', () => {
             )
         await expect.poll(getEventBytes).toContain('ALLOWED_DYNAMIC_PRODUCT')
         const eventBytes = await getEventBytes()
+        const jsonLdEventBytes = JSON.stringify(
+            (await page.capturedEvents())
+                .filter((event) => event.event === '$snapshot')
+                .flatMap((event) => event.properties['$snapshot_data'])
+                .filter((event) => event.type === 5 && event.data.tag === '$json_ld')
+        )
         expect(eventBytes).toContain('ALLOWED_PRODUCT_ID')
         expect(eventBytes).toContain('ALLOWED_INITIAL_PRODUCT')
         expect(eventBytes).toContain('ALLOWED_DYNAMIC_PRODUCT')
         expect(eventBytes).toContain('ALLOWED_MANUFACTURER')
         expect(eventBytes).toContain('ALLOWED_MANUFACTURER_LEGAL_NAME')
         expect(eventBytes).toContain('ALLOWED_GRAPH_LANGUAGE')
+        expect(eventBytes).toContain('"@type":"PrivateType"')
+        expect(eventBytes).toContain('ALLOWED_PRIVATE_GRAPH_ID')
         expect(eventBytes).not.toContain('"tagName":"script"')
         for (const privateMarker of [
             'PRIVATE_ATTRIBUTE',
@@ -178,16 +215,24 @@ test.describe('Session recording - masking', () => {
             'PRIVATE_UNAPPROVED_EMAIL',
             'PRIVATE_DESCRIPTION',
             'PRIVATE_URL_TOKEN',
+            'PRIVATE_PROPERTY_NAME@example.com',
+            'ALLOWED_REDACTED_PROPERTY_DESCENDANT',
+            'PRIVATE_ID_URL',
+            'PRIVATE_MISSING_DOM_ID',
             'PRIVATE_NESTED_PERSON',
             'PRIVATE_MANUFACTURER_EMAIL',
             'PRIVATE_GRAPH_EMAIL',
             'PRIVATE_GRAPH_ENTITY',
+            'PRIVATE_CUSTOM_CHILD_VALUE',
+            'PRIVATE_ID_ONLY_NODE_VALUE',
             'PRIVATE_MASKED_PRODUCT',
             'PRIVATE_DYNAMIC_EMAIL',
             'PRIVATE_DYNAMIC_MASKED_PRODUCT',
         ]) {
             expect(eventBytes).not.toContain(privateMarker)
         }
+        expect(jsonLdEventBytes).not.toContain('DROPPED_CUSTOM_CHILD_ID')
+        expect(jsonLdEventBytes).not.toContain('DROPPED_ID_ONLY_NODE_ID')
     })
 
     test('masks text', async ({ page, context }) => {
