@@ -1,5 +1,22 @@
 # posthog-js-lite
 
+## 4.11.0
+
+### Minor Changes
+
+- [#4663](https://github.com/PostHog/posthog-js/pull/4663) [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3) Thanks [@pauldambra](https://github.com/pauldambra)! - Detect the Claude, Codex, and ChatGPT apps from their user agent markers: `$browser` now reports the app name instead of `Chrome`.
+
+  ChatGPT versions its apps differently per platform, so its `$browser_version` is not comparable across platforms. (2026-09-01)
+
+- [#4663](https://github.com/PostHog/posthog-js/pull/4663) [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3) Thanks [@pauldambra](https://github.com/pauldambra)! - Use the shared `@posthog/core` browser detection instead of a separate copy. `$browser` and `$browser_version` now match posthog-js.
+
+  This reattributes some events. Browsers the old copy missed (Vivaldi, Yandex, Whale, DuckDuckGo, Brave on iOS, Pale Moon, Waterfox, Oculus Browser) now report their own name instead of `Chrome` or `Safari`. User agents that only contain `Gecko` now report `Firefox` instead of `Mozilla`. Opera versions older than 15 are no longer detected. (2026-09-01)
+
+### Patch Changes
+
+- Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a)]:
+  - @posthog/core@1.50.0
+
 ## 4.10.4
 
 ### Patch Changes

@@ -1,5 +1,51 @@
 # posthog-js
 
+## 1.423.0
+
+### Minor Changes
+
+- [#4663](https://github.com/PostHog/posthog-js/pull/4663) [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3) Thanks [@pauldambra](https://github.com/pauldambra)! - Detect the Claude, Codex, and ChatGPT apps from their user agent markers: `$browser` now reports the app name instead of `Chrome`.
+
+    ChatGPT versions its apps differently per platform, so its `$browser_version` is not comparable across platforms. (2026-09-01)
+
+- [#4659](https://github.com/PostHog/posthog-js/pull/4659) [`1406e04`](https://github.com/PostHog/posthog-js/commit/1406e04745d3828528a3709377810015927ba036) Thanks [@marandaneto](https://github.com/marandaneto)! - Synchronize feature flag and early access enrollment persistence across browser tabs. Keep successful partial evaluations authoritative for payload updates and removals, including falsy payload values, while retaining cached state for failed evaluations.
+  (2026-09-01)
+
+### Patch Changes
+
+- [#4696](https://github.com/PostHog/posthog-js/pull/4696) [`aa72a36`](https://github.com/PostHog/posthog-js/commit/aa72a36930f09f8db0971e9077e852d1c76f3879) Thanks [@github-actions](https://github.com/apps/github-actions)! - Prefer `data-ph-capture-attribute-*` values from the closest element when the same property is defined on multiple ancestors.
+  (2026-09-01)
+
+- [#4683](https://github.com/PostHog/posthog-js/pull/4683) [`6309cb2`](https://github.com/PostHog/posthog-js/commit/6309cb22e3f1b419d232f7bfbd1656917d4e24dc) Thanks [@posthog](https://github.com/apps/posthog)! - Harden the directly importable `getElementsChainString` utility against runtime JavaScript callers that pass a non-array value. It now returns an empty string instead of calling `.map` on malformed input.
+  (2026-09-01)
+
+- [#4708](https://github.com/PostHog/posthog-js/pull/4708) [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Change `bigint` attributes on logs, metrics and spans to send as an int64 rather than as a string.
+  (2026-09-01)
+
+- [#4692](https://github.com/PostHog/posthog-js/pull/4692) [`ec550b8`](https://github.com/PostHog/posthog-js/commit/ec550b82797caafb79cdd87bde1a59c7991f37f6) Thanks [@mhornbacher](https://github.com/mhornbacher)! - Respect `navigator.globalPrivacyControl` when `respect_dnt` is enabled
+  (2026-09-01)
+
+- [#4697](https://github.com/PostHog/posthog-js/pull/4697) [`6d6091e`](https://github.com/PostHog/posthog-js/commit/6d6091e0b335d27b1aa94ea725fec0842aaa9463) Thanks [@yfwmaniish](https://github.com/yfwmaniish)! - Fix a memory leak in Session Replay recording: `MutationBuffer` skipped its own cleanup whenever a mutation batch normalized to an empty payload (e.g. a node added and removed within the same task), leaving the buffer holding strong references to DOM nodes indefinitely.
+  (2026-09-01)
+
+- [#4672](https://github.com/PostHog/posthog-js/pull/4672) [`0cddefe`](https://github.com/PostHog/posthog-js/commit/0cddefe2e84d0bd8c85cf53f5d65b5fd4318d9cf) Thanks [@posthog](https://github.com/apps/posthog)! - Error tracking now drops a known uBlock Origin Lite exception thrown by its Safari extension. Safari masks extension content-script URLs as `webkit-masked-url://hidden/`, but also uses that URL for application code, so the filter requires the extension's error signature before dropping an all-masked stack. A remaining unmasked `in_app` frame still preserves the exception as first-party.
+  (2026-09-01)
+
+- [#4704](https://github.com/PostHog/posthog-js/pull/4704) [`cee2280`](https://github.com/PostHog/posthog-js/commit/cee22804dfbedae447808d1615b5b27315d08f45) Thanks [@veryayskiy](https://github.com/veryayskiy)! - back off support widget polling to stop starving sends
+  (2026-09-01)
+
+- [#4684](https://github.com/PostHog/posthog-js/pull/4684) [`5874d1c`](https://github.com/PostHog/posthog-js/commit/5874d1c9f1e8cb9bf70600698a102498f876c24a) Thanks [@yfwmaniish](https://github.com/yfwmaniish)! - Fall back to in-memory storage when neither web storage nor cookies are available, instead of selecting a backend that cannot store anything. In contexts like a `data:` URL — a Figma plugin, for example — Chrome disables localStorage and cookies alike, and both the persistence and consent paths previously committed to an unusable store, logging a SecurityError on every capture. `cookieStore._is_supported()` now round-trips a probe cookie rather than only checking that `document` exists, and `memoryStore` no longer reports a stored falsy value (such as the `0` consent writes for "opted out") as absent.
+  (2026-09-01)
+
+- [#4662](https://github.com/PostHog/posthog-js/pull/4662) [`e7f5733`](https://github.com/PostHog/posthog-js/commit/e7f5733c368f83795e88572ba16e736176460e67) Thanks [@posthog](https://github.com/apps/posthog)! - Warn at init when `persistence` is `'memory'` or `'sessionStorage'` and no `bootstrap.distinctID` is set. In this setup the SDK mints a fresh distinct ID on every page load, so each `identify()` call merges another ID onto the same person. A person can then pass the distinct-ID limit, after which person pages and the session tab load only a truncated slice and the rest of the events look missing even though ingestion is fine. The warning points at the two fixes: switch to `localStorage+cookie`, or keep this persistence and pass a stable ID through `bootstrap.distinctID`.
+  (2026-09-01)
+
+- [#4682](https://github.com/PostHog/posthog-js/pull/4682) [`5c6ab6f`](https://github.com/PostHog/posthog-js/commit/5c6ab6f8372edacb1500d3d459b713f622b6a993) Thanks [@posthog](https://github.com/apps/posthog)! - Fix an uncaught `TypeError` in the web vitals attribution bundle. The attributed INP observer read `startTime` from the first entry without a guard, so a report with no entries (for example after a bfcache restore or soft navigation) threw and stopped the metric capture. Bump `web-vitals` to 6.2.1, which guards the empty-entry case: instead of throwing, it reports the metric with fallback attribution that carries no interaction details (zeroed input and processing delays).
+  (2026-09-01)
+- Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6309cb2`](https://github.com/PostHog/posthog-js/commit/6309cb22e3f1b419d232f7bfbd1656917d4e24dc), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a)]:
+    - @posthog/core@1.50.0
+    - @posthog/browser-common@0.7.1
+
 ## 1.422.5
 
 ### Patch Changes

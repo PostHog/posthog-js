@@ -1,5 +1,15 @@
 # posthog-ai
 
+## 8.9.1
+
+### Patch Changes
+
+- [#4698](https://github.com/PostHog/posthog-js/pull/4698) [`5ae5c29`](https://github.com/PostHog/posthog-js/commit/5ae5c2992d0f06dd9416fc453011214e4e36046b) Thanks [@dependabot](https://github.com/apps/dependabot)! - Preserve Anthropic workspace IDs on wrapped provider promises and support `@anthropic-ai/sdk` versions from 0.112.3 through 0.120.x.
+  (2026-09-01)
+- Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a)]:
+  - @posthog/core@1.50.0
+  - posthog-node@5.51.5
+
 ## 8.9.0
 
 ### Minor Changes

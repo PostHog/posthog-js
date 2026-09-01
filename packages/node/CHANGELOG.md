@@ -1,5 +1,17 @@
 # posthog-node
 
+## 5.51.5
+
+### Patch Changes
+
+- [#4661](https://github.com/PostHog/posthog-js/pull/4661) [`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b) Thanks [@marandaneto](https://github.com/marandaneto)! - Match local feature flag string operators, exact-value coercion, and JSON stringification with the flags service.
+  (2026-09-01)
+
+- [#4708](https://github.com/PostHog/posthog-js/pull/4708) [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Change `bigint` attributes on logs, metrics and spans to send as an int64 rather than as a string.
+  (2026-09-01)
+- Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a)]:
+  - @posthog/core@1.50.0
+
 ## 5.51.4
 
 ### Patch Changes
