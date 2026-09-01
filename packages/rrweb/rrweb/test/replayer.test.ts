@@ -30,6 +30,7 @@ import StyleSheetTextMutation from './events/style-sheet-text-mutation';
 import canvasInIframe from './events/canvas-in-iframe';
 import adoptedStyleSheet from './events/adopted-style-sheet';
 import adoptedStyleSheetBeforeShadowRoot from './events/adopted-style-sheet-before-shadow-root';
+import adoptedStyleSheetShadowHostReadd from './events/adopted-style-sheet-shadow-host-readd';
 import adoptedStyleSheetStaleRetry from './events/adopted-style-sheet-stale-retry';
 import adoptedStyleSheetModification from './events/adopted-style-sheet-modification';
 import documentReplacementEvents from './events/document-replacement';
@@ -1156,6 +1157,43 @@ describe('replayer', function () {
     expect(state.adoptedSheetCount).toBe(1);
     expect(state.ruleCounts).toEqual([3]);
     expect(state.anchorColor).toBe('rgb(255, 0, 0)');
+  });
+
+  it('re-adopts stylesheets when a shadow host is removed and re-added without a new AdoptedStyleSheet event', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(adoptedStyleSheetShadowHostReadd)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.play();
+    `);
+    await page.waitForTimeout(1000);
+
+    const checkCorrectness = async () => {
+      const state = await page.evaluate(() => {
+        const iframe = document.querySelector('iframe') as HTMLIFrameElement;
+        const host = iframe.contentDocument!.querySelector(
+          'late-shadow-host',
+        ) as HTMLElement;
+        const anchor = host.shadowRoot!.querySelector('a')!;
+        return {
+          adoptedSheetCount: host.shadowRoot!.adoptedStyleSheets.length,
+          ruleCounts: host.shadowRoot!.adoptedStyleSheets.map(
+            (s) => s.cssRules.length,
+          ),
+          anchorColor: iframe.contentWindow!.getComputedStyle(anchor).color,
+        };
+      });
+      expect(state.adoptedSheetCount).toBe(1);
+      expect(state.ruleCounts).toEqual([3]);
+      expect(state.anchorColor).toBe('rgb(255, 0, 0)');
+    };
+    await checkCorrectness();
+
+    // fast-forward mode: the re-add mutation is applied to the virtual dom
+    await page.evaluate('replayer.play(0);');
+    await waitForRAF(page);
+    await page.evaluate('replayer.pause(600);');
+    await checkCorrectness();
   });
 
   it('adopts stylesheets when playback pauses past the retry window before the shadow root attaches', async () => {
