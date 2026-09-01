@@ -15,7 +15,13 @@ import {
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { captureAiGeneration } from './capture'
 import { getBackgroundResponseLatency } from './background-responses'
-import { buildProviderMetadata, extractCacheWriteTokens, extractRequestId, getResponseFailure, responsesStopReason } from './utils'
+import {
+  buildProviderMetadata,
+  extractCacheWriteTokens,
+  extractRequestId,
+  getResponseFailure,
+  responsesStopReason,
+} from './utils'
 
 export type OpenAICompatibleProvider = 'openai' | 'azure'
 type ChatParams = OpenAI.Chat.Completions.ChatCompletionCreateParams

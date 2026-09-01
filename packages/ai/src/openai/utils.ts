@@ -82,10 +82,7 @@ export function isTerminalResponse(response: { status?: string | null } | null |
  * reasons, so they yield undefined.
  */
 export function responsesStopReason(
-  response:
-    | { status?: string | null; incomplete_details?: { reason?: string | null } | null }
-    | null
-    | undefined
+  response: { status?: string | null; incomplete_details?: { reason?: string | null } | null } | null | undefined
 ): string | undefined {
   if (!response || !isTerminalResponse(response)) {
     return undefined
