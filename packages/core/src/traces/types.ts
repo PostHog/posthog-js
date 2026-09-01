@@ -98,4 +98,8 @@ export interface ResolvedTracesConfig extends TracesConfig {
    * dropped rather than queued ones, whose children may already have shipped.
    */
   maxQueueSize: number
+  /** Bound on spans started but not yet ended. At the bound `startSpan` returns a no-op handle. */
+  maxLiveSpans: number
+  /** How long a span may stay live before it stops being accounted for and can never export. */
+  maxSpanAgeMs: number
 }

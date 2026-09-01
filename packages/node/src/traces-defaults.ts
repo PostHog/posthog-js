@@ -6,6 +6,15 @@ const DEFAULT_FLUSH_INTERVAL_MS = 5000
 const DEFAULT_MAX_EXPORT_BATCH_SIZE = 512
 const DEFAULT_MAX_QUEUE_SIZE = 2048
 
+// Live-span bounds. A server can legitimately hold thousands of spans open at
+// once, and refusing a legitimate span is worse than tolerating a leak, so the
+// count bound sits well above realistic concurrency — affordable because live
+// accounting is an id and a timestamp per span, not the span. The age bound is
+// an hour: production traces routinely run past ten minutes, and a span still
+// open after an hour is a leak rather than slow work.
+const DEFAULT_MAX_LIVE_SPANS = 10_000
+const DEFAULT_MAX_SPAN_AGE_MS = 3_600_000
+
 /**
  * Coerces a caller-supplied positive-integer option. `0`, a negative, or `NaN`
  * reaching the export loop would stall it.
@@ -60,5 +69,7 @@ export function resolveTracesConfig(config: TracesConfig | undefined): ResolvedT
     maxExportBatchSize,
     // Never below the flush trigger, or the depth-based flush could never fire.
     maxQueueSize: Math.max(positiveInteger(config?.maxQueueSize, DEFAULT_MAX_QUEUE_SIZE), maxExportBatchSize),
+    maxLiveSpans: positiveInteger(config?.maxLiveSpans, DEFAULT_MAX_LIVE_SPANS),
+    maxSpanAgeMs: positiveInteger(config?.maxSpanAgeMs, DEFAULT_MAX_SPAN_AGE_MS),
   }
 }

@@ -3,8 +3,9 @@ import { SyncSpanContextManager } from './context'
 import type { ResolvedTracesConfig } from './types'
 import type { Logger } from '../types'
 
-// The pipeline holds no reference to a span until that span ends, so a handle the
-// caller drops is collectable like any other object.
+// Live-span accounting keeps an id and a timestamp per span, never the span, so a
+// handle the caller drops stays collectable. This probe is what stops a later
+// change from turning that accounting into a registry of span objects.
 const gc = (globalThis as { gc?: () => void }).gc
 
 // `--expose-gc` is set by the `test:unit` script. A runner that invokes jest
@@ -17,6 +18,8 @@ describe('live spans', () => {
     flushIntervalMs: 5000,
     maxExportBatchSize: 512,
     maxQueueSize: 2048,
+    maxLiveSpans: 10000,
+    maxSpanAgeMs: 3600000,
   }
 
   const createTraces = (): PostHogTraces =>
