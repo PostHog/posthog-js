@@ -594,6 +594,7 @@
         "_remove",
         "_removeAllTriggerListeners",
         "_removeEventTriggerCaptureHook",
+        "_removeExtension",
         "_removeListeners",
         "_removePageViewCaptureHook",
         "_removeSurveyFromDom",
