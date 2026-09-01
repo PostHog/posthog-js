@@ -3465,8 +3465,8 @@
           "name": "bootstrap"
         },
         {
-          "description": "The segment analytics object.",
-          "type": "SegmentAnalytics",
+          "description": "The Segment analytics object, or integration configuration.",
+          "type": "SegmentAnalytics | SegmentIntegrationConfig",
           "name": "segment"
         },
         {
