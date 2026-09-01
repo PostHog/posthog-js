@@ -827,8 +827,6 @@ function initFetchObserver(
                 if (recordResponseHeaders) {
                     networkRequest.responseHeaders = responseHeaders
                 }
-                // Recording the response body must never break a request the host already got a good
-                // response for, so a body-read failure is swallowed and we still return the response.
                 try {
                     if (
                         shouldRecordBody({
