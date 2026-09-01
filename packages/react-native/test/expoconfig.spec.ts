@@ -366,19 +366,6 @@ describe('addDsymUploadBuildPhase', () => {
   // xcode's addBuildPhase stores shellScript quote-escaped with literal newlines.
   const encodePbx = (script: string): string => '"' + script.replace(/"/g, '\\"') + '"'
 
-  it('unbinds dSYM uploads from a release in event mode, and refreshes back out of it', () => {
-    // The refresh only fires when the stored script matches a variant the plugin can generate, so
-    // a release-mode variant missing from that list would silently freeze the phase as-is.
-    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: encodePbx(buildDsymUploadShellScript()) }
-    const xp = mockXcodeProjectForBuildPhase(existing)
-
-    addDsymUploadBuildPhase(xp, false, false, 'event')
-    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, false, 'event')))
-
-    addDsymUploadBuildPhase(xp, false, false, 'symbol-set')
-    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, false, 'symbol-set')))
-  })
-
   // Verbatim text of the phase as posthog-react-native 4.63 wrote it. The plugin refreshes a phase
   // only when its text matches something the plugin generated, so a project prebuilt by that SDK
   // depends on this exact text staying in the list. Kept as literals on purpose: deriving it from
@@ -427,47 +414,12 @@ describe('addDsymUploadBuildPhase', () => {
       const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: encodePbx(legacyLines.join('\n')) }
       const xp = mockXcodeProjectForBuildPhase(existing)
 
-      addDsymUploadBuildPhase(xp, includeSource, skipOnConflict, 'event')
+      addDsymUploadBuildPhase(xp, includeSource, skipOnConflict)
 
       expect(xp.addBuildPhase).not.toHaveBeenCalled()
-      expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(includeSource, skipOnConflict, 'event')))
+      expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(includeSource, skipOnConflict)))
     }
   )
-
-  // Runs the generated phase against a stub upload-symbols.sh, so the assertions are on what
-  // posthog-ios actually receives rather than on the shell source.
-  const runDsymPhase = (script: string, env: Record<string, string>): { status: number; output: string } => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-dsym-phase-'))
-    try {
-      const stub = path.join(tempDir, 'PostHog', 'build-tools', 'upload-symbols.sh')
-      fs.mkdirSync(path.dirname(stub), { recursive: true })
-      fs.writeFileSync(stub, '#!/bin/sh\necho "NO_RELEASE_BIND=${POSTHOG_NO_RELEASE_BIND:-unset}"\n', {
-        mode: 0o755,
-      })
-      const scriptPath = path.join(tempDir, 'phase.sh')
-      fs.writeFileSync(scriptPath, script, { mode: 0o755 })
-      const result = spawnSync('/bin/sh', [scriptPath], {
-        env: { ...process.env, PODS_ROOT: tempDir, BUILD_DIR: tempDir, ...env },
-        encoding: 'utf8',
-      })
-      return { status: result.status ?? -1, output: `${result.stdout}${result.stderr}` }
-    } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true })
-    }
-  }
-
-  it('never unbinds the dSYM upload, whatever the environment says', () => {
-    // The release mode steers the Hermes upload only. posthog-ios always binds its symbol sets, so
-    // this phase must not export POSTHOG_NO_RELEASE_BIND for any value it inherits.
-    const script = buildDsymUploadShellScript()
-
-    for (const mode of ['event', 'symbol-set', 'evnet']) {
-      const result = runDsymPhase(script, { POSTHOG_RELEASE_MODE: mode })
-
-      expect(result.status).toBe(0)
-      expect(result.output).toContain('NO_RELEASE_BIND=unset')
-    }
-  })
 
   it('refreshes an existing plugin-generated phase script so option changes take effect', () => {
     const existing: any = {

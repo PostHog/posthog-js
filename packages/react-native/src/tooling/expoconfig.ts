@@ -8,7 +8,7 @@ const { withAppBuildGradle, withBaseMod, withGradleProperties, withProjectBuildG
 // com.posthog.android uploads R8 mapping files and injects a matching map-id so native
 // crash stack traces can be deobfuscated. The injected version has to read every gradle
 // property the plugin writes, or that half of the build ignores the option: 1.4.0 is the first
-// version that reads posthog.dotenvFile, and 1.5.0 the first that reads posthog.releaseMode.
+// version that reads posthog.dotenvFile.
 const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.5.2'
 
 const resolvePostHogReactNativePackageJsonPath =
@@ -321,14 +321,9 @@ export function buildDsymUploadShellScript(includeSource = false, skipOnConflict
 }
 
 // The phase as SDKs without release-mode support wrote it: the same script with no release-mode
-// block. isPluginGeneratedDsymUploadBuildPhase recognizes only text the plugin wrote, so every
-// shape the plugin has ever written has to stay among its variants. Without that, a project
-// prebuilt by an older SDK keeps its old phase and never picks up a change to this one.
-function composeDsymUploadShellScript(
-  includeSource: boolean,
-  skipOnConflict: boolean,
-  releaseModeLines: string[] = []
-): string {
+// block. isPluginGeneratedDsymUploadBuildPhase compares against this exact text, so a change here
+// makes the plugin stop recognizing the phases it wrote before, and stop refreshing them.
+function composeDsymUploadShellScript(includeSource: boolean, skipOnConflict: boolean): string {
   const lines = [
     '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
     '# upload-symbols.sh ships inside the posthog-ios dependency.',
@@ -347,8 +342,6 @@ function composeDsymUploadShellScript(
       'export POSTHOG_SKIP_ON_CONFLICT=1'
     )
   }
-
-  lines.push(...releaseModeLines)
 
   lines.push(
     'PODS_SCRIPT="${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh"',
@@ -381,44 +374,13 @@ function decodePbxShellScript(stored: string): string {
   return stored.slice(1, -1).replace(/\\(.)/g, (_match, ch) => (ch === 'n' ? '\n' : ch === 't' ? '\t' : ch))
 }
 
-// The release-mode block the previous SDK wrote into this phase. It exported POSTHOG_NO_RELEASE_BIND
-// for event mode, which posthog-ios no longer reads. Kept so a project prebuilt by that SDK is still
-// recognized, and so the refresh replaces the block rather than leaving it in place.
-function buildPreviousDsymReleaseModeLines(releaseMode?: PostHogReleaseMode): string[] {
-  return [
-    releaseMode
-      ? `POSTHOG_RESOLVED_RELEASE_MODE="${releaseMode}"`
-      : 'POSTHOG_RESOLVED_RELEASE_MODE="${POSTHOG_RELEASE_MODE:-}"',
-    'case "$POSTHOG_RESOLVED_RELEASE_MODE" in',
-    '  ""|symbol-set) ;;',
-    '  event)',
-    '    # Upload dSYMs without binding them to a release, so each crash resolves its own from the',
-    '    # app version and namespace the SDK sends. posthog-ios versions whose upload-symbols.sh',
-    '    # does not read this variable ignore it and keep binding the dSYMs.',
-    '    export POSTHOG_NO_RELEASE_BIND=1',
-    '    ;;',
-    '  *)',
-    "    echo \"error: posthog release mode must be 'symbol-set' or 'event', was '$POSTHOG_RESOLVED_RELEASE_MODE'\"",
-    '    exit 1',
-    '    ;;',
-    'esac',
-  ]
-}
-
 function isPluginGeneratedDsymUploadBuildPhase(phase: any): boolean {
   if (typeof phase?.shellScript !== 'string') {
     return false
   }
   const stored = decodePbxShellScript(phase.shellScript)
   return [false, true].some((source) =>
-    [false, true].some(
-      (skip) =>
-        stored === buildDsymUploadShellScript(source, skip) ||
-        [undefined, ...POSTHOG_RELEASE_MODES].some(
-          (mode) =>
-            stored === composeDsymUploadShellScript(source, skip, buildPreviousDsymReleaseModeLines(mode))
-        )
-    )
+    [false, true].some((skip) => stored === buildDsymUploadShellScript(source, skip))
   )
 }
 
@@ -442,18 +404,11 @@ export function moveDsymUploadBuildPhaseToEnd(xcodeProject: any): void {
 // the phase after extension embedding avoids dependency cycles in apps with app extensions.
 // Re-runs refresh only a still-plugin-generated phase, also one an older SDK wrote, so user
 // customizations remain untouched.
-export function addDsymUploadBuildPhase(
-  xcodeProject: any,
-  includeSource = false,
-  skipOnConflict = false,
-  releaseMode?: PostHogReleaseMode
-): void {
+export function addDsymUploadBuildPhase(xcodeProject: any, includeSource = false, skipOnConflict = false): void {
   const existing = xcodeProject.pbxItemByComment(POSTHOG_DSYM_BUILD_PHASE_NAME, 'PBXShellScriptBuildPhase')
   if (existing) {
     if (isPluginGeneratedDsymUploadBuildPhase(existing)) {
-      existing.shellScript = encodePbxShellScript(
-        buildDsymUploadShellScript(includeSource, skipOnConflict, releaseMode)
-      )
+      existing.shellScript = encodePbxShellScript(buildDsymUploadShellScript(includeSource, skipOnConflict))
       existing.inputPaths = Array.from(
         new Set([...(Array.isArray(existing.inputPaths) ? existing.inputPaths : []), POSTHOG_DSYM_INPUT_PATH])
       )
@@ -462,7 +417,7 @@ export function addDsymUploadBuildPhase(
     xcodeProject.addBuildPhase([], 'PBXShellScriptBuildPhase', POSTHOG_DSYM_BUILD_PHASE_NAME, null, {
       inputPaths: [POSTHOG_DSYM_INPUT_PATH],
       shellPath: '/bin/sh',
-      shellScript: buildDsymUploadShellScript(includeSource, skipOnConflict, releaseMode),
+      shellScript: buildDsymUploadShellScript(includeSource, skipOnConflict),
     })
   }
 
@@ -703,8 +658,7 @@ const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
       addDsymUploadBuildPhase(
         xcodeProject,
         nativeSymbols.includeSource,
-        props.skipOnConflict === true,
-        props.releaseMode
+        props.skipOnConflict === true
       )
     }
 
