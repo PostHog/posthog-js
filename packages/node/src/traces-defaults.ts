@@ -1,3 +1,4 @@
+import { assignUserAttributes } from '@posthog/core'
 import type { ResolvedTracesConfig, TracesConfig } from '@posthog/core'
 
 // OpenTelemetry's BatchSpanProcessor defaults, which sit comfortably under the
@@ -62,7 +63,12 @@ export function resolveTracesConfig(
   config: TracesConfig | undefined,
   hostResourceAttributes?: Record<string, string>
 ): ResolvedTracesConfig {
-  const resourceAttributes = { ...hostResourceAttributes, ...withUsableIdentityKeys(config?.resourceAttributes) }
+  // Copied key by key rather than spread: a throwing accessor on a user-supplied
+  // attribute would otherwise escape the first `startSpan`.
+  const resourceAttributes = assignUserAttributes(
+    { ...hostResourceAttributes },
+    withUsableIdentityKeys(config?.resourceAttributes)
+  )
   const maxExportBatchSize = positiveInteger(config?.maxExportBatchSize, DEFAULT_MAX_EXPORT_BATCH_SIZE)
   return {
     serviceName: (resourceAttributes?.['service.name'] as string | undefined) ?? config?.serviceName,

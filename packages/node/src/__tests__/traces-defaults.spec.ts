@@ -146,4 +146,30 @@ describe('resourceAttributes guarding', () => {
 
     expect(() => resolveTracesConfig({ resourceAttributes: hostile as never })).not.toThrow()
   })
+
+  it('does not throw when a non-identity accessor throws', () => {
+    const hostile = { 'service.name': 'checkout-api' }
+    Object.defineProperty(hostile, 'region', {
+      enumerable: true,
+      get() {
+        throw new Error('config getter exploded')
+      },
+    })
+
+    expect(() => resolveTracesConfig({ resourceAttributes: hostile as never }, { 'os.name': 'Linux' })).not.toThrow()
+  })
+
+  it('keeps the readable attributes when one accessor throws', () => {
+    const hostile = { region: 'us' }
+    Object.defineProperty(hostile, 'tenant', {
+      enumerable: true,
+      get() {
+        throw new Error('config getter exploded')
+      },
+    })
+
+    const resolved = resolveTracesConfig({ resourceAttributes: hostile as never }, { 'os.name': 'Linux' })
+
+    expect(resolved.resourceAttributes).toMatchObject({ 'os.name': 'Linux', region: 'us' })
+  })
 })

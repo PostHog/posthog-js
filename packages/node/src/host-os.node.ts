@@ -1,4 +1,5 @@
 import { platform, release } from 'node:os'
+import { osResourceAttributes } from '@posthog/core'
 
 /**
  * OTLP `os.name` / `os.version` for the machine running the SDK, so spans can
@@ -15,8 +16,7 @@ export function hostOsResourceAttributes(): Record<string, string> {
     osName = platform()
     osVersion = release()
   } catch {}
-  return {
-    ...(osName ? { 'os.name': osName } : {}),
-    ...(osVersion ? { 'os.version': osVersion } : {}),
-  }
+  // Through the shared builder, so a Node span reports the same `os.name` the
+  // browser, iOS and Android SDKs send rather than the `node:os` identifier.
+  return osResourceAttributes(osName, osVersion)
 }
