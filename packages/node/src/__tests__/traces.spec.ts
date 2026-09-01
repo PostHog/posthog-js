@@ -72,6 +72,35 @@ describe('PostHog traces', () => {
       expect(untraced.getActiveSpan()).toBeNull()
       await untraced.shutdown()
     })
+
+    it('passes an inbound trace through a service that has tracing off', async () => {
+      const untraced = createClient({ traces: undefined })
+      const inbound = `00-${'4bf92f3577b34da6a3ce929d0e0e4736'}-00f067aa0ba902b7-00`
+
+      const span = untraced.startSpan('proxied', { parent: inbound, tracestate: 'vendor=abc' })
+      span.end()
+      await untraced.shutdown()
+
+      // Echoed verbatim: the ids belong to the upstream caller, which recorded them.
+      expect(span.traceparent()).toBe(inbound)
+      expect(span.tracestate()).toBe('vendor=abc')
+      expect(traceRequests()).toHaveLength(0)
+    })
+
+    it('exposes a passed-through trace to getActiveSpan inside withSpan', async () => {
+      const untraced = createClient({ traces: undefined })
+      const inbound = `00-${'4bf92f3577b34da6a3ce929d0e0e4736'}-00f067aa0ba902b7-01`
+
+      const propagated = await untraced.withSpan('proxied', { parent: inbound }, async () => {
+        // After an await, so this also covers the AsyncLocalStorage path.
+        await Promise.resolve()
+        return untraced.getActiveSpan()?.traceparent()
+      })
+      await untraced.shutdown()
+
+      expect(propagated).toBe(inbound)
+      expect(untraced.getActiveSpan()).toBeNull()
+    })
   })
 
   describe('transport', () => {

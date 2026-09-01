@@ -18,6 +18,18 @@ const TRACEPARENT_RE = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2
  * and dropping the parentage would orphan our own spans.
  */
 export function parseTraceparent(value: unknown): RemoteSpanContext | undefined {
+  const fields = matchTraceparent(value)
+  return fields && { traceId: fields.traceId, spanId: fields.spanId }
+}
+
+interface TraceparentFields {
+  version: string
+  traceId: string
+  spanId: string
+  flags: string
+}
+
+function matchTraceparent(value: unknown): TraceparentFields | undefined {
   if (typeof value !== 'string') {
     return undefined
   }
@@ -25,14 +37,24 @@ export function parseTraceparent(value: unknown): RemoteSpanContext | undefined 
   if (!match) {
     return undefined
   }
-  const [, version, traceId, spanId] = match
+  const [, version, traceId, spanId, flags] = match
   if (version === 'ff') {
     return undefined
   }
   if (!isValidTraceId(traceId) || !isValidSpanId(spanId)) {
     return undefined
   }
-  return { traceId, spanId }
+  return { version, traceId, spanId, flags }
+}
+
+/**
+ * The canonical form of an inbound `traceparent`, or `undefined` when it is
+ * malformed. Version and flags are carried through as received, so a service
+ * that forwards this value continues the caller's trace exactly as sent.
+ */
+export function normalizeTraceparent(value: unknown): string | undefined {
+  const fields = matchTraceparent(value)
+  return fields && `${fields.version}-${fields.traceId}-${fields.spanId}-${fields.flags}`
 }
 
 /**

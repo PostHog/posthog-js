@@ -89,7 +89,7 @@ export type {
 } from './metrics/types'
 export { PostHogTraces } from './traces'
 export { SyncSpanContextManager } from './traces/context'
-export { NOOP_SPAN } from './traces/span'
+export { NOOP_SPAN, inertSpan } from './traces/span'
 export type { ResolvedTracesConfig, SpanContextManager, TraceSdkContext } from './traces/types'
 // Same barrel convention as logs and metrics for the user-facing tracing types.
 export type {

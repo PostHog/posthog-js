@@ -204,6 +204,12 @@ function encodeKeyValueList(
     if (!propertyIsEnumerable.call(attrs, key)) {
       continue
     }
+    if (!key) {
+      // OTLP requires a non-empty key. The server stores one verbatim, where it
+      // shows up as a nameless attribute nothing can filter on.
+      logger?.debug('Dropping an attribute with an empty key')
+      continue
+    }
     if (result.length >= MAX_JSON_SAFE_VALUE_ITEMS || state.remainingNodes <= 0) {
       // Reported rather than written into the attributes: a synthetic key would
       // land in the user's own namespace and could collide with a real one.
