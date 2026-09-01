@@ -2,21 +2,7 @@
 
 ...<older entries truncated>
 
-idated against Xcode target dependency behavior with embedded extensions. The report specifically identifies the extension case as one where a prior design avoided explicit dSYM inputs, so blindly adding an input path could trade this deterministic timeout for a dependency cycle.
-
-## 2026-08-25T19:04:55.442Z
-- Item: issue #4648 — fix(react-native): ph-no-capture ignored past maxElementsCaptured
-- Conclusion: Confirmed React Native autocapture privacy bug; a focused, small fix and regression test are appropriate.
-- Labels: react-native, feature/autocapture, team/client-libraries
-- URL: https://github.com/PostHog/posthog-js/issues/4648
-- Relevant files: `packages/react-native/src/autocapture.tsx`, `packages/react-native/src/PostHogProvider.tsx`, `packages/react-native/test/autocapture.spec.ts`, `packages/react-native/src/types.ts`
-- Findings: `autocaptureFromTouchEvent` checks `props?.[noCaptureProp]` inside a loop whose condition includes `elements.length < maxElementsCaptured`; the default cap is 20.; Each labelled element is pushed into `elements`, so 20 labelled descendants end the loop before a further ancestor's `ph-no-capture` prop can be inspected.; When elements are collected, the function calls `posthog.autocapture('touch', elements, ...)`, meaning a missed opt-out results in event capture rather than a marked or partial payload.; `PostHogProvider` delegates touch-end capture to this same `autocaptureFromTouchEvent` helper, and existing unit tests already exercise this helper with mocked Fiber-like `.return` chains.; `maxElementsCaptured` is documented as the maximum number of elements to capture, supporting the distinction between an emission limit and an opt-out decision.
-- Fix assessment: The fault is localized to the pure Fiber-chain traversal and can be covered with a deterministic unit test. No public API or payload shape needs to change.
-- PR: https://github.com/PostHog/posthog-js/pull/4649
-
-## 2026-08-27T22:24:27.464Z
-- Item: issue #4667 — nextjs-config: sourcemap CLI races Turbopack filesystem cache in Next.js 16.3+ (Chunk ID not found)
-- Conclusion: Credible Next.js/Turbopack sourcemap-upload race; it needs a targeted compatibility fix rather than an arbitrary delay or a speculative retry.
+it needs a targeted compatibility fix rather than an arbitrary delay or a speculative retry.
 - Labels: frameworks/next-js, team/client-libraries
 - URL: https://github.com/PostHog/posthog-js/issues/4667
 - Relevant files: `packages/nextjs-config/src/config.ts`, `packages/nextjs-config/src/utils.ts`, `packages/plugin-utils/src/cli.ts`, `packages/nextjs-config/src/strip-sourcemap-comments.ts`, `packages/nextjs-config/CHANGELOG.md`
@@ -97,3 +83,13 @@ idated against Xcode target dependency behavior with embedded extensions. The re
 - Relevant files: `packages/types/src/posthog-config.ts`, `packages/browser/src/types.ts`, `packages/browser/src/posthog-core.ts`, `packages/browser/src/posthog-featureflags.ts`, `packages/browser/src/__tests__/posthog-core.identify.test.ts`, `packages/browser/src/__tests__/featureflags.test.ts`, `packages/browser/functional_tests/identify.test.ts`, `packages/browser/functional_tests/feature-flags.test.ts`
 - Findings: `packages/browser/src/types.ts` defines the browser config as an extension of the shared `@posthog/types` `PostHogConfig`; neither inspected config type currently defines `reuseAnonymousId`.; `defaultConfig` in `packages/browser/src/posthog-core.ts` has no reuse-anonymous-ID setting, so an explicit default of `false` is needed to preserve the current behavior.; During an anonymous-to-identified transition, `PostHog.identify()` captures `$identify` with `distinct_id: new_distinct_id` and `$anon_distinct_id: previous_distinct_id`, then calls `featureFlags.setAnonymousDistinctId(previous_distinct_id)`.; `PostHogFeatureFlags._callFlagsEndpoint()` serializes its stored anonymous ID as `$anon_distinct_id` in the `/flags/?v=2` request, so only changing the `$identify` event would leave feature-flag evaluation with merge semantics.; The identity transition, user-state update, person-property handling, and feature-flag reload are separate from setting `$anon_distinct_id`; they can remain intact when the option is enabled.; Existing unit and functional tests already assert the default `$identify` payload and the anonymous ID forwarded to feature-flag requests, providing direct locations for enabled and default-off regression coverage.
 - Fix assessment: The behavior is localized to the identify transition and its feature-flag handoff. A default-off boolean preserves existing users, and existing focused tests cover both affected payloads.
+
+## 2026-09-01T12:02:49.182Z
+- Item: issue #4718 — `IPostHog` interface is missing `captureException` methods
+- Conclusion: Confirmed TypeScript API-surface bug: request-scoped @posthog/next clients expose exception capture at runtime, but IPostHog omits both exception-capture methods.
+- Labels: node, frameworks/next-js, feature/error-tracking, team/client-libraries
+- URL: https://github.com/PostHog/posthog-js/issues/4718
+- Relevant files: `packages/node/src/types.ts`, `packages/node/src/client.ts`, `packages/next/src/server/createPostHog.ts`, `packages/next/src/server/getPostHog.ts`, `packages/next/src/server/captureRequestError.ts`, `packages/node/src/__tests__/metrics.spec.ts`
+- Findings: `IPostHog` in `packages/node/src/types.ts` declares `capture` and `captureImmediate`, but declares neither `captureException` nor `captureExceptionImmediate`.; `PostHogBackendClient` explicitly implements `IPostHog` and defines `captureException(error, distinctId?, additionalProperties?, uuid?, flags?): void` and `captureExceptionImmediate(error, distinctId?, additionalProperties?, flags?): Promise<void>` in `packages/node/src/client.ts`.; `createPostHog().getPostHog` is explicitly typed as `() => Promise<IPostHog>` in `packages/next/src/server/createPostHog.ts`, which produces the reported TS2339 error for consumers.; `withRequestContext` in `packages/next/src/server/getPostHog.ts` proxies every callable member other than `withContext`, so both concrete exception-capture methods are available and request-context-wrapped at runtime.; `packages/next/src/server/captureRequestError.ts` defines a local `PostHogExceptionCaptureClient` solely to type its call to `captureExceptionImmediate`, corroborating that the shared interface is incomplete.; `packages/node/src/__tests__/metrics.spec.ts` already demonstrates the repository's pattern for verifying that a concrete client API is reachable through `IPostHog`.
+- Fix assessment: The mismatch is localized to the public interface and the exact concrete signatures already exist. No runtime proxy or event-capture behavior needs to change.
+- PR: https://github.com/PostHog/posthog-js/pull/4719
