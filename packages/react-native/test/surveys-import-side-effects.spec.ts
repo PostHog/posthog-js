@@ -10,10 +10,7 @@ describe('surveys import side effects (#3740)', () => {
   const surveyModulesWithStyles: [string, () => Promise<unknown>][] = [
     ['../src/surveys/icons', () => import('../src/surveys/icons')],
     ['../src/surveys/components/Cancel', () => import('../src/surveys/components/Cancel')],
-    [
-      '../src/surveys/components/ConfirmationMessage',
-      () => import('../src/surveys/components/ConfirmationMessage'),
-    ],
+    ['../src/surveys/components/ConfirmationMessage', () => import('../src/surveys/components/ConfirmationMessage')],
     ['../src/surveys/components/BottomSection', () => import('../src/surveys/components/BottomSection')],
     ['../src/surveys/components/QuestionTypes', () => import('../src/surveys/components/QuestionTypes')],
     ['../src/surveys/components/SurveyModal', () => import('../src/surveys/components/SurveyModal')],

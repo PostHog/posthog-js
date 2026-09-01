@@ -70,9 +70,7 @@ describe('Surveys: back button', () => {
     })
 
     test('back button is hidden on the first question', () => {
-        render(
-            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />
-        )
+        render(<SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
 
         expect(screen.getByText('Question 1')).toBeVisible()
         expect(screen.queryByRole('button', { name: /go to previous question/i })).not.toBeInTheDocument()
@@ -90,9 +88,7 @@ describe('Surveys: back button', () => {
     })
 
     test('back button appears after advancing and returns to the previous question with prior answer prefilled', async () => {
-        render(
-            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />
-        )
+        render(<SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'first answer' } })
         fireEvent.click(screen.getByRole('button', { name: /submit survey/i }))
@@ -123,9 +119,7 @@ describe('Surveys: back button', () => {
 
         // Second mount: feed the captured state back in (simulating a reload).
         mockedGetInProgressSurveyState.mockReturnValue(persistedState)
-        render(
-            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />
-        )
+        render(<SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
 
         // Behavior: we resume on Q2 AND the back button is available because Q1 is in history.
         expect(screen.getByText('Question 2')).toBeVisible()
@@ -152,12 +146,7 @@ describe('Surveys: back button', () => {
         }
 
         render(
-            <SurveyPopup
-                survey={branchedSurvey}
-                removeSurveyFromFocus={vi.fn()}
-                isPopup
-                posthog={mockPosthog as any}
-            />
+            <SurveyPopup survey={branchedSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />
         )
 
         fireEvent.input(screen.getByRole('textbox'), { target: { value: 'skip to q3' } })
@@ -177,9 +166,7 @@ describe('Surveys: back button', () => {
             responses: { $survey_response_q1: 'previous answer' },
         })
 
-        render(
-            <SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />
-        )
+        render(<SurveyPopup survey={baseSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
 
         expect(screen.getByText('Question 2')).toBeVisible()
         expect(screen.queryByRole('button', { name: /go to previous question/i })).not.toBeInTheDocument()
@@ -207,12 +194,7 @@ describe('Surveys: back button', () => {
         }
 
         render(
-            <SurveyPopup
-                survey={branchedSurvey}
-                removeSurveyFromFocus={vi.fn()}
-                isPopup
-                posthog={mockPosthog as any}
-            />
+            <SurveyPopup survey={branchedSurvey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />
         )
 
         // Q1: pick 'a' -> routes to Q2

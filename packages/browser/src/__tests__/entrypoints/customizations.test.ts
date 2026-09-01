@@ -43,9 +43,9 @@ describe('customizations entrypoints', () => {
 
     it('initializes the shared config with the posthog-js identity', async () => {
         await vi.isolateModulesAsync(async () => {
-            const Config = (await vi.importActual<typeof import('@posthog/browser-common/config')>(
-                '@posthog/browser-common/config'
-            )).default
+            const Config = (
+                await vi.importActual<typeof import('@posthog/browser-common/config')>('@posthog/browser-common/config')
+            ).default
             Config.LIB_NAME = 'test-sentinel'
             Config.LIB_VERSION = '0.0.0-test'
 

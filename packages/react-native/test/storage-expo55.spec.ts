@@ -1,19 +1,14 @@
 // Test for Expo SDK 55 where both the new File/Paths API and a working legacy subpath exist.
 // The new API should always be preferred over the legacy subpath.
 
-const {
-  mockFileWrite,
-  mockFileText,
-  mockDocument,
-  mockLegacyReadAsStringAsync,
-  mockLegacyWriteAsStringAsync,
-} = vi.hoisted(() => ({
-  mockFileWrite: vi.fn(),
-  mockFileText: vi.fn().mockResolvedValue('stored-value'),
-  mockDocument: { uri: 'file:///mock-doc-dir/' },
-  mockLegacyReadAsStringAsync: vi.fn(),
-  mockLegacyWriteAsStringAsync: vi.fn(),
-}))
+const { mockFileWrite, mockFileText, mockDocument, mockLegacyReadAsStringAsync, mockLegacyWriteAsStringAsync } =
+  vi.hoisted(() => ({
+    mockFileWrite: vi.fn(),
+    mockFileText: vi.fn().mockResolvedValue('stored-value'),
+    mockDocument: { uri: 'file:///mock-doc-dir/' },
+    mockLegacyReadAsStringAsync: vi.fn(),
+    mockLegacyWriteAsStringAsync: vi.fn(),
+  }))
 
 // Mock expo-file-system main module (SDK 55): has new File/Paths API + deprecated legacy stubs
 vi.mock('../src/optional/OptionalExpoFileSystem', () => ({

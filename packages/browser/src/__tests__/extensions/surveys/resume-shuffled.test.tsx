@@ -45,8 +45,7 @@ const shuffleTo = (a: number, b: number, c: number) =>
 
 const currentQuestion = () => document.querySelector('.survey-question')?.textContent
 
-const show = () =>
-    render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog} />)
+const show = () => render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog} />)
 
 describe('Surveys: resuming a shuffled survey', () => {
     beforeEach(() => {

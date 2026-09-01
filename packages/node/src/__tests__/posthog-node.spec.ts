@@ -127,12 +127,10 @@ describe('PostHog Node.js', () => {
     it('flush waits for pending captureException async work before flushing', async () => {
       mockedFetch.mockClear()
       const originalBuildEventMessage = ErrorTracking.buildEventMessage
-      const buildEventMessageSpy = vi
-        .spyOn(ErrorTracking, 'buildEventMessage')
-        .mockImplementation(async (...args) => {
-          await new Promise((resolve) => setTimeout(resolve, 10))
-          return originalBuildEventMessage(...args)
-        })
+      const buildEventMessageSpy = vi.spyOn(ErrorTracking, 'buildEventMessage').mockImplementation(async (...args) => {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        return originalBuildEventMessage(...args)
+      })
 
       try {
         posthog.captureException(new Error('boom'), 'user-1')

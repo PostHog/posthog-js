@@ -463,21 +463,11 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
 
             // First URL
             setWindowLocation('https://example.com/page1')
-            urlTriggerMatching.checkUrlTriggerConditions(
-                vi.fn(),
-                vi.fn(),
-                createActivateCallback(sessionId),
-                sessionId
-            )
+            urlTriggerMatching.checkUrlTriggerConditions(vi.fn(), vi.fn(), createActivateCallback(sessionId), sessionId)
             expect(onActivateCalls).toBe(1)
 
             // Same URL - should skip, so onActivate not called again
-            urlTriggerMatching.checkUrlTriggerConditions(
-                vi.fn(),
-                vi.fn(),
-                createActivateCallback(sessionId),
-                sessionId
-            )
+            urlTriggerMatching.checkUrlTriggerConditions(vi.fn(), vi.fn(), createActivateCallback(sessionId), sessionId)
             expect(onActivateCalls).toBe(1)
 
             // Verify that _lastCheckedUrl was set to page1
@@ -485,12 +475,7 @@ describe('checkUrlTriggerConditions - activation loop detection', () => {
 
             // Different URL - should check again and update _lastCheckedUrl
             setWindowLocation('https://example.com/page2')
-            urlTriggerMatching.checkUrlTriggerConditions(
-                vi.fn(),
-                vi.fn(),
-                createActivateCallback(sessionId),
-                sessionId
-            )
+            urlTriggerMatching.checkUrlTriggerConditions(vi.fn(), vi.fn(), createActivateCallback(sessionId), sessionId)
 
             // Verify that _lastCheckedUrl was updated to page2
             expect((urlTriggerMatching as any)._lastCheckedUrl).toBe('https://example.com/page2')

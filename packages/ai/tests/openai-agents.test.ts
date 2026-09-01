@@ -1113,8 +1113,7 @@ describe('PostHogTracingProcessor', () => {
       })
 
       const now = Date.now()
-      vi
-        .spyOn(Date, 'now')
+      vi.spyOn(Date, 'now')
         .mockReturnValueOnce(now)
         .mockReturnValueOnce(now + 1500)
 

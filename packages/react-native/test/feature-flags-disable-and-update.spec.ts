@@ -13,9 +13,7 @@ describe('PostHog RN disableRemoteFeatureFlags and updateFlags', () => {
   let mockStorage: PostHogCustomStorage
 
   const flagsCalls = (): any[][] =>
-    ((globalThis as any).window.fetch as vi.Mock).mock.calls.filter(([url]: [string]) =>
-      String(url).includes('/flags')
-    )
+    ((globalThis as any).window.fetch as vi.Mock).mock.calls.filter(([url]: [string]) => String(url).includes('/flags'))
 
   // Remote config is served from the /array/<token>/config endpoint.
   const configCalls = (): any[][] =>

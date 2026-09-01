@@ -67,9 +67,7 @@ describe('survey headers', () => {
   it('reserves room for a headerless intro description', () => {
     const description = 'A long intro description that wraps before it reaches the top-right close button'
 
-    render(
-      <IntroMessage appearance={defaultSurveyAppearance} header="" description={description} onStart={vi.fn()} />
-    )
+    render(<IntroMessage appearance={defaultSurveyAppearance} header="" description={description} onStart={vi.fn()} />)
 
     const introDescription = screen.getByText(description) as HTMLElement
     expect(introDescription.parentElement?.style.paddingRight).toBe(`${closeButtonSize}px`)
