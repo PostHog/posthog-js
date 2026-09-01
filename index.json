@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/4734": {
+    "key": "PostHog/posthog-js/issue/4734",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4734",
+    "url": "https://github.com/PostHog/posthog-js/issues/4734",
+    "conclusion": "Valid React Native Android session-replay enhancement, but it is blocked on a concrete posthog-android API for gesture-aware/background screenshot capture.",
+    "labels": [
+      "react-native",
+      "Android",
+      "feature/replay",
+      "enhancement",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-01T21:05:02.031Z"
+  },
   "PostHog/posthog-js/issue/4724": {
     "key": "PostHog/posthog-js/issue/4724",
     "repo": "PostHog/posthog-js",
