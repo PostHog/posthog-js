@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.9.2
+
+### Patch Changes
+
+- [#4664](https://github.com/PostHog/posthog-js/pull/4664) [`86fe9da`](https://github.com/PostHog/posthog-js/commit/86fe9dab9faf3d8e259d250f914e1cbbaa2a0b17) Thanks [@bernatixer](https://github.com/bernatixer)! - Interrupted or cancelled streams now report the token usage and latency they actually observed, instead of zeros, across the OpenAI, Anthropic, Gemini, Azure and Vercel wrappers. When usage was never reported, token counts and override costs are omitted entirely, so `$ai_input_tokens` can be absent where it was previously always `0`.
+  (2026-09-01)
+
 ## 8.9.1
 
 ### Patch Changes
