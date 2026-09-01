@@ -807,7 +807,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
   },
   "segment": [
     "undefined",
-    "SegmentAnalytics"
+    "SegmentAnalytics",
+    "SegmentIntegrationConfig"
   ],
   "capture_heatmaps": [
     "undefined",

@@ -20,19 +20,68 @@ import { PostHog } from '../posthog-core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 
 import { EVENT_IDENTIFY, EVENT_PAGEVIEW, USER_STATE, USER_STATE_IDENTIFIED } from '../constants'
-import { isFunction } from '@posthog/core'
+import { hasOwnProperty, isArray, isFunction, isNullish } from '@posthog/core'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
-import type { SegmentUser, SegmentAnalytics, SegmentContext, SegmentPlugin } from '@posthog/types'
+import type {
+    SegmentUser,
+    SegmentAnalytics,
+    SegmentContext,
+    SegmentPlugin,
+    SegmentEnrichmentFilterFn,
+    SegmentIntegrationConfig,
+    Properties,
+} from '@posthog/types'
 
 // Re-export for backwards compatibility
-export type { SegmentUser, SegmentAnalytics, SegmentContext, SegmentPlugin }
+export type {
+    SegmentUser,
+    SegmentAnalytics,
+    SegmentContext,
+    SegmentPlugin,
+    SegmentEnrichmentFilterFn,
+    SegmentIntegrationConfig,
+}
 
 type SegmentIntegrationUser = Awaited<ReturnType<SegmentAnalytics['user']>>
 
 const logger = createLogger('[SegmentIntegration]')
 
-const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
+const isSegmentAnalytics = (segment: SegmentAnalytics | SegmentIntegrationConfig): segment is SegmentAnalytics =>
+    isFunction((segment as SegmentAnalytics).register)
+
+const normalizeSegmentIntegrationConfig = (
+    segment: SegmentAnalytics | SegmentIntegrationConfig
+): SegmentIntegrationConfig => {
+    return isSegmentAnalytics(segment) ? { analytics: segment } : segment
+}
+
+const runSegmentPropertyFilters = (
+    filters: SegmentEnrichmentFilterFn | SegmentEnrichmentFilterFn[],
+    properties: Properties
+): Properties | null => {
+    const fns = isArray(filters) ? filters : [filters]
+    let result: Properties | null = { ...properties }
+
+    for (const fn of fns) {
+        try {
+            result = fn(result)
+            if (isNullish(result)) {
+                return null
+            }
+        } catch (error) {
+            logger.error('Error in Segment filterProperties:', error)
+            return null
+        }
+    }
+
+    return result
+}
+
+const createSegmentIntegration = (
+    posthog: PostHog,
+    { filterProperties }: Pick<SegmentIntegrationConfig, 'filterProperties'> = {}
+): SegmentPlugin => {
     if (typeof Promise === 'undefined' || !Promise.resolve) {
         logger.warn('This browser does not have Promise support, and can not use the segment integration')
     }
@@ -51,18 +100,23 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
             posthog.identify(ctx.event.userId)
         }
 
-        const additionalProperties = posthog.calculateEventProperties(eventName, ctx.event.properties)
-        // We register as a Segment enrichment plugin, so these properties become part of the
-        // event that Segment fans out to every destination, not just PostHog. $sdk_debug_*
-        // keys are internal SDK telemetry that only our capture pipeline reads, so we drop
-        // them here to keep them out of the customer's other destinations.
-        const enrichedProperties: typeof additionalProperties = {}
-        for (const key in additionalProperties) {
-            if (!key.startsWith('$sdk_debug_')) {
-                enrichedProperties[key] = additionalProperties[key]
+        let additionalProperties = posthog.calculateEventProperties(eventName, ctx.event.properties)
+        if (!isNullish(filterProperties)) {
+            const originalProperties = ctx.event.properties || {}
+            const enrichmentProperties: Properties = {}
+            for (const key of Object.keys(additionalProperties)) {
+                if (!hasOwnProperty.call(originalProperties, key)) {
+                    enrichmentProperties[key] = additionalProperties[key]
+                }
             }
+
+            const filteredProperties = runSegmentPropertyFilters(filterProperties, enrichmentProperties)
+            if (isNullish(filteredProperties)) {
+                return ctx
+            }
+            additionalProperties = filteredProperties
         }
-        ctx.event.properties = Object.assign({}, enrichedProperties, ctx.event.properties)
+        ctx.event.properties = Object.assign({}, additionalProperties, ctx.event.properties)
         return ctx
     }
 
@@ -81,12 +135,7 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
     }
 }
 
-function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
-    const segment = posthog.config.segment
-    if (!segment) {
-        return done()
-    }
-
+function setupPostHogFromSegment(posthog: PostHog, segment: SegmentAnalytics, done: () => void) {
     const bootstrapUser = (user: SegmentIntegrationUser) => {
         // Use segments anonymousId instead
         const getSegmentAnonymousId = () => user.anonymousId() || uuidv7()
@@ -113,13 +162,14 @@ function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
 }
 
 export function setupSegmentIntegration(posthog: PostHog, done: () => void) {
-    const segment = posthog.config.segment
-    if (!segment) {
+    const segmentConfig = posthog.config.segment
+    if (!segmentConfig) {
         return done()
     }
 
-    setupPostHogFromSegment(posthog, () => {
-        segment.register(createSegmentIntegration(posthog)).then(() => {
+    const { analytics, filterProperties } = normalizeSegmentIntegrationConfig(segmentConfig)
+    setupPostHogFromSegment(posthog, analytics, () => {
+        analytics.register(createSegmentIntegration(posthog, { filterProperties })).then(() => {
             done()
         })
     })
