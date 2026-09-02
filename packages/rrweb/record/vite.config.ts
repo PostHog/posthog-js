@@ -11,6 +11,7 @@ const workspacePackages: Record<string, string> = {
 };
 
 export default config(path.resolve(__dirname, 'src/index.ts'), 'rrweb', {
+  generateDeclarations: process.argv.includes('--watch'),
   plugins: [
     {
       name: 'resolve-workspace-sources',

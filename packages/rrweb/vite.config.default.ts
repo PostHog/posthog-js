@@ -112,6 +112,7 @@ export default function (
     outputDir?: string;
     fileName?: string;
     plugins?: Plugin[];
+    generateDeclarations?: boolean;
     external?: string[];
   },
 ) {
@@ -119,6 +120,7 @@ export default function (
     fileName,
     outputDir: outDir = 'dist',
     plugins = [],
+    generateDeclarations = true,
     external = [],
   } = options || {};
 
@@ -170,21 +172,22 @@ export default function (
       sourcemap: true,
     },
     plugins: [
-      dts({
-        insertTypesEntry: true,
-        bundleTypes: true,
-        afterBuild: (emittedFiles: Map<string, string>) => {
-          // To pass publint (`npm x publint@latest`) and ensure the
-          // package is supported by all consumers, we must export types that are
-          // read as ESM. To do this, there must be duplicate types with the
-          // correct extension supplied in the package.json exports field.
-          const files: string[] = Array.from(emittedFiles.keys());
-          files.forEach((file) => {
-            const ctsFile = file.replace('.d.ts', '.d.cts');
-            copyFileSync(file, ctsFile);
-          });
-        },
-      }),
+      generateDeclarations &&
+        dts({
+          insertTypesEntry: true,
+          bundleTypes: true,
+          afterBuild: (emittedFiles: Map<string, string>) => {
+            // To pass publint (`npm x publint@latest`) and ensure the
+            // package is supported by all consumers, we must export types that are
+            // read as ESM. To do this, there must be duplicate types with the
+            // correct extension supplied in the package.json exports field.
+            const files: string[] = Array.from(emittedFiles.keys());
+            files.forEach((file) => {
+              const ctsFile = file.replace('.d.ts', '.d.cts');
+              copyFileSync(file, ctsFile);
+            });
+          },
+        }),
       minifyAndUMDPlugin({ name, outDir }),
       visualizer({
         filename: resolve(__dirname, name + '-bundle-analysis.html'), // Path for the HTML report
