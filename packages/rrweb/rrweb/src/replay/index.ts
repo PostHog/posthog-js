@@ -158,6 +158,10 @@ export class Replayer {
   // was attached, keyed by node id; adopted when the shadow root appears.
   private pendingAdoptedStyleSheets: Map<number, number[]> = new Map();
 
+  // Latest adopted styleIds per host id. The recorder does not re-emit
+  // AdoptedStyleSheet events for a re-added host it already tracks.
+  private lastAdoptedStyleIds: Map<number, number[]> = new Map();
+
   // Latest adoption per host, keyed by node id; a wall-clock retry armed by
   // an older AdoptedStyleSheet event must not overwrite a newer one.
   private adoptedStyleSheetTokens: Map<number, object> = new Map();
@@ -385,6 +389,7 @@ export class Replayer {
       this.mirror.reset();
       this.styleMirror.reset();
       this.pendingAdoptedStyleSheets.clear();
+      this.lastAdoptedStyleIds.clear();
       this.adoptedStyleSheetTokens.clear();
       this.mediaManager.reset();
       this.lastScrollMap.clear();
@@ -675,6 +680,7 @@ export class Replayer {
     this.mirror.reset();
     this.styleMirror.reset();
     this.pendingAdoptedStyleSheets.clear();
+    this.lastAdoptedStyleIds.clear();
     this.adoptedStyleSheetTokens.clear();
     this.mediaManager.reset();
     this.resetCache();
@@ -939,6 +945,7 @@ export class Replayer {
           this.mediaManager.reset();
           this.styleMirror.reset();
           this.pendingAdoptedStyleSheets.clear();
+          this.lastAdoptedStyleIds.clear();
           this.adoptedStyleSheetTokens.clear();
           this.rebuildFullSnapshot(event, isSync);
           // 'instant' so the offset is not animated when the page sets scroll-behavior: smooth
@@ -1772,16 +1779,22 @@ export class Replayer {
           }
           parent = (parent as Element | RRElement).shadowRoot! as Node | RRNode;
         } else parent = parent.shadowRoot as Node | RRNode;
-        // adopt stylesheets whose event arrived before this shadow root existed
-        const pendingStyleIds = this.pendingAdoptedStyleSheets.get(
-          mutation.parentId,
-        );
-        if (pendingStyleIds && !this.usingVirtualDom) {
-          this.applyAdoptedStyleSheet({
-            source: IncrementalSource.AdoptedStyleSheet,
-            id: mutation.parentId,
-            styleIds: pendingStyleIds,
-          });
+        // lastAdoptedStyleIds sees every event so it wins over a pending entry
+        const styleIds =
+          this.lastAdoptedStyleIds.get(mutation.parentId) ??
+          this.pendingAdoptedStyleSheets.get(mutation.parentId);
+        if (styleIds) {
+          if (this.usingVirtualDom) {
+            // the real shadow root only exists after the diff, so let the
+            // Flush handler finish the adoption
+            this.pendingAdoptedStyleSheets.set(mutation.parentId, styleIds);
+          } else {
+            this.applyAdoptedStyleSheet({
+              source: IncrementalSource.AdoptedStyleSheet,
+              id: mutation.parentId,
+              styleIds,
+            });
+          }
         }
       }
 
@@ -2345,6 +2358,8 @@ export class Replayer {
   }
 
   private applyAdoptedStyleSheet(data: adoptedStyleSheetData) {
+    // tracked even when the host is currently detached
+    this.lastAdoptedStyleIds.set(data.id, data.styleIds);
     const targetHost = this.mirror.getNode(data.id);
     if (!targetHost) return;
     // supersede retries still pending from an older event for this host
