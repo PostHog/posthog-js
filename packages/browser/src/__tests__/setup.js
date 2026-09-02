@@ -1,3 +1,4 @@
+/* global globalThis, process */
 import Config from '../config'
 
 if (process.env.POSTHOG_FUNCTIONAL_TESTS) {
