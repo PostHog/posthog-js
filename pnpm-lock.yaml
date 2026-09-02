@@ -1004,6 +1004,9 @@ importers:
       tsdown:
         specifier: 0.22.14
         version: 0.22.14(@volar/typescript@2.4.28)(typescript@5.8.2)
+      tslib:
+        specifier: 'catalog:'
+        version: 2.8.1
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
