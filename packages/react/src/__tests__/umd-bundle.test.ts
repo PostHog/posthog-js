@@ -18,7 +18,7 @@ describe('UMD bundle', () => {
             module,
             require: (id: string) => {
                 if (id === 'posthog-js') {
-                    return mockPostHogInstance
+                    return { default: mockPostHogInstance, posthog: mockPostHogInstance }
                 }
                 if (id === 'react') {
                     return React
