@@ -70,7 +70,12 @@ export function parseRetryAfterMs(value: string | null | undefined, now: number 
   if (!value) {
     return undefined
   }
-  const trimmed = value.trim()
+  const raw = value.trim()
+  // `headers.get` joins repeated headers with ", ", so a CDN and a load
+  // balancer that each append one yield "60, 120". Read the first, which the
+  // outermost hop set — but only for delta-seconds, since an HTTP-date carries
+  // a comma of its own ("Wed, 21 Oct 2015 07:28:00 GMT").
+  const trimmed = /^\d+\s*,/.test(raw) ? raw.slice(0, raw.indexOf(',')).trim() : raw
   // Integer seconds. Not parseFloat: "10 minutes" must not read as 10 seconds.
   const seconds = /^\d+$/.test(trimmed) ? Number(trimmed) : Number.NaN
   if (!Number.isFinite(seconds) && /^[+-]?[\d.]+$/.test(trimmed)) {

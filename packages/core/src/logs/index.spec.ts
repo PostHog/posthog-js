@@ -1255,10 +1255,140 @@ describe('PostHogLogs', () => {
       await jest.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(5000)
+      // Stop just short of the deadline, then cross it without letting the
+      // re-armed timer fire — otherwise the timer satisfies the assertion and
+      // the test says nothing about onReconnect.
+      await jest.advanceTimersByTimeAsync(4999)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+      jest.setSystemTime(Date.now() + 2)
+
       logs.onReconnect()
       await jest.advanceTimersByTimeAsync(1)
-      expect(mockInstance._sendLogsBatch.mock.calls.length).toBeGreaterThan(1)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not let a capture after an explicit flush send inside the window', async () => {
+      // `flush()` is the lifecycle path (RN foreground/background, shutdown).
+      // It leaves no timer behind, so the next capture is the one that arms
+      // one — at the plain interval unless the window floors it.
+      mockInstance._sendLogsBatch = jest.fn(() =>
+        Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      )
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await logs.flush().catch(() => {})
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      logs.captureLog({ body: 'second' })
+      await jest.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await jest.advanceTimersByTimeAsync(295_000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('ends the window when an explicit flush succeeds', async () => {
+      // The endpoint just accepted a batch, so the wait it asked for earlier is
+      // over — the gated paths must not stay blocked for the rest of it.
+      const outcomes: any[] = [{ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }]
+      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000, maxBufferSize: 2 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await jest.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await logs.flush()
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+
+      logs.captureLog({ body: 'second' })
+      logs.onReconnect()
+      await jest.advanceTimersByTimeAsync(1)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
+    })
+
+    it('drops a Retry-After wait on reset', async () => {
+      const outcomes: any[] = [{ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }]
+      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      // Asserted through a gated path: a plain capture would flush either way.
+      logs.reset()
+      logs.captureLog({ body: 'second' })
+      logs.onReconnect()
+      await jest.advanceTimersByTimeAsync(1)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps its own backoff when the endpoint asks for less', async () => {
+      // A proxy answering `Retry-After: 1` must not turn the retry into a
+      // one-second hot loop against an endpoint already refusing traffic.
+      mockInstance._sendLogsBatch = jest.fn(() =>
+        Promise.resolve({ kind: 'retry-later', error: new Error('503'), retryAfterMs: 10 })
+      )
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await jest.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await jest.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('ends the wait when a later failure names none', async () => {
+      // 429 with a window, then a plain 503: the queue drops back to its own
+      // backoff rather than waiting the old window out on every attempt.
+      const outcomes: any[] = [
+        { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 },
+        { kind: 'retry-later', error: new Error('503') },
+      ]
+      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await jest.advanceTimersByTimeAsync(300_000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+
+      // Back on the plain backoff, not another 300s.
+      await jest.advanceTimersByTimeAsync(4000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
     })
 
     it('keeps flushing on the interval while captures keep arriving', async () => {

@@ -73,9 +73,12 @@ export class PostHogMetrics {
   // types under one name produces charts that blend both series.
   private _typeByName = new Map<string, MetricType>()
   private _typeCollisionWarned = new Set<string>()
-  // Set from a `Retry-After` the endpoint sent; cleared on any other outcome so
-  // one throttled response cannot pin the delay for the rest of the process.
-  private _retryAfterMs = 0
+  // Absolute deadline from a `Retry-After` the endpoint sent; cleared on any
+  // other outcome so one throttled response cannot pin the delay for the rest
+  // of the process. A deadline rather than a duration, so a timer armed while
+  // the wait is already part-served counts down the remainder instead of
+  // restarting it.
+  private _retryAfterUntil = 0
   private _flushTimerFiresAt = 0
   // Bumped by reset(). A flush that was in flight when reset() ran (e.g. it
   // lost a shutdown race) sees a stale generation when its send settles and
@@ -140,7 +143,7 @@ export class PostHogMetrics {
   /** Clears the flush timer, drops the current window, and invalidates in-flight flushes. */
   reset(): void {
     this._generation++
-    this._retryAfterMs = 0
+    this._retryAfterUntil = 0
     this._clearFlushTimer()
     this._series = new Map()
     this._flushPromise = null
@@ -313,7 +316,11 @@ export class PostHogMetrics {
   // `Retry-After` is a floor, not a replacement: never retry before the server
   // asked, and never more often than the flush interval.
   private _nextFlushDelay(): number {
-    return Math.max(this._config.flushIntervalMs, this._retryAfterMs)
+    return Math.max(this._config.flushIntervalMs, this._retryAfterRemainingMs())
+  }
+
+  private _retryAfterRemainingMs(): number {
+    return Math.max(0, this._retryAfterUntil - Date.now())
   }
 
   private _setFlushTimer(delayMs: number): void {
@@ -355,7 +362,8 @@ export class PostHogMetrics {
     }
     // Only a retriable outcome carries a wait; anything else ends it, or a stale
     // one would pin every later flush at the window the server has moved on from.
-    this._retryAfterMs = outcome.kind === 'retry-later' ? (outcome.retryAfterMs ?? 0) : 0
+    this._retryAfterUntil =
+      outcome.kind === 'retry-later' && outcome.retryAfterMs ? Date.now() + outcome.retryAfterMs : 0
     switch (outcome.kind) {
       case 'ok':
         return

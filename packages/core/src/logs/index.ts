@@ -311,10 +311,15 @@ export class PostHogLogs {
         continue
       }
 
+      // Only a retriable outcome carries a wait, and it is recorded here rather
+      // than on the background wrapper so an explicit `flush()` — which every
+      // lifecycle hook takes — records and clears it too.
+      this._retryAfterUntil =
+        outcome.kind === 'retry-later' && outcome.retryAfterMs ? Date.now() + outcome.retryAfterMs : 0
+
       if (outcome.kind === 'retry-later') {
         // Transient failure: keep records in the queue for the next flush cycle
         // and surface the error so the caller can log/react.
-        this._retryAfterUntil = outcome.retryAfterMs ? Date.now() + outcome.retryAfterMs : 0
         throw outcome.error
       }
 
@@ -396,7 +401,10 @@ export class PostHogLogs {
     if (this._flushTimer) {
       return
     }
-    this._setFlushTimer(this._flushIntervalMs)
+    // Floored by any open window: an explicit `flush()` leaves no timer behind,
+    // so this is the path a capture takes after one, and the plain interval
+    // would land inside the wait the endpoint asked for.
+    this._setFlushTimer(Math.max(this._flushIntervalMs, this._retryAfterRemainingMs()))
   }
 
   // Backoff and `Retry-After` are floors, so a timer already armed at the plain
@@ -491,7 +499,6 @@ export class PostHogLogs {
       .then(
         () => {
           this._consecutiveFlushFailures = 0
-          this._retryAfterUntil = 0
         },
         (err) => {
           this._consecutiveFlushFailures++

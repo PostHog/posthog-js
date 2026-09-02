@@ -1338,7 +1338,6 @@ describe('PostHogTraces', () => {
       // The wait elapses, the retry lands a 400, and that ends the wait.
       await jest.advanceTimersByTimeAsync(300_000)
       expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
-      expect((traces as any)._retryAfterMs).toBe(0)
 
       traces.startSpan('second').end()
       await jest.advanceTimersByTimeAsync(1000)
@@ -1367,6 +1366,79 @@ describe('PostHogTraces', () => {
       const before = mockInstance._sendTracesBatch.mock.calls.length
       await jest.advanceTimersByTimeAsync(2000)
       expect(mockInstance._sendTracesBatch.mock.calls.length).toBeGreaterThan(before)
+    })
+
+    it('sends nothing on a host flush inside the window', async () => {
+      // posthog-node arms an events timer at `flushInterval` and its `flush()`
+      // override drains spans alongside them. Without the gate the window is
+      // spent one host cycle at a time.
+      mockInstance._sendTracesBatch.mockResolvedValue({
+        kind: 'retry-later',
+        error: new Error('throttled'),
+        retryAfterMs: 300_000,
+      })
+      const traces = createTraces({ flushIntervalMs: 10_000 })
+      traces.startSpan('first').end()
+
+      await traces.flush()
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      for (let i = 0; i < 9; i++) {
+        await jest.advanceTimersByTimeAsync(10_000)
+        await traces.flush()
+      }
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not spend the head batch retry budget inside the window', async () => {
+      // The batch is dropped after MAX_RETRIES_PER_BATCH consecutive failures.
+      // At the host's cadence that budget burns out long before the window the
+      // endpoint asked for, and the spans are lost with it.
+      mockInstance._sendTracesBatch.mockResolvedValue({
+        kind: 'retry-later',
+        error: new Error('throttled'),
+        retryAfterMs: 300_000,
+      })
+      const traces = createTraces({ flushIntervalMs: 10_000 })
+      traces.startSpan('first').end()
+
+      for (let i = 0; i < 12; i++) {
+        await traces.flush()
+        await jest.advanceTimersByTimeAsync(10_000)
+      }
+
+      expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Dropping'))
+    })
+
+    it('sends on a forced flush inside the window', async () => {
+      // Teardown has no later attempt to honour the wait with.
+      mockInstance._sendTracesBatch.mockResolvedValue({
+        kind: 'retry-later',
+        error: new Error('throttled'),
+        retryAfterMs: 300_000,
+      })
+      const traces = createTraces({ flushIntervalMs: 10_000 })
+      traces.startSpan('first').end()
+
+      await traces.flush()
+      await traces.flush({ force: true })
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('drops a Retry-After wait on reset', async () => {
+      const outcomes: SendTracesBatchOutcome[] = [
+        { kind: 'retry-later', error: new Error('throttled'), retryAfterMs: 300_000 },
+      ]
+      mockInstance._sendTracesBatch.mockImplementation(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const traces = createTraces({ flushIntervalMs: 1000 })
+      traces.startSpan('first').end()
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      traces.reset()
+      traces.startSpan('second').end()
+      await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
     })
   })
 

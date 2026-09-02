@@ -63,6 +63,27 @@ describe('OTLP bodies over the endpoint limit', () => {
     expect(mocks.fetch).not.toHaveBeenCalled()
   })
 
+  // The endpoint rejects a body *over* its limit, so one exactly at it is
+  // accepted on both sides. Pinning both directions keeps the comparison from
+  // drifting to `>=`, which would refuse an acceptable batch without a request
+  // and — in traces — halve it down and drop the span with no 413 to show for it.
+  const overheadBytes = (): number => JSON.stringify(spansOf(1024)).length - 1024
+
+  it('sends a batch of exactly the limit', async () => {
+    const exact = 2 * 1024 * 1024 - overheadBytes()
+    expect(JSON.stringify(spansOf(exact)).length).toBe(2 * 1024 * 1024)
+
+    await expect(posthog._sendTracesBatch(spansOf(exact))).resolves.toEqual({ kind: 'ok' })
+    expect(mocks.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports a batch one byte over the limit as too-large', async () => {
+    await expect(posthog._sendTracesBatch(spansOf(2 * 1024 * 1024 - overheadBytes() + 1))).resolves.toEqual({
+      kind: 'too-large',
+    })
+    expect(mocks.fetch).not.toHaveBeenCalled()
+  })
+
   it('sends a compressible payload that is inside the limit before compression', async () => {
     jest.spyOn(posthog as any, 'compressPayload').mockResolvedValue(new Uint8Array(1024))
     ;(posthog as any).disableCompression = false

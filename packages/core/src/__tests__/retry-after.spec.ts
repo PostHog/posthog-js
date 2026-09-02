@@ -12,6 +12,14 @@ describe('parseRetryAfterMs', () => {
     expect(parseRetryAfterMs('Tue, 01 Sep 2026 12:00:30 GMT', now)).toBe(30_000)
   })
 
+  it('reads the outermost hop when two proxies each append one', () => {
+    // `headers.get` joins repeated headers with ", ". The date form carries a
+    // comma of its own, so only the delta-seconds form is split.
+    expect(parseRetryAfterMs('60, 120', now)).toBe(60_000)
+    expect(parseRetryAfterMs('60,120', now)).toBe(60_000)
+    expect(parseRetryAfterMs('Tue, 01 Sep 2026 12:00:30 GMT', now)).toBe(30_000)
+  })
+
   it('ignores a header that does not name a future time', () => {
     // A past date and a zero delta both mean "retry now", which is the caller's own backoff.
     expect(parseRetryAfterMs('Tue, 01 Sep 2026 11:59:00 GMT', now)).toBeUndefined()

@@ -73,9 +73,12 @@ export class PostHogTraces {
   private _lastDropWarningAt = 0
   private _dropReasons = new Set<string>()
   private _consecutiveFlushFailures = 0
-  // Set from a `Retry-After` the endpoint sent; cleared on any other outcome so
-  // one throttled response cannot pin the delay for the rest of the process.
-  private _retryAfterMs = 0
+  // Absolute deadline from a `Retry-After` the endpoint sent; cleared on any
+  // other outcome so one throttled response cannot pin the delay for the rest
+  // of the process. A deadline rather than a duration, so a timer armed while
+  // the wait is already part-served counts down the remainder instead of
+  // restarting it.
+  private _retryAfterUntil = 0
   private _flushTimerFiresAt = 0
   // Separate from the backoff counter: this one belongs to whatever batch is at
   // the head, and resets whenever that batch is removed or shrunk.
@@ -219,10 +222,20 @@ export class PostHogTraces {
    *
    * A pass reports spans removed — queue length can't stand in, since a send
    * concurrent with an arrival leaves it unchanged.
+   *
+   * While the endpoint has asked for a wait this sends nothing and leaves the
+   * armed timer to retry, so a host that flushes on its own cadence can't spend
+   * the head batch's retry budget inside a window where every attempt is
+   * refused. `force` is for teardown, which has no later attempt to save.
    */
-  async flush(): Promise<void> {
+  async flush({ force = false }: { force?: boolean } = {}): Promise<void> {
     for (;;) {
       if (!this._queue.length) {
+        return
+      }
+
+      if (!force && this._isWaitingOutRetryAfter()) {
+        this._armFlushTimerIfQueuedNoEarlierThan()
         return
       }
 
@@ -264,7 +277,7 @@ export class PostHogTraces {
     this._dropReasons.clear()
     this._lastDropWarningAt = 0
     this._consecutiveFlushFailures = 0
-    this._retryAfterMs = 0
+    this._retryAfterUntil = 0
     this._headBatchFailures = 0
   }
 
@@ -507,7 +520,8 @@ export class PostHogTraces {
         // Only a retriable outcome carries a wait; anything else ends it, or a
         // stale one would pin every later flush at the window the server has
         // moved on from.
-        this._retryAfterMs = outcome.kind === 'retry-later' ? (outcome.retryAfterMs ?? 0) : 0
+        this._retryAfterUntil =
+          outcome.kind === 'retry-later' && outcome.retryAfterMs ? Date.now() + outcome.retryAfterMs : 0
 
         if (outcome.kind === 'ok') {
           this._consecutiveFlushFailures = 0
@@ -642,7 +656,15 @@ export class PostHogTraces {
     const capped = Math.min(delay, Math.max(MAX_FLUSH_BACKOFF_MS, this._config.flushIntervalMs))
     // `Retry-After` is a floor, not a replacement: never retry before the server
     // asked, and never more often than our own backoff would have.
-    return Math.max(capped, this._retryAfterMs)
+    return Math.max(capped, this._retryAfterRemainingMs())
+  }
+
+  private _retryAfterRemainingMs(): number {
+    return Math.max(0, this._retryAfterUntil - Date.now())
+  }
+
+  private _isWaitingOutRetryAfter(): boolean {
+    return this._retryAfterRemainingMs() > 0
   }
 
   private _clearFlushTimer(): void {
