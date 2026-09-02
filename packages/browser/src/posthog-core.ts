@@ -1839,9 +1839,7 @@ export class PostHog implements PostHogInterface {
         const finalFbc =
             data.$set?.[FACEBOOK_CLICK_ID] ??
             (isObject(data.properties?.$set) ? data.properties.$set[FACEBOOK_CLICK_ID] : undefined)
-        if (fbc && finalFbc === fbc.value) {
-            this._markFacebookClickIdDelivered(fbc.value)
-        }
+        const fbcToConfirm = fbc?.pending && finalFbc === fbc.value ? fbc.value : undefined
 
         this._internalEventEmitter.emit('eventCaptured', data)
 
@@ -1855,9 +1853,22 @@ export class PostHog implements PostHogInterface {
             timestampMode: isSessionRecording ? 'body' : 'capture-body',
             batchKey: options?._batchKey,
             transport: options?.transport,
+            fireCallbackOnDrop: !!fbcToConfirm,
+            callback: fbcToConfirm
+                ? (response) => {
+                      if (response.statusCode >= 200 && response.statusCode < 300) {
+                          this._markFacebookClickIdDelivered(fbcToConfirm)
+                      }
+                  }
+                : undefined,
         }
 
-        if (this.config.request_batching && (!options || options?._batchKey) && !options?.send_instantly) {
+        if (
+            this.config.request_batching &&
+            (!options || options?._batchKey) &&
+            !options?.send_instantly &&
+            !fbcToConfirm
+        ) {
             this._requestQueue.enqueue(requestOptions)
         } else {
             this._send_retriable_request(requestOptions)

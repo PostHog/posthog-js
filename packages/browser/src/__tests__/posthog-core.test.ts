@@ -577,6 +577,9 @@ describe('posthog core', () => {
                     persistence_name: token,
                     person_profiles: 'always',
                 })
+                jest.spyOn(posthog, '_send_retriable_request').mockImplementation((options) => {
+                    options.callback?.({ statusCode: 200 })
+                })
 
                 posthog.capture('$pageview')
 
@@ -634,6 +637,34 @@ describe('posthog core', () => {
                 now.mockRestore()
             })
 
+            it('should keep $fbc pending until the request is accepted', () => {
+                const now = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/?fbclid=request-retry')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    person_profiles: 'always',
+                    request_batching: true,
+                })
+                let statusCode = 0
+                const sendSpy = jest.spyOn(posthog, '_send_retriable_request').mockImplementation((options) => {
+                    options.callback?.({ statusCode })
+                })
+
+                posthog.capture('$pageview')
+                statusCode = 200
+                posthog.capture('retry-event')
+                posthog.capture('after-delivery')
+
+                expect(beforeSendMock.mock.calls[0][0].$set.$fbc).toBe('fb.1.1700000000000.request-retry')
+                expect(beforeSendMock.mock.calls[1][0].$set.$fbc).toBe('fb.1.1700000000000.request-retry')
+                expect(beforeSendMock.mock.calls[2][0].$set?.$fbc).toBeUndefined()
+                expect(sendSpy).toHaveBeenCalledTimes(2)
+                expect(sendSpy.mock.calls[0][0].fireCallbackOnDrop).toBe(true)
+                now.mockRestore()
+            })
+
             it('should defer $fbc delivery past a minimal feature-flag event', () => {
                 const now = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
                 const token = uuidv7()
@@ -683,6 +714,9 @@ describe('posthog core', () => {
                     token,
                     persistence_name: token,
                     person_profiles: 'always',
+                })
+                jest.spyOn(posthog, '_send_retriable_request').mockImplementation((options) => {
+                    options.callback?.({ statusCode: 200 })
                 })
                 posthog.capture('$pageview')
 
