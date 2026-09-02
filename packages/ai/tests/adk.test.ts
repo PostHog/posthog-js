@@ -36,6 +36,17 @@ function createContext(overrides: Record<string, any> = {}): any {
   }
 }
 
+function createInvocationContext(overrides: Record<string, any> = {}): any {
+  return {
+    invocationId: 'inv_123',
+    userId: 'user_123',
+    userContent: { role: 'user', parts: [{ text: 'Hello there' }] },
+    session: { id: 'sess_123', userId: 'user_123' },
+    agent: { name: 'assistant' },
+    ...overrides,
+  }
+}
+
 function createRequest(overrides: Record<string, any> = {}): any {
   return {
     model: 'gemini-2.0-flash',
@@ -109,6 +120,7 @@ describe('PostHogADKPlugin', () => {
     expect(props.$ai_trace_id).toBe('inv_123')
     expect(props.$ai_session_id).toBe('sess_123')
     expect(props.$ai_agent_name).toBe('assistant')
+    expect(props.$ai_span_name).toBe('assistant')
     expect(props.$ai_stop_reason).toBe('STOP')
     expect(typeof props.$ai_latency).toBe('number')
     expect(props.$ai_latency).toBeGreaterThanOrEqual(0)
@@ -173,6 +185,44 @@ describe('PostHogADKPlugin', () => {
     expect(client.capture).toHaveBeenCalledTimes(1)
     expect(capturedEvent(client).properties.$ai_output_choices).toEqual([
       { role: 'assistant', content: [{ type: 'text', text: 'Hi, how can I help?' }] },
+    ])
+  })
+
+  it('captures multi-part system instructions without truncating them', async () => {
+    const ctx = createContext()
+    await plugin.beforeModelCallback({
+      callbackContext: ctx,
+      llmRequest: createRequest({
+        config: {
+          systemInstruction: { parts: [{ text: 'First instruction. ' }, { text: 'Second instruction.' }] },
+        },
+      }),
+    })
+    await plugin.afterModelCallback({ callbackContext: ctx, llmResponse: createResponse() })
+
+    expect(capturedEvent(client).properties.$ai_input[0]).toEqual({
+      role: 'system',
+      content: 'First instruction. Second instruction.',
+    })
+  })
+
+  it('base64-encodes binary inline input when full AI capture is enabled', async () => {
+    ;(client as any).enableFullAiCapture = true
+    const ctx = createContext()
+    await plugin.beforeModelCallback({
+      callbackContext: ctx,
+      llmRequest: createRequest({
+        contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'image/png', data: new Uint8Array([137, 80]) } }] }],
+        config: {},
+      }),
+    })
+    await plugin.afterModelCallback({ callbackContext: ctx, llmResponse: createResponse() })
+
+    expect(capturedEvent(client).properties.$ai_input).toEqual([
+      {
+        role: 'user',
+        content: [{ type: 'image', inline_data: { mime_type: 'image/png', data: 'iVA=' } }],
+      },
     ])
   })
 
@@ -245,6 +295,107 @@ describe('PostHogADKPlugin', () => {
     expect(capturedEvent(client, 1).properties.$ai_input).toEqual([
       { role: 'user', content: [{ type: 'text', text: 'second' }] },
     ])
+  })
+
+  it('captures a root trace, parented generations, and tool spans', async () => {
+    const invocationContext = createInvocationContext()
+    const callbackContext = createContext({ functionCallId: 'call_1' })
+
+    await plugin.beforeRunCallback({ invocationContext })
+    await plugin.beforeAgentCallback({ agent: { name: 'assistant' } as any, callbackContext })
+    await plugin.beforeModelCallback({ callbackContext, llmRequest: createRequest() })
+    await plugin.afterModelCallback({ callbackContext, llmResponse: createResponse() })
+    await plugin.beforeToolCallback({
+      tool: { name: 'get_weather' } as any,
+      toolArgs: { city: 'SF' },
+      toolContext: callbackContext,
+    })
+    await plugin.afterToolCallback({
+      tool: { name: 'get_weather' } as any,
+      toolArgs: { city: 'SF' },
+      toolContext: callbackContext,
+      result: { temp: 21 },
+    })
+    await plugin.afterAgentCallback({ agent: { name: 'assistant' } as any, callbackContext })
+    await plugin.afterRunCallback({ invocationContext })
+
+    expect(client.capture).toHaveBeenCalledTimes(4)
+    const generation = capturedEvent(client, 0)
+    expect(generation.event).toBe('$ai_generation')
+    expect(generation.properties).toMatchObject({
+      $ai_trace_id: 'inv_123',
+      $ai_span_name: 'assistant',
+    })
+    expect(generation.properties.$ai_span_id).toEqual(expect.any(String))
+    expect(generation.properties.$ai_parent_id).toEqual(expect.any(String))
+
+    const toolSpan = capturedEvent(client, 1)
+    expect(toolSpan.event).toBe('$ai_span')
+    expect(toolSpan.properties).toMatchObject({
+      $ai_trace_id: 'inv_123',
+      $ai_span_id: 'call_1',
+      $ai_parent_id: generation.properties.$ai_parent_id,
+      $ai_span_name: 'get_weather',
+      $ai_input_state: { city: 'SF' },
+      $ai_output_state: { temp: 21 },
+    })
+
+    const agentSpan = capturedEvent(client, 2)
+    expect(agentSpan.event).toBe('$ai_span')
+    expect(agentSpan.properties).toMatchObject({
+      $ai_trace_id: 'inv_123',
+      $ai_span_id: generation.properties.$ai_parent_id,
+      $ai_parent_id: 'inv_123',
+      $ai_span_name: 'assistant',
+    })
+
+    const trace = capturedEvent(client, 3)
+    expect(trace.event).toBe('$ai_trace')
+    expect(trace.properties).toMatchObject({
+      $ai_trace_id: 'inv_123',
+      $ai_span_id: 'inv_123',
+      $ai_span_name: 'assistant',
+    })
+  })
+
+  it('cleans up pending model calls when a run is cancelled', async () => {
+    const invocationContext = createInvocationContext()
+    await plugin.beforeRunCallback({ invocationContext })
+    await plugin.beforeModelCallback({ callbackContext: createContext(), llmRequest: createRequest() })
+
+    expect((plugin as any)._pending.size).toBe(1)
+    await plugin.afterRunCallback({ invocationContext })
+    expect((plugin as any)._pending.size).toBe(0)
+  })
+
+  it('evicts only model calls older than the maximum pending age', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-01-01T00:00:00Z'))
+    try {
+      await plugin.beforeModelCallback({
+        callbackContext: createContext({ invocationId: 'stale' }),
+        llmRequest: createRequest({ contents: [{ role: 'user', parts: [{ text: 'stale' }] }] }),
+      })
+      jest.advanceTimersByTime(60 * 60 * 1000 + 1)
+      await plugin.beforeModelCallback({
+        callbackContext: createContext({ invocationId: 'recent' }),
+        llmRequest: createRequest({ contents: [{ role: 'user', parts: [{ text: 'recent' }] }] }),
+      })
+
+      expect([...((plugin as any)._pending as Map<string, unknown[]>).keys()]).toEqual([
+        expect.stringContaining('recent'),
+      ])
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('captures when invocationContext is absent', async () => {
+    const ctx = createContext({ invocationContext: undefined })
+    await plugin.beforeModelCallback({ callbackContext: ctx, llmRequest: createRequest() })
+    await plugin.afterModelCallback({ callbackContext: ctx, llmResponse: createResponse() })
+
+    expect(client.capture).toHaveBeenCalledTimes(1)
+    expect(capturedEvent(client).properties.$ai_input).toHaveLength(2)
   })
 
   it('captures an error event on onModelErrorCallback', async () => {
