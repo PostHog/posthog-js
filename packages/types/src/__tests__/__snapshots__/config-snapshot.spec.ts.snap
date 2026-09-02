@@ -323,6 +323,10 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
     \\"undefined\\",
     \\"string\\"
   ],
+  \\"identity_claims\\": [
+    \\"undefined\\",
+    \\"Record<string, { value: string; hash: string; }>\\"
+  ],
   \\"disable_web_experiments\\": [
     \\"false\\",
     \\"true\\"
