@@ -37,8 +37,8 @@
     },
     "scripts": {
         "clean": "rimraf dist",
-        "lint": "eslint src tests fixtures playwright playwright.config.ts scripts/*.mjs",
-        "lint:fix": "eslint src tests fixtures playwright playwright.config.ts scripts/*.mjs --fix",
+        "lint": "oxlint --report-unused-disable-directives-severity error src tests fixtures playwright playwright.config.ts scripts/*.mjs",
+        "lint:fix": "oxlint --report-unused-disable-directives-severity error src tests fixtures playwright playwright.config.ts scripts/*.mjs --fix",
         "build": "rslib build",
         "dev": "rslib build -w",
         "test:unit": "jest -c jest.config.cjs && rslib build && node scripts/check-mixed-module-delivery.mjs",

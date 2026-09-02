@@ -4,10 +4,10 @@ default_install_hook_types = ["pre-commit", "pre-push"]
 repo = "local"
 
 [[repos.hooks]]
-id = "eslint"
-name = "eslint"
+id = "oxlint"
+name = "oxlint"
 language = "system"
-entry = "pnpm exec eslint --cache --fix"
+entry = "pnpm exec oxlint --fix --report-unused-disable-directives-severity error"
 files = '\.(ts|tsx|js|jsx|mjs|cjs)$'
 stages = ["pre-commit"]
 
