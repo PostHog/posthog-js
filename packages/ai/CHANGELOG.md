@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.10.0
+
+### Minor Changes
+
+- [#4687](https://github.com/PostHog/posthog-js/pull/4687) [`657b173`](https://github.com/PostHog/posthog-js/commit/657b17367d9e2e8884f44976fafc5305d8866b33) Thanks [@AhmadHammad21](https://github.com/AhmadHammad21)! - Add a Google ADK (`@google/adk`) observability adapter. `@posthog/ai/adk` exposes `PostHogADKPlugin`, an ADK `BasePlugin` that captures a full `$ai_generation` event (input, output, model, token usage, latency, finish reason, trace id, session id, distinct id and groups) for every model call an ADK agent makes, funnelling through the shared `captureAiGeneration` primitive so PostHog derives cost from the model and tokens.
+  (2026-09-02)
+
 ## 8.9.3
 
 ### Patch Changes
