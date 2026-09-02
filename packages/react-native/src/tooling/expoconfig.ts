@@ -8,8 +8,9 @@ const { withAppBuildGradle, withBaseMod, withGradleProperties, withProjectBuildG
 // com.posthog.android uploads R8 mapping files and injects a matching map-id so native
 // crash stack traces can be deobfuscated. The injected version has to read every gradle
 // property the plugin writes, or that half of the build ignores the option: 1.4.0 is the first
-// version that reads posthog.dotenvFile.
-const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.5.2'
+// version that reads posthog.dotenvFile. 1.6.0 is the first version that ignores
+// posthog.releaseMode with a deprecation warning, so the R8 mapping always binds to the release.
+const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.6.0'
 
 const resolvePostHogReactNativePackageJsonPath =
   "[\"node\", \"--print\", \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')\"].execute().text.trim()"
@@ -562,10 +563,11 @@ export function updateDotenvFileGradleProperties(
 }
 
 // Managed posthog.hermesReleaseMode entry in android/gradle.properties, read by the SDK's
-// posthog.gradle hermes upload. The key is deliberately not posthog.releaseMode: com.posthog.android
-// reads that one for the R8 mapping upload, and the mode must not reach it. A posthog.releaseMode
-// entry is deprecated user-owned config, so the prebuild leaves it alone; posthog.gradle reads it
-// as a fallback with a warning, and com.posthog.android deprecates it on its own schedule.
+// posthog.gradle hermes upload. The key is deliberately not posthog.releaseMode:
+// com.posthog.android below 1.6.0 reads that one for the R8 mapping upload, and the mode must not
+// reach it. A posthog.releaseMode entry is deprecated user-owned config, so the prebuild leaves it
+// alone. posthog.gradle reads it as a fallback with a warning, and com.posthog.android 1.6.0
+// warns about it and ignores it.
 export function updateHermesReleaseModeGradleProperties(
   properties: GradlePropertiesItem[],
   releaseMode?: PostHogReleaseMode
@@ -661,7 +663,10 @@ type PostHogPluginProps = {
    * How the release a build belongs to gets associated with the exceptions it reports.
    *
    * This steers the Hermes source map upload only. iOS dSYMs and Android R8 mappings always bind to
-   * the release their build creates.
+   * the release their build creates. The R8 half of that needs the `com.posthog.android` gradle
+   * plugin 1.6.0, which ignores the deprecated `posthog.releaseMode` key. A fresh prebuild injects
+   * that version, but a project whose android/build.gradle already carries an older classpath line
+   * keeps it: bump the line by hand or prebuild with `--clean`.
    *
    * `event` (the default; still EXPERIMENTAL while the rollout settles) uploads the maps
    * release-independent, and each event resolves its own release from the `$app_namespace` /

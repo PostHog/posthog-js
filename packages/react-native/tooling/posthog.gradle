@@ -387,8 +387,8 @@ def resolvePostHogReactNativeSDKPath(reactRoot) {
  * variable posthog-cli and the bundler plugins already read, then null. Null means nothing
  * configured a mode: the build applies the `event` default, and an old posthog-cli then softens it
  * to a bound upload with a warning instead of failing the build. The preferred key is not
- * `posthog.releaseMode`, because com.posthog.android reads that one for the R8 mapping upload and
- * the mode must not reach it. This covers the JavaScript half of an Android build only.
+ * `posthog.releaseMode`, because com.posthog.android below 1.6.0 reads that one for the R8 mapping
+ * upload and the mode must not reach it. This covers the JavaScript half of an Android build only.
  *
  * An unrecognized value fails the build rather than falling back, so a typo cannot silently leave
  * a build binding its source maps to a release it meant to keep independent.
