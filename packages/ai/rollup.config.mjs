@@ -45,6 +45,7 @@ const providers = [
   'gemini',
   'otel',
   'openai-agents',
+  'adk',
 ]
 
 providers.forEach((provider) => {
