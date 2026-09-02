@@ -128,6 +128,20 @@ describe('PageView ID manager', () => {
             expect(secondPageView.$prev_pageview_last_scroll).toBeDefined()
         })
 
+        it('can handle a scroll update after the document is unavailable', () => {
+            mockWindowGetter.mockReturnValue({})
+
+            expect(() => instance.scrollManager['_updateScrollData']()).not.toThrow()
+            expect(instance.scrollManager.getContext()).toMatchObject({
+                lastScrollY: 0,
+                maxScrollY: 0,
+                maxScrollHeight: 0,
+                lastContentY: 0,
+                maxContentY: 0,
+                maxContentHeight: 0,
+            })
+        })
+
         it('should include the pathname', () => {
             instance.scrollManager['_updateScrollData']()
             const firstPageView = pageViewIdManager.doPageView(firstTimestamp, pageviewId1)
