@@ -2357,6 +2357,35 @@ describe('Lazy SessionRecording', () => {
                         assignableWindow.POSTHOG_DEBUG = undefined
                     })
 
+                    it('logs one reason for a rotation-born epoch even when the dedup key does not absorb the transient fresh-start hold', () => {
+                        // the "logs once" guarantee also has to hold when the previous dedup key
+                        // does not happen to match the transient fresh-start hold that start()
+                        // sets before the rotation reason overwrites it. A prior rotation leaves a
+                        // `...:no_interaction_since_session_rotated` key, so the second rotation's
+                        // transient `no_interaction_since_recording_started` no longer collides.
+                        assignableWindow.POSTHOG_DEBUG = true
+                        const logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+
+                        const firstRotationTimestamp = rotateExternallyWhileUnknown()
+                        emitInactiveEvent(firstRotationTimestamp + 100, 'unknown')
+
+                        sessionIdGeneratorMock.mockImplementation(() => 'second-rotated-session-id')
+                        const secondRotationTimestamp =
+                            firstRotationTimestamp + sessionManager['_sessionTimeoutMs'] + 1000
+                        jest.useFakeTimers().setSystemTime(new Date(secondRotationTimestamp))
+                        logSpy.mockClear()
+                        sessionManager.checkAndGetSessionAndWindowId(false, secondRotationTimestamp)
+
+                        const holdLogs = logSpy.mock.calls.filter(
+                            (call) => typeof call[1] === 'string' && call[1].includes('holding buffer')
+                        )
+                        expect(holdLogs).toHaveLength(1)
+                        expect(holdLogs[0][1]).toContain('no_interaction_since_session_rotated')
+
+                        logSpy.mockRestore()
+                        assignableWindow.POSTHOG_DEBUG = undefined
+                    })
+
                     // the sdkDebugProperties getter keeps running after stop()/discard() (the
                     // recorder is torn down but not dropped), so the hold reason has to clear or a
                     // stopped recorder keeps blaming user inactivity on every later captured event

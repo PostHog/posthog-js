@@ -1599,6 +1599,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
             return
         }
+        // Inside a rotation restart, start() sets a transient fresh-start hold that
+        // _restartForSessionIdChange overwrites with the real rotation reason on its next line
+        // (with this flag already cleared). Defer the log and dedup bookkeeping to that
+        // authoritative call, so a held rotation logs once, under the reason that actually sticks,
+        // instead of also emitting a mislabelled fresh-start line for the same epoch.
+        if (this._isRestartingForSessionIdChange) {
+            return
+        }
         const holdKey = `${this.sessionId}:${reason}`
         if (holdKey === this._lastLoggedFlushHold) {
             return
