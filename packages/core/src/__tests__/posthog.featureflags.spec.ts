@@ -1593,7 +1593,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should retry when an injected flags response body ignores abort and stalls', async () => {
-        const cancel = vi.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+        const cancel = vi.fn<() => Promise<void>>(() => new Promise<void>(() => {}))
         let flagsRequestCount = 0
         ;[posthog, mocks] = createTestClient(
           'TEST_API_KEY',
