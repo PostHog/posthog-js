@@ -146,6 +146,16 @@ for (const [entry, bundle] of Object.entries(bundles)) {
     assert.equal('__extends' in sandbox, false, `${entry} UMD leaks a TypeScript helper globally`)
 }
 
+// Avoid reintroducing intermediate-transform helpers that disproportionately affect the small surveys bundles.
+const baselineSurveyBytes = {
+    'esm/surveys/index.js': 4748,
+    'umd/surveys/index.js': 5521,
+}
+for (const [file, baselineBytes] of Object.entries(baselineSurveyBytes)) {
+    const bytes = (await readFile(resolve(packageRoot, 'dist', file))).byteLength
+    assert.ok(bytes <= Math.ceil(baselineBytes * 1.05), `${file} grew more than 5%: ${bytes} bytes`)
+}
+
 // Keep compressed payloads within 15% of the Rollup baseline captured for this migration.
 const baselineGzipBytes = {
     'esm/index.js': 5234,

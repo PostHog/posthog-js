@@ -88,7 +88,8 @@ const runtimeBuild = (
     },
     globalName,
     platform: 'browser',
-    target: 'es2015',
+    // Preserve modern syntax until the compatibility plugin performs the single ES5 downlevel pass.
+    target: 'esnext',
     clean,
     sourcemap: true,
     dts: false,
