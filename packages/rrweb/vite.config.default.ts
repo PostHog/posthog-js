@@ -5,8 +5,8 @@ import { defineConfig, LibraryOptions, LibraryFormats, Plugin } from 'vite';
 import { build, Format } from 'esbuild';
 import { resolve } from 'path';
 import { umdWrapper } from 'esbuild-plugin-umd-wrapper';
-import * as fs from 'node:fs';
 import { visualizer } from 'rollup-plugin-visualizer';
+import { ensureSourcemap } from './vite.config.utils.ts';
 
 // don't empty out dir if --watch flag is passed
 const emptyOutDir = !process.argv.includes('--watch');
@@ -29,7 +29,7 @@ function minifyAndUMDPlugin({
           (file.fileName.endsWith('.js') || file.fileName.endsWith('.cjs'));
         if (!isCSS && !isCJS) {
           if (isJS) {
-            writeMissingSourcemap(outputOptions.dir!, file.fileName);
+            ensureSourcemap(outputOptions.dir!, file.fileName);
           }
           continue;
         }
@@ -63,33 +63,11 @@ function minifyAndUMDPlugin({
             isCss: false,
             outDir,
           });
-          writeMissingSourcemap(outputOptions.dir!, file.fileName);
+          ensureSourcemap(outputOptions.dir!, file.fileName);
         }
       }
     },
   };
-}
-
-function writeMissingSourcemap(outputDir: string, fileName: string) {
-  const outputPath = resolve(outputDir, fileName);
-  const mapPath = `${outputPath}.map`;
-  if (fs.existsSync(mapPath)) {
-    return;
-  }
-
-  const basename = fileName.split('/').pop()!;
-  fs.appendFileSync(outputPath, `\n//# sourceMappingURL=${basename}.map\n`);
-  fs.writeFileSync(
-    mapPath,
-    JSON.stringify({
-      version: 3,
-      file: basename,
-      sources: [],
-      sourcesContent: [],
-      names: [],
-      mappings: '',
-    }),
-  );
 }
 
 async function buildFile({

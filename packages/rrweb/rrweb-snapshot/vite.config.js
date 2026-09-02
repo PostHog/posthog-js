@@ -1,15 +1,11 @@
 import path from 'path';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
-import {
-  appendFileSync,
-  copyFileSync,
-  existsSync,
-  writeFileSync,
-} from 'node:fs';
+import { copyFileSync } from 'node:fs';
 import { build as esbuild } from 'esbuild';
 import { umdWrapper } from 'esbuild-plugin-umd-wrapper';
 import { resolve } from 'path';
+import { ensureSourcemap } from '../vite.config.utils.ts';
 
 // Plugin to generate UMD bundles using esbuild after vite build
 function umdPlugin({ name, outDir }) {
@@ -22,7 +18,7 @@ function umdPlugin({ name, outDir }) {
           (file.fileName.endsWith('.js') || file.fileName.endsWith('.cjs'));
         if (file.type !== 'chunk' || !file.fileName.endsWith('.cjs')) {
           if (isJS) {
-            writeMissingSourcemap(outputOptions.dir, file.fileName);
+            ensureSourcemap(outputOptions.dir, file.fileName);
           }
           continue;
         }
@@ -75,32 +71,10 @@ function umdPlugin({ name, outDir }) {
         console.log(`${outDir}/${baseFileName}.umd.cjs.map`);
         console.log(`${outDir}/${baseFileName}.umd.min.cjs`);
         console.log(`${outDir}/${baseFileName}.umd.min.cjs.map`);
-        writeMissingSourcemap(outputOptions.dir, file.fileName);
+        ensureSourcemap(outputOptions.dir, file.fileName);
       }
     },
   };
-}
-
-function writeMissingSourcemap(outputDir, fileName) {
-  const outputPath = resolve(outputDir, fileName);
-  const mapPath = `${outputPath}.map`;
-  if (existsSync(mapPath)) {
-    return;
-  }
-
-  const basename = fileName.split('/').pop();
-  appendFileSync(outputPath, `\n//# sourceMappingURL=${basename}.map\n`);
-  writeFileSync(
-    mapPath,
-    JSON.stringify({
-      version: 3,
-      file: basename,
-      sources: [],
-      sourcesContent: [],
-      names: [],
-      mappings: '',
-    }),
-  );
 }
 
 export default defineConfig({
