@@ -19,7 +19,7 @@
         "build": "rollup -c",
         "dev": "rollup -cw",
         "test:unit": "jest",
-        "lint": "eslint src",
+        "lint": "oxlint --report-unused-disable-directives-severity error src",
         "test:debug": "jest --runInBand",
         "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"

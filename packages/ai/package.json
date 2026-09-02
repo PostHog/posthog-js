@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "8.9.3",
+  "version": "8.10.0",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -15,8 +15,8 @@
     "clean": "rimraf dist",
     "test:unit": "jest && pnpm test:module-load",
     "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs",
-    "lint": "eslint src tests",
-    "lint:fix": "eslint src tests --fix",
+    "lint": "oxlint --report-unused-disable-directives-severity error src tests",
+    "lint:fix": "oxlint --report-unused-disable-directives-severity error src tests --fix",
     "build": "tsdown",
     "dev": "tsdown --watch",
     "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
@@ -43,8 +43,7 @@
     "langchain": "^1.5.10",
     "node-fetch": "^3.3.2",
     "posthog-node": "workspace:^",
-    "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "tsdown": "catalog:"
   },
   "keywords": [
     "posthog",
