@@ -49,9 +49,8 @@ describe('PostHogWeb', () => {
       expect(posthog.optedOut).toEqual(false)
 
       posthog.capture('test')
-      await waitForPromises()
 
-      expect(fetch).toHaveBeenCalledTimes(2)
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
     })
 
     it('should load feature flags on init', async () => {
