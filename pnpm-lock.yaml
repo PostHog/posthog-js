@@ -407,8 +407,8 @@ importers:
         specifier: ^0.0.222
         version: 0.0.222
       browserslist:
-        specifier: ^4.28.4
-        version: 4.28.4
+        specifier: ^4.28.8
+        version: 4.28.8
       compare-versions:
         specifier: ^6.1.1
         version: 6.1.1
