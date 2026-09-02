@@ -409,6 +409,7 @@
         "_isRecordingConsoleEntry",
         "_isRecordingEnabled",
         "_isRemoteConfigFresh",
+        "_isRestartingForSessionIdChange",
         "_isResuming",
         "_isSampled",
         "_isSessionIdleAfterCrossTabRefresh",
