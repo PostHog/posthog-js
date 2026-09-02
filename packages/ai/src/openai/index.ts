@@ -358,7 +358,6 @@ export class WrappedResponses extends Responses {
                 accumulated.terminalResponse ?? {
                   id: accumulated.completionId ?? '',
                   model: accumulated.model ?? openAIParams.model,
-                  status: accumulated.stopReason as OpenAIOrignal.Responses.Response['status'],
                   service_tier: accumulated.serviceTier,
                 }
               await captureAiGeneration(
