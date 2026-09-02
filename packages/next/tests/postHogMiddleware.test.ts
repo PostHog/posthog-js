@@ -3,7 +3,32 @@ vi.mock('server-only', () => ({}))
 import { postHogMiddleware } from '../src/middleware/postHogMiddleware'
 
 // Mock identity module so we can control the generated ID
-const mockGenerateAnonymousId = vi.fn(() => 'mock-anon-id')
+const {
+    mockGenerateAnonymousId,
+    mockCookiesSet,
+    mockCookiesDelete,
+    mockNextResponseNext,
+    mockNextResponseRewrite,
+    mockNextResponseConstructor,
+} = vi.hoisted(() => {
+    const mockCookiesSet = vi.fn()
+    const mockCookiesDelete = vi.fn()
+    return {
+        mockGenerateAnonymousId: vi.fn(() => 'mock-anon-id'),
+        mockCookiesSet,
+        mockCookiesDelete,
+        mockNextResponseNext: vi.fn(() => ({
+            headers: new Map(),
+            cookies: { set: mockCookiesSet, delete: mockCookiesDelete },
+        })),
+        mockNextResponseRewrite: vi.fn((url: URL) => ({
+            headers: new Map(),
+            cookies: { set: vi.fn() },
+            _rewriteUrl: url,
+        })),
+        mockNextResponseConstructor: vi.fn(),
+    }
+})
 vi.mock('../src/shared/identity', () => ({
     generateAnonymousId: () => mockGenerateAnonymousId(),
 }))
@@ -31,20 +56,6 @@ class MockNextRequest {
         this.headers = new Map()
     }
 }
-
-const mockCookiesSet = vi.fn()
-const mockCookiesDelete = vi.fn()
-const mockNextResponseNext = vi.fn(() => ({
-    headers: new Map(),
-    cookies: { set: mockCookiesSet, delete: mockCookiesDelete },
-}))
-
-const mockNextResponseRewrite = vi.fn((url: URL) => ({
-    headers: new Map(),
-    cookies: { set: vi.fn() },
-    _rewriteUrl: url,
-}))
-const mockNextResponseConstructor = vi.fn()
 
 vi.mock('next/server.js', () => ({
     NextResponse: class {

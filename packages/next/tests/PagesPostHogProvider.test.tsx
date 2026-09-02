@@ -2,9 +2,7 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { PostHogProvider } from '../src/pages/PostHogProvider'
 
-const mockClientPostHogProvider = vi.fn(({ children }: { children: React.ReactNode }) => (
-    <div data-testid="client-provider">{children}</div>
-))
+const mockClientPostHogProvider = vi.hoisted(() => vi.fn())
 vi.mock('../src/client/ClientPostHogProvider', () => ({
     ClientPostHogProvider: (props: any) => mockClientPostHogProvider(props),
 }))
@@ -12,6 +10,9 @@ vi.mock('../src/client/ClientPostHogProvider', () => ({
 describe('Pages PostHogProvider', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        mockClientPostHogProvider.mockImplementation(({ children }: { children: React.ReactNode }) => (
+            <div data-testid="client-provider">{children}</div>
+        ))
     })
 
     it('renders children inside ClientPostHogProvider', () => {

@@ -3,10 +3,12 @@ import { getServerSidePostHog } from '../src/pages/getServerSidePostHog'
 
 vi.mock('@vercel/functions', () => ({}))
 
-const mockEnterContext = vi.fn()
-const mockWithContext = vi.fn((_, fn) => fn())
-const mockGetAllFlags = vi.fn()
-const mockGetAllFlagsAndPayloads = vi.fn()
+const { mockEnterContext, mockWithContext, mockGetAllFlags, mockGetAllFlagsAndPayloads } = vi.hoisted(() => ({
+    mockEnterContext: vi.fn(),
+    mockWithContext: vi.fn((_, fn) => fn()),
+    mockGetAllFlags: vi.fn(),
+    mockGetAllFlagsAndPayloads: vi.fn(),
+}))
 
 vi.mock('posthog-node', () => ({
     PostHog: vi.fn().mockImplementation(() => ({

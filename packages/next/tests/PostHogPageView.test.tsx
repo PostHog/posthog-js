@@ -2,21 +2,30 @@ import React from 'react'
 import { render } from '@testing-library/react'
 import { PostHogPageView } from '../src/client/PostHogPageView'
 
-const mockCapture = vi.fn()
-const mockUsePostHog = vi.fn(() => ({ capture: mockCapture }))
+const { mockCapture, mockUsePostHog, mockNavigation } = vi.hoisted(() => {
+    const mockCapture = vi.fn()
+    return {
+        mockCapture,
+        mockUsePostHog: vi.fn(() => ({ capture: mockCapture })),
+        mockNavigation: {
+            pathname: '/initial',
+            searchParams: new URLSearchParams(),
+            params: {} as Record<string, string | string[] | undefined>,
+            useParams: undefined as (() => Record<string, string | string[] | undefined>) | undefined,
+        },
+    }
+})
+mockNavigation.useParams = () => mockNavigation.params
+
 vi.mock('@posthog/react', () => ({
     usePostHog: () => mockUsePostHog(),
 }))
 
-let mockPathname = '/initial'
-let mockSearchParams = new URLSearchParams()
-let mockParams: Record<string, string | string[] | undefined> = {}
-let mockUseParams: (() => Record<string, string | string[] | undefined>) | undefined = () => mockParams
 vi.mock('next/navigation.js', () => ({
-    usePathname: () => mockPathname,
-    useSearchParams: () => mockSearchParams,
+    usePathname: () => mockNavigation.pathname,
+    useSearchParams: () => mockNavigation.searchParams,
     get useParams() {
-        return mockUseParams
+        return mockNavigation.useParams
     },
 }))
 
@@ -24,10 +33,10 @@ describe('PostHogPageView', () => {
     beforeEach(() => {
         mockCapture.mockClear()
         mockUsePostHog.mockClear()
-        mockPathname = '/initial'
-        mockSearchParams = new URLSearchParams()
-        mockParams = {}
-        mockUseParams = () => mockParams
+        mockNavigation.pathname = '/initial'
+        mockNavigation.searchParams = new URLSearchParams()
+        mockNavigation.params = {}
+        mockNavigation.useParams = () => mockNavigation.params
     })
 
     it('captures a $pageview event on mount', () => {
@@ -38,7 +47,7 @@ describe('PostHogPageView', () => {
     })
 
     it('includes search params in the captured URL', () => {
-        mockSearchParams = new URLSearchParams('q=hello&page=2')
+        mockNavigation.searchParams = new URLSearchParams('q=hello&page=2')
         render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledWith('$pageview', {
             $current_url: 'http://localhost/initial?q=hello&page=2',
@@ -56,9 +65,9 @@ describe('PostHogPageView', () => {
         ['a catch-all segment', '/docs/guides/setup', { slug: ['guides', 'setup'] }, '/docs/[...slug]'],
         ['an encoded segment', '/users/Jane%20Doe', { name: 'Jane Doe' }, '/users/[name]'],
     ])('captures the route template for %s', (_description, pathname, params, expectedTemplate) => {
-        mockPathname = pathname
-        mockParams = params
-        mockSearchParams = new URLSearchParams('ref=test')
+        mockNavigation.pathname = pathname
+        mockNavigation.params = params
+        mockNavigation.searchParams = new URLSearchParams('ref=test')
 
         render(<PostHogPageView captureRouteTemplate />)
 
@@ -69,8 +78,8 @@ describe('PostHogPageView', () => {
     })
 
     it('omits the route template when it is ambiguous', () => {
-        mockPathname = '/orgs/1/projects/1'
-        mockParams = { orgId: '1', projectId: '1' }
+        mockNavigation.pathname = '/orgs/1/projects/1'
+        mockNavigation.params = { orgId: '1', projectId: '1' }
 
         render(<PostHogPageView captureRouteTemplate />)
 
@@ -80,7 +89,7 @@ describe('PostHogPageView', () => {
     })
 
     it('falls back to ordinary pageview capture when useParams is unavailable', () => {
-        mockUseParams = undefined
+        mockNavigation.useParams = undefined
         const consoleWarn = vi.spyOn(console, 'warn').mockImplementation()
 
         try {
@@ -103,7 +112,7 @@ describe('PostHogPageView', () => {
         const { rerender } = render(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledTimes(1)
 
-        mockPathname = '/new-page'
+        mockNavigation.pathname = '/new-page'
         rerender(<PostHogPageView />)
         expect(mockCapture).toHaveBeenCalledTimes(2)
         expect(mockCapture).toHaveBeenLastCalledWith('$pageview', {

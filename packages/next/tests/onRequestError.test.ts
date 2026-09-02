@@ -1,8 +1,13 @@
 vi.mock('server-only', () => ({}))
 
-const mockCaptureExceptionImmediate = vi.fn().mockResolvedValue(undefined)
-const mockGetOrCreateNodeClient = vi.fn().mockResolvedValue({
-    captureExceptionImmediate: mockCaptureExceptionImmediate,
+const { mockCaptureExceptionImmediate, mockGetOrCreateNodeClient } = vi.hoisted(() => {
+    const mockCaptureExceptionImmediate = vi.fn().mockResolvedValue(undefined)
+    return {
+        mockCaptureExceptionImmediate,
+        mockGetOrCreateNodeClient: vi
+            .fn()
+            .mockResolvedValue({ captureExceptionImmediate: mockCaptureExceptionImmediate }),
+    }
 })
 
 vi.mock('../src/server/clientCache.node', () => ({
