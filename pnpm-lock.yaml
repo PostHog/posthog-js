@@ -31,8 +31,8 @@ catalogs:
       specifier: ^7.27.1
       version: 7.28.5
     '@posthog/cli':
-      specifier: ~0.14.1
-      version: 0.14.1
+      specifier: ~0.16.2
+      version: 0.16.2
     '@rslib/core':
       specifier: 0.10.6
       version: 0.10.6
@@ -759,7 +759,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.14.1
+        version: 0.16.2
       '@posthog/plugin-utils':
         specifier: workspace:^
         version: link:../plugin-utils
@@ -836,7 +836,7 @@ importers:
         version: 4.1.3(magicast@0.5.3)
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.14.1
+        version: 0.16.2
       '@posthog/core':
         specifier: workspace:^
         version: link:../core
@@ -1175,7 +1175,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.14.1
+        version: 0.16.2
       '@posthog/plugin-utils':
         specifier: workspace:^
         version: link:../plugin-utils
@@ -1734,7 +1734,7 @@ importers:
     dependencies:
       '@posthog/cli':
         specifier: 'catalog:'
-        version: 0.14.1
+        version: 0.16.2
       '@posthog/core':
         specifier: workspace:^
         version: link:../core
@@ -6191,8 +6191,8 @@ packages:
   '@poppinss/exception@1.2.3':
     resolution: {integrity: sha512-dCED+QRChTVatE9ibtoaxc+WkdzOSjYTKi/+uacHWIsfodVfpsueo3+DKpgU5Px8qXjgmXkSvhXvSCz3fnP9lw==}
 
-  '@posthog/cli@0.14.1':
-    resolution: {integrity: sha512-gTzcKpl9TZLf0LrlLHEjChlPc9LIK1gdQG0alMnX6+b+W1mTD+6nTN0W/MeEzjT4DiKDeK8FPhc1n7dT1tWKFw==}
+  '@posthog/cli@0.16.2':
+    resolution: {integrity: sha512-h8bpf9ffBUH/Z9IoyGV+wiI+vS8rIPorKT3eKQXuzuwawO0G7Qvy+hDd7HQ9YJjHByYZ77yPPQvrSs4WsqTUCg==}
     engines: {node: '>=14.14', npm: '>=6'}
     hasBin: true
 
@@ -24833,7 +24833,7 @@ snapshots:
 
   '@poppinss/exception@1.2.3': {}
 
-  '@posthog/cli@0.14.1':
+  '@posthog/cli@0.16.2':
     dependencies:
       detect-libc: 2.1.2
 
