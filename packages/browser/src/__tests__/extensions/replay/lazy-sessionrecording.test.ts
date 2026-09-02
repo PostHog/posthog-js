@@ -2397,6 +2397,21 @@ describe('Lazy SessionRecording', () => {
                     expect(shippedSessionIds()).toEqual(new Set([sessionId]))
                 })
 
+                it('rotations that survive on a TTL-expired remote config still ship zero recordings without interaction', () => {
+                    const preservedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG) as any
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            ...preservedConfig,
+                            cache_timestamp: Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS - 1,
+                        },
+                    })
+
+                    const rotations = runExternalRotations(startingTimestamp, 2)
+
+                    expect(rotations).toBeGreaterThan(50)
+                    expect(shippedSessionIds()).toEqual(new Set())
+                })
+
                 // The Jul 2026 idle-rotation family: an idle tab rotates, the markers for the
                 // rotation land in the new session's empty buffer, and shipping them opens a
                 // recording that bills the customer and plays back as nothing.
@@ -3113,6 +3128,75 @@ describe('Lazy SessionRecording', () => {
                 // start('session_id_changed') was able to read remote config and
                 // restart rrweb — confirmed by a second record() call.
                 expect(recordMock).toHaveBeenCalledTimes(2)
+            })
+
+            it('attributes the rotated session full snapshot to the new session id', () => {
+                const firstSessionId = sessionId
+                releaseInteractionHold()
+                _emit(createFullSnapshot({ timestamp: 1000 }))
+                _emit(createIncrementalSnapshot({ data: { source: IncrementalSource.MouseInteraction } }))
+
+                const preservedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+                posthog.persistence?.clear()
+                posthog.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: preservedConfig })
+                sessionManager.resetSessionId()
+                sessionId = 'rotated-session-id'
+                ;(posthog.capture as Mock).mockClear()
+
+                sessionManager.checkAndGetSessionAndWindowId()
+                releaseInteractionHold()
+
+                _emit(createMetaSnapshot({ timestamp: 2000 }))
+                _emit(createFullSnapshot({ timestamp: 2001 }))
+                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                const rotatedEpochAttribution = (posthog.capture as Mock).mock.calls
+                    .filter(([event]) => event === '$snapshot')
+                    .flatMap(([, properties]) =>
+                        properties.$snapshot_data
+                            .filter((e: any) => e.timestamp >= 2000)
+                            .map((e: any) => [e.type, properties.$session_id])
+                    )
+
+                expect(rotatedEpochAttribution).toEqual([
+                    [META_EVENT_TYPE, 'rotated-session-id'],
+                    [FULL_SNAPSHOT_EVENT_TYPE, 'rotated-session-id'],
+                ])
+                expect(firstSessionId).not.toBe('rotated-session-id')
+            })
+
+            it('restarts rrweb on the reset rotation even when the preserved remote config is past its TTL', () => {
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                const firstSessionId = sessionId
+                releaseInteractionHold()
+                _emit(createFullSnapshot({ timestamp: 1000 }))
+
+                const preservedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG) as any
+                posthog.persistence?.clear()
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: {
+                        ...preservedConfig,
+                        cache_timestamp: Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS - 1,
+                    },
+                })
+                sessionManager.resetSessionId()
+                sessionId = 'rotated-session-id'
+                ;(posthog.capture as Mock).mockClear()
+
+                sessionManager.checkAndGetSessionAndWindowId()
+
+                expect({
+                    recordCalls: recordMock.mock.calls.length,
+                    isStarted: sessionRecording['_lazyLoadedSessionRecording'].isStarted,
+                    attributedTo:
+                        sessionRecording['_lazyLoadedSessionRecording']['_sessionId'] === firstSessionId
+                            ? 'stale first session'
+                            : sessionRecording['_lazyLoadedSessionRecording']['_sessionId'],
+                }).toEqual({ recordCalls: 2, isStarted: true, attributedTo: 'rotated-session-id' })
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isRestartingForSessionIdChange']).toBe(false)
+                const refreshedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG) as any
+                expect(refreshedConfig.cache_timestamp).toBeGreaterThan(Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS)
             })
         })
 
@@ -5360,6 +5444,24 @@ describe('Lazy SessionRecording', () => {
             sessionRecording.dispose()
 
             expect(lazyRecorderStop).toHaveBeenCalledTimes(1)
+        })
+
+        it('discards an active recorder when disposed without flushing buffered events', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']!
+            const lazyRecorderStop = jest.spyOn(lazyRecorder, 'stop')
+            const lazyRecorderDiscard = jest.spyOn(lazyRecorder, 'discard')
+
+            sessionRecording.dispose({ discardBufferedEvents: true })
+
+            expect(lazyRecorderDiscard).toHaveBeenCalledWith({ discardProducerEvents: true })
+            expect(lazyRecorderStop).not.toHaveBeenCalled()
         })
 
         it('does not start a recorder when its script loads after disposal', () => {

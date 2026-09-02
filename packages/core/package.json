@@ -1,6 +1,6 @@
 {
   "name": "@posthog/core",
-  "version": "1.50.0",
+  "version": "1.50.2",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -39,8 +39,8 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "lint": "eslint src",
-    "lint:fix": "eslint src --fix",
+    "lint": "oxlint --report-unused-disable-directives-severity error src",
+    "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "build": "rslib build",
     "dev": "rslib build -w",
     "test:unit": "jest",

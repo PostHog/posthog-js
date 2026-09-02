@@ -181,7 +181,7 @@ export function isCrossDomainCookie(documentLocation: Location | undefined) {
     return true
 }
 
-// Use this instead of element.addEventListener to avoid eslint errors
+// Use this instead of element.addEventListener to avoid lint errors
 // this properly implements the default options for passive event listeners
 export function addEventListener(
     element: Window | Document | Element | undefined,

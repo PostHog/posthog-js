@@ -16,7 +16,7 @@
         "build": "pnpm turbo run prepublish",
         "check-types": "tsc -noEmit",
         "prepublish": "tsc -noEmit && vite build",
-        "lint": "pnpm eslint src"
+        "lint": "oxlint src"
     },
     "type": "module",
     "repository": {
@@ -65,6 +65,7 @@
         "identity-obj-proxy": "^3.0.0",
         "ignore-styles": "^5.0.1",
         "jest-image-snapshot": "^6.2.0",
+        "prettier": "^3.8.3",
         "puppeteer": "^23.11.1",
         "tslib": "catalog:",
         "typescript": "catalog:",

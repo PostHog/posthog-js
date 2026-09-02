@@ -233,6 +233,90 @@ describe('LangChainCallbackHandler', () => {
       expectedStopReason: 'stop',
     },
     {
+      name: 'Responses API status when no finish_reason exists',
+      serializedId: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'],
+      runId: 'run_responses_api_status',
+      model: 'gpt-4o',
+      provider: 'openai',
+      generation: {
+        message: new AIMessage({
+          content: 'Test response',
+          usage_metadata: {
+            input_tokens: 30,
+            output_tokens: 10,
+            total_tokens: 40,
+          },
+          response_metadata: { status: 'completed', incomplete_details: null },
+        }),
+      },
+      expectedInputTokens: 30,
+      expectedOutputTokens: 10,
+      expectedStopReason: 'completed',
+    },
+    {
+      name: 'Responses API incomplete_details.reason over its status',
+      serializedId: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'],
+      runId: 'run_responses_api_incomplete',
+      model: 'gpt-4o',
+      provider: 'openai',
+      generation: {
+        message: new AIMessage({
+          content: 'Test response',
+          usage_metadata: {
+            input_tokens: 33,
+            output_tokens: 11,
+            total_tokens: 44,
+          },
+          response_metadata: { status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' } },
+        }),
+      },
+      expectedInputTokens: 33,
+      expectedOutputTokens: 11,
+      expectedStopReason: 'max_output_tokens',
+    },
+    {
+      name: 'Responses API non-terminal status is not a stop reason',
+      serializedId: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'],
+      runId: 'run_responses_api_queued',
+      model: 'gpt-4o',
+      provider: 'openai',
+      generation: {
+        message: new AIMessage({
+          content: '',
+          usage_metadata: {
+            input_tokens: 5,
+            output_tokens: 0,
+            total_tokens: 5,
+          },
+          response_metadata: { status: 'queued', incomplete_details: null },
+        }),
+      },
+      expectedInputTokens: 5,
+      expectedOutputTokens: 0,
+      expectedStopReason: undefined,
+    },
+    {
+      name: 'finish_reason over a Responses-style status',
+      serializedId: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'],
+      runId: 'run_responses_api_precedence',
+      model: 'gpt-4o',
+      provider: 'openai',
+      generation: {
+        message: new AIMessage({
+          content: 'Test response',
+          usage_metadata: {
+            input_tokens: 36,
+            output_tokens: 12,
+            total_tokens: 48,
+          },
+          response_metadata: { finish_reason: 'stop', status: 'completed' },
+        }),
+      },
+      expectedInputTokens: 36,
+      expectedOutputTokens: 12,
+      expectedStopReason: 'stop',
+    },
+    {
       name: 'generationInfo response_metadata Bedrock invocation metrics',
       serializedId: ['langchain', 'chat_models', 'bedrock', 'ChatBedrock'],
       runId: 'run_generation_info_bedrock_invocation_metrics',

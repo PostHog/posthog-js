@@ -35,8 +35,8 @@
   },
   "scripts": {
     "clean": "rimraf dist",
-    "lint": "eslint src test",
-    "lint:fix": "eslint src test --fix",
+    "lint": "oxlint --report-unused-disable-directives-severity error src test",
+    "lint:fix": "oxlint --report-unused-disable-directives-severity error src test --fix",
     "test:unit": "jest -c jest.config.js",
     "test": "pnpm test:unit",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",

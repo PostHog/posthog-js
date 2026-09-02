@@ -1130,7 +1130,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // Only check TTL if recording hasn't started yet
         // Once started, trust the config until a hard page load
-        if (!this.isStarted) {
+        // A rotation restart is briefly not-started between stop() and start(); it keeps that trust
+        if (!this.isStarted && !this._isRestartingForSessionIdChange) {
             // default to now so that configs persisted by older SDK versions
             // (which never set cache_timestamp) are treated as fresh
             const cacheTimestamp = parsedConfig.cache_timestamp ?? Date.now()
@@ -1537,19 +1538,26 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // ordering matters: the hold is set after stop() (so the stop discards or ships the
     // old epoch per its own flag) and after start() (whose fresh-start reset would
     // otherwise clobber it); no flush can run synchronously in between
+    private _isRestartingForSessionIdChange = false
+
     private _restartForSessionIdChange(holdNextEpoch: boolean) {
-        this.stop()
-        // cost metrics are per-session; reset them only after the old recorder has
-        // stopped (its teardown flush still records deferred stylesheet work, which
-        // belongs to the old session) and before the new one takes its first snapshot
-        this._slowestFullSnapshot = undefined
-        this._lastSeenSnapshotCost = undefined
-        // the throttler drop counts are per-session too, so the new session starts at zero
-        this._throttledMutationsDropped = 0
-        this._oversizedMutationsDropped = 0
-        this._oversizedMutationBytesDropped = 0
-        getRRWeb()?.resetSnapshotCostState?.()
-        this.start('session_id_changed')
+        this._isRestartingForSessionIdChange = true
+        try {
+            this.stop()
+            // cost metrics are per-session; reset them only after the old recorder has
+            // stopped (its teardown flush still records deferred stylesheet work, which
+            // belongs to the old session) and before the new one takes its first snapshot
+            this._slowestFullSnapshot = undefined
+            this._lastSeenSnapshotCost = undefined
+            // the throttler drop counts are per-session too, so the new session starts at zero
+            this._throttledMutationsDropped = 0
+            this._oversizedMutationsDropped = 0
+            this._oversizedMutationBytesDropped = 0
+            getRRWeb()?.resetSnapshotCostState?.()
+            this.start('session_id_changed')
+        } finally {
+            this._isRestartingForSessionIdChange = false
+        }
         this._holdFlushUntilInteraction = holdNextEpoch
         this._heldEpochShipsOnUnload = false
     }
@@ -1573,7 +1581,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._scheduleFlushBuffer()
     }
 
-    discard() {
+    discard({ discardProducerEvents = false }: { discardProducerEvents?: boolean } = {}) {
+        if (discardProducerEvents) {
+            // rrweb teardown can synchronously emit deferred stylesheet mutations.
+            // Clear first so those emissions cannot flush existing data, then clear them below too.
+            this._clearBuffer()
+            this._stopRecordingProducers()
+        }
         this._clearBuffer()
         this._teardown()
         logger.info('discarded')

@@ -1,5 +1,19 @@
 # @posthog/core
 
+## 1.50.2
+
+### Patch Changes
+
+- [#4727](https://github.com/PostHog/posthog-js/pull/4727) [`ec9354c`](https://github.com/PostHog/posthog-js/commit/ec9354c367e70dde8ba98c60761f8d462b78b430) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Drop attributes with an empty key from exported logs and metrics instead of sending them. OTLP requires a non-empty key, and the server stored one verbatim, where it appeared as a nameless attribute that filters could not match.
+  (2026-09-01)
+
+## 1.50.1
+
+### Patch Changes
+
+- [#4710](https://github.com/PostHog/posthog-js/pull/4710) [`e87820a`](https://github.com/PostHog/posthog-js/commit/e87820a84d9a402b7db9b1c31c966e8028d0d65a) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add `os.name` and `os.version` resource attributes to logs from the browser SDK, overridable via `logs.resourceAttributes`
+  (2026-09-01)
+
 ## 1.50.0
 
 ### Minor Changes

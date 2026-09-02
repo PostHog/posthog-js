@@ -489,13 +489,18 @@ export class PostHog implements PostHogInterface {
     private _hasStableInitialDistinctId = false
     private _hasWarnedAboutVolatileIdentity = false
 
-    private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
-        if (oldExt) {
-            const idx = this._extensions.indexOf(oldExt)
-            if (idx !== -1) {
-                this._extensions.splice(idx, 1)
-            }
+    private _removeExtension<T extends Extension>(extension: T | undefined): void {
+        if (!extension) {
+            return
         }
+        const idx = this._extensions.indexOf(extension)
+        if (idx !== -1) {
+            this._extensions.splice(idx, 1)
+        }
+    }
+
+    private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
+        this._removeExtension(oldExt)
         this._extensions.push(newExt)
         newExt.initialize?.()
         return newExt
@@ -3210,9 +3215,9 @@ export class PostHog implements PostHogInterface {
         this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
 
         // Send $groupidentify when the group is new/changed OR when properties
-        // are provided. Skip only when the group already exists with the same
-        // key and no new properties are being set.
-        if (isNewGroup || groupPropertiesToSet) {
+        // are provided, but only when the event can be processed. The local group
+        // association remains useful for events and feature flags without person processing.
+        if ((isNewGroup || groupPropertiesToSet) && this._hasPersonProcessing()) {
             const groupIdentifyProperties: Properties = {
                 $group_type: groupType,
                 $group_key: groupKey,
@@ -3528,6 +3533,7 @@ export class PostHog implements PostHogInterface {
             // Clear HMAC identity verification fields
             delete this.config.identity_distinct_id
             delete this.config.identity_hash
+            delete this.config.identity_claims
             resetCompleted = true
         } finally {
             if (cookieSyncSuppressionStarted) {
@@ -3602,6 +3608,8 @@ export class PostHog implements PostHogInterface {
      * (distinct_id + HMAC hash) instead of anonymous session identifiers.
      * The hash should be computed server-side as HMAC-SHA256 of the
      * distinct_id using the project's API secret.
+     * Any additional signed identity claims are cleared because they are
+     * bound to the previously configured distinct_id.
      *
      * @param distinctId - The verified user distinct_id
      * @param hash - HMAC-SHA256 of distinctId using the project API secret
@@ -3614,6 +3622,7 @@ export class PostHog implements PostHogInterface {
      * @public
      */
     setIdentity(distinctId: string, hash: string): void {
+        delete this.config.identity_claims
         this.config.identity_distinct_id = distinctId
         this.config.identity_hash = hash
         this.alias(distinctId)
@@ -3633,6 +3642,7 @@ export class PostHog implements PostHogInterface {
     clearIdentity(): void {
         delete this.config.identity_distinct_id
         delete this.config.identity_hash
+        delete this.config.identity_claims
         this.conversations?._onIdentityCleared()
     }
 
@@ -4407,6 +4417,8 @@ export class PostHog implements PostHogInterface {
             return
         }
         if (this._inCookielessMode()) {
+            // Identity changes must not let queued recorder work flush under the replacement identity.
+            this.sessionRecording?.dispose({ discardBufferedEvents: true })
             // If the user was being treated as rejected in on_reject mode (either explicitly opted out, or opted out by default via opt_out_capturing_by_default), then before we can start sending regular non-cookieless events
             // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this._reset(true, true)
@@ -4481,6 +4493,11 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        const sessionRecording =
+            this.config.cookieless_mode === COOKIELESS_ON_REJECT ? this.sessionRecording : undefined
+        // Identity changes must not let queued recorder work flush under the cookieless identity.
+        sessionRecording?.dispose({ discardBufferedEvents: true })
+
         if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isOptedIn()) {
             // If the user has opted in, we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this._reset(true, true)
@@ -4495,8 +4512,8 @@ export class PostHog implements PostHogInterface {
                 distinct_id: COOKIELESS_SENTINEL_VALUE,
                 $device_id: null,
             })
-            // tear down rrweb observers before sessionManager goes away — late events would throw
-            this.sessionRecording?.stopRecording()
+            // Detach the recorder before sessionManager goes away so pending work cannot outlive it.
+            this._removeExtension(sessionRecording)
             this.sessionRecording = undefined
             this.sessionManager?.destroy()
             this.pageViewManager?.destroy()

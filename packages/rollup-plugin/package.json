@@ -1,6 +1,6 @@
 {
     "name": "@posthog/rollup-plugin",
-    "version": "1.5.1",
+    "version": "1.6.0",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -17,8 +17,8 @@
     "scripts": {
         "build": "rslib build",
         "clean": "rimraf dist",
-        "lint": "eslint src 'test/*.mjs'",
-        "lint:fix": "eslint src 'test/*.mjs' --fix",
+        "lint": "oxlint --report-unused-disable-directives-severity error src 'test/*.mjs'",
+        "lint:fix": "oxlint --report-unused-disable-directives-severity error src 'test/*.mjs' --fix",
         "test:unit": "jest --passWithNoTests",
         "test:functional": "node --test test/*.test.mjs",
         "dev": "rslib build --watch",

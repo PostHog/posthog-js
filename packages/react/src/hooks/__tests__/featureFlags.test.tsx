@@ -157,7 +157,7 @@ describe('feature flag hooks', () => {
                 } as unknown as PostHog['featureFlags'],
             } as unknown as PostHog
 
-            // eslint-disable-next-line react/display-name
+            // eslint-disable-next-line react-js/display-name
             return ({ children }: { children: React.ReactNode }) => (
                 <PostHogProvider client={client}>{children}</PostHogProvider>
             )

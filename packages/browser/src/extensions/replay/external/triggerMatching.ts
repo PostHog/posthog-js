@@ -49,13 +49,12 @@ export interface RecordingTriggersStatusV2 extends RecordingTriggersStatus {
 }
 
 export type TriggerType = 'url' | 'event'
-/* 
+/*
 triggers can have one of three statuses:
  * - trigger_activated: the trigger met conditions to start recording
  * - trigger_pending: the trigger is present, but the conditions are not yet met
  * - trigger_disabled: the trigger is not present
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const triggerStatuses = [TRIGGER_ACTIVATED, TRIGGER_PENDING, TRIGGER_DISABLED] as const
 export type TriggerStatus = (typeof triggerStatuses)[number]
 
@@ -83,7 +82,6 @@ function persistedTriggerStatus(
  * When "sampled" that means a sample rate is set, and the last time the session ID rotated
  * the sample rate determined this session should be sent to the server.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const sessionRecordingStatuses = [
     DISABLED,
     SAMPLED,

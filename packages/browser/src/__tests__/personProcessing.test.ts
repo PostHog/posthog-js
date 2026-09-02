@@ -606,8 +606,7 @@ describe('person processing', () => {
             expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(true)
         })
 
-        it('should send the $groupidentify event even if person_processing is set to never', async () => {
-            // Groups are separate from person processing - $groupidentify should always be sent
+        it('should retain the group association without sending $groupidentify if person_processing is never', async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('never')
 
@@ -617,21 +616,19 @@ describe('person processing', () => {
             posthog.capture('custom event after group')
 
             // assert
-            // setGroupPropertiesForFlags still has a person processing check
             expect(mockLogger.error).toBeCalledTimes(1)
             expect(mockLogger.error).toHaveBeenCalledWith(
                 'posthog.setGroupPropertiesForFlags was called, but process_person is set to "never". This call will be ignored.'
             )
 
-            // $groupidentify is sent (groups are independent of person processing)
-            expect(beforeSendMock).toBeCalledTimes(3)
+            // no $groupidentify is sent, only the two custom events
+            expect(beforeSendMock).toBeCalledTimes(2)
             const eventBeforeGroup = beforeSendMock.mock.calls[0]
             expect(eventBeforeGroup[0].properties.$process_person_profile).toEqual(false)
-            const groupIdentify = beforeSendMock.mock.calls[1]
-            expect(groupIdentify[0].event).toEqual('$groupidentify')
-            // $groupidentify doesn't set $process_person_profile since it doesn't process persons
-            const eventAfterGroup = beforeSendMock.mock.calls[2]
+            const eventAfterGroup = beforeSendMock.mock.calls[1]
+            expect(eventAfterGroup[0].event).toEqual('custom event after group')
             expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(false)
+            expect(eventAfterGroup[0].properties.$groups).toEqual({ groupType: 'groupKey' })
         })
     })
 

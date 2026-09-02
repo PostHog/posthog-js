@@ -5,7 +5,7 @@ import { setupPostHogNitroPlugin } from './nitro-plugin'
 export default definePlugin((nitroApp) => {
   setupPostHogNitroPlugin({
     useRuntimeConfig,
-    onError: handler =>
+    onError: (handler) =>
       nitroApp.hooks.hook('error', (error, { event }) =>
         handler(
           error,
@@ -14,9 +14,9 @@ export default definePlugin((nitroApp) => {
                 path: new URL(event.req.url).pathname,
                 method: event.req.method,
               }
-            : undefined,
-        ),
+            : undefined
+        )
       ),
-    onClose: handler => nitroApp.hooks.hook('close', handler),
+    onClose: (handler) => nitroApp.hooks.hook('close', handler),
   })
 })

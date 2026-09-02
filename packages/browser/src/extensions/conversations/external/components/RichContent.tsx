@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { h, Fragment } from 'preact'
 import { useMemo } from 'preact/hooks'
 import { isUndefined, isNumber, isArray } from '@posthog/core'

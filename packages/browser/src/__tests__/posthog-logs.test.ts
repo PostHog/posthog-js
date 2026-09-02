@@ -764,6 +764,30 @@ describe('posthog-logs', () => {
                 expect(attrsMap['deployment.environment']).toEqual({ stringValue: 'production' })
             })
 
+            it('should include the detected OS in OTLP resource attributes', () => {
+                Object.defineProperty(window.navigator, 'userAgent', {
+                    value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0',
+                    configurable: true,
+                })
+
+                try {
+                    logs = new PostHogLogs(mockPostHog)
+                    logs.captureLog({ body: 'test' })
+                    jest.advanceTimersByTime(3000)
+
+                    const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                    const attrsMap = Object.fromEntries(
+                        call.data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
+                    )
+
+                    expect(attrsMap['os.name']).toEqual({ stringValue: 'Windows' })
+                    expect(attrsMap['os.version']).toEqual({ stringValue: '10' })
+                } finally {
+                    // @ts-expect-error restoring the jsdom prototype getter
+                    delete window.navigator.userAgent
+                }
+            })
+
             it('should allow resourceAttributes to override named fields', () => {
                 ;(mockPostHog.config as any).logs = {
                     ...mockPostHog.config.logs,
