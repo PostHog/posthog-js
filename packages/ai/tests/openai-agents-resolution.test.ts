@@ -34,7 +34,7 @@ function createIsolatedFixture(): string {
 }
 
 beforeAll(() => {
-  execFileSync(process.execPath, [resolve(repositoryRoot, 'node_modules/rollup/dist/bin/rollup'), '-c'], {
+  execFileSync(process.execPath, [resolve(packageRoot, 'node_modules/tsdown/dist/run.mjs')], {
     cwd: packageRoot,
     stdio: 'pipe',
   })
