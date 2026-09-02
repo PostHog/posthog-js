@@ -1031,6 +1031,10 @@ export class PostHogFeatureFlags implements Extension {
      * hasn't responded yet. This reduces flicker but means you might briefly see stale values
      * (e.g., a flag that was disabled on the server).
      *
+     * A flag that you disable in PostHog is not sent to the SDK at all. This method then returns
+     * `undefined`, not `false`. If your code needs a `false` value, keep the flag active with a 0%
+     * rollout, or handle `undefined` yourself.
+     *
      * ### Usage:
      *
      *     if(posthog.getFeatureFlag('my-flag') === 'some-variant') { // do something }
@@ -1315,6 +1319,11 @@ export class PostHogFeatureFlags implements Extension {
      * By default, this method may return cached values from localStorage if the `/flags` endpoint
      * hasn't responded yet. This reduces flicker but means you might briefly see stale values
      * (e.g., a flag that was disabled on the server).
+     *
+     * A flag that you disable in PostHog is not sent to the SDK at all. The result is then the same
+     * as for a flag that does not exist: `defaultValue` if you give one, otherwise `undefined`. If
+     * your code needs a `false` value, pass `defaultValue: false`, or keep the flag active with a
+     * 0% rollout.
      *
      * ### Usage:
      *

@@ -14,6 +14,10 @@ import { usePostHog } from './usePostHog'
  * - The ref will be properly hydrated on the client side once PostHog initializes
  * - Consider using a fallback value or `v-if` directive when rendering based on this value
  *
+ * **Disabled flags:**
+ * A flag that you disable in PostHog is not sent to the SDK at all, so the ref holds `undefined`
+ * for it, not `false`. If your code needs a `false` value, keep the flag active with a 0% rollout.
+ *
  * @example
  * ```ts
  * const isEnabled = useFeatureFlagEnabled('my-flag')

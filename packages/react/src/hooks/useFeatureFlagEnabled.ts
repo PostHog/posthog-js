@@ -6,7 +6,11 @@ import { isUndefined } from '../utils/type-utils'
  * Check whether a feature flag is enabled for the current user.
  *
  * Returns `undefined` while flags are still loading or when the flag is absent, so callers can
- * distinguish "not known yet" from "disabled".
+ * distinguish "not known yet" from "does not match".
+ *
+ * A flag that you disable in PostHog is not sent to the SDK at all, so this hook returns
+ * `undefined` for it, not `false`. If your code needs a `false` value, pass `defaultValue`, or keep
+ * the flag active with a 0% rollout.
  *
  * @param flag Key of the feature flag.
  * @returns Whether the flag is enabled, or `undefined` if not yet loaded or not found.

@@ -2244,6 +2244,10 @@ export class PostHog implements PostHogInterface {
      * Returns the feature flag value which can be a boolean, string, or undefined.
      * Supports multivariate flags that can return custom string values.
      *
+     * A flag that you disable in PostHog is not sent to the SDK at all. This method then returns
+     * `undefined`, not `false`. If your code needs a `false` value, keep the flag active with a 0%
+     * rollout, or handle `undefined` yourself.
+     *
      * {@label Feature flags}
      *
      * @example
@@ -2349,9 +2353,15 @@ export class PostHog implements PostHogInterface {
      * Checks if a feature flag is enabled for the current user.
      *
      * @remarks
-     * Returns true if the flag is enabled, false if disabled, or undefined if not found
-     * (unless `defaultValue` is given, which is returned instead of undefined).
-     * This is a convenience method that treats any truthy value as enabled.
+     * Returns true if the flag is enabled, false if the flag is active but does not match the
+     * current user, or undefined if the flag has no value (unless `defaultValue` is given, which is
+     * returned instead of undefined). This is a convenience method that treats any truthy value as
+     * enabled.
+     *
+     * A flag that you disable in PostHog is not sent to the SDK at all. The result is then the same
+     * as for a flag that does not exist: `defaultValue` if you give one, otherwise `undefined`. If
+     * your code needs a `false` value, pass `defaultValue: false`, or keep the flag active with a
+     * 0% rollout.
      *
      * {@label Feature flags}
      *
