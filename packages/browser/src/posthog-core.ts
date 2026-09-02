@@ -189,7 +189,12 @@ const FBC_PATTERN = /^fb\.[0-9]+\.[0-9]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/
 
 type FacebookClickIdUpdate = {
     value: string
-    changed: boolean
+    pending: boolean
+}
+
+type PersistedFacebookClickId = {
+    value: string
+    delivered: boolean
 }
 
 // Transport-level keys the browser SDK carries inside event properties (unlike other SDKs,
@@ -1521,34 +1526,76 @@ export class PostHog implements PostHogInterface {
         this._execute_array([item])
     }
 
-    private _updateFacebookClickId(fbclid: unknown, providedFbc: unknown): FacebookClickIdUpdate | undefined {
+    private _getPersistedFacebookClickId(): PersistedFacebookClickId | undefined {
+        const stored = this.persistence?.get_property(PERSISTENCE_FACEBOOK_CLICK_ID)
+        if (isString(stored) && FBC_PATTERN.test(stored)) {
+            return { value: stored, delivered: false }
+        }
+        if (isObject(stored) && isString(stored.value) && FBC_PATTERN.test(stored.value)) {
+            return { value: stored.value, delivered: stored.delivered === true }
+        }
+        return undefined
+    }
+
+    private _updateFacebookClickId(
+        fbclid: unknown,
+        providedFbc: unknown,
+        hasProvidedFbc: boolean,
+        unsetFbc: boolean
+    ): FacebookClickIdUpdate | undefined {
         if (!this.persistence) {
             return undefined
         }
 
-        const storedFbc = this.persistence.get_property(PERSISTENCE_FACEBOOK_CLICK_ID)
+        this.persistence.refreshKey(PERSISTENCE_FACEBOOK_CLICK_ID)
+        const stored = this._getPersistedFacebookClickId()
+
+        if (unsetFbc) {
+            this.persistence.unregister(PERSISTENCE_FACEBOOK_CLICK_ID)
+            return undefined
+        }
 
         // Keep an explicitly supplied value as the local source of truth too, so a later event with
         // the same fbclid cannot replace its original timestamp.
-        if (isString(providedFbc) && FBC_PATTERN.test(providedFbc)) {
-            const changed = providedFbc !== storedFbc
-            if (changed) {
-                this.persistence.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: providedFbc })
+        if (hasProvidedFbc) {
+            if (!isString(providedFbc) || !FBC_PATTERN.test(providedFbc)) {
+                this.persistence.unregister(PERSISTENCE_FACEBOOK_CLICK_ID)
+                return undefined
             }
-            return { value: providedFbc, changed }
+            if (providedFbc !== stored?.value) {
+                this.persistence.register({
+                    [PERSISTENCE_FACEBOOK_CLICK_ID]: { value: providedFbc, delivered: false },
+                })
+            }
+            return { value: providedFbc, pending: providedFbc !== stored?.value || !stored.delivered }
         }
 
         if (isString(fbclid) && FBCLID_PATTERN.test(fbclid)) {
-            if (isString(storedFbc) && FBC_PATTERN.test(storedFbc) && storedFbc.split('.')[3] === fbclid) {
-                return { value: storedFbc, changed: false }
+            if (stored?.value.split('.')[3] === fbclid) {
+                return { value: stored.value, pending: !stored.delivered }
             }
 
             const fbc = `fb.1.${Date.now()}.${fbclid}`
-            this.persistence.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: fbc })
-            return { value: fbc, changed: true }
+            this.persistence.register({
+                [PERSISTENCE_FACEBOOK_CLICK_ID]: { value: fbc, delivered: false },
+            })
+            return { value: fbc, pending: true }
         }
 
-        return isString(storedFbc) && FBC_PATTERN.test(storedFbc) ? { value: storedFbc, changed: false } : undefined
+        return stored ? { value: stored.value, pending: !stored.delivered } : undefined
+    }
+
+    private _markFacebookClickIdDelivered(value: string): void {
+        if (!this.persistence) {
+            return
+        }
+        this.persistence.refreshKey(PERSISTENCE_FACEBOOK_CLICK_ID)
+        const stored = this._getPersistedFacebookClickId()
+        if (stored?.value === value && !stored.delivered) {
+            this.persistence.register({
+                [PERSISTENCE_FACEBOOK_CLICK_ID]: { value, delivered: true },
+            })
+        }
     }
 
     /**
@@ -1687,11 +1734,21 @@ export class PostHog implements PostHogInterface {
             data.$set = options?.$set
         }
 
-        const fbc = this._updateFacebookClickId(campaignParams?.fbclid, options?.$set?.[FACEBOOK_CLICK_ID])
+        const propertySet = isObject(properties?.$set) ? properties.$set : undefined
+        const hasOptionFbc = !!options?.$set && FACEBOOK_CLICK_ID in options.$set
+        const hasPropertyFbc = !!propertySet && FACEBOOK_CLICK_ID in propertySet
+        const hasProvidedFbc = hasOptionFbc || hasPropertyFbc
+        const providedFbc = hasOptionFbc ? options?.$set?.[FACEBOOK_CLICK_ID] : propertySet?.[FACEBOOK_CLICK_ID]
+        const propertyUnset = isArray(properties?.$unset) ? properties.$unset : []
+        const optionUnset = options?.$unset || []
+        const unsetFbc =
+            propertyUnset.indexOf(FACEBOOK_CLICK_ID) !== -1 || optionUnset.indexOf(FACEBOOK_CLICK_ID) !== -1
+        const fbc = this._updateFacebookClickId(campaignParams?.fbclid, providedFbc, hasProvidedFbc, unsetFbc)
         if (
             fbc &&
             data.properties.$process_person_profile === true &&
-            (fbc.changed || event_name === EVENT_IDENTIFY || event_name === '$set') &&
+            fbc.pending &&
+            !hasProvidedFbc &&
             !shouldSendMinimalFlagCalledEvent
         ) {
             // An explicit person property supplied by the caller wins over the SDK-derived value.
@@ -1777,6 +1834,13 @@ export class PostHog implements PostHogInterface {
                 // codeql[js/insecure-randomness] Event UUIDs are identifiers for deduplication, not secrets.
                 data.uuid = getEventUuid(data.uuid, uuidv7)
             }
+        }
+
+        const finalFbc =
+            data.$set?.[FACEBOOK_CLICK_ID] ??
+            (isObject(data.properties?.$set) ? data.properties.$set[FACEBOOK_CLICK_ID] : undefined)
+        if (fbc && finalFbc === fbc.value) {
+            this._markFacebookClickIdDelivered(fbc.value)
         }
 
         this._internalEventEmitter.emit('eventCaptured', data)

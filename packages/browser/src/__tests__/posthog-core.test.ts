@@ -615,6 +615,104 @@ describe('posthog core', () => {
                 })
                 now.mockRestore()
             })
+
+            it('should retry $fbc delivery after before_send drops the first eligible event', () => {
+                const now = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/?fbclid=retry-click')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    person_profiles: 'always',
+                })
+                beforeSendMock.mockReturnValueOnce(null)
+
+                posthog.capture('$pageview')
+                posthog.capture('next-event')
+
+                expect(beforeSendMock.mock.calls[1][0].$set.$fbc).toBe('fb.1.1700000000000.retry-click')
+                now.mockRestore()
+            })
+
+            it('should defer $fbc delivery past a minimal feature-flag event', () => {
+                const now = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/?fbclid=minimal-click')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    person_profiles: 'always',
+                })
+                posthog.register({ $minimal_flag_called_events: true })
+
+                posthog.capture('$feature_flag_called', { $feature_flag_has_experiment: false })
+                posthog.capture('next-event')
+
+                expect(beforeSendMock.mock.calls[0][0].$set?.$fbc).toBeUndefined()
+                expect(beforeSendMock.mock.calls[1][0].$set.$fbc).toBe('fb.1.1700000000000.minimal-click')
+                now.mockRestore()
+            })
+
+            it.each([
+                ['$groupidentify', (posthog: PostHog) => posthog.group('organization', 'acme')],
+                ['$create_alias', (posthog: PostHog) => posthog.alias('known-user')],
+            ])('should carry an anonymous click onto %s when it enables person processing', (event, transition) => {
+                const now = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/?fbclid=transition-click')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    person_profiles: 'identified_only',
+                })
+
+                posthog.capture('$pageview')
+                transition(posthog)
+
+                expect(beforeSendMock.mock.calls[1][0]).toMatchObject({
+                    event,
+                    $set: { $fbc: 'fb.1.1700000000000.transition-click' },
+                })
+                now.mockRestore()
+            })
+
+            it('should let setPersonProperties replace the stored $fbc', () => {
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/?fbclid=sdk-click')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    person_profiles: 'always',
+                })
+                posthog.capture('$pageview')
+
+                posthog.setPersonProperties({ $fbc: 'fb.1.1700000000000.caller-click' })
+                posthog.setPersonProperties({ plan: 'paid' })
+
+                expect(beforeSendMock.mock.calls[1][0]).toMatchObject({
+                    properties: { $set: { $fbc: 'fb.1.1700000000000.caller-click' } },
+                })
+                expect(beforeSendMock.mock.calls[1][0].$set?.$fbc).toBeUndefined()
+                expect(beforeSendMock.mock.calls[2][0].$set?.$fbc).toBeUndefined()
+            })
+
+            it('should let unsetPersonProperties clear the stored $fbc', () => {
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/?fbclid=sdk-click')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    person_profiles: 'always',
+                })
+                posthog.capture('$pageview')
+
+                posthog.unsetPersonProperties('$fbc')
+                posthog.setPersonProperties({ plan: 'paid' })
+
+                expect(beforeSendMock.mock.calls[1][0]).toMatchObject({ properties: { $unset: ['$fbc'] } })
+                expect(beforeSendMock.mock.calls[1][0].$set?.$fbc).toBeUndefined()
+                expect(beforeSendMock.mock.calls[2][0].$set?.$fbc).toBeUndefined()
+            })
         })
 
         describe('survey events', () => {

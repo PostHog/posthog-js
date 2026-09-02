@@ -32,6 +32,7 @@ import {
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_FACEBOOK_CLICK_ID,
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
@@ -229,6 +230,7 @@ export class PostHogPersistence {
     private _storageMigrationInProgress = false
     private _localIdentityChangePending = false
     private _crossTabFeatureFlagIdentityMismatch = false
+    private _facebookClickIdChangePending = false
     private readonly _crossTabFeatureFlagHandlers = new Set<() => void>()
     private _onStorage?: (event: StorageEvent) => void
 
@@ -1175,10 +1177,13 @@ export class PostHogPersistence {
         if (this._disabled) {
             return
         }
+        if (prop === PERSISTENCE_FACEBOOK_CLICK_ID && this._facebookClickIdChangePending) {
+            return
+        }
         const group = this._splitStorage ? getPersistenceKeyPolicy(prop)?.storageGroup : undefined
         const entry = group ? localStore._parse(this._groupEntryName(group)) : this._storage._parse(this._name)
         if (entry && prop in entry) {
-            this._setProp(prop, entry[prop])
+            this._setProp(prop, entry[prop], false)
             return
         }
         // A grouped key that has not migrated yet still lives in the main blob;
@@ -1186,11 +1191,11 @@ export class PostHogPersistence {
         if (group) {
             const mainEntry = this._storage._parse(this._name)
             if (mainEntry && prop in mainEntry) {
-                this._setProp(prop, mainEntry[prop])
+                this._setProp(prop, mainEntry[prop], false)
                 return
             }
         }
-        this._deleteProp(prop)
+        this._deleteProp(prop, false)
     }
 
     /**
@@ -1249,6 +1254,12 @@ export class PostHogPersistence {
         // not adopt a sibling write that arrived while it was in progress.
         if (!forceSuppressedSnapshot) {
             this.syncCookieProperties()
+            if (
+                !this._facebookClickIdChangePending &&
+                (!this._config.cookieWinsOnConflict || this._config.persistence.toLowerCase() !== 'localstorage+cookie')
+            ) {
+                this.refreshKey(PERSISTENCE_FACEBOOK_CLICK_ID)
+            }
         }
 
         const shouldReconcileCrossTabProperties = !forceSuppressedSnapshot && !this._storageMigrationInProgress
@@ -1279,6 +1290,7 @@ export class PostHogPersistence {
         if (writeResult !== 'failed') {
             this._pendingCrossTabFeatureFlagChanges.clear()
             this._localIdentityChangePending = false
+            this._facebookClickIdChangePending = false
         }
         if (crossTabPropertiesChanged) {
             this._crossTabFeatureFlagHandlers.forEach((handler) => handler())
@@ -1304,6 +1316,7 @@ export class PostHogPersistence {
         }
         if (mainWriteResult !== 'failed') {
             this._localIdentityChangePending = false
+            this._facebookClickIdChangePending = false
             CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
                 if (!getPersistenceKeyPolicy(key)?.storageGroup) {
                     this._pendingCrossTabFeatureFlagChanges.delete(key)
@@ -1816,6 +1829,9 @@ export class PostHogPersistence {
         if ((prop === DISTINCT_ID || prop === USER_STATE) && previousValue !== to) {
             this._localIdentityChangePending = true
         }
+        if (prop === PERSISTENCE_FACEBOOK_CLICK_ID && !isStorageValueEqual(previousValue, to)) {
+            this._facebookClickIdChangePending = true
+        }
         this._markPendingCrossTabFeatureFlagChanges(prop, previousValue, to)
         // A volatile value change never dirties its group — it changes on every
         // remote load and would otherwise force a rewrite of the large entry per
@@ -1833,6 +1849,9 @@ export class PostHogPersistence {
         }
         if (isCrossTabFeatureFlagKey(prop)) {
             this._setCrossTabFeatureFlagChangesPending(prop, true)
+        }
+        if (prop === PERSISTENCE_FACEBOOK_CLICK_ID) {
+            this._facebookClickIdChangePending = true
         }
         this._markGroupDirty(prop)
     }
