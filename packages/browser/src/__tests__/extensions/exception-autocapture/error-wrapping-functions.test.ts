@@ -4,7 +4,7 @@ import { ErrorTracking } from '@posthog/core'
 const { wrapOnError, wrapUnhandledRejection, wrapConsoleError } = posthogErrorWrappingFunctions
 
 describe('error wrapping functions', () => {
-    const captureFn = vi.fn<(properties: ErrorTracking.ErrorProperties) => void>()
+    const captureFn = vi.fn<[ErrorTracking.ErrorProperties], void>()
     const win = window as any
 
     afterEach(() => {

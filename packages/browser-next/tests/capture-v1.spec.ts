@@ -224,7 +224,7 @@ describe('Capture Analytics V1', () => {
                 finishFirst = resolve
             })
             const fetch = vi
-                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockImplementationOnce(async (_input, init = {}) => {
                     requests.push(init)
                     return first
@@ -303,7 +303,7 @@ describe('Capture Analytics V1', () => {
 
         it('returns only never-attempted batches when delivery is cancelled between requests', async () => {
             let canRetryChecks = 0
-            const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(
+            const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(
                 async () => new Response('{"results":{}}', { status: 200 })
             )
 
@@ -447,7 +447,7 @@ describe('Capture Analytics V1', () => {
             const compression = new Promise<Blob>((resolve) => {
                 finishCompression = resolve
             })
-            const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             const delivery = sendCaptureV1Batch(
                 runtime(fetch),
                 [message({ properties: { value: 'x'.repeat(2_000) } })],
@@ -514,7 +514,7 @@ describe('Capture Analytics V1', () => {
         it('bounds stalled compression and sends the original request without consuming an attempt', async () => {
             vi.useFakeTimers()
             try {
-                const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(
+                const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(
                     async () => new Response('{"results":{}}', { status: 200 })
                 )
                 const delivery = sendCaptureV1Batch(
@@ -672,7 +672,7 @@ describe('Capture Analytics V1', () => {
 
     it.each([400, 401, 402, 403, 413, 415, 429])('treats HTTP %s as terminal', async (status) => {
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status }))
 
         await expect(sendCaptureV1Batch(runtime(fetch), [message()], '1.2.3')).resolves.toMatchObject({
@@ -712,7 +712,7 @@ describe('Capture Analytics V1', () => {
             text: () => Promise.reject(new Error('body stream failed')),
         } as Response
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValueOnce(failedBodyResponse)
             .mockResolvedValueOnce(new Response('{"results":{}}', { status: 200 }))
         const sleep = vi.fn().mockResolvedValue(undefined)
@@ -790,7 +790,7 @@ describe('Capture Analytics V1', () => {
 
     it.each([408, 500, 502, 503, 504])('retries transient HTTP %s and then succeeds', async (status) => {
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValueOnce(new Response('{}', { status }))
             .mockResolvedValueOnce(new Response('{"results":{}}', { status: 200 }))
         const sleep = vi.fn().mockResolvedValue(undefined)
@@ -809,7 +809,7 @@ describe('Capture Analytics V1', () => {
 
     it('retries a transport failure and then succeeds', async () => {
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockRejectedValueOnce(new Error('offline'))
             .mockResolvedValueOnce(new Response('{"results":{}}', { status: 200 }))
         const sleep = vi.fn().mockResolvedValue(undefined)
@@ -831,7 +831,7 @@ describe('Capture Analytics V1', () => {
         [1, 4_500],
     ])('applies bounded jitter for random value %s', async (randomValue, expectedDelay) => {
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValueOnce(new Response('{}', { status: 503 }))
             .mockResolvedValueOnce(new Response('{"results":{}}', { status: 200 }))
         const sleep = vi.fn().mockResolvedValue(undefined)
@@ -868,7 +868,7 @@ describe('Capture Analytics V1', () => {
         ],
     ] as const)('honors %s', async (_label, firstResponse, now, expectedDelay) => {
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValueOnce(firstResponse())
             .mockResolvedValueOnce(new Response('{"results":{}}', { status: 200 }))
         const sleep = vi.fn().mockResolvedValue(undefined)
@@ -885,7 +885,7 @@ describe('Capture Analytics V1', () => {
 
     it('ignores an overflowing Retry-After value', async () => {
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValueOnce(
                 new Response('{}', { status: 503, headers: { 'Retry-After': `9${'0'.repeat(305)}` } })
             )
@@ -903,7 +903,7 @@ describe('Capture Analytics V1', () => {
 
     it('clamps Retry-After to the maximum backoff', async () => {
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValueOnce(new Response('{}', { status: 503, headers: { 'Retry-After': '120' } }))
             .mockResolvedValueOnce(new Response('{"results":{}}', { status: 200 }))
         const sleep = vi.fn().mockResolvedValue(undefined)
@@ -951,7 +951,7 @@ describe('Capture Analytics V1', () => {
         [2.9, 2],
     ])('normalizes an attempt budget of %s to %s attempts', async (maxAttempts, expectedAttempts) => {
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 503 }))
 
         await sendCaptureV1Batch(runtime(fetch), [message()], '1.2.3', {
@@ -967,7 +967,7 @@ describe('Capture Analytics V1', () => {
 
     it('always makes one attempt when the attempt budget is zero', async () => {
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 503 }))
         const sleep = vi.fn().mockResolvedValue(undefined)
 
@@ -980,7 +980,7 @@ describe('Capture Analytics V1', () => {
 
     it('stops before backoff when retry permission is revoked', async () => {
         let canRetry = true
-        const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>().mockImplementation(async () => {
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>().mockImplementation(async () => {
             canRetry = false
             return new Response('{}', { status: 503 })
         })
@@ -1000,7 +1000,7 @@ describe('Capture Analytics V1', () => {
     it('rechecks retry permission after backoff', async () => {
         let canRetry = true
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 503 }))
         const sleep = vi.fn().mockImplementation(async () => {
             canRetry = false
@@ -1021,7 +1021,7 @@ describe('Capture Analytics V1', () => {
         vi.useFakeTimers()
         try {
             let signal: AbortSignal | undefined
-            const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>().mockImplementation(
+            const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>().mockImplementation(
                 async (_input, init = {}) =>
                     new Promise<Response>((_resolve, reject) => {
                         signal = init.signal ?? undefined
@@ -1059,7 +1059,7 @@ describe('Capture Analytics V1', () => {
         try {
             const controller = new AbortController()
             let requestSignal: AbortSignal | undefined
-            const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>().mockImplementation(
+            const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>().mockImplementation(
                 async (_input, init = {}) =>
                     new Promise<Response>((_resolve, reject) => {
                         requestSignal = init.signal ?? undefined
@@ -1093,7 +1093,7 @@ describe('Capture Analytics V1', () => {
         vi.useFakeTimers()
         try {
             let resolveFetch: ((response: Response) => void) | undefined
-            const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>().mockImplementation(
+            const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>().mockImplementation(
                 () =>
                     new Promise<Response>((resolve) => {
                         resolveFetch = resolve
@@ -1130,7 +1130,7 @@ describe('Capture Analytics V1', () => {
                 text: () => new Promise<string>(() => {}),
             } as unknown as Response
             const fetch = vi
-                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValueOnce(stalledResponse)
                 .mockResolvedValueOnce(new Response('{"results":{}}', { status: 200 }))
             const sleep = vi.fn().mockResolvedValue(undefined)
@@ -1159,7 +1159,7 @@ describe('Capture Analytics V1', () => {
         vi.useFakeTimers()
         try {
             const fetch = vi
-                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockImplementation(async () => new Promise<Response>(() => {}))
 
             const delivery = sendCaptureV1Batch(runtime(fetch), [message()], '1.2.3', {
@@ -1174,7 +1174,8 @@ describe('Capture Analytics V1', () => {
             const result = await delivery
 
             expect(result.error).toMatchObject({ name: 'AbortError' })
-            expect(result.error?.message).toMatch(/after 49\d(?:\.\d+)?ms$/)
+            expect(result.error).toBeInstanceOf(Error)
+            expect((result.error as Error).message).toMatch(/after 49\d(?:\.\d+)?ms$/)
             expect(vi.getTimerCount()).toBe(0)
         } finally {
             vi.useRealTimers()
@@ -1183,7 +1184,7 @@ describe('Capture Analytics V1', () => {
 
     it('does not start Fetch when request setup exhausts the elapsed budget', async () => {
         let elapsed = 0
-        const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
         const properties = {
             nested: {
                 toJSON: () => {
@@ -1205,7 +1206,7 @@ describe('Capture Analytics V1', () => {
 
     it('does not start a backoff that would consume the remaining elapsed budget', async () => {
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 503, headers: { 'Retry-After': '10' } }))
         const sleep = vi.fn().mockResolvedValue(undefined)
 
@@ -1225,7 +1226,7 @@ describe('Capture Analytics V1', () => {
     it('does not start another attempt after backoff exhausts the elapsed budget', async () => {
         let elapsed = 0
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 503 }))
         const sleep = vi.fn().mockImplementation(async () => {
             elapsed = 5_000
@@ -1255,7 +1256,7 @@ describe('Capture Analytics V1', () => {
     })
 
     it('contains serialization failures', async () => {
-        const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
 
         await expect(
             sendCaptureV1Batch(runtime(fetch), [message({ properties: { invalid: 1n } })], '1.2.3')

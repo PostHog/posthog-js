@@ -426,7 +426,7 @@ describe('@posthog/browser core', () => {
 
     it('does not retry analytics after consent is revoked', async () => {
         const client: { current?: Awaited<ReturnType<typeof createPostHog>> } = {}
-        const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>().mockImplementation(async () => {
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>().mockImplementation(async () => {
             client.current?.optOut()
             return new Response('{}', { status: 503 })
         })
@@ -447,7 +447,7 @@ describe('@posthog/browser core', () => {
         vi.useFakeTimers()
         try {
             const fetch = vi
-                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
             const posthog = await createPostHogWithAnalytics({
                 projectToken: 'ph_test',
@@ -486,7 +486,7 @@ describe('@posthog/browser core', () => {
         vi.useFakeTimers()
         try {
             const fetch = vi
-                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
             const posthog = await createPostHogWithAnalytics({
                 projectToken: 'ph_test',
@@ -516,7 +516,7 @@ describe('@posthog/browser core', () => {
         vi.useFakeTimers()
         try {
             const fetch = vi
-                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
             const posthog = await createPostHog({
                 projectToken: 'ph_test',
@@ -558,7 +558,7 @@ describe('@posthog/browser core', () => {
         vi.useFakeTimers()
         try {
             const fetch = vi
-                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
             const posthog = await createPostHogWithAnalytics({
                 projectToken: 'ph_test',
@@ -615,7 +615,7 @@ describe('@posthog/browser core', () => {
     it('bounds shutdown and aborts a stalled active request', async () => {
         vi.useFakeTimers()
         try {
-            const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(() => new Promise(() => {}))
+            const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(() => new Promise(() => {}))
             const posthog = await createPostHog({
                 projectToken: 'ph_test',
                 capturePageview: false,

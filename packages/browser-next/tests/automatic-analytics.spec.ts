@@ -227,7 +227,7 @@ describe('@posthog/browser automatic analytics', () => {
     it('retains events after a load failure and retries loading on explicit flush', async () => {
         const requests: SentRequest[] = []
         const load = vi
-            .fn<(options: AnalyticsOptions) => Promise<Extension>>()
+            .fn<[AnalyticsOptions], Promise<Extension>>()
             .mockRejectedValueOnce(new Error('chunk unavailable'))
             .mockResolvedValueOnce(analytics({ flushAt: 100, flushInterval: 0 }))
         const posthog = await createPostHogCore(

@@ -1062,6 +1062,9 @@ importers:
       expo-localization:
         specifier: ^11.0.0
         version: 11.0.0
+      jsdom:
+        specifier: 'catalog:'
+        version: 26.1.0
       metro:
         specifier: 0.83.1
         version: 0.83.1

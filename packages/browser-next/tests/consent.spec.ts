@@ -182,7 +182,7 @@ describe('portable consent persistence', () => {
             await client.capture('extension-blocked')
             await client.sendRequest('/flags/')
         })
-        const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
         const storage = new MemoryStorage()
         storage.values.set(DEFAULT_KEY, '0')
 
@@ -348,7 +348,7 @@ describe('portable consent persistence', () => {
         try {
             const storage = new MemoryStorage()
             const fetch = vi
-                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
             const first = await createPostHog({
                 projectToken: 'ph_test',
@@ -791,7 +791,7 @@ describe('portable consent persistence', () => {
     it('invokes transport when consent is granted at dispatch after request preparation', async () => {
         const storage = new MemoryStorage()
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
@@ -811,7 +811,7 @@ describe('portable consent persistence', () => {
     it('does not invoke transport when request preparation ends with denied consent', async () => {
         const storage = new MemoryStorage()
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
@@ -829,7 +829,7 @@ describe('portable consent persistence', () => {
     it('returns a Fetch response received after denial and grant', async () => {
         const storage = new MemoryStorage()
         let finishFetch: ((response: Response) => void) | undefined
-        const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(
             () =>
                 new Promise<Response>((resolve) => {
                     finishFetch = resolve
@@ -850,7 +850,7 @@ describe('portable consent persistence', () => {
     it('returns a Fetch failure received after denial and grant', async () => {
         const storage = new MemoryStorage()
         let failFetch: ((error: Error) => void) | undefined
-        const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(
             () =>
                 new Promise<Response>((_resolve, reject) => {
                     failFetch = reject

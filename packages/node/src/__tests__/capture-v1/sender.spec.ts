@@ -47,7 +47,7 @@ function makeSender(
   const sleeps: number[] = []
   const errors: Error[] = []
   const clock = { value: CLOCK_START }
-  const fetch = vi.fn<(url: string, options: any) => Promise<PostHogFetchResponse>>()
+  const fetch = vi.fn<[string, any], Promise<PostHogFetchResponse>>()
 
   const sender = new V1CaptureSender(
     {
@@ -405,7 +405,7 @@ describe('V1CaptureSender', () => {
 
     it('bounds response body cancellation by the request deadline before retrying a 5xx', async () => {
       const { sender, fetch, errors, sleeps } = makeSender({ maxAttempts: 2 })
-      const cancel = vi.fn<() => Promise<void>>(() => new Promise<void>(() => {}))
+      const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
       fetch
         .mockResolvedValueOnce(makeStallingResponse(503, cancel))
         .mockResolvedValueOnce(makeResponse(503, 'still unavailable'))
@@ -488,7 +488,7 @@ describe('V1CaptureSender', () => {
       await vi.advanceTimersByTimeAsync(1000)
       await sendPromise
 
-      const cancel = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
+      const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
       resolveFetch(makeStallingResponse(200, cancel))
       await vi.advanceTimersByTimeAsync(0)
 
@@ -499,7 +499,7 @@ describe('V1CaptureSender', () => {
 
     it('retries a stalled success body without waiting for body cancellation to settle', async () => {
       const { sender, fetch, errors, sleeps } = makeSender({ maxAttempts: 2, requestTimeoutMs: 1000 })
-      const cancel = vi.fn<() => Promise<void>>(() => new Promise<void>(() => {}))
+      const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
       fetch
         .mockImplementationOnce(() => Promise.resolve(makeStallingResponse(200, cancel)))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
@@ -517,7 +517,7 @@ describe('V1CaptureSender', () => {
 
     it('preserves the response-body timeout error when custom body reading rejects on abort', async () => {
       const { sender, fetch, errors } = makeSender({ maxAttempts: 1, requestTimeoutMs: 1000 })
-      const cancel = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
+      const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
       fetch.mockImplementation((_url, options) => {
         const response = makeStallingResponse(200, cancel)
         response.text = () =>
@@ -545,7 +545,7 @@ describe('V1CaptureSender', () => {
       const { sender, fetch, errors } = makeSender({ maxAttempts: 2, requestTimeoutMs: 1000 })
       const cancels: vi.Mock<Promise<void>, []>[] = []
       fetch.mockImplementation(() => {
-        const cancel = vi.fn<() => Promise<void>>(() => new Promise<void>(() => {}))
+        const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
         cancels.push(cancel)
         return Promise.resolve(makeStallingResponse(200, cancel))
       })
@@ -571,7 +571,7 @@ describe('V1CaptureSender', () => {
 
     it('times out a stalled HTTP error body without changing terminal status classification', async () => {
       const { sender, fetch, errors } = makeSender({ maxAttempts: 2, requestTimeoutMs: 1000 })
-      const cancel = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
+      const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
       fetch.mockResolvedValue(makeStallingResponse(400, cancel))
 
       const sendPromise = sender.sendV1Batch([msg('u1')])
@@ -718,7 +718,7 @@ describe('V1CaptureSender', () => {
     it('uses the real clock, request-id generator and sleep when not injected', async () => {
       const errors: Error[] = []
       const fetch = vi
-        .fn<(url: string, options: any) => Promise<PostHogFetchResponse>>()
+        .fn<[string, any], Promise<PostHogFetchResponse>>()
         .mockResolvedValueOnce(makeResponse(503))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
@@ -737,7 +737,7 @@ describe('V1CaptureSender', () => {
 
     it('uses the real gzip compressor when not injected', async () => {
       const fetch = vi
-        .fn<(url: string, options: any) => Promise<PostHogFetchResponse>>()
+        .fn<[string, any], Promise<PostHogFetchResponse>>()
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
       const sender = new V1CaptureSender({ ...baseConfig, compressionEnabled: true }, { fetch, onError: () => {} })

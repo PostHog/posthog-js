@@ -30,7 +30,7 @@ describe('@posthog/browser public lifecycle state machine', () => {
         const storage = new MemoryStorage()
         const response = deferred<Response>()
         const bodies: Array<{ batch?: Array<{ event?: string }> }> = []
-        const fetch = vi.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>((_input, init = {}) => {
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>((_input, init = {}) => {
             bodies.push(JSON.parse(String(init.body)) as { batch?: Array<{ event?: string }> })
             return response.promise
         })
@@ -110,7 +110,7 @@ describe('@posthog/browser public lifecycle state machine', () => {
         const loaded = deferred<Extension>()
         const load = vi.fn(() => loaded.promise)
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const extension = analytics({ flushAt: 1, flushInterval: 0 })
         const disposeExtension = extension.dispose?.bind(extension)
@@ -149,7 +149,7 @@ describe('@posthog/browser public lifecycle state machine', () => {
     it('cancels a real retry timer when bounded shutdown expires', async () => {
         vi.useFakeTimers()
         const fetch = vi
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 503 }))
         const posthog = await createPostHog({
             projectToken: 'ph_test',

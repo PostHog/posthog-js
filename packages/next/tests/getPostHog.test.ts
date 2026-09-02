@@ -1,14 +1,53 @@
 // Mock posthog-node
-const mockCapture = vi.fn()
-const mockIdentify = vi.fn()
-const mockIsFeatureEnabled = vi.fn()
-const mockGetFeatureFlag = vi.fn()
-const mockGetFeatureFlagPayload = vi.fn()
-const mockGetAllFlags = vi.fn()
-const mockGetAllFlagsAndPayloads = vi.fn()
-const mockShutdown = vi.fn()
-const mockEnterContext = vi.fn()
-const mockWithContext = vi.fn((_, fn) => fn())
+const {
+    mockCapture,
+    mockIdentify,
+    mockIsFeatureEnabled,
+    mockGetFeatureFlag,
+    mockGetFeatureFlagPayload,
+    mockGetAllFlags,
+    mockGetAllFlagsAndPayloads,
+    mockShutdown,
+    mockEnterContext,
+    mockWithContext,
+    mockGetOrCreateNodeClient,
+} = vi.hoisted(() => {
+    const mockCapture = vi.fn()
+    const mockIdentify = vi.fn()
+    const mockIsFeatureEnabled = vi.fn()
+    const mockGetFeatureFlag = vi.fn()
+    const mockGetFeatureFlagPayload = vi.fn()
+    const mockGetAllFlags = vi.fn()
+    const mockGetAllFlagsAndPayloads = vi.fn()
+    const mockShutdown = vi.fn()
+    const mockEnterContext = vi.fn()
+    const mockWithContext = vi.fn((_, fn) => fn())
+    const mockGetOrCreateNodeClient = vi.fn().mockImplementation(() => ({
+        capture: mockCapture,
+        identify: mockIdentify,
+        isFeatureEnabled: mockIsFeatureEnabled,
+        getFeatureFlag: mockGetFeatureFlag,
+        getFeatureFlagPayload: mockGetFeatureFlagPayload,
+        getAllFlags: mockGetAllFlags,
+        getAllFlagsAndPayloads: mockGetAllFlagsAndPayloads,
+        shutdown: mockShutdown,
+        enterContext: mockEnterContext,
+        withContext: mockWithContext,
+    }))
+    return {
+        mockCapture,
+        mockIdentify,
+        mockIsFeatureEnabled,
+        mockGetFeatureFlag,
+        mockGetFeatureFlagPayload,
+        mockGetAllFlags,
+        mockGetAllFlagsAndPayloads,
+        mockShutdown,
+        mockEnterContext,
+        mockWithContext,
+        mockGetOrCreateNodeClient,
+    }
+})
 
 vi.mock('posthog-node', () => ({
     PostHog: vi.fn().mockImplementation(() => ({
@@ -37,35 +76,18 @@ function createMockCookies(entries: Record<string, string>) {
     }
 }
 
-const mockCookieStore = createMockCookies({})
-
 function createMockHeaders(entries: Record<string, string>) {
     return {
         get: vi.fn((name: string) => entries[name.toLowerCase()] ?? null),
     }
 }
 
-const mockHeaderStore = createMockHeaders({})
-
 vi.mock('next/headers.js', () => ({
-    cookies: vi.fn(() => Promise.resolve(mockCookieStore)),
-    headers: vi.fn(() => Promise.resolve(mockHeaderStore)),
+    cookies: vi.fn(),
+    headers: vi.fn(),
 }))
 
 // Mock clientCache.node to avoid cross-test cache pollution
-const mockGetOrCreateNodeClient = vi.fn().mockImplementation(() => ({
-    capture: mockCapture,
-    identify: mockIdentify,
-    isFeatureEnabled: mockIsFeatureEnabled,
-    getFeatureFlag: mockGetFeatureFlag,
-    getFeatureFlagPayload: mockGetFeatureFlagPayload,
-    getAllFlags: mockGetAllFlags,
-    getAllFlagsAndPayloads: mockGetAllFlagsAndPayloads,
-    shutdown: mockShutdown,
-    enterContext: mockEnterContext,
-    withContext: mockWithContext,
-}))
-
 vi.mock('../src/server/clientCache.node', () => ({
     getOrCreateNodeClient: (...args: unknown[]) => mockGetOrCreateNodeClient(...args),
 }))

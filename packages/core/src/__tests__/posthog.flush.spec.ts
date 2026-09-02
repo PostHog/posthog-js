@@ -189,7 +189,7 @@ describe('PostHog Core', () => {
       })
 
       it('does not retry capture after a successful response body cancellation stalls', async () => {
-        const cancel = vi.fn<() => Promise<void>>(() => new Promise<void>(() => {}))
+        const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
         mocks.fetch.mockResolvedValue({
           status: 200,
           text: () => Promise.resolve('ok'),
@@ -208,7 +208,7 @@ describe('PostHog Core', () => {
       })
 
       it('does not retry logs after a successful response body cancellation stalls', async () => {
-        const cancel = vi.fn<() => Promise<void>>(() => new Promise<void>(() => {}))
+        const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
         mocks.fetch.mockResolvedValue({
           status: 200,
           text: () => Promise.resolve('ok'),
@@ -226,7 +226,7 @@ describe('PostHog Core', () => {
       })
 
       it('does not retry metrics after a successful response body cancellation stalls', async () => {
-        const cancel = vi.fn<() => Promise<void>>(() => new Promise<void>(() => {}))
+        const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
         mocks.fetch.mockResolvedValue({
           status: 200,
           text: () => Promise.resolve('ok'),
@@ -244,7 +244,7 @@ describe('PostHog Core', () => {
       })
 
       it('preserves terminal HTTP status and reports when the error response body stalls', async () => {
-        const cancel = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
         const text = vi.fn(() => new Promise<string>(() => {}))
         mocks.fetch.mockResolvedValue({
           status: 400,
@@ -272,7 +272,7 @@ describe('PostHog Core', () => {
       })
 
       it('does not read an error response body after its absolute deadline', async () => {
-        const cancel = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
         const text = vi.fn().mockResolvedValue('too late')
         mocks.fetch.mockResolvedValue({
           status: 400,
@@ -309,7 +309,7 @@ describe('PostHog Core', () => {
 
       it('cancels stalled retryable HTTP error bodies without waiting for them', async () => {
         const text = vi.fn(() => new Promise<string>(() => {}))
-        const cancel = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
         mocks.fetch.mockImplementation(async () => ({
           status: 500,
           text,
@@ -339,7 +339,7 @@ describe('PostHog Core', () => {
 
       it('bounds an injected fetch that ignores abort and cancels its late response', async () => {
         let resolveFetch!: (response: any) => void
-        const cancel = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
         ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
           flushAt: 5,
           fetchRetryCount: 0,
@@ -372,7 +372,7 @@ describe('PostHog Core', () => {
       })
 
       it('clears the request deadline after successful response consumption', async () => {
-        const cancel = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
         mocks.fetch.mockResolvedValue({
           status: 200,
           text: () => Promise.resolve('ok'),
@@ -392,7 +392,7 @@ describe('PostHog Core', () => {
         ['feature flags', (client: PostHogCoreTestClient) => client.getFlags('distinct-id')],
         ['surveys', (client: PostHogCoreTestClient) => client.getSurveysStateless()],
       ])('bounds a stalled body for required %s responses', async (_name, request) => {
-        const cancel = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
         ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
           requestTimeout: 1000,
           fetchRetryCount: 0,

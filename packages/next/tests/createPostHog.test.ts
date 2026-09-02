@@ -1,6 +1,14 @@
-const mockCapture = vi.fn()
-const mockWithContext = vi.fn((_, fn) => fn())
-const mockEnterContext = vi.fn()
+const { mockCapture, mockWithContext, mockEnterContext, mockGetOrCreateNodeClient } = vi.hoisted(() => {
+    const mockCapture = vi.fn()
+    const mockWithContext = vi.fn((_, fn) => fn())
+    const mockEnterContext = vi.fn()
+    const mockGetOrCreateNodeClient = vi.fn().mockImplementation(() => ({
+        capture: mockCapture,
+        withContext: mockWithContext,
+        enterContext: mockEnterContext,
+    }))
+    return { mockCapture, mockWithContext, mockEnterContext, mockGetOrCreateNodeClient }
+})
 
 vi.mock('posthog-node', () => ({
     PostHog: vi.fn().mockImplementation(() => ({
@@ -33,12 +41,6 @@ vi.mock('next/headers.js', () => ({
 }))
 
 // Mock clientCache.node to avoid cross-test cache pollution
-const mockGetOrCreateNodeClient = vi.fn().mockImplementation(() => ({
-    capture: mockCapture,
-    withContext: mockWithContext,
-    enterContext: mockEnterContext,
-}))
-
 vi.mock('../src/server/clientCache.node', () => ({
     getOrCreateNodeClient: (...args: unknown[]) => mockGetOrCreateNodeClient(...args),
 }))
