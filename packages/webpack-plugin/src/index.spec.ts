@@ -6,7 +6,7 @@ import { runSourcemapCli } from '@posthog/plugin-utils'
 import { PosthogWebpackPlugin } from './index'
 import type { ResolvedPluginConfig } from './config'
 
-const mockLoggerError = vi.fn()
+const mockLoggerError = vi.hoisted(() => vi.fn())
 
 vi.mock('@posthog/core', () => ({
     createLogger: () => ({ error: mockLoggerError }),
