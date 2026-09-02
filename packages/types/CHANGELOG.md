@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.408.0
+
+### Minor Changes
+
+- [#4741](https://github.com/PostHog/posthog-js/pull/4741) [`61a26e5`](https://github.com/PostHog/posthog-js/commit/61a26e5227bcb79c3b5b512e7a9829449e7d49eb) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Forward generic server-signed identity claims with conversations widget requests.
+  (2026-09-02)
+
 ## 1.407.2
 
 ### Patch Changes

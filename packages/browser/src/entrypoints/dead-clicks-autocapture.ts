@@ -214,7 +214,6 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._touchStart = undefined
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     private _onMutation(_mutations: MutationRecord[]): void {
         // we don't actually care about the content of the mutations, right now
         this._lastMutation = Date.now()
