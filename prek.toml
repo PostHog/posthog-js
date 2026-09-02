@@ -15,7 +15,7 @@ stages = ["pre-commit"]
 id = "oxfmt-code"
 name = "oxfmt (code)"
 language = "system"
-entry = "pnpm exec oxfmt --write"
+entry = "pnpm exec oxfmt --write --no-error-on-unmatched-pattern"
 files = '\.(ts|tsx|js|jsx|mjs|cjs)$'
 stages = ["pre-commit"]
 
@@ -23,7 +23,7 @@ stages = ["pre-commit"]
 id = "oxfmt-data"
 name = "oxfmt (JSON and Markdown)"
 language = "system"
-entry = "pnpm exec oxfmt --write"
+entry = "pnpm exec oxfmt --write --no-error-on-unmatched-pattern"
 files = '\.(json|md)$'
 stages = ["pre-commit"]
 
