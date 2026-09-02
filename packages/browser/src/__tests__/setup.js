@@ -1,5 +1,9 @@
 import Config from '../config'
 
+if (process.env.POSTHOG_FUNCTIONAL_TESTS) {
+    delete globalThis.fetch
+}
+
 const failOnUnexpectedConsoleOutput = () => {
     console.debug = (...args) => {
         throw new Error(`Unexpected console.debug: ${args}`)
@@ -38,8 +42,8 @@ beforeEach(() => {
     failOnUnexpectedConsoleOutput()
 
     // Prevent jsdom XHR requests from creating open handles (TLSWRAP/Timeout)
-    // that keep Jest from exiting. No unit tests need real HTTP responses.
-    if (typeof XMLHttpRequest !== 'undefined') {
+    // that keep unit test workers alive. Functional tests exercise the real XHR transport.
+    if (!process.env.POSTHOG_FUNCTIONAL_TESTS && typeof XMLHttpRequest !== 'undefined') {
         vi.spyOn(XMLHttpRequest.prototype, 'send').mockImplementation(() => {})
     }
 })

@@ -29,7 +29,7 @@
         "test:unit": "vitest run src",
         "test:unit:surveys": "vitest run survey",
         "test:unit:tours": "vitest run tours",
-        "test:functional": "vitest run functional_tests",
+        "test:functional": "POSTHOG_FUNCTIONAL_TESTS=1 vitest run functional_tests",
         "test-watch": "vitest src",
         "test:typecheck": "cd src/__tests__ && tsc --noEmit --project tsconfig.json",
         "typecheck": "tsc --noEmit --project tsconfig.json",

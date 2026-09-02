@@ -1,7 +1,6 @@
 import '../src/__tests__/helpers/mock-logger'
 
 import { waitFor } from '@testing-library/dom'
-import 'regenerator-runtime/runtime'
 import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance'
 import { PostHog } from '../src/posthog-core'
 import { logger } from '@posthog/browser-common/utils/logger'
