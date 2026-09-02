@@ -2,8 +2,4 @@
 'posthog-react-native': minor
 ---
 
-Scope `releaseMode` to the Hermes source map upload and default it to `event`; iOS dSYMs and Android R8 mappings always bind to the release their build creates. Set `releaseMode: 'symbol-set'`, or `POSTHOG_RELEASE_MODE=symbol-set` before the prebuild, to keep stamping the release onto the maps.
-
-Rename the `posthog.releaseMode` gradle property to `posthog.hermesReleaseMode`. The old key still works, with a deprecation warning. `com.posthog.android` 1.6.0 stops reading the old key for the R8 mapping upload, and a prebuild now injects that version; a project whose android/build.gradle already carries an older classpath line bumps it by hand.
-
-`event` mode needs posthog-cli 0.16.0: an unconfigured build warns and keeps binding on an older CLI, an explicitly configured `event` fails the build and names the upgrade. A prebuild also rewrites the dSYM phase an earlier plugin version generated, removing its deprecated `POSTHOG_NO_RELEASE_BIND` export.
+Default `releaseMode` to `event` and apply it to the Hermes source map upload only, so iOS dSYMs and Android R8 mappings always bind to the release their build creates. Set `releaseMode: 'symbol-set'` to opt out. Event mode needs posthog-cli 0.16.0 or newer, and an unconfigured build on an older CLI warns and keeps binding. The `posthog.releaseMode` gradle property becomes `posthog.hermesReleaseMode`, the old key still works with a deprecation warning, and a prebuild now pins `com.posthog.android` 1.6.0.

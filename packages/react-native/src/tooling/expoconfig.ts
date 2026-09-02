@@ -745,11 +745,7 @@ const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
     modifyExistingXcodeBuildScript(bundleReactNativePhase, props.skipOnConflict === true, props.releaseMode)
 
     if (nativeSymbols.enabled) {
-      addDsymUploadBuildPhase(
-        xcodeProject,
-        nativeSymbols.includeSource,
-        props.skipOnConflict === true
-      )
+      addDsymUploadBuildPhase(xcodeProject, nativeSymbols.includeSource, props.skipOnConflict === true)
     }
 
     applyDotenvFileBuildSetting(xcodeProject, props.dotenvFile)
