@@ -30,12 +30,8 @@ export interface Dispatch<A extends UnknownAction = UnknownAction> {
  *
  * This matches Redux Toolkit's Middleware interface for compatibility.
  */
-export interface ReduxMiddleware<
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-object-type
-    _DispatchExt = {},
-    S = any,
-    D extends Dispatch = Dispatch,
-> {
+// oxlint-disable-next-line typescript/no-empty-object-type
+export interface ReduxMiddleware<_DispatchExt = {}, S = any, D extends Dispatch = Dispatch> {
     (api: MiddlewareAPI<D, S>): (next: (action: unknown) => unknown) => (action: unknown) => unknown
 }
 

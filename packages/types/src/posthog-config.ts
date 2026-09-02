@@ -1562,6 +1562,15 @@ export interface PostHogConfig {
     identity_hash?: string
 
     /**
+     * Additional server-signed identity claims.
+     *
+     * Claims are forwarded to products such as conversations only when
+     * `identity_distinct_id` and `identity_hash` are also present. Claim
+     * verification and consumption happen server-side.
+     */
+    identity_claims?: Record<string, { value: string; hash: string }>
+
+    /**
      * Determines whether PostHog should disable web experiments.
      *
      * Currently disabled while we're in BETA. It will be toggled to `true` in a future release.

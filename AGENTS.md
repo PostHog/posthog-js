@@ -17,7 +17,7 @@ This is a pnpm monorepo containing multiple PostHog JavaScript SDKs and developm
 - `./playground` - Projects to test packages locally during development
 - `./examples` - Simple example projects demonstrating how to install and use our SDKs
 - `./target` - Generated tarballs for SDK packages (created by `pnpm package`)
-- `./tooling` - Shared development packages (ESLint plugin, Rollup utils, TSConfig base)
+- `./tooling` - Shared development packages (Oxlint plugin, Rollup utils, TSConfig base)
 - `./.github` - CI/CD workflows and custom GitHub Actions
 
 ## SDK Packages
@@ -166,11 +166,10 @@ Turbo handles build orchestration and ensures packages are built in the correct 
 
 ## Code Style and Linting
 
-### Oxlint and ESLint
+### Oxlint
 
-- Oxlint runs correctness rules across workspace packages
-- ESLint remains for custom `eslint-plugin-posthog-js` and plugin rules that have not been migrated
-- TypeScript and React support
+- Oxlint runs all workspace lint rules, including the custom `oxlint-plugin-posthog-js` rules
+- TypeScript, React, Jest, Vue, and browser compatibility rules are enabled through Oxlint
 
 ### Automatic Formatting
 
@@ -235,8 +234,7 @@ When a PR containing a changeset is merged to `main`, the `release.yml` GitHub A
 - `pnpm-workspace.yaml` - Workspace definition and version catalogs
 - `turbo.json` - Build orchestration and task caching
 - `.nvmrc` - Node version specification
-- `.oxlintrc.json` - Oxlint configuration
-- `.eslintrc.cjs` - ESLint configuration for remaining custom and plugin rules
+- `.oxlintrc.json` - Oxlint configuration, including package-specific overrides
 - `.oxfmtrc.json` - Oxfmt configuration
 
 ### Documentation
