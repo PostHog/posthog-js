@@ -1,5 +1,7 @@
+import { assignUserAttributes } from '../traces/sanitize'
+
 /**
- * Shape the logs and metrics resolved configs share for resource
+ * Shape the logs, metrics and traces resolved configs share for resource
  * attribution. Generic over the attribute value type so each signal keeps its
  * own value union.
  */
@@ -11,7 +13,7 @@ export interface OtlpResourceConfig<TAttributeValue> {
 }
 
 /**
- * OTLP resource attributes shared by the logs and metrics envelopes.
+ * OTLP resource attributes shared by the logs, metrics and traces envelopes.
  *
  * User `resourceAttributes` are spread first, then SDK-controlled keys on top so
  * a stray user key can't clobber the ingestion-attribution ones; the dedicated
@@ -26,7 +28,10 @@ export function buildOtlpResourceAttributes<TAttributeValue>(
   sdkVersion: string
 ): Record<string, TAttributeValue | string> {
   return {
-    ...config.resourceAttributes,
+    // Read key by key: a throwing accessor on a user-supplied attribute runs on
+    // every flush, before the pipeline's own error handling, and would otherwise
+    // stop the signal exporting entirely.
+    ...assignUserAttributes<Record<string, TAttributeValue>>({}, config.resourceAttributes),
     'service.name': config.serviceName || 'unknown_service',
     ...(config.environment && { 'deployment.environment': config.environment }),
     ...(config.serviceVersion && { 'service.version': config.serviceVersion }),
@@ -47,15 +52,19 @@ export function buildOtlpResourceAttributes<TAttributeValue>(
  * platforms they cover.
  */
 const OS_NAMES: Record<string, string> = {
-  // node:os platform()
+  // node:os platform(), all eleven of them
   darwin: 'macOS',
   win32: 'Windows',
+  // Cygwin is a POSIX layer over Windows, so it belongs under the same filter.
+  cygwin: 'Windows',
   linux: 'Linux',
   android: 'Android',
   freebsd: 'FreeBSD',
   openbsd: 'OpenBSD',
+  netbsd: 'NetBSD',
   sunos: 'SunOS',
   aix: 'AIX',
+  haiku: 'Haiku',
   // detectOS
   'Mac OS X': 'macOS',
 }

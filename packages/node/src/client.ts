@@ -631,6 +631,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Runtime-detected OTLP resource attributes for every span. Overridden by the
+   * Node entrypoint with the host OS; the edge build contributes none, keeping
+   * `node:os` out of an edge bundle, which cannot resolve it.
+   */
+  protected hostResourceAttributes(): Record<string, string> {
+    return {}
+  }
+
+  /**
    * Active-span tracking, built on first use. Lives on the client rather than
    * on the traces pipeline because a client with tracing off still activates a
    * pass-through span, so it needs the same store the pipeline would use.
@@ -653,7 +662,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (!this._traces) {
       this._traces = new PostHogTraces(
         this,
-        resolveTracesConfig(this.options.traces),
+        resolveTracesConfig(this.options.traces, this.hostResourceAttributes()),
         this._logger,
         () => this._tracingContext(),
         this._spanContextManager,
