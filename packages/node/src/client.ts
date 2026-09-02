@@ -2796,10 +2796,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (this._traces) {
       // Same treatment as metrics: send what's queued, raced against the shared
       // shutdown budget, then reset so a losing flush can't re-arm a timer.
-      // Forced past any `Retry-After` wait, which teardown has no later attempt
-      // to honour.
       await raceWithTimeout(
-        this._traces.flush({ force: true }).catch(() => {}),
+        this._traces.flush().catch(() => {}),
         Math.max(0, shutdownDeadlineMs - Date.now())
       )
       this._traces.reset()

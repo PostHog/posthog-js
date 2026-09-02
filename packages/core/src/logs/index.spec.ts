@@ -1364,6 +1364,66 @@ describe('PostHogLogs', () => {
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
     })
 
+    it('does not restart a served-out wait for a capture during the retry', async () => {
+      // A deadline, not a duration. The retry's timer has already fired, so the
+      // capture below arms the next one — and it sees the wait still set,
+      // because the send it belongs to has not settled. Holding a duration here
+      // re-arms for the whole window again and leaves the record 300s behind an
+      // endpoint that has already recovered.
+      let settle: ((outcome: any) => void) | undefined
+      let call = 0
+      mockInstance._sendLogsBatch = jest.fn(() => {
+        call++
+        if (call === 1) {
+          return Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+        }
+        return new Promise((resolve) => {
+          settle = resolve
+        })
+      })
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await jest.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      // The wait elapses and the retry goes out, but hangs.
+      await jest.advanceTimersByTimeAsync(300_000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+
+      logs.captureLog({ body: 'second' })
+      settle?.({ kind: 'ok' })
+      await jest.advanceTimersByTimeAsync(0)
+
+      // One interval, not another window.
+      await jest.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
+    })
+
+    it('does not let a backward clock step stretch the wait past the cap', async () => {
+      mockInstance._sendLogsBatch = jest.fn(() =>
+        Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 60_000 })
+      )
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await jest.advanceTimersByTimeAsync(1000)
+
+      const real = Date.now()
+      jest.spyOn(Date, 'now').mockImplementation(() => real - 3_600_000)
+      expect((logs as any)._retryAfterRemainingMs()).toBeLessThanOrEqual(5 * 60_000)
+    })
+
     it('ends the wait when a later failure names none', async () => {
       // 429 with a window, then a plain 503: the queue drops back to its own
       // backoff rather than waiting the old window out on every attempt.

@@ -1,7 +1,7 @@
 import type { LogAttributeValue } from '@posthog/types'
 import { buildOtlpLogRecord, buildOtlpLogsPayload, buildResourceAttributes } from './logs-utils'
 import { Logger, PostHogPersistedProperty } from '../types'
-import { isArray, raceWithTimeout, safeSetTimeout } from '../utils'
+import { MAX_RETRY_AFTER_MS, isArray, raceWithTimeout, safeSetTimeout } from '../utils'
 import type { BufferedLogEntry, CaptureLogOptions, LogSdkContext, LogsHost, ResolvedPostHogLogsConfig } from './types'
 
 // Caps the retry backoff at 2^6 = 64× the flush interval.
@@ -437,7 +437,10 @@ export class PostHogLogs {
   }
 
   private _retryAfterRemainingMs(): number {
-    return Math.max(0, this._retryAfterUntil - Date.now())
+    // Clamped, not just floored: the deadline is wall clock, so a backward step
+    // (NTP, a resumed VM, a user changing the date) would otherwise strand the
+    // queue far past the cap `parseRetryAfterMs` applied.
+    return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, this._retryAfterUntil - Date.now()))
   }
 
   private _isWaitingOutRetryAfter(): boolean {

@@ -9,7 +9,7 @@ import type {
   OtlpNumberDataPoint,
 } from '@posthog/types'
 import type { Logger } from '../types'
-import { isArray, safeSetTimeout } from '../utils'
+import { MAX_RETRY_AFTER_MS, isArray, safeSetTimeout } from '../utils'
 import { toOtlpKeyValueList } from '../utils/otlp-any-value'
 import {
   DEFAULT_HISTOGRAM_BOUNDS,
@@ -320,7 +320,10 @@ export class PostHogMetrics {
   }
 
   private _retryAfterRemainingMs(): number {
-    return Math.max(0, this._retryAfterUntil - Date.now())
+    // Clamped, not just floored: the deadline is wall clock, so a backward step
+    // (NTP, a resumed VM, a user changing the date) would otherwise strand the
+    // queue far past the cap `parseRetryAfterMs` applied.
+    return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, this._retryAfterUntil - Date.now()))
   }
 
   private _setFlushTimer(delayMs: number): void {

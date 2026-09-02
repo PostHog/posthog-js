@@ -29,6 +29,7 @@ import {
 import {
   allSettled,
   createNamedError,
+  MAX_RETRY_AFTER_MS,
   currentISOTime,
   PromiseQueue,
   removeTrailingSlash,
@@ -50,14 +51,6 @@ import {
   PrimitiveCoercer,
   createDefaultStackParser,
 } from './error-tracking'
-
-/**
- * Longest `Retry-After` the SDK will wait. A rate-limit window can legitimately
- * be long, but nothing upstream of the SDK bounds this header — it is as likely
- * to come from a proxy or CDN as from PostHog — and an unbounded value would
- * strand a queue for hours, so the wait is capped and the retry happens early.
- */
-const MAX_RETRY_AFTER_MS = 5 * 60_000
 
 /**
  * `Retry-After` as milliseconds from now. The header is either delta-seconds or

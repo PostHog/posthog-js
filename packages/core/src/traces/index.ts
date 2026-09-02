@@ -13,7 +13,7 @@ import { newSpanId, newTraceId } from './ids'
 import { parseTraceparent, sanitizeTracestate } from './traceparent'
 import { assignUserAttributes, resolveStartTime, sanitizeName } from './sanitize'
 import { buildOtlpSpan, buildOtlpTracesPayload, buildTracesResourceAttributes } from './otlp'
-import { isPromise, safeSetTimeout } from '../utils'
+import { MAX_RETRY_AFTER_MS, isPromise, safeSetTimeout } from '../utils'
 
 // Retriable failures on the same head batch before it is dropped, so a stuck
 // batch cannot pin the queue while fresher spans are refused at the cap. The
@@ -223,19 +223,15 @@ export class PostHogTraces {
    * A pass reports spans removed — queue length can't stand in, since a send
    * concurrent with an arrival leaves it unchanged.
    *
-   * While the endpoint has asked for a wait this sends nothing and leaves the
-   * armed timer to retry, so a host that flushes on its own cadence can't spend
-   * the head batch's retry budget inside a window where every attempt is
-   * refused. `force` is for teardown, which has no later attempt to save.
+   * An open `Retry-After` window does not stop an explicit flush: the caller is
+   * a lifecycle or teardown boundary that has no later attempt, and on a
+   * serverless host the armed timer is unref'd and dies with the isolate. The
+   * window is honoured by not charging such an attempt against the head batch's
+   * retry budget, so the wait costs a request rather than the spans.
    */
-  async flush({ force = false }: { force?: boolean } = {}): Promise<void> {
+  async flush(): Promise<void> {
     for (;;) {
       if (!this._queue.length) {
-        return
-      }
-
-      if (!force && this._isWaitingOutRetryAfter()) {
-        this._armFlushTimerIfQueuedNoEarlierThan()
         return
       }
 
@@ -508,6 +504,10 @@ export class PostHogTraces {
           continue
         }
 
+        // Read before the send: the outcome overwrites the window, and an attempt
+        // the endpoint had already told us to skip says nothing about this batch.
+        const insideRetryAfterWindow = this._isWaitingOutRetryAfter()
+
         const outcome = await this._instance._sendTracesBatch(
           buildOtlpTracesPayload(spans, resourceAttributes, scopeName, scopeVersion, this._logger)
         )
@@ -557,7 +557,12 @@ export class PostHogTraces {
 
         if (outcome.kind === 'retry-later') {
           this._consecutiveFlushFailures++
-          this._headBatchFailures++
+          // A refusal inside a window the endpoint asked us to wait out is not
+          // evidence against this batch. Charging it spends the whole budget on
+          // the wait and drops the spans before the window even elapses.
+          if (!insideRetryAfterWindow) {
+            this._headBatchFailures++
+          }
           this._headBatchSize = size
           if (this._headBatchFailures < MAX_RETRIES_PER_BATCH) {
             // Keep the spans queued; the flush timer picks them up again.
@@ -660,7 +665,10 @@ export class PostHogTraces {
   }
 
   private _retryAfterRemainingMs(): number {
-    return Math.max(0, this._retryAfterUntil - Date.now())
+    // Clamped, not just floored: the deadline is wall clock, so a backward step
+    // (NTP, a resumed VM, a user changing the date) would otherwise strand the
+    // queue far past the cap `parseRetryAfterMs` applied.
+    return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, this._retryAfterUntil - Date.now()))
   }
 
   private _isWaitingOutRetryAfter(): boolean {
