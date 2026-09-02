@@ -114,6 +114,10 @@ const MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = ONE_HOUR
 // visible freeze - no rendering, scrolling, or cursor movement - and worth a warning.
 const SLOW_FULL_SNAPSHOT_THRESHOLD_MS = 500
 
+// why a flush is held. `status` still reads "active" for a held epoch, so the reason is
+// reported on captured events and logged, or a held recording looks like a shipping one.
+type FlushHoldReason = 'no_interaction_since_recording_started' | 'no_interaction_since_session_rotated'
+
 function roundOrUndefined(value: number | undefined): number | undefined {
     return isUndefined(value) ? undefined : Math.round(value)
 }
@@ -521,6 +525,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // true while the current epoch has had no user interaction; a held epoch is
     // discarded (not shipped) by stop or a subsequent rotation
     private _holdFlushUntilInteraction = false
+    private _flushHoldReason: FlushHoldReason | undefined
+    private _lastLoggedFlushHold: string | undefined
     // fresh-start holds ship on a clean unload (passive visits are captured, matching
     // pre-hold behavior); rotation-born holds don't — that unload ship was the incident
     private _heldEpochShipsOnUnload = false
@@ -1173,9 +1179,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // held recorder (e.g. a remote-config refresh) cannot release a hold that only
         // interaction evidence should release.
         if (!this.isStarted) {
-            this._holdFlushUntilInteraction = this._isIdle !== false && !this._suppressNextFreshStartHold
+            const holdFreshStart = this._isIdle !== false && !this._suppressNextFreshStartHold
+            this._setFlushHold(holdFreshStart ? 'no_interaction_since_recording_started' : undefined)
             this._suppressNextFreshStartHold = false
-            this._heldEpochShipsOnUnload = this._holdFlushUntilInteraction
+            this._heldEpochShipsOnUnload = holdFreshStart
             this._heldBufferOverflowed = false
         }
 
@@ -1558,8 +1565,26 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         } finally {
             this._isRestartingForSessionIdChange = false
         }
-        this._holdFlushUntilInteraction = holdNextEpoch
+        this._setFlushHold(holdNextEpoch ? 'no_interaction_since_session_rotated' : undefined)
         this._heldEpochShipsOnUnload = false
+    }
+
+    // the only writer of the hold, so the reported reason cannot drift from the hold itself.
+    // Nothing else announces a held epoch - no flush is scheduled while held, so the log has to
+    // happen here rather than on a flush that may never run
+    private _setFlushHold(reason: FlushHoldReason | undefined) {
+        this._holdFlushUntilInteraction = !isUndefined(reason)
+        this._flushHoldReason = reason
+        if (isUndefined(reason)) {
+            this._lastLoggedFlushHold = undefined
+            return
+        }
+        const holdKey = `${this.sessionId}:${reason}`
+        if (holdKey === this._lastLoggedFlushHold) {
+            return
+        }
+        this._lastLoggedFlushHold = holdKey
+        logger.info(`holding buffer: ${reason}. nothing is uploaded until the user interacts with the page`)
     }
 
     // releases run on evidence someone cares about the session: a user interaction, an event
@@ -1572,7 +1597,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (!this._holdFlushUntilInteraction) {
             return
         }
-        this._holdFlushUntilInteraction = false
+        this._setFlushHold(undefined)
         this._heldEpochShipsOnUnload = false
         if (this._heldBufferOverflowed) {
             this._heldBufferOverflowed = false
@@ -2367,7 +2392,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._documentWasEverVisible &&
             !this._heldBufferOverflowed
         ) {
-            this._holdFlushUntilInteraction = false
+            this._setFlushHold(undefined)
         }
 
         // beforeunload cannot wait for async CompressionStream work. Synchronously
@@ -2542,6 +2567,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         return {
             $recording_status: this.status,
+            // "active" does not mean "uploading": a held epoch keeps its buffer until the user
+            // interacts, and only this property tells a held session from a shipping one
+            $sdk_debug_replay_flush_hold_reason: this._flushHoldReason,
             $sdk_debug_replay_internal_buffer_length: this._buffer.data.length,
             $sdk_debug_replay_internal_buffer_size: this._buffer.size,
             $sdk_debug_current_session_duration: this._sessionDuration,

@@ -2303,6 +2303,60 @@ describe('Lazy SessionRecording', () => {
 
                     expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
                 })
+
+                describe('reporting the hold', () => {
+                    // a held epoch reads as 'active' but uploads nothing, so the hold has to
+                    // report itself or support cannot tell it from a working recording
+                    const holdReason = () =>
+                        sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties
+                            .$sdk_debug_replay_flush_hold_reason
+
+                    it('names a fresh-start hold on captured events while the status still reads active', () => {
+                        jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                        expect(posthog.capture).not.toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.anything(),
+                            expect.anything()
+                        )
+                        expect(sessionRecording.status).toEqual('active')
+                        expect(holdReason()).toEqual('no_interaction_since_recording_started')
+                    })
+
+                    it('names a rotation-born hold, and stops naming it once the hold releases', () => {
+                        const rotationTimestamp = rotateExternallyWhileUnknown()
+                        emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                        expect(holdReason()).toEqual('no_interaction_since_session_rotated')
+
+                        emitActiveEvent(rotationTimestamp + 200)
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                        expect(holdReason()).toBeUndefined()
+                    })
+
+                    it('logs the hold reason once per held epoch', () => {
+                        assignableWindow.POSTHOG_DEBUG = true
+                        const logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+
+                        const rotationTimestamp = rotateExternallyWhileUnknown()
+                        emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+                        emitInactiveEvent(rotationTimestamp + 200, 'unknown')
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                        // the logger prepends a prefix arg, so the message is the second call arg
+                        const holdLogs = logSpy.mock.calls.filter(
+                            (call) => typeof call[1] === 'string' && call[1].includes('holding buffer')
+                        )
+                        expect(holdLogs).toHaveLength(1)
+                        expect(holdLogs[0][1]).toContain('no_interaction_since_session_rotated')
+
+                        logSpy.mockRestore()
+                        assignableWindow.POSTHOG_DEBUG = undefined
+                    })
+                })
             })
 
             describe('recording volume invariants', () => {
