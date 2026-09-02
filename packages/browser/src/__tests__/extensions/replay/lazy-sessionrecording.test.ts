@@ -75,7 +75,7 @@ vi.mock('../../../config', async (importOriginal) => {
     }
 })
 
-const mockRemoteConfigLoad = vi.fn()
+const { mockRemoteConfigLoad } = vi.hoisted(() => ({ mockRemoteConfigLoad: vi.fn() }))
 vi.mock('../../../remote-config', () => ({
     RemoteConfigLoader: vi.fn().mockImplementation(() => ({
         load: mockRemoteConfigLoad,

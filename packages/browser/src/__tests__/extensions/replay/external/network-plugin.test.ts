@@ -532,6 +532,7 @@ describe('network plugin', () => {
         describe('XHR listener cleanup', () => {
             let mockWindow: any
             let xhr: any
+            let cleanupObserver: () => void
 
             beforeEach(() => {
                 const mock = createMockWindow()
@@ -540,10 +541,12 @@ describe('network plugin', () => {
                 global.PerformanceObserver = mockWindow.PerformanceObserver
 
                 const plugin = getRecordNetworkPlugin({ recordBody: true })
-                plugin.observer(() => {}, mockWindow, { recordBody: true })
+                cleanupObserver = plugin.observer(() => {}, mockWindow, { recordBody: true })
 
                 xhr = new mockWindow.XMLHttpRequest()
             })
+
+            afterEach(() => cleanupObserver())
 
             it('should remove readystatechange listener on successful request', () => {
                 xhr.open('GET', 'https://example.com')
@@ -605,8 +608,11 @@ describe('network plugin', () => {
             // instrumentation runs before we delegate to the host's open/fetch, so if it throws we must
             // not let the exception escape and misattribute a failure to session replay
             const OriginalRequest = global.Request
+            let cleanupObserver: (() => void) | undefined
 
             afterEach(() => {
+                cleanupObserver?.()
+                cleanupObserver = undefined
                 global.Request = OriginalRequest
             })
 
@@ -626,7 +632,7 @@ describe('network plugin', () => {
                 } as any
 
                 const plugin = getRecordNetworkPlugin({ recordBody: true })
-                plugin.observer(() => {}, mockWindow, { recordBody: true })
+                cleanupObserver = plugin.observer(() => {}, mockWindow, { recordBody: true })
 
                 const xhr = new mockWindow.XMLHttpRequest()
                 expect(() => xhr.open('GET', 'https://example.com')).not.toThrow()
@@ -650,7 +656,7 @@ describe('network plugin', () => {
 
                 let patchedFetch: (...args: any[]) => Promise<any> = mockWindow.fetch
                 const plugin = getRecordNetworkPlugin({ recordBody: true })
-                plugin.observer(() => {}, mockWindow, { recordBody: true })
+                cleanupObserver = plugin.observer(() => {}, mockWindow, { recordBody: true })
                 patchedFetch = mockWindow.fetch
 
                 global.Request = class {
@@ -691,7 +697,9 @@ describe('network plugin', () => {
 
                 let patchedFetch: (...args: any[]) => Promise<any> = mockWindow.fetch
                 const plugin = getRecordNetworkPlugin({ recordBody: { request: true, response: false } })
-                plugin.observer(() => {}, mockWindow, { recordBody: { request: true, response: false } })
+                cleanupObserver = plugin.observer(() => {}, mockWindow, {
+                    recordBody: { request: true, response: false },
+                })
                 patchedFetch = mockWindow.fetch
 
                 // request header/body recording must not throw or block the host's original fetch

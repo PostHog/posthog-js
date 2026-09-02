@@ -7,28 +7,27 @@
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 
+vi.mock('posthog-node', () => ({
+  PostHog: vi.fn().mockImplementation(() => ({
+    capture: vi.fn(),
+    captureImmediate: vi.fn(),
+    privacyMode: false,
+  })),
+}))
+
 if (!GEMINI_API_KEY) {
   test.skip('Gemini integration tests require GEMINI_API_KEY', () => {})
 } else {
-  // Dynamic imports to avoid ESM parse failures when @google/genai
-  // transitive deps are not configured in transformIgnorePatterns.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { PostHog } = require('posthog-node')
-
-  vi.mock('posthog-node', () => ({
-    PostHog: vi.fn().mockImplementation(() => ({
-      capture: vi.fn(),
-      captureImmediate: vi.fn(),
-      privacyMode: false,
-    })),
-  }))
-
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const PostHogGemini = require('../src/gemini').default
-
   describe('Gemini Integration Tests', () => {
+    let PostHog: typeof import('posthog-node').PostHog
+    let PostHogGemini: typeof import('../src/gemini').default
     let mockPostHogClient: any
     let client: any
+
+    beforeAll(async () => {
+      ;({ PostHog } = await import('posthog-node'))
+      PostHogGemini = (await import('../src/gemini')).default
+    })
 
     beforeEach(() => {
       mockPostHogClient = new PostHog('test-key')
