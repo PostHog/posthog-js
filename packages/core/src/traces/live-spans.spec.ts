@@ -20,6 +20,10 @@ describe('live spans', () => {
     maxQueueSize: 2048,
     maxLiveSpans: 10000,
     maxSpanAgeMs: 3600000,
+    beforeSpanSend: [],
+    maxAttributesPerSpan: 128,
+    maxEventsPerSpan: 128,
+    maxAttributeValueLength: 8192,
   }
 
   const createTraces = (): PostHogTraces =>

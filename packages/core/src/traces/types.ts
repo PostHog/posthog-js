@@ -7,6 +7,7 @@ export type {
   SpanTimeInput,
   StartSpanOptions,
   TracesConfig,
+  BeforeSpanSendFn,
   OtlpSpan,
   OtlpSpanEvent,
   OtlpSpanKeyValue,
@@ -14,7 +15,15 @@ export type {
   OtlpTracesPayload,
 } from '@posthog/types'
 
-import type { OtlpTracesPayload, Span, SpanAttributes, SpanKind, SpanStatusCode, TracesConfig } from '@posthog/types'
+import type {
+  BeforeSpanSendFn,
+  OtlpTracesPayload,
+  Span,
+  SpanAttributes,
+  SpanKind,
+  SpanStatusCode,
+  TracesConfig,
+} from '@posthog/types'
 
 /** Same tagged outcome shape as `SendLogsBatchOutcome` — one policy for all three signals. */
 export type SendTracesBatchOutcome =
@@ -72,6 +81,8 @@ export interface SpanRecord {
   /** ms epoch. */
   startTime: number
   endTime: number
+  droppedAttributesCount?: number
+  droppedEventsCount?: number
 }
 
 /**
@@ -98,6 +109,10 @@ export interface ResolvedTracesConfig extends TracesConfig {
    * dropped rather than queued ones, whose children may already have shipped.
    */
   maxQueueSize: number
+  beforeSpanSend: BeforeSpanSendFn[]
+  maxAttributesPerSpan: number
+  maxEventsPerSpan: number
+  maxAttributeValueLength: number
   /** Bound on spans started but not yet ended. At the bound `startSpan` returns a no-op handle. */
   maxLiveSpans: number
   /** How long a span may stay live before it stops being accounted for and can never export. */

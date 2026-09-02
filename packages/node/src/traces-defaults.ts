@@ -1,11 +1,20 @@
 import { assignUserAttributes } from '@posthog/core'
-import type { ResolvedTracesConfig, TracesConfig } from '@posthog/core'
+import type { BeforeSpanSendFn, ResolvedTracesConfig, TracesConfig } from '@posthog/core'
 
 // OpenTelemetry's BatchSpanProcessor defaults, which sit comfortably under the
 // server's 2 MB body cap.
 const DEFAULT_FLUSH_INTERVAL_MS = 5000
 const DEFAULT_MAX_EXPORT_BATCH_SIZE = 512
 const DEFAULT_MAX_QUEUE_SIZE = 2048
+// OpenTelemetry's per-span defaults.
+const DEFAULT_MAX_ATTRIBUTES_PER_SPAN = 128
+const DEFAULT_MAX_EVENTS_PER_SPAN = 128
+// OpenTelemetry leaves the value length unlimited, which is what lets one
+// multi-MB attribute make a span too large for the endpoint to accept — and an
+// oversized span is dropped whole. 8 KB holds a deep stack trace and any
+// realistic header, query string or payload excerpt, and keeps a span at the
+// attribute cap under 1 MB, comfortably inside the 2 MB body cap.
+const DEFAULT_MAX_ATTRIBUTE_VALUE_LENGTH = 8192
 
 // Live-span bounds. A server can legitimately hold thousands of spans open at
 // once, and refusing a legitimate span is worse than tolerating a leak, so the
@@ -54,6 +63,18 @@ function withUsableIdentityKeys(attributes: TracesConfig['resourceAttributes']):
 }
 
 /**
+ * Keeps only the callable hooks. Anything else is dropped rather than called: an
+ * untyped caller passing the wrong shape would otherwise have every span dropped
+ * by a hook that throws, leaving tracing silently off.
+ */
+function resolveBeforeSpanSend(beforeSpanSend: TracesConfig['beforeSpanSend']): BeforeSpanSendFn[] {
+  if (!beforeSpanSend) {
+    return []
+  }
+  return [beforeSpanSend].flat().filter((hook): hook is BeforeSpanSendFn => typeof hook === 'function')
+}
+
+/**
  * Resolves the public `traces` config into the shape core `PostHogTraces` consumes.
  * OTLP resource attributes take precedence over the named fields, matching the
  * logs config. `hostResourceAttributes` are runtime-detected by the entrypoint and
@@ -75,6 +96,10 @@ export function resolveTracesConfig(
     serviceVersion: (resourceAttributes?.['service.version'] as string | undefined) ?? config?.serviceVersion,
     environment: (resourceAttributes?.['deployment.environment'] as string | undefined) ?? config?.environment,
     resourceAttributes,
+    beforeSpanSend: resolveBeforeSpanSend(config?.beforeSpanSend),
+    maxAttributesPerSpan: positiveInteger(config?.maxAttributesPerSpan, DEFAULT_MAX_ATTRIBUTES_PER_SPAN),
+    maxEventsPerSpan: positiveInteger(config?.maxEventsPerSpan, DEFAULT_MAX_EVENTS_PER_SPAN),
+    maxAttributeValueLength: positiveInteger(config?.maxAttributeValueLength, DEFAULT_MAX_ATTRIBUTE_VALUE_LENGTH),
     flushIntervalMs: positiveInteger(config?.flushIntervalMs, DEFAULT_FLUSH_INTERVAL_MS),
     maxExportBatchSize,
     // Never below the flush trigger, or the depth-based flush could never fire.

@@ -31,6 +31,9 @@ describe('PostHog traces', () => {
 
   const attributeOf = (span: OtlpSpan, key: string): any => span.attributes?.find((a) => a.key === key)?.value
 
+  const attributeOfEvent = (event: NonNullable<OtlpSpan['events']>[number], key: string): any =>
+    event.attributes?.find((a: any) => a.key === key)?.value
+
   // Traces run their own flush cycle; this advances it without calling flush().
   const DEFAULT_TRACES_FLUSH_INTERVAL_MS = 5000
   const flushTraces = async (): Promise<void> => {
@@ -319,6 +322,36 @@ describe('PostHog traces', () => {
       const [span] = sentSpans()
       expect(span.status).toEqual({ code: 2, message: 'boom' })
       expect(span.events?.[0].name).toBe('exception')
+      expect(attributeOfEvent(span.events![0], 'exception.stacktrace')).toEqual({
+        stringValue: expect.stringContaining('TypeError: boom'),
+      })
+    })
+
+    it('bounds a stack by maxAttributeValueLength, and beforeSpanSend can scrub it', async () => {
+      const scrubbed = createClient({
+        traces: {
+          serviceName: 'checkout-api',
+          maxAttributeValueLength: 64,
+          beforeSpanSend: (span: any) => {
+            for (const event of span.events) {
+              if (event.attributes?.['exception.stacktrace']) {
+                event.attributes['exception.stacktrace'] = '[redacted]'
+              }
+            }
+            return span
+          },
+        },
+      })
+
+      expect(() =>
+        scrubbed.withSpan('job', () => {
+          throw new TypeError('boom')
+        })
+      ).toThrow('boom')
+      await scrubbed.shutdown()
+
+      const [span] = sentSpans()
+      expect(attributeOfEvent(span.events![0], 'exception.stacktrace')).toEqual({ stringValue: '[redacted]' })
     })
   })
 
@@ -488,6 +521,93 @@ describe('PostHog traces', () => {
       expect(waitUntil).toHaveBeenCalled()
       expect(sentSpans().map((span) => span.name)).toEqual(['handler'])
       await client.shutdown()
+    })
+  })
+
+  describe('beforeSpanSend', () => {
+    it('scrubs attributes before they leave the process', async () => {
+      const client = createClient({
+        traces: {
+          serviceName: 'svc',
+          beforeSpanSend: (span: any) => {
+            delete span.attributes.password
+            return span
+          },
+        },
+      })
+      client.startSpan('login', { attributes: { password: 'hunter2', ok: true } }).end()
+      await client.shutdown()
+
+      const [span] = sentSpans()
+      expect(span.attributes?.find((a) => a.key === 'password')).toBeUndefined()
+      expect(span.attributes?.find((a) => a.key === 'ok')).toBeDefined()
+    })
+
+    it('runs an array of hooks through the client option', async () => {
+      const client = createClient({
+        traces: {
+          serviceName: 'svc',
+          beforeSpanSend: [
+            (span: any) => {
+              span.attributes.first = true
+              return span
+            },
+            (span: any) => {
+              span.attributes.second = true
+              return span
+            },
+          ],
+        },
+      })
+      client.startSpan('checkout').end()
+      await client.shutdown()
+
+      const keys = sentSpans()[0].attributes?.map((a) => a.key)
+      expect(keys).toEqual(expect.arrayContaining(['first', 'second']))
+    })
+
+    it('drops a span the hook rejects', async () => {
+      const client = createClient({
+        traces: {
+          serviceName: 'svc',
+          beforeSpanSend: (span: any) => (span.attributes['http.route'] === '/health' ? null : span),
+        },
+      })
+      client.startSpan('GET /health', { attributes: { 'http.route': '/health' } }).end()
+      client.startSpan('GET /orders', { attributes: { 'http.route': '/orders' } }).end()
+      await client.shutdown()
+
+      expect(sentSpans().map((s) => s.name)).toEqual(['GET /orders'])
+    })
+  })
+
+  describe('span limits', () => {
+    it('caps attributes and reports how many were dropped', async () => {
+      const client = createClient({ traces: { serviceName: 'svc', maxAttributesPerSpan: 2 } })
+      const span = client.startSpan('checkout')
+      span.setAttribute('a', 1)
+      span.setAttribute('b', 2)
+      span.setAttribute('c', 3)
+      span.end()
+      await client.shutdown()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes?.map((a) => a.key)).toEqual(['a', 'b'])
+      expect(sent.droppedAttributesCount).toBe(1)
+    })
+
+    it('defaults to the OpenTelemetry cap of 128', async () => {
+      const client = createClient({ traces: { serviceName: 'svc' } })
+      const span = client.startSpan('checkout')
+      for (let i = 0; i < 130; i++) {
+        span.setAttribute(`key-${i}`, i)
+      }
+      span.end()
+      await client.shutdown()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes).toHaveLength(128)
+      expect(sent.droppedAttributesCount).toBe(2)
     })
   })
 

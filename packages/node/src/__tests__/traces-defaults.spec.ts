@@ -1,14 +1,36 @@
 import { resolveTracesConfig } from '../traces-defaults'
 
 describe('resolveTracesConfig', () => {
+  it.each([
+    ['zero', 0],
+    ['negative', -1],
+    ['not a number', NaN],
+  ])('falls back to the default per-span caps when given %s', (_label, value) => {
+    const resolved = resolveTracesConfig({
+      maxAttributesPerSpan: value,
+      maxEventsPerSpan: value,
+      maxAttributeValueLength: value,
+    })
+    expect(resolved.maxAttributesPerSpan).toBe(128)
+    expect(resolved.maxEventsPerSpan).toBe(128)
+    expect(resolved.maxAttributeValueLength).toBe(8192)
+  })
+
   it('applies the documented defaults', () => {
     expect(resolveTracesConfig(undefined)).toMatchObject({
       flushIntervalMs: 5000,
       maxExportBatchSize: 512,
       maxQueueSize: 2048,
+      maxAttributesPerSpan: 128,
+      maxEventsPerSpan: 128,
+      maxAttributeValueLength: 8192,
       maxLiveSpans: 10_000,
       maxSpanAgeMs: 3_600_000,
     })
+  })
+
+  it('honours an explicit attribute value bound', () => {
+    expect(resolveTracesConfig({ maxAttributeValueLength: 256 }).maxAttributeValueLength).toBe(256)
   })
 
   it('honours explicit live-span bounds', () => {
@@ -133,6 +155,21 @@ describe('resourceAttributes guarding', () => {
 
     expect(resolved.serviceName).toBe('checkout-api')
     expect(resolved.resourceAttributes).toEqual({ region: 'us' })
+  })
+
+  it('ignores a beforeSpanSend entry that is not a function', () => {
+    // A plain-JS caller passing the wrong shape would otherwise have every span
+    // dropped by a hook that throws on call, with tracing silently off.
+    const scrub = (span: any): any => span
+    const resolved = resolveTracesConfig({ beforeSpanSend: ['not a function', scrub] as never })
+
+    expect(resolved.beforeSpanSend).toEqual([scrub])
+  })
+
+  it('resolves to no hooks when beforeSpanSend is the wrong type entirely', () => {
+    const resolved = resolveTracesConfig({ beforeSpanSend: { scrub: true } as never })
+
+    expect(resolved.beforeSpanSend).toEqual([])
   })
 
   it('does not throw when an identity accessor throws', () => {

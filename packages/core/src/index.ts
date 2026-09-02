@@ -92,6 +92,9 @@ export { PostHogTraces } from './traces'
 export { SyncSpanContextManager } from './traces/context'
 export { NOOP_SPAN, inertSpan } from './traces/span'
 export type { ResolvedTracesConfig, SpanContextManager, TraceSdkContext } from './traces/types'
+// The `beforeSpanSend` shapes come straight from @posthog/types: hooks see the
+// public record, not core's internal one, which also carries `traceState`.
+export type { SpanRecord, BeforeSpanSendFn } from '@posthog/types'
 // Same barrel convention as logs and metrics for the user-facing tracing types.
 export type {
   Span,
