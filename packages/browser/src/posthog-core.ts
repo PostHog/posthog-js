@@ -1852,15 +1852,17 @@ export class PostHog implements PostHogInterface {
             compression: 'best-available',
             timestampMode: isSessionRecording ? 'body' : 'capture-body',
             batchKey: options?._batchKey,
-            transport: options?.transport,
-            fireCallbackOnDrop: !!fbcToConfirm,
-            callback: fbcToConfirm
-                ? (response) => {
-                      if (response.statusCode >= 200 && response.statusCode < 300) {
-                          this._markFacebookClickIdDelivered(fbcToConfirm)
-                      }
+            ...(options?.transport ? { transport: options.transport } : {}),
+            ...(fbcToConfirm
+                ? {
+                      fireCallbackOnDrop: true,
+                      callback: (response) => {
+                          if (response.statusCode >= 200 && response.statusCode < 300) {
+                              this._markFacebookClickIdDelivered(fbcToConfirm)
+                          }
+                      },
                   }
-                : undefined,
+                : {}),
         }
 
         if (
