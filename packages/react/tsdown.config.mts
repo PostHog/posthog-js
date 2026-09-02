@@ -23,29 +23,45 @@ const es5CompatibilityPlugin = {
             }
 
             let code = output.code
+            const isUmd = /typeof exports === ["']object["']/u.test(code)
+
+            if (isUmd) {
+                // Match Rollup's former `esModule: false` and strict-mode UMD factory semantics.
+                const moduleMarkerPattern =
+                    /Object\.defineProperty\([^,]+, Symbol\.toStringTag, \{ value: ["']Module["'] \}\);/u
+                if (!moduleMarkerPattern.test(code)) {
+                    throw new Error(`Could not remove the UMD module marker from ${output.fileName}`)
+                }
+                code = code.replace(moduleMarkerPattern, '"use strict";')
+            }
 
             // Rolldown does not expose Rollup's `interop: 'compat'`. Restore the same UMD
             // default-import behavior for CommonJS posthog-js namespaces before downleveling.
             const interopPattern = /posthog_js\s*=\s*__toESM\(posthog_js\);/u
-            if (interopPattern.test(code)) {
-                code = code.replace(
-                    interopPattern,
-                    'posthog_js = posthog_js && typeof posthog_js === "object" && "default" in posthog_js ? posthog_js : { default: posthog_js };'
-                )
+            const needsPostHogInterop = /global\.PosthogReact\s*=\s*\{\}/u.test(code)
+            if (needsPostHogInterop && !interopPattern.test(code)) {
+                throw new Error(`Could not restore posthog-js UMD interop in ${output.fileName}`)
             }
+            code = code.replace(
+                interopPattern,
+                'posthog_js = posthog_js && typeof posthog_js === "object" && "default" in posthog_js ? posthog_js : { default: posthog_js };'
+            )
 
             const result = ts.transpileModule(code, {
                 fileName: output.fileName,
                 compilerOptions: {
                     allowJs: true,
                     module: ts.ModuleKind.ES2015,
+                    removeComments: true,
                     sourceMap: true,
                     target: ts.ScriptTarget.ES5,
                 },
             })
             const downlevelMap = result.sourceMapText ? JSON.parse(result.sourceMapText) : null
 
-            output.code = result.outputText.replace(/\n?\/\/# sourceMappingURL=.*$/u, '')
+            const downleveledCode = result.outputText.replace(/\n?\/\/# sourceMappingURL=.*$/u, '')
+            // TypeScript prepends ES5 helpers. Keep them scoped like Rollup's former UMD helpers.
+            output.code = isUmd ? `(function () {${downleveledCode}\n}).call(this);` : downleveledCode
             output.map = output.map && downlevelMap ? remapping([downlevelMap, output.map], () => null) : downlevelMap
         })
     },

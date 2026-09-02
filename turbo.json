@@ -38,6 +38,10 @@
             "inputs": ["dist/**", "package.json"],
             "env": ["PACKAGE_DEST"]
         },
+        "@posthog/react#build": {
+            "dependsOn": ["^build"],
+            "cache": false
+        },
         "@posthog/next#build": {
             "dependsOn": ["^build", "@posthog/react#build"]
         },

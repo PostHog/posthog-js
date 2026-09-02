@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import { readFile, readdir } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { relative, resolve } from 'node:path'
+import { runInNewContext } from 'node:vm'
+import { gzipSync } from 'node:zlib'
 
 const packageRoot = resolve(import.meta.dirname, '..')
 const browserReactRoot = resolve(packageRoot, '../browser/react')
@@ -52,8 +55,19 @@ for (const file of expectedDistFiles) {
     )
 }
 
-assert.deepEqual(await filesUnder(resolve(packageRoot, 'src')), await filesUnder(resolve(browserReactRoot, 'src')))
+const sourceFiles = await filesUnder(resolve(packageRoot, 'src'))
+assert.deepEqual(sourceFiles, await filesUnder(resolve(browserReactRoot, 'src')))
+for (const file of sourceFiles) {
+    assert.deepEqual(
+        await readFile(resolve(packageRoot, 'src', file)),
+        await readFile(resolve(browserReactRoot, 'src', file)),
+        `browser React source copy differs for ${file}`
+    )
+}
+
 for (const directory of ['slim', 'surveys']) {
+    assert.deepEqual(await filesUnder(resolve(packageRoot, directory)), ['package.json'])
+    assert.deepEqual(await filesUnder(resolve(browserReactRoot, directory)), ['package.json'])
     assert.deepEqual(
         await readFile(resolve(packageRoot, directory, 'package.json')),
         await readFile(resolve(browserReactRoot, directory, 'package.json'))
@@ -105,4 +119,35 @@ assert.match(bundles.main.umd, /global\.PosthogReact = \{\}/)
 assert.match(bundles.slim.umd, /global\.PosthogReactSlim = \{\}/)
 assert.match(bundles.surveys.umd, /global\.PosthogReactSurveys = \{\}/)
 
-console.log('React build output, source maps, externals, globals, and browser copy are valid')
+const require = createRequire(import.meta.url)
+for (const [entry, bundle] of Object.entries(bundles)) {
+    assert.doesNotMatch(bundle.umd, /Symbol\.toStringTag/, `${entry} UMD requires Symbol`)
+    assert.match(bundle.umd, /function \([^)]*\) \{\n\s+["']use strict["'];/, `${entry} UMD is not strict`)
+
+    const commonJsModule = { exports: {} }
+    const sandbox = {
+        console,
+        exports: commonJsModule.exports,
+        module: commonJsModule,
+        require,
+        Symbol: undefined,
+    }
+    runInNewContext(bundle.umd, sandbox)
+    assert.equal('__extends' in sandbox, false, `${entry} UMD leaks a TypeScript helper globally`)
+}
+
+// Keep compressed payloads within 15% of the Rollup baseline captured for this migration.
+const baselineGzipBytes = {
+    'esm/index.js': 5234,
+    'esm/slim/index.js': 4399,
+    'esm/surveys/index.js': 1840,
+    'umd/index.js': 5572,
+    'umd/slim/index.js': 4708,
+    'umd/surveys/index.js': 1990,
+}
+for (const [file, baselineBytes] of Object.entries(baselineGzipBytes)) {
+    const bytes = gzipSync(await readFile(resolve(packageRoot, 'dist', file))).byteLength
+    assert.ok(bytes <= Math.ceil(baselineBytes * 1.15), `${file} gzip size grew more than 15%: ${bytes} bytes`)
+}
+
+console.log('React build output, ES5 UMD behavior, size, source maps, externals, globals, and browser copy are valid')
