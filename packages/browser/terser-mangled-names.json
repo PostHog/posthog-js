@@ -881,6 +881,7 @@
         "_unwrapConsoleError",
         "_unwrapOnError",
         "_unwrapUnhandledRejection",
+        "_updateFacebookClickId",
         "_updateScrollData",
         "_updateWindowAndSessionIds",
         "_urlBlocklist",
