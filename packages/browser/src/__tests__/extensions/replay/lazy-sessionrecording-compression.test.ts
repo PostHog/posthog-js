@@ -149,7 +149,7 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
 
 describe('LazyLoadedSessionRecording compression paths', () => {
     afterEach(() => {
-        vi.dontMock('@posthog/core')
+        vi.doUnmock('@posthog/core')
         vi.resetModules()
     })
 

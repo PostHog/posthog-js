@@ -25,7 +25,7 @@ function deleteAllCookies() {
 }
 
 // periodically flakes because of unexpected console logging
-vi.retryTimes(3)
+vi.setConfig({ retry: 3 })
 
 describe('consentManager', () => {
     const createPostHog = async (config: Partial<PostHogConfig> = {}) => {

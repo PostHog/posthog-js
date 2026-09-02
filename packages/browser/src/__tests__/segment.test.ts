@@ -44,7 +44,7 @@ const initPostHogInAPromise = (
 }
 
 // sometimes flakes because of unexpected console.logs
-vi.retryTimes(6)
+vi.setConfig({ retry: 6 })
 
 describe(`Segment integration`, () => {
     let segment: any

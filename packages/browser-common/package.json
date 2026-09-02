@@ -89,6 +89,7 @@
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
+        "jsdom": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:"
     }

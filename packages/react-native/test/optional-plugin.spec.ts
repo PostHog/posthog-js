@@ -1,4 +1,4 @@
-import { resolveOptionalPlugin } from '../src/optional/OptionalPlugin'
+import { resolveOptionalPlugin, type OptionalPluginLoaders } from '../src/optional/OptionalPlugin'
 
 const PRIMARY = { __plugin: 'primary' }
 const LEGACY = { __plugin: 'legacy' }
@@ -8,6 +8,15 @@ type LoadedOptionalPlugin = {
   version: string | undefined
 }
 
+const optionalLoader =
+  <T>(available: boolean, value: T): (() => T) =>
+  () => {
+    if (!available) {
+      throw new Error('not installed')
+    }
+    return value
+  }
+
 const loadOptionalPlugin = (
   os: string,
   {
@@ -15,28 +24,14 @@ const loadOptionalPlugin = (
     primaryMetadataAvailable = true,
     legacyInstalled = true,
   }: { primaryInstalled?: boolean; primaryMetadataAvailable?: boolean; legacyInstalled?: boolean } = {}
-): LoadedOptionalPlugin =>
-  resolveOptionalPlugin(os, (moduleName) => {
-    if (moduleName === '@posthog/react-native-plugin') {
-      if (!primaryInstalled) {
-        throw new Error('not installed')
-      }
-      return PRIMARY
-    }
-    if (moduleName === '@posthog/react-native-plugin/package.json') {
-      if (!primaryMetadataAvailable) {
-        throw new Error('metadata not exported')
-      }
-      return { version: '2.4.1' }
-    }
-    if (moduleName === 'posthog-react-native-session-replay') {
-      if (!legacyInstalled) {
-        throw new Error('not installed')
-      }
-      return LEGACY
-    }
-    throw new Error(`unexpected module: ${moduleName}`)
-  })
+): LoadedOptionalPlugin => {
+  const loaders: OptionalPluginLoaders = {
+    loadPrimary: optionalLoader(primaryInstalled, PRIMARY) as OptionalPluginLoaders['loadPrimary'],
+    loadPrimaryVersion: optionalLoader(primaryMetadataAvailable, '2.4.1'),
+    loadLegacy: optionalLoader(legacyInstalled, LEGACY) as OptionalPluginLoaders['loadLegacy'],
+  }
+  return resolveOptionalPlugin(os, loaders)
+}
 
 describe('OptionalPlugin loader', () => {
   it('loads the primary plugin on macOS', () => {

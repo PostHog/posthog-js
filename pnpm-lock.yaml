@@ -518,6 +518,9 @@ importers:
       '@rslib/core':
         specifier: 'catalog:'
         version: 0.10.6(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(typescript@5.8.2)
+      jsdom:
+        specifier: 'catalog:'
+        version: 26.1.0
       typescript:
         specifier: 'catalog:'
         version: 5.8.2

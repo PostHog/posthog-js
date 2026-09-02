@@ -42,7 +42,8 @@ describe('customizations entrypoints', () => {
     })
 
     it('initializes the shared config with the posthog-js identity', async () => {
-        await vi.isolateModulesAsync(async () => {
+        vi.resetModules()
+        try {
             const Config = (
                 await vi.importActual<typeof import('@posthog/browser-common/config')>('@posthog/browser-common/config')
             ).default
@@ -55,7 +56,9 @@ describe('customizations entrypoints', () => {
                 LIB_NAME: 'web',
                 LIB_VERSION: packageInfo.version,
             })
-        })
+        } finally {
+            vi.resetModules()
+        }
     })
 
     it('setAllPersonProfilePropertiesAsPersonPropertiesForFlags accepts the instance passed to `loaded`', () => {

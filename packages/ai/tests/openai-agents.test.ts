@@ -1255,7 +1255,7 @@ describe('PostHogTracingProcessor', () => {
   })
 })
 
-const mockAddTraceProcessor = vi.fn()
+const { mockAddTraceProcessor } = vi.hoisted(() => ({ mockAddTraceProcessor: vi.fn() }))
 vi.mock('@openai/agents', () => ({
   addTraceProcessor: mockAddTraceProcessor,
 }))

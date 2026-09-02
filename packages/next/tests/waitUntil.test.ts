@@ -1,12 +1,13 @@
 vi.mock('server-only', () => ({}))
 
-const mockVercelWaitUntil = vi.fn()
+const { mockVercelWaitUntil, mockPostHogConstructor } = vi.hoisted(() => ({
+    mockVercelWaitUntil: vi.fn(),
+    mockPostHogConstructor: vi.fn(),
+}))
 
 vi.mock('@vercel/functions', () => ({
     waitUntil: mockVercelWaitUntil,
 }))
-
-const mockPostHogConstructor = vi.fn()
 
 vi.mock('posthog-node', () => ({
     PostHog: mockPostHogConstructor,
