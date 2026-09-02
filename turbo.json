@@ -12,6 +12,7 @@
                 ".babelrc",
                 "babel.config.js",
                 "rollup.config.mjs",
+                "tsdown.config.mts",
                 "scripts/check-mangled-property-consistency.js",
                 "scripts/check-sourcemap-ignore-list.js",
                 "terser-cross-bundle-properties.cjs",
