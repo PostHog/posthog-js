@@ -22,51 +22,74 @@ function minifyAndUMDPlugin({
     name: 'minify-plugin',
     async writeBundle(outputOptions, bundle) {
       for (const file of Object.values(bundle)) {
-        if (
-          file.type === 'asset' &&
-          (file.fileName.endsWith('.cjs.map') || file.fileName.endsWith('.css'))
-        ) {
-          const isCSS = file.fileName.endsWith('.css');
-          const inputFilePath = resolve(
-            outputOptions.dir!,
-            file.fileName,
-          ).replace(/\.map$/, '');
-          const baseFileName = file.fileName.replace(
-            /(\.cjs|\.css)(\.map)?$/,
-            '',
-          );
-          const outputFilePath = resolve(outputOptions.dir!, baseFileName);
-          // console.log(outputFilePath, 'minifying', file.fileName);
-          if (isCSS) {
-            await buildFile({
-              input: inputFilePath,
-              output: `${outputFilePath}.min.css`,
-              minify: true,
-              isCss: true,
-              outDir,
-            });
-          } else {
-            await buildFile({
-              name,
-              input: inputFilePath,
-              output: `${outputFilePath}.umd.cjs`,
-              minify: false,
-              isCss: false,
-              outDir,
-            });
-            await buildFile({
-              name,
-              input: inputFilePath,
-              output: `${outputFilePath}.umd.min.cjs`,
-              minify: true,
-              isCss: false,
-              outDir,
-            });
+        const isCSS = file.type === 'asset' && file.fileName.endsWith('.css');
+        const isCJS = file.type === 'chunk' && file.fileName.endsWith('.cjs');
+        const isJS =
+          file.type === 'chunk' &&
+          (file.fileName.endsWith('.js') || file.fileName.endsWith('.cjs'));
+        if (!isCSS && !isCJS) {
+          if (isJS) {
+            writeMissingSourcemap(outputOptions.dir!, file.fileName);
           }
+          continue;
+        }
+
+        const inputFilePath = resolve(outputOptions.dir!, file.fileName);
+        const baseFileName = file.fileName.replace(/(\.cjs|\.css)$/, '');
+        const outputFilePath = resolve(outputOptions.dir!, baseFileName);
+        // console.log(outputFilePath, 'minifying', file.fileName);
+        if (isCSS) {
+          await buildFile({
+            input: inputFilePath,
+            output: `${outputFilePath}.min.css`,
+            minify: true,
+            isCss: true,
+            outDir,
+          });
+        } else {
+          await buildFile({
+            name,
+            input: inputFilePath,
+            output: `${outputFilePath}.umd.cjs`,
+            minify: false,
+            isCss: false,
+            outDir,
+          });
+          await buildFile({
+            name,
+            input: inputFilePath,
+            output: `${outputFilePath}.umd.min.cjs`,
+            minify: true,
+            isCss: false,
+            outDir,
+          });
+          writeMissingSourcemap(outputOptions.dir!, file.fileName);
         }
       }
     },
   };
+}
+
+function writeMissingSourcemap(outputDir: string, fileName: string) {
+  const outputPath = resolve(outputDir, fileName);
+  const mapPath = `${outputPath}.map`;
+  if (fs.existsSync(mapPath)) {
+    return;
+  }
+
+  const basename = fileName.split('/').pop()!;
+  fs.appendFileSync(outputPath, `\n//# sourceMappingURL=${basename}.map\n`);
+  fs.writeFileSync(
+    mapPath,
+    JSON.stringify({
+      version: 3,
+      file: basename,
+      sources: [],
+      sourcesContent: [],
+      names: [],
+      mappings: '',
+    }),
+  );
 }
 
 async function buildFile({
@@ -125,7 +148,10 @@ export default function (
       ],
     },
     build: {
-      // See https://vitejs.dev/guide/build.html#library-mode
+      // Preserve Vite 6's browser support instead of adopting Vite 7/8's newer defaults.
+      target: ['chrome87', 'edge88', 'firefox78', 'safari14'],
+
+      // See https://vite.dev/guide/build.html#library-mode
       lib: {
         cssFileName: 'style',
         entry,
@@ -141,7 +167,7 @@ export default function (
 
       emptyOutDir,
 
-      rollupOptions: {
+      rolldownOptions: {
         output: {
           exports: 'named',
         },
@@ -156,7 +182,7 @@ export default function (
     plugins: [
       dts({
         insertTypesEntry: true,
-        rollupTypes: true,
+        bundleTypes: true,
         afterBuild: (emittedFiles: Map<string, string>) => {
           // To pass publint (`npm x publint@latest`) and ensure the
           // package is supported by all consumers, we must export types that are
