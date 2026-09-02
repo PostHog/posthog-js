@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.422.5",
+    "version": "1.424.1",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -21,8 +21,8 @@
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
         "lint": "eslint src && eslint playwright",
         "lint:fix": "eslint src --fix && eslint playwright --fix",
-        "prettier": "prettier --write src/ functional_tests/ playwright/",
-        "prettier:check": "prettier --check src/ functional_tests/ playwright/",
+        "format": "oxfmt --write src/ functional_tests/ playwright/",
+        "format:check": "oxfmt --check src/ functional_tests/ playwright/",
         "prepublishOnly": "pnpm check-react",
         "check-react": "[ -d 'react/dist' ] || { echo '@posthog/react has not been built'; exit 1; }",
         "test": "pnpm test:unit && pnpm test:functional",

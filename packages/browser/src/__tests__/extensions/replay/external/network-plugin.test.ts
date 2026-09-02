@@ -854,6 +854,25 @@ describe('network plugin', () => {
             )
         })
 
+        it('resolves and swallows the rejection when cancel() rejects (Safari "Load failed")', async () => {
+            const rejections: unknown[] = []
+            const onRejection = (reason: unknown): void => {
+                rejections.push(reason)
+            }
+            process.on('unhandledRejection', onRejection)
+            try {
+                const cancel = jest.fn(() => Promise.reject(new TypeError('Load failed')))
+                const r = fakeStreamingBody([encode('hello')], { cancel })
+                await expect(_tryReadBodyStreaming(r, 1000)).resolves.toBe('hello')
+                expect(cancel).toHaveBeenCalled()
+                // let the microtask queue surface any rejection that escaped the helper
+                await new Promise((resolve) => setTimeout(resolve, 0))
+                expect(rejections).toHaveLength(0)
+            } finally {
+                process.off('unhandledRejection', onRejection)
+            }
+        })
+
         it('times out a hung stream and cancels the reader so it stops being read', async () => {
             jest.useFakeTimers()
             try {

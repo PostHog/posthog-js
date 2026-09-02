@@ -297,7 +297,7 @@ function matchesPrivacyRule(element: Element, classRule?: string | RegExp, selec
 }
 
 function isWithinPrivacyBoundary(element: Element, options: JsonLdPrivacyOptions): boolean {
-    for (let current: Element | null = element; current; ) {
+    for (let current: Element | null = element; current;) {
         if (
             matchesPrivacyRule(current, options.blockClass, options.blockSelector) ||
             matchesPrivacyRule(current, options.maskTextClass, options.maskTextSelector)

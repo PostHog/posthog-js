@@ -183,6 +183,8 @@ export class WrappedCompletions extends Completions {
                   {
                     completionId: accumulated.completionId,
                     systemFingerprint: accumulated.systemFingerprint,
+                    usage: accumulated.usage,
+                    latency: (Date.now() - startTime) / 1000,
                   }
                 )
               )
@@ -243,7 +245,8 @@ export class WrappedCompletions extends Completions {
                 monitoring: posthogParams,
                 modelParametersSource: body,
               },
-              error
+              error,
+              { latency: (Date.now() - startTime) / 1000 }
             )
           )
           throw error
@@ -404,7 +407,11 @@ export class WrappedResponses extends Responses {
                     modelParametersSource: body,
                   },
                   error,
-                  accumulated.completionId
+                  {
+                    completionId: accumulated.completionId,
+                    usage: accumulated.usage,
+                    latency: (Date.now() - startTime) / 1000,
+                  }
                 )
               )
               throw error
@@ -464,7 +471,8 @@ export class WrappedResponses extends Responses {
                 monitoring: posthogParams,
                 modelParametersSource: body,
               },
-              error
+              error,
+              { latency: (Date.now() - startTime) / 1000 }
             )
           )
           throw error
@@ -605,7 +613,8 @@ export class WrappedResponses extends Responses {
               monitoring: posthogParams,
               modelParametersSource: body,
             },
-            error
+            error,
+            { latency: (Date.now() - startTime) / 1000 }
           )
         )
         throw error
@@ -666,7 +675,8 @@ export class WrappedEmbeddings extends Embeddings {
               monitoring: posthogParams,
               modelParametersSource: body,
             },
-            error
+            error,
+            (Date.now() - startTime) / 1000
           )
         )
         throw error
@@ -776,17 +786,14 @@ export class WrappedTranscriptions extends Transcriptions {
             (iterator, controller) => new Stream(iterator, controller)
           )
           ;(async () => {
+            let usage: {
+              inputTokens?: number
+              outputTokens?: number
+              rawUsage?: unknown
+            } = {}
             try {
               let finalContent: string = ''
               let firstTokenTime: number | undefined
-              let usage: {
-                inputTokens?: number
-                outputTokens?: number
-                rawUsage?: unknown
-              } = {
-                inputTokens: 0,
-                outputTokens: 0,
-              }
 
               const doneEvent: OpenAIOrignal.Audio.Transcriptions.TranscriptionTextDoneEvent['type'] =
                 'transcript.text.done'
@@ -832,10 +839,10 @@ export class WrappedTranscriptions extends Transcriptions {
                 provider: 'openai',
                 input: openAIParams.prompt,
                 output: [],
-                latency: 0,
+                latency: (Date.now() - startTime) / 1000,
                 baseURL: this.baseURL,
                 modelParameters: getModelParams(body),
-                usage: { inputTokens: 0, outputTokens: 0 },
+                usage,
                 error,
               })
               throw error
@@ -885,13 +892,10 @@ export class WrappedTranscriptions extends Transcriptions {
             provider: 'openai',
             input: openAIParams.prompt,
             output: [],
-            latency: 0,
+            latency: (Date.now() - startTime) / 1000,
             baseURL: this.baseURL,
             modelParameters: getModelParams(body),
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
+            usage: {},
             error,
           })
           throw error

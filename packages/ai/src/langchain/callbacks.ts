@@ -720,7 +720,14 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       gen.generationInfo?.finish_reason ||
       generationResponseMetadata?.stop_reason ||
       generationResponseMetadata?.finish_reason ||
-      gen.generationInfo?.stop_reason
+      gen.generationInfo?.stop_reason ||
+      // The Responses API reports no finish_reason. An early stop is named by
+      // `incomplete_details.reason`, and `status` covers the rest, matching the
+      // native OpenAI Responses wrapper.
+      messageResponseMetadata?.incomplete_details?.reason ||
+      generationResponseMetadata?.incomplete_details?.reason ||
+      messageResponseMetadata?.status ||
+      generationResponseMetadata?.status
 
     return stopReason != null ? String(stopReason) : undefined
   }

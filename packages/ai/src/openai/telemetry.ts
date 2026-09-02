@@ -122,7 +122,12 @@ export function buildChatSuccessOptions(
 export function buildChatErrorOptions(
   context: CommonContext<ChatParams>,
   error: unknown,
-  metadata: { completionId?: string; systemFingerprint?: string } = {}
+  metadata: {
+    completionId?: string
+    systemFingerprint?: string
+    usage?: TokenUsage
+    latency: number
+  }
 ): CaptureAiGenerationOptions {
   return {
     ...context.monitoring,
@@ -130,10 +135,10 @@ export function buildChatErrorOptions(
     provider: context.provider,
     input: sanitizeOpenAI(context.params.messages, context.client),
     output: [],
-    latency: 0,
+    latency: metadata.latency,
     baseURL: context.baseURL,
     modelParameters: getModelParams(context.modelParametersSource),
-    usage: { inputTokens: 0, outputTokens: 0 },
+    usage: metadata.usage ?? {},
     completionId: metadata.completionId,
     providerMetadata: buildProviderMetadata({ systemFingerprint: metadata.systemFingerprint }),
     error,
@@ -199,7 +204,7 @@ export function buildBackgroundResponseOptions(
 export function buildResponsesErrorOptions(
   context: CommonContext<ResponsesParams>,
   error: unknown,
-  completionId?: string
+  metadata: { completionId?: string; usage?: TokenUsage; latency: number }
 ): CaptureAiGenerationOptions {
   return {
     ...context.monitoring,
@@ -207,11 +212,11 @@ export function buildResponsesErrorOptions(
     provider: context.provider,
     input: buildSanitizedResponsesInput(context),
     output: [],
-    latency: 0,
+    latency: metadata.latency,
     baseURL: context.baseURL,
     modelParameters: getModelParams(context.modelParametersSource),
-    usage: { inputTokens: 0, outputTokens: 0 },
-    completionId,
+    usage: metadata.usage ?? {},
+    completionId: metadata.completionId,
     error,
   }
 }
@@ -238,7 +243,8 @@ export function buildEmbeddingSuccessOptions(
 
 export function buildEmbeddingErrorOptions(
   context: CommonContext<OpenAI.EmbeddingCreateParams>,
-  error: unknown
+  error: unknown,
+  latency: number
 ): CaptureAiGenerationOptions {
   return {
     eventType: AIEvent.Embedding,
@@ -247,10 +253,10 @@ export function buildEmbeddingErrorOptions(
     provider: context.provider,
     input: withPrivacyMode(context.client, context.monitoring.privacyMode, context.params.input),
     output: null,
-    latency: 0,
+    latency,
     baseURL: context.baseURL,
     modelParameters: getModelParams(context.modelParametersSource),
-    usage: { inputTokens: 0 },
+    usage: {},
     error,
   }
 }

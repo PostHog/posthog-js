@@ -9,10 +9,14 @@
         "bundle-size:array": "node packages/browser/scripts/compare-array-bundle-size.mjs",
         "clean": "turbo clean",
         "clean:dep": "rm -rf node_modules && pnpm -r exec rm -rf node_modules",
-        "lint": "turbo lint",
-        "lint:fix": "turbo lint:fix",
-        "lint:playground": "prettier --check 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && eslint 'playground/**/*.{ts,tsx,js,jsx,mjs}'",
-        "lint:playground:fix": "prettier --write 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && eslint --fix 'playground/**/*.{ts,tsx,js,jsx,mjs}'",
+        "format": "oxfmt --check 'packages/**/*.{ts,tsx,js,jsx,mjs,cjs}' '!packages/rrweb/**' '!packages/**/playground/**' '!packages/**/examples/**'",
+        "format:fix": "oxfmt --write 'packages/**/*.{ts,tsx,js,jsx,mjs,cjs}' '!packages/rrweb/**' '!packages/**/playground/**' '!packages/**/examples/**'",
+        "lint": "pnpm format && pnpm lint:oxlint && turbo lint",
+        "lint:fix": "pnpm lint:oxlint:fix && turbo lint:fix && pnpm format:fix",
+        "lint:oxlint": "oxlint packages",
+        "lint:oxlint:fix": "oxlint --fix packages",
+        "lint:playground": "oxfmt --check 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && eslint 'playground/**/*.{ts,tsx,js,jsx,mjs}'",
+        "lint:playground:fix": "eslint --fix 'playground/**/*.{ts,tsx,js,jsx,mjs}' && oxfmt --write 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}'",
         "test": "turbo test",
         "test:unit": "turbo test:unit",
         "test:docs-scripts": "node --test \"scripts/docs/__tests__/*.test.js\"",
@@ -45,16 +49,16 @@
         "esbuild-plugin-umd-wrapper": "catalog:",
         "eslint": "8.57.0",
         "eslint-config-posthog-js": "link:tooling/eslint-plugin-posthog-js",
-        "eslint-config-prettier": "^8.10.2",
+        "eslint-config-prettier": "^10.1.8",
         "eslint-plugin-compat": "6.2.0",
         "eslint-plugin-jest": "^28.14.0",
         "eslint-plugin-no-only-tests": "^3.3.0",
         "eslint-plugin-posthog-js": "link:tooling/eslint-plugin-posthog-js",
-        "eslint-plugin-prettier": "^5.5.6",
         "eslint-plugin-react": "^7.37.5",
         "eslint-plugin-react-hooks": "^4.6.2",
         "lint-staged": "^10.5.4",
-        "prettier": "^3.8.3",
+        "oxfmt": "^0.65.0",
+        "oxlint": "^1.80.0",
         "rimraf": "^6.1.3",
         "rollup": "catalog:",
         "rollup-plugin-visualizer": "^5.14.0",
@@ -65,8 +69,8 @@
     "lint-staged": {
         "*.{ts,tsx,js,jsx,mjs,cjs}": [
             "eslint --cache --fix",
-            "prettier --write"
+            "oxfmt --write"
         ],
-        "*.{json,md}": "prettier --write"
+        "*.{json,md}": "oxfmt --write"
     }
 }

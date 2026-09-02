@@ -627,7 +627,7 @@ export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number)
 
         function cancel(): void {
             try {
-                void reader?.cancel()
+                void reader?.cancel().catch(() => {})
             } catch {
                 // the reader may already be released; nothing to clean up
             }
@@ -824,15 +824,19 @@ function initFetchObserver(
                 if (recordResponseHeaders) {
                     networkRequest.responseHeaders = responseHeaders
                 }
-                if (
-                    shouldRecordBody({
-                        type: 'response',
-                        headers: responseHeaders,
-                        url,
-                        recordBody: options.recordBody,
-                    })
-                ) {
-                    networkRequest.responseBody = await _tryReadResponseBody({ r: res, options, url })
+                try {
+                    if (
+                        shouldRecordBody({
+                            type: 'response',
+                            headers: responseHeaders,
+                            url,
+                            recordBody: options.recordBody,
+                        })
+                    ) {
+                        networkRequest.responseBody = await _tryReadResponseBody({ r: res, options, url })
+                    }
+                } catch (e) {
+                    logger.error('Failed to record fetch response for network capture', e)
                 }
 
                 return res
