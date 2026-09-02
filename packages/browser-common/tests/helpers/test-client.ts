@@ -147,7 +147,7 @@ export class TestClient implements Client {
         this.getExtension = options.getExtension ?? (() => undefined)
     }
 
-    async capture(event: string, properties?: Properties | null, options?: CaptureOptions): Promise<void> {
+    capture(event: string, properties?: Properties | null, options?: CaptureOptions): void {
         const dynamicProperties = this._dynamicEventPropertyProducers.reduce(
             (acc, producer) => ({ ...acc, ...producer() }),
             {} as Record<string, unknown>

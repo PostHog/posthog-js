@@ -621,7 +621,7 @@ describe('browser-next session state', () => {
         const first = posthog.session
         storage.failReads = true
 
-        await expect(posthog.capture('after-read-failure')).resolves.toBeUndefined()
+        expect(() => posthog.capture('after-read-failure')).not.toThrow()
         expect(posthog.session).toEqual(first)
     })
 
@@ -855,7 +855,7 @@ describe('browser-next session state', () => {
         })
         const posthog = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
 
-        await expect(posthog.capture('safe')).resolves.toBeUndefined()
+        expect(() => posthog.capture('safe')).not.toThrow()
         expect(posthog.session.sessionId).not.toBe('')
         await expect(posthog.dispose()).resolves.toBeUndefined()
     })

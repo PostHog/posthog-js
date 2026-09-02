@@ -54,13 +54,14 @@ export const runClientConformanceSuite = (hostName: string, createHost: ClientCo
             expect(kv.get<{ first: unknown; second: unknown }>(['first', 'second'])).toEqual({})
         })
 
-        it('captures dynamic properties and publishes finalized events', async () => {
+        it('captures dynamic properties and publishes finalized events synchronously', () => {
             const events: Array<{ event: string; properties: Readonly<Record<string, unknown>> }> = []
             const subscription = host!.client.onEvent((event) => events.push(event))
             const registration = host!.client.registerDynamicEventProperties(() => ({ dynamic: 'yes' }))
 
-            await host!.client.capture('conformance_event', { explicit: true })
+            const result: void = host!.client.capture('conformance_event', { explicit: true })
 
+            expect(result).toBeUndefined()
             expect(events).toHaveLength(1)
             expect(events[0]).toMatchObject({
                 event: 'conformance_event',

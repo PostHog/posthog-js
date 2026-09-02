@@ -8,7 +8,7 @@ The package root contains the capture host and a bounded in-memory analytics que
 import { createPostHog } from '@posthog/browser'
 
 const posthog = await createPostHog({ projectToken: '<project-token>' })
-await posthog.capture('signed_up')
+posthog.capture('signed_up')
 await posthog.flush()
 ```
 
@@ -34,7 +34,7 @@ const posthog = await createPostHog({
 
 Use `analytics: false` to keep the default entrypoint buffer-only, or import `createPostHog` from `@posthog/browser/core` for a graph with no analytics dynamic-import reference. Client-owned extensions are supplied through `extensions` when the client is created.
 
-`capture()` resolves after queue admission rather than waiting for code or network delivery. `flush()` waits for an in-progress automatic load and retries a failed first load once when explicitly asked to flush; without available delivery it resolves without discarding unexpired queued events. Core admission retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
+`capture()` admits an event to the queue synchronously and does not wait for code or network delivery. `flush()` waits for an in-progress automatic load and retries a failed first load once when explicitly asked to flush; without available delivery it resolves without discarding unexpired queued events. Core admission retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
 
 The analytics extension sends FIFO Capture V1 batches of at most 100 events and partitions large backlogs by exact uncompressed envelope size. `flushAt` defaults to 20 and triggers delivery by queued count; `flushInterval` defaults to 3,000 milliseconds and triggers delivery by age. Set `flushInterval: 0` to disable timer delivery. Explicit `flush()` and shutdown bypass both thresholds. Retry-exhausted transient failures remain in the bounded lane for a later interval, reconnect, or explicit flush rather than hot-looping or being discarded.
 
