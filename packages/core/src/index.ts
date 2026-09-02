@@ -45,6 +45,7 @@ export {
 } from './logs/logs-utils'
 export { toOtlpAnyValue, toOtlpKeyValueList } from './utils/otlp-any-value'
 export { osResourceAttributes } from './utils/otlp-resource'
+export { assignUserAttributes } from './traces/sanitize'
 export { PostHogLogs } from './logs'
 export type {
   BeforeSendLogFn,

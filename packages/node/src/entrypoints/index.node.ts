@@ -11,6 +11,7 @@ import type { SpanContextManager } from '@posthog/core'
 import { PostHogContext } from '../extensions/context/context'
 import { AsyncLocalStorageSpanContextManager } from '../extensions/context/span-context.node'
 import { gzipCompress } from '../gzip.node'
+import { hostOsResourceAttributes } from '../host-os.node'
 
 export class PostHog extends PostHogBackendClient {
   getLibraryId(): string {
@@ -27,6 +28,10 @@ export class PostHog extends PostHogBackendClient {
 
   protected override initializeSpanContextManager(): SpanContextManager {
     return new AsyncLocalStorageSpanContextManager()
+  }
+
+  protected override hostResourceAttributes(): Record<string, string> {
+    return hostOsResourceAttributes()
   }
 
   protected override createErrorPropertiesBuilder(): CoreErrorTracking.ErrorPropertiesBuilder {
