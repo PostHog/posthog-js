@@ -718,6 +718,7 @@
         "_resumeSavedTour",
         "_resyncIntervalMs",
         "_resyncTimer",
+        "_retryAfterInstalledAt",
         "_retryAfterRemainingMs",
         "_retryAfterUntil",
         "_retryQueue",

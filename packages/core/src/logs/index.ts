@@ -1,7 +1,8 @@
 import type { LogAttributeValue } from '@posthog/types'
 import { buildOtlpLogRecord, buildOtlpLogsPayload, buildResourceAttributes } from './logs-utils'
 import { Logger, PostHogPersistedProperty } from '../types'
-import { MAX_RETRY_AFTER_MS, isArray, raceWithTimeout, safeSetTimeout } from '../utils'
+import { isArray, raceWithTimeout, safeSetTimeout } from '../utils'
+import { MAX_RETRY_AFTER_MS } from '../utils/retry-after'
 import type { BufferedLogEntry, CaptureLogOptions, LogSdkContext, LogsHost, ResolvedPostHogLogsConfig } from './types'
 
 // Caps the retry backoff at 2^6 = 64× the flush interval.
@@ -32,6 +33,7 @@ export class PostHogLogs {
   // success so one throttled response cannot pin the delay for the rest of the
   // process.
   private _retryAfterUntil = 0
+  private _retryAfterInstalledAt = 0
   private _flushTimerFiresAt = 0
   // Consecutive failed flushes; drives exponential backoff on the retry timer.
   // A successful flush resets it to 0.
@@ -98,6 +100,7 @@ export class PostHogLogs {
     this._droppedWarned = false
     this._consecutiveFlushFailures = 0
     this._retryAfterUntil = 0
+    this._retryAfterInstalledAt = 0
     this._maxBatchRecordsPerPost = this._config.maxBatchRecordsPerPost
   }
 
@@ -293,6 +296,10 @@ export class PostHogLogs {
         this._instance.getLibraryVersion()
       )
 
+      // Read before the send: the outcome overwrites the window, and a refusal
+      // the endpoint had already told us to expect must not extend it.
+      const insideRetryAfterWindow = this._isWaitingOutRetryAfter()
+
       const outcome = await this._instance._sendLogsBatch(payload)
 
       if (this._queueGeneration !== generation) {
@@ -313,9 +320,15 @@ export class PostHogLogs {
 
       // Only a retriable outcome carries a wait, and it is recorded here rather
       // than on the background wrapper so an explicit `flush()` — which every
-      // lifecycle hook takes — records and clears it too.
-      this._retryAfterUntil =
-        outcome.kind === 'retry-later' && outcome.retryAfterMs ? Date.now() + outcome.retryAfterMs : 0
+      // lifecycle hook takes — records and clears it too. A refusal from inside
+      // an open window does not extend it, or a host that flushes on its own
+      // cadence keeps the window from ever elapsing.
+      if (outcome.kind !== 'retry-later' || !outcome.retryAfterMs) {
+        this._retryAfterUntil = 0
+      } else if (!insideRetryAfterWindow) {
+        this._retryAfterInstalledAt = Date.now()
+        this._retryAfterUntil = this._retryAfterInstalledAt + outcome.retryAfterMs
+      }
 
       if (outcome.kind === 'retry-later') {
         // Transient failure: keep records in the queue for the next flush cycle
@@ -437,10 +450,14 @@ export class PostHogLogs {
   }
 
   private _retryAfterRemainingMs(): number {
-    // Clamped, not just floored: the deadline is wall clock, so a backward step
-    // (NTP, a resumed VM, a user changing the date) would otherwise strand the
-    // queue far past the cap `parseRetryAfterMs` applied.
-    return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, this._retryAfterUntil - Date.now()))
+    const now = Date.now()
+    // The deadline is wall clock. A clock that has moved behind the point the
+    // window was installed can no longer measure it, so end the window rather
+    // than hold the queue for the size of the step; the cap bounds the rest.
+    if (now < this._retryAfterInstalledAt) {
+      return 0
+    }
+    return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, this._retryAfterUntil - now))
   }
 
   private _isWaitingOutRetryAfter(): boolean {

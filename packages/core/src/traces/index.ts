@@ -13,7 +13,8 @@ import { newSpanId, newTraceId } from './ids'
 import { parseTraceparent, sanitizeTracestate } from './traceparent'
 import { assignUserAttributes, resolveStartTime, sanitizeName } from './sanitize'
 import { buildOtlpSpan, buildOtlpTracesPayload, buildTracesResourceAttributes } from './otlp'
-import { MAX_RETRY_AFTER_MS, isPromise, safeSetTimeout } from '../utils'
+import { isPromise, safeSetTimeout } from '../utils'
+import { MAX_RETRY_AFTER_MS } from '../utils/retry-after'
 
 // Retriable failures on the same head batch before it is dropped, so a stuck
 // batch cannot pin the queue while fresher spans are refused at the cap. The
@@ -79,6 +80,7 @@ export class PostHogTraces {
   // the wait is already part-served counts down the remainder instead of
   // restarting it.
   private _retryAfterUntil = 0
+  private _retryAfterInstalledAt = 0
   private _flushTimerFiresAt = 0
   // Separate from the backoff counter: this one belongs to whatever batch is at
   // the head, and resets whenever that batch is removed or shrunk.
@@ -274,6 +276,7 @@ export class PostHogTraces {
     this._lastDropWarningAt = 0
     this._consecutiveFlushFailures = 0
     this._retryAfterUntil = 0
+    this._retryAfterInstalledAt = 0
     this._headBatchFailures = 0
   }
 
@@ -519,9 +522,16 @@ export class PostHogTraces {
 
         // Only a retriable outcome carries a wait; anything else ends it, or a
         // stale one would pin every later flush at the window the server has
-        // moved on from.
-        this._retryAfterUntil =
-          outcome.kind === 'retry-later' && outcome.retryAfterMs ? Date.now() + outcome.retryAfterMs : 0
+        // moved on from. A refusal from inside an open window does not extend
+        // it: the endpoint is repeating an answer it already gave, and sliding
+        // the deadline on each one means the window never elapses — which would
+        // hold the head batch's retry budget at zero forever.
+        if (outcome.kind !== 'retry-later' || !outcome.retryAfterMs) {
+          this._retryAfterUntil = 0
+        } else if (!insideRetryAfterWindow) {
+          this._retryAfterInstalledAt = Date.now()
+          this._retryAfterUntil = this._retryAfterInstalledAt + outcome.retryAfterMs
+        }
 
         if (outcome.kind === 'ok') {
           this._consecutiveFlushFailures = 0
@@ -665,10 +675,14 @@ export class PostHogTraces {
   }
 
   private _retryAfterRemainingMs(): number {
-    // Clamped, not just floored: the deadline is wall clock, so a backward step
-    // (NTP, a resumed VM, a user changing the date) would otherwise strand the
-    // queue far past the cap `parseRetryAfterMs` applied.
-    return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, this._retryAfterUntil - Date.now()))
+    const now = Date.now()
+    // The deadline is wall clock. A clock that has moved behind the point the
+    // window was installed can no longer measure it, so end the window rather
+    // than hold the queue for the size of the step; the cap bounds the rest.
+    if (now < this._retryAfterInstalledAt) {
+      return 0
+    }
+    return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, this._retryAfterUntil - now))
   }
 
   private _isWaitingOutRetryAfter(): boolean {

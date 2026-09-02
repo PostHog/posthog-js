@@ -299,6 +299,35 @@ describe('PostHogMetrics', () => {
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(3)
     })
 
+    it('does not let a host out-pacing the window keep it open forever', async () => {
+      // Each refusal sliding the deadline would keep `_nextFlushDelay` pinned at
+      // the full window, so the flush cadence would never recover.
+      const instance = createMockInstance({
+        _sendMetricsBatch: jest.fn((): Promise<SendMetricsBatchOutcome> =>
+          Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 30_000 })
+        ),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 60_000 }, instance)
+      metrics.count('orders_created', 1)
+      await metrics.flush()
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      // Sampled: whether a given moment falls inside a window is timing
+      // dependent, but it must fall outside one sometimes.
+      let sawWindowClosed = false
+      for (let i = 0; i < 12; i++) {
+        await jest.advanceTimersByTimeAsync(5000)
+        // Sampled before the flush: a flush that finds the window closed opens
+        // a fresh one, so sampling after it would always look open.
+        if ((metrics as any)._retryAfterRemainingMs() === 0) {
+          sawWindowClosed = true
+        }
+        metrics.count('orders_created', 1)
+        await metrics.flush()
+      }
+      expect(sawWindowClosed).toBe(true)
+    })
+
     it('does not install a Retry-After that lands after reset', async () => {
       let settle: ((outcome: SendMetricsBatchOutcome) => void) | undefined
       const instance = createMockInstance({
@@ -416,21 +445,6 @@ describe('PostHogMetrics', () => {
       metrics.count('orders_created', 1)
       await metrics.flush()
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
-    })
-
-    it('does not let a backward clock step stretch the wait past the cap', async () => {
-      const instance = createMockInstance({
-        _sendMetricsBatch: jest.fn((): Promise<SendMetricsBatchOutcome> =>
-          Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 60_000 })
-        ),
-      })
-      const metrics = createMetrics({ flushIntervalMs: 1000 }, instance)
-      metrics.count('orders_created', 1)
-      await metrics.flush()
-
-      const real = Date.now()
-      jest.spyOn(Date, 'now').mockImplementation(() => real - 3_600_000)
-      expect((metrics as any)._retryAfterRemainingMs()).toBeLessThanOrEqual(5 * 60_000)
     })
 
     it('ends the wait when a later failure names none', async () => {

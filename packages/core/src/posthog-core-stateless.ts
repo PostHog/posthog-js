@@ -29,7 +29,6 @@ import {
 import {
   allSettled,
   createNamedError,
-  MAX_RETRY_AFTER_MS,
   currentISOTime,
   PromiseQueue,
   removeTrailingSlash,
@@ -42,6 +41,7 @@ import {
   getEventUuid,
   safeJsonStringify,
 } from './utils'
+import { MAX_RETRY_AFTER_MS } from './utils/retry-after'
 import { uuidv7 } from './vendor/uuidv7'
 import {
   ErrorPropertiesBuilder,

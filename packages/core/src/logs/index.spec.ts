@@ -1405,23 +1405,63 @@ describe('PostHogLogs', () => {
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
     })
 
-    it('does not let a backward clock step stretch the wait past the cap', async () => {
+    it('does not let a host out-pacing the window keep it open forever', async () => {
+      // RN takes flush() on every app-state transition. If each refusal slid the
+      // deadline forward, the window would never elapse and the gated paths —
+      // the size trigger and onReconnect — would stay suppressed indefinitely.
       mockInstance._sendLogsBatch = jest.fn(() =>
-        Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 60_000 })
+        Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 30_000 })
       )
       const logs = new PostHogLogs(
         mockInstance,
-        resolveForTest({ flushIntervalMs: 1000 }),
+        resolveForTest({ flushIntervalMs: 60_000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await logs.flush().catch(() => {})
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      // Lifecycle flushes every 5s, well past the 30s window. Sampled rather
+      // than asserted through onReconnect: whether a given moment falls inside
+      // a window is timing-dependent, but it must fall outside one *sometimes*.
+      let sawWindowClosed = false
+      for (let i = 0; i < 12; i++) {
+        await jest.advanceTimersByTimeAsync(5000)
+        // Sampled before the flush: a flush that finds the window closed opens
+        // a fresh one, so sampling after it would always look open.
+        if ((logs as any)._retryAfterRemainingMs() === 0) {
+          sawWindowClosed = true
+        }
+        logs.captureLog({ body: `line ${i}` })
+        await logs.flush().catch(() => {})
+      }
+      expect(sawWindowClosed).toBe(true)
+    })
+
+    it('keeps flushing after a backward clock step', async () => {
+      const outcomes: any[] = [{ kind: 'retry-later', error: new Error('429'), retryAfterMs: 60_000 }]
+      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000, maxBufferSize: 2 }),
         logger,
         getContextFor(mockInstance),
         immediateOnReady
       )
       logs.captureLog({ body: 'first' })
       await jest.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
       const real = Date.now()
       jest.spyOn(Date, 'now').mockImplementation(() => real - 3_600_000)
-      expect((logs as any)._retryAfterRemainingMs()).toBeLessThanOrEqual(5 * 60_000)
+
+      // A gated path: suppressed for the size of the step without the guard.
+      logs.captureLog({ body: 'second' })
+      logs.onReconnect()
+      await jest.advanceTimersByTimeAsync(1)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
     })
 
     it('ends the wait when a later failure names none', async () => {

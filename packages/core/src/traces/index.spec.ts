@@ -1407,6 +1407,55 @@ describe('PostHogTraces', () => {
 
       expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Dropping'))
       expect(mockInstance._sendTracesBatch.mock.calls.length).toBeGreaterThan(1)
+
+      // The budget is deferred, not disabled. Once the window elapses the batch
+      // must retire — a deadline that slid forward on each refusal would keep
+      // the window open forever and strand everything behind the head batch.
+      for (let i = 0; i < 12; i++) {
+        await jest.advanceTimersByTimeAsync(310_000)
+        await traces.flush()
+      }
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('failed 8 times in a row'))
+    })
+
+    it('charges the budget for a timer-path failure after the wait was served out', async () => {
+      // The exemption is narrow: an attempt made *early*, inside a window that
+      // has not elapsed. A retry the timer fired at the deadline has served the
+      // wait, so it must count — otherwise the budget never advances and a
+      // permanently refused head batch pins everything behind it.
+      mockInstance._sendTracesBatch.mockResolvedValue({
+        kind: 'retry-later',
+        error: new Error('429'),
+        retryAfterMs: 60_000,
+      })
+      const traces = createTraces({ flushIntervalMs: 1000 })
+      traces.startSpan('first').end()
+
+      for (let i = 0; i < 12; i++) {
+        await jest.advanceTimersByTimeAsync(61_000)
+      }
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('failed 8 times in a row'))
+    })
+
+    it('does not let a host out-pacing the window stall the retry budget', async () => {
+      // flush() more often than the window is long. If each refusal slid the
+      // deadline forward, the window would never elapse, the head batch would
+      // never retire, and every span behind it would be dropped at the cap.
+      mockInstance._sendTracesBatch.mockResolvedValue({
+        kind: 'retry-later',
+        error: new Error('429'),
+        retryAfterMs: 30_000,
+      })
+      const traces = createTraces({ flushIntervalMs: 10_000, maxQueueSize: 5, maxExportBatchSize: 2 })
+
+      for (let i = 0; i < 60; i++) {
+        traces.startSpan(`span-${i}`).end()
+        await traces.flush()
+        await jest.advanceTimersByTimeAsync(5_000)
+      }
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('failed 8 times in a row'))
     })
 
     it('still charges the retry budget for failures outside any window', async () => {
@@ -1424,10 +1473,11 @@ describe('PostHogTraces', () => {
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Dropping'))
     })
 
-    it('does not let a backward clock step stretch the wait past the cap', async () => {
-      // The deadline is wall clock. Without a clamp an NTP correction or a
-      // resumed VM turns a 60s wait into an hours-long one.
-      mockInstance._sendTracesBatch.mockResolvedValueOnce({
+    it('does not let a backward clock step hold the retry budget open', async () => {
+      // The deadline is wall clock. An NTP correction or a resumed VM would
+      // otherwise keep the window "open" for the size of the step — and with
+      // in-window refusals uncharged, the head batch would never retire.
+      mockInstance._sendTracesBatch.mockResolvedValue({
         kind: 'retry-later',
         error: new Error('429'),
         retryAfterMs: 60_000,
@@ -1436,9 +1486,16 @@ describe('PostHogTraces', () => {
       traces.startSpan('first').end()
       await traces.flush()
 
-      const real = Date.now()
-      jest.spyOn(Date, 'now').mockImplementation(() => real - 3_600_000)
-      expect((traces as any)._retryAfterRemainingMs()).toBeLessThanOrEqual(5 * 60_000)
+      // Step the clock back an hour and let simulated time run from there.
+      jest.setSystemTime(Date.now() - 3_600_000)
+
+      // Asserted on the queue, not the drop warning: `_recordDrop` paces that
+      // warning off the same clock and would suppress it here.
+      for (let i = 0; i < 12; i++) {
+        await traces.flush()
+        await jest.advanceTimersByTimeAsync(61_000)
+      }
+      expect((traces as any)._queue).toHaveLength(0)
     })
 
     it('does not install a Retry-After that lands after reset', async () => {
