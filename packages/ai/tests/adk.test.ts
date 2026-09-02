@@ -212,7 +212,9 @@ describe('PostHogADKPlugin', () => {
     await plugin.beforeModelCallback({
       callbackContext: ctx,
       llmRequest: createRequest({
-        contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'image/png', data: new Uint8Array([137, 80]) } }] }],
+        contents: [
+          { role: 'user', parts: [{ inlineData: { mimeType: 'image/png', data: new Uint8Array([137, 80]) } }] },
+        ],
         config: {},
       }),
     })

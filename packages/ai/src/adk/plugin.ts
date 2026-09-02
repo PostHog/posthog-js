@@ -170,18 +170,14 @@ export class PostHogADKPlugin extends BasePlugin {
         return
       }
 
-      await this._captureLifecycleEvent(
-        '$ai_trace',
-        trace.distinctId,
-        {
-          $ai_trace_id: invocationContext.invocationId,
-          $ai_span_id: trace.spanId,
-          $ai_span_name: trace.name,
-          $ai_input_state: withPrivacyMode(this._client, this._privacyMode, trace.input),
-          $ai_latency: (Date.now() - trace.startTime) / 1000,
-          ...(trace.sessionId ? { $ai_session_id: trace.sessionId } : {}),
-        }
-      )
+      await this._captureLifecycleEvent('$ai_trace', trace.distinctId, {
+        $ai_trace_id: invocationContext.invocationId,
+        $ai_span_id: trace.spanId,
+        $ai_span_name: trace.name,
+        $ai_input_state: withPrivacyMode(this._client, this._privacyMode, trace.input),
+        $ai_latency: (Date.now() - trace.startTime) / 1000,
+        ...(trace.sessionId ? { $ai_session_id: trace.sessionId } : {}),
+      })
     } catch (error) {
       this._handleError(error)
     }
@@ -484,9 +480,7 @@ export class PostHogADKPlugin extends BasePlugin {
       ...(this._parentSpanId(context) ? { $ai_parent_id: this._parentSpanId(context) } : {}),
       $ai_span_name: pending.name,
       $ai_input_state: withPrivacyMode(this._client, this._privacyMode, pending.input),
-      ...(result !== undefined
-        ? { $ai_output_state: withPrivacyMode(this._client, this._privacyMode, result) }
-        : {}),
+      ...(result !== undefined ? { $ai_output_state: withPrivacyMode(this._client, this._privacyMode, result) } : {}),
       $ai_latency: (Date.now() - pending.startTime) / 1000,
       ...(context.sessionId ? { $ai_session_id: context.sessionId } : {}),
       ...(context.agentName ? { $ai_agent_name: context.agentName } : {}),
@@ -548,7 +542,9 @@ export class PostHogADKPlugin extends BasePlugin {
   }
 
   private _parentSpanId(context: Context): string | undefined {
-    return this._pendingAgents.get(this._pendingKey(context))?.[0]?.spanId ?? this._traces.get(context.invocationId)?.spanId
+    return (
+      this._pendingAgents.get(this._pendingKey(context))?.[0]?.spanId ?? this._traces.get(context.invocationId)?.spanId
+    )
   }
 
   private _pendingKey(context: Context): string {
