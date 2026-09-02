@@ -43,7 +43,8 @@
     "langchain": "^1.5.10",
     "node-fetch": "^3.3.2",
     "posthog-node": "workspace:^",
-    "tsdown": "catalog:"
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
   },
   "keywords": [
     "posthog",
