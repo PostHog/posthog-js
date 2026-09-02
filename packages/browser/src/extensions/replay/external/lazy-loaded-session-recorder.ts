@@ -1129,8 +1129,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // Only check TTL if recording hasn't started yet
-        // Once started, trust the config until a hard page load
-        if (!this.isStarted) {
+        // Once started, trust the config until a hard page load.
+        // A rotation restart transits through stop() before start(), so isStarted is
+        // briefly false while re-reading a config that was trusted moments ago. The TTL
+        // bail there would silently kill the recorder and leave the rotated session
+        // without a full snapshot, so that transit keeps the started-state trust.
+        if (!this.isStarted && !this._isRestartingForSessionIdChange) {
             // default to now so that configs persisted by older SDK versions
             // (which never set cache_timestamp) are treated as fresh
             const cacheTimestamp = parsedConfig.cache_timestamp ?? Date.now()
@@ -1537,19 +1541,28 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // ordering matters: the hold is set after stop() (so the stop discards or ships the
     // old epoch per its own flag) and after start() (whose fresh-start reset would
     // otherwise clobber it); no flush can run synchronously in between
+    // true only while a rotation's stop()/start() pair runs, read by the _remoteConfig
+    // getter so the transit is not mistaken for a cold boot with a leftover config
+    private _isRestartingForSessionIdChange = false
+
     private _restartForSessionIdChange(holdNextEpoch: boolean) {
-        this.stop()
-        // cost metrics are per-session; reset them only after the old recorder has
-        // stopped (its teardown flush still records deferred stylesheet work, which
-        // belongs to the old session) and before the new one takes its first snapshot
-        this._slowestFullSnapshot = undefined
-        this._lastSeenSnapshotCost = undefined
-        // the throttler drop counts are per-session too, so the new session starts at zero
-        this._throttledMutationsDropped = 0
-        this._oversizedMutationsDropped = 0
-        this._oversizedMutationBytesDropped = 0
-        getRRWeb()?.resetSnapshotCostState?.()
-        this.start('session_id_changed')
+        this._isRestartingForSessionIdChange = true
+        try {
+            this.stop()
+            // cost metrics are per-session; reset them only after the old recorder has
+            // stopped (its teardown flush still records deferred stylesheet work, which
+            // belongs to the old session) and before the new one takes its first snapshot
+            this._slowestFullSnapshot = undefined
+            this._lastSeenSnapshotCost = undefined
+            // the throttler drop counts are per-session too, so the new session starts at zero
+            this._throttledMutationsDropped = 0
+            this._oversizedMutationsDropped = 0
+            this._oversizedMutationBytesDropped = 0
+            getRRWeb()?.resetSnapshotCostState?.()
+            this.start('session_id_changed')
+        } finally {
+            this._isRestartingForSessionIdChange = false
+        }
         this._holdFlushUntilInteraction = holdNextEpoch
         this._heldEpochShipsOnUnload = false
     }

@@ -3114,6 +3114,78 @@ describe('Lazy SessionRecording', () => {
                 // restart rrweb — confirmed by a second record() call.
                 expect(recordMock).toHaveBeenCalledTimes(2)
             })
+
+            it('attributes the rotated session full snapshot to the new session id', () => {
+                const firstSessionId = sessionId
+                releaseInteractionHold()
+                _emit(createFullSnapshot({ timestamp: 1000 }))
+                _emit(createIncrementalSnapshot({ data: { source: IncrementalSource.MouseInteraction } }))
+
+                const preservedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+                posthog.persistence?.clear()
+                posthog.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: preservedConfig })
+                sessionManager.resetSessionId()
+                sessionId = 'rotated-session-id'
+                ;(posthog.capture as Mock).mockClear()
+
+                // posthog.reset() is followed by identify(), whose capture runs the session
+                // check and fires the session-id-changed listener before any rrweb emit.
+                sessionManager.checkAndGetSessionAndWindowId()
+                releaseInteractionHold()
+
+                // rrweb restarts and re-snapshots the new epoch
+                _emit(createMetaSnapshot({ timestamp: 2000 }))
+                _emit(createFullSnapshot({ timestamp: 2001 }))
+                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                // where did the rotated epoch's own meta + full snapshot land?
+                const rotatedEpochAttribution = (posthog.capture as Mock).mock.calls
+                    .filter(([event]) => event === '$snapshot')
+                    .flatMap(([, properties]) =>
+                        properties.$snapshot_data
+                            .filter((e: any) => e.timestamp >= 2000)
+                            .map((e: any) => [e.type, properties.$session_id])
+                    )
+
+                expect(rotatedEpochAttribution).toEqual([
+                    [META_EVENT_TYPE, 'rotated-session-id'],
+                    [FULL_SNAPSHOT_EVENT_TYPE, 'rotated-session-id'],
+                ])
+                expect(rotatedEpochAttribution.map(([, id]) => id)).not.toContain(firstSessionId)
+            })
+
+            it('restarts rrweb on the reset rotation even when the preserved remote config is past its TTL', () => {
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                const firstSessionId = sessionId
+                releaseInteractionHold()
+                _emit(createFullSnapshot({ timestamp: 1000 }))
+
+                // reset() preserves the recording config but keeps its original
+                // cache_timestamp, so a session that outlived the TTL carries a
+                // stale config into the rotation.
+                const preservedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG) as any
+                posthog.persistence?.clear()
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: {
+                        ...preservedConfig,
+                        cache_timestamp: Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS - 1,
+                    },
+                })
+                sessionManager.resetSessionId()
+                sessionId = 'rotated-session-id'
+                ;(posthog.capture as Mock).mockClear()
+
+                sessionManager.checkAndGetSessionAndWindowId()
+
+                expect({
+                    recordCalls: recordMock.mock.calls.length,
+                    isStarted: sessionRecording['_lazyLoadedSessionRecording'].isStarted,
+                    attributedTo:
+                        sessionRecording['_lazyLoadedSessionRecording']['_sessionId'] === firstSessionId
+                            ? 'stale first session'
+                            : sessionRecording['_lazyLoadedSessionRecording']['_sessionId'],
+                }).toEqual({ recordCalls: 2, isStarted: true, attributedTo: 'rotated-session-id' })
+            })
         })
 
         describe('when pageview capture is disabled', () => {
