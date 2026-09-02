@@ -1779,9 +1779,10 @@ export class Replayer {
           }
           parent = (parent as Element | RRElement).shadowRoot! as Node | RRNode;
         } else parent = parent.shadowRoot as Node | RRNode;
+        // lastAdoptedStyleIds sees every event so it wins over a pending entry
         const styleIds =
-          this.pendingAdoptedStyleSheets.get(mutation.parentId) ??
-          this.lastAdoptedStyleIds.get(mutation.parentId);
+          this.lastAdoptedStyleIds.get(mutation.parentId) ??
+          this.pendingAdoptedStyleSheets.get(mutation.parentId);
         if (styleIds) {
           if (this.usingVirtualDom) {
             // the real shadow root only exists after the diff, so let the
@@ -2357,12 +2358,13 @@ export class Replayer {
   }
 
   private applyAdoptedStyleSheet(data: adoptedStyleSheetData) {
+    // tracked even when the host is currently detached
+    this.lastAdoptedStyleIds.set(data.id, data.styleIds);
     const targetHost = this.mirror.getNode(data.id);
     if (!targetHost) return;
     // supersede retries still pending from an older event for this host
     const token = {};
     this.adoptedStyleSheetTokens.set(data.id, token);
-    this.lastAdoptedStyleIds.set(data.id, data.styleIds);
     // Create StyleSheet objects which will be adopted after.
     data.styles?.forEach((style) => {
       let newStyleSheet: CSSStyleSheet | null = null;

@@ -30,7 +30,9 @@ import StyleSheetTextMutation from './events/style-sheet-text-mutation';
 import canvasInIframe from './events/canvas-in-iframe';
 import adoptedStyleSheet from './events/adopted-style-sheet';
 import adoptedStyleSheetBeforeShadowRoot from './events/adopted-style-sheet-before-shadow-root';
-import adoptedStyleSheetShadowHostReadd from './events/adopted-style-sheet-shadow-host-readd';
+import adoptedStyleSheetShadowHostReadd, {
+  eventsWithClearWhileDetached,
+} from './events/adopted-style-sheet-shadow-host-readd';
 import adoptedStyleSheetStaleRetry from './events/adopted-style-sheet-stale-retry';
 import adoptedStyleSheetModification from './events/adopted-style-sheet-modification';
 import documentReplacementEvents from './events/document-replacement';
@@ -1190,6 +1192,33 @@ describe('replayer', function () {
     await checkCorrectness();
 
     // fast-forward mode: the re-add mutation is applied to the virtual dom
+    await page.evaluate('replayer.play(0);');
+    await waitForRAF(page);
+    await page.evaluate('replayer.pause(600);');
+    await checkCorrectness();
+  });
+
+  it('does not re-adopt sheets that were cleared while the host was detached', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(eventsWithClearWhileDetached)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.play();
+    `);
+    await page.waitForTimeout(1000);
+
+    const checkCorrectness = async () => {
+      const adoptedSheetCount = await page.evaluate(() => {
+        const iframe = document.querySelector('iframe') as HTMLIFrameElement;
+        const host = iframe.contentDocument!.querySelector(
+          'late-shadow-host',
+        ) as HTMLElement;
+        return host.shadowRoot!.adoptedStyleSheets.length;
+      });
+      expect(adoptedSheetCount).toBe(0);
+    };
+    await checkCorrectness();
+
     await page.evaluate('replayer.play(0);');
     await waitForRAF(page);
     await page.evaluate('replayer.pause(600);');
