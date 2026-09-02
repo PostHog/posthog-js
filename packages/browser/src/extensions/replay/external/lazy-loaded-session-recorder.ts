@@ -1509,6 +1509,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._isStoppingAfterCompression = false
                 this._flushBuffer()
                 this._clearBuffer()
+                this._releaseHoldAfterStop()
                 this._teardown()
                 logger.info('stopped')
             })
@@ -1516,6 +1517,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 // Keep stop() best-effort. Compression errors are handled per event,
                 // but never let an unexpected queue failure block teardown.
                 this._isStoppingAfterCompression = false
+                this._releaseHoldAfterStop()
                 this._teardown()
                 logger.info('stopped')
             })
@@ -1538,8 +1540,22 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // flush-then-clear discards it — correct for rotation restarts and opt-out alike
         this._flushBuffer()
         this._clearBuffer()
+        this._releaseHoldAfterStop()
         this._teardown()
         logger.info('stopped')
+    }
+
+    // Clear the reported hold once the epoch's buffer is gone. Must run AFTER the
+    // flush-then-clear above: clearing the hold first would let the suppressed flush ship the
+    // held buffer. Without this a stopped or discarded recorder keeps reporting a stale
+    // $sdk_debug_replay_flush_hold_reason on later captured events, because the
+    // sdkDebugProperties getter still runs after stop() (the recorder is torn down, not dropped).
+    // preserveLogDedup keeps _lastLoggedFlushHold: a rotation restart sets a transient
+    // fresh-start hold in start() that _restartForSessionIdChange immediately overwrites with the
+    // real rotation reason, and the surviving dedup key is what keeps that transient from logging.
+    private _releaseHoldAfterStop() {
+        this._setFlushHold(undefined, { preserveLogDedup: true })
+        this._heldEpochShipsOnUnload = false
     }
 
     // ordering matters: the hold is set after stop() (so the stop discards or ships the
@@ -1572,11 +1588,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // the only writer of the hold, so the reported reason cannot drift from the hold itself.
     // Nothing else announces a held epoch - no flush is scheduled while held, so the log has to
     // happen here rather than on a flush that may never run
-    private _setFlushHold(reason: FlushHoldReason | undefined) {
+    private _setFlushHold(reason: FlushHoldReason | undefined, { preserveLogDedup = false } = {}) {
         this._holdFlushUntilInteraction = !isUndefined(reason)
         this._flushHoldReason = reason
         if (isUndefined(reason)) {
-            this._lastLoggedFlushHold = undefined
+            // a stop/discard preserves the dedup key so a rotation restart's transient
+            // fresh-start hold is not logged; a release clears it so a later hold re-logs
+            if (!preserveLogDedup) {
+                this._lastLoggedFlushHold = undefined
+            }
             return
         }
         const holdKey = `${this.sessionId}:${reason}`
@@ -1614,6 +1634,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._stopRecordingProducers()
         }
         this._clearBuffer()
+        this._releaseHoldAfterStop()
         this._teardown()
         logger.info('discarded')
     }

@@ -2356,6 +2356,29 @@ describe('Lazy SessionRecording', () => {
                         logSpy.mockRestore()
                         assignableWindow.POSTHOG_DEBUG = undefined
                     })
+
+                    // the sdkDebugProperties getter keeps running after stop()/discard() (the
+                    // recorder is torn down but not dropped), so the hold reason has to clear or a
+                    // stopped recorder keeps blaming user inactivity on every later captured event
+                    it('stops naming the hold once the recorder is stopped (opt-out)', () => {
+                        jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                        expect(holdReason()).toEqual('no_interaction_since_recording_started')
+
+                        sessionRecording['_lazyLoadedSessionRecording'].stop()
+
+                        expect(holdReason()).toBeUndefined()
+                    })
+
+                    it('stops naming the hold once the recorder is discarded', () => {
+                        jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                        expect(holdReason()).toEqual('no_interaction_since_recording_started')
+
+                        sessionRecording['_lazyLoadedSessionRecording'].discard()
+
+                        expect(holdReason()).toBeUndefined()
+                    })
                 })
             })
 
