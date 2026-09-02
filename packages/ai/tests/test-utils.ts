@@ -10,7 +10,7 @@ export async function waitForAsyncOperations(): Promise<void> {
   // Use process.nextTick to wait for all microtasks
   await new Promise(process.nextTick)
   // If fake timers are enabled, run them and flush again
-  if (vi.isMockFunction(setTimeout)) {
+  if (vi.isFakeTimers()) {
     vi.runAllTimers()
     await new Promise(process.nextTick)
   }
