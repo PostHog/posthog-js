@@ -309,11 +309,21 @@ describe('PostHogSpan', () => {
       expect(createSpan({ traceState: 'vendor=abc' }).tracestate()).toBe('vendor=abc')
     })
 
+    it('propagates the trace flags it was started with', () => {
+      expect(createSpan({ traceFlags: '00' }).traceparent()).toBe(`00-${TRACE_ID}-${SPAN_ID}-00`)
+      expect(createSpan().traceparent()).toBe(`00-${TRACE_ID}-${SPAN_ID}-01`)
+    })
+
+    it('hands a child the flags it propagates, so the whole chain agrees', () => {
+      expect(createSpan({ traceFlags: '00' }).childContext().traceFlags).toBe('00')
+    })
+
     it('exposes a child context carrying its own span id as the parent', () => {
       expect(createSpan({ traceState: 'vendor=abc' }).childContext()).toEqual({
         traceId: TRACE_ID,
         parentSpanId: SPAN_ID,
         traceState: 'vendor=abc',
+        traceFlags: '01',
       })
     })
   })
