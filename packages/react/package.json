@@ -20,7 +20,7 @@
         "dev": "rimraf dist ../browser/react/dist ../browser/react/src && tsdown --watch",
         "check:build-output": "es-check --module es5 'dist/esm/**/*.js' && es-check es5 'dist/umd/**/*.js' && node scripts/check-build-output.mjs",
         "test:unit": "jest",
-        "lint": "eslint src",
+        "lint": "oxlint --report-unused-disable-directives-severity error src",
         "test:debug": "jest --runInBand",
         "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"

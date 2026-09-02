@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.424.1",
+    "version": "1.425.0",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -19,8 +19,8 @@
         "postbuild": "node scripts/strip-lib-package-json.js && node scripts/check-mangled-property-consistency.js && node scripts/check-sourcemap-ignore-list.js",
         "prepack": "node scripts/strip-sourcemap-sources-content.js",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-        "lint": "eslint src && eslint playwright",
-        "lint:fix": "eslint src --fix && eslint playwright --fix",
+        "lint": "oxlint --report-unused-disable-directives-severity error src && oxlint --report-unused-disable-directives-severity error playwright",
+        "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix && oxlint --report-unused-disable-directives-severity error playwright --fix",
         "format": "oxfmt --write src/ functional_tests/ playwright/",
         "format:check": "oxfmt --check src/ functional_tests/ playwright/",
         "prepublishOnly": "pnpm check-react",
