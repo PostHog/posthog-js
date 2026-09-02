@@ -23,7 +23,8 @@ function minifyAndUMDPlugin({
     async writeBundle(outputOptions, bundle) {
       for (const file of Object.values(bundle)) {
         const isCSS = file.type === 'asset' && file.fileName.endsWith('.css');
-        const isCJS = file.type === 'chunk' && file.fileName.endsWith('.cjs');
+        const isCJS =
+          file.type === 'chunk' && file.isEntry && file.fileName.endsWith('.cjs');
         const isJS =
           file.type === 'chunk' &&
           (file.fileName.endsWith('.js') || file.fileName.endsWith('.cjs'));
@@ -107,9 +108,19 @@ async function buildFile({
 export default function (
   entry: LibraryOptions['entry'],
   name: LibraryOptions['name'],
-  options?: { outputDir?: string; fileName?: string; plugins?: Plugin[] },
+  options?: {
+    outputDir?: string;
+    fileName?: string;
+    plugins?: Plugin[];
+    external?: string[];
+  },
 ) {
-  const { fileName, outputDir: outDir = 'dist', plugins = [] } = options || {};
+  const {
+    fileName,
+    outputDir: outDir = 'dist',
+    plugins = [],
+    external = [],
+  } = options || {};
 
   let formats: LibraryFormats[] = ['es', 'cjs'];
 
@@ -146,6 +157,7 @@ export default function (
       emptyOutDir,
 
       rolldownOptions: {
+        external,
         output: {
           exports: 'named',
         },

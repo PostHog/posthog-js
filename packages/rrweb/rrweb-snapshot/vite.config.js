@@ -16,7 +16,11 @@ function umdPlugin({ name, outDir }) {
         const isJS =
           file.type === 'chunk' &&
           (file.fileName.endsWith('.js') || file.fileName.endsWith('.cjs'));
-        if (file.type !== 'chunk' || !file.fileName.endsWith('.cjs')) {
+        if (
+          file.type !== 'chunk' ||
+          !file.isEntry ||
+          !file.fileName.endsWith('.cjs')
+        ) {
           if (isJS) {
             ensureSourcemap(outputOptions.dir, file.fileName);
           }
