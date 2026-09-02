@@ -62,10 +62,6 @@
             "dependsOn": []
         },
         "test:unit": {
-            "dependsOn": ["^build"],
-            "cache": false
-        },
-        "posthog-node#test:unit": {
             "dependsOn": ["^build", "build"],
             "cache": false
         },
