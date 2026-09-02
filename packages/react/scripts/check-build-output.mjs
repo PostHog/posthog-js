@@ -102,6 +102,16 @@ const bundles = {
     },
 }
 
+for (const [entry, formats] of Object.entries(bundles)) {
+    for (const [format, bundle] of Object.entries(formats)) {
+        assert.match(
+            bundle,
+            /\/\/# sourceMappingURL=index\.js\.map$/u,
+            `${entry} ${format} has no source-map reference`
+        )
+    }
+}
+
 for (const entry of ['main', 'surveys']) {
     assert.match(bundles[entry].esm, /from ["']posthog-js["']/)
     assert.match(bundles[entry].esm, /from ["']react["']/)

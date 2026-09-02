@@ -61,7 +61,8 @@ const es5CompatibilityPlugin = {
 
             const downleveledCode = result.outputText.replace(/\n?\/\/# sourceMappingURL=.*$/u, '')
             // TypeScript prepends ES5 helpers. Keep them scoped like Rollup's former UMD helpers.
-            output.code = isUmd ? `(function () {${downleveledCode}\n}).call(this);` : downleveledCode
+            const wrappedCode = isUmd ? `(function () {${downleveledCode}\n}).call(this);` : downleveledCode
+            output.code = `${wrappedCode}\n//# sourceMappingURL=${output.fileName}.map`
             output.map = output.map && downlevelMap ? remapping([downlevelMap, output.map], () => null) : downlevelMap
         })
     },
