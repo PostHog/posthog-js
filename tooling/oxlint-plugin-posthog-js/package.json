@@ -5,6 +5,6 @@
     "type": "commonjs",
     "scripts": {
         "lint": "oxlint --report-unused-disable-directives-severity error .",
-        "test:unit": "node custom-oxlint-rules.test.js && node no-external-replay-imports.test.js"
+        "test:unit": "node custom-oxlint-rules.test.js && node no-external-replay-imports.test.js && node lint-config.test.js"
     }
 }
