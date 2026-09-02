@@ -530,6 +530,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
             try {
                 jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { PostHogFeatureFlags: NoDocumentFeatureFlags } = require('../posthog-featureflags')
                     const noDocumentFeatureFlags = new NoDocumentFeatureFlags({
                         get: () => ({ ...config, refreshIntervalMs }),

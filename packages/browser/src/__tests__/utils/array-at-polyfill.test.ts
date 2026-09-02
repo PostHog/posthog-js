@@ -4,6 +4,7 @@
 // whether Array.prototype.at exists at import time.
 function loadPolyfill(): void {
     jest.isolateModules(() => {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require('@posthog/browser-common/utils/array-at-polyfill')
     })
 }

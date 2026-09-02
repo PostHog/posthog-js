@@ -20,6 +20,7 @@ describe(`event-utils`, () => {
 
         it('should have user agent in properties', () => {
             // TS doesn't like it but we can assign userAgent
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             globals['userAgent'] = 'blah'
             const properties = getEventProperties()
@@ -28,6 +29,7 @@ describe(`event-utils`, () => {
 
         it('should truncate very long user agents in properties', () => {
             // TS doesn't like it but we can assign userAgent
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             globals['userAgent'] = 'a'.repeat(1001)
             const properties = getEventProperties()

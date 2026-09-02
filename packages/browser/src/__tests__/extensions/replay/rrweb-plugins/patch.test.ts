@@ -133,6 +133,7 @@ describe('patch', () => {
         const makeWrapper = (next: any) =>
             function wrapper(this: unknown) {
                 framesPerCall += 1
+                // eslint-disable-next-line prefer-rest-params
                 return next.apply(this, arguments)
             }
 

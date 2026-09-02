@@ -1784,6 +1784,7 @@ describe('PostHogLogs', () => {
       mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve({ kind: 'ok' }))
 
       let persistCalls = 0
+      // oxlint-disable-next-line prefer-const
       let logs: PostHogLogs
       logs = new PostHogLogs(
         mockInstance,

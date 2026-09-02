@@ -170,6 +170,7 @@ const patchFetch = (
     distinctId: TracingHeadersDistinctId,
     sessionManager?: SessionIdManager
 ): (() => void) => {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     return patch(window, 'fetch', (originalFetch: typeof fetch) => {
         return function (this: unknown, url: URL | RequestInfo, init?: RequestInit | undefined) {
@@ -214,6 +215,7 @@ const patchXHR = (
         // we can assert this is present because we've checked previously
         window!.XMLHttpRequest.prototype,
         'open',
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         (originalOpen: typeof XMLHttpRequest.prototype.open) => {
             return function (
@@ -224,6 +226,7 @@ const patchXHR = (
                 password?: string | null
             ) {
                 // because this function is returned in its actual context `this` _is_ an XMLHttpRequest
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
                 const xhr = this as XMLHttpRequest
 

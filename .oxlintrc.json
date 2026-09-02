@@ -30,7 +30,7 @@
     },
     "rules": {
         "prefer-spread": "off",
-        "no-empty-pattern": "off",
+        "no-empty-pattern": "error",
         "no-import-assign": "off",
         "no-unassigned-vars": "off",
         "no-unreachable": "off",
@@ -42,7 +42,21 @@
         "no-prototype-builtins": "off",
         "no-empty": "off",
         "no-console": "error",
+        "no-case-declarations": "error",
+        "no-fallthrough": "error",
+        "no-inner-declarations": "error",
+        "no-regex-spaces": "error",
         "no-unused-vars": "error",
+        "no-var": "error",
+        "prefer-const": "error",
+        "prefer-rest-params": "error",
+        "typescript/ban-ts-comment": "error",
+        "typescript/no-array-constructor": "error",
+        "typescript/no-empty-object-type": "error",
+        "typescript/no-namespace": "error",
+        "typescript/no-require-imports": "error",
+        "typescript/no-unnecessary-type-constraint": "error",
+        "typescript/no-unsafe-function-type": "error",
         "jest/expect-expect": "off",
         "jest/no-conditional-expect": "off",
         "jest/no-disabled-tests": "off",
@@ -142,6 +156,24 @@
                 "posthog-js/no-add-event-listener": "off",
                 "no-constant-condition": "off",
                 "compat/compat": "off"
+            }
+        },
+        {
+            "files": ["**/*.cjs"],
+            "rules": {
+                "typescript/no-require-imports": "off"
+            }
+        },
+        {
+            "files": ["tooling/oxlint-plugin-posthog-js/**"],
+            "rules": {
+                "typescript/no-require-imports": "off"
+            }
+        },
+        {
+            "files": ["packages/react-native/src/**", "packages/react-native-plugin/src/**"],
+            "rules": {
+                "typescript/no-require-imports": "off"
             }
         },
         {
@@ -264,23 +296,23 @@
         {
             "files": ["packages/react/src/**", "packages/react-native/src/**", "packages/react-native-plugin/src/**"],
             "rules": {
-                "react/display-name": "error",
-                "react/jsx-key": "error",
-                "react/jsx-no-comment-textnodes": "error",
-                "react/jsx-no-duplicate-props": "error",
-                "react/jsx-no-target-blank": "error",
-                "react/jsx-no-undef": "error",
-                "react/no-children-prop": "error",
-                "react/no-danger-with-children": "error",
-                "react/no-direct-mutation-state": "error",
-                "react/no-find-dom-node": "error",
-                "react/no-is-mounted": "error",
-                "react/no-render-return-value": "error",
-                "react/no-string-refs": "error",
-                "react/no-unescaped-entities": "error",
-                "react/no-unknown-property": "error",
-                "react/react-in-jsx-scope": "error",
-                "react/require-render-return": "error",
+                "react-js/display-name": "error",
+                "react-js/jsx-key": "error",
+                "react-js/jsx-no-comment-textnodes": "error",
+                "react-js/jsx-no-duplicate-props": "error",
+                "react-js/jsx-no-target-blank": "error",
+                "react-js/jsx-no-undef": "error",
+                "react-js/no-children-prop": "error",
+                "react-js/no-danger-with-children": "error",
+                "react-js/no-direct-mutation-state": "error",
+                "react-js/no-find-dom-node": "error",
+                "react-js/no-is-mounted": "error",
+                "react-js/no-render-return-value": "error",
+                "react-js/no-string-refs": "error",
+                "react-js/no-unescaped-entities": "error",
+                "react-js/no-unknown-property": "error",
+                "react-js/react-in-jsx-scope": "error",
+                "react-js/require-render-return": "error",
                 "react/rules-of-hooks": "error",
                 "react/exhaustive-deps": "warn",
                 "react-js/jsx-uses-react": "error",
@@ -329,7 +361,9 @@
                 "posthog-js/no-direct-string-check": "off",
                 "posthog-js/no-direct-undefined-check": "off",
                 "posthog-js/no-external-replay-imports": "off",
-                "posthog-js/private-members-leading-underscore": "off"
+                "posthog-js/private-members-leading-underscore": "off",
+                "typescript/no-require-imports": "off",
+                "prefer-spread": "error"
             }
         },
         {

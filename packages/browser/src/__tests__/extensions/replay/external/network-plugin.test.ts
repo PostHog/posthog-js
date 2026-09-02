@@ -320,6 +320,7 @@ describe('network plugin', () => {
     describe('network observer lifecycle', () => {
         it('emits URL-less initial timing metadata when a method-gated mask filters it', () => {
             jest.isolateModules(() => {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                 const { mockWindow, performanceEntries } = createMockWindow()
                 global.PerformanceObserver = mockWindow.PerformanceObserver
@@ -363,8 +364,10 @@ describe('network plugin', () => {
 
         it('drops initial server timings when the current mask filters only their parent URL', () => {
             jest.isolateModules(() => {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                 // Use the config module from this isolated module registry so its private fallback tracking is shared.
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const replayConfig = require('../../../../extensions/replay/external/config')
                 const { mockWindow, performanceEntries } = createMockWindow()
                 global.PerformanceObserver = mockWindow.PerformanceObserver
@@ -407,8 +410,10 @@ describe('network plugin', () => {
 
         it('drops initial server timings when the deprecated mask filters only their parent URL', () => {
             jest.isolateModules(() => {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                 // Use the config module from this isolated module registry so its private fallback tracking is shared.
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const replayConfig = require('../../../../extensions/replay/external/config')
                 const { mockWindow, performanceEntries } = createMockWindow()
                 global.PerformanceObserver = mockWindow.PerformanceObserver
@@ -451,6 +456,7 @@ describe('network plugin', () => {
 
         it('drops server timings derived from a masked PostHog ingestion request', () => {
             jest.isolateModules(() => {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                 const { mockWindow, observerCallbacks } = createMockWindow()
                 global.PerformanceObserver = mockWindow.PerformanceObserver
@@ -473,6 +479,7 @@ describe('network plugin', () => {
 
         it('does not let a dropped parent suppress the next request in a performance observer batch', () => {
             jest.isolateModules(() => {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                 const { mockWindow, observerCallbacks } = createMockWindow()
                 global.PerformanceObserver = mockWindow.PerformanceObserver
@@ -502,6 +509,7 @@ describe('network plugin', () => {
         describe('singleton initialization and cleanup', () => {
             it('should initialize successfully on first call', () => {
                 jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                     const { mockWindow, observerCallbacks } = createMockWindow()
                     global.PerformanceObserver = mockWindow.PerformanceObserver
@@ -516,6 +524,7 @@ describe('network plugin', () => {
 
             it('should allow re-initialization after cleanup', () => {
                 jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                     const { mockWindow, observerCallbacks } = createMockWindow()
                     global.PerformanceObserver = mockWindow.PerformanceObserver
@@ -537,6 +546,7 @@ describe('network plugin', () => {
 
             it('should handle multiple cleanup calls safely', () => {
                 jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                     const { mockWindow, observerCallbacks } = createMockWindow()
                     global.PerformanceObserver = mockWindow.PerformanceObserver
@@ -561,6 +571,7 @@ describe('network plugin', () => {
 
             beforeEach(() => {
                 jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                     const mock = createMockWindow()
                     mockWindow = mock.mockWindow
@@ -641,6 +652,7 @@ describe('network plugin', () => {
 
             it('XHR open still delegates to the host when Request construction throws', () => {
                 jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                     const { mockWindow } = createMockWindow()
                     global.PerformanceObserver = mockWindow.PerformanceObserver
@@ -682,6 +694,7 @@ describe('network plugin', () => {
 
                 let patchedFetch: (...args: any[]) => Promise<any> = mockWindow.fetch
                 jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                     const plugin = getRecordNetworkPlugin({ recordBody: true })
                     plugin.observer(() => {}, mockWindow, { recordBody: true })
@@ -726,6 +739,7 @@ describe('network plugin', () => {
 
                 let patchedFetch: (...args: any[]) => Promise<any> = mockWindow.fetch
                 jest.isolateModules(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
                     const plugin = getRecordNetworkPlugin({ recordBody: { request: true, response: false } })
                     plugin.observer(() => {}, mockWindow, { recordBody: { request: true, response: false } })

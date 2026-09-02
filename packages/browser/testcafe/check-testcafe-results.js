@@ -14,7 +14,9 @@ const testCafeMock = {
     requestHooks: () => testCafeMock,
     afterEach: () => testCafeMock,
 }
+// eslint-disable-next-line no-undef
 globalThis.fixture = () => testCafeMock
+// eslint-disable-next-line no-undef
 globalThis.test = () => testCafeMock
 import {
     assertConfigOptionsChangeAutocaptureBehaviourAccordingly,

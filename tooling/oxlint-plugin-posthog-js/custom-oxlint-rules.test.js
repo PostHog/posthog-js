@@ -17,6 +17,7 @@ const noDirectPromiseAllSettled = require('./no-direct-promise-all-settled')
 const noEnum = require('./no-enum')
 const noUnsafeWebGlobal = require('./no-unsafe-web-global')
 const privateMembersLeadingUnderscore = require('./private-members-leading-underscore')
+const preferImportMeta = require('./prefer-import-meta')
 
 const { RuleTester } = require('oxlint/plugins-dev')
 
@@ -24,6 +25,7 @@ const ruleTester = new RuleTester({
     languageOptions: {
         ecmaVersion: 2015,
         sourceType: 'module',
+        globals: { process: 'readonly' },
     },
 })
 
@@ -258,6 +260,26 @@ tsRuleTester.run('private-members-leading-underscore', privateMembersLeadingUnde
             code: `class Foo { constructor(private value: number) {} }`,
             filename: 'test.ts',
             errors: [{ messageId: 'leadingUnderscore' }],
+        },
+    ],
+})
+
+ruleTester.run('prefer-import-meta', preferImportMeta, {
+    valid: [
+        { code: `process.env.NODE_ENV` },
+        { code: `import.meta.client` },
+        { code: `function check(process) { return process.client }` },
+    ],
+    invalid: [
+        {
+            code: `if (process.client) start()`,
+            errors: [{ messageId: 'preferImportMeta' }],
+            output: `if (import.meta.client) start()`,
+        },
+        {
+            code: `if (process /* explanation */.client) start()`,
+            errors: [{ messageId: 'preferImportMeta' }],
+            output: `if (import.meta /* explanation */.client) start()`,
         },
     ],
 })

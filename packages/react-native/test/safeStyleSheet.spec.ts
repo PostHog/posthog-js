@@ -23,6 +23,7 @@ describe('createSafeStyleSheet', () => {
   it('falls back to the raw style map when StyleSheet is unavailable', () => {
     jest.isolateModules(() => {
       jest.doMock('react-native', () => ({ StyleSheet: undefined }))
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- isolated require exercises the no-runtime branch
       const { createSafeStyleSheet: createWithoutRuntime } = require('../src/surveys/safeStyleSheet')
       const input = { container: { padding: 10 } }
 

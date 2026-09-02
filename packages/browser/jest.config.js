@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const path = require('path')
 
 // Dynamically resolve package paths so config doesn't need updating on version bumps.

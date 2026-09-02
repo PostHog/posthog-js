@@ -22,6 +22,7 @@ describe('surveys import side effects (#3740)', () => {
       // Simulate a runtime where react-native resolves but StyleSheet is unavailable
       // (e.g. Jest `testEnvironment: node` without the React Native preset).
       jest.doMock('react-native', () => ({ StyleSheet: undefined }))
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- dynamic require is required to test import-time side effects under an isolated module registry
       expect(() => require(modulePath)).not.toThrow()
     })
   })

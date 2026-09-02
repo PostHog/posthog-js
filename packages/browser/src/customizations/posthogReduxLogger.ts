@@ -30,6 +30,7 @@ export interface Dispatch<A extends UnknownAction = UnknownAction> {
  *
  * This matches Redux Toolkit's Middleware interface for compatibility.
  */
+// oxlint-disable-next-line typescript/no-empty-object-type
 export interface ReduxMiddleware<_DispatchExt = {}, S = any, D extends Dispatch = Dispatch> {
     (api: MiddlewareAPI<D, S>): (next: (action: unknown) => unknown) => (action: unknown) => unknown
 }
@@ -258,6 +259,7 @@ export function posthogKeaLogger<S = any>(config: PostHogStateLoggerConfig<S> = 
 export function posthogReduxLogger<S = any>(
     config: PostHogStateLoggerConfig<S> = {}
     // the empty object is the recommended typing from redux docs
+    //eslint-disable-next-line @typescript-eslint/no-empty-object-type
 ): ReduxMiddleware<{}, S> {
     const {
         maskAction,

@@ -1,6 +1,7 @@
 /**
  * @jest-environment node
  */
+/* eslint-disable @typescript-eslint/no-require-imports */
 
 const {
     isRetryableError,

@@ -790,6 +790,7 @@ describe('surveys', () => {
             const userAgent =
                 'Mozilla/5.0 (Linux; U; Android-4.0.3; en-us; Galaxy Nexus Build/IML74K) AppleWebKit/535.7 (KHTML, like Gecko) CrMo/16.0.912.75 Mobile Safari/535.7'
             // TS doesn't like it but we can assign userAgent
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             globals['userAgent'] = userAgent
 
@@ -807,6 +808,7 @@ describe('surveys', () => {
             const userAgent =
                 'Mozilla/5.0 (Linux; U; Android-4.0.3; en-us; Galaxy Nexus Build/IML74K) AppleWebKit/535.7 (KHTML, like Gecko) CrMo/16.0.912.75 Mobile Safari/535.7'
             // TS doesn't like it but we can assign userAgent
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             globals['userAgent'] = userAgent
 
@@ -1917,6 +1919,7 @@ describe('surveys', () => {
         })
 
         it('tracks the language flip but does not re-render while the survey is still pending delay', () => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const preactModule = require('preact')
             const renderSpy = jest.spyOn(preactModule, 'render')
             const translateSpy = jest.fn().mockReturnValue({ survey: frSurvey, language: 'fr' })

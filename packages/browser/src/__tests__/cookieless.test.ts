@@ -55,6 +55,7 @@ jest.mock('@posthog/browser-common/utils/globals', () => {
     }
 })
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { mockURLGetter, mockedCookieBox, mockedFetch, document } = require('@posthog/browser-common/utils/globals')
 
 const delay = (timeoutMs: number) => new Promise((resolve) => setTimeout(resolve, timeoutMs))

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* oxlint-disable typescript/no-require-imports */
 /**
  * Simple test script for PostHog remote config endpoint.
  */

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 import { gzipSync, strToU8 } from 'fflate'
 
 type SetupOptions = {
