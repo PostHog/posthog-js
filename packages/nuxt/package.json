@@ -29,7 +29,7 @@
     "prepare": "nuxt prepare",
     "build": "nuxt-module-build build",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-    "lint": "eslint .",
+    "lint": "oxlint --report-unused-disable-directives-severity error .",
     "test:unit": "node tests/vue-plugin.test.mjs && node tests/nitro-plugin.test.mjs && node tests/sourcemaps-ssr.test.mjs && node tests/nuxt5-consumer.test.mjs"
   },
   "dependencies": {
@@ -46,7 +46,6 @@
     "@nuxt/devtools": "^3.3.1",
     "@nuxt/module-builder": "^1.0.2",
     "@nuxt/schema": "^4.1.2",
-    "@nuxt/eslint-config": "^1.9.0",
-    "eslint": "^9.37.0"
+    "eslint-plugin-regexp": "2.10.0"
   }
 }

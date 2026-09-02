@@ -205,6 +205,82 @@ describe('ConversationsManager Identity Verification', () => {
             expect(url).toContain('widget_session_id')
             expect(url).not.toContain('identity_hash')
         })
+
+        it('should use widget_session_id when only the base hash is set', async () => {
+            ;(mockPosthog as any).config.identity_hash = 'abc123hash'
+
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            jest.clearAllMocks()
+
+            await act(async () => {
+                await manager.getTickets()
+            })
+
+            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+                (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
+            )
+            const url = call[0].url as string
+            expect(url).toContain('widget_session_id')
+            expect(url).not.toContain('identity_distinct_id')
+            expect(url).not.toContain('identity_hash')
+        })
+
+        it('should not use claims without the base identity pair', async () => {
+            ;(mockPosthog as any).config.identity_claims = {
+                email: { value: 'viewer@example.com', hash: 'email-claim-hash' },
+            }
+
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            jest.clearAllMocks()
+
+            await act(async () => {
+                await manager.getTickets()
+            })
+
+            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+                (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
+            )
+            const url = call[0].url as string
+            expect(url).toContain('widget_session_id')
+            expect(url).not.toContain('identity_email')
+            expect(url).not.toContain('identity_hash_email')
+        })
+
+        it('should ignore incomplete and reserved claims while forwarding valid claims generically', async () => {
+            ;(mockPosthog as any).config.identity_distinct_id = 'user_123'
+            ;(mockPosthog as any).config.identity_hash = 'abc123hash'
+            ;(mockPosthog as any).config.identity_claims = {
+                organization: { value: 'posthog', hash: 'organization-claim-hash' },
+                email: { value: 'viewer@example.com' },
+                empty_value: { value: '', hash: 'empty-value-hash' },
+                empty_hash: { value: 'ignored', hash: '' },
+                distinct_id: { value: 'other-user', hash: 'other-user-hash' },
+                hash: { value: 'other-base-hash', hash: 'hash-claim-hash' },
+                hash_organization: { value: 'other-organization-hash', hash: 'nested-hash-claim-hash' },
+            }
+
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            jest.clearAllMocks()
+
+            await act(async () => {
+                await manager.getTickets()
+            })
+
+            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+                (c: any) => c[0].url?.includes('/widget/tickets') && c[0].method === 'GET'
+            )
+            const url = call[0].url as string
+            expect(url).toContain('identity_organization=posthog')
+            expect(url).toContain('identity_hash_organization=organization-claim-hash')
+            expect(url).toContain('identity_distinct_id=user_123')
+            expect(url).toContain('identity_hash=abc123hash')
+            expect(url).not.toContain('identity_email')
+            expect(url).not.toContain('identity_empty_value')
+            expect(url).not.toContain('identity_empty_hash')
+            expect(url).not.toContain('other-user')
+            expect(url).not.toContain('other-base-hash')
+            expect(url).not.toContain('other-organization-hash')
+        })
     })
 
     describe('setIdentity / clearIdentity', () => {
@@ -253,6 +329,10 @@ describe('ConversationsManager Identity Verification', () => {
         beforeEach(() => {
             ;(mockPosthog as any).config.identity_distinct_id = 'user_123'
             ;(mockPosthog as any).config.identity_hash = 'abc123hash'
+            ;(mockPosthog as any).config.identity_claims = {
+                email: { value: 'viewer@example.com', hash: 'email-claim-hash' },
+                organization: { value: 'posthog', hash: 'organization-claim-hash' },
+            }
             manager = new ConversationsManager(mockConfig, mockPosthog)
             jest.clearAllMocks()
         })
@@ -269,6 +349,10 @@ describe('ConversationsManager Identity Verification', () => {
             const data = call[0].data
             expect(data.identity_distinct_id).toBe('user_123')
             expect(data.identity_hash).toBe('abc123hash')
+            expect(data.identity_email).toBe('viewer@example.com')
+            expect(data.identity_hash_email).toBe('email-claim-hash')
+            expect(data.identity_organization).toBe('posthog')
+            expect(data.identity_hash_organization).toBe('organization-claim-hash')
             expect(data.distinct_id).toBe('user_123')
             expect(data.widget_session_id).toBeUndefined()
         })
@@ -285,6 +369,10 @@ describe('ConversationsManager Identity Verification', () => {
             const url = call[0].url as string
             expect(url).toContain('identity_distinct_id=user_123')
             expect(url).toContain('identity_hash=abc123hash')
+            expect(url).toContain('identity_email=viewer%40example.com')
+            expect(url).toContain('identity_hash_email=email-claim-hash')
+            expect(url).toContain('identity_organization=posthog')
+            expect(url).toContain('identity_hash_organization=organization-claim-hash')
             expect(url).not.toContain('widget_session_id')
         })
 
@@ -300,6 +388,10 @@ describe('ConversationsManager Identity Verification', () => {
             const data = call[0].data
             expect(data.identity_distinct_id).toBe('user_123')
             expect(data.identity_hash).toBe('abc123hash')
+            expect(data.identity_email).toBe('viewer@example.com')
+            expect(data.identity_hash_email).toBe('email-claim-hash')
+            expect(data.identity_organization).toBe('posthog')
+            expect(data.identity_hash_organization).toBe('organization-claim-hash')
             expect(data.widget_session_id).toBeUndefined()
         })
 
@@ -315,7 +407,61 @@ describe('ConversationsManager Identity Verification', () => {
             const url = call[0].url as string
             expect(url).toContain('identity_distinct_id=user_123')
             expect(url).toContain('identity_hash=abc123hash')
+            expect(url).toContain('identity_email=viewer%40example.com')
+            expect(url).toContain('identity_hash_email=email-claim-hash')
+            expect(url).toContain('identity_organization=posthog')
+            expect(url).toContain('identity_hash_organization=organization-claim-hash')
             expect(url).not.toContain('widget_session_id')
+        })
+    })
+
+    describe('API calls with base identity and no claims', () => {
+        beforeEach(() => {
+            ;(mockPosthog as any).config.identity_distinct_id = 'user_123'
+            ;(mockPosthog as any).config.identity_hash = 'abc123hash'
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            jest.clearAllMocks()
+        })
+
+        it('should preserve the existing request shape for all endpoints', async () => {
+            await act(async () => {
+                await manager.sendMessage('Hello!')
+                await manager.getMessages('ticket-123')
+                await manager.markAsRead('ticket-123')
+                await manager.getTickets()
+            })
+
+            const calls = (mockPosthog._send_request as jest.Mock).mock.calls.map((call: any[]) => call[0])
+            const sendMessageCall = calls.find(
+                (call: any) => call.url?.endsWith('/widget/message') && call.method === 'POST'
+            )
+            const getMessagesCall = calls.find(
+                (call: any) => call.url?.includes('/widget/messages/ticket-123?') && call.method === 'GET'
+            )
+            const markAsReadCall = calls.find((call: any) => call.url?.includes('/read') && call.method === 'POST')
+            const getTicketsCall = calls.find(
+                (call: any) => call.url?.includes('/widget/tickets') && call.method === 'GET'
+            )
+
+            expect(sendMessageCall.data).toEqual(
+                expect.objectContaining({
+                    identity_distinct_id: 'user_123',
+                    identity_hash: 'abc123hash',
+                    distinct_id: 'user_123',
+                })
+            )
+            expect(sendMessageCall.data.identity_email).toBeUndefined()
+            expect(markAsReadCall.data).toEqual({
+                identity_distinct_id: 'user_123',
+                identity_hash: 'abc123hash',
+            })
+
+            for (const call of [getMessagesCall, getTicketsCall]) {
+                expect(call.url).toContain('identity_distinct_id=user_123')
+                expect(call.url).toContain('identity_hash=abc123hash')
+                expect(call.url).not.toContain('identity_email')
+                expect(call.url).not.toContain('widget_session_id')
+            }
         })
     })
 
@@ -354,6 +500,31 @@ describe('ConversationsManager Identity Verification', () => {
             expect(url).toContain('widget_session_id=test-widget-session-id')
             expect(url).not.toContain('identity_distinct_id')
             expect(url).not.toContain('identity_hash')
+        })
+
+        it('getMessages should include widget_session_id in query params', async () => {
+            await act(async () => {
+                await manager.getMessages('ticket-123')
+            })
+
+            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+                (c: any) => c[0].url?.includes('/widget/messages/ticket-123') && c[0].method === 'GET'
+            )
+            const url = call[0].url as string
+            expect(url).toContain('widget_session_id=test-widget-session-id')
+            expect(url).not.toContain('identity_distinct_id')
+            expect(url).not.toContain('identity_hash')
+        })
+
+        it('markAsRead should include widget_session_id in the body', async () => {
+            await act(async () => {
+                await manager.markAsRead('ticket-123')
+            })
+
+            const call = (mockPosthog._send_request as jest.Mock).mock.calls.find(
+                (c: any) => c[0].url?.includes('/read') && c[0].method === 'POST'
+            )
+            expect(call[0].data).toEqual({ widget_session_id: 'test-widget-session-id' })
         })
     })
 })

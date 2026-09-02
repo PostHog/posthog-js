@@ -1,5 +1,3 @@
-/* eslint camelcase: "off" */
-
 import { each, extend, stripEmptyProperties, addEventListener } from '@posthog/browser-common/utils/general-utils'
 import {
     COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES,

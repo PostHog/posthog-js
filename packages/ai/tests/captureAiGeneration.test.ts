@@ -81,6 +81,21 @@ describe('captureAiGeneration', () => {
     expect(event.properties.$process_person_profile).toBeUndefined()
   })
 
+  it.each([
+    { name: 'explicit null omits the property', baseURL: null, expected: undefined },
+    { name: 'undefined preserves the empty-string default', baseURL: undefined, expected: '' },
+  ])('$name for $ai_base_url', async ({ baseURL, expected }) => {
+    const client = buildClient()
+
+    await captureAiGeneration(client, { ...baseRequiredOptions, baseURL })
+
+    if (expected === undefined) {
+      expect(lastCaptureProperties(client)).not.toHaveProperty('$ai_base_url')
+    } else {
+      expect(lastCaptureProperties(client).$ai_base_url).toBe(expected)
+    }
+  })
+
   it('auto-generates a traceId and uses it as distinctId when missing', async () => {
     const client = buildClient()
 

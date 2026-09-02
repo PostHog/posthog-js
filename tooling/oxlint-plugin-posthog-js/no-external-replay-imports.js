@@ -1,6 +1,6 @@
 module.exports = {
     create(context) {
-        const filename = context.getFilename()
+        const filename = context.filename
         const isAllowedFile =
             filename.includes('src/entrypoints') ||
             filename.includes('src/extensions/replay/external') ||

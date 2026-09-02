@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "8.9.3",
+  "version": "8.10.0",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -15,8 +15,8 @@
     "clean": "rimraf dist",
     "test:unit": "jest && pnpm test:module-load",
     "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs",
-    "lint": "eslint src tests",
-    "lint:fix": "eslint src tests --fix",
+    "lint": "oxlint --report-unused-disable-directives-severity error src tests",
+    "lint:fix": "oxlint --report-unused-disable-directives-severity error src tests --fix",
     "build": "rollup -c",
     "dev": "rollup -c --watch",
     "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
@@ -25,6 +25,7 @@
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.15",
     "@anthropic-ai/sdk": ">=0.112.3 <0.121.0",
+    "@google/adk": "^2.0.0",
     "@google/genai": "^1.52.0",
     "@langchain/core": "^1.2.9",
     "openai": "^6.49.0",
@@ -64,6 +65,7 @@
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=0.112.3 <0.121.0",
+    "@google/adk": "^2.0.0",
     "@google/genai": "^1.52.0",
     "@langchain/core": "^1.2.3",
     "openai": "^6.48.0",
@@ -77,6 +79,9 @@
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "@google/adk": {
       "optional": true
     },
     "@google/genai": {
@@ -155,6 +160,11 @@
       "require": "./dist/openai-agents/index.cjs",
       "import": "./dist/openai-agents/index.mjs",
       "types": "./dist/openai-agents/index.d.ts"
+    },
+    "./adk": {
+      "require": "./dist/adk/index.cjs",
+      "import": "./dist/adk/index.mjs",
+      "types": "./dist/adk/index.d.ts"
     }
   },
   "directories": {

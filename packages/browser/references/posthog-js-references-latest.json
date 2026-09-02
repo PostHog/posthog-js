@@ -1890,7 +1890,7 @@
         {
           "category": "",
           "description": "Set HMAC-based identity verification.",
-          "details": "When set, products like conversations use server-verified identity (distinct_id + HMAC hash) instead of anonymous session identifiers. The hash should be computed server-side as HMAC-SHA256 of the distinct_id using the project's API secret.",
+          "details": "When set, products like conversations use server-verified identity (distinct_id + HMAC hash) instead of anonymous session identifiers. The hash should be computed server-side as HMAC-SHA256 of the distinct_id using the project's API secret. Any additional signed identity claims are cleared because they are bound to the previously configured distinct_id.",
           "id": "setIdentity",
           "showDocs": true,
           "title": "setIdentity",
@@ -3164,6 +3164,11 @@
           "description": "HMAC-SHA256 of `identity_distinct_id` using the project's API secret.\nMust be provided together with `identity_distinct_id`.",
           "type": "string",
           "name": "identity_hash"
+        },
+        {
+          "description": "Additional server-signed identity claims.\n\nClaims are forwarded to products such as conversations only when\n`identity_distinct_id` and `identity_hash` are also present. Claim\nverification and consumption happen server-side.",
+          "type": "Record<string, { value: string; hash: string; }>",
+          "name": "identity_claims"
         },
         {
           "description": "Determines whether PostHog should disable web experiments.\n\nCurrently disabled while we're in BETA. It will be toggled to `true` in a future release.",

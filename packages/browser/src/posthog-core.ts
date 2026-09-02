@@ -3660,6 +3660,7 @@ export class PostHog implements PostHogInterface {
             // Clear HMAC identity verification fields
             delete this.config.identity_distinct_id
             delete this.config.identity_hash
+            delete this.config.identity_claims
             resetCompleted = true
         } finally {
             if (cookieSyncSuppressionStarted) {
@@ -3734,6 +3735,8 @@ export class PostHog implements PostHogInterface {
      * (distinct_id + HMAC hash) instead of anonymous session identifiers.
      * The hash should be computed server-side as HMAC-SHA256 of the
      * distinct_id using the project's API secret.
+     * Any additional signed identity claims are cleared because they are
+     * bound to the previously configured distinct_id.
      *
      * @param distinctId - The verified user distinct_id
      * @param hash - HMAC-SHA256 of distinctId using the project API secret
@@ -3746,6 +3749,7 @@ export class PostHog implements PostHogInterface {
      * @public
      */
     setIdentity(distinctId: string, hash: string): void {
+        delete this.config.identity_claims
         this.config.identity_distinct_id = distinctId
         this.config.identity_hash = hash
         this.alias(distinctId)
@@ -3765,6 +3769,7 @@ export class PostHog implements PostHogInterface {
     clearIdentity(): void {
         delete this.config.identity_distinct_id
         delete this.config.identity_hash
+        delete this.config.identity_claims
         this.conversations?._onIdentityCleared()
     }
 
