@@ -191,6 +191,7 @@ export class PostHogMCP extends PostHog {
     }
 
     if (isCaptureModelEnabled(this.#captureModel)) {
+      this.#modelParameterOwnership.clear()
       const ownershipByName = new Map<string, boolean>()
       for (const tool of prepared) {
         if (typeof tool.name !== 'string') {

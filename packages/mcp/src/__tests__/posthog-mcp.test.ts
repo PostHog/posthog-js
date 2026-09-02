@@ -167,6 +167,35 @@ describe('PostHogMCP', () => {
         await client.shutdown()
       }
     })
+
+    it.each([
+      {
+        name: 'trims a direct model value',
+        llmModel: '  claude-sonnet-4-20250514  ',
+        expected: 'claude-sonnet-4-20250514',
+      },
+      { name: 'drops a direct unknown model', llmModel: ' unknown ', expected: undefined },
+      {
+        name: 'redacts a token from a direct model value',
+        llmModel: 'gateway-phx_abcdefghijklmnopqrstuvwxyz1234',
+        expected: 'gateway-[redacted]',
+      },
+    ])('$name', async ({ llmModel, expected }) => {
+      posthog.captureToolCall({
+        toolName: 'execute-sql',
+        distinctId: 'user-123',
+        isError: false,
+        llmModel,
+        llmModelSource: 'self_reported',
+      })
+      await tick()
+
+      const properties = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties
+      expect(properties[PostHogMCPAnalyticsProperty.LlmModel]).toBe(expected)
+      expect(properties[PostHogMCPAnalyticsProperty.LlmModelSource]).toBe(
+        expected === undefined ? undefined : 'self_reported'
+      )
+    })
   })
 
   describe('intent capture', () => {
@@ -345,6 +374,21 @@ describe('PostHogMCP', () => {
         client.prepareToolList(tools)
         const call = client.prepareToolCall('execute-sql', { query: 'select 1', llm_model: ' unknown ' })
         expect(call.args).toEqual({ query: 'select 1' })
+        expect(call.llmModel).toBeUndefined()
+        expect(call.llmModelSource).toBeUndefined()
+      } finally {
+        await client.shutdown()
+      }
+    })
+
+    it('forgets ownership for tools removed from a refreshed list', async () => {
+      const client = newClient({ captureModel: true })
+      try {
+        client.prepareToolList(tools)
+        client.prepareToolList([tools[1]])
+
+        const call = client.prepareToolCall('execute-sql', { llm_model: 'application-owned-value' })
+        expect(call.args).toEqual({ llm_model: 'application-owned-value' })
         expect(call.llmModel).toBeUndefined()
         expect(call.llmModelSource).toBeUndefined()
       } finally {

@@ -74,7 +74,10 @@ export function addModelParameterToTools<TTool extends ModelInjectableTool>(
  * not become a property value queries would group by.
  */
 export function getModelArgument(request: MCPRequestLike): string | undefined {
-  const model = request.params?.arguments?.llm_model
+  return normalizeModel(request.params?.arguments?.llm_model)
+}
+
+function normalizeModel(model: unknown): string | undefined {
   if (typeof model !== 'string') {
     return undefined
   }
@@ -86,9 +89,10 @@ export function getModelArgument(request: MCPRequestLike): string | undefined {
 }
 
 export function setEventModel(event: McpEvent, model: string | undefined): void {
-  if (!model) {
+  const normalizedModel = normalizeModel(model)
+  if (!normalizedModel) {
     return
   }
-  event.llmModel = model
+  event.llmModel = normalizedModel
   event.llmModelSource = 'self_reported'
 }
