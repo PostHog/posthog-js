@@ -12,8 +12,8 @@
   },
   "scripts": {
     "clean": "rimraf dist coverage",
-    "lint": "eslint src",
-    "lint:fix": "eslint src --fix",
+    "lint": "oxlint --report-unused-disable-directives-severity error src",
+    "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "test:unit": "vitest run",
     "test:edge-compat": "vitest run --config vitest.edge.config.ts",
     "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",

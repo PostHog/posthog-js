@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { render, h } from 'preact'
 import { isNumber, isNull, stripUrlHash } from '@posthog/core'
 import {

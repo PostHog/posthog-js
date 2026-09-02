@@ -8,17 +8,24 @@ const noDirectDateCheck = require('./no-direct-date-check')
 const noDirectNumberCheck = require('./no-direct-number-check')
 const noDirectBooleanCheck = require('./no-direct-boolean-check')
 const noAddEventListener = require('./no-add-event-listener')
+const noDirectAttachShadow = require('./no-direct-attach-shadow')
+const noDirectDocumentCheck = require('./no-direct-document-check')
+const noDirectFileCheck = require('./no-direct-file-check')
+const noDirectFormDataCheck = require('./no-direct-form-data-check')
+const noDirectMutationObserver = require('./no-direct-mutation-observer')
+const noDirectPromiseAllSettled = require('./no-direct-promise-all-settled')
+const noEnum = require('./no-enum')
 const noUnsafeWebGlobal = require('./no-unsafe-web-global')
+const privateMembersLeadingUnderscore = require('./private-members-leading-underscore')
+const preferImportMeta = require('./prefer-import-meta')
 
-const { RuleTester } = require('eslint')
+const { RuleTester } = require('oxlint/plugins-dev')
 
 const ruleTester = new RuleTester({
-    parserOptions: {
+    languageOptions: {
         ecmaVersion: 2015,
         sourceType: 'module',
-    },
-    env: {
-        browser: true,
+        globals: { process: 'readonly' },
     },
 })
 
@@ -134,8 +141,7 @@ ruleTester.run('no-direct-boolean-check', noDirectBooleanCheck, {
 })
 
 const tsRuleTester = new RuleTester({
-    parser: require.resolve('@typescript-eslint/parser'),
-    parserOptions: {
+    languageOptions: {
         ecmaVersion: 2015,
         sourceType: 'module',
     },
@@ -144,46 +150,136 @@ const tsRuleTester = new RuleTester({
 tsRuleTester.run('no-unsafe-web-global', noUnsafeWebGlobal, {
     valid: [
         // typeof guard is safe
-        { code: `typeof Event !== 'undefined'` },
+        { code: `typeof Event !== 'undefined'`, filename: 'test.ts' },
         // guarded by typeof via short-circuit &&
-        { code: `typeof Event !== 'undefined' && isInstanceOf(candidate, Event)` },
+        { code: `typeof Event !== 'undefined' && isInstanceOf(candidate, Event)`, filename: 'test.ts' },
         // type annotation
-        { code: `function foo(e: Event) {}` },
+        { code: `function foo(e: Event) {}`, filename: 'test.ts' },
         // type predicate
-        { code: `function foo(e: unknown): e is Event { return true }` },
+        { code: `function foo(e: unknown): e is Event { return true }`, filename: 'test.ts' },
         // property access
-        { code: `obj.Event` },
+        { code: `obj.Event`, filename: 'test.ts' },
         // non-web-global identifier
-        { code: `const x = SomeOtherThing` },
+        { code: `const x = SomeOtherThing`, filename: 'test.ts' },
     ],
     invalid: [
         // direct value reference
         {
             code: `const x = Event`,
+            filename: 'test.ts',
             errors: [{ messageId: 'unsafeWebGlobal' }],
         },
         // new expression
         {
             code: `new Event('test')`,
+            filename: 'test.ts',
             errors: [{ messageId: 'unsafeWebGlobal' }],
         },
         // instanceof without typeof guard
         {
             code: `candidate instanceof Event`,
+            filename: 'test.ts',
             errors: [{ messageId: 'unsafeWebGlobal' }],
         },
         // isUndefined(Event) — the original bug pattern
         {
             code: `!isUndefined(Event) && isInstanceOf(candidate, Event)`,
-            errors: [
-                { messageId: 'unsafeWebGlobal' },
-                { messageId: 'unsafeWebGlobal' },
-            ],
+            filename: 'test.ts',
+            errors: [{ messageId: 'unsafeWebGlobal' }, { messageId: 'unsafeWebGlobal' }],
         },
         // other web globals
         {
             code: `new MutationObserver(() => {})`,
+            filename: 'test.ts',
             errors: [{ messageId: 'unsafeWebGlobal' }],
+        },
+    ],
+})
+
+ruleTester.run('no-direct-document-check', noDirectDocumentCheck, {
+    valid: [{ code: `isDocument(x)` }],
+    invalid: [{ code: `x instanceof Document`, errors: 1 }],
+})
+
+ruleTester.run('no-direct-file-check', noDirectFileCheck, {
+    valid: [{ code: `isFile(x)` }],
+    invalid: [{ code: `x instanceof File`, errors: 1 }],
+})
+
+ruleTester.run('no-direct-form-data-check', noDirectFormDataCheck, {
+    valid: [{ code: `isFormData(x)` }],
+    invalid: [{ code: `x instanceof FormData`, errors: 1 }],
+})
+
+ruleTester.run('no-direct-mutation-observer', noDirectMutationObserver, {
+    valid: [{ code: `new NativeMutationObserver(callback)` }],
+    invalid: [{ code: `new MutationObserver(callback)`, errors: [{ messageId: 'noDirectMutationObserver' }] }],
+})
+
+ruleTester.run('no-direct-promise-all-settled', noDirectPromiseAllSettled, {
+    valid: [{ code: `allSettled(promises)` }],
+    invalid: [
+        {
+            code: `Promise.allSettled(promises)`,
+            errors: [{ messageId: 'noDirectPromiseAllSettled' }],
+        },
+    ],
+})
+
+ruleTester.run('no-direct-attach-shadow', noDirectAttachShadow, {
+    valid: [
+        { code: `attachShadowRootSafely(element)` },
+        { code: `class Foo extends Bar { method() { super.attachShadow() } }` },
+    ],
+    invalid: [{ code: `element.attachShadow({ mode: 'open' })`, errors: [{ messageId: 'noDirectAttachShadow' }] }],
+})
+
+ruleTester.run('no-enum', noEnum, {
+    valid: [{ code: `const Foo = { A: 'a' } as const`, filename: 'test.ts' }],
+    invalid: [{ code: `enum Foo { A }`, filename: 'test.ts', errors: [{ messageId: 'noEnum' }] }],
+})
+
+tsRuleTester.run('private-members-leading-underscore', privateMembersLeadingUnderscore, {
+    valid: [
+        { code: `class Foo { private _value = 1 }`, filename: 'test.ts' },
+        { code: `class Foo { constructor(private _value: number) {} }`, filename: 'test.ts' },
+        { code: `class Foo { public value = 1 }`, filename: 'test.ts' },
+    ],
+    invalid: [
+        {
+            code: `class Foo { private value = 1 }`,
+            filename: 'test.ts',
+            errors: [{ messageId: 'leadingUnderscore' }],
+        },
+        {
+            code: `class Foo { private method() {} }`,
+            filename: 'test.ts',
+            errors: [{ messageId: 'leadingUnderscore' }],
+        },
+        {
+            code: `class Foo { constructor(private value: number) {} }`,
+            filename: 'test.ts',
+            errors: [{ messageId: 'leadingUnderscore' }],
+        },
+    ],
+})
+
+ruleTester.run('prefer-import-meta', preferImportMeta, {
+    valid: [
+        { code: `process.env.NODE_ENV` },
+        { code: `import.meta.client` },
+        { code: `function check(process) { return process.client }` },
+    ],
+    invalid: [
+        {
+            code: `if (process.client) start()`,
+            errors: [{ messageId: 'preferImportMeta' }],
+            output: `if (import.meta.client) start()`,
+        },
+        {
+            code: `if (process /* explanation */.client) start()`,
+            errors: [{ messageId: 'preferImportMeta' }],
+            output: `if (import.meta /* explanation */.client) start()`,
         },
     ],
 })

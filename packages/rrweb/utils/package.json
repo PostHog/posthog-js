@@ -6,7 +6,7 @@
         "build": "tsc -noEmit && vite build",
         "check-types": "tsc -noEmit",
         "prepublish": "npm run build",
-        "lint": "pnpm eslint src/**/*.ts"
+        "lint": "oxlint src"
     },
     "repository": {
         "type": "git",

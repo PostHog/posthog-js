@@ -60,8 +60,8 @@
         "check:pages-router-ssr": "node ./scripts/check-pages-router-ssr.mjs",
         "test:unit": "vitest run",
         "test": "pnpm test:unit",
-        "lint": "eslint src",
-        "lint:fix": "eslint src --fix",
+        "lint": "oxlint --report-unused-disable-directives-severity error src",
+        "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
         "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },

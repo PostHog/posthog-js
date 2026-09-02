@@ -1784,8 +1784,8 @@ describe('PostHogLogs', () => {
       mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve({ kind: 'ok' }))
 
       let persistCalls = 0
+      // oxlint-disable-next-line prefer-const
       let logs: PostHogLogs
-      // eslint-disable-next-line prefer-const
       logs = new PostHogLogs(
         mockInstance,
         resolveForTest({ maxBufferSize: 4, maxQueueSize: 4, maxBatchRecordsPerPost: 2 }),
