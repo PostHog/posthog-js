@@ -16,7 +16,7 @@
         "build": "pnpm turbo run prepublish",
         "check-types": "tsc -noEmit",
         "prepublish": "tsc -noEmit && vite build",
-        "lint": "pnpm eslint src"
+        "lint": "oxlint src"
     },
     "type": "module",
     "repository": {

@@ -12,8 +12,8 @@
   },
   "scripts": {
     "clean": "rimraf dist coverage",
-    "lint": "eslint src && oxfmt --check harness",
-    "lint:fix": "eslint src --fix && oxfmt --write harness",
+    "lint": "oxlint --report-unused-disable-directives-severity error src && oxfmt --check harness",
+    "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix && oxfmt --write harness",
     "generate-version": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
     "pretest:unit": "pnpm generate-version",
     "test:unit": "jest",

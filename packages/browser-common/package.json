@@ -74,8 +74,8 @@
     },
     "scripts": {
         "clean": "rimraf dist",
-        "lint": "eslint src tests",
-        "lint:fix": "eslint src tests --fix",
+        "lint": "oxlint --report-unused-disable-directives-severity error src tests",
+        "lint:fix": "oxlint --report-unused-disable-directives-severity error src tests --fix",
         "build": "rslib build",
         "dev": "rslib build -w",
         "test:unit": "jest -c jest.config.cjs",

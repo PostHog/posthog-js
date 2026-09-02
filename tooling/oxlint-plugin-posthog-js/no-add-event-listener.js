@@ -11,6 +11,8 @@ module.exports = {
     },
 
     create(context) {
+        const sourceCode = context.sourceCode
+
         return {
             CallExpression(node) {
                 // Check if it's an addEventListener call
@@ -21,25 +23,25 @@ module.exports = {
                         message: 'Use addEventListener from @utils instead of calling it directly on elements',
                         fix(fixer) {
                             // Get the element expression
-                            const elementText = context.getSourceCode().getText(callee.object)
+                            const elementText = sourceCode.getText(callee.object)
 
                             // Get the event type
-                            const eventText = context.getSourceCode().getText(node.arguments[0])
+                            const eventText = sourceCode.getText(node.arguments[0])
 
                             // Get the callback
-                            const callbackText = context.getSourceCode().getText(node.arguments[1])
+                            const callbackText = sourceCode.getText(node.arguments[1])
 
                             // Get options if they exist
                             const optionsText =
                                 node.arguments[2] != null
-                                    ? context.getSourceCode().getText(node.arguments[2]) === 'true'
+                                    ? sourceCode.getText(node.arguments[2]) === 'true'
                                         ? ', { capture: true }'
-                                        : `, ${context.getSourceCode().getText(node.arguments[2])}`
+                                        : `, ${sourceCode.getText(node.arguments[2])}`
                                     : ''
 
                             // Add import if needed (note: this is a basic implementation, it won't always work)
                             const importFix = fixer.insertTextBefore(
-                                context.getSourceCode().ast,
+                                sourceCode.ast,
                                 "import { addEventListener } from './utils'\n"
                             )
 

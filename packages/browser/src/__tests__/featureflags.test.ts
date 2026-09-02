@@ -1,5 +1,3 @@
-/*eslint @typescript-eslint/no-empty-function: "off" */
-
 import {
     filterActiveFeatureFlags,
     parseFlagsResponse as normalizeFlagsResponse,

@@ -94,7 +94,7 @@ The `/src/extensions/` directory contains modular features:
 
 ### Lint Rules
 
-Custom ESLint rules enforce using `@posthog/core` type-check helpers instead of native JS:
+Custom Oxlint rules enforce using `@posthog/core` type-check helpers instead of native JS:
 
 - **No `Array.isArray()`** — use `isArray()` from `@posthog/core`
 - **No `=== null`** — use `isNull()` from `@posthog/core`

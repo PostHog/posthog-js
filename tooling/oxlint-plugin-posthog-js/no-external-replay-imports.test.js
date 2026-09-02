@@ -1,13 +1,10 @@
 const noExternalReplayImports = require('./no-external-replay-imports')
-const { RuleTester } = require('eslint')
+const { RuleTester } = require('oxlint/plugins-dev')
 
 const ruleTester = new RuleTester({
-    parserOptions: {
+    languageOptions: {
         ecmaVersion: 2020,
         sourceType: 'module',
-    },
-    env: {
-        browser: true,
     },
 })
 
@@ -63,7 +60,7 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
         },
         // Disallowed import using relative path
         {
-            code: "import { something } from './external/denylist'",
+            code: "import { something } from '../../extensions/replay/external/denylist'",
             filename: '/project/src/utils/something.ts',
             errors: [
                 {
@@ -85,7 +82,7 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
         },
         // Disallowed dynamic import
         {
-            code: "import('./external/denylist').then(module => {})",
+            code: "import('../../extensions/replay/external/denylist').then(module => {})",
             filename: '/project/src/utils/something.ts',
             errors: [
                 {
