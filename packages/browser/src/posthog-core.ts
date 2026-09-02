@@ -3195,10 +3195,6 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        if (!this._requirePersonProcessing('posthog.group')) {
-            return
-        }
-
         // Apply a sibling reset before reading or writing groups so this explicit
         // mutation is newer than the adopted cookie snapshot.
         this.persistence?.syncCookieProperties()
@@ -3214,9 +3210,9 @@ export class PostHog implements PostHogInterface {
         this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
 
         // Send $groupidentify when the group is new/changed OR when properties
-        // are provided. Skip only when the group already exists with the same
-        // key and no new properties are being set.
-        if (isNewGroup || groupPropertiesToSet) {
+        // are provided, but only when the event can be processed. The local group
+        // association remains useful for events and feature flags without person processing.
+        if ((isNewGroup || groupPropertiesToSet) && this._hasPersonProcessing()) {
             const groupIdentifyProperties: Properties = {
                 $group_type: groupType,
                 $group_key: groupKey,

@@ -606,9 +606,7 @@ describe('person processing', () => {
             expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(true)
         })
 
-        it('should be ignored and log an error if person_processing is set to never', async () => {
-            // $groupidentify needs person processing, so the plugin server drops it when
-            // person processing is off. Gate group() like the other identity methods.
+        it('should retain the group association without sending $groupidentify if person_processing is never', async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('never')
 
@@ -620,7 +618,7 @@ describe('person processing', () => {
             // assert
             expect(mockLogger.error).toBeCalledTimes(1)
             expect(mockLogger.error).toHaveBeenCalledWith(
-                'posthog.group was called, but process_person is set to "never". This call will be ignored.'
+                'posthog.setGroupPropertiesForFlags was called, but process_person is set to "never". This call will be ignored.'
             )
 
             // no $groupidentify is sent, only the two custom events
@@ -630,6 +628,7 @@ describe('person processing', () => {
             const eventAfterGroup = beforeSendMock.mock.calls[1]
             expect(eventAfterGroup[0].event).toEqual('custom event after group')
             expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(false)
+            expect(eventAfterGroup[0].properties.$groups).toEqual({ groupType: 'groupKey' })
         })
     })
 

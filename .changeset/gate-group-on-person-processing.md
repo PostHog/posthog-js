@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Gate `group()` on person processing, like the other identity methods. Under `identified_only` a `group()` call now promotes the user to identified, so the `$groupidentify` event is kept instead of dropped. Under `never` the call is ignored and logs an error, instead of sending an event the server always drops.
+Gate `$groupidentify` on person processing. Under `identified_only`, a `group()` call promotes the user to identified so the event is kept instead of dropped. Under `never`, the local group association is retained for subsequent events and feature flags, but `$groupidentify` is not sent because the server always drops it.
