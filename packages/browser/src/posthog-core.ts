@@ -2246,7 +2246,9 @@ export class PostHog implements PostHogInterface {
      *
      * A flag that you disable in PostHog is not sent to the SDK at all. This method then returns
      * `undefined`, not `false`. If your code needs a `false` value, keep the flag active with a 0%
-     * rollout, or handle `undefined` yourself.
+     * rollout, or handle `undefined` yourself. A 0% rollout's `false` comes from the server, so it
+     * cannot be delivered through `bootstrap` (which drops `false` entries) — a bootstrapped flag
+     * reads as `undefined` until `/flags` responds.
      *
      * {@label Feature flags}
      *
