@@ -14,6 +14,7 @@ function _useNavigationTracker(
   navigationRef?: PostHogNavigationRef,
   client?: PostHog
 ): void {
+  // oxlint-disable-next-line react-hooks/rules-of-hooks -- This internal function is exported as useNavigationTracker.
   const posthog = useOverridablePostHog(client, 'useNavigationTracker')
 
   if (!OptionalReactNativeNavigation) {

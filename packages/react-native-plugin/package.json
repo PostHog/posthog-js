@@ -40,8 +40,8 @@
   ],
   "scripts": {
     "clean": "del-cli android/build lib",
-    "lint": "eslint \"**/*.{js,ts,tsx}\"",
-    "lint:fix": "eslint \"**/*.{js,ts,tsx}\" --fix",
+    "lint": "oxlint --report-unused-disable-directives-severity error .",
+    "lint:fix": "oxlint --report-unused-disable-directives-severity error . --fix",
     "typecheck": "tsc",
     "test:unit": "jest --passWithNoTests && node scripts/check-spm-manifest.mjs",
     "test": "pnpm test:unit",

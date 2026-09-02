@@ -31,7 +31,6 @@ bundle-stats*.html
 # vite temp files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
-.eslintcache
 cypress/downloads/downloads.html
 /test-results/
 /playwright-report/

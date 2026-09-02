@@ -8,7 +8,7 @@
     "test:watch": "vitest watch",
     "check-types": "tsc -noEmit",
     "prepublish": "tsc -noEmit && vite build",
-    "lint": "pnpm eslint src/**/*.ts"
+    "lint": "oxlint src"
   },
   "repository": {
     "type": "git",
