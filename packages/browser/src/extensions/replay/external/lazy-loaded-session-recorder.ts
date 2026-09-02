@@ -1129,11 +1129,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // Only check TTL if recording hasn't started yet
-        // Once started, trust the config until a hard page load.
-        // A rotation restart transits through stop() before start(), so isStarted is
-        // briefly false while re-reading a config that was trusted moments ago. The TTL
-        // bail there would silently kill the recorder and leave the rotated session
-        // without a full snapshot, so that transit keeps the started-state trust.
+        // Once started, trust the config until a hard page load
+        // A rotation restart is briefly not-started between stop() and start(); it keeps that trust
         if (!this.isStarted && !this._isRestartingForSessionIdChange) {
             // default to now so that configs persisted by older SDK versions
             // (which never set cache_timestamp) are treated as fresh
@@ -1541,8 +1538,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // ordering matters: the hold is set after stop() (so the stop discards or ships the
     // old epoch per its own flag) and after start() (whose fresh-start reset would
     // otherwise clobber it); no flush can run synchronously in between
-    // true only while a rotation's stop()/start() pair runs, read by the _remoteConfig
-    // getter so the transit is not mistaken for a cold boot with a leftover config
     private _isRestartingForSessionIdChange = false
 
     private _restartForSessionIdChange(holdNextEpoch: boolean) {

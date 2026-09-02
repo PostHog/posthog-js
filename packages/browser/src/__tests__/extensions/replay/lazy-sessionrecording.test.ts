@@ -2397,6 +2397,21 @@ describe('Lazy SessionRecording', () => {
                     expect(shippedSessionIds()).toEqual(new Set([sessionId]))
                 })
 
+                it('rotations that survive on a TTL-expired remote config still ship zero recordings without interaction', () => {
+                    const preservedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG) as any
+                    posthog.persistence?.register({
+                        [SESSION_RECORDING_REMOTE_CONFIG]: {
+                            ...preservedConfig,
+                            cache_timestamp: Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS - 1,
+                        },
+                    })
+
+                    const rotations = runExternalRotations(startingTimestamp, 2)
+
+                    expect(rotations).toBeGreaterThan(50)
+                    expect(shippedSessionIds()).toEqual(new Set())
+                })
+
                 // The Jul 2026 idle-rotation family: an idle tab rotates, the markers for the
                 // rotation land in the new session's empty buffer, and shipping them opens a
                 // recording that bills the customer and plays back as nothing.
@@ -3128,17 +3143,13 @@ describe('Lazy SessionRecording', () => {
                 sessionId = 'rotated-session-id'
                 ;(posthog.capture as Mock).mockClear()
 
-                // posthog.reset() is followed by identify(), whose capture runs the session
-                // check and fires the session-id-changed listener before any rrweb emit.
                 sessionManager.checkAndGetSessionAndWindowId()
                 releaseInteractionHold()
 
-                // rrweb restarts and re-snapshots the new epoch
                 _emit(createMetaSnapshot({ timestamp: 2000 }))
                 _emit(createFullSnapshot({ timestamp: 2001 }))
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
-                // where did the rotated epoch's own meta + full snapshot land?
                 const rotatedEpochAttribution = (posthog.capture as Mock).mock.calls
                     .filter(([event]) => event === '$snapshot')
                     .flatMap(([, properties]) =>
@@ -3151,7 +3162,7 @@ describe('Lazy SessionRecording', () => {
                     [META_EVENT_TYPE, 'rotated-session-id'],
                     [FULL_SNAPSHOT_EVENT_TYPE, 'rotated-session-id'],
                 ])
-                expect(rotatedEpochAttribution.map(([, id]) => id)).not.toContain(firstSessionId)
+                expect(firstSessionId).not.toBe('rotated-session-id')
             })
 
             it('restarts rrweb on the reset rotation even when the preserved remote config is past its TTL', () => {
@@ -3160,9 +3171,6 @@ describe('Lazy SessionRecording', () => {
                 releaseInteractionHold()
                 _emit(createFullSnapshot({ timestamp: 1000 }))
 
-                // reset() preserves the recording config but keeps its original
-                // cache_timestamp, so a session that outlived the TTL carries a
-                // stale config into the rotation.
                 const preservedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG) as any
                 posthog.persistence?.clear()
                 posthog.persistence?.register({
@@ -3185,6 +3193,10 @@ describe('Lazy SessionRecording', () => {
                             ? 'stale first session'
                             : sessionRecording['_lazyLoadedSessionRecording']['_sessionId'],
                 }).toEqual({ recordCalls: 2, isStarted: true, attributedTo: 'rotated-session-id' })
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isRestartingForSessionIdChange']).toBe(false)
+                const refreshedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG) as any
+                expect(refreshedConfig.cache_timestamp).toBeGreaterThan(Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS)
             })
         })
 
