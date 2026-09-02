@@ -4,9 +4,7 @@ import { cookies } from 'next/headers.js'
 import { PostHogProvider } from '../src/app/PostHogProvider'
 
 // Mock ClientPostHogProvider
-const mockClientProvider = vi.fn(({ children }: { children: React.ReactNode }) => (
-    <div data-testid="client-provider">{children}</div>
-))
+const mockClientProvider = vi.hoisted(() => vi.fn())
 vi.mock('../src/client/ClientPostHogProvider', () => ({
     ClientPostHogProvider: (props: any) => mockClientProvider(props),
 }))
@@ -33,7 +31,10 @@ describe('PostHogProvider', () => {
     const originalEnv = process.env
 
     beforeEach(() => {
-        mockClientProvider.mockClear()
+        mockClientProvider.mockReset()
+        mockClientProvider.mockImplementation(({ children }: { children: React.ReactNode }) => (
+            <div data-testid="client-provider">{children}</div>
+        ))
         process.env = { ...originalEnv }
     })
 
