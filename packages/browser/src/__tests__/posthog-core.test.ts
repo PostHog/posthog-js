@@ -567,6 +567,54 @@ describe('posthog core', () => {
                 // assert
                 expect(beforeSendMock.mock.calls[1][0].properties.utm_source).toBe('campaign')
             })
+
+            it('should keep the original $fbc timestamp until the fbclid changes', () => {
+                const now = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/?fbclid=first-click')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    person_profiles: 'always',
+                })
+
+                posthog.capture('$pageview')
+
+                expect(beforeSendMock.mock.calls[0][0].$set.$fbc).toBe('fb.1.1700000000000.first-click')
+                expect(beforeSendMock.mock.calls[0][0].properties).not.toHaveProperty('$fbc')
+
+                now.mockReturnValue(1_800_000_000_000)
+                mockURL.mockReturnValue('https://www.example.com/next?fbclid=first-click')
+                posthog.capture('$pageview')
+
+                expect(beforeSendMock.mock.calls[1][0].$set?.$fbc).toBeUndefined()
+                mockURL.mockReturnValue('https://www.example.com/?fbclid=second-click')
+                posthog.capture('$pageview')
+
+                expect(beforeSendMock.mock.calls[2][0].$set.$fbc).toBe('fb.1.1800000000000.second-click')
+                now.mockRestore()
+            })
+
+            it('should carry an anonymous click onto the identify event', () => {
+                const now = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/?fbclid=anonymous-click')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    person_profiles: 'identified_only',
+                })
+
+                posthog.capture('$pageview')
+                posthog.identify('identified-user')
+
+                expect(beforeSendMock.mock.calls[0][0].$set?.$fbc).toBeUndefined()
+                expect(beforeSendMock.mock.calls[1][0]).toMatchObject({
+                    event: '$identify',
+                    $set: { $fbc: 'fb.1.1700000000000.anonymous-click' },
+                })
+                now.mockRestore()
+            })
         })
 
         describe('survey events', () => {

@@ -16,8 +16,10 @@ import {
     EVENT_IDENTIFY,
     EVENT_PAGELEAVE,
     EVENT_PAGEVIEW,
+    FACEBOOK_CLICK_ID,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
+    PERSISTENCE_FACEBOOK_CLICK_ID,
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
     SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
@@ -181,6 +183,14 @@ const RESET_CONSENT_WARN =
 const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
+
+const FBCLID_PATTERN = /^[A-Za-z0-9_-]{1,400}$/
+const FBC_PATTERN = /^fb\.[0-9]+\.[0-9]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/
+
+type FacebookClickIdUpdate = {
+    value: string
+    changed: boolean
+}
 
 // Transport-level keys the browser SDK carries inside event properties (unlike other SDKs,
 // where they live outside `properties`). They are out of scope of the minimal
@@ -1511,6 +1521,36 @@ export class PostHog implements PostHogInterface {
         this._execute_array([item])
     }
 
+    private _updateFacebookClickId(fbclid: unknown, providedFbc: unknown): FacebookClickIdUpdate | undefined {
+        if (!this.persistence) {
+            return undefined
+        }
+
+        const storedFbc = this.persistence.get_property(PERSISTENCE_FACEBOOK_CLICK_ID)
+
+        // Keep an explicitly supplied value as the local source of truth too, so a later event with
+        // the same fbclid cannot replace its original timestamp.
+        if (isString(providedFbc) && FBC_PATTERN.test(providedFbc)) {
+            const changed = providedFbc !== storedFbc
+            if (changed) {
+                this.persistence.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: providedFbc })
+            }
+            return { value: providedFbc, changed }
+        }
+
+        if (isString(fbclid) && FBCLID_PATTERN.test(fbclid)) {
+            if (isString(storedFbc) && FBC_PATTERN.test(storedFbc) && storedFbc.split('.')[3] === fbclid) {
+                return { value: storedFbc, changed: false }
+            }
+
+            const fbc = `fb.1.${Date.now()}.${fbclid}`
+            this.persistence.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: fbc })
+            return { value: fbc, changed: true }
+        }
+
+        return isString(storedFbc) && FBC_PATTERN.test(storedFbc) ? { value: storedFbc, changed: false } : undefined
+    }
+
     /**
      * Captures an event with optional properties and configuration.
      *
@@ -1597,8 +1637,9 @@ export class PostHog implements PostHogInterface {
         // The initial campaign/referrer props need to be stored in the regular persistence, as they are there to mimic
         // the person-initial props. The non-initial versions are stored in the sessionPersistence, as they are sent
         // with every event and used by the session table to create session-initial props.
+        let campaignParams: Properties | undefined
         if (this.config.save_campaign_params) {
-            this.sessionPersistence.update_campaign_params()
+            campaignParams = this.sessionPersistence.update_campaign_params()
         }
         if (this.config.save_referrer) {
             this.sessionPersistence.update_referrer_info()
@@ -1644,6 +1685,17 @@ export class PostHog implements PostHogInterface {
         const setProperties = options?.$set
         if (setProperties && !shouldSendMinimalFlagCalledEvent) {
             data.$set = options?.$set
+        }
+
+        const fbc = this._updateFacebookClickId(campaignParams?.fbclid, options?.$set?.[FACEBOOK_CLICK_ID])
+        if (
+            fbc &&
+            data.properties.$process_person_profile === true &&
+            (fbc.changed || event_name === EVENT_IDENTIFY || event_name === '$set') &&
+            !shouldSendMinimalFlagCalledEvent
+        ) {
+            // An explicit person property supplied by the caller wins over the SDK-derived value.
+            data.$set = { [FACEBOOK_CLICK_ID]: fbc.value, ...data.$set }
         }
         const unsetProperties = options?.$unset
         if (unsetProperties) {

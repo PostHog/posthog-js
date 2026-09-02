@@ -1582,7 +1582,7 @@ export class PostHogPersistence {
         }
     }
 
-    update_campaign_params(): void {
+    update_campaign_params(): Properties | undefined {
         const currentUrl = document?.URL
         if (currentUrl === this._campaign_params_url) {
             return
@@ -1593,11 +1593,12 @@ export class PostHogPersistence {
             this._config.mask_personal_data_properties,
             this._config.custom_personal_data_properties
         )
-        // only save campaign params if there were any
-        if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
+        const hasCampaignParams = !isEmptyObject(stripEmptyProperties(campaignParams))
+        if (hasCampaignParams) {
             this.register(campaignParams)
         }
         this._campaign_params_url = currentUrl
+        return hasCampaignParams ? campaignParams : undefined
     }
     update_search_keyword(): void {
         this.register(getSearchInfo())

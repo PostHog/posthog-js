@@ -77,6 +77,7 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     '$feature_flag_errors',
     '$feature_flag_evaluated_at',
     '$minimal_flag_called_events',
+    '$fbc_persistence',
     '$client_session_props',
     '$capture_rate_limit',
     '$initial_campaign_params',
