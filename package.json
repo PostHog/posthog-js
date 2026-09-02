@@ -26,6 +26,7 @@
         "build": "turbo build",
         "dev": "turbo dev",
         "package": "export PACKAGE_DEST=$(pwd)/target && turbo package",
+        "prepare": "if [ -z \"$CI\" ]; then prek install; fi",
         "check:package-tarballs": "node scripts/check-package-tarballs.js",
         "package:watch": "export PACKAGE_DEST=$(pwd)/target && turbo watch package",
         "bump": "pnpm changeset version",
@@ -37,6 +38,7 @@
         "@changesets/changelog-github": "^0.5.2",
         "@changesets/cli": "^2.29.8",
         "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",
+        "@j178/prek": "^0.4.14",
         "@microsoft/api-extractor": "^7.58.9",
         "@microsoft/api-extractor-model": "^7.33.8",
         "@microsoft/tsdoc": "^0.15.1",
@@ -56,7 +58,6 @@
         "eslint-plugin-posthog-js": "link:tooling/eslint-plugin-posthog-js",
         "eslint-plugin-react": "^7.37.5",
         "eslint-plugin-react-hooks": "^4.6.2",
-        "lint-staged": "^10.5.4",
         "oxfmt": "^0.65.0",
         "oxlint": "^1.80.0",
         "rimraf": "^6.1.3",
@@ -65,12 +66,5 @@
         "ts-node": "^10.9.2",
         "turbo": "^2.9.16",
         "typescript": "catalog:"
-    },
-    "lint-staged": {
-        "*.{ts,tsx,js,jsx,mjs,cjs}": [
-            "eslint --cache --fix",
-            "oxfmt --write"
-        ],
-        "*.{json,md}": "oxfmt --write"
     }
 }
