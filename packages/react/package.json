@@ -16,8 +16,9 @@
     "packageManager": "pnpm@10.12.4",
     "scripts": {
         "clean": "rimraf dist",
-        "build": "rollup -c",
-        "dev": "rollup -cw",
+        "build": "rimraf dist ../browser/react/dist ../browser/react/src && tsdown && pnpm check:build-output",
+        "dev": "rimraf dist ../browser/react/dist ../browser/react/src && tsdown --watch",
+        "check:build-output": "es-check --module es5 'dist/esm/**/*.js' && es-check es5 'dist/umd/**/*.js' && node scripts/check-build-output.mjs",
         "test:unit": "jest",
         "lint": "eslint src",
         "test:debug": "jest --runInBand",
@@ -44,15 +45,15 @@
         }
     },
     "devDependencies": {
+        "@ampproject/remapping": "2.3.0",
         "@babel/preset-env": "catalog:",
         "@babel/preset-react": "catalog:",
         "@babel/preset-typescript": "catalog:",
-        "@posthog-tooling/rollup-utils": "workspace:*",
         "@testing-library/dom": "catalog:",
         "@testing-library/jest-dom": "catalog:",
         "@testing-library/react": "catalog:",
-        "@types/react": "catalog:",
         "@types/jest": "catalog:",
+        "@types/react": "catalog:",
         "cross-env": "^7.0.3",
         "jest": "catalog:",
         "jest-environment-jsdom": "catalog:",
@@ -60,9 +61,7 @@
         "react": "catalog:",
         "react-dom": "catalog:",
         "react-test-renderer": "catalog:",
-        "rollup": "catalog:",
-        "rollup-plugin-copy": "^3.5.0",
-        "tslib": "catalog:",
+        "tsdown": "0.22.14",
         "typescript": "catalog:"
     }
 }

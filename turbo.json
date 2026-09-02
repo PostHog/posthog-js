@@ -16,6 +16,8 @@
                 "scripts/check-sourcemap-ignore-list.js",
                 "terser-cross-bundle-properties.cjs",
                 "terser-mangled-names.json",
+                "tsdown.config.mts",
+                "tsdown.config.ts",
                 "rslib.config.mjs",
                 "vite.config.ts",
                 "vite.config.js"
