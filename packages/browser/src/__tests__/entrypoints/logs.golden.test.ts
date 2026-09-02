@@ -14,7 +14,6 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
     let mockCapture: jest.Mock
 
     const initialize = (instance: PostHog = mockPostHog) => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require('../../entrypoints/logs')
         assignableWindow.__PosthogExtensions__.logs.initializeLogs(instance)
     }

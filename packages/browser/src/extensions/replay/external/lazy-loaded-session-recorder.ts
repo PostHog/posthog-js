@@ -2638,7 +2638,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     }
                     sessionRecordingOptions.sampling = sampling
                 } else {
-                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                     // @ts-ignore
                     sessionRecordingOptions[key] = value
                 }

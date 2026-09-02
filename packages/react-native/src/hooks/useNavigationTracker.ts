@@ -25,7 +25,6 @@ function _useNavigationTracker(
   let navigation: any = navigationRef
 
   try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
     routes = OptionalReactNativeNavigation.useNavigationState((state: any) => state?.routes)
   } catch (error) {
     // useNavigationState might not be available in static navigation setups
@@ -35,7 +34,6 @@ function _useNavigationTracker(
 
   try {
     if (!navigation) {
-      // eslint-disable-next-line react-hooks/rules-of-hooks
       navigation = OptionalReactNativeNavigation.useNavigation()
     }
   } catch (error) {
@@ -45,7 +43,6 @@ function _useNavigationTracker(
     return
   }
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   const trackRoute = useCallback((): void => {
     if (!navigation || !posthog) {
       return
@@ -100,7 +97,6 @@ function _useNavigationTracker(
     }
   }, [navigation, options, posthog])
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     // NOTE: The navigation stacks may not be fully rendered initially. This means the first route can be missed (it doesn't update useNavigationState)
     // If missing we simply wait a tick and call it again.

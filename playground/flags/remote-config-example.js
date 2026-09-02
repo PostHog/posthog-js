@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable @typescript-eslint/no-require-imports, no-undef */
 /**
  * Simple test script for PostHog remote config endpoint.
  */

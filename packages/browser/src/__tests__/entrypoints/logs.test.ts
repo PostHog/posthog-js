@@ -72,7 +72,6 @@ describe('logs entrypoint', () => {
 
     describe('core capture routing', () => {
         beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
         })
 
@@ -132,7 +131,6 @@ describe('logs entrypoint', () => {
 
     describe('log truncation features', () => {
         beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
         })
 
@@ -587,7 +585,6 @@ describe('logs entrypoint', () => {
 
     describe('console output safety', () => {
         beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
         })
 
@@ -607,7 +604,6 @@ describe('logs entrypoint', () => {
 
     describe('re-entrancy protection', () => {
         beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
         })
 
@@ -676,7 +672,6 @@ describe('logs entrypoint', () => {
 
     describe('consent / opt-out handling', () => {
         beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
         })
 
@@ -732,7 +727,6 @@ describe('logs entrypoint', () => {
 
     describe('performance tests', () => {
         beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
         })
 
@@ -830,7 +824,6 @@ describe('logs entrypoint', () => {
     })
     describe('re-entrancy across multiple nested logs', () => {
         beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
         })
 
@@ -852,7 +845,6 @@ describe('logs entrypoint', () => {
 
     describe('teardown under another console wrapper', () => {
         beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
         })
 
@@ -898,7 +890,6 @@ describe('logs entrypoint', () => {
         let capturedBuffered: jest.Mock
 
         beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../../entrypoints/logs')
 
             realConsoleLog = assignableWindow.console.log as jest.Mock

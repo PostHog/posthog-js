@@ -286,7 +286,6 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
     const restorePatch = patch(
         win.XMLHttpRequest.prototype,
         'open',
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         (originalOpen: typeof XMLHttpRequest.prototype.open) => {
             return function (
@@ -297,7 +296,6 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 password?: string | null
             ) {
                 // because this function is returned in its actual context `this` _is_ an XMLHttpRequest
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
                 const xhr = this as XMLHttpRequest
 
@@ -759,7 +757,6 @@ function initFetchObserver(
     const recordRequestHeaders = shouldRecordHeaders('request', options.recordHeaders)
     const recordResponseHeaders = shouldRecordHeaders('response', options.recordHeaders)
 
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     const restorePatch = patch(win, 'fetch', (originalFetch: typeof fetch) => {
         return async function (url: URL | RequestInfo, init?: RequestInit | undefined) {
@@ -942,7 +939,6 @@ function initNetworkObserver(
 export const NETWORK_PLUGIN_NAME = 'rrweb/network@1'
 
 // TODO how should this be typed?
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 export const getRecordNetworkPlugin: (options?: NetworkRecordOptions) => RecordPlugin = (options) => {
     return {

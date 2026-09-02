@@ -152,7 +152,7 @@ export const PostHogProvider = ({
     }
 
     return new PostHog(apiKey ?? '', parsedOptions)
-  }, [client, apiKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [client, apiKey])
 
   const autocaptureOptions = useMemo(
     () => (autocapture && typeof autocapture !== 'boolean' ? autocapture : {}),

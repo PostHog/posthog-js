@@ -1785,7 +1785,6 @@ describe('PostHogLogs', () => {
 
       let persistCalls = 0
       let logs: PostHogLogs
-      // eslint-disable-next-line prefer-const
       logs = new PostHogLogs(
         mockInstance,
         resolveForTest({ maxBufferSize: 4, maxQueueSize: 4, maxBatchRecordsPerPost: 2 }),

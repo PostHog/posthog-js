@@ -28,7 +28,6 @@ const loadOptionalPlugin = (
     mockOptional('@posthog/react-native-plugin', primaryInstalled, PRIMARY)
     mockOptional('@posthog/react-native-plugin/package.json', primaryMetadataAvailable, { version: '2.4.1' })
     mockOptional('posthog-react-native-session-replay', legacyInstalled, LEGACY)
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- isolated require re-runs the module's platform-gated load under a fresh registry
     const optionalPlugin = require('../src/optional/OptionalPlugin')
     loaded = {
       plugin: optionalPlugin.OptionalReactNativePlugin,

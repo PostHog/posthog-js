@@ -42,7 +42,6 @@ jest.mock('@posthog/browser-common/utils/globals', () => {
     }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { mockURL, mockReferrer, mockHostName } = require('@posthog/browser-common/utils/globals')
 
 describe('posthog core', () => {

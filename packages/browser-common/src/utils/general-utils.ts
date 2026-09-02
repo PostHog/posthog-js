@@ -74,7 +74,6 @@ export const trySafe = function <T>(fn: () => T): T | undefined {
 export const safewrap = function <F extends (...args: any[]) => any = (...args: any[]) => any>(f: F): F {
     return function (...args) {
         try {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             return f.apply(this, args)
         } catch (e) {
@@ -86,7 +85,6 @@ export const safewrap = function <F extends (...args: any[]) => any = (...args: 
     } as F
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 export const safewrapClass = function (klass: Function, functions: string[]): void {
     for (let i = 0; i < functions.length; i++) {
         klass.prototype[functions[i]!] = safewrap(klass.prototype[functions[i]!])
@@ -181,7 +179,7 @@ export function isCrossDomainCookie(documentLocation: Location | undefined) {
     return true
 }
 
-// Use this instead of element.addEventListener to avoid eslint errors
+// Use this instead of element.addEventListener to avoid lint errors
 // this properly implements the default options for passive event listeners
 export function addEventListener(
     element: Window | Document | Element | undefined,

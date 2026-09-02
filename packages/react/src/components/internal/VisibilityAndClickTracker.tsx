@@ -28,7 +28,6 @@ export function VisibilityAndClickTracker({
             threshold: 0.1,
             ...options,
         }),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         [options?.threshold, options?.root, options?.rootMargin]
     )
 
