@@ -57,7 +57,7 @@ try {
         'compat(compat)',
         'posthog-js(no-direct-array-check)',
     ]) {
-        assert.match(output, new RegExp(rule.replace(/[()]/g, '\\$&')), `Expected ${rule} to run:\n${output}`)
+        assert.ok(output.includes(rule), `Expected ${rule} to run:\n${output}`)
     }
 
     const nuxtResult = spawnSync(oxlintBin, [nuxtFixture], { cwd: nuxtDir, encoding: 'utf8' })
@@ -76,7 +76,7 @@ try {
         'typescript(no-explicit-any)',
         'posthog-js(prefer-import-meta)',
     ]) {
-        assert.match(nuxtOutput, new RegExp(rule.replace(/[()]/g, '\\$&')), `Expected ${rule} to run:\n${nuxtOutput}`)
+        assert.ok(nuxtOutput.includes(rule), `Expected ${rule} to run:\n${nuxtOutput}`)
     }
 } finally {
     rmSync(reactFixture, { force: true })

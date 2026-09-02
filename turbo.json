@@ -65,6 +65,10 @@
             "dependsOn": ["^build"],
             "cache": false
         },
+        "posthog-node#test:unit": {
+            "dependsOn": ["^build", "build"],
+            "cache": false
+        },
         "test:functional": {},
         "@posthog/rollup-plugin#test:functional": {
             "dependsOn": ["build"]
