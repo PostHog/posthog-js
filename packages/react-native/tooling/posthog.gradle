@@ -142,10 +142,14 @@ plugins.withId('com.android.application') {
 
                         doFirst {
                             def cliPackage = PostHogCli.resolveCliPackagePath(rootDirFile, reactRoot)
-                            // Resolved here and in doLast rather than shared, because the
-                            // configuration cache serializes each task action's captured state.
+                            // Resolved once per execution and carried on the task, so doLast does
+                            // not spawn a second `posthog-cli --version`. Execution-time task state
+                            // is safe under the configuration cache, which serializes each action's
+                            // captured state separately. Not a static: a Gradle daemon lives for
+                            // hours, and a memo there would miss a CLI upgrade.
                             def posthogReleaseModeArgs = PostHogCli.releaseModeArgs(
                                 [*osCompatibility, cliPackage], posthogReleaseMode, posthogReleaseModeExplicit, logger)
+                            it.ext.posthogReleaseModeArgs = posthogReleaseModeArgs
                             def args = [cliPackage]
                             args.addAll(["hermes", "clone",
                                 "--minified-map-path", packagerSourcemapOutput, // The path to a sourcemap
@@ -171,8 +175,7 @@ plugins.withId('com.android.application') {
 
                         doLast {
                             def cliPackage = PostHogCli.resolveCliPackagePath(rootDirFile, reactRoot)
-                            def posthogReleaseModeArgs = PostHogCli.releaseModeArgs(
-                                [*osCompatibility, cliPackage], posthogReleaseMode, posthogReleaseModeExplicit, logger)
+                            def posthogReleaseModeArgs = it.ext.posthogReleaseModeArgs
                             def args = [cliPackage]
                             args.addAll(["hermes", "upload",
                                 "--directory", sourcemapOutput.getParent()      // The path to a sourcemap that should be uploaded.
