@@ -659,6 +659,22 @@ describe('persistence', () => {
         })
     })
 
+    it.each(['localStorage', 'sessionStorage', 'memory'])(
+        'should preserve initial person URL length with %s persistence',
+        (persistenceMode) => {
+            const longUrl = `https://www.example.com/?${'&'.repeat(2000)}`
+            // @ts-expect-error ok to set global in test
+            globals.location = { href: longUrl }
+            referrer = longUrl
+            library = new PostHogPersistence(makePostHogConfig('test', persistenceMode))
+
+            library.set_initial_person_info()
+
+            expect(library.props[INITIAL_PERSON_INFO].r).toHaveLength(1000)
+            expect(library.props[INITIAL_PERSON_INFO].u).toHaveLength(1000)
+        }
+    )
+
     describe('localStorage+cookie', () => {
         const encode = (props: any) => encodeURIComponent(JSON.stringify(props))
 

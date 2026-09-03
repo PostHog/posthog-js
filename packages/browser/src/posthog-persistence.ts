@@ -210,6 +210,8 @@ export class PostHogPersistence {
     // Whether the resolved storage backend can host the split (localStorage /
     // localStorage+cookie). Set by `_buildStorage`.
     private _splitStorageEligible = false
+    // Whether the resolved backend writes identity properties to a cookie.
+    private _storesIdentityInCookie = false
     // Whether flag config is stored in their own entries this session:
     // backend-eligible AND `split_storage` enabled.
     // Re-resolved on every `update_config` (backend rebuild or a runtime flag flip).
@@ -948,6 +950,7 @@ export class PostHogPersistence {
         )
 
         let store: PersistentStore
+        let storesIdentityInCookie = false
 
         // The flag split is only meaningful on a localStorage-backed
         // store: it is the one that broadcasts large cross-tab `storage` events.
@@ -962,18 +965,22 @@ export class PostHogPersistence {
         } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore._is_supported()) {
             store = localPlusCookieStore
             splitEligible = true
+            storesIdentityInCookie = true
         } else if (storage_type === 'sessionstorage' && sessionStore._is_supported()) {
             store = sessionStore
         } else if (storage_type === 'memory') {
             store = memoryStore
         } else if (storage_type === 'cookie' && cookieStore._is_supported()) {
             store = cookieStore
+            storesIdentityInCookie = true
         } else if (localPlusCookieStore._is_supported()) {
             // selected storage type wasn't supported, fallback to 'localstorage+cookie' if possible
             store = localPlusCookieStore
             splitEligible = true
+            storesIdentityInCookie = true
         } else if (cookieStore._is_supported()) {
             store = cookieStore
+            storesIdentityInCookie = true
         } else {
             // Neither web storage nor cookies are available -- e.g. a page served from a
             // `data:` URL, where Chrome disables both. Falling back to cookieStore here left
@@ -982,6 +989,7 @@ export class PostHogPersistence {
         }
 
         this._splitStorageEligible = splitEligible
+        this._storesIdentityInCookie = storesIdentityInCookie
         return store
     }
 
@@ -1649,10 +1657,12 @@ export class PostHogPersistence {
         )
         this.register_once(
             {
-                [INITIAL_PERSON_INFO]: {
-                    r: truncateForCookie(personInfo.r),
-                    u: personInfo.u ? truncateForCookie(personInfo.u) : undefined,
-                },
+                [INITIAL_PERSON_INFO]: this._storesIdentityInCookie
+                    ? {
+                          r: truncateForCookie(personInfo.r),
+                          u: personInfo.u ? truncateForCookie(personInfo.u) : undefined,
+                      }
+                    : personInfo,
             },
             undefined
         )
