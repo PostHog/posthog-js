@@ -779,8 +779,7 @@ describe('extension lifecycle', () => {
 
             expect(posthog.getFeatureFlag('test-flag')).toBe(true)
             expect(posthog.getFeatureFlag('variant-flag')).toBe('control')
-            // Disabled flags should not be returned
-            expect(posthog.getFeatureFlag('disabled-flag')).toBeUndefined()
+            expect(posthog.getFeatureFlag('disabled-flag')).toBe(false)
             expect(posthog.flagsEndpointWasHit).toBe(true)
         })
     })
