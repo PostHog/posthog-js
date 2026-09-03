@@ -16,8 +16,10 @@ import {
     EVENT_IDENTIFY,
     EVENT_PAGELEAVE,
     EVENT_PAGEVIEW,
+    FACEBOOK_CLICK_ID,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
+    PERSISTENCE_FACEBOOK_CLICK_ID,
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
     SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
@@ -181,6 +183,19 @@ const RESET_CONSENT_WARN =
 const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
+
+const FBCLID_PATTERN = /^[A-Za-z0-9_-]{1,400}$/
+const FBC_PATTERN = /^fb\.[0-9]+\.[0-9]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/
+
+type FacebookClickIdUpdate = {
+    value: string
+    pending: boolean
+}
+
+type PersistedFacebookClickId = {
+    value: string
+    delivered: boolean
+}
 
 // Transport-level keys the browser SDK carries inside event properties (unlike other SDKs,
 // where they live outside `properties`). They are out of scope of the minimal
@@ -1511,6 +1526,78 @@ export class PostHog implements PostHogInterface {
         this._execute_array([item])
     }
 
+    private _getPersistedFacebookClickId(): PersistedFacebookClickId | undefined {
+        const stored = this.persistence?.get_property(PERSISTENCE_FACEBOOK_CLICK_ID)
+        if (isString(stored) && FBC_PATTERN.test(stored)) {
+            return { value: stored, delivered: false }
+        }
+        if (isObject(stored) && isString(stored.value) && FBC_PATTERN.test(stored.value)) {
+            return { value: stored.value, delivered: stored.delivered === true }
+        }
+        return undefined
+    }
+
+    private _updateFacebookClickId(
+        fbclid: unknown,
+        providedFbc: unknown,
+        hasProvidedFbc: boolean,
+        unsetFbc: boolean
+    ): FacebookClickIdUpdate | undefined {
+        if (!this.persistence) {
+            return undefined
+        }
+
+        this.persistence.refreshKey(PERSISTENCE_FACEBOOK_CLICK_ID)
+        const stored = this._getPersistedFacebookClickId()
+
+        if (unsetFbc) {
+            this.persistence.unregister(PERSISTENCE_FACEBOOK_CLICK_ID)
+            return undefined
+        }
+
+        // Keep an explicitly supplied value as the local source of truth too, so a later event with
+        // the same fbclid cannot replace its original timestamp.
+        if (hasProvidedFbc) {
+            if (!isString(providedFbc) || !FBC_PATTERN.test(providedFbc)) {
+                this.persistence.unregister(PERSISTENCE_FACEBOOK_CLICK_ID)
+                return undefined
+            }
+            if (providedFbc !== stored?.value) {
+                this.persistence.register({
+                    [PERSISTENCE_FACEBOOK_CLICK_ID]: { value: providedFbc, delivered: false },
+                })
+            }
+            return { value: providedFbc, pending: providedFbc !== stored?.value || !stored.delivered }
+        }
+
+        if (isString(fbclid) && FBCLID_PATTERN.test(fbclid)) {
+            if (stored?.value.split('.')[3] === fbclid) {
+                return { value: stored.value, pending: !stored.delivered }
+            }
+
+            const fbc = `fb.1.${Date.now()}.${fbclid}`
+            this.persistence.register({
+                [PERSISTENCE_FACEBOOK_CLICK_ID]: { value: fbc, delivered: false },
+            })
+            return { value: fbc, pending: true }
+        }
+
+        return stored ? { value: stored.value, pending: !stored.delivered } : undefined
+    }
+
+    private _markFacebookClickIdDelivered(value: string): void {
+        if (!this.persistence) {
+            return
+        }
+        this.persistence.refreshKey(PERSISTENCE_FACEBOOK_CLICK_ID)
+        const stored = this._getPersistedFacebookClickId()
+        if (stored?.value === value && !stored.delivered) {
+            this.persistence.register({
+                [PERSISTENCE_FACEBOOK_CLICK_ID]: { value, delivered: true },
+            })
+        }
+    }
+
     /**
      * Captures an event with optional properties and configuration.
      *
@@ -1597,8 +1684,9 @@ export class PostHog implements PostHogInterface {
         // The initial campaign/referrer props need to be stored in the regular persistence, as they are there to mimic
         // the person-initial props. The non-initial versions are stored in the sessionPersistence, as they are sent
         // with every event and used by the session table to create session-initial props.
+        let campaignParams: Properties | undefined
         if (this.config.save_campaign_params) {
-            this.sessionPersistence.update_campaign_params()
+            campaignParams = this.sessionPersistence.update_campaign_params()
         }
         if (this.config.save_referrer) {
             this.sessionPersistence.update_referrer_info()
@@ -1644,6 +1732,27 @@ export class PostHog implements PostHogInterface {
         const setProperties = options?.$set
         if (setProperties && !shouldSendMinimalFlagCalledEvent) {
             data.$set = options?.$set
+        }
+
+        const propertySet = isObject(properties?.$set) ? properties.$set : undefined
+        const hasOptionFbc = !!options?.$set && FACEBOOK_CLICK_ID in options.$set
+        const hasPropertyFbc = !!propertySet && FACEBOOK_CLICK_ID in propertySet
+        const hasProvidedFbc = hasOptionFbc || hasPropertyFbc
+        const providedFbc = hasOptionFbc ? options?.$set?.[FACEBOOK_CLICK_ID] : propertySet?.[FACEBOOK_CLICK_ID]
+        const propertyUnset = isArray(properties?.$unset) ? properties.$unset : []
+        const optionUnset = options?.$unset || []
+        const unsetFbc =
+            propertyUnset.indexOf(FACEBOOK_CLICK_ID) !== -1 || optionUnset.indexOf(FACEBOOK_CLICK_ID) !== -1
+        const fbc = this._updateFacebookClickId(campaignParams?.fbclid, providedFbc, hasProvidedFbc, unsetFbc)
+        if (
+            fbc &&
+            data.properties.$process_person_profile === true &&
+            fbc.pending &&
+            !hasProvidedFbc &&
+            !shouldSendMinimalFlagCalledEvent
+        ) {
+            // An explicit person property supplied by the caller wins over the SDK-derived value.
+            data.$set = { [FACEBOOK_CLICK_ID]: fbc.value, ...data.$set }
         }
         const unsetProperties = options?.$unset
         if (unsetProperties) {
@@ -1727,6 +1836,11 @@ export class PostHog implements PostHogInterface {
             }
         }
 
+        const finalFbc =
+            data.$set?.[FACEBOOK_CLICK_ID] ??
+            (isObject(data.properties?.$set) ? data.properties.$set[FACEBOOK_CLICK_ID] : undefined)
+        const fbcToConfirm = fbc?.pending && finalFbc === fbc.value ? fbc.value : undefined
+
         this._internalEventEmitter.emit('eventCaptured', data)
 
         const url = options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
@@ -1738,10 +1852,25 @@ export class PostHog implements PostHogInterface {
             compression: 'best-available',
             timestampMode: isSessionRecording ? 'body' : 'capture-body',
             batchKey: options?._batchKey,
-            transport: options?.transport,
+            ...(options?.transport ? { transport: options.transport } : {}),
+            ...(fbcToConfirm
+                ? {
+                      fireCallbackOnDrop: true,
+                      callback: (response) => {
+                          if (response.statusCode >= 200 && response.statusCode < 300) {
+                              this._markFacebookClickIdDelivered(fbcToConfirm)
+                          }
+                      },
+                  }
+                : {}),
         }
 
-        if (this.config.request_batching && (!options || options?._batchKey) && !options?.send_instantly) {
+        if (
+            this.config.request_batching &&
+            (!options || options?._batchKey) &&
+            !options?.send_instantly &&
+            !fbcToConfirm
+        ) {
             this._requestQueue.enqueue(requestOptions)
         } else {
             this._send_retriable_request(requestOptions)
