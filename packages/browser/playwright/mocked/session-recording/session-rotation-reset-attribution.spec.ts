@@ -2,8 +2,8 @@ import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-tes
 import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page } from '@playwright/test'
 
-// a rotation while the async compression queue is busy must ship the old session's
-// tail under the old session id; the race is timing-dependent, run with --repeat-each>=3
+// a rotation while the async compression queue is busy must ship the old session's tail
+// under the old session id; the race is timing-dependent, so scenarios repeat with retries 0
 
 const ROTATION_SLACK_MS = 100
 const FULL_SNAPSHOT_DEADLINE_MS = 2000
@@ -311,48 +311,50 @@ async function rotateInOneEvaluate(page: Page): Promise<RotationResult> {
 }
 
 test.describe('Session recording - reset()+identify() attribution under load', () => {
-    test.describe.configure({ timeout: 60000 })
+    test.describe.configure({ timeout: 60000, retries: 0 })
 
     test.beforeEach(async ({ page, context }) => {
         await bootWithChurn(page, context)
     })
 
-    test('A: active reset - reset()+identify() back to back while mutations run', async ({ page }) => {
-        const oldSessionId = await getSessionId(page)
+    for (const run of [1, 2, 3]) {
+        test(`A: active reset - reset()+identify() back to back while mutations run (run ${run})`, async ({ page }) => {
+            const oldSessionId = await getSessionId(page)
 
-        const { rotationTime, pre, post } = await rotateInOneEvaluate(page)
+            const { rotationTime, pre, post } = await rotateInOneEvaluate(page)
 
-        const newSessionId = await getSessionId(page)
-        expect(newSessionId).not.toEqual(oldSessionId)
+            const newSessionId = await getSessionId(page)
+            expect(newSessionId).not.toEqual(oldSessionId)
 
-        const batches = await settleAndCollect(page, newSessionId)
-        runAttributionOracle(batches, oldSessionId, newSessionId, rotationTime, {
-            expectIdleMarkers: false,
-            diag: { pre, post },
+            const batches = await settleAndCollect(page, newSessionId)
+            runAttributionOracle(batches, oldSessionId, newSessionId, rotationTime, {
+                expectIdleMarkers: false,
+                diag: { pre, post },
+            })
         })
-    })
 
-    test('B: idle, wake, then reset()+identify() in one evaluate', async ({ page }) => {
-        const oldSessionId = await getSessionId(page)
+        test(`B: idle, wake, then reset()+identify() in one evaluate (run ${run})`, async ({ page }) => {
+            const oldSessionId = await getSessionId(page)
 
-        await goIdleThenWake(page)
+            await goIdleThenWake(page)
 
-        const { rotationTime, pre, post } = await rotateInOneEvaluate(page)
+            const { rotationTime, pre, post } = await rotateInOneEvaluate(page)
 
-        const newSessionId = await getSessionId(page)
-        expect(newSessionId).not.toEqual(oldSessionId)
+            const newSessionId = await getSessionId(page)
+            expect(newSessionId).not.toEqual(oldSessionId)
 
-        const batches = await settleAndCollect(page, newSessionId)
-        runAttributionOracle(batches, oldSessionId, newSessionId, rotationTime, {
-            expectIdleMarkers: true,
-            diag: { pre, post },
+            const batches = await settleAndCollect(page, newSessionId)
+            runAttributionOracle(batches, oldSessionId, newSessionId, rotationTime, {
+                expectIdleMarkers: true,
+                diag: { pre, post },
+            })
         })
-    })
+    }
 })
 
 test.describe('Session recording - reset() attribution control (compress_events: false)', () => {
     // compression-off control: the oracle must always hold here
-    test.describe.configure({ timeout: 60000 })
+    test.describe.configure({ timeout: 60000, retries: 0 })
 
     const uncompressedStartOptions = {
         ...startOptions,
