@@ -42,6 +42,14 @@ describe('traceparent', () => {
       })
     })
 
+    it('rejects version 00 with extra fields, which only a higher version may carry', () => {
+      // W3C defines version 00 as exactly three fields. A peer that follows the
+      // spec restarts the trace here, so continuing it would split the trace in
+      // half across the two services.
+      expect(parseTraceparent(`00-${TRACE_ID}-${SPAN_ID}-01-something`)).toBeUndefined()
+      expect(parseTraceparent(`00-${TRACE_ID}-${SPAN_ID}-01-`)).toBeUndefined()
+    })
+
     it('normalizes case and surrounding whitespace', () => {
       expect(parseTraceparent(`  00-${TRACE_ID.toUpperCase()}-${SPAN_ID.toUpperCase()}-01 `)).toEqual({
         traceId: TRACE_ID,
@@ -130,9 +138,9 @@ describe('normalizeTraceparent', () => {
     expect(normalizeTraceparent(`01-${TRACE_ID}-${SPAN_ID}-01`)).toBe(`01-${TRACE_ID}-${SPAN_ID}-01`)
   })
 
-  it('canonicalises whitespace and case, and drops unknown trailing fields', () => {
-    expect(normalizeTraceparent(`  00-${TRACE_ID.toUpperCase()}-${SPAN_ID}-01-extra `)).toBe(
-      `00-${TRACE_ID}-${SPAN_ID}-01`
+  it("canonicalises whitespace and case, and drops a higher version's trailing fields", () => {
+    expect(normalizeTraceparent(`  01-${TRACE_ID.toUpperCase()}-${SPAN_ID}-01-extra `)).toBe(
+      `01-${TRACE_ID}-${SPAN_ID}-01`
     )
   })
 
@@ -140,6 +148,7 @@ describe('normalizeTraceparent', () => {
     ['a malformed header', 'not-a-traceparent'],
     ['the invalid ff version', `ff-${TRACE_ID}-${SPAN_ID}-01`],
     ['an all-zero trace id', `00-${'0'.repeat(32)}-${SPAN_ID}-01`],
+    ['version 00 with trailing fields', `00-${TRACE_ID}-${SPAN_ID}-01-extra`],
     ['a non-string', ['a', 'b']],
   ])('rejects %s', (_name, value) => {
     expect(normalizeTraceparent(value)).toBeUndefined()

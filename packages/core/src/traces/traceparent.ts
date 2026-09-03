@@ -8,7 +8,8 @@ export interface RemoteSpanContext {
 }
 
 // `00-<32 hex>-<16 hex>-<2 hex>`. Version `ff` is invalid per the spec; other
-// unknown versions are forwards-compatible, so we parse the first four fields only.
+// unknown versions are forwards-compatible, so we parse the first four fields
+// and tolerate whatever a later version appends after them.
 const TRACEPARENT_RE = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})(-.*)?$/
 
 /**
@@ -49,8 +50,15 @@ function matchTraceparent(value: unknown): TraceparentFields | undefined {
   if (!match) {
     return undefined
   }
-  const [, version, traceId, spanId, flags] = match
+  const [, version, traceId, spanId, flags, trailing] = match
   if (version === 'ff') {
+    return undefined
+  }
+  // Version `00` is defined as exactly `trace-id "-" parent-id "-" trace-flags`.
+  // W3C scopes the tolerate-what-you-don't-know rule to a *higher* version, so a
+  // version `00` header with anything appended is malformed and starts a fresh
+  // trace, the way a conformant peer handles it.
+  if (version === '00' && trailing) {
     return undefined
   }
   if (!isValidTraceId(traceId) || !isValidSpanId(spanId)) {
