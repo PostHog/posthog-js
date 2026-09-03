@@ -1,7 +1,7 @@
 let mockFailCompression = false
 
-jest.mock('node:zlib', () => {
-  const actual = jest.requireActual<typeof import('node:zlib')>('node:zlib')
+vi.mock('node:zlib', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:zlib')>()
   return {
     ...actual,
     gzip: (input: Buffer | string, callback: (error: Error | null, result?: Buffer) => void) =>
@@ -30,7 +30,7 @@ describe('Node gzip compression', () => {
 
   it('falls back when zlib compression fails', async () => {
     mockFailCompression = true
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await expect(gzipCompress('payload')).resolves.toBeNull()
     expect(errorSpy).toHaveBeenCalledWith('Failed to gzip compress data', expect.any(Error))

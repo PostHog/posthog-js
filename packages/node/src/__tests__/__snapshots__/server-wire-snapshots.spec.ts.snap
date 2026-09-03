@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`server wire snapshots snapshots a deterministic complete captureException wire event 1`] = `
+exports[`server wire snapshots > snapshots a deterministic complete captureException wire event 1`] = `
 {
   "body": {
     "api_key": "<redacted>",
@@ -73,7 +73,7 @@ exports[`server wire snapshots snapshots a deterministic complete captureExcepti
 }
 `;
 
-exports[`server wire snapshots snapshots a maximal flags request body 1`] = `
+exports[`server wire snapshots > snapshots a maximal flags request body 1`] = `
 {
   "body": {
     "$device_id": "device-3",
@@ -119,7 +119,7 @@ exports[`server wire snapshots snapshots a maximal flags request body 1`] = `
 }
 `;
 
-exports[`server wire snapshots snapshots the canonical Capture V1 transform and request matrix 1`] = `
+exports[`server wire snapshots > snapshots the canonical Capture V1 transform and request matrix 1`] = `
 {
   "body": {
     "batch": [

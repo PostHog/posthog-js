@@ -186,7 +186,7 @@ describe('error conversion', () => {
       const replacementFile = join(directory, 'replacement.ts')
       await writeFile(sourceFile, 'original context\n')
       await writeFile(replacementFile, 'replacement context\n')
-      const openSourceFile = jest.fn(async (path: string, flags: number) => {
+      const openSourceFile = vi.fn(async (path: string, flags: number) => {
         expect(path).toBe(sourceFile)
         if (process.platform !== 'win32') {
           expect(flags & constants.O_NONBLOCK).toBe(constants.O_NONBLOCK)
@@ -209,8 +209,8 @@ describe('error conversion', () => {
       const sourceFile = join(directory, 'source.ts')
       await writeFile(sourceFile, 'source context\n')
       const fileHandle = await open(sourceFile, constants.O_RDONLY)
-      const closeSourceFile = jest.spyOn(fileHandle, 'close')
-      jest.spyOn(fileHandle, 'createReadStream').mockImplementation(() => {
+      const closeSourceFile = vi.spyOn(fileHandle, 'close')
+      vi.spyOn(fileHandle, 'createReadStream').mockImplementation(() => {
         throw new Error('stream initialization failed')
       })
       const frame = makeFrame(sourceFile)
@@ -228,7 +228,7 @@ describe('error conversion', () => {
       const fileHandle = await open(sourceFile, constants.O_RDONLY)
       const createSourceStream = fileHandle.createReadStream.bind(fileHandle)
       let sourceStream: ReadStream | undefined
-      jest.spyOn(fileHandle, 'createReadStream').mockImplementation((options) => {
+      vi.spyOn(fileHandle, 'createReadStream').mockImplementation((options) => {
         sourceStream = createSourceStream(options)
         return sourceStream
       })
@@ -246,7 +246,7 @@ describe('error conversion', () => {
       await writeFile(sourceFile, '')
       await truncate(sourceFile, MAX_CONTEXTLINES_FILE_SIZE + 1)
       const frame = makeFrame(sourceFile)
-      const logger = { debug: jest.fn() }
+      const logger = { debug: vi.fn() }
 
       await addSourceContext([frame], undefined, logger)
 

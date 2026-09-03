@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Segment integration enriches Segment track events with PostHog properties 1`] = `
+exports[`Segment integration > enriches Segment track events with PostHog properties 1`] = `
 {
   "anonymousId": "test-anonymous-id",
   "event": "Order Completed",

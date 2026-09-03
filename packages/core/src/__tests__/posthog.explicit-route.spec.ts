@@ -54,10 +54,10 @@ function createClient(
 ): [ExplicitRouteTestClient, PostHogCoreTestClientMocks] {
   const storageCache: { [key: string]: string | JsonType } = {}
   const mocks: PostHogCoreTestClientMocks = {
-    fetch: jest.fn(),
+    fetch: vi.fn(),
     storage: {
-      getItem: jest.fn((key) => storageCache[key]),
-      setItem: jest.fn((key, val) => {
+      getItem: vi.fn((key) => storageCache[key]),
+      setItem: vi.fn((key, val) => {
         storageCache[key] = val == null ? undefined : val
       }),
     },
@@ -84,7 +84,7 @@ const queueEvents = (client: ExplicitRouteTestClient, key: PostHogPersistedPrope
 
 describe('PostHog Core explicit queue route', () => {
   beforeEach(() => {
-    jest.setSystemTime(new Date('2022-01-01'))
+    vi.setSystemTime(new Date('2022-01-01'))
   })
 
   it('enqueues onto the explicit route, overriding getQueueRouteKey', () => {

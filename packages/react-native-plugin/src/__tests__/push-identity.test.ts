@@ -1,37 +1,31 @@
 /* eslint-disable compat/compat */
-// All mock state lives inside the factory: the mocked module is required while this
-// file's imports hoist, before any module-scope const here would initialize.
-jest.mock('react-native', () => {
-  const listeners: { [event: string]: (payload: any) => void | Promise<void> } = {}
-  const removed: string[] = []
-  const nativeModule = {
-    providePushIdentityToken: jest.fn(() => Promise.resolve()),
-  }
-  return {
-    __pushMock: { listeners, removed, nativeModule },
-    NativeModules: { PosthogReactNativePlugin: nativeModule },
-    NativeEventEmitter: class {
-      addListener(event: string, handler: (payload: any) => void) {
-        listeners[event] = handler
-        return {
-          remove: () => {
-            removed.push(event)
-            delete listeners[event]
-          },
-        }
+const pushMock = vi.hoisted(() => ({
+  listeners: {} as { [event: string]: (payload: any) => void | Promise<void> },
+  removed: [] as string[],
+  nativeModule: {
+    providePushIdentityToken: vi.fn(() => Promise.resolve()),
+  },
+}))
+
+vi.mock('react-native', () => ({
+  NativeModules: { PosthogReactNativePlugin: pushMock.nativeModule },
+  NativeEventEmitter: class {
+    addListener(event: string, handler: (payload: any) => void) {
+      pushMock.listeners[event] = handler
+      return {
+        remove: () => {
+          pushMock.removed.push(event)
+          delete pushMock.listeners[event]
+        },
       }
-    },
-    Platform: { OS: 'ios', select: (obj: any) => obj.ios ?? obj.default },
-  }
-})
+    }
+  },
+  Platform: { OS: 'ios', select: (obj: any) => obj.ios ?? obj.default },
+}))
 
 import { setPushIdentityProvider } from '../index'
 
-const { listeners, removed, nativeModule } = (jest.requireMock('react-native') as any).__pushMock as {
-  listeners: { [event: string]: (payload: any) => void | Promise<void> }
-  removed: string[]
-  nativeModule: { providePushIdentityToken: jest.Mock }
-}
+const { listeners, removed, nativeModule } = pushMock
 
 const emitRequest = async (requestId = 'req-1'): Promise<void> => {
   const handler = listeners.PostHogPushIdentityRequest
@@ -45,13 +39,13 @@ const emitRequest = async (requestId = 'req-1'): Promise<void> => {
 
 describe('setPushIdentityProvider', () => {
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     nativeModule.providePushIdentityToken.mockImplementation(() => Promise.resolve())
     removed.length = 0
   })
 
   it('replies with the minted token, keyed by request id', async () => {
-    const provider = jest.fn(async (distinctId: string, appId: string) => `token-${distinctId}-${appId}`)
+    const provider = vi.fn(async (distinctId: string, appId: string) => `token-${distinctId}-${appId}`)
     setPushIdentityProvider(provider)
 
     await emitRequest()
@@ -61,7 +55,7 @@ describe('setPushIdentityProvider', () => {
   })
 
   it('a throwing provider degrades to a null token', async () => {
-    setPushIdentityProvider(jest.fn(async () => Promise.reject(new Error('mint failed'))))
+    setPushIdentityProvider(vi.fn(async () => Promise.reject(new Error('mint failed'))))
 
     await emitRequest()
 
@@ -69,7 +63,7 @@ describe('setPushIdentityProvider', () => {
   })
 
   it('a non-string reply degrades to a null token', async () => {
-    setPushIdentityProvider(jest.fn(async () => 42 as any))
+    setPushIdentityProvider(vi.fn(async () => 42 as any))
 
     await emitRequest()
 
@@ -77,11 +71,11 @@ describe('setPushIdentityProvider', () => {
   })
 
   it('installing a new provider replaces the previous listener', async () => {
-    setPushIdentityProvider(jest.fn(async () => 'old'))
+    setPushIdentityProvider(vi.fn(async () => 'old'))
     // The module-level subscription persists across tests; only count removals
     // caused by the replacement below.
     removed.length = 0
-    const replacement = jest.fn(async () => 'new')
+    const replacement = vi.fn(async () => 'new')
     setPushIdentityProvider(replacement)
 
     await emitRequest()
@@ -93,7 +87,7 @@ describe('setPushIdentityProvider', () => {
 
   it('a failing native reply does not throw into the emitter', async () => {
     nativeModule.providePushIdentityToken.mockImplementation(() => Promise.reject(new Error('bridge gone')))
-    setPushIdentityProvider(jest.fn(async () => 'token'))
+    setPushIdentityProvider(vi.fn(async () => 'token'))
 
     await expect(emitRequest()).resolves.toBeUndefined()
   })
