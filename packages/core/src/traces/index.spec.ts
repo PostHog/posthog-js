@@ -798,9 +798,8 @@ describe('PostHogTraces', () => {
     })
 
     it('keeps them when the hook builds its record from the fields it can see', async () => {
-      // Spreading the record carries the propagation fields through even though
-      // no public type declares them; naming the public fields is what drops
-      // them, and is what the hook-visible type invites a caller to write.
+      // Spreading carries the propagation fields through even though no public
+      // type declares them; naming the public fields is what drops them.
       const instance = createMockInstance()
       const traces = createTraces(
         {

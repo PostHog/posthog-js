@@ -371,9 +371,8 @@ describe('PostHogSpan', () => {
     })
 
     it('bounds the work a shared subtree costs, not just a cyclic one', () => {
-      // Siblings pointing at one object are re-walked once per path, so a DAG
-      // ten levels wide reaches the same leaves ten million times. Only the node
-      // budget stops it, and a leaf that skips the charge does not spend it.
+      // Siblings pointing at one object are re-walked once per path, so this
+      // reaches the same leaves ten million times. Only the node budget stops it.
       const leaf: string[] = []
       for (let i = 0; i < 1000; i++) {
         leaf.push('x'.repeat(2000))
@@ -383,9 +382,8 @@ describe('PostHogSpan', () => {
 
       const bounded = truncateAttributeValue(shared, 8)
 
-      // Counting what the walk shortened, not what the result can reach: once
-      // the budget is gone the original is handed back by reference, so the
-      // untouched tail of the graph is still reachable through it.
+      // Counting what the walk shortened, not what the result can reach: past
+      // the budget the original is handed back by reference.
       const cap = MAX_JSON_SAFE_VALUE_NODES * 2
       let shortened = 0
       const stack: unknown[] = [bounded]

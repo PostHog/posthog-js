@@ -593,12 +593,13 @@ export function truncateAttributeValue(value: SpanAttributeValue, maxLength: num
 
 /**
  * Walks under the same depth cap, node budget and ancestor set as
- * `encodeAnyValue`, charging a node per value so the two cost the same. Depth alone does not bound this: a value whose children
- * point back at their siblings costs `fanout ** depth` visits, which is minutes
- * of synchronous work inside the caller's own `setAttribute` call.
+ * `encodeAnyValue`, charging the same values. The encoder spends one budget
+ * across the whole attribute bag where this spends one per value, so it runs out
+ * no later and marks whatever this walk returned whole.
  *
- * A value the walk cannot bound is returned as it came. The encoder walks it
- * again under its own budget and marks whatever it finds there.
+ * Depth alone does not bound this: a value whose children point back at their
+ * siblings costs `fanout ** depth` visits, which is minutes of synchronous work
+ * inside the caller's own `setAttribute` call.
  */
 function truncateValue(
   value: SpanAttributeValue,
@@ -607,17 +608,12 @@ function truncateValue(
   depth: number
 ): SpanAttributeValue {
   if (value === null || typeof value !== 'object') {
-    // A nullish leaf is free here because the encoder drops one without spending
-    // its budget. Charging it would make this walk the stricter of the two, and
-    // then a value whose leaves are mostly nulls exhausts this budget while the
-    // encoder still has room — leaving a large string unbounded on both sides.
+    // Free, as it is in the encoder, which drops a nullish leaf without charging.
     if (isNullish(value)) {
       return value
     }
-    // Everything else is charged as the encoder charges it. A shared subtree is
-    // re-walked once per path that reaches it, so leaving the leaves free lets
-    // one value cost `budget * items` string copies where the encoder would have
-    // stopped at `budget`.
+    // A shared subtree is re-walked once per path reaching it, so a leaf that
+    // skips the charge lets one value cost `budget * items` string copies.
     if (state.remainingNodes <= 0) {
       return value
     }
@@ -631,10 +627,6 @@ function truncateValue(
     // its strings at full length.
     return CIRCULAR_VALUE
   }
-  // Unlike a cycle, these two are bounded by the encoder as well: it stops at the
-  // same depth, charges the same values — nullish leaves free on both sides — and
-  // spends one budget across the whole bag rather than one per attribute, so it
-  // runs out no later than this walk and marks whatever this one left unbounded.
   if (state.remainingNodes <= 0 || depth >= MAX_JSON_SAFE_VALUE_DEPTH) {
     return value
   }
