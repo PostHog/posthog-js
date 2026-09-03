@@ -8,6 +8,7 @@ import type {
   McpEvent,
   MissingCapabilityCaptureData,
   PreparedToolCall,
+  PrepareToolCallOptions,
   PrepareToolListOptions,
   ToolCallCaptureData,
   ToolsListCaptureData,
@@ -25,7 +26,7 @@ import { normalizeHeaderString } from './headers'
 import { applyMcpLibIdentity } from './lib-identity'
 import { log } from './logger'
 import {
-  addModelParameterToTools,
+  addModelParameterToTool,
   getModelArgument,
   getModelDescription,
   isCaptureModelEnabled,
@@ -203,7 +204,12 @@ export class PostHogMCP extends PostHog {
       for (const [toolName, ownsModel] of ownershipByName) {
         this.#modelParameterOwnership.set(toolName, ownsModel)
       }
-      prepared = addModelParameterToTools(prepared, getModelDescription(this.#captureModel))
+      const modelDescription = getModelDescription(this.#captureModel)
+      prepared = prepared.map((tool) =>
+        typeof tool.name === 'string' && ownershipByName.get(tool.name) === false
+          ? tool
+          : addModelParameterToTool(tool, modelDescription)
+      )
     }
     return prepared
   }
@@ -216,6 +222,9 @@ export class PostHogMCP extends PostHog {
    * Pass the returned intent and model fields to {@link captureToolCall}, and
    * dispatch the returned `args` to your tool.
    *
+   * On stateless or multi-replica servers, pass the original tool descriptor
+   * so ownership does not depend on which process served `tools/list`.
+   *
    * This only extracts the explicit `context` argument (`intentSource:
    * 'context_parameter'`); it does not infer intent. If you run your own
    * inference, pass that string with `intentSource: 'inferred'` straight to
@@ -224,19 +233,28 @@ export class PostHogMCP extends PostHog {
    *
    * @example
    * ```ts
-   * const { intent, intentSource, args, isMissingCapability } = posthog.prepareToolCall(name, rawArgs)
+   * const { intent, intentSource, llmModel, llmModelSource, args, isMissingCapability } =
+   *   posthog.prepareToolCall(name, rawArgs)
    * if (isMissingCapability) {
-   *   posthog.captureMissingCapability({ context: intent, ...identity })
+   *   posthog.captureMissingCapability({ context: intent, llmModel, llmModelSource, ...identity })
    *   return getMoreToolsResult()
    * }
    * const result = await runTool(name, args)
    * posthog.captureToolCall({ toolName: name, intent, intentSource, ...identity })
    * ```
    */
-  prepareToolCall(name: string, args?: Record<string, unknown>): PreparedToolCall {
+  prepareToolCall(
+    name: string,
+    args?: Record<string, unknown>,
+    options: PrepareToolCallOptions = {}
+  ): PreparedToolCall {
     const rawContext = args?.context
     const intent = typeof rawContext === 'string' && rawContext.trim() ? rawContext.trim() : undefined
-    const ownsModel = this.#modelParameterOwnership.get(name) === true
+    const ownsModel =
+      isCaptureModelEnabled(this.#captureModel) &&
+      (options.originalTool
+        ? analyticsOwnsParameter(options.originalTool.inputSchema, 'llm_model')
+        : this.#modelParameterOwnership.get(name) === true)
     const llmModel = ownsModel ? getModelArgument({ params: { arguments: args } }) : undefined
     const strippedArgs = stripContext(args)
     return {
@@ -265,6 +283,10 @@ export class PostHogMCP extends PostHog {
     event.resourceName = this.#missingCapabilityToolName
     event.parameters = data.parameters
     applyIntent(event, data.context, 'context_parameter')
+    setEventModel(event, data.llmModel)
+    if (event.llmModel && data.llmModelSource) {
+      event.llmModelSource = data.llmModelSource
+    }
     this.#emit(event)
   }
 

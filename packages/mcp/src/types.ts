@@ -593,11 +593,19 @@ export interface PrepareToolListOptions {
   reportMissing?: boolean
 }
 
+/** Options for {@link PostHogMCP.prepareToolCall}. */
+export interface PrepareToolCallOptions {
+  /**
+   * The tool descriptor before PostHog preparation. Pass this on stateless or
+   * multi-replica servers so SDK argument ownership is resolved per request.
+   */
+  originalTool?: { inputSchema?: unknown }
+}
+
 /**
  * Result of {@link PostHogMCP.prepareToolCall}: the intent pulled off the
- * incoming call, the arguments with the injected `context` removed (so your tool
- * handler and its schema validation never see it), and whether the call targeted
- * the `get_more_tools` virtual tool.
+ * incoming call, the arguments with SDK-owned analytics fields removed, and
+ * whether the call targeted the `get_more_tools` virtual tool.
  */
 export interface PreparedToolCall {
   /** The agent's stated intent (the `context` argument), if present. */
@@ -608,7 +616,7 @@ export interface PreparedToolCall {
   llmModel?: string
   /** How the model id was obtained. Always `self_reported` when present. */
   llmModelSource?: MCPAnalyticsModelSource
-  /** The call arguments with the injected `context` key stripped out. */
+  /** The call arguments with SDK-owned `context` and `llm_model` keys removed. */
   args?: Record<string, unknown>
   /** True when `name` is the `get_more_tools` virtual tool. */
   isMissingCapability: boolean
@@ -621,6 +629,10 @@ export interface MissingCapabilityCaptureData extends McpCaptureCommon {
    * on the `get_more_tools` call) → `$mcp_intent`.
    */
   context?: string
+  /** The calling agent's self-reported model id -> `$mcp_llm_model`. */
+  llmModel?: string
+  /** How the model id was obtained -> `$mcp_llm_model_source`. */
+  llmModelSource?: MCPAnalyticsModelSource
   /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
   parameters?: unknown
 }

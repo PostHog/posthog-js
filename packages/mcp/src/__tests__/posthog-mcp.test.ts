@@ -368,6 +368,32 @@ describe('PostHogMCP', () => {
       }
     })
 
+    it('skips model injection for duplicate names when any descriptor owns llm_model', async () => {
+      const client = newClient({ captureModel: true })
+      const duplicateTools = [
+        tools[0],
+        {
+          name: 'execute-sql',
+          inputSchema: {
+            type: 'object',
+            properties: { llm_model: { type: 'string' } },
+            required: ['llm_model'],
+          },
+        },
+      ]
+      try {
+        const prepared = client.prepareToolList(duplicateTools)
+        expect(prepared[0].inputSchema.properties).not.toHaveProperty('llm_model')
+        expect(prepared[1].inputSchema.properties.llm_model).toEqual({ type: 'string' })
+
+        const call = client.prepareToolCall('execute-sql', { llm_model: 'application-owned-value' })
+        expect(call.args).toEqual({ llm_model: 'application-owned-value' })
+        expect(call.llmModel).toBeUndefined()
+      } finally {
+        await client.shutdown()
+      }
+    })
+
     it('drops an unknown self-reported model', async () => {
       const client = newClient({ captureModel: true })
       try {
@@ -395,6 +421,46 @@ describe('PostHogMCP', () => {
         await client.shutdown()
       }
     })
+
+    it.each([
+      {
+        name: 'strips an SDK-owned model argument',
+        originalTool: tools[0],
+        expectedArgs: { query: 'select 1' },
+        expectedModel: 'claude-sonnet-4-20250514',
+      },
+      {
+        name: 'preserves an application-owned model argument',
+        originalTool: {
+          name: 'route-model',
+          inputSchema: {
+            type: 'object',
+            properties: { llm_model: { type: 'string' } },
+            required: ['llm_model'],
+          },
+        },
+        expectedArgs: { query: 'select 1', llm_model: 'claude-sonnet-4-20250514' },
+        expectedModel: undefined,
+      },
+    ])(
+      '$name from the original schema without prior list preparation',
+      async ({ originalTool, expectedArgs, expectedModel }) => {
+        const client = newClient({ captureModel: true })
+        try {
+          const call = client.prepareToolCall(
+            originalTool.name,
+            { query: 'select 1', llm_model: 'claude-sonnet-4-20250514' },
+            { originalTool }
+          )
+
+          expect(call.args).toEqual(expectedArgs)
+          expect(call.llmModel).toBe(expectedModel)
+          expect(call.llmModelSource).toBe(expectedModel ? 'self_reported' : undefined)
+        } finally {
+          await client.shutdown()
+        }
+      }
+    )
   })
 
   describe('prepareToolCall', () => {
@@ -419,14 +485,21 @@ describe('PostHogMCP', () => {
   })
 
   describe('captureMissingCapability', () => {
-    it('emits $mcp_missing_capability with the context as intent', async () => {
-      posthog.captureMissingCapability({ context: 'I need a tool to delete cohorts', distinctId: 'user-123' })
+    it('emits $mcp_missing_capability with the context and model', async () => {
+      posthog.captureMissingCapability({
+        context: 'I need a tool to delete cohorts',
+        distinctId: 'user-123',
+        llmModel: 'claude-sonnet-4-20250514',
+        llmModelSource: 'self_reported',
+      })
       await tick()
 
       const payload = onlyCapture(PostHogMCPAnalyticsEvent.MissingCapability)
       const p = payload.properties
       expect(p[PostHogMCPAnalyticsProperty.Intent]).toBe('I need a tool to delete cohorts')
       expect(p[PostHogMCPAnalyticsProperty.IntentSource]).toBe('context_parameter')
+      expect(p[PostHogMCPAnalyticsProperty.LlmModel]).toBe('claude-sonnet-4-20250514')
+      expect(p[PostHogMCPAnalyticsProperty.LlmModelSource]).toBe('self_reported')
     })
   })
 
