@@ -1,4 +1,4 @@
-import type { Span, SpanAttributes, StartSpanOptions } from '@posthog/types'
+import type { Span, SpanAttributes, SpanRecord as HookSpanRecord, StartSpanOptions } from '@posthog/types'
 import type { Logger } from '../types'
 import type {
   OtlpSpan,
@@ -70,8 +70,6 @@ interface SpanIdentity {
   spanId: string
   parentSpanId?: string
   traceState?: string
-  traceFlags: string
-  parentIsRemote: boolean
 }
 
 /**
@@ -489,8 +487,6 @@ export class PostHogTraces {
       spanId: record.spanId,
       parentSpanId: record.parentSpanId,
       traceState: record.traceState,
-      traceFlags: record.traceFlags,
-      parentIsRemote: record.parentIsRemote,
     }
     const originalTimes = { startTime: record.startTime, endTime: record.endTime }
     // Snapshotted with the rest: the hook mutates the record in place, so reading
@@ -499,20 +495,26 @@ export class PostHogTraces {
       attributes: record.droppedAttributesCount,
       events: record.droppedEventsCount,
     }
+    // Read here rather than restored onto the hook's return value: writing them
+    // back would throw on a frozen record, and neither is on the record a hook
+    // is handed, so a rebuilding hook always arrives without them.
+    const originalPropagation = {
+      traceFlags: record.traceFlags,
+      parentIsRemote: record.parentIsRemote,
+    }
     // Copied, not referenced: the hook is documented as mutating the record in
     // place, and a reference would restore the mutation onto itself.
     const originalStatus = record.status && { ...record.status }
+    let hooked: HookSpanRecord = record
     let current = record
     try {
       for (const hook of this._config.beforeSpanSend) {
-        const result = hook(current)
+        const result = hook(hooked)
         if (!result) {
           this._recordDrop(1, 'beforeSpanSend dropped it')
           return null
         }
-        // A hook is handed the public record, which carries neither the trace
-        // flags nor the parent's remoteness; `_keepSpanIdentity` puts both back.
-        current = this._keepSpanIdentity(result as SpanRecord, identity)
+        hooked = this._keepSpanIdentity(result, identity)
       }
 
       // Rebuilt field by field before anything below writes to it. The hook's
@@ -520,19 +522,24 @@ export class PostHogTraces {
       // class instance whose fields are prototype getters a spread would miss.
       // Naming them also bounds what can reach the wire.
       current = {
-        traceId: current.traceId,
-        spanId: current.spanId,
-        parentSpanId: current.parentSpanId,
-        traceState: current.traceState,
-        traceFlags: current.traceFlags,
-        parentIsRemote: current.parentIsRemote,
-        name: current.name,
-        kind: current.kind,
-        status: current.status,
-        attributes: current.attributes,
-        events: current.events,
-        startTime: current.startTime,
-        endTime: current.endTime,
+        traceId: hooked.traceId,
+        spanId: hooked.spanId,
+        parentSpanId: hooked.parentSpanId,
+        // From the snapshot: `_keepSpanIdentity` has already put it back on the
+        // record, but no public type declares it, so it cannot be read off one.
+        traceState: identity.traceState,
+        name: hooked.name,
+        kind: hooked.kind,
+        status: hooked.status,
+        attributes: hooked.attributes,
+        events: hooked.events,
+        startTime: hooked.startTime,
+        endTime: hooked.endTime,
+        // Taken from the span for the same reason as the dropped counts: no
+        // public type declares them, so a rebuilding hook returns without them
+        // and a `?? fallback` here would export a sampled-out trace as sampled.
+        traceFlags: originalPropagation.traceFlags,
+        parentIsRemote: originalPropagation.parentIsRemote,
         // Taken from the span, not from the hook's return value: these are SDK
         // bookkeeping that no public type declares, so a hook overwriting them
         // must not erase what the span actually dropped.
@@ -598,7 +605,7 @@ export class PostHogTraces {
    * Restores the fields a hook must not change. Runs per hook so a later hook in
    * the chain cannot sample on an id an earlier one forged.
    */
-  private _keepSpanIdentity(hooked: SpanRecord, original: SpanIdentity): SpanRecord {
+  private _keepSpanIdentity(hooked: HookSpanRecord, original: SpanIdentity): HookSpanRecord {
     if (
       hooked.traceId !== original.traceId ||
       hooked.spanId !== original.spanId ||
@@ -615,10 +622,6 @@ export class PostHogTraces {
     // A hook that rebuilds the record instead of spreading it would otherwise
     // drop tracestate, which is not part of the record the hook is handed.
     restoreField(hooked, 'traceState', original.traceState)
-    // Same reasoning: the sampled flag and the parent's remoteness are the
-    // caller's, and neither is on the record a hook sees.
-    restoreField(hooked, 'traceFlags', original.traceFlags)
-    restoreField(hooked, 'parentIsRemote', original.parentIsRemote)
     return hooked
   }
 

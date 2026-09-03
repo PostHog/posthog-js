@@ -743,6 +743,20 @@ describe('PostHogTraces', () => {
       expect(sentSpans(instance)[0].flags).toBe(0x300)
     })
 
+    it('keeps them when the rebuilding hook also freezes what it returns', async () => {
+      // Restoring these onto the returned record would throw here, and a throwing
+      // hook drops the span.
+      const instance = createMockInstance()
+      const traces = createTraces(
+        { beforeSpanSend: [(span: SpanRecord) => Object.freeze({ ...span }) as SpanRecord] },
+        instance
+      )
+      traces.startSpan('child', { parent: `00-${TRACE_ID}-${REMOTE_SPAN_ID}-00` }).end()
+      await traces.flush()
+
+      expect(sentSpans(instance).map((s) => s.flags)).toEqual([0x300])
+    })
+
     it('runs hooks left to right and stops at the first null', async () => {
       const order: string[] = []
       await endOneSpan([
