@@ -342,7 +342,7 @@ describe('V2 Trigger Groups', () => {
             }
 
             const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
-            const onActivate = jest.fn()
+            const onActivate = vi.fn()
             matcher.checkEventTriggerConditions('purchase', onActivate, 'session-1')
             expect(onActivate).toHaveBeenCalledWith('event', 'purchase')
         })
@@ -359,7 +359,7 @@ describe('V2 Trigger Groups', () => {
             }
 
             const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
-            const onActivate = jest.fn()
+            const onActivate = vi.fn()
             matcher.checkEventTriggerConditions('pageview', onActivate, 'session-1')
             expect(onActivate).not.toHaveBeenCalled()
         })
@@ -381,7 +381,7 @@ describe('V2 Trigger Groups', () => {
             }
 
             const matcher = new TriggerGroupMatching(fakePostHog, group, () => {})
-            const onActivate = jest.fn()
+            const onActivate = vi.fn()
             matcher.checkEventTriggerConditions('purchase', onActivate, 'session-1')
             expect(onActivate).toHaveBeenCalledWith('event', 'purchase')
         })

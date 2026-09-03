@@ -1,9 +1,9 @@
-/** @jest-environment jsdom */
+/** @vitest-environment jsdom */
 import React from 'react'
 import { act, render, cleanup } from '@testing-library/react'
 import { SurveyQuestionType, OpenSurveyQuestion } from '@posthog/core'
 
-// Minimal react-native shim — jest-expo's full preset chain explodes under
+// Minimal react-native shim — vi-expo's full preset chain explodes under
 // jsdom. ScrollView reflects scrollEnabled as a data attribute and stashes its
 // layout callbacks so the test can drive viewport/content sizes.
 let scrollViewCallbacks: {
@@ -11,8 +11,8 @@ let scrollViewCallbacks: {
   onContentSizeChange?: (width: number, height: number) => void
 } = {}
 
-jest.mock('react-native', () => {
-  const RealReact = jest.requireActual('react')
+vi.mock('react-native', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   const strip = (props: any) => {
     const domProps = { ...props }
     delete domProps.keyboardShouldPersistTaps
@@ -53,7 +53,7 @@ jest.mock('react-native', () => {
     TextInput: Box,
     Pressable,
     TouchableOpacity: Pressable,
-    Linking: { openURL: jest.fn() },
+    Linking: { openURL: vi.fn() },
     StyleSheet: { create: (s: any) => s, flatten: (s: any) => s, absoluteFill: {} },
   }
 })

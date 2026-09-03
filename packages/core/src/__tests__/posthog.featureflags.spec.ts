@@ -12,8 +12,8 @@ describe('PostHog Feature Flags v4', () => {
   let posthog: PostHogCoreTestClient
   let mocks: PostHogCoreTestClientMocks
 
-  jest.useFakeTimers()
-  jest.setSystemTime(new Date('2022-01-01'))
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2022-01-01'))
 
   const createMockFeatureFlags = (): Partial<PostHogV2FlagsResponse['flags']> => ({
     'feature-1': {
@@ -274,9 +274,10 @@ describe('PostHog Feature Flags v4', () => {
     })
 
     describe('when loaded', () => {
-      beforeEach(() => {
+      beforeEach(async () => {
         // The core doesn't reload flags by default (this is handled differently by web and RN)
         posthog.reloadFeatureFlags()
+        await waitForPromises()
       })
 
       it('should return the value of a flag', async () => {
@@ -294,7 +295,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       describe('when errored out', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
           ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch.mockImplementation((url) => {
               if (url.includes('/flags/')) {
@@ -313,6 +314,7 @@ describe('PostHog Feature Flags v4', () => {
           })
 
           posthog.reloadFeatureFlags()
+          await waitForPromises()
         })
 
         it('should return undefined', async () => {
@@ -348,7 +350,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       describe('when subsequent flags calls return partial results', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
           ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch
               .mockImplementationOnce((url) => {
@@ -418,6 +420,7 @@ describe('PostHog Feature Flags v4', () => {
           })
 
           posthog.reloadFeatureFlags()
+          await waitForPromises()
         })
 
         it('should return combined results', async () => {
@@ -491,7 +494,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       describe('when subsequent flags calls return failed flags with errorsWhileComputingFlags', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
           ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch
               .mockImplementationOnce((url) => {
@@ -563,6 +566,7 @@ describe('PostHog Feature Flags v4', () => {
           })
 
           posthog.reloadFeatureFlags()
+          await waitForPromises()
         })
 
         it('should filter out failed flags and preserve their cached values', async () => {
@@ -593,7 +597,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       describe('when subsequent flags calls return results without errors', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
           ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
             _mocks.fetch
               .mockImplementationOnce((url) => {
@@ -665,6 +669,7 @@ describe('PostHog Feature Flags v4', () => {
           })
 
           posthog.reloadFeatureFlags()
+          await waitForPromises()
         })
 
         it('should return only latest results', async () => {
@@ -1421,7 +1426,7 @@ describe('PostHog Feature Flags v4', () => {
     })
 
     describe('when quota limited', () => {
-      beforeEach(() => {
+      beforeEach(async () => {
         ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (_mocks) => {
           _mocks.fetch.mockImplementation((url) => {
             if (url.includes('/flags/')) {
@@ -1440,6 +1445,7 @@ describe('PostHog Feature Flags v4', () => {
         })
 
         posthog.reloadFeatureFlags()
+        await waitForPromises()
       })
 
       it('should unset all flags when feature_flags is quota limited', async () => {
@@ -1469,7 +1475,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should emit featureflags event with quotaLimited when quota limited', async () => {
-        const featureFlagsHandler = jest.fn()
+        const featureFlagsHandler = vi.fn()
         posthog.on('featureflags', featureFlagsHandler)
 
         await posthog.reloadFeatureFlagsAsync()
@@ -1576,7 +1582,7 @@ describe('PostHog Feature Flags v4', () => {
 
         const resultPromise = posthog.getFlags('distinct-id')
         await waitForPromises()
-        await jest.advanceTimersByTimeAsync(1)
+        await vi.advanceTimersByTimeAsync(1)
         const result = await resultPromise
 
         expect(result.success).toBe(true)
@@ -1587,7 +1593,7 @@ describe('PostHog Feature Flags v4', () => {
       })
 
       it('should retry when an injected flags response body ignores abort and stalls', async () => {
-        const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+        const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
         let flagsRequestCount = 0
         ;[posthog, mocks] = createTestClient(
           'TEST_API_KEY',
@@ -1630,15 +1636,15 @@ describe('PostHog Feature Flags v4', () => {
 
         const resultPromise = posthog.getFlags('distinct-id')
         await waitForPromises()
-        await jest.advanceTimersByTimeAsync(1000)
-        await jest.advanceTimersByTimeAsync(1)
+        await vi.advanceTimersByTimeAsync(1000)
+        await vi.advanceTimersByTimeAsync(1)
         const result = await resultPromise
 
         expect(result.success).toBe(true)
         expect(mocks.fetch).toHaveBeenCalledTimes(2)
         expect(mocks.fetch.mock.calls[0][1].signal?.aborted).toBe(true)
         expect(cancel).toHaveBeenCalledTimes(1)
-        expect(jest.getTimerCount()).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
       })
 
       it.each([502, 504])('should return api_error after exhausting retries for HTTP %i responses', async (status) => {
@@ -1665,8 +1671,8 @@ describe('PostHog Feature Flags v4', () => {
 
         const resultPromise = posthog.getFlags('distinct-id')
         await waitForPromises()
-        await jest.advanceTimersByTimeAsync(1)
-        await jest.advanceTimersByTimeAsync(1)
+        await vi.advanceTimersByTimeAsync(1)
+        await vi.advanceTimersByTimeAsync(1)
 
         await expect(resultPromise).resolves.toEqual({
           success: false,
@@ -1757,7 +1763,7 @@ describe('PostHog Feature Flags v4', () => {
 
         const resultPromise = posthog.getFlags('distinct-id')
         await waitForPromises()
-        await jest.advanceTimersByTimeAsync(1)
+        await vi.advanceTimersByTimeAsync(1)
         const result = await resultPromise
 
         expect(result.success).toBe(true)
@@ -2031,7 +2037,7 @@ describe('PostHog Feature Flags v4', () => {
     })
 
     describe('when loaded', () => {
-      beforeEach(() => {
+      beforeEach(async () => {
         ;[posthog, mocks] = createTestClient(
           'TEST_API_KEY',
           {
@@ -2081,6 +2087,7 @@ describe('PostHog Feature Flags v4', () => {
         )
 
         posthog.reloadFeatureFlags()
+        await waitForPromises()
       })
 
       it('should load new feature flags', async () => {

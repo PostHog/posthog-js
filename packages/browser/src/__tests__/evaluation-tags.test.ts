@@ -5,14 +5,14 @@ import { createPosthogInstance } from './helpers/posthog-instance'
 
 describe('feature flag evaluation contexts', () => {
     afterEach(() => {
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
         delete (window as Window & { POSTHOG_DEBUG?: boolean }).POSTHOG_DEBUG
     })
 
     it('includes valid evaluation contexts in Client flags requests', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
-        const sendRequest = jest.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: {} })
+        const sendRequest = vi.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: {} })
         const config = defaultConfig()
         config.evaluation_contexts = ['production', '', 'experiment-A']
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config))
@@ -33,7 +33,7 @@ describe('feature flag evaluation contexts', () => {
     it('omits evaluation contexts when none are configured', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
-        const sendRequest = jest.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: {} })
+        const sendRequest = vi.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: {} })
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
 
@@ -50,7 +50,7 @@ describe('feature flag evaluation contexts', () => {
         const config = defaultConfig()
         config.evaluation_environments = ['legacy']
         ;(window as Window & { POSTHOG_DEBUG?: boolean }).POSTHOG_DEBUG = true
-        const warn = jest.spyOn(window.console, 'warn').mockImplementation()
+        const warn = vi.spyOn(window.console, 'warn').mockImplementation(() => {})
         const source = new MutableFeatureFlagsConfigSource(config)
 
         source.update(config, false)
@@ -67,7 +67,7 @@ describe('feature flag evaluation contexts', () => {
         ;(window as Window & { POSTHOG_DEBUG?: boolean }).POSTHOG_DEBUG = true
         const config = defaultConfig()
         config.flag_keys = 'invalid' as unknown as string[]
-        const error = jest.spyOn(window.console, 'error').mockImplementation()
+        const error = vi.spyOn(window.console, 'error').mockImplementation(() => {})
 
         new MutableFeatureFlagsConfigSource(config)
 

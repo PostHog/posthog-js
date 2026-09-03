@@ -19,7 +19,7 @@
         "clean": "rimraf dist",
         "lint": "oxlint --report-unused-disable-directives-severity error src 'test/*.mjs'",
         "lint:fix": "oxlint --report-unused-disable-directives-severity error src 'test/*.mjs' --fix",
-        "test:unit": "jest --passWithNoTests",
+        "test:unit": "vitest run --passWithNoTests",
         "test:functional": "node --test test/*.test.mjs",
         "dev": "rslib build --watch",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
@@ -40,9 +40,9 @@
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
-        "@types/jest": "catalog:",
-        "jest": "catalog:",
         "rollup": "~4.53.2",
-        "vite": "^8.0.16"
+        "vite": "^8.0.16",
+        "@vitest/coverage-v8": "catalog:",
+        "vitest": "catalog:"
     }
 }

@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { test } from '@jest/globals'
+import { test } from 'vitest'
 import { convexTest } from 'convex-test'
 import schema from './schema.js'
 import component from '@posthog/convex/test'

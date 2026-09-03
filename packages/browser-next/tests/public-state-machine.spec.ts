@@ -22,19 +22,19 @@ const automaticSetup = (load: (options: AnalyticsOptions) => Promise<Extension>)
 
 describe('@posthog/browser public lifecycle state machine', () => {
     afterEach(() => {
-        jest.restoreAllMocks()
-        jest.useRealTimers()
+        vi.restoreAllMocks()
+        vi.useRealTimers()
     })
 
     it('keeps public mutations inert while closing and after disposal, and joins mixed lifecycle calls', async () => {
         const storage = new MemoryStorage()
         const response = deferred<Response>()
         const bodies: Array<{ batch?: Array<{ event?: string }> }> = []
-        const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>((_input, init = {}) => {
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>((_input, init = {}) => {
             bodies.push(JSON.parse(String(init.body)) as { batch?: Array<{ event?: string }> })
             return response.promise
         })
-        const cleanup = jest.fn(async () => {})
+        const cleanup = vi.fn(async () => {})
         const posthog = await createPostHog({
             projectToken: 'ph_test',
             capturePageview: false,
@@ -106,16 +106,16 @@ describe('@posthog/browser public lifecycle state machine', () => {
     })
 
     it('disposes a late automatic import without installing or sending after shutdown', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         const loaded = deferred<Extension>()
-        const load = jest.fn(() => loaded.promise)
-        const fetch = jest
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        const load = vi.fn(() => loaded.promise)
+        const fetch = vi
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const extension = analytics({ flushAt: 1, flushInterval: 0 })
         const disposeExtension = extension.dispose?.bind(extension)
         const disposed = deferred<void>()
-        const dispose = jest.fn(() => {
+        const dispose = vi.fn(() => {
             disposed.resolve(undefined)
             return disposeExtension?.()
         })
@@ -135,7 +135,7 @@ describe('@posthog/browser public lifecycle state machine', () => {
         expect(load).toHaveBeenCalledTimes(1)
 
         const shutdown = posthog.shutdown(5)
-        await jest.advanceTimersByTimeAsync(5)
+        await vi.advanceTimersByTimeAsync(5)
         await shutdown
 
         loaded.resolve(extension)
@@ -143,13 +143,13 @@ describe('@posthog/browser public lifecycle state machine', () => {
         expect(dispose).toHaveBeenCalledTimes(1)
         expect(posthog.getExtension('analytics')).toBeUndefined()
         expect(fetch).not.toHaveBeenCalled()
-        expect(jest.getTimerCount()).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
     })
 
     it('cancels a real retry timer when bounded shutdown expires', async () => {
-        jest.useFakeTimers()
-        const fetch = jest
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        vi.useFakeTimers()
+        const fetch = vi
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 503 }))
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -160,26 +160,26 @@ describe('@posthog/browser public lifecycle state machine', () => {
             extensions: [analytics({ flushAt: 1, flushInterval: 0 })],
         })
         await posthog.capture('retrying')
-        await jest.advanceTimersByTimeAsync(0)
+        await vi.advanceTimersByTimeAsync(0)
         expect(fetch).toHaveBeenCalledTimes(1)
-        expect(jest.getTimerCount()).toBeGreaterThan(0)
+        expect(vi.getTimerCount()).toBeGreaterThan(0)
 
         const shutdown = posthog.shutdown(5)
-        await jest.advanceTimersByTimeAsync(5)
+        await vi.advanceTimersByTimeAsync(5)
         await shutdown
         expect(fetch).toHaveBeenCalledTimes(1)
-        expect(jest.getTimerCount()).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
 
-        await jest.advanceTimersByTimeAsync(60_000)
+        await vi.advanceTimersByTimeAsync(60_000)
         expect(fetch).toHaveBeenCalledTimes(1)
     })
 
     it('contains extension cleanup rejection and still cleans every extension once', async () => {
-        const first = jest.fn(async () => {})
-        const failing = jest.fn(async () => {
+        const first = vi.fn(async () => {})
+        const failing = vi.fn(async () => {
             throw new Error('cleanup failed')
         })
-        const last = jest.fn(async () => {})
+        const last = vi.fn(async () => {})
         const posthog = await createPostHog({
             projectToken: 'ph_test',
             capturePageview: false,

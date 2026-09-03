@@ -3,7 +3,7 @@ import { renderHook } from '@testing-library/react'
 import { PostHogProvider, PostHog } from '../../context'
 import { usePostHog } from '..'
 
-jest.useFakeTimers()
+vi.useFakeTimers()
 
 const posthog = { posthog_client: true } as unknown as PostHog
 

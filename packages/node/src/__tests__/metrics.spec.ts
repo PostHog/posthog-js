@@ -1,9 +1,9 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import type { IPostHog } from '@/types'
 
-jest.mock('../version', () => ({ version: '1.2.3' }))
+vi.mock('../version', () => ({ version: '1.2.3' }))
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const options: PostHogOptions = {
   host: 'http://example.com',
@@ -15,7 +15,7 @@ const options: PostHogOptions = {
 describe('PostHog Node.js metrics', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   beforeEach(() => {
     mockedFetch.mockReset()
@@ -110,7 +110,7 @@ describe('PostHog Node.js metrics', () => {
 
     expect(metricsCalls()).toHaveLength(1)
     expect(metricsByName(lastMetricsBody())['jobs.processed'].sum.dataPoints[0].asDouble).toBe(4)
-    expect(jest.getTimerCount()).toBe(0)
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('is reachable through the IPostHog interface', () => {
@@ -136,7 +136,7 @@ describe('PostHog Node.js metrics', () => {
 
     posthog.metrics.count('jobs.processed', 1)
     const shutdown = posthog.shutdown(100)
-    await jest.advanceTimersByTimeAsync(150)
+    await vi.advanceTimersByTimeAsync(150)
     await shutdown
     expect(metricsCalls()).toHaveLength(1)
 
@@ -144,7 +144,7 @@ describe('PostHog Node.js metrics', () => {
     // error — after teardown its window must be discarded, not merged back
     // onto a re-armed flush timer.
     rejectFetch(new Error('connection refused'))
-    await jest.advanceTimersByTimeAsync(60_000)
+    await vi.advanceTimersByTimeAsync(60_000)
 
     expect(metricsCalls()).toHaveLength(1)
   })
@@ -156,7 +156,7 @@ describe('PostHog Node.js metrics', () => {
     mockedFetch.mockImplementation(() => new Promise(() => {}) as any)
 
     const shutdown = posthog.shutdown(500)
-    await jest.advanceTimersByTimeAsync(600)
+    await vi.advanceTimersByTimeAsync(600)
 
     await expect(shutdown).resolves.toBeUndefined()
   })
@@ -178,7 +178,7 @@ describe('PostHog Node.js metrics', () => {
       .finally(() => {
         settled = true
       })
-    await jest.advanceTimersByTimeAsync(600)
+    await vi.advanceTimersByTimeAsync(600)
 
     expect(settled).toBe(true)
   })
