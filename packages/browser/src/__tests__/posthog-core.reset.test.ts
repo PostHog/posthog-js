@@ -129,9 +129,8 @@ describe('reset()', () => {
         const callFlags = vi.spyOn(instance.featureFlags, '_callFlagsEndpoint')
 
         instance.reset()
-        await new Promise((resolve) => setTimeout(resolve, 10))
 
-        expect(callFlags).toHaveBeenCalledTimes(1)
+        await vi.waitFor(() => expect(callFlags).toHaveBeenCalledTimes(1))
     })
 
     it('does not reload twice in existing call sites which manually invoke reloadFeatureFlags', async () => {
@@ -139,9 +138,8 @@ describe('reset()', () => {
 
         instance.reset()
         instance.reloadFeatureFlags()
-        await new Promise((resolve) => setTimeout(resolve, 10))
 
-        expect(callFlags).toHaveBeenCalledTimes(1)
+        await vi.waitFor(() => expect(callFlags).toHaveBeenCalledTimes(1))
     })
 
     describe('when calling reset(true)', () => {

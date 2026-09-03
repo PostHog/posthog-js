@@ -1,6 +1,6 @@
 import { mockLogger } from './helpers/mock-logger'
 
-import { createPosthogInstance } from './helpers/posthog-instance'
+import { createPosthogInstance as createPosthogInstanceBase } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
@@ -107,6 +107,13 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
 
 const { mockURLGetter, mockReferrerGetter, document } = mockedGlobals as any
 
+const activeInstances = new Set<Awaited<ReturnType<typeof createPosthogInstanceBase>>>()
+const createPosthogInstance = async (...args: Parameters<typeof createPosthogInstanceBase>) => {
+    const instance = await createPosthogInstanceBase(...args)
+    activeInstances.add(instance)
+    return instance
+}
+
 describe('person processing', () => {
     const distinctId = '123'
     beforeEach(() => {
@@ -114,6 +121,11 @@ describe('person processing', () => {
         mockReferrerGetter.mockReturnValue('https://referrer.com')
         mockURLGetter.mockReturnValue('https://example.com?utm_source=foo')
         document.cookie = ''
+    })
+
+    afterEach(() => {
+        activeInstances.forEach((instance) => instance.featureFlags.dispose())
+        activeInstances.clear()
     })
 
     const setup = async (
