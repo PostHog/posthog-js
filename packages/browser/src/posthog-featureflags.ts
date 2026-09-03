@@ -274,6 +274,8 @@ export class PostHogFeatureFlags implements Extension {
     private _crossTabPersistenceUnsubscribe?: () => void
     private _baseEventProperties: Record<string, unknown> = {}
     private _eventPropertiesWithFlagValues: Record<string, unknown> = {}
+    // Bootstrap values are a transient view over the last durable flag snapshot.
+    private _bootstrapState?: FeatureFlagsState
     private _reloadingHandlers: Array<() => void> = []
     private _hasLoadedFlags: boolean = false
     private _requestInFlight: boolean = false
@@ -452,7 +454,25 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     private _prop<Key extends keyof FeatureFlagsState>(key: Key): FeatureFlagsState[Key] {
+        if (this._bootstrapState && key in this._bootstrapState) {
+            return this._bootstrapState[key]
+        }
         return this._client?.kv.get<FeatureFlagsState[Key]>(key)
+    }
+
+    private _clearBootstrapState(): boolean {
+        if (!this._bootstrapState) {
+            return false
+        }
+        this._bootstrapState = undefined
+        return true
+    }
+
+    private _fallBackToPersistedFlags(): boolean {
+        if (isUndefined(this._client?.kv.get(ENABLED_FEATURE_FLAGS))) {
+            return false
+        }
+        return this._clearBootstrapState()
     }
 
     private _set(properties: FeatureFlagsState): void {
@@ -628,7 +648,9 @@ export class PostHogFeatureFlags implements Extension {
                     return res
                 }, {})
 
-            return this._receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
+            return this._receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads }, undefined, {
+                persist: false,
+            })
         }
         return undefined
     }
@@ -985,6 +1007,9 @@ export class PostHogFeatureFlags implements Extension {
             }
             this._set({ [PERSISTENCE_FEATURE_FLAG_ERRORS]: [FeatureFlagError.CONNECTION_ERROR] })
             this._logger.error('Feature flag request failed', error)
+            if (this._fallBackToPersistedFlags()) {
+                this._fireFeatureFlagsCallbacks(true)
+            }
             requestAdditionalReload()
         }
 
@@ -1365,7 +1390,7 @@ export class PostHogFeatureFlags implements Extension {
     private _receivedFeatureFlags(
         response: Partial<FlagsResponse>,
         errorsLoading?: boolean,
-        options?: { partialResponse?: boolean }
+        options?: { partialResponse?: boolean; persist?: boolean }
     ): void {
         if (!this._client) {
             return
@@ -1384,8 +1409,20 @@ export class PostHogFeatureFlags implements Extension {
             this._logger
         )
         if (statePatch) {
-            this._markCrossTabFeatureFlagSnapshot(statePatch, response, !!options?.partialResponse)
-            this._set(statePatch)
+            if (options?.persist === false) {
+                const hasPersistedFlags = !isUndefined(this._client.kv.get(ENABLED_FEATURE_FLAGS))
+                this._bootstrapState = statePatch
+                // Keep bootstrapping durable on a first visit, but don't replace a prior remote snapshot.
+                if (!hasPersistedFlags) {
+                    this._set(statePatch)
+                }
+            } else {
+                this._clearBootstrapState()
+                this._markCrossTabFeatureFlagSnapshot(statePatch, response, !!options?.partialResponse)
+                this._set(statePatch)
+            }
+        } else if (errorsLoading) {
+            this._fallBackToPersistedFlags()
         }
         // Reset stale refresh flag when we successfully receive fresh flags
         if (!errorsLoading) {
@@ -1769,6 +1806,7 @@ export class PostHogFeatureFlags implements Extension {
         this._additionalReloadRequested = false
         this._baseEventProperties = {}
         this._eventPropertiesWithFlagValues = {}
+        this._bootstrapState = undefined
         this._hasLoadedFlags = false
         this._reloadingDisabled = false
         this._flagsLoadedFromRemote = false
