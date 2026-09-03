@@ -743,6 +743,37 @@ describe('PostHogTraces', () => {
       expect(sentSpans(instance)[0].flags).toBe(0x300)
     })
 
+    it('keeps them when the hook builds its record from the fields it can see', async () => {
+      // Spreading the record carries the propagation fields through even though
+      // no public type declares them; naming the public fields is what drops
+      // them, and is what the hook-visible type invites a caller to write.
+      const instance = createMockInstance()
+      const traces = createTraces(
+        {
+          beforeSpanSend: [
+            (span: SpanRecord) =>
+              ({
+                traceId: span.traceId,
+                spanId: span.spanId,
+                parentSpanId: span.parentSpanId,
+                name: span.name,
+                kind: span.kind,
+                status: span.status,
+                attributes: span.attributes,
+                events: span.events,
+                startTime: span.startTime,
+                endTime: span.endTime,
+              }) as SpanRecord,
+          ],
+        },
+        instance
+      )
+      traces.startSpan('child', { parent: `00-${TRACE_ID}-${REMOTE_SPAN_ID}-00` }).end()
+      await traces.flush()
+
+      expect(sentSpans(instance)[0].flags).toBe(0x300)
+    })
+
     it('keeps them when the rebuilding hook also freezes what it returns', async () => {
       // Restoring these onto the returned record would throw here, and a throwing
       // hook drops the span.

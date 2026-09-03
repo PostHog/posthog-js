@@ -65,6 +65,13 @@ function looksLikeSpan(value: unknown): boolean {
   }
 }
 
+/**
+ * The rebuilt record with every field named, optional ones included. A field
+ * added to either half of `SpanRecord` is a compile error at the rebuild until
+ * it says whether a hook may set that field or the span keeps its own value.
+ */
+type RebuiltSpanRecord = { [K in keyof Required<SpanRecord>]: SpanRecord[K] }
+
 interface SpanIdentity {
   traceId: string
   spanId: string
@@ -524,7 +531,7 @@ export class PostHogTraces {
       // return value may be frozen, where every write here would throw, or a
       // class instance whose fields are prototype getters a spread would miss.
       // Naming them also bounds what can reach the wire.
-      current = {
+      const rebuilt: RebuiltSpanRecord = {
         // All four from the snapshot, never from the hook's return value. A hook
         // that forges an id has it ignored, which is the documented behaviour,
         // and one that also freezes what it returns keeps its span: writing the
@@ -551,6 +558,7 @@ export class PostHogTraces {
         droppedAttributesCount: originalDropped.attributes,
         droppedEventsCount: originalDropped.events,
       }
+      current = rebuilt
       // A value missing either collection is not a span record — an `async`
       // hook returns a Promise, truthy and `undefined` for every field. Filling
       // the gaps in would export a nameless span carrying no person or session.
