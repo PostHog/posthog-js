@@ -826,6 +826,12 @@ export class PostHogFeatureFlags implements Extension {
             return
         }
 
+        if (this._requestInFlight) {
+            // Record the queued reload before the debounce fires so the in-flight response
+            // cannot clear identity state needed by the next request.
+            this._additionalReloadRequested = true
+        }
+
         if (this._reloadDebouncer) {
             // If we're already in a debounce then we don't want to do anything
             return
