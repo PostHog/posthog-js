@@ -53,6 +53,9 @@ interface ParentContext {
   traceId: string
   parentSpanId?: string
   traceState?: string
+  traceFlags?: string
+  /** True when the parent arrived as a `traceparent` header. */
+  isRemote?: boolean
 }
 
 /**
@@ -147,6 +150,8 @@ export class PostHogTraces {
         spanId,
         parentSpanId: parent?.parentSpanId,
         traceState: parent?.traceState,
+        traceFlags: parent?.traceFlags,
+        parentIsRemote: parent?.isRemote,
         name: sanitizeName(name, 'Span name', this._logger),
         kind: options?.kind ?? 'internal',
         // Auto-context first so user-supplied attributes win on collision.
@@ -280,6 +285,8 @@ export class PostHogTraces {
         traceId: remote.traceId,
         parentSpanId: remote.spanId,
         traceState: sanitizeTracestate(options?.tracestate),
+        traceFlags: remote.flags,
+        isRemote: true,
       }
     }
 

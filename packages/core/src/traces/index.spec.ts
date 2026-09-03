@@ -192,6 +192,40 @@ describe('PostHogTraces', () => {
       expect(sentSpans()[0].traceId).toBe(TRACE_ID)
     })
 
+    it('propagates the sampled-out flag onward rather than upgrading it to 01', async () => {
+      // A downstream parent-based sampler would otherwise record a trace its own
+      // head sampler had already rejected.
+      const traces = createTraces()
+      const span = traces.startSpan('handler', { parent: `00-${TRACE_ID}-${REMOTE_SPAN_ID}-00` })
+      const child = traces.startSpan('inner', { parent: span })
+
+      expect(span.traceparent()!.startsWith(`00-${TRACE_ID}-`)).toBe(true)
+      expect(span.traceparent()!.endsWith('-00')).toBe(true)
+      // The whole chain agrees, not just the span that read the header.
+      expect(child.traceparent()!.endsWith('-00')).toBe(true)
+
+      child.end()
+      span.end()
+      await traces.flush()
+
+      // Recorded and exported all the same, with the wire agreeing with the header.
+      const byName = Object.fromEntries(sentSpans().map((sent) => [sent.name, sent.flags]))
+      expect(byName).toEqual({ handler: 0x300, inner: 0x100 })
+    })
+
+    it('marks a header parent remote and a handle parent local', async () => {
+      const traces = createTraces()
+      const remote = traces.startSpan('handler', { parent: `00-${TRACE_ID}-${REMOTE_SPAN_ID}-01` })
+      const local = traces.startSpan('inner', { parent: remote })
+
+      local.end()
+      remote.end()
+      await traces.flush()
+
+      const byName = Object.fromEntries(sentSpans().map((span) => [span.name, span.flags]))
+      expect(byName).toEqual({ handler: 0x301, inner: 0x101 })
+    })
+
     it('preserves tracestate opaquely and passes it to children', async () => {
       const traces = createTraces()
       const parent = traces.startSpan('handler', {

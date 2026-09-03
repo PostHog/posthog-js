@@ -293,6 +293,20 @@ describe('PostHog traces', () => {
       expect(span.parentSpanId).toBe(spanId)
     })
 
+    it('hands the next service the flag the caller sent, not an upgraded one', async () => {
+      const inbound = `00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00`
+      let propagated: string | null = null
+
+      await posthog.withSpan('handler', { parent: inbound }, async () => {
+        propagated = posthog.getActiveSpan()!.traceparent()
+      })
+      await flushTraces()
+
+      expect(propagated).toEqual(expect.stringMatching(/-00$/))
+      // Recorded and exported, with the remote-parent bits set.
+      expect(sentSpans()[0].flags).toBe(0x300)
+    })
+
     it('produces a traceparent for the next service', async () => {
       let traceparent: string | null = null
       posthog.withSpan('POST /checkout', () => {
