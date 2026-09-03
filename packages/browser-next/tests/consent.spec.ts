@@ -88,7 +88,7 @@ describe('portable consent persistence', () => {
     })
 
     afterEach(() => {
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
         for (const key of ['addEventListener', 'removeEventListener', 'dispatchEvent', 'CustomEvent', 'localStorage']) {
             const descriptor = descriptors.get(key)
             if (descriptor) {
@@ -98,7 +98,7 @@ describe('portable consent persistence', () => {
             }
         }
         descriptors.clear()
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
     it.each([
         ['default Unicode token', 'ph_🦔', undefined, undefined, '__ph_opt_in_out_ph_🦔'],
@@ -177,12 +177,12 @@ describe('portable consent persistence', () => {
     })
 
     it('keeps extension state and persistence available under prior denial while blocking transmission', async () => {
-        const extensionSetup = jest.fn(async (client: Client) => {
+        const extensionSetup = vi.fn(async (client: Client) => {
             client.kv.set('private', true)
             await client.capture('extension-blocked')
             await client.sendRequest('/flags/')
         })
-        const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
         const storage = new MemoryStorage()
         storage.values.set(DEFAULT_KEY, '0')
 
@@ -344,11 +344,11 @@ describe('portable consent persistence', () => {
     })
 
     it('cancels a sibling retry backoff even when consent is granted again', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
             const storage = new MemoryStorage()
-            const fetch = jest
-                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            const fetch = vi
+                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
             const first = await createPostHog({
                 projectToken: 'ph_test',
@@ -359,7 +359,7 @@ describe('portable consent persistence', () => {
             })
             const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
             await first.capture('retrying')
-            await jest.advanceTimersByTimeAsync(0)
+            await vi.advanceTimersByTimeAsync(0)
             expect(fetch).toHaveBeenCalledTimes(1)
 
             second.optOut()
@@ -367,9 +367,9 @@ describe('portable consent persistence', () => {
             await first.flush()
 
             expect(fetch).toHaveBeenCalledTimes(1)
-            expect(jest.getTimerCount()).toBe(0)
+            expect(vi.getTimerCount()).toBe(0)
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
@@ -453,7 +453,7 @@ describe('portable consent persistence', () => {
     })
 
     it('installs no observers when effective storage is absent', async () => {
-        const add = jest.spyOn(globalThis, 'addEventListener')
+        const add = vi.spyOn(globalThis, 'addEventListener')
         const noStorage = await createPostHog({
             projectToken: 'ph_test',
             storage: false,
@@ -569,7 +569,7 @@ describe('portable consent persistence', () => {
     it('completes capture authorized before serialization crosses denial and grant', async () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
-        const observed = jest.fn()
+        const observed = vi.fn()
         const first = await createPostHog({
             projectToken: 'ph_test',
             storage,
@@ -600,7 +600,7 @@ describe('portable consent persistence', () => {
     it('completes capture authorized before a dynamic producer crosses denial and grant', async () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
-        const observed = jest.fn()
+        const observed = vi.fn()
         const first = await createPostHog({
             projectToken: 'ph_test',
             storage,
@@ -627,7 +627,7 @@ describe('portable consent persistence', () => {
     it('completes event fanout while denial from an observer purges queued delivery', async () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
-        const laterObserver = jest.fn()
+        const laterObserver = vi.fn()
         const first = await createPostHog({
             projectToken: 'ph_test',
             storage,
@@ -653,7 +653,7 @@ describe('portable consent persistence', () => {
         const requests: SentRequest[] = []
         const startedAt = Date.now()
         let captureTime = startedAt
-        jest.spyOn(Date, 'now').mockImplementation(() => captureTime)
+        vi.spyOn(Date, 'now').mockImplementation(() => captureTime)
         const first = await createPostHog({
             projectToken: 'ph_test',
             storage,
@@ -672,7 +672,7 @@ describe('portable consent persistence', () => {
             captureTime = startedAt + (index + 1) * 110
             await first.capture(`queued-${index}`)
         }
-        const warn = jest.spyOn(console, 'warn').mockImplementationOnce(() => {
+        const warn = vi.spyOn(console, 'warn').mockImplementationOnce(() => {
             second.optOut()
             second.optIn()
         })
@@ -685,13 +685,13 @@ describe('portable consent persistence', () => {
     })
 
     it('completes capture fanout while denial from a new-session observer purges queued delivery', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
-            jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+            vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
             const storage = new MemoryStorage()
             const requests: SentRequest[] = []
-            const observed = jest.fn()
-            const laterSessionObserver = jest.fn()
+            const observed = vi.fn()
+            const laterSessionObserver = vi.fn()
             const first = await createPostHog({
                 projectToken: 'ph_test',
                 storage,
@@ -710,7 +710,7 @@ describe('portable consent persistence', () => {
             await first.flush()
             observed.mockClear()
             requests.splice(0)
-            jest.advanceTimersByTime(1_800_001)
+            vi.advanceTimersByTime(1_800_001)
 
             await first.capture('private')
             await first.flush()
@@ -718,7 +718,7 @@ describe('portable consent persistence', () => {
             expect(observed).toHaveBeenCalledTimes(1)
             expect(requests).toHaveLength(0)
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
@@ -736,7 +736,7 @@ describe('portable consent persistence', () => {
         }
         const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-        const observed = jest.fn()
+        const observed = vi.fn()
         first.onNewSession(observed)
         first.reset()
         storage.onStateWrite = () => {
@@ -758,7 +758,7 @@ describe('portable consent persistence', () => {
         const setupStarted = new Promise<void>((resolve) => {
             markSetupStarted = resolve
         })
-        const dispose = jest.fn()
+        const dispose = vi.fn()
         const extension: Extension = {
             name: 'late-consent',
             setup: () => {
@@ -790,8 +790,8 @@ describe('portable consent persistence', () => {
 
     it('invokes transport when consent is granted at dispatch after request preparation', async () => {
         const storage = new MemoryStorage()
-        const fetch = jest
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        const fetch = vi
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
@@ -810,8 +810,8 @@ describe('portable consent persistence', () => {
 
     it('does not invoke transport when request preparation ends with denied consent', async () => {
         const storage = new MemoryStorage()
-        const fetch = jest
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        const fetch = vi
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
@@ -829,7 +829,7 @@ describe('portable consent persistence', () => {
     it('returns a Fetch response received after denial and grant', async () => {
         const storage = new MemoryStorage()
         let finishFetch: ((response: Response) => void) | undefined
-        const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(
             () =>
                 new Promise<Response>((resolve) => {
                     finishFetch = resolve
@@ -850,7 +850,7 @@ describe('portable consent persistence', () => {
     it('returns a Fetch failure received after denial and grant', async () => {
         const storage = new MemoryStorage()
         let failFetch: ((error: Error) => void) | undefined
-        const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(
             () =>
                 new Promise<Response>((_resolve, reject) => {
                     failFetch = reject
@@ -899,8 +899,8 @@ describe('portable consent persistence', () => {
         const storage = new MemoryStorage()
         storage.setItem(DEFAULT_KEY, '0')
         const config = { supportedCompression: ['gzip-js'] } as RemoteConfig
-        const loader = jest.fn(async () => config)
-        const observed = jest.fn()
+        const loader = vi.fn(async () => config)
+        const observed = vi.fn()
         const first = await createPostHog({
             projectToken: 'ph_test',
             storage,
@@ -927,7 +927,7 @@ describe('portable consent persistence', () => {
             fetch: false,
             remoteConfig: config,
         })
-        const observer = jest.fn()
+        const observer = vi.fn()
         const first = posthog.onRemoteConfig(observer)
         posthog.onRemoteConfig(observer)
         first.dispose()
@@ -945,7 +945,7 @@ describe('portable consent persistence', () => {
         const loaded = new Promise<RemoteConfig>((resolve) => {
             finishLoad = resolve
         })
-        const loader = jest.fn(() => loaded)
+        const loader = vi.fn(() => loaded)
         const first = await createPostHog({
             projectToken: 'ph_test',
             storage,
@@ -977,7 +977,7 @@ describe('portable consent persistence', () => {
             remoteConfigLoader: async () => config,
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-        const laterObserver = jest.fn()
+        const laterObserver = vi.fn()
         first.onRemoteConfig(() => {
             second.optOut()
             second.optIn()
@@ -991,7 +991,7 @@ describe('portable consent persistence', () => {
 
     it('starts a deferred remote-config loader across denial and grant', async () => {
         const storage = new MemoryStorage()
-        const loader = jest.fn(async () => ({}) as RemoteConfig)
+        const loader = vi.fn(async () => ({}) as RemoteConfig)
         const first = await createPostHog({
             projectToken: 'ph_test',
             storage,
@@ -1037,8 +1037,8 @@ describe('portable consent persistence', () => {
 
     it('removes observations before waiting for extension disposal', async () => {
         const storage = new ObservableStorage()
-        const add = jest.spyOn(globalThis, 'addEventListener')
-        const remove = jest.spyOn(globalThis, 'removeEventListener')
+        const add = vi.spyOn(globalThis, 'addEventListener')
+        const remove = vi.spyOn(globalThis, 'removeEventListener')
         let finishExtensionDisposal: (() => void) | undefined
         const extensionDisposal = new Promise<void>((resolve) => {
             finishExtensionDisposal = resolve

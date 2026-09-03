@@ -1,7 +1,7 @@
 import type { Span, SpanAttributes, SpanAttributeValue, SpanKind, SpanStatusCode, SpanTimeInput } from '@posthog/types'
 import type { Logger } from '../types'
 import type { SpanEventRecord, SpanRecord } from './types'
-import { formatTraceparent, normalizeTraceparent, sanitizeTracestate } from './traceparent'
+import { formatTraceparent, normalizeTraceparent, sanitizeTracestate, TRACE_FLAGS_SAMPLED } from './traceparent'
 import { assignUserAttributes, clampEndTime, resolveSuppliedTime, sanitizeName } from './sanitize'
 import { isArray, isError, isNullish } from '../utils'
 import {
@@ -25,6 +25,10 @@ export interface SpanInit {
   spanId: string
   parentSpanId?: string
   traceState?: string
+  /** The trace-flags byte to propagate; the inbound one when continuing a remote trace. */
+  traceFlags?: string
+  /** True when the parent came from a `traceparent` header rather than a local handle. */
+  parentIsRemote?: boolean
   name: string
   kind: SpanKind
   attributes: SpanAttributes
@@ -44,6 +48,8 @@ export class PostHogSpan implements Span {
   private readonly _spanId: string
   private readonly _parentSpanId?: string
   private readonly _traceState?: string
+  private readonly _traceFlags: string
+  private readonly _parentIsRemote: boolean
   private readonly _startTime: number
   // Absent on backdated spans and on platforms with no monotonic source.
   private readonly _startMono?: number
@@ -73,6 +79,8 @@ export class PostHogSpan implements Span {
     this._spanId = init.spanId
     this._parentSpanId = init.parentSpanId
     this._traceState = init.traceState
+    this._traceFlags = init.traceFlags ?? TRACE_FLAGS_SAMPLED
+    this._parentIsRemote = init.parentIsRemote ?? false
     this._name = init.name
     this._kind = init.kind
     this._autoKeys = new Set(init.autoAttributeKeys)
@@ -247,7 +255,7 @@ export class PostHogSpan implements Span {
   }
 
   traceparent(): string | null {
-    return formatTraceparent(this._traceId, this._spanId)
+    return formatTraceparent(this._traceId, this._spanId, this._traceFlags)
   }
 
   tracestate(): string | null {
@@ -255,8 +263,14 @@ export class PostHogSpan implements Span {
   }
 
   /** Context a child span inherits when this handle is its parent. */
-  childContext(): { traceId: string; parentSpanId: string; traceState?: string } {
-    return { traceId: this._traceId, parentSpanId: this._spanId, traceState: this._traceState }
+  childContext(): { traceId: string; parentSpanId: string; traceState?: string; traceFlags: string } {
+    return {
+      traceId: this._traceId,
+      parentSpanId: this._spanId,
+      traceState: this._traceState,
+      // A child of a continued trace keeps propagating the caller's decision.
+      traceFlags: this._traceFlags,
+    }
   }
 
   end(endTime?: SpanTimeInput): void {
@@ -275,6 +289,8 @@ export class PostHogSpan implements Span {
         spanId: this._spanId,
         ...(this._parentSpanId && { parentSpanId: this._parentSpanId }),
         ...(this._traceState && { traceState: this._traceState }),
+        traceFlags: this._traceFlags,
+        parentIsRemote: this._parentIsRemote,
         name: this._name,
         kind: this._kind,
         ...(this._status && { status: this._status }),

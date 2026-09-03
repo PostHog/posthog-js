@@ -1,7 +1,8 @@
 import { mockLogger } from './helpers/mock-logger'
 
-import { createPosthogInstance } from './helpers/posthog-instance'
+import { createPosthogInstance as createPosthogInstanceBase } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
 import { RemoteConfig } from '../types'
 
@@ -65,10 +66,10 @@ const CAMPAIGN_PARAMS_NULL = {
     wbraid: null,
 }
 
-jest.mock('@posthog/browser-common/utils/globals', () => {
-    const orig = jest.requireActual('@posthog/browser-common/utils/globals')
-    const mockURLGetter = jest.fn()
-    const mockReferrerGetter = jest.fn()
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
+    const mockURLGetter = vi.fn()
+    const mockReferrerGetter = vi.fn()
     let mockedCookieVal = ''
     return {
         ...orig,
@@ -104,16 +105,27 @@ jest.mock('@posthog/browser-common/utils/globals', () => {
     }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter, document } = require('@posthog/browser-common/utils/globals')
+const { mockURLGetter, mockReferrerGetter, document } = mockedGlobals as any
+
+const activeInstances = new Set<Awaited<ReturnType<typeof createPosthogInstanceBase>>>()
+const createPosthogInstance = async (...args: Parameters<typeof createPosthogInstanceBase>) => {
+    const instance = await createPosthogInstanceBase(...args)
+    activeInstances.add(instance)
+    return instance
+}
 
 describe('person processing', () => {
     const distinctId = '123'
     beforeEach(() => {
-        console.error = jest.fn()
+        console.error = vi.fn()
         mockReferrerGetter.mockReturnValue('https://referrer.com')
         mockURLGetter.mockReturnValue('https://example.com?utm_source=foo')
         document.cookie = ''
+    })
+
+    afterEach(() => {
+        activeInstances.forEach((instance) => instance.featureFlags.dispose())
+        activeInstances.clear()
     })
 
     const setup = async (
@@ -122,7 +134,7 @@ describe('person processing', () => {
         persistence_name?: string
     ) => {
         token = token || uuidv7()
-        const beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const beforeSendMock = vi.fn().mockImplementation((e) => e)
         const posthog = await createPosthogInstance(token, {
             before_send: beforeSendMock,
             person_profiles,
@@ -606,8 +618,7 @@ describe('person processing', () => {
             expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(true)
         })
 
-        it('should send the $groupidentify event even if person_processing is set to never', async () => {
-            // Groups are separate from person processing - $groupidentify should always be sent
+        it('should retain the group association without sending $groupidentify if person_processing is never', async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('never')
 
@@ -617,21 +628,19 @@ describe('person processing', () => {
             posthog.capture('custom event after group')
 
             // assert
-            // setGroupPropertiesForFlags still has a person processing check
             expect(mockLogger.error).toBeCalledTimes(1)
             expect(mockLogger.error).toHaveBeenCalledWith(
                 'posthog.setGroupPropertiesForFlags was called, but process_person is set to "never". This call will be ignored.'
             )
 
-            // $groupidentify is sent (groups are independent of person processing)
-            expect(beforeSendMock).toBeCalledTimes(3)
+            // no $groupidentify is sent, only the two custom events
+            expect(beforeSendMock).toBeCalledTimes(2)
             const eventBeforeGroup = beforeSendMock.mock.calls[0]
             expect(eventBeforeGroup[0].properties.$process_person_profile).toEqual(false)
-            const groupIdentify = beforeSendMock.mock.calls[1]
-            expect(groupIdentify[0].event).toEqual('$groupidentify')
-            // $groupidentify doesn't set $process_person_profile since it doesn't process persons
-            const eventAfterGroup = beforeSendMock.mock.calls[2]
+            const eventAfterGroup = beforeSendMock.mock.calls[1]
+            expect(eventAfterGroup[0].event).toEqual('custom event after group')
             expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(false)
+            expect(eventAfterGroup[0].properties.$groups).toEqual({ groupType: 'groupKey' })
         })
     })
 
@@ -917,7 +926,7 @@ describe('person processing', () => {
 
         it('should log a message when deduping properties', async () => {
             const { posthog } = await setup('always')
-            mockLogger.info = jest.fn()
+            mockLogger.info = vi.fn()
 
             posthog.setPersonProperties({ email: 'john@example.com' })
             posthog.setPersonProperties({ email: 'john@example.com' })

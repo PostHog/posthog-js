@@ -27,8 +27,26 @@ const SPAN_STATUS_TO_OTLP: Record<SpanStatusCode, number> = {
   error: 2,
 }
 
-/** W3C trace flags: the sampled bit, always set because every captured span is recorded. */
-const TRACE_FLAGS_SAMPLED = 1
+/** W3C trace flags live in the low byte; the sampled bit is `0x01`. */
+const TRACE_FLAGS_SAMPLED = 0x01
+// OTel's span flags, above the W3C byte: one bit says the parent's remoteness is
+// known, the other says it is remote. Both unset reads as "unknown", which this
+// SDK never has to say — a string parent is remote, a handle parent is local, and
+// a root span's parent context is empty, which is not remote. Setting the known
+// bit on a root span is what the OTel Go and Java exporters do too.
+const SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE = 0x100
+const SPAN_FLAGS_CONTEXT_IS_REMOTE = 0x200
+
+/**
+ * The `flags` field for a span: its W3C trace-flags byte, plus OTel's
+ * parent-remoteness bits. Nothing reads the remoteness today, but a span
+ * exported without it can never be backfilled with it.
+ */
+function spanFlags(record: SpanRecord): number {
+  const traceFlags = parseInt(record.traceFlags, 16)
+  const w3c = Number.isFinite(traceFlags) ? traceFlags & 0xff : TRACE_FLAGS_SAMPLED
+  return w3c | SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE | (record.parentIsRemote ? SPAN_FLAGS_CONTEXT_IS_REMOTE : 0)
+}
 
 /**
  * Every free-text string this encoder puts on the wire. A lone surrogate survives
@@ -98,7 +116,7 @@ export function buildOtlpSpan(record: SpanRecord, logger?: Logger): OtlpSpan {
     kind: spanKindToOtlp(record.kind),
     startTimeUnixNano: msToUnixNanoString(record.startTime),
     endTimeUnixNano: msToUnixNanoString(record.endTime),
-    flags: TRACE_FLAGS_SAMPLED,
+    flags: spanFlags(record),
   }
   if (record.parentSpanId) {
     span.parentSpanId = record.parentSpanId

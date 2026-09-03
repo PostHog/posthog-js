@@ -6,19 +6,39 @@ const SPAN_ID = '00f067aa0ba902b7'
 describe('traceparent', () => {
   describe('parseTraceparent', () => {
     it('parses a sampled header', () => {
-      expect(parseTraceparent(`00-${TRACE_ID}-${SPAN_ID}-01`)).toEqual({ traceId: TRACE_ID, spanId: SPAN_ID })
+      expect(parseTraceparent(`00-${TRACE_ID}-${SPAN_ID}-01`)).toEqual({
+        traceId: TRACE_ID,
+        spanId: SPAN_ID,
+        flags: '01',
+      })
     })
 
-    it('continues the trace even when the caller sampled it out', () => {
-      // Every captured span is recorded, so honouring an inbound `00` would
-      // orphan our own spans rather than save anything.
-      expect(parseTraceparent(`00-${TRACE_ID}-${SPAN_ID}-00`)).toEqual({ traceId: TRACE_ID, spanId: SPAN_ID })
+    it('continues the trace even when the caller sampled it out, and keeps the flag', () => {
+      // Every captured span is recorded, so honouring an inbound `00` by
+      // dropping the parentage would orphan our own spans. The flag itself is
+      // kept, so what we propagate onward still says what the caller decided.
+      expect(parseTraceparent(`00-${TRACE_ID}-${SPAN_ID}-00`)).toEqual({
+        traceId: TRACE_ID,
+        spanId: SPAN_ID,
+        flags: '00',
+      })
+    })
+
+    it.each([
+      ['a reserved bit alongside sampled', '05', '01'],
+      ['reserved bits with sampled unset', '04', '00'],
+      ['every bit set', 'ff', '01'],
+    ])('zeroes %s, which version 00 does not define', (_label, inbound, expected) => {
+      // We re-emit under version `00`, and W3C requires a vendor to zero every
+      // flag that version does not define rather than forward it.
+      expect(parseTraceparent(`00-${TRACE_ID}-${SPAN_ID}-${inbound}`)?.flags).toBe(expected)
     })
 
     it('accepts a future version with extra fields', () => {
       expect(parseTraceparent(`01-${TRACE_ID}-${SPAN_ID}-01-something`)).toEqual({
         traceId: TRACE_ID,
         spanId: SPAN_ID,
+        flags: '01',
       })
     })
 
@@ -26,6 +46,7 @@ describe('traceparent', () => {
       expect(parseTraceparent(`  00-${TRACE_ID.toUpperCase()}-${SPAN_ID.toUpperCase()}-01 `)).toEqual({
         traceId: TRACE_ID,
         spanId: SPAN_ID,
+        flags: '01',
       })
     })
 
@@ -45,12 +66,20 @@ describe('traceparent', () => {
   })
 
   describe('formatTraceparent', () => {
-    it('always sets the sampled flag', () => {
+    it('sets the sampled flag on a trace started here', () => {
       expect(formatTraceparent(TRACE_ID, SPAN_ID)).toBe(`00-${TRACE_ID}-${SPAN_ID}-01`)
     })
 
+    it('propagates the flags byte it was given', () => {
+      expect(formatTraceparent(TRACE_ID, SPAN_ID, '00')).toBe(`00-${TRACE_ID}-${SPAN_ID}-00`)
+    })
+
     it('round-trips through the parser', () => {
-      expect(parseTraceparent(formatTraceparent(TRACE_ID, SPAN_ID))).toEqual({ traceId: TRACE_ID, spanId: SPAN_ID })
+      expect(parseTraceparent(formatTraceparent(TRACE_ID, SPAN_ID))).toEqual({
+        traceId: TRACE_ID,
+        spanId: SPAN_ID,
+        flags: '01',
+      })
     })
   })
 

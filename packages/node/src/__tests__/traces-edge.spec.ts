@@ -1,9 +1,9 @@
 import { PostHog } from '@/entrypoints/index.edge'
 import type { OtlpSpan, OtlpTracesPayload } from '@posthog/types'
 
-jest.mock('../version', () => ({ version: '1.2.3' }))
+vi.mock('../version', () => ({ version: '1.2.3' }))
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 describe('PostHog traces on the edge build', () => {
   const createClient = (): PostHog =>

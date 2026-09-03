@@ -33,7 +33,14 @@ print_command_error() {
 # WITH_ENVIRONMENT is executed by React Native
 
 POSTHOG_SKIP_ON_CONFLICT_ENABLED="${POSTHOG_SKIP_ON_CONFLICT:-}"
-POSTHOG_RELEASE_MODE_VALUE="${POSTHOG_RELEASE_MODE:-}"
+# The mode is explicit when the environment or a --posthog-release-mode argument supplies it, and
+# implicit when only the event default applies. The difference decides how an old posthog-cli is
+# handled below: an explicit mode fails the build, the implicit default softens to a bound upload.
+POSTHOG_RELEASE_MODE_EXPLICIT=1
+if [ -z "${POSTHOG_RELEASE_MODE:-}" ]; then
+  POSTHOG_RELEASE_MODE_EXPLICIT=0
+fi
+POSTHOG_RELEASE_MODE_VALUE="${POSTHOG_RELEASE_MODE:-event}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --posthog-skip-on-conflict)
@@ -47,10 +54,12 @@ while [ "$#" -gt 0 ]; do
         exit 1
       fi
       POSTHOG_RELEASE_MODE_VALUE="$2"
+      POSTHOG_RELEASE_MODE_EXPLICIT=1
       shift 2
       ;;
     --posthog-release-mode=*)
       POSTHOG_RELEASE_MODE_VALUE="${1#*=}"
+      POSTHOG_RELEASE_MODE_EXPLICIT=1
       shift
       ;;
     --)
@@ -68,12 +77,13 @@ if [ "$POSTHOG_SKIP_ON_CONFLICT_ENABLED" = "1" ] || [ "$POSTHOG_SKIP_ON_CONFLICT
   POSTHOG_UPLOAD_ARGS+=(--skip-on-conflict)
 fi
 
-# How the release a build belongs to gets associated with the exceptions it reports.
-#   symbol-set (the default) stamps the release onto the uploaded source maps, and an exception
-#     inherits the release of the maps its frames resolved against.
-#   event uploads the maps release-independent, and each event resolves its own release from the
-#     $app_namespace / $app_version / $app_build the SDK already sends. Xcode's build settings
-#     supply matching coordinates below, so nothing has to be injected into the app.
+# How the release a build belongs to gets associated with the exceptions it reports. This covers
+# the Hermes source maps only. The dSYM upload always binds to the release its build creates.
+#   event (the default) uploads the maps release-independent, and each event resolves its own
+#     release from the $app_namespace / $app_version / $app_build the SDK already sends. Xcode's
+#     build settings supply matching coordinates below, so nothing is injected into the app.
+#   symbol-set stamps the release onto the uploaded maps instead, and an exception inherits the
+#     release of the maps its frames resolved against.
 POSTHOG_RELEASE_MODE_ARGS=()
 if [ -n "$POSTHOG_RELEASE_MODE_VALUE" ]; then
   case "$POSTHOG_RELEASE_MODE_VALUE" in
@@ -181,16 +191,31 @@ fi
 # posthog-cli 0.16.0 added --release-mode to the hermes commands (PostHog/posthog#87660). Keep this
 # in step with PostHogCli.MIN_RELEASE_MODE_VERSION in posthog.gradle.
 MIN_RELEASE_MODE_CLI_VERSION="0.16.0"
-if [ ${#POSTHOG_RELEASE_MODE_ARGS[@]} -gt 0 ] && [ "${POSTHOG_SKIP_CLI_VERSION_CHECK:-}" != "1" ]; then
-  if [ -z "$PH_CLI_VERSION" ]; then
-    echo "error: could not determine the posthog-cli version, which release mode '$POSTHOG_RELEASE_MODE_VALUE' needs. Upgrade: npm install -g @posthog/cli@latest"
-    exit 1
+# A SKIP_BUNDLING build (a native-only compile) exits before the hermes clone/upload below, so the
+# --release-mode flag they carry is never applied. Skip the floor check for it, otherwise the default
+# event mode fails such a build over a posthog-cli version it never exercises.
+if [ ${#POSTHOG_RELEASE_MODE_ARGS[@]} -gt 0 ] && [ "${POSTHOG_SKIP_CLI_VERSION_CHECK:-}" != "1" ] && [ -z "${SKIP_BUNDLING:-}" ]; then
+  POSTHOG_CLI_SUPPORTS_RELEASE_MODE=0
+  if [ -n "$PH_CLI_VERSION" ]; then
+    # If the minimum sorts first, the installed version is at or above it.
+    PH_CLI_LOWEST=$(printf '%s\n%s\n' "$MIN_RELEASE_MODE_CLI_VERSION" "$PH_CLI_VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)
+    if [ "$PH_CLI_LOWEST" = "$MIN_RELEASE_MODE_CLI_VERSION" ]; then
+      POSTHOG_CLI_SUPPORTS_RELEASE_MODE=1
+    fi
   fi
-  # If the minimum sorts first, the installed version is at or above it.
-  PH_CLI_LOWEST=$(printf '%s\n%s\n' "$MIN_RELEASE_MODE_CLI_VERSION" "$PH_CLI_VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)
-  if [ "$PH_CLI_LOWEST" != "$MIN_RELEASE_MODE_CLI_VERSION" ]; then
-    echo "error: release mode '$POSTHOG_RELEASE_MODE_VALUE' needs posthog-cli >= ${MIN_RELEASE_MODE_CLI_VERSION} (found ${PH_CLI_VERSION}). Upgrade: npm install -g @posthog/cli@latest"
-    exit 1
+  if [ "$POSTHOG_CLI_SUPPORTS_RELEASE_MODE" != "1" ]; then
+    if [ "$POSTHOG_RELEASE_MODE_EXPLICIT" = "1" ]; then
+      if [ -z "$PH_CLI_VERSION" ]; then
+        echo "error: could not determine the posthog-cli version, which release mode '$POSTHOG_RELEASE_MODE_VALUE' needs. Upgrade: npm install -g @posthog/cli@latest"
+        exit 1
+      fi
+      echo "error: release mode '$POSTHOG_RELEASE_MODE_VALUE' needs posthog-cli >= ${MIN_RELEASE_MODE_CLI_VERSION} (found ${PH_CLI_VERSION}). Upgrade: npm install -g @posthog/cli@latest"
+      exit 1
+    fi
+    # Nothing configured the mode, so keep the old posthog-cli working: upload without the flag,
+    # which binds the maps to the release, as builds did before the event default existed.
+    echo "warning: posthog-cli ${PH_CLI_VERSION:-unknown} predates release mode '$POSTHOG_RELEASE_MODE_VALUE' (needs >= ${MIN_RELEASE_MODE_CLI_VERSION}). Uploading Hermes source maps bound to the release. Upgrade: npm install -g @posthog/cli@latest"
+    POSTHOG_RELEASE_MODE_ARGS=()
   fi
 fi
 

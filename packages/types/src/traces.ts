@@ -151,8 +151,10 @@ export interface Span {
     updateName(name: string): this
 
     /**
-     * This span's W3C `traceparent` header value (`00-<traceId>-<spanId>-01`),
-     * for propagating the trace to another service.
+     * This span's W3C `traceparent` header value (`00-<traceId>-<spanId>-<flags>`),
+     * for propagating the trace to another service. A span continuing a remote
+     * trace propagates the flags byte it was handed, so a downstream sampler
+     * sees the decision the head sampler made; a trace started here is sampled.
      *
      * When tracing is off, a span started with a `parent` header echoes that
      * header back — version and sampled flag included — so a service that
@@ -393,7 +395,10 @@ export interface OtlpSpan {
     attributes?: OtlpSpanKeyValue[]
     events?: OtlpSpanEvent[]
     status?: OtlpSpanStatus
-    /** W3C trace flags in the low byte; the sampled bit is always set. */
+    /**
+     * W3C trace flags in the low byte — the sampled bit as this span propagates
+     * it — plus OTel's parent-remoteness bits (`0x100` known, `0x200` remote).
+     */
     flags?: number
     /** User attributes dropped by `maxAttributesPerSpan`. Omitted when none were. */
     droppedAttributesCount?: number

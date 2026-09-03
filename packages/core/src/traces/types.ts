@@ -73,6 +73,10 @@ export interface SpanRecord {
   spanId: string
   parentSpanId?: string
   traceState?: string
+  /** The W3C trace-flags byte this span propagates, e.g. `01` sampled. */
+  traceFlags: string
+  /** True when the parent came from a `traceparent` header rather than a local handle. */
+  parentIsRemote: boolean
   name: string
   kind: SpanKind
   status?: { code: SpanStatusCode; message?: string }

@@ -4,9 +4,9 @@ import { createMockPostHog, createMockPersistence } from './helpers/posthog-inst
 
 describe('Session Props Manager', () => {
     const createSessionPropsManager = () => {
-        const onSessionId = jest.fn()
-        const generateProps = jest.fn()
-        const persistenceRegister = jest.fn()
+        const onSessionId = vi.fn()
+        const generateProps = vi.fn()
+        const persistenceRegister = vi.fn()
         const sessionIdManager = {
             onSessionId,
         } as unknown as SessionIdManager

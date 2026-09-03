@@ -13,10 +13,10 @@
         "format:fix": "oxfmt --write 'packages/**/*.{ts,tsx,js,jsx,mjs,cjs}' '!packages/rrweb/**' '!packages/**/playground/**' '!packages/**/examples/**'",
         "lint": "pnpm format && pnpm lint:oxlint && turbo lint",
         "lint:fix": "pnpm lint:oxlint:fix && turbo lint:fix && pnpm format:fix",
-        "lint:oxlint": "oxlint packages",
-        "lint:oxlint:fix": "oxlint --fix packages",
-        "lint:playground": "oxfmt --check 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && eslint 'playground/**/*.{ts,tsx,js,jsx,mjs}'",
-        "lint:playground:fix": "eslint --fix 'playground/**/*.{ts,tsx,js,jsx,mjs}' && oxfmt --write 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}'",
+        "lint:oxlint": "oxlint -c .oxlintrc.correctness.json packages",
+        "lint:oxlint:fix": "oxlint -c .oxlintrc.correctness.json --fix packages",
+        "lint:playground": "oxfmt --check 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && oxlint --report-unused-disable-directives-severity error playground",
+        "lint:playground:fix": "oxlint --fix --report-unused-disable-directives-severity error playground && oxfmt --write 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}'",
         "test": "turbo test",
         "test:unit": "turbo test:unit",
         "test:docs-scripts": "node --test \"scripts/docs/__tests__/*.test.js\"",
@@ -26,6 +26,7 @@
         "build": "turbo build",
         "dev": "turbo dev",
         "package": "export PACKAGE_DEST=$(pwd)/target && turbo package",
+        "prepare": "if [ -z \"$CI\" ] && [ \"$PREK\" != \"0\" ] && [ \"$HUSKY\" != \"0\" ] && command -v git >/dev/null 2>&1 && [ -x node_modules/.bin/prek ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then node_modules/.bin/prek install; fi",
         "check:package-tarballs": "node scripts/check-package-tarballs.js",
         "package:watch": "export PACKAGE_DEST=$(pwd)/target && turbo watch package",
         "bump": "pnpm changeset version",
@@ -36,27 +37,16 @@
     "devDependencies": {
         "@changesets/changelog-github": "^0.5.2",
         "@changesets/cli": "^2.29.8",
-        "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",
+        "@j178/prek": "^0.4.14",
         "@microsoft/api-extractor": "^7.58.9",
         "@microsoft/api-extractor-model": "^7.33.8",
         "@microsoft/tsdoc": "^0.15.1",
-        "@types/eslint": "^8.56.12",
         "@types/node": "^22.19.1",
-        "@typescript-eslint/eslint-plugin": "^8.60.1",
-        "@typescript-eslint/parser": "^8.60.1",
         "es-check": "7.2.1",
         "esbuild": "^0.25.0",
         "esbuild-plugin-umd-wrapper": "catalog:",
-        "eslint": "8.57.0",
-        "eslint-config-posthog-js": "link:tooling/eslint-plugin-posthog-js",
-        "eslint-config-prettier": "^10.1.8",
         "eslint-plugin-compat": "6.2.0",
-        "eslint-plugin-jest": "^28.14.0",
-        "eslint-plugin-no-only-tests": "^3.3.0",
-        "eslint-plugin-posthog-js": "link:tooling/eslint-plugin-posthog-js",
         "eslint-plugin-react": "^7.37.5",
-        "eslint-plugin-react-hooks": "^4.6.2",
-        "lint-staged": "^10.5.4",
         "oxfmt": "^0.65.0",
         "oxlint": "^1.80.0",
         "rimraf": "^6.1.3",
@@ -64,13 +54,7 @@
         "rollup-plugin-visualizer": "^5.14.0",
         "ts-node": "^10.9.2",
         "turbo": "^2.9.16",
-        "typescript": "catalog:"
-    },
-    "lint-staged": {
-        "*.{ts,tsx,js,jsx,mjs,cjs}": [
-            "eslint --cache --fix",
-            "oxfmt --write"
-        ],
-        "*.{json,md}": "oxfmt --write"
+        "typescript": "catalog:",
+        "vitest": "catalog:"
     }
 }

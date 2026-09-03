@@ -70,6 +70,8 @@ interface SpanIdentity {
   spanId: string
   parentSpanId?: string
   traceState?: string
+  traceFlags: string
+  parentIsRemote: boolean
 }
 
 /**
@@ -97,6 +99,9 @@ interface ParentContext {
   traceId: string
   parentSpanId?: string
   traceState?: string
+  traceFlags?: string
+  /** True when the parent arrived as a `traceparent` header. */
+  isRemote?: boolean
 }
 
 /**
@@ -193,6 +198,8 @@ export class PostHogTraces {
         spanId,
         parentSpanId: parent?.parentSpanId,
         traceState: parent?.traceState,
+        traceFlags: parent?.traceFlags,
+        parentIsRemote: parent?.isRemote,
         name: sanitizeName(name, 'Span name', this._logger),
         kind: options?.kind ?? 'internal',
         // Auto-context first so user-supplied attributes win on collision.
@@ -330,6 +337,8 @@ export class PostHogTraces {
         traceId: remote.traceId,
         parentSpanId: remote.spanId,
         traceState: sanitizeTracestate(options?.tracestate),
+        traceFlags: remote.flags,
+        isRemote: true,
       }
     }
 
@@ -480,6 +489,8 @@ export class PostHogTraces {
       spanId: record.spanId,
       parentSpanId: record.parentSpanId,
       traceState: record.traceState,
+      traceFlags: record.traceFlags,
+      parentIsRemote: record.parentIsRemote,
     }
     const originalTimes = { startTime: record.startTime, endTime: record.endTime }
     // Snapshotted with the rest: the hook mutates the record in place, so reading
@@ -499,7 +510,9 @@ export class PostHogTraces {
           this._recordDrop(1, 'beforeSpanSend dropped it')
           return null
         }
-        current = this._keepSpanIdentity(result, identity)
+        // A hook is handed the public record, which carries neither the trace
+        // flags nor the parent's remoteness; `_keepSpanIdentity` puts both back.
+        current = this._keepSpanIdentity(result as SpanRecord, identity)
       }
 
       // Rebuilt field by field before anything below writes to it. The hook's
@@ -511,6 +524,8 @@ export class PostHogTraces {
         spanId: current.spanId,
         parentSpanId: current.parentSpanId,
         traceState: current.traceState,
+        traceFlags: current.traceFlags,
+        parentIsRemote: current.parentIsRemote,
         name: current.name,
         kind: current.kind,
         status: current.status,
@@ -600,6 +615,10 @@ export class PostHogTraces {
     // A hook that rebuilds the record instead of spreading it would otherwise
     // drop tracestate, which is not part of the record the hook is handed.
     restoreField(hooked, 'traceState', original.traceState)
+    // Same reasoning: the sampled flag and the parent's remoteness are the
+    // caller's, and neither is on the record a hook sees.
+    restoreField(hooked, 'traceFlags', original.traceFlags)
+    restoreField(hooked, 'parentIsRemote', original.parentIsRemote)
     return hooked
   }
 

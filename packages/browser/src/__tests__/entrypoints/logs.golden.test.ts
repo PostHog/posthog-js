@@ -11,34 +11,33 @@ const LAST_ACTIVITY = new Date('2023-01-01T10:30:00Z').getTime() // 167256900000
 describe('logs entrypoint — golden (console-capture record handed to core)', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
-    let mockCapture: jest.Mock
+    let mockCapture: vi.Mock
 
-    const initialize = (instance: PostHog = mockPostHog) => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        require('../../entrypoints/logs')
+    const initialize = async (instance: PostHog = mockPostHog): Promise<void> => {
+        await import('../../entrypoints/logs')
         assignableWindow.__PosthogExtensions__.logs.initializeLogs(instance)
     }
 
     beforeEach(() => {
-        jest.resetModules()
-        jest.clearAllMocks()
+        vi.resetModules()
+        vi.clearAllMocks()
 
         originalConsole = { ...console }
 
-        mockCapture = jest.fn()
+        mockCapture = vi.fn()
 
         mockPostHog = {
             config: { api_host: 'https://app.posthog.com', token: 'test-token' },
             sessionManager: {
-                checkAndGetSessionAndWindowId: jest.fn(() => ({
+                checkAndGetSessionAndWindowId: vi.fn(() => ({
                     sessionId: 'session-123',
                     windowId: 'window-456',
                     sessionStartTimestamp: SESSION_START,
                     lastActivityTimestamp: LAST_ACTIVITY,
                 })),
             },
-            get_distinct_id: jest.fn(() => 'user-123'),
-            is_capturing: jest.fn(() => true),
+            get_distinct_id: vi.fn(() => 'user-123'),
+            is_capturing: vi.fn(() => true),
             version: '1.392.0',
             logs: { le: mockCapture },
         } as unknown as PostHog
@@ -48,7 +47,7 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
             writable: true,
         })
         Object.defineProperty(assignableWindow, 'console', {
-            value: { log: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+            value: { log: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
             writable: true,
         })
         assignableWindow.__PosthogExtensions__ = {}
@@ -58,8 +57,8 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
         Object.assign(console, originalConsole)
     })
 
-    it('emits the exact record for a string log', () => {
-        initialize()
+    it('emits the exact record for a string log', async () => {
+        await initialize()
         assignableWindow.console.log('hello')
 
         expect(mockCapture).toHaveBeenCalledTimes(1)
@@ -79,8 +78,8 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
         ['warn', 'warn'],
         ['error', 'error'],
         ['debug', 'debug'],
-    ] as const)('maps console.%s to level %s', (method, level) => {
-        initialize()
+    ] as const)('maps console.%s to level %s', async (method, level) => {
+        await initialize()
         assignableWindow.console[method]('x')
 
         expect(mockCapture.mock.calls[0][0]).toMatchObject({
@@ -89,8 +88,8 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
         })
     })
 
-    it('emits the exact record for an object log, flattening the first arg into attributes', () => {
-        initialize()
+    it('emits the exact record for an object log, flattening the first arg into attributes', async () => {
+        await initialize()
         assignableWindow.console.warn({ user: { id: 5 }, msg: 'hi' })
 
         expect(mockCapture.mock.calls[0][0]).toEqual({
@@ -105,8 +104,8 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
         })
     })
 
-    it('does not include distinct_id or location.href — core adds posthogDistinctId/url.full', () => {
-        initialize()
+    it('does not include distinct_id or location.href — core adds posthogDistinctId/url.full', async () => {
+        await initialize()
         assignableWindow.console.log('hello')
 
         const attributes = mockCapture.mock.calls[0][0].attributes

@@ -12,6 +12,8 @@ const record = (overrides: Partial<SpanRecord> = {}): SpanRecord => ({
   spanId: '00f067aa0ba902b7',
   name: 'checkout',
   kind: 'internal',
+  traceFlags: '01',
+  parentIsRemote: false,
   attributes: {},
   events: [],
   startTime: 1_700_000_000_000,
@@ -77,7 +79,7 @@ describe('OTLP span encoding', () => {
         kind: 1,
         startTimeUnixNano: '1700000000000000000',
         endTimeUnixNano: '1700000000080000000',
-        flags: 1,
+        flags: 0x101,
       })
     })
 
@@ -108,8 +110,28 @@ describe('OTLP span encoding', () => {
       expect(span.events).toEqual([{ name: 'cache miss', timeUnixNano: '1700000000040000000' }])
     })
 
-    it('always sets the sampled trace flag', () => {
-      expect(buildOtlpSpan(record()).flags).toBe(1)
+    it('sets the sampled bit and marks a root span as known-not-remote', () => {
+      // A root span has no parent context to be remote, which the OTel Go and
+      // Java exporters also report as known-not-remote rather than unknown.
+      expect(buildOtlpSpan(record()).flags).toBe(0x101)
+    })
+
+    it('marks a local parent as known-not-remote', () => {
+      expect(buildOtlpSpan(record({ parentSpanId: 'b7ad6b7169203331' })).flags).toBe(0x101)
+    })
+
+    it('marks a parent that arrived as a header as remote', () => {
+      expect(buildOtlpSpan(record({ parentSpanId: 'b7ad6b7169203331', parentIsRemote: true })).flags).toBe(0x301)
+    })
+
+    it('propagates an inbound sampled-out flag rather than overriding it', () => {
+      // The span is still recorded and exported; what the wire says is the
+      // decision the head sampler made.
+      expect(buildOtlpSpan(record({ traceFlags: '00', parentIsRemote: true })).flags).toBe(0x300)
+    })
+
+    it('falls back to sampled when the flags byte is unusable', () => {
+      expect(buildOtlpSpan(record({ traceFlags: 'zz' })).flags).toBe(0x101)
     })
   })
 
@@ -236,7 +258,7 @@ describe('OTLP span encoding', () => {
                     kind: 2,
                     startTimeUnixNano: '1700000000000000000',
                     endTimeUnixNano: '1700000000080000000',
-                    flags: 1,
+                    flags: 0x101,
                     attributes: [
                       { key: 'posthogDistinctId', value: { stringValue: 'user-123' } },
                       { key: 'sessionId', value: { stringValue: 'session-123' } },

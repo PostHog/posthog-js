@@ -4,25 +4,25 @@ import { PostHogSpanProcessor } from '../src/otel'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
 
-jest.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
-  OTLPTraceExporter: jest.fn(),
+vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
+  OTLPTraceExporter: vi.fn(),
 }))
 
-jest.mock('@opentelemetry/sdk-trace-base', () => ({
-  BatchSpanProcessor: jest.fn().mockImplementation(() => ({
-    onStart: jest.fn(),
-    onEnd: jest.fn(),
-    shutdown: jest.fn().mockResolvedValue(undefined),
-    forceFlush: jest.fn().mockResolvedValue(undefined),
+vi.mock('@opentelemetry/sdk-trace-base', () => ({
+  BatchSpanProcessor: vi.fn().mockImplementation(() => ({
+    onStart: vi.fn(),
+    onEnd: vi.fn(),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+    forceFlush: vi.fn().mockResolvedValue(undefined),
   })),
 }))
 
-function mockProcessor(): SpanProcessor & { onStart: jest.Mock; onEnd: jest.Mock } {
+function mockProcessor(): SpanProcessor & { onStart: vi.Mock; onEnd: vi.Mock } {
   return {
-    onStart: jest.fn(),
-    onEnd: jest.fn(),
-    shutdown: jest.fn().mockResolvedValue(undefined),
-    forceFlush: jest.fn().mockResolvedValue(undefined),
+    onStart: vi.fn(),
+    onEnd: vi.fn(),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+    forceFlush: vi.fn().mockResolvedValue(undefined),
   }
 }
 
@@ -32,7 +32,7 @@ function makeSpan(name: string, attributes: Record<string, unknown> = {}): Reada
 
 describe('PostHogSpanProcessor', () => {
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   it.each([
@@ -79,7 +79,7 @@ describe('PostHogSpanProcessor', () => {
     ['empty', { projectToken: '' }],
     ['blank', { projectToken: '  \n\t ' }],
   ])('disables and no-ops when projectToken is %s', async (_case, options) => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const processor = new PostHogSpanProcessor(options as any)
 
     processor.onStart({} as Span, {} as Context)
