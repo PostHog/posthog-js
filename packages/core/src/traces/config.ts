@@ -1,5 +1,6 @@
-import { assignUserAttributes } from '@posthog/core'
-import type { ResolvedTracesConfig, TracesConfig } from '@posthog/core'
+import { assignUserAttributes } from '../utils/json-utils'
+import type { ResolvedTracesConfig } from './types'
+import type { TracesConfig } from '@posthog/types'
 
 // OpenTelemetry's BatchSpanProcessor defaults, which sit comfortably under the
 // server's 2 MB body cap.

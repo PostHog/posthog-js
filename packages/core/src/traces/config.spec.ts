@@ -1,4 +1,4 @@
-import { resolveTracesConfig } from '../traces-defaults'
+import { resolveTracesConfig } from './config'
 
 describe('resolveTracesConfig', () => {
   it('applies the documented defaults', () => {
