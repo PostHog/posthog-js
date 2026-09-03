@@ -18,9 +18,9 @@ import { RetryAfterWindow } from '../utils/retry-after'
 
 // Retriable failures on the same head batch before it is dropped, so a stuck
 // batch cannot pin the queue while fresher spans are refused at the cap. The
-// budget counts attempts, not elapsed time: on the timer path the backoff
-// spreads them over minutes, while a host that calls `flush()` per request
-// spends them as fast as the requests arrive.
+// budget counts backoff windows rather than attempts: a host that drains on
+// every request would otherwise retire a batch in milliseconds, spending on
+// its own call rate what the timer path spends over minutes.
 const MAX_RETRIES_PER_BATCH = 8
 
 const MAX_FLUSH_BACKOFF_EXPONENT = 6
@@ -85,6 +85,9 @@ export class PostHogTraces {
   // Read only while a budget is in flight, so the head cannot grow to sweep in
   // fresh spans and drop them on a budget they never spent.
   private _headBatchSize = 0
+  // When the head batch may next be charged, on `clockNow`'s basis: one failure
+  // per backoff window, whoever drove the attempt.
+  private _headBatchChargeableAt = 0
   // Bumped by reset(); a pass whose generation is stale abandons the queue.
   private _generation = 0
   // Live-span accounting: span id -> monotonic start. Ids and numbers only,
@@ -276,7 +279,13 @@ export class PostHogTraces {
     this._lastDropWarningAt = 0
     this._consecutiveFlushFailures = 0
     this._retryAfter.reset()
+    this._resetHeadBatchBudget()
+  }
+
+  /** Called wherever the head batch leaves or changes shape, so its budget goes with it. */
+  private _resetHeadBatchBudget(): void {
     this._headBatchFailures = 0
+    this._headBatchChargeableAt = 0
   }
 
   /**
@@ -508,13 +517,13 @@ export class PostHogTraces {
           this._queue.splice(0, size)
           remaining -= size
           removed += size
-          this._headBatchFailures = 0
+          this._resetHeadBatchBudget()
           continue
         }
 
-        // Read before the send, so the retry budget below charges this attempt
-        // against the window it was actually made under.
-        const insideRetryAfterWindow = this._retryAfter.isOpen()
+        // Read before the send, so the budget below charges this attempt against
+        // the window it was actually made under.
+        const chargeable = clockNow() >= this._headBatchChargeableAt
 
         const outcome = await this._instance._sendTracesBatch(
           buildOtlpTracesPayload(spans, resourceAttributes, scopeName, scopeVersion, this._logger)
@@ -529,7 +538,7 @@ export class PostHogTraces {
 
         if (outcome.kind === 'ok') {
           this._consecutiveFlushFailures = 0
-          this._headBatchFailures = 0
+          this._resetHeadBatchBudget()
           this._queue.splice(0, size)
           remaining -= size
           removed += size
@@ -547,27 +556,33 @@ export class PostHogTraces {
             remaining -= 1
             removed += 1
             this._recordDrop(1, 'it is too large for the ingestion endpoint')
-            this._headBatchFailures = 0
+            this._resetHeadBatchBudget()
             continue
           }
           // Halve the batch the server rejected, not the configured maximum: when the
           // queue is shallower than the maximum, shrinking it resends an identical body.
           this._maxExportBatchSize = Math.max(1, Math.floor(size / 2))
           // A different batch from here on, so its budget starts fresh.
-          this._headBatchFailures = 0
+          this._resetHeadBatchBudget()
           this._logger.debug(`Batch too large; retrying the same spans in batches of ${this._maxExportBatchSize}`)
           continue
         }
 
         if (outcome.kind === 'retry-later') {
           this._consecutiveFlushFailures++
-          // A refusal inside a window the endpoint asked us to wait out is not
-          // evidence against this batch. Charging it spends the whole budget on
-          // the wait and drops the spans before the window even elapses.
-          if (!insideRetryAfterWindow) {
-            this._headBatchFailures++
-          }
+          // One charge per backoff window. A refusal that arrives before the
+          // window the last one bought has elapsed — an explicit `flush()`, a
+          // per-request serverless drain, or a wait the endpoint asked for with
+          // `Retry-After` — is the same refusal seen again, not new evidence
+          // against the batch, so honoring the endpoint costs a request rather
+          // than the spans.
           this._headBatchSize = size
+          if (chargeable) {
+            this._headBatchFailures++
+            // The window this charge buys is the delay the timer will wait, which
+            // grows with the failure count and honors `Retry-After`.
+            this._headBatchChargeableAt = clockNow() + this._nextFlushDelay()
+          }
           if (this._headBatchFailures < MAX_RETRIES_PER_BATCH) {
             // Keep the spans queued; the flush timer picks them up again.
             this._logger.debug('Span export failed; retrying on the next flush', outcome.error)
@@ -579,7 +594,7 @@ export class PostHogTraces {
           remaining -= size
           removed += size
           this._consecutiveFlushFailures = 0
-          this._headBatchFailures = 0
+          this._resetHeadBatchBudget()
           this._recordDrop(size, `the ingestion endpoint failed ${MAX_RETRIES_PER_BATCH} times in a row`)
           if (this._retryAfter.isOpen()) {
             // Retiring the batch cleared the failure counters, so carrying on
@@ -594,7 +609,7 @@ export class PostHogTraces {
         this._queue.splice(0, size)
         remaining -= size
         removed += size
-        this._headBatchFailures = 0
+        this._resetHeadBatchBudget()
         this._recordDrop(size, 'the ingestion endpoint rejected the batch')
       }
 
