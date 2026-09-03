@@ -1938,6 +1938,54 @@ describe('PostHogTraces', () => {
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('2 span(s)'))
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('the user has opted out'))
     })
+
+    it('stops draining a backlog when optOut() lands while a batch is in flight', async () => {
+      const instance = createMockInstance()
+      instance._sendTracesBatch = vi.fn(() =>
+        Promise.resolve({ kind: 'retry-later' as const, error: new Error('down') })
+      )
+      const traces = createTraces({ maxExportBatchSize: 2 }, instance)
+      context = { distinctId: 'alice', sessionId: 'session-1' }
+      for (let i = 0; i < 6; i++) {
+        traces.startSpan(`span-${i}`).end()
+        await flushMicrotasks()
+      }
+      expect(instance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      instance._sendTracesBatch.mockImplementation(() =>
+        Promise.resolve().then(() => {
+          instance.optedOut = true
+          return { kind: 'ok' as const }
+        })
+      )
+      await traces.flush()
+
+      expect(instance._sendTracesBatch).toHaveBeenCalledTimes(2)
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('4 span(s)'))
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('the user has opted out'))
+    })
+
+    it('stops draining a backlog when the client is disabled while a batch is in flight', async () => {
+      const instance = createMockInstance()
+      instance._sendTracesBatch = vi.fn(() =>
+        Promise.resolve({ kind: 'retry-later' as const, error: new Error('down') })
+      )
+      const traces = createTraces({ maxExportBatchSize: 2 }, instance)
+      for (let i = 0; i < 6; i++) {
+        traces.startSpan(`span-${i}`).end()
+        await flushMicrotasks()
+      }
+
+      instance._sendTracesBatch.mockImplementation(() =>
+        Promise.resolve().then(() => {
+          instance.isDisabled = true
+          return { kind: 'ok' as const }
+        })
+      )
+      await traces.flush()
+
+      expect(instance._sendTracesBatch).toHaveBeenCalledTimes(2)
+    })
   })
 
   describe('drop accounting', () => {

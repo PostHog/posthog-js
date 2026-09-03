@@ -712,21 +712,31 @@ export class PostHogTraces {
     return encoded
   }
 
+  /**
+   * Discards the queue when consent has been withdrawn, returning how many spans
+   * it dropped. Spans carry `posthogDistinctId` and `sessionId`, so anything still
+   * queued when the user opts out must not be exported.
+   */
+  private _discardQueueIfConsentWithdrawn(): number {
+    if (!this._instance.isDisabled && !this._instance.optedOut) {
+      return 0
+    }
+    const discarded = this._queue.length
+    this._queue = []
+    this._recordDrop(discarded, 'the user has opted out')
+    this._warnAboutDrops()
+    return discarded
+  }
+
   /** Returns how many spans it removed from the queue, sent or dropped. */
   private async _flushInner(): Promise<number> {
     if (!this._queue.length) {
       return 0
     }
 
-    // Consent can flip between a span being queued and this pass running. Spans
-    // carry `posthogDistinctId` and `sessionId`, so anything still queued when
-    // the user opts out must be discarded rather than exported.
-    if (this._instance.isDisabled || this._instance.optedOut) {
-      const discarded = this._queue.length
-      this._queue = []
-      this._recordDrop(discarded, 'the user has opted out')
-      this._warnAboutDrops()
-      return discarded
+    const discardedBeforeDrain = this._discardQueueIfConsentWithdrawn()
+    if (discardedBeforeDrain) {
+      return discardedBeforeDrain
     }
 
     // Bounded like span attributes: resource attributes are caller-supplied too,
@@ -745,6 +755,13 @@ export class PostHogTraces {
 
     try {
       while (remaining > 0 && this._queue.length > 0) {
+        // Re-checked per batch: a send suspends, so the user can opt out while one
+        // batch is in flight and the batches behind it would still export.
+        const discardedMidDrain = this._discardQueueIfConsentWithdrawn()
+        if (discardedMidDrain) {
+          return removed + discardedMidDrain
+        }
+
         // Floor at one, or a non-positive batch size loops forever on an empty batch.
         const cap =
           this._headBatchFailures > 0
