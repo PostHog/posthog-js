@@ -19,24 +19,24 @@ describe('Conversations Identity Verification', () => {
 
     beforeEach(() => {
         localStorage.clear()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
 
         mockManager = {
-            show: jest.fn(),
-            hide: jest.fn(),
-            reset: jest.fn(),
-            isVisible: jest.fn().mockReturnValue(true),
-            sendMessage: jest.fn(),
-            getMessages: jest.fn(),
-            markAsRead: jest.fn(),
-            getTickets: jest.fn(),
-            requestRestoreLink: jest.fn(),
-            restoreFromToken: jest.fn(),
-            restoreFromUrlToken: jest.fn(),
-            getCurrentTicketId: jest.fn(),
-            getWidgetSessionId: jest.fn(),
-            setIdentity: jest.fn(),
-            clearIdentity: jest.fn(),
+            show: vi.fn(),
+            hide: vi.fn(),
+            reset: vi.fn(),
+            isVisible: vi.fn().mockReturnValue(true),
+            sendMessage: vi.fn(),
+            getMessages: vi.fn(),
+            markAsRead: vi.fn(),
+            getTickets: vi.fn(),
+            requestRestoreLink: vi.fn(),
+            restoreFromToken: vi.fn(),
+            restoreFromUrlToken: vi.fn(),
+            getCurrentTicketId: vi.fn(),
+            getWidgetSessionId: vi.fn(),
+            setIdentity: vi.fn(),
+            clearIdentity: vi.fn(),
         } as unknown as ConversationsManager
 
         const config = createMockConfig({
@@ -51,19 +51,19 @@ describe('Conversations Identity Verification', () => {
                 props: {},
             }),
             requestRouter: {
-                endpointFor: jest.fn().mockReturnValue('https://test.posthog.com/api/test'),
+                endpointFor: vi.fn().mockReturnValue('https://test.posthog.com/api/test'),
             } as any,
             consent: {
-                isOptedOut: jest.fn().mockReturnValue(false),
+                isOptedOut: vi.fn().mockReturnValue(false),
             } as any,
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
-            on: jest.fn().mockReturnValue(jest.fn()),
-            setIdentity: jest.fn((distinctId: string, hash: string) => {
+            get_distinct_id: vi.fn().mockReturnValue('test-distinct-id'),
+            on: vi.fn().mockReturnValue(vi.fn()),
+            setIdentity: vi.fn((distinctId: string, hash: string) => {
                 mockPostHog.config.identity_distinct_id = distinctId
                 mockPostHog.config.identity_hash = hash
                 ;(mockPostHog as any).conversations?._onIdentityChanged()
             }),
-            clearIdentity: jest.fn(() => {
+            clearIdentity: vi.fn(() => {
                 delete mockPostHog.config.identity_distinct_id
                 delete mockPostHog.config.identity_hash
                 ;(mockPostHog as any).conversations?._onIdentityCleared()
@@ -72,8 +72,8 @@ describe('Conversations Identity Verification', () => {
 
         assignableWindow.__PosthogExtensions__ = {
             initConversations: undefined,
-            loadExternalDependency: jest.fn((_instance, _path, callback) => {
-                assignableWindow.__PosthogExtensions__!.initConversations = jest.fn().mockReturnValue(mockManager)
+            loadExternalDependency: vi.fn((_instance, _path, callback) => {
+                assignableWindow.__PosthogExtensions__!.initConversations = vi.fn().mockReturnValue(mockManager)
                 callback(null)
             }),
         }

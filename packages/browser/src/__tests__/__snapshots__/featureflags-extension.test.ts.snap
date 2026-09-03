@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`PostHogFeatureFlags extension lifecycle snapshots feature flag persistence after loading a v2 response 1`] = `
+exports[`PostHogFeatureFlags extension lifecycle > snapshots feature flag persistence after loading a v2 response 1`] = `
 {
   "$active_feature_flags": [
     "boolean-flag",

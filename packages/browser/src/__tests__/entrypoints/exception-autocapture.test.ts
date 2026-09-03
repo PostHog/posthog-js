@@ -19,7 +19,7 @@ describe('exception-autocapture entrypoint', () => {
     })
 
     it('captures errors for legacy clients', () => {
-        const capture = jest.fn()
+        const capture = vi.fn()
 
         assignableWindow.extendPostHogWithExceptionAutocapture({ capture })
         window?.onerror?.('message', 'source', 1, 2, new Error('legacy error'))
@@ -34,8 +34,8 @@ describe('exception-autocapture entrypoint', () => {
     })
 
     it('still calls the original error handler when legacy capture throws', () => {
-        const originalErrorHandler = jest.fn(() => true)
-        const capture = jest.fn(() => {
+        const originalErrorHandler = vi.fn(() => true)
+        const capture = vi.fn(() => {
             throw new Error('capture failed')
         })
         if (!window) {
@@ -50,7 +50,7 @@ describe('exception-autocapture entrypoint', () => {
     })
 
     it('does not capture errors matching legacy exclusion rules', () => {
-        const capture = jest.fn()
+        const capture = vi.fn()
 
         assignableWindow.extendPostHogWithExceptionAutocapture(
             { capture },
@@ -74,7 +74,7 @@ describe('exception-autocapture entrypoint', () => {
     })
 
     it('does not apply legacy error exclusion rules to unhandled rejections', () => {
-        const capture = jest.fn()
+        const capture = vi.fn()
 
         assignableWindow.extendPostHogWithExceptionAutocapture(
             { capture },
@@ -98,7 +98,7 @@ describe('exception-autocapture entrypoint', () => {
     })
 
     it('captures errors when a legacy exclusion rule is invalid', () => {
-        const capture = jest.fn()
+        const capture = vi.fn()
 
         expect(() =>
             assignableWindow.extendPostHogWithExceptionAutocapture(
@@ -116,7 +116,7 @@ describe('exception-autocapture entrypoint', () => {
     })
 
     it('captures unhandled rejections for legacy clients', () => {
-        const capture = jest.fn()
+        const capture = vi.fn()
 
         assignableWindow.extendPostHogWithExceptionAutocapture({ capture })
         const handled = window?.onunhandledrejection?.({

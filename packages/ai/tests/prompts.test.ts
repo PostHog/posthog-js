@@ -2,12 +2,12 @@ import { Prompts } from '../src/prompts'
 import type { PromptApiResponse } from '../src/types'
 
 // Mock fetch globally
-const mockFetch = jest.fn()
+const mockFetch = vi.fn()
 global.fetch = mockFetch
 
 // Mock console.warn to capture warnings
 const originalWarn = console.warn
-let consoleWarnSpy: jest.SpyInstance
+let consoleWarnSpy: vi.SpyInstance
 
 describe('Prompts', () => {
   const mockPromptResponse: PromptApiResponse = {
@@ -32,13 +32,13 @@ describe('Prompts', () => {
   }
 
   beforeEach(() => {
-    jest.clearAllMocks()
-    jest.useFakeTimers()
-    consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
   afterEach(() => {
-    jest.useRealTimers()
+    vi.useRealTimers()
     consoleWarnSpy.mockRestore()
     console.warn = originalWarn
   })
@@ -218,7 +218,7 @@ describe('Prompts', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1)
 
       // Advance time by 60 seconds (still within TTL)
-      jest.advanceTimersByTime(60 * 1000)
+      vi.advanceTimersByTime(60 * 1000)
 
       // Second call - should use cache
       const result2 = await prompts.get('test-prompt', { cacheTtlSeconds: 300 })
@@ -287,7 +287,7 @@ describe('Prompts', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1)
 
       // Advance time past TTL
-      jest.advanceTimersByTime(61 * 1000)
+      vi.advanceTimersByTime(61 * 1000)
 
       // Second call - should refetch
       const result2 = await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
@@ -312,7 +312,7 @@ describe('Prompts', () => {
       expect(result1.prompt).toBe(mockPromptResponse.prompt)
 
       // Advance time past TTL
-      jest.advanceTimersByTime(61 * 1000)
+      vi.advanceTimersByTime(61 * 1000)
 
       // Second call - should use stale cache
       const result2 = await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
@@ -456,14 +456,14 @@ describe('Prompts', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1)
 
       // Advance time by 4 minutes (within default 5-minute TTL)
-      jest.advanceTimersByTime(4 * 60 * 1000)
+      vi.advanceTimersByTime(4 * 60 * 1000)
 
       // Second call - should use cache
       await prompts.get('test-prompt')
       expect(mockFetch).toHaveBeenCalledTimes(1)
 
       // Advance time past 5-minute TTL
-      jest.advanceTimersByTime(2 * 60 * 1000)
+      vi.advanceTimersByTime(2 * 60 * 1000)
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -491,7 +491,7 @@ describe('Prompts', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1)
 
       // Advance time past custom TTL
-      jest.advanceTimersByTime(61 * 1000)
+      vi.advanceTimersByTime(61 * 1000)
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -587,7 +587,7 @@ describe('Prompts', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1)
 
       // Advance time past custom TTL
-      jest.advanceTimersByTime(61 * 1000)
+      vi.advanceTimersByTime(61 * 1000)
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -665,7 +665,7 @@ describe('Prompts', () => {
       await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
 
       // Advance past TTL
-      jest.advanceTimersByTime(61 * 1000)
+      vi.advanceTimersByTime(61 * 1000)
 
       // Second call should use stale cache
       const result = await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
@@ -763,7 +763,7 @@ describe('Prompts', () => {
       const prompts = new Prompts({ posthog: createMockPostHog() })
 
       await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
-      jest.advanceTimersByTime(61 * 1000)
+      vi.advanceTimersByTime(61 * 1000)
       const result = await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
 
       expect(result.source).toBe('stale_cache')

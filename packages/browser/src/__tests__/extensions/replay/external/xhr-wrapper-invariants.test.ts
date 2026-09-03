@@ -1,5 +1,5 @@
 /**
- * @jest-environment node
+ * @vitest-environment node
  */
 
 import { getRecordNetworkPlugin } from '../../../../extensions/replay/external/network-plugin'
@@ -144,7 +144,7 @@ async function triggerDoneAndFlush(xhr: any, cbInvocations: CapturedCb[]): Promi
 }
 
 describe('xhr wrapper', () => {
-    // Note: NO jest.useFakeTimers here — the recording cb path goes
+    // Note: NO vi.useFakeTimers here — the recording cb path goes
     // through real microtasks and Promise.resolve flushes. Fake timers
     // would freeze the promise chain.
     afterEach(() => {
