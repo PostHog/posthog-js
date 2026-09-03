@@ -543,6 +543,23 @@ describe('PostHogSpan', () => {
       expect(ended[0].attributes.doc).toBe('ab')
     })
 
+    it('bounds a string that follows a large collection of nulls', () => {
+      // The encoder drops a nullish value without spending its budget, so a walk
+      // that charges for one runs out first and leaves the string after it
+      // unbounded on both sides — a 2 MB value under a bound of 8.
+      const span = createSpan({ maxAttributeValueLength: 8 })
+
+      span.setAttribute('payload', {
+        rows: Array.from({ length: 400 }, () =>
+          Object.fromEntries(Array.from({ length: 50 }, (_unused, index) => [`c${index}`, null]))
+        ),
+        html: 'X'.repeat(50000),
+      })
+      span.end()
+
+      expect((ended[0].attributes.payload as any).html).toHaveLength(8)
+    })
+
     it('bounds a string that follows a large collection', () => {
       // The traversal budget is spent on containers, not leaves: a big array
       // used to exhaust it and leave every later string at full length.

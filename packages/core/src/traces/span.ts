@@ -380,11 +380,11 @@ function orderedKeys(attributes: SpanAttributes, keysBeforeHook: readonly string
   if (!keysBeforeHook.length) {
     return Object.keys(attributes)
   }
-  // hasOwnProperty, not `in`: `in` walks the prototype chain, so a key the caller
-  // set that collides with Object.prototype survives the hook deleting it and
-  // reads back as the inherited member — the same trap the attribute store's own
-  // Object.keys comment describes.
-  const beforeHook = keysBeforeHook.filter((key) => Object.prototype.hasOwnProperty.call(attributes, key))
+  // The encoder's own predicate: `in` would walk the prototype chain, so a key
+  // the caller set that collides with Object.prototype survives the hook deleting
+  // it and reads back as the inherited member, and `hasOwnProperty` would keep a
+  // key the hook hid by making it non-enumerable, which the encoder never emits.
+  const beforeHook = keysBeforeHook.filter((key) => Object.prototype.propertyIsEnumerable.call(attributes, key))
   const seen = new Set(beforeHook)
   return [...beforeHook, ...Object.keys(attributes).filter((key) => !seen.has(key))]
 }
@@ -607,10 +607,17 @@ function truncateValue(
   depth: number
 ): SpanAttributeValue {
   if (value === null || typeof value !== 'object') {
-    // Charged like every other value, as the encoder charges it. A shared
-    // subtree is re-walked once per path that reaches it, so leaving the leaves
-    // free lets one value cost `budget * items` string copies where the encoder
-    // would have stopped at `budget`.
+    // A nullish leaf is free here because the encoder drops one without spending
+    // its budget. Charging it would make this walk the stricter of the two, and
+    // then a value whose leaves are mostly nulls exhausts this budget while the
+    // encoder still has room — leaving a large string unbounded on both sides.
+    if (isNullish(value)) {
+      return value
+    }
+    // Everything else is charged as the encoder charges it. A shared subtree is
+    // re-walked once per path that reaches it, so leaving the leaves free lets
+    // one value cost `budget * items` string copies where the encoder would have
+    // stopped at `budget`.
     if (state.remainingNodes <= 0) {
       return value
     }
@@ -624,10 +631,10 @@ function truncateValue(
     // its strings at full length.
     return CIRCULAR_VALUE
   }
-  // Unlike a cycle, these two are bounded by the encoder as well: it stops at
-  // the same depth, charges values the same way, and spends one budget across the
-  // whole bag rather than one per attribute, so it runs out no later than this
-  // walk and marks whatever this one left unbounded.
+  // Unlike a cycle, these two are bounded by the encoder as well: it stops at the
+  // same depth, charges the same values — nullish leaves free on both sides — and
+  // spends one budget across the whole bag rather than one per attribute, so it
+  // runs out no later than this walk and marks whatever this one left unbounded.
   if (state.remainingNodes <= 0 || depth >= MAX_JSON_SAFE_VALUE_DEPTH) {
     return value
   }

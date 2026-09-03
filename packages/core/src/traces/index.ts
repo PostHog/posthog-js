@@ -303,8 +303,12 @@ export class PostHogTraces {
     // await, and a resource-attribute getter or `toJSON` that ends a span in
     // that window would otherwise re-enter here, find no pass in flight, and
     // send the same head batch again — without bound.
+    // Sampled before the microtask, not inside `_flushInner`: a `reset()` landing
+    // in the window would otherwise be invisible to this pass, which would then
+    // drain the post-reset queue alongside the pass `reset()` started.
+    const startedAtGeneration = this._generation
     const promise = Promise.resolve()
-      .then(() => this._flushInner())
+      .then(() => (startedAtGeneration === this._generation ? this._flushInner() : 0))
       .finally(() => {
         // Only clear the slot this call installed: a `reset()` mid-flight may
         // already have installed a newer one.
