@@ -1746,7 +1746,7 @@ describe('posthog core', () => {
                 posthog.group('company', 'company::5')
                 posthog.capture('some_event', { $groups: { project: 'project::7' } })
 
-                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
+                const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
                 // eslint-disable-next-line posthog-js/no-direct-array-check
                 if (Array.isArray(eventPayload.data!)) {
                     throw new Error('')
@@ -1761,7 +1761,7 @@ describe('posthog core', () => {
                 posthog.group('project', 'project::5')
                 posthog.capture('some_event', { $groups: { project: 'project::7' } })
 
-                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
+                const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
                 // eslint-disable-next-line posthog-js/no-direct-array-check
                 if (Array.isArray(eventPayload.data!)) {
                     throw new Error('')
@@ -1774,7 +1774,7 @@ describe('posthog core', () => {
                 posthog.group('company', 'company::5')
                 posthog.capture('some_event', { $groups: {} })
 
-                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
+                const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
                 // eslint-disable-next-line posthog-js/no-direct-array-check
                 if (Array.isArray(eventPayload.data!)) {
                     throw new Error('')
