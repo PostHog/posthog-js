@@ -29,7 +29,7 @@ import {
 import { PERSISTENCE_KEY_POLICY } from '../persistence-key-policy'
 import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
-import { window } from '@posthog/browser-common/utils/globals'
+import * as globals from '@posthog/browser-common/utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import {
     cookieStore,
@@ -44,6 +44,7 @@ import {
 import { defaultPostHog } from './helpers/posthog-instance'
 import Mock = jest.Mock
 
+const { window } = globals
 let referrer = '' // No referrer by default
 Object.defineProperty(document, 'referrer', { get: () => referrer })
 
@@ -741,6 +742,29 @@ describe('persistence', () => {
                 $initial_person_info: { u: 'https://www.example.com', r: 'https://www.referrer.com' },
                 $user_state: 'identified',
             })
+        })
+
+        it('should limit initial person URLs by their encoded cookie size', () => {
+            const longUrl = `https://www.example.com/?${'&'.repeat(2000)}`
+            // @ts-expect-error ok to set global in test
+            globals.location = { href: longUrl }
+            referrer = longUrl
+            library = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
+            library.register({
+                distinct_id: '0195ad79-114c-7cba-b50c-f5669fc3c9c9',
+                $device_id: '0195ad79-114c-7cba-b50c-f5669fc3c9c9',
+                $sesid: [1742372694303, '0195ad79-1843-77fd-a2c8-274d23d9c647', 1742372149315],
+            })
+
+            library.set_initial_person_info()
+
+            const personInfo = library.props[INITIAL_PERSON_INFO]
+            expect(encodeURIComponent(JSON.stringify(personInfo.r).slice(1, -1)).length).toBeLessThanOrEqual(1000)
+            expect(encodeURIComponent(JSON.stringify(personInfo.u).slice(1, -1)).length).toBeLessThanOrEqual(1000)
+            const persistedCookieValue = cookieStore._get('ph__posthog')
+            expect(persistedCookieValue).toBeTruthy()
+            const encodedCookieValue = encodeURIComponent(persistedCookieValue || '')
+            expect(`ph__posthog=${encodedCookieValue}; SameSite=Lax; path=/`.length).toBeLessThan(4096 * 0.9)
         })
 
         it('should persist custom properties to cookies when using localStorage+cookie', () => {

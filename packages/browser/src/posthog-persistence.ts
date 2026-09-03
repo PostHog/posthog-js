@@ -78,6 +78,23 @@ const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['pers
 
 const getCookieIdentityChangePendingName = (name: string): string => `${name}_cookie_identity_change_pending`
 
+const MAX_COOKIE_PERSON_INFO_FIELD_SIZE = 1000
+
+const truncateForCookie = (value: string): string => {
+    // Persistence JSON-stringifies and URI-encodes this value, so raw character count is not its cookie size.
+    let result = ''
+    let encodedLength = 0
+    for (const character of value) {
+        const encodedCharacterLength = encodeURIComponent(JSON.stringify(character).slice(1, -1)).length
+        if (encodedLength + encodedCharacterLength > MAX_COOKIE_PERSON_INFO_FIELD_SIZE) {
+            break
+        }
+        result += character
+        encodedLength += encodedCharacterLength
+    }
+    return result
+}
+
 const parseName = (config: PostHogConfig): string => {
     let token = ''
     if (config['token']) {
@@ -1625,13 +1642,17 @@ export class PostHogPersistence {
             return
         }
 
+        const personInfo = getPersonInfo(
+            this._config.mask_personal_data_properties,
+            this._config.custom_personal_data_properties,
+            this._config.disable_capture_url_hashes
+        )
         this.register_once(
             {
-                [INITIAL_PERSON_INFO]: getPersonInfo(
-                    this._config.mask_personal_data_properties,
-                    this._config.custom_personal_data_properties,
-                    this._config.disable_capture_url_hashes
-                ),
+                [INITIAL_PERSON_INFO]: {
+                    r: truncateForCookie(personInfo.r),
+                    u: personInfo.u ? truncateForCookie(personInfo.u) : undefined,
+                },
             },
             undefined
         )
