@@ -26,9 +26,9 @@ const resolveForTest = (partial?: Partial<ResolvedTracesConfig>): ResolvedTraces
 const createMockInstance = (overrides: Record<string, any> = {}): any => ({
   isDisabled: false,
   optedOut: false,
-  getLibraryId: jest.fn(() => 'posthog-core-tests'),
-  getLibraryVersion: jest.fn(() => '0.0.0-test'),
-  _sendTracesBatch: jest.fn((): Promise<SendTracesBatchOutcome> => Promise.resolve({ kind: 'ok' })),
+  getLibraryId: vi.fn(() => 'posthog-core-tests'),
+  getLibraryVersion: vi.fn(() => '0.0.0-test'),
+  _sendTracesBatch: vi.fn((): Promise<SendTracesBatchOutcome> => Promise.resolve({ kind: 'ok' })),
   ...overrides,
 })
 
@@ -394,7 +394,7 @@ describe('PostHogTraces', () => {
       const pending = traces.withSpan('job', async () => {
         await new Promise((resolve) => setTimeout(resolve, 80))
       })
-      await jest.advanceTimersByTimeAsync(80)
+      await vi.advanceTimersByTimeAsync(80)
       await pending
       await traces.flush()
 
@@ -430,7 +430,7 @@ describe('PostHogTraces', () => {
 
     it('runs the callback once with an inert handle when tracing cannot run', async () => {
       const traces = createTraces({}, createMockInstance({ optedOut: true }))
-      const fn = jest.fn(() => 'value')
+      const fn = vi.fn(() => 'value')
 
       expect(traces.withSpan('job', fn)).toBe('value')
       expect(fn).toHaveBeenCalledTimes(1)
@@ -632,7 +632,7 @@ describe('PostHogTraces', () => {
       traces.startSpan('a').end()
       expect(mockInstance._sendTracesBatch).not.toHaveBeenCalled()
 
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(sentSpans()).toHaveLength(1)
     })
 
@@ -692,7 +692,7 @@ describe('PostHogTraces', () => {
     it('halves the batch and resends the same spans on 413', async () => {
       const outcomes: SendTracesBatchOutcome[] = [{ kind: 'too-large' }, { kind: 'ok' }, { kind: 'ok' }]
       const instance = createMockInstance({
-        _sendTracesBatch: jest.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' })),
+        _sendTracesBatch: vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' })),
       })
       const traces = createTraces({ maxExportBatchSize: 4 }, instance)
       for (let i = 0; i < 4; i++) {
@@ -710,7 +710,7 @@ describe('PostHogTraces', () => {
       // configured maximum leaves `size` unchanged whenever the queue is
       // shallower than it — the ordinary timer-flush case.
       const instance = createMockInstance({
-        _sendTracesBatch: jest.fn().mockResolvedValueOnce({ kind: 'too-large' }).mockResolvedValue({ kind: 'ok' }),
+        _sendTracesBatch: vi.fn().mockResolvedValueOnce({ kind: 'too-large' }).mockResolvedValue({ kind: 'ok' }),
       })
       const traces = createTraces({ maxExportBatchSize: 512 }, instance)
       for (let i = 0; i < 3; i++) {
@@ -725,7 +725,7 @@ describe('PostHogTraces', () => {
     it('ramps the batch size back up after a 413 shrink', async () => {
       // A one-off oversized payload shouldn't permanently halve throughput.
       const instance = createMockInstance({
-        _sendTracesBatch: jest.fn().mockResolvedValueOnce({ kind: 'too-large' }).mockResolvedValue({ kind: 'ok' }),
+        _sendTracesBatch: vi.fn().mockResolvedValueOnce({ kind: 'too-large' }).mockResolvedValue({ kind: 'ok' }),
       })
       const traces = createTraces({ maxExportBatchSize: 4 }, instance)
       for (let i = 0; i < 4; i++) {
@@ -745,7 +745,7 @@ describe('PostHogTraces', () => {
 
     it('drops a single span the server rejects as too large', async () => {
       const instance = createMockInstance({
-        _sendTracesBatch: jest.fn(() => Promise.resolve({ kind: 'too-large' as const })),
+        _sendTracesBatch: vi.fn(() => Promise.resolve({ kind: 'too-large' as const })),
       })
       const traces = createTraces({ maxExportBatchSize: 1 }, instance)
       traces.startSpan('huge').end()
@@ -763,7 +763,7 @@ describe('PostHogTraces', () => {
 
     it('names the reason for each kind of drop', async () => {
       const instance = createMockInstance({
-        _sendTracesBatch: jest.fn(() => Promise.resolve({ kind: 'fatal' as const, error: new Error('400') })),
+        _sendTracesBatch: vi.fn(() => Promise.resolve({ kind: 'fatal' as const, error: new Error('400') })),
       })
       const traces = createTraces({ maxExportBatchSize: 1 }, instance)
       traces.startSpan('poison').end()
@@ -779,7 +779,7 @@ describe('PostHogTraces', () => {
       // Warning once per process would leave the SDK silent about every
       // subsequent drop for the life of the app.
       const instance = createMockInstance({
-        _sendTracesBatch: jest.fn(() => Promise.resolve({ kind: 'fatal' as const, error: new Error('400') })),
+        _sendTracesBatch: vi.fn(() => Promise.resolve({ kind: 'fatal' as const, error: new Error('400') })),
       })
       const traces = createTraces({ maxExportBatchSize: 1 }, instance)
 
@@ -788,12 +788,12 @@ describe('PostHogTraces', () => {
       traces.startSpan('b').end()
       await traces.flush()
 
-      expect((logger.warn as jest.Mock).mock.calls.length).toBeGreaterThan(1)
+      expect((logger.warn as vi.Mock).mock.calls.length).toBeGreaterThan(1)
     })
 
     it('keeps spans queued on a retriable failure', async () => {
       const instance = createMockInstance({
-        _sendTracesBatch: jest
+        _sendTracesBatch: vi
           .fn()
           .mockResolvedValueOnce({ kind: 'retry-later', error: new Error('network') })
           .mockResolvedValue({ kind: 'ok' }),
@@ -811,14 +811,14 @@ describe('PostHogTraces', () => {
 
     it('backs off exponentially while sends keep failing', async () => {
       const instance = createMockInstance({
-        _sendTracesBatch: jest.fn(() => Promise.resolve({ kind: 'retry-later' as const, error: new Error('network') })),
+        _sendTracesBatch: vi.fn(() => Promise.resolve({ kind: 'retry-later' as const, error: new Error('network') })),
       })
       const traces = createTraces({ flushIntervalMs: 5000 }, instance)
       traces.startSpan('a').end()
 
       const sendsPerWindow: number[] = []
       for (let i = 0; i < 8; i++) {
-        await jest.advanceTimersByTimeAsync(5000)
+        await vi.advanceTimersByTimeAsync(5000)
         sendsPerWindow.push(instance._sendTracesBatch.mock.calls.length)
       }
 
@@ -827,7 +827,7 @@ describe('PostHogTraces', () => {
 
     it('returns to the base interval after a send succeeds', async () => {
       const instance = createMockInstance({
-        _sendTracesBatch: jest
+        _sendTracesBatch: vi
           .fn()
           .mockResolvedValueOnce({ kind: 'retry-later', error: new Error('network') })
           .mockResolvedValueOnce({ kind: 'retry-later', error: new Error('network') })
@@ -836,19 +836,19 @@ describe('PostHogTraces', () => {
       const traces = createTraces({ flushIntervalMs: 5000 }, instance)
       traces.startSpan('a').end()
 
-      await jest.advanceTimersByTimeAsync(5000)
-      await jest.advanceTimersByTimeAsync(5000)
-      await jest.advanceTimersByTimeAsync(10000)
+      await vi.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(10000)
       expect(instance._sendTracesBatch).toHaveBeenCalledTimes(3)
 
       traces.startSpan('b').end()
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(instance._sendTracesBatch).toHaveBeenCalledTimes(4)
     })
 
     it('drops a poison batch rather than wedging the queue', async () => {
       const instance = createMockInstance({
-        _sendTracesBatch: jest
+        _sendTracesBatch: vi
           .fn()
           .mockResolvedValueOnce({ kind: 'fatal', error: new Error('400') })
           .mockResolvedValue({ kind: 'ok' }),
@@ -869,20 +869,20 @@ describe('PostHogTraces', () => {
       // Ending a span is application control flow — it must never throw because
       // the exporter is broken.
       const instance = createMockInstance({
-        _sendTracesBatch: jest.fn(() => Promise.reject(new Error('transport exploded'))),
+        _sendTracesBatch: vi.fn(() => Promise.reject(new Error('transport exploded'))),
       })
       const traces = createTraces({ maxExportBatchSize: 1 }, instance)
 
       expect(() => traces.startSpan('a').end()).not.toThrow()
       // Let the background flush settle; the rejection is swallowed there.
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     it('surfaces a transport failure through an explicit flush()', async () => {
       // flush() is the caller asking to be told, so it propagates — matching
       // how the logs and metrics pipelines behave.
       const instance = createMockInstance({
-        _sendTracesBatch: jest.fn(() => Promise.reject(new Error('transport exploded'))),
+        _sendTracesBatch: vi.fn(() => Promise.reject(new Error('transport exploded'))),
       })
       const traces = createTraces({ maxExportBatchSize: 100 }, instance)
       traces.startSpan('a').end()
@@ -1036,7 +1036,7 @@ describe('PostHogTraces', () => {
       await flushMicrotasks()
       expect(logger.warn).not.toHaveBeenCalled()
 
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
 
       expect(logger.warn.mock.calls.map((call: any[]) => call[0]).join(' ')).toContain('queue is full')
     })
@@ -1050,7 +1050,7 @@ describe('PostHogTraces', () => {
       }
       const afterFirstWindow = logger.warn.mock.calls.length
 
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       traces.startSpan('later').end()
       await flushMicrotasks()
 
@@ -1116,7 +1116,7 @@ describe('PostHogTraces', () => {
       let live = 0
       let peak = 0
       const drain = traces.flush.bind(traces)
-      jest.spyOn(traces, 'flush').mockImplementation(() => {
+      vi.spyOn(traces, 'flush').mockImplementation(() => {
         live++
         peak = Math.max(peak, live)
         return drain().finally(() => {
@@ -1150,7 +1150,7 @@ describe('PostHogTraces', () => {
         traces.startSpan('b').end()
       })
       await flushMicrotasks()
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
 
       expect(sentSpans().map((span) => span.name)).toEqual(['a', 'b'])
     })
@@ -1168,7 +1168,7 @@ describe('PostHogTraces', () => {
         const before = mockInstance._sendTracesBatch.mock.calls.length
         let waited = 0
         while (mockInstance._sendTracesBatch.mock.calls.length === before && waited < 120_000) {
-          await jest.advanceTimersByTimeAsync(1000)
+          await vi.advanceTimersByTimeAsync(1000)
           waited += 1000
         }
         delays.push(waited)
@@ -1188,7 +1188,7 @@ describe('PostHogTraces', () => {
 
       // Eight retriable failures spend the head batch's budget.
       for (let attempt = 0; attempt < 12; attempt++) {
-        await jest.advanceTimersByTimeAsync(30_000)
+        await vi.advanceTimersByTimeAsync(30_000)
       }
 
       const attempted = mockInstance._sendTracesBatch.mock.calls.flatMap((call: any[]) =>
@@ -1204,12 +1204,12 @@ describe('PostHogTraces', () => {
       const traces = createTraces({ flushIntervalMs: 1000, maxExportBatchSize: 512, maxQueueSize: 2048 })
       traces.startSpan('old').end()
       while (mockInstance._sendTracesBatch.mock.calls.length < 7) {
-        await jest.advanceTimersByTimeAsync(30_000)
+        await vi.advanceTimersByTimeAsync(30_000)
       }
       for (let i = 0; i < 20; i++) {
         traces.startSpan(`fresh-${i}`).end()
       }
-      await jest.advanceTimersByTimeAsync(30_000)
+      await vi.advanceTimersByTimeAsync(30_000)
 
       const eighth = mockInstance._sendTracesBatch.mock.calls[7][0] as OtlpTracesPayload
       // The head cannot grow to sweep in spans that have never been retried.
@@ -1233,7 +1233,7 @@ describe('PostHogTraces', () => {
         traces.startSpan(`s${i}`).end()
       }
       for (let tick = 0; tick < 6; tick++) {
-        await jest.advanceTimersByTimeAsync(30_000)
+        await vi.advanceTimersByTimeAsync(30_000)
       }
 
       const halved = attempted.filter((names) => names.join() === 's0,s1')
@@ -1254,7 +1254,7 @@ describe('PostHogTraces', () => {
       traces.startSpan('a').end()
       traces.startSpan('b').end()
       for (let tick = 0; tick < 12; tick++) {
-        await jest.advanceTimersByTimeAsync(30_000)
+        await vi.advanceTimersByTimeAsync(30_000)
       }
 
       expect([...new Set(sentSpans().map((span) => span.name))]).toEqual(['a', 'b'])
@@ -1269,7 +1269,7 @@ describe('PostHogTraces', () => {
       // and shutdown() then discards it.
       let onSend = (): void => {}
       const instance = createMockInstance({
-        _sendTracesBatch: jest.fn(() => {
+        _sendTracesBatch: vi.fn(() => {
           onSend()
           onSend = (): void => {}
           return Promise.resolve({ kind: 'ok' as const })
@@ -1323,7 +1323,7 @@ describe('PostHogTraces', () => {
       const traces = createTraces({ maxSpanAgeMs: 60_000 })
       const leaked = traces.startSpan('leaked')
 
-      await jest.advanceTimersByTimeAsync(61_000)
+      await vi.advanceTimersByTimeAsync(61_000)
       // Eviction is lazy: the next startSpan sweeps.
       traces.startSpan('later').end()
       leaked.end()
@@ -1337,7 +1337,7 @@ describe('PostHogTraces', () => {
       const traces = createTraces({ maxLiveSpans: 1, maxSpanAgeMs: 60_000 })
       traces.startSpan('leaked-forever')
 
-      await jest.advanceTimersByTimeAsync(61_000)
+      await vi.advanceTimersByTimeAsync(61_000)
       traces.startSpan('after-the-leak').end()
       await traces.flush()
 
@@ -1361,7 +1361,7 @@ describe('PostHogTraces', () => {
     it('abandons an in-flight pass instead of splicing spans it never sent', async () => {
       let release!: (outcome: SendTracesBatchOutcome) => void
       const instance = createMockInstance({
-        _sendTracesBatch: jest.fn(
+        _sendTracesBatch: vi.fn(
           () =>
             new Promise<SendTracesBatchOutcome>((resolve) => {
               release = resolve

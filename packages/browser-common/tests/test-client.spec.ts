@@ -3,7 +3,7 @@ import { createTestClient } from './helpers/test-client'
 describe('TestClient remote config', () => {
     it('replays the latest outcome and publishes subsequent outcomes', () => {
         const client = createTestClient()
-        const firstListener = jest.fn()
+        const firstListener = vi.fn()
         client.onRemoteConfig(firstListener)
 
         expect(firstListener).not.toHaveBeenCalled()
@@ -12,7 +12,7 @@ describe('TestClient remote config', () => {
         client.setRemoteConfigResult(failure)
         expect(firstListener).toHaveBeenLastCalledWith(failure)
 
-        const lateListener = jest.fn()
+        const lateListener = vi.fn()
         client.onRemoteConfig(lateListener)
         expect(lateListener).toHaveBeenCalledWith(failure)
 

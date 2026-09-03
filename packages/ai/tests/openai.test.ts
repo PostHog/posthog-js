@@ -19,33 +19,25 @@ let mockOpenAiParsedResponse: ParsedResponse<any> = {} as ParsedResponse<any>
 let mockOpenAiEmbeddingResponse: any = {}
 let mockStreamChunks: ChatCompletionChunk[] = []
 
-jest.mock(
-  'posthog-node',
-  () => {
-    return {
-      PostHog: jest.fn().mockImplementation(() => {
-        return {
-          capture: jest.fn(),
-          captureImmediate: jest.fn(),
-          privacy_mode: false,
-        }
-      }),
-    }
-  },
-  { virtual: true }
-)
+vi.mock('posthog-node', () => {
+  return {
+    PostHog: vi.fn().mockImplementation(() => {
+      return {
+        capture: vi.fn(),
+        captureImmediate: vi.fn(),
+        privacy_mode: false,
+      }
+    }),
+  }
+})
 
-jest.mock(
-  '@posthog/core',
-  () => ({
-    uuidv7: jest.fn(() => 'uuid-v7'),
-    ErrorTracking: {},
-    toJsonSafeValue: jest.fn((value) => value),
-  }),
-  { virtual: true }
-)
+vi.mock('@posthog/core', () => ({
+  uuidv7: vi.fn(() => 'uuid-v7'),
+  ErrorTracking: {},
+  toJsonSafeValue: vi.fn((value) => value),
+}))
 
-jest.mock('openai', () => {
+vi.mock('openai', () => {
   // Mock Completions class – `create` is declared on the prototype so that
   // subclasses can safely `super.create(...)` without it being shadowed by an
   // instance field (which would overwrite the subclass implementation).
@@ -106,18 +98,18 @@ jest.mock('openai', () => {
     constructor() {
       this.chat = {
         completions: {
-          create: jest.fn(),
+          create: vi.fn(),
         },
       }
       this.embeddings = {
-        create: jest.fn(),
+        create: vi.fn(),
       }
       this.responses = {
-        create: jest.fn(),
+        create: vi.fn(),
       }
       this.audio = {
         transcriptions: {
-          create: jest.fn(),
+          create: vi.fn(),
         },
       }
     }
@@ -158,7 +150,7 @@ const createMockAsyncIterator = <T>(chunks: T[]): MockAsyncIterator<T> => {
 const createMockAPIPromise = <T>(
   data: T,
   withResponseData: unknown = { stale: true }
-): Promise<T> & { asResponse: jest.Mock; withResponse: jest.Mock } => {
+): Promise<T> & { asResponse: vi.Mock; withResponse: vi.Mock } => {
   const response = new Response(JSON.stringify(data), {
     headers: {
       'x-ratelimit-remaining-requests': '42',
@@ -166,8 +158,8 @@ const createMockAPIPromise = <T>(
     status: 200,
   })
   return Object.assign(Promise.resolve(data), {
-    asResponse: jest.fn().mockResolvedValue(response),
-    withResponse: jest.fn().mockResolvedValue({
+    asResponse: vi.fn().mockResolvedValue(response),
+    withResponse: vi.fn().mockResolvedValue({
       data: withResponseData,
       response,
       request_id: 'req_test',
@@ -312,7 +304,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
   })
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
 
     // Reset the default mocks
     mockPostHogClient = new (PostHog as any)()
@@ -423,7 +415,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
 
     const ChatMock: any = openaiModule.Chat
-    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockImplementation((params: any) => {
+    ;(ChatMock.Completions as any).prototype.create = vi.fn().mockImplementation((params: any) => {
       if (params.stream) {
         const mockStream = createMockAsyncIterator(mockStreamChunks)
         return createMockAPIPromise(mockStream)
@@ -433,12 +425,12 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
     // Mock the Responses.prototype.parse method that super.parse() will call
     const ResponsesMock: any = openaiModule.Responses
-    ResponsesMock.prototype.parse = jest.fn().mockImplementation(() => createMockAPIPromise(mockOpenAiParsedResponse))
-    ResponsesMock.prototype.create = jest.fn().mockImplementation(() => createMockAPIPromise(mockOpenAiParsedResponse))
+    ResponsesMock.prototype.parse = vi.fn().mockImplementation(() => createMockAPIPromise(mockOpenAiParsedResponse))
+    ResponsesMock.prototype.create = vi.fn().mockImplementation(() => createMockAPIPromise(mockOpenAiParsedResponse))
 
     // Mock the Embeddings class
     const EmbeddingsMock: any = openaiModule.Embeddings || class MockEmbeddings {}
-    EmbeddingsMock.prototype.create = jest
+    EmbeddingsMock.prototype.create = vi
       .fn()
       .mockImplementation(() => createMockAPIPromise(mockOpenAiEmbeddingResponse))
   })
@@ -460,7 +452,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     // We expect 1 capture call
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
     // Check the capture arguments
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, event, properties } = captureArgs[0]
 
     expect(distinctId).toBe('test-id')
@@ -519,7 +511,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     await client.chat.completions.create(chatRequest)
 
     expect((openaiModule.Chat.Completions as any).prototype.create).toHaveBeenCalledWith(chatRequest, undefined)
-    expect((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_output_choices']).toEqual([
+    expect((mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties['$ai_output_choices']).toEqual([
       {
         role: 'assistant',
         content: [
@@ -534,7 +526,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       },
     ])
 
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     mockOpenAiParsedResponse = {
       ...mockOpenAiParsedResponse,
       output: [{ type: 'image_generation_call', id: 'image-1', status: 'completed', result: binary } as any],
@@ -544,14 +536,14 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
     expect(response.output[0]).toMatchObject({ result: binary })
     expect((openaiModule.Responses as any).prototype.parse).toHaveBeenCalledWith(responseRequest, undefined)
-    expect((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_output_choices']).toEqual([
+    expect((mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties['$ai_output_choices']).toEqual([
       { type: 'image_generation_call', id: 'image-1', status: 'completed', result: '[base64 redacted]' },
     ])
 
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     const transcriptionResult = { text: `data:audio/wav;base64,${binary}` }
     const TranscriptionsMock: any = openaiModule.Audio.Transcriptions
-    TranscriptionsMock.prototype.create = jest.fn().mockResolvedValue(transcriptionResult)
+    TranscriptionsMock.prototype.create = vi.fn().mockResolvedValue(transcriptionResult)
     const file = new Blob(['audio'], { type: 'audio/wav' }) as any
     file.name = 'audio.wav'
     const transcriptionRequest = { model: 'whisper-1', file }
@@ -560,7 +552,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
     expect(transcription).toBe(transcriptionResult)
     expect(TranscriptionsMock.prototype.create).toHaveBeenCalledWith(transcriptionRequest, undefined)
-    expect((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_output_choices']).toBe(
+    expect((mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties['$ai_output_choices']).toBe(
       '[base64 audio/wav redacted]'
     )
   })
@@ -581,7 +573,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(JSON.stringify(captureArgs[0].properties['$ai_input'])).toContain(dataUrl)
   })
 
@@ -600,7 +592,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(JSON.stringify(captureArgs[0].properties['$ai_input'])).toContain('redacted')
   })
 
@@ -629,7 +621,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     const captureDelivery = new Promise<void>((resolve) => {
       resolveCapture = resolve
     })
-    ;(mockPostHogClient.captureImmediate as jest.Mock).mockReturnValue(captureDelivery)
+    ;(mockPostHogClient.captureImmediate as vi.Mock).mockReturnValue(captureDelivery)
 
     const promise = client.chat.completions.create({
       model: 'gpt-4',
@@ -655,7 +647,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
   })
 
   test('chat completions preserve the provider result when captureImmediate rejects', async () => {
-    ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+    ;(mockPostHogClient.captureImmediate as vi.Mock).mockRejectedValue(new Error('telemetry failed'))
 
     const response = await client.chat.completions.create({
       model: 'gpt-4',
@@ -670,8 +662,8 @@ describe('PostHogOpenAI - Jest test suite', () => {
   test('chat completions preserve the provider error when captureImmediate rejects', async () => {
     const providerError = new Error('provider failed')
     const ChatMock: any = openaiModule.Chat
-    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockRejectedValue(providerError)
-    ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+    ;(ChatMock.Completions as any).prototype.create = vi.fn().mockRejectedValue(providerError)
+    ;(mockPostHogClient.captureImmediate as vi.Mock).mockRejectedValue(new Error('telemetry failed'))
 
     const rejection = await client.chat.completions
       .create({
@@ -693,7 +685,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       posthogGroups: { company: 'test_company' },
     })
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { groups } = captureArgs[0]
     expect(groups).toEqual({ company: 'test_company' })
   })
@@ -707,7 +699,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
     expect(properties['$ai_input']).toBeNull()
     expect(properties['$ai_output_choices']).toBeNull()
@@ -726,7 +718,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
     expect(properties['$ai_input']).toBeNull()
     expect(properties['$ai_output_choices']).toBeNull()
@@ -751,7 +743,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
 
     expect(properties['$ai_model_parameters']).toEqual({
@@ -773,7 +765,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
         posthogDistinctId: 'test-id',
       })
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       expect(captureArgs[0].properties['$ai_model_parameters'].service_tier).toBe('flex')
     })
 
@@ -793,7 +785,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       }
       await flushPromises()
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       expect(captureArgs[0].properties['$ai_model_parameters'].service_tier).toBe('priority')
     })
 
@@ -823,7 +815,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
       await invoke()
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       expect(captureArgs[0].properties['$ai_model_parameters'].service_tier).toBe('default')
     })
 
@@ -841,7 +833,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
         },
       ]
       const ResponsesMock: any = openaiModule.Responses
-      ResponsesMock.prototype.create = jest
+      ResponsesMock.prototype.create = vi
         .fn()
         .mockImplementation(() => createMockAPIPromise(createMockAsyncIterator(chunks)))
 
@@ -857,7 +849,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       }
       await flushPromises()
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       expect(captureArgs[0].properties['$ai_model_parameters'].service_tier).toBe('flex')
     })
   })
@@ -886,7 +878,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
 
     // Check standard token properties
@@ -959,7 +951,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       // Token counts stay raw either way (OpenAI convention, consistent with
@@ -998,7 +990,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties[tokenKey]).toBe(1234)
@@ -1025,7 +1017,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
     expect(properties['$ai_cache_read_input_tokens']).toBe(29580)
     expect(properties['$ai_cache_creation_input_tokens']).toBe(3820)
@@ -1046,7 +1038,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     await flushPromises()
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureArgs[0].properties['$ai_cache_reporting_exclusive']).toBe(false)
   })
 
@@ -1071,7 +1063,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     await flushPromises()
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
     expect(properties['$ai_cache_read_input_tokens']).toBe(29580)
     expect(properties['$ai_cache_creation_input_tokens']).toBe(3820)
@@ -1122,7 +1114,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(response).toEqual(mockOpenAiParsedResponse)
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
 
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, event, properties } = captureArgs[0]
 
     expect(distinctId).toBe('test-id')
@@ -1224,7 +1216,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     test.each(terminalStatuses)('non-streaming %s response preserves terminal data', async (status) => {
       const response = terminalResponse(status)
       const ResponsesMock: any = openaiModule.Responses
-      ResponsesMock.prototype.create = jest.fn().mockImplementation(() => createMockAPIPromise(response))
+      ResponsesMock.prototype.create = vi.fn().mockImplementation(() => createMockAPIPromise(response))
 
       await client.responses.create({
         model: 'gpt-4',
@@ -1233,8 +1225,8 @@ describe('PostHogOpenAI - Jest test suite', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
-      expect(properties['$ai_stop_reason']).toBe(status)
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+      expect(properties['$ai_stop_reason']).toBe(status === 'incomplete' ? 'max_output_tokens' : status)
       expect(properties['$ai_input_tokens']).toBe(11)
       expect(properties['$ai_output_tokens']).toBe(7)
       expect(properties['$ai_output_choices']).toEqual([
@@ -1271,7 +1263,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
         },
       ]
       const ResponsesMock: any = openaiModule.Responses
-      ResponsesMock.prototype.create = jest
+      ResponsesMock.prototype.create = vi
         .fn()
         .mockImplementation(() => createMockAPIPromise(createMockAsyncIterator(chunks)))
 
@@ -1287,8 +1279,8 @@ describe('PostHogOpenAI - Jest test suite', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
-      expect(properties['$ai_stop_reason']).toBe(status)
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
+      expect(properties['$ai_stop_reason']).toBe(status === 'incomplete' ? 'max_output_tokens' : status)
       expect(properties['$ai_input_tokens']).toBe(11)
       expect(properties['$ai_output_tokens']).toBe(7)
       expect(properties['$ai_output_choices']).toEqual(response.output ?? [])
@@ -1306,7 +1298,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     test('parse failed response preserves terminal data', async () => {
       const response = terminalResponse('failed')
       const ResponsesMock: any = openaiModule.Responses
-      ResponsesMock.prototype.parse = jest.fn().mockImplementation(() => createMockAPIPromise(response))
+      ResponsesMock.prototype.parse = vi.fn().mockImplementation(() => createMockAPIPromise(response))
 
       await client.responses.parse({
         model: 'gpt-4',
@@ -1315,7 +1307,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       } as any)
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
       expect(properties['$ai_stop_reason']).toBe('failed')
       expect(properties['$ai_is_error']).toBe(true)
       expect(properties['$ai_error']).toContain('provider response failed')
@@ -1336,7 +1328,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       }
       const chunks = [{ type: 'response.completed', sequence_number: 0, response }]
       const ResponsesMock: any = openaiModule.Responses
-      ResponsesMock.prototype.create = jest
+      ResponsesMock.prototype.create = vi
         .fn()
         .mockImplementation(() => createMockAPIPromise(createMockAsyncIterator(chunks)))
 
@@ -1352,7 +1344,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
       expect(JSON.stringify(properties['$ai_output_choices'])).toContain(binary)
       expect(JSON.stringify(properties)).not.toContain('redacted')
     })
@@ -1374,19 +1366,19 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
 
     test('non-streaming create captures cache creation tokens', async () => {
-      ResponsesMock.prototype.create = jest.fn().mockImplementation(() => createMockAPIPromise(response))
+      ResponsesMock.prototype.create = vi.fn().mockImplementation(() => createMockAPIPromise(response))
 
       await client.responses.create({ model: 'gpt-4', input: 'Hello', posthogDistinctId: 'test-id' })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
       expect(properties['$ai_cache_read_input_tokens']).toBe(29580)
       expect(properties['$ai_cache_creation_input_tokens']).toBe(3820)
     })
 
     test('streaming create captures cache creation tokens', async () => {
       const chunks = [{ type: 'response.completed', sequence_number: 0, response }]
-      ResponsesMock.prototype.create = jest
+      ResponsesMock.prototype.create = vi
         .fn()
         .mockImplementation(() => createMockAPIPromise(createMockAsyncIterator(chunks)))
 
@@ -1402,18 +1394,18 @@ describe('PostHogOpenAI - Jest test suite', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
       expect(properties['$ai_cache_read_input_tokens']).toBe(29580)
       expect(properties['$ai_cache_creation_input_tokens']).toBe(3820)
     })
 
     test('parse captures cache creation tokens', async () => {
-      ResponsesMock.prototype.parse = jest.fn().mockImplementation(() => createMockAPIPromise(response))
+      ResponsesMock.prototype.parse = vi.fn().mockImplementation(() => createMockAPIPromise(response))
 
       await client.responses.parse({ model: 'gpt-4', input: 'Hello', posthogDistinctId: 'test-id' } as any)
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
       expect(properties['$ai_cache_read_input_tokens']).toBe(29580)
       expect(properties['$ai_cache_creation_input_tokens']).toBe(3820)
     })
@@ -1447,7 +1439,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(response).toEqual(mockOpenAiParsedResponse)
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
 
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, event, properties } = captureArgs[0]
 
     expect(distinctId).toBe('test-instructions-id')
@@ -1468,7 +1460,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, properties } = captureArgs[0]
 
     expect(distinctId).toBe('trace-123')
@@ -1484,7 +1476,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, properties } = captureArgs[0]
 
     expect(distinctId).toBe('user-456')
@@ -1514,7 +1506,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       }, sourceController)
 
       const ChatMock: any = openaiModule.Chat
-      ;(ChatMock.Completions as any).prototype.create = jest.fn().mockReturnValue(createMockAPIPromise(source))
+      ;(ChatMock.Completions as any).prototype.create = vi.fn().mockReturnValue(createMockAPIPromise(source))
 
       const stream = await client.chat.completions.create({
         model: 'gpt-4',
@@ -1534,7 +1526,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(sourceReturned).toBe(true)
       expect(sourceController.signal.aborted).toBe(true)
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
       expect(properties['$ai_output_choices'][0].content[0].text).toBe(firstChunk.choices[0]?.delta.content)
     })
 
@@ -1567,7 +1559,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
       // Verify PostHog was called with correct data
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { distinctId, event, properties } = captureArgs[0]
 
       expect(distinctId).toBe('test-stream-user')
@@ -1603,7 +1595,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       const streamErrorCases: {
         name: string
         firstChunk: unknown
-        stubCreate: (impl: jest.Mock) => void
+        stubCreate: (impl: vi.Mock) => void
         invoke: () => Promise<unknown>
       }[] = [
         {
@@ -1665,7 +1657,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
           },
         })
 
-        streamErrorCase.stubCreate(jest.fn().mockImplementation(() => createMockAPIPromise(createErroringIterator())))
+        streamErrorCase.stubCreate(vi.fn().mockImplementation(() => createMockAPIPromise(createErroringIterator())))
 
         const unhandledRejections = await collectUnhandledRejections(async () => {
           const stream = await streamErrorCase.invoke()
@@ -1730,7 +1722,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
       // Verify the capture includes tool calls in the formatted output
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       // Check that output contains both text and function call
@@ -1895,7 +1887,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       // Wait for async capture
       await flushPromises()
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       // Verify both tool calls are in the output
@@ -1932,7 +1924,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       }
 
       const ChatMock: any = openaiModule.Chat
-      ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(errorStream)
+      ;(ChatMock.Completions as any).prototype.create = vi.fn().mockResolvedValue(errorStream)
 
       const stream = await client.chat.completions.create({
         model: 'gpt-4',
@@ -1953,7 +1945,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
       // Verify error was captured
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_http_status']).toBe(503)
@@ -1986,7 +1978,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
       // Verify PostHog was called with time to first token
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       // Time to first token should be present and be a number
@@ -2035,7 +2027,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       // Wait for capture
       await flushPromises()
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       // Should have empty text content
@@ -2061,7 +2053,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(response).toEqual(mockOpenAiEmbeddingResponse)
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { distinctId, event, properties } = captureArgs[0]
 
       expect(distinctId).toBe('test-id')
@@ -2106,7 +2098,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       }
 
       const EmbeddingsMock: any = openaiModule.Embeddings || class MockEmbeddings {}
-      EmbeddingsMock.prototype.create = jest.fn().mockResolvedValue(mockOpenAiEmbeddingResponse)
+      EmbeddingsMock.prototype.create = vi.fn().mockResolvedValue(mockOpenAiEmbeddingResponse)
 
       const response = await client.embeddings.create({
         model: 'text-embedding-3-small',
@@ -2117,7 +2109,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(response).toEqual(mockOpenAiEmbeddingResponse)
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_input']).toEqual(arrayInput)
@@ -2135,7 +2127,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_input']).toBeNull()
@@ -2146,7 +2138,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       const EmbeddingsMock: any = openaiModule.Embeddings || class MockEmbeddings {}
       const testError = new Error('API Error') as Error & { status: number }
       testError.status = 400
-      EmbeddingsMock.prototype.create = jest.fn().mockRejectedValue(testError)
+      EmbeddingsMock.prototype.create = vi.fn().mockRejectedValue(testError)
 
       await expect(
         client.embeddings.create({
@@ -2158,7 +2150,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
       // Verify error was captured
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_http_status']).toBe(400)
@@ -2192,7 +2184,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       // Mock the Audio.Transcriptions.prototype.create method
       const AudioMock: any = openaiModule.Audio
       const TranscriptionsMock = AudioMock.Transcriptions
-      TranscriptionsMock.prototype.create = jest
+      TranscriptionsMock.prototype.create = vi
         .fn()
         .mockImplementation(() => createMockAPIPromise(mockTranscriptionResponse))
     })
@@ -2234,7 +2226,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(response).toEqual(mockTranscriptionResponse)
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { distinctId, event, properties } = captureArgs[0]
 
       expect(distinctId).toBe('test-transcription-user')
@@ -2263,7 +2255,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_input']).toBe('This is a test prompt to guide transcription.')
@@ -2281,7 +2273,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_model_parameters']).toMatchObject({
@@ -2302,7 +2294,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
       const AudioMock: any = openaiModule.Audio
       const TranscriptionsMock = AudioMock.Transcriptions
-      TranscriptionsMock.prototype.create = jest.fn().mockResolvedValue(mockVerboseResponse)
+      TranscriptionsMock.prototype.create = vi.fn().mockResolvedValue(mockVerboseResponse)
 
       const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
       mockFile.name = 'test.mp3'
@@ -2317,7 +2309,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(response).toEqual(mockVerboseResponse)
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_output_choices']).toBe('Hello, this is a test transcription.')
@@ -2339,7 +2331,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_input']).toBeNull()
@@ -2358,7 +2350,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
       const AudioMock: any = openaiModule.Audio
       const TranscriptionsMock = AudioMock.Transcriptions
-      TranscriptionsMock.prototype.create = jest.fn().mockResolvedValue(responseWithUsage)
+      TranscriptionsMock.prototype.create = vi.fn().mockResolvedValue(responseWithUsage)
 
       const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
       mockFile.name = 'test.mp3'
@@ -2370,7 +2362,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_input_tokens']).toBe(150)
@@ -2382,7 +2374,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       const TranscriptionsMock = AudioMock.Transcriptions
       const testError = new Error('API Error') as Error & { status: number }
       testError.status = 400
-      TranscriptionsMock.prototype.create = jest.fn().mockRejectedValue(testError)
+      TranscriptionsMock.prototype.create = vi.fn().mockRejectedValue(testError)
 
       const mockFile = new Blob(['mock audio data'], { type: 'audio/mpeg' }) as any
       mockFile.name = 'test.mp3'
@@ -2396,7 +2388,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       ).rejects.toThrow('API Error')
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_http_status']).toBe(400)
@@ -2431,7 +2423,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { groups } = captureArgs[0]
       expect(groups).toEqual({ company: 'test_company' })
     })
@@ -2439,7 +2431,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     conditionalTest('posthogProperties are not sent to OpenAI', async () => {
       const AudioMock: any = openaiModule.Audio
       const TranscriptionsMock = AudioMock.Transcriptions
-      const mockCreate = jest.fn().mockResolvedValue(mockTranscriptionResponse)
+      const mockCreate = vi.fn().mockResolvedValue(mockTranscriptionResponse)
       const originalCreate = TranscriptionsMock.prototype.create
       TranscriptionsMock.prototype.create = mockCreate
 
@@ -2502,7 +2494,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
         posthogDistinctId: 'test-user',
       })
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_web_search_count']).toBe(1)
@@ -2543,7 +2535,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       } as any
 
       const ResponsesMock: any = openaiModule.Responses || class MockResponses {}
-      ResponsesMock.prototype.create = jest.fn().mockResolvedValue(mockResponsesResult)
+      ResponsesMock.prototype.create = vi.fn().mockResolvedValue(mockResponsesResult)
 
       await client.responses.create({
         model: 'gpt-4',
@@ -2551,7 +2543,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
         posthogDistinctId: 'test-user',
       } as any)
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       // Should detect 2 web_search_call items (exact count)
@@ -2619,7 +2611,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
       await flushPromises()
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_web_search_count']).toBe(1)
@@ -2686,7 +2678,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
       await flushPromises()
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       // Should detect web search from early chunk even without usage data
@@ -2729,7 +2721,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
         posthogDistinctId: 'test-user',
       })
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_web_search_count']).toBe(1)
@@ -2766,7 +2758,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
         posthogDistinctId: 'test-user',
       })
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_web_search_count']).toBe(1)
@@ -2802,7 +2794,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
         posthogDistinctId: 'test-user',
       })
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       // Should not have web search count when not present
@@ -2812,7 +2804,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
   conditionalTest('posthogProperties are not sent to OpenAI', async () => {
     const ChatMock: any = openaiModule.Chat
-    const mockCreate = jest.fn().mockResolvedValue({})
+    const mockCreate = vi.fn().mockResolvedValue({})
     const originalCreate = (ChatMock.Completions as any).prototype.create
     ;(ChatMock.Completions as any).prototype.create = mockCreate
 
@@ -2839,7 +2831,7 @@ describe('PostHogOpenAI - $ai_base_url', () => {
   it('emits the wrapped client base URL', async () => {
     const ph = new (PostHog as any)()
     const ChatMock: any = openaiModule.Chat
-    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue({
+    ;(ChatMock.Completions as any).prototype.create = vi.fn().mockResolvedValue({
       id: 'chatcmpl-x',
       model: 'gpt-4',
       object: 'chat.completion',
@@ -2858,7 +2850,7 @@ describe('PostHogOpenAI - $ai_base_url', () => {
     const wrapped = new WrappedCompletions({ baseURL: 'https://gateway.posthog.com/v1' } as any, ph as any)
     await wrapped.create({ model: 'gpt-4', messages: [{ role: 'user', content: 'hi' }] } as any)
 
-    const { properties } = (ph.capture as jest.Mock).mock.calls[0][0]
+    const { properties } = (ph.capture as vi.Mock).mock.calls[0][0]
     expect(properties['$ai_base_url']).toBe('https://gateway.posthog.com/v1')
   })
 })

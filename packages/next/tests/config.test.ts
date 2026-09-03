@@ -5,7 +5,7 @@ describe('shared config', () => {
     const originalEnv = process.env
 
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         process.env = { ...originalEnv }
         delete process.env.NEXT_PUBLIC_POSTHOG_KEY
         delete process.env.NEXT_PUBLIC_POSTHOG_HOST
@@ -25,7 +25,7 @@ describe('shared config', () => {
     })
 
     it('warns and returns undefined when apiKey is not a string and no env fallback exists', () => {
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
         expect(resolveApiKey({ value: 'phc_test123' })).toBeUndefined()
 

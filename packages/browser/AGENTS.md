@@ -76,7 +76,7 @@ The `/src/extensions/` directory contains modular features:
 - **TypeScript** compilation to `lib/` directory
 - **Rollup** bundling with multiple output formats (ES modules, UMD)
 - **Preact** for UI components (surveys, toolbar)
-- **PostCSS** for CSS processing with nesting support
+- **Lightning CSS** for CSS processing, nesting transforms, and minification
 - **Terser** for minification with property mangling
 
 ### Testing Strategy
@@ -94,7 +94,7 @@ The `/src/extensions/` directory contains modular features:
 
 ### Lint Rules
 
-Custom ESLint rules enforce using `@posthog/core` type-check helpers instead of native JS:
+Custom Oxlint rules enforce using `@posthog/core` type-check helpers instead of native JS:
 
 - **No `Array.isArray()`** — use `isArray()` from `@posthog/core`
 - **No `=== null`** — use `isNull()` from `@posthog/core`
