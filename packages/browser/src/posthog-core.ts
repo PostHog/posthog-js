@@ -3027,7 +3027,7 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
-     * @param new_distinct_id - A non-empty string that uniquely identifies a user.
+     * @param {String} [new_distinct_id] A non-empty string that uniquely identifies a user.
      * @param {Object} [userPropertiesToSet] Optional: An associative array of properties to store about the user. Note: For feature flag evaluations, if the same key is present in the userPropertiesToSetOnce,
      *  it will be overwritten by the value in userPropertiesToSet.
      * @param {Object} [userPropertiesToSetOnce] Optional: An associative array of properties to store about the user. If property is previously set, this does not override that value.
