@@ -1293,6 +1293,37 @@ describe('PostHogLogs', () => {
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
     })
 
+    it('does not let a capture during an explicit flush send inside the window', async () => {
+      // The sibling case covers a capture *after* the flush settles. This one
+      // lands while the send is in flight, so it arms the timer at the plain
+      // interval before the window exists.
+      let release: (v: any) => void = () => {}
+      mockInstance._sendLogsBatch = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            release = resolve
+          })
+      )
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      const flushed = logs.flush().catch(() => {})
+      await vi.advanceTimersByTimeAsync(0)
+
+      logs.captureLog({ body: 'second' })
+      release({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      await flushed
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+    })
+
     it('keeps the Retry-After window when a batch is refused for size', async () => {
       // `too-large` is a verdict on the body's size — the SDK's own or a 413 —
       // so it says nothing about the endpoint's rate limit and must not end the

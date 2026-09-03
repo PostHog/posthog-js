@@ -333,6 +333,12 @@ export class PostHogMetrics {
   }
 
   private async _doFlush(): Promise<void> {
+    // A flush retires the pending timer, the way the logs and traces queues do.
+    // Without this, `_armFlushTimerNoEarlierThan` — which only ever ratchets a
+    // timer later — leaves a `Retry-After` delay armed after the window it came
+    // from has already been closed by a successful flush, and every later
+    // capture finds a timer pending and declines to arm a sooner one.
+    this._clearFlushTimer()
     if (this._series.size === 0) {
       return
     }

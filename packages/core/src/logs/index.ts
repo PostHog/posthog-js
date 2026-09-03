@@ -314,6 +314,13 @@ export class PostHogLogs {
       // window too.
       this._retryAfter.record(outcome)
 
+      // A capture that landed while this send was in flight armed the timer at
+      // the plain interval, before the window existed. Only `_flushInBackground`
+      // re-arms on settle, and an explicit `flush()` does not go through it.
+      if (this._flushTimer) {
+        this._armFlushTimerNoEarlierThan(Math.max(this._flushIntervalMs, this._retryAfter.remainingMs()))
+      }
+
       if (outcome.kind === 'retry-later') {
         // Transient failure: keep records in the queue for the next flush cycle
         // and surface the error so the caller can log/react.

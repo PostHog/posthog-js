@@ -775,4 +775,24 @@ describe('PostHogMetrics', () => {
       expect(optedOutInstance._sendMetricsBatch).not.toHaveBeenCalled()
     })
   })
+
+  it('does not hold a later capture at a window a successful flush already closed', async () => {
+    let sends = 0
+    mockInstance._sendMetricsBatch = vi.fn(async (): Promise<SendMetricsBatchOutcome> => {
+      sends += 1
+      return sends === 1 ? { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 } : { kind: 'ok' }
+    })
+    const metrics = createMetrics({ flushIntervalMs: 5000 })
+
+    metrics.count('a', 1)
+    await vi.advanceTimersByTimeAsync(5000)
+    await metrics.flush()
+    const closedAt = Date.now()
+
+    metrics.count('b', 1)
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(3)
+    expect(Date.now() - closedAt).toBeLessThanOrEqual(5000)
+  })
 })
