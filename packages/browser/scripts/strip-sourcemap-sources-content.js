@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* oxlint-disable no-console, typescript/no-require-imports -- This CommonJS prepack CLI reports stripping results. */
 
 /**
  * Pre-pack step: drop `sourcesContent` from the source maps we publish to npm.
@@ -29,7 +30,7 @@ function findMaps(dir) {
         if (entry.isDirectory()) {
             return findMaps(entryPath)
         }
-        return entry.name.endsWith('.js.map') ? [entryPath] : []
+        return /\.m?js\.map$/.test(entry.name) ? [entryPath] : []
     })
 }
 
