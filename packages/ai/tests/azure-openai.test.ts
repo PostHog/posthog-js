@@ -1246,7 +1246,7 @@ describe('PostHogAzureOpenAI - Responses terminal statuses', () => {
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
     const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
-    expect(properties['$ai_stop_reason']).toBe(status)
+    expect(properties['$ai_stop_reason']).toBe(status === 'incomplete' ? 'max_output_tokens' : status)
     expect(properties['$ai_input_tokens']).toBe(11)
     expect(properties['$ai_output_tokens']).toBe(7)
     expect(properties['$ai_output_choices']).toEqual([
@@ -1289,7 +1289,7 @@ describe('PostHogAzureOpenAI - Responses terminal statuses', () => {
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
     const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
-    expect(properties['$ai_stop_reason']).toBe(status)
+    expect(properties['$ai_stop_reason']).toBe(status === 'incomplete' ? 'max_output_tokens' : status)
     expect(properties['$ai_input_tokens']).toBe(11)
     expect(properties['$ai_output_tokens']).toBe(7)
     expect(properties['$ai_output_choices']).toEqual(response.output ?? [])

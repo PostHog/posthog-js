@@ -6,10 +6,7 @@ import { dts } from 'rollup-plugin-dts'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import commonjs from '@rollup/plugin-commonjs'
-import postcss from 'rollup-plugin-postcss'
-import postcssImport from 'postcss-import'
-import postcssNesting from 'postcss-nesting'
-import cssnano from 'cssnano'
+import { Features, transform as transformCss } from 'lightningcss'
 import fs from 'fs'
 import path from 'path'
 import crossBundlePropertyConfig from './terser-cross-bundle-properties.cjs'
@@ -35,47 +32,31 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
     resolve({ browser: true }),
     typescript({ sourceMap: true, outDir: './dist', module: 'es2015' }),
     commonjs(),
-    postcss({
-        plugins: [
-            postcssImport(),
-            postcssNesting(),
-            cssnano({
-                preset: [
-                    'default',
-                    {
-                        discardComments: { removeAll: true },
-                        discardDuplicates: true,
-                        discardEmpty: true,
-                        discardUnused: true,
-                        mergeIdents: true,
-                        mergeLonghand: true,
-                        mergeRules: true,
-                        minifyFontValues: true,
-                        minifyGradients: true,
-                        minifyParams: true,
-                        minifySelectors: true,
-                        normalizeCharset: true,
-                        normalizeDisplayValues: true,
-                        normalizePositions: true,
-                        normalizeRepeatStyle: true,
-                        normalizeString: true,
-                        normalizeTimingFunctions: true,
-                        normalizeUnicode: true,
-                        normalizeUrl: true,
-                        normalizeWhitespace: true,
-                        orderedValues: true,
-                        reduceIdents: true,
-                        reduceInitial: true,
-                        reduceTransforms: true,
-                        svgo: true,
-                        uniqueSelectors: true,
-                    },
-                ],
-            }),
-        ],
-        minimize: true,
-        inject: false,
-    }),
+    {
+        name: 'lightningcss',
+        transform(code, id) {
+            if (!id.endsWith('.css')) {
+                return null
+            }
+
+            const result = transformCss({
+                filename: id,
+                code: Buffer.from(code),
+                minify: true,
+                // Match the previous PostCSS output by lowering nesting and media query ranges.
+                include: Features.Nesting | Features.MediaQueries,
+            })
+
+            for (const warning of result.warnings) {
+                this.warn(warning.message)
+            }
+
+            return {
+                code: `export default ${JSON.stringify(result.code.toString())}`,
+                map: { mappings: '' },
+            }
+        },
+    },
     babel({
         extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',

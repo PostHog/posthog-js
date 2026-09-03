@@ -22,6 +22,8 @@ const options = {
     projectId: '1',
 }
 
+const symbolSetOptions = { ...options, sourcemaps: { releaseMode: 'symbol-set' as const } }
+
 type RenderChunkResult = { code: string; map: unknown } | null
 
 type TestPlugin = {
@@ -79,9 +81,9 @@ describe('posthogRollupPlugin', () => {
     describe('renderChunk', () => {
         const code = 'console.log("chunk one");console.log("chunk two");'
 
-        it('injects the chunk id snippet and trailing comment in-memory', () => {
+        it('injects the chunk id snippet and trailing comment in-memory', async () => {
             const plugin = testPlugin(options)
-            const result = plugin.renderChunk.handler(code, { fileName: 'index-abc123.js' })
+            const result = await plugin.renderChunk.handler(code, { fileName: 'index-abc123.js' })
 
             expect(result).not.toBeNull()
             expect(result!.code.startsWith('!function(){try{var e=')).toBe(true)
@@ -89,13 +91,16 @@ describe('posthogRollupPlugin', () => {
             expect(result!.code).toMatch(/\n\/\/# chunkId=[0-9a-f-]{36}$/)
             expect(result!.map).toBeDefined()
 
+            // The default is event mode, so the chunk carries the release id.
+            expect(result!.code).toContain('e._posthogReleaseId=e._posthogReleaseId||"release-id-1"')
+
             // the runtime snippet and the CLI-facing comment carry the same id
             const commentId = result!.code.match(/\/\/# chunkId=(\S+)$/)![1]
             expect(determineChunkIdFromSource(result!.code)).toBe(commentId)
         })
 
-        it('mints a fresh chunk id per injection', () => {
-            const plugin = testPlugin(options)
+        it('mints a fresh chunk id per injection in symbol-set mode', () => {
+            const plugin = testPlugin(symbolSetOptions)
             const first = plugin.renderChunk.handler(code, { fileName: 'a.js' })
             const second = plugin.renderChunk.handler(code, { fileName: 'b.js' })
 
@@ -103,14 +108,14 @@ describe('posthogRollupPlugin', () => {
         })
 
         it('does not re-inject already injected code', () => {
-            const plugin = testPlugin(options)
+            const plugin = testPlugin(symbolSetOptions)
             const injected = plugin.renderChunk.handler(code, { fileName: 'index.js' })!.code
 
             expect(plugin.renderChunk.handler(injected, { fileName: 'index.js' })).toBeNull()
         })
 
         it('keeps a "use strict" directive in effect by injecting after it', () => {
-            const plugin = testPlugin(options)
+            const plugin = testPlugin(symbolSetOptions)
             const result = plugin.renderChunk.handler('"use strict";console.log("app");', {
                 fileName: 'index.cjs',
             })
@@ -119,7 +124,7 @@ describe('posthogRollupPlugin', () => {
         })
 
         it('does not split a leading string-literal expression', () => {
-            const plugin = testPlugin(options)
+            const plugin = testPlugin(symbolSetOptions)
             const cases = [
                 '"undefined"!=typeof window&&console.log(1);',
                 '"undefined"\n!=typeof window&&console.log(1);',
@@ -137,7 +142,7 @@ describe('posthogRollupPlugin', () => {
         })
 
         it('honors semicolonless ASI directives', () => {
-            const plugin = testPlugin(options)
+            const plugin = testPlugin(symbolSetOptions)
             const result = plugin.renderChunk.handler('"use strict"\n!function(){console.log(1)}();', {
                 fileName: 'index.js',
             })
@@ -147,7 +152,7 @@ describe('posthogRollupPlugin', () => {
         })
 
         it('injects after a full directive prologue like "use client"', () => {
-            const plugin = testPlugin(options)
+            const plugin = testPlugin(symbolSetOptions)
             const result = plugin.renderChunk.handler('"use client";\n"use strict";\nconsole.log("app");', {
                 fileName: 'index.js',
             })
@@ -212,7 +217,7 @@ describe('posthogRollupPlugin', () => {
             })
 
             it('does not resolve a release in symbol-set mode', async () => {
-                const plugin = testPlugin(options)
+                const plugin = testPlugin(symbolSetOptions)
 
                 await plugin.renderChunk.handler(code, { fileName: 'index.js' })
 
@@ -234,9 +239,9 @@ describe('posthogRollupPlugin', () => {
         const preliminaryFileName = 'index-!~{001}~.js'
         const fileName = 'index-abc123.js'
 
-        it('restores a chunk id comment removed after renderChunk', () => {
+        it('restores a chunk id comment removed after renderChunk', async () => {
             const plugin = testPlugin(options)
-            const rendered = plugin.renderChunk.handler(code, { fileName: preliminaryFileName })!
+            const rendered = (await plugin.renderChunk.handler(code, { fileName: preliminaryFileName }))!
             const chunkId = determineChunkIdFromSource(rendered.code)!
             const minifiedCode = rendered.code.replace(createChunkIdComment(chunkId), '')
             const bundle = {
@@ -248,9 +253,9 @@ describe('posthogRollupPlugin', () => {
             expect(determineChunkIdFromSource(bundle[fileName].code)).toBe(chunkId)
         })
 
-        it('does not duplicate a chunk id comment that survived output minification', () => {
+        it('does not duplicate a chunk id comment that survived output minification', async () => {
             const plugin = testPlugin(options)
-            const rendered = plugin.renderChunk.handler(code, { fileName: preliminaryFileName })!
+            const rendered = (await plugin.renderChunk.handler(code, { fileName: preliminaryFileName }))!
             const bundle = {
                 [fileName]: { type: 'chunk', fileName, preliminaryFileName, code: rendered.code },
             }

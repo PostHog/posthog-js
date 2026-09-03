@@ -10,6 +10,7 @@ import {
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_FACEBOOK_CLICK_ID,
     PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
     PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
     PRODUCT_TOURS,
@@ -77,6 +78,7 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     '$feature_flag_errors',
     '$feature_flag_evaluated_at',
     '$minimal_flag_called_events',
+    '$fbc_persistence',
     '$client_session_props',
     '$capture_rate_limit',
     '$initial_campaign_params',
@@ -860,6 +862,30 @@ describe('persistence', () => {
                 })
             })
 
+            it('carries pending $fbc state to another subdomain through the shared cookie', () => {
+                const config = makeConfig('localStorage+cookie', true)
+                const firstSubdomain = new PostHogPersistence(config)
+                const fbcState = { value: 'fb.1.1700000000000.cross-subdomain', delivered: false }
+                firstSubdomain.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: fbcState })
+
+                localStorage.clear()
+                const secondSubdomain = new PostHogPersistence(config)
+
+                expect(secondSubdomain.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(fbcState)
+            })
+
+            it('preserves sibling $fbc state before a stale localStorage tab writes', () => {
+                const config = makeConfig('localStorage', false)
+                const landingTab = new PostHogPersistence(config)
+                const staleTab = new PostHogPersistence(config)
+                const fbcState = { value: 'fb.1.1700000000000.cross-tab', delivered: false }
+
+                landingTab.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: fbcState })
+                staleTab.register({ unrelated: 'write' })
+
+                expect(new PostHogPersistence(config).props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(fbcState)
+            })
+
             it('flag on: self-heals stale localStorage by writing the merged value back', () => {
                 document.cookie = encodeCookie({ distinct_id: 'from_cookie' })
                 localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'from_localstorage' }))
@@ -1186,6 +1212,29 @@ describe('persistence', () => {
                 expect(lib.props.$user_state).toBe('anonymous')
                 expect(lib.props.$user_id).toBeUndefined()
                 expect(lib.props.__alias).toBeUndefined()
+            })
+
+            it('flag on: a live tab drops prior-user $fbc when it adopts a sibling reset', () => {
+                const fbcState = { value: 'fb.1.1700000000000.prior-user', delivered: true }
+                document.cookie = encodeCookie({
+                    distinct_id: 'identified-user',
+                    $user_state: 'identified',
+                    [PERSISTENCE_FACEBOOK_CLICK_ID]: fbcState,
+                })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({
+                        distinct_id: 'identified-user',
+                        $user_state: 'identified',
+                        [PERSISTENCE_FACEBOOK_CLICK_ID]: fbcState,
+                    })
+                )
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                document.cookie = encodeCookie({ distinct_id: 'new-anonymous', $user_state: 'anonymous' })
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toBeUndefined()
             })
 
             it('flag on: a same-ID sibling reset clears stale user identity', () => {
