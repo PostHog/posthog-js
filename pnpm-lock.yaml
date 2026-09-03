@@ -78,9 +78,15 @@ catalogs:
     react-test-renderer:
       specifier: ^19.2.1
       version: 19.2.7
+    rolldown:
+      specifier: 1.2.1
+      version: 1.2.1
     rollup:
       specifier: ^4.53.3
       version: 4.53.3
+    terser:
+      specifier: 5.48.0
+      version: 5.48.0
     ts-jest:
       specifier: 29.4.11
       version: 29.4.11
@@ -451,6 +457,9 @@ importers:
       preact-render-to-string:
         specifier: ^6.3.1
         version: 6.3.1(preact@10.29.3)
+      rolldown:
+        specifier: 'catalog:'
+        version: 1.2.1
       rollup:
         specifier: 'catalog:'
         version: 4.53.3
@@ -463,6 +472,9 @@ importers:
       sinon:
         specifier: 9.0.2
         version: 9.0.2
+      terser:
+        specifier: 'catalog:'
+        version: 5.48.0
       testcafe:
         specifier: ^2.6.2
         version: 2.6.2

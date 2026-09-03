@@ -1,4 +1,6 @@
 import type { recordOptions, rrwebRecord as rrwebRecordType } from '../types/rrweb'
+import { RECORDING_REMOTE_CONFIG_TTL_MS } from '../../../constants'
+export { RECORDING_REMOTE_CONFIG_TTL_MS } from '../../../constants'
 import type { SnapshotCost } from '@posthog/rrweb-record'
 import {
     type customEvent,
@@ -127,7 +129,6 @@ function networkTimingFromConfig(config: boolean | PerformanceCaptureConfig | un
 }
 
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
-export const RECORDING_REMOTE_CONFIG_TTL_MS = ONE_HOUR
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
