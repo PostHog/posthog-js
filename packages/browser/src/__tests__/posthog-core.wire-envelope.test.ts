@@ -1,14 +1,16 @@
 import type { CaptureResult } from '../types'
 
-jest.mock('@posthog/browser-common/utils/globals', () => ({
-    ...jest.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals,
-    fetch: jest.fn(),
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
+    userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    fetch: vi.fn(),
 }))
 
 import { fetch } from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 
-const mockedFetch = fetch as jest.MockedFunction<any>
+const mockedFetch = fetch as vi.MockedFunction<any>
 const fixedTimestamp = new Date('2023-11-14T22:13:20.000Z')
 
 const normalizeWireEvent = (event: CaptureResult, generatedProperties: string[]): CaptureResult => {
@@ -56,14 +58,14 @@ const parsedFetchBodyForPath = (path: string): any => {
 
 describe('PostHog final decoded request envelopes', () => {
     beforeEach(() => {
-        jest.useFakeTimers()
-        jest.setSystemTime(fixedTimestamp)
+        vi.useFakeTimers()
+        vi.setSystemTime(fixedTimestamp)
         mockedFetch.mockReset()
         mockedFetch.mockResolvedValue({ status: 200, text: () => Promise.resolve('{}') })
     })
 
     afterEach(() => {
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     it('serializes timestamp overrides as UTC without rewriting caller properties', async () => {

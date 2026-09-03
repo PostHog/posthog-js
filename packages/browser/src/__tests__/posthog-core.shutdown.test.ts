@@ -27,8 +27,8 @@ describe('shutdown()', () => {
     })
 
     it('flushes the request and retry queues', async () => {
-        const requestQueueUnload = jest.spyOn(instance._requestQueue!, 'unload')
-        const retryQueueUnload = jest.spyOn(instance._retryQueue!, 'unload')
+        const requestQueueUnload = vi.spyOn(instance._requestQueue!, 'unload')
+        const retryQueueUnload = vi.spyOn(instance._retryQueue!, 'unload')
 
         await instance.shutdown()
 
@@ -37,7 +37,7 @@ describe('shutdown()', () => {
     })
 
     it('disposes session recording visibility tracking', async () => {
-        const sessionRecordingDispose = jest.spyOn(instance.sessionRecording!, 'dispose')
+        const sessionRecordingDispose = vi.spyOn(instance.sessionRecording!, 'dispose')
 
         await instance.shutdown()
 
@@ -45,7 +45,7 @@ describe('shutdown()', () => {
     })
 
     it('disposes feature flags through the extension runtime', async () => {
-        const featureFlagsDispose = jest.spyOn(instance.featureFlags!, 'dispose')
+        const featureFlagsDispose = vi.spyOn(instance.featureFlags!, 'dispose')
 
         await instance.shutdown()
 
@@ -53,8 +53,8 @@ describe('shutdown()', () => {
     })
 
     it('destroys persistence storage listeners', async () => {
-        const persistenceDestroy = jest.spyOn(instance.persistence!, 'destroy')
-        const sessionPersistenceDestroy = jest.spyOn(instance.sessionPersistence!, 'destroy')
+        const persistenceDestroy = vi.spyOn(instance.persistence!, 'destroy')
+        const sessionPersistenceDestroy = vi.spyOn(instance.sessionPersistence!, 'destroy')
 
         await instance.shutdown()
 
@@ -64,13 +64,13 @@ describe('shutdown()', () => {
 
     it('isolates extension cleanup failures and continues queue flushing', async () => {
         const order: string[] = []
-        const requestQueueUnload = jest.spyOn(instance._requestQueue!, 'unload')
-        const retryQueueUnload = jest.spyOn(instance._retryQueue!, 'unload')
+        const requestQueueUnload = vi.spyOn(instance._requestQueue!, 'unload')
+        const retryQueueUnload = vi.spyOn(instance._retryQueue!, 'unload')
         const host = instance._getBrowserClientAdapter()
-        jest.spyOn(host.logger, 'error').mockImplementation()
+        vi.spyOn(host.logger, 'error').mockImplementation(() => {})
         await host.add({
             name: 'failing',
-            setup: jest.fn(),
+            setup: vi.fn(),
             dispose: () => {
                 order.push('failing')
                 throw new Error('disposal failure')
@@ -78,7 +78,7 @@ describe('shutdown()', () => {
         })
         await host.add({
             name: 'survivor',
-            setup: jest.fn(),
+            setup: vi.fn(),
             dispose: () => {
                 order.push('survivor')
             },
@@ -92,12 +92,12 @@ describe('shutdown()', () => {
     })
 
     it('cleans pending setup immediately and does not delay queue flushing', async () => {
-        const requestQueueUnload = jest.spyOn(instance._requestQueue!, 'unload')
-        const retryQueueUnload = jest.spyOn(instance._retryQueue!, 'unload')
+        const requestQueueUnload = vi.spyOn(instance._requestQueue!, 'unload')
+        const retryQueueUnload = vi.spyOn(instance._retryQueue!, 'unload')
         const pendingSetup: Extension = {
             name: 'pending-setup',
             setup: () => new Promise<void>(() => undefined),
-            dispose: jest.fn(),
+            dispose: vi.fn(),
         }
         void instance._getBrowserClientAdapter().add(pendingSetup)
 
@@ -110,12 +110,12 @@ describe('shutdown()', () => {
 
     it('runs synchronous extension cleanup before unloading queues', async () => {
         const order: string[] = []
-        jest.spyOn(instance._requestQueue!, 'unload').mockImplementation(() => {
+        vi.spyOn(instance._requestQueue!, 'unload').mockImplementation(() => {
             order.push('request-unload')
         })
         await instance._getBrowserClientAdapter().add({
             name: 'synchronous-cleanup',
-            setup: jest.fn(),
+            setup: vi.fn(),
             dispose: () => {
                 order.push('extension-dispose')
             },

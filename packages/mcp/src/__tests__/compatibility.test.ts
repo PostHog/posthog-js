@@ -5,17 +5,17 @@ import {
 } from '../extensions/compatibility'
 import { log } from '../extensions/logger'
 
-jest.mock('../extensions/logger', () => ({ log: jest.fn(), setLogger: jest.fn() }))
+vi.mock('../extensions/logger', () => ({ log: vi.fn(), setLogger: vi.fn() }))
 
 const validLowLevelServer = () => ({
-  setRequestHandler: jest.fn(),
-  _requestHandlers: new Map([['test', jest.fn()]]),
-  getClientVersion: jest.fn(),
+  setRequestHandler: vi.fn(),
+  _requestHandlers: new Map([['test', vi.fn()]]),
+  getClientVersion: vi.fn(),
   _serverInfo: { name: 'TestServer' },
 })
 
 beforeEach(() => {
-  jest.clearAllMocks()
+  vi.clearAllMocks()
 })
 
 describe('isCompatibleServerType', () => {
@@ -149,7 +149,7 @@ describe('logCompatibilityWarning', () => {
   it('logs a message that references MCP compatibility', () => {
     logCompatibilityWarning(log)
     expect(log).toHaveBeenCalledTimes(1)
-    const [[message]] = (log as jest.Mock).mock.calls
+    const [[message]] = (log as vi.Mock).mock.calls
     expect(message).toMatch(/compatibility/i)
     expect(message).toMatch(/Model Context Protocol|MCP/)
   })

@@ -13,7 +13,7 @@
   "license": "MIT",
   "scripts": {
     "clean": "rimraf dist",
-    "test:unit": "jest && pnpm test:module-load",
+    "test:unit": "vitest run && pnpm test:module-load",
     "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs",
     "lint": "oxlint --report-unused-disable-directives-severity error src tests",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src tests --fix",
@@ -38,11 +38,11 @@
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
     "@posthog-tooling/tsconfig-base": "workspace:*",
-    "@types/jest": "catalog:",
-    "jest": "catalog:",
     "langchain": "^1.5.10",
     "node-fetch": "^3.3.2",
     "posthog-node": "workspace:^",
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:"
   },

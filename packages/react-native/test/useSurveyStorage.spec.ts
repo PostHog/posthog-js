@@ -1,4 +1,4 @@
-/** @jest-environment jsdom */
+/** @vitest-environment jsdom */
 import { PostHogPersistedProperty } from '@posthog/core'
 import { act, renderHook } from '@testing-library/react'
 import React from 'react'
@@ -47,17 +47,17 @@ describe('updateSeenSurveys', () => {
 
 describe('useSurveyStorage', () => {
   it('drops non-string persisted entries before updating seen surveys', async () => {
-    jest.useRealTimers()
+    vi.useRealTimers()
     try {
       const ready = Promise.resolve()
       const mockPostHog = {
-        ready: jest.fn(() => ready),
-        getPersistedProperty: jest.fn((property) =>
+        ready: vi.fn(() => ready),
+        getPersistedProperty: vi.fn((property) =>
           property === PostHogPersistedProperty.SurveysSeen
             ? JSON.stringify(['survey-a', 42, null, 'survey-b'])
             : undefined
         ),
-        setPersistedProperty: jest.fn(),
+        setPersistedProperty: vi.fn(),
       } as unknown as PostHog
       const wrapper = ({ children }: { children: React.ReactNode }) =>
         React.createElement(PostHogContext.Provider, { value: { client: mockPostHog } }, children)
@@ -73,7 +73,7 @@ describe('useSurveyStorage', () => {
       }).not.toThrow()
       expect(result.current.seenSurveys).toEqual(['survey-c_1', 'survey-a', 'survey-b'])
     } finally {
-      jest.useFakeTimers()
+      vi.useFakeTimers()
     }
   })
 })

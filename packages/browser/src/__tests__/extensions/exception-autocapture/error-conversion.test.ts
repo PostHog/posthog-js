@@ -1,8 +1,8 @@
 import { isNull, ErrorTracking } from '@posthog/core'
-import { expect } from '@jest/globals'
+import { expect } from 'vitest'
 import { buildErrorPropertiesBuilder } from '../../../posthog-exceptions'
 
-// ugh, jest
+// ugh, vi
 // can't reference PromiseRejectionEvent to construct it 🤷
 export type PromiseRejectionEventTypes = 'rejectionhandled' | 'unhandledrejection'
 
@@ -25,7 +25,7 @@ export class PromiseRejectionEvent extends Event {
     }
 }
 
-// ugh, jest
+// ugh, vi
 
 describe('Error conversion', () => {
     const errorPropertiesBuilder = buildErrorPropertiesBuilder()
