@@ -67,10 +67,12 @@ function withUsableIdentityKeys(attributes: TracesConfig['resourceAttributes']):
  * untyped caller passing the wrong shape would otherwise have every span dropped
  * by a hook that throws, leaving tracing silently off.
  *
- * Dropping one is warned about rather than thrown on. `beforeSpanSend` is where
+ * Dropping one is reported rather than thrown on. `beforeSpanSend` is where
  * redaction lives, so a configuration that silently filters nothing ships the
  * values it was meant to remove — but a client constructor that throws takes the
- * application down with it, which is the worse of the two.
+ * application down with it, which is the worse of the two. `critical`, because
+ * every other level is gated behind `debug: true`, and a redaction hook that is
+ * quietly inert is exactly what an operator has to hear about without opting in.
  */
 function resolveBeforeSpanSend(beforeSpanSend: TracesConfig['beforeSpanSend'], logger?: Logger): BeforeSpanSendFn[] {
   if (!beforeSpanSend) {
@@ -79,7 +81,7 @@ function resolveBeforeSpanSend(beforeSpanSend: TracesConfig['beforeSpanSend'], l
   const supplied = [beforeSpanSend].flat()
   const hooks = supplied.filter((hook): hook is BeforeSpanSendFn => typeof hook === 'function')
   if (hooks.length !== supplied.length) {
-    logger?.warn(
+    logger?.critical(
       `beforeSpanSend: ignoring ${supplied.length - hooks.length} of ${supplied.length} entries that are not functions. ` +
         'Spans export without them, so whatever they were redacting is not redacted.'
     )

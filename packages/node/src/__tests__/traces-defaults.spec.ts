@@ -173,7 +173,8 @@ describe('resourceAttributes guarding', () => {
 
     resolveTracesConfig({ beforeSpanSend: ['not a function', scrub] as never }, undefined, logger)
 
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('ignoring 1 of 2 entries'))
+    // `critical`, not `warn`: every other level is gated behind `debug: true`.
+    expect(logger.critical).toHaveBeenCalledWith(expect.stringContaining('ignoring 1 of 2 entries'))
   })
 
   it('stays quiet when every hook is callable', () => {
@@ -181,7 +182,7 @@ describe('resourceAttributes guarding', () => {
 
     resolveTracesConfig({ beforeSpanSend: [(span: any): any => span] }, undefined, logger)
 
-    expect(logger.warn).not.toHaveBeenCalled()
+    expect(logger.critical).not.toHaveBeenCalled()
   })
 
   it('resolves to no hooks when beforeSpanSend is the wrong type entirely', () => {
