@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* eslint-disable no-console, @typescript-eslint/no-require-imports */
+/* oxlint-disable no-console, typescript/no-require-imports -- This CommonJS CLI reports validation results. */
 
 /**
  * Post-build check: verify every source map we ship ignore-lists all of its sources.
