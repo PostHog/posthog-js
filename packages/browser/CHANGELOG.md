@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.426.1
+
+### Patch Changes
+
+- [#4765](https://github.com/PostHog/posthog-js/pull/4765) [`d8508b6`](https://github.com/PostHog/posthog-js/commit/d8508b6416105e7197f98617a8345b14a1c67634) Thanks [@marandaneto](https://github.com/marandaneto)! - Initialize the Segment enrichment integration when Segment is configured through `set_config`, so Segment events include PostHog properties such as active feature flags.
+  (2026-09-03)
+
 ## 1.426.0
 
 ### Minor Changes
