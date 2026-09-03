@@ -1192,9 +1192,13 @@ describe('posthog core', () => {
             expect(posthog.get_distinct_id()).not.toBe('abcd')
             expect(posthog.get_distinct_id()).not.toEqual(undefined)
             expect(posthog.getFeatureFlag('multivariant')).toBe('variant-1')
-            expect(posthog.getFeatureFlag('disabled')).toBe(undefined)
+            expect(posthog.getFeatureFlag('disabled')).toBe(false)
             expect(posthog.getFeatureFlag('undef')).toBe(undefined)
-            expect(posthog.featureFlags.getFlagVariants()).toEqual({ multivariant: 'variant-1', enabled: true })
+            expect(posthog.featureFlags.getFlagVariants()).toEqual({
+                multivariant: 'variant-1',
+                enabled: true,
+                disabled: false,
+            })
         })
 
         it('sets the right feature flag payloads', () => {
@@ -1248,16 +1252,16 @@ describe('posthog core', () => {
             expect(posthog.featureFlags.getFlagVariants()).toEqual({})
         })
 
-        it('onFeatureFlags should be called immediately if feature flags are bootstrapped', () => {
-            let called = false
+        it('onFeatureFlags should be called immediately with active bootstrapped flags', () => {
+            const callback = vi.fn()
             const posthog = posthogWith({
                 bootstrap: {
-                    featureFlags: { multivariant: 'variant-1' },
+                    featureFlags: { multivariant: 'variant-1', disabled: false },
                 },
             })
 
-            posthog.featureFlags.onFeatureFlags(() => (called = true))
-            expect(called).toEqual(true)
+            posthog.featureFlags.onFeatureFlags(callback)
+            expect(callback).toHaveBeenCalledWith(['multivariant'], { multivariant: 'variant-1' })
         })
 
         it('onFeatureFlags should not be called immediately if feature flags bootstrap is empty', () => {
