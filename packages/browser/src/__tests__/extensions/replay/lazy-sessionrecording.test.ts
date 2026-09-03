@@ -3245,21 +3245,17 @@ describe('Lazy SessionRecording', () => {
                     releaseInteractionHold()
                     sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
-                    const snapshotCalls = (posthog.capture as Mock).mock.calls.filter(
-                        ([name]) => name === '$snapshot'
-                    )
+                    const snapshotCalls = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
                     const attributionFor = (predicate: (e: any) => boolean): string[] =>
                         snapshotCalls.flatMap(([, props]) =>
                             props.$snapshot_data.filter(predicate).map(() => props.$session_id)
                         )
 
                     expect(recordMock.mock.calls.length).toBe(2)
-                    expect(attributionFor((e) => e.data?.tag === '$session_id_change')).toEqual([
+                    expect(attributionFor((e) => e.data?.tag === '$session_id_change')).toEqual(['rotated-session-id'])
+                    expect(attributionFor((e) => e.type === FULL_SNAPSHOT_EVENT_TYPE && e.timestamp !== 1000)).toEqual([
                         'rotated-session-id',
                     ])
-                    expect(
-                        attributionFor((e) => e.type === FULL_SNAPSHOT_EVENT_TYPE && e.timestamp !== 1000)
-                    ).toEqual(['rotated-session-id'])
                     expect(firstSessionId).not.toBe('rotated-session-id')
                 })
             })
