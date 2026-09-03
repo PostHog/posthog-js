@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { render } from '@testing-library/react'
+import type { Mock } from 'vitest'
 import { __POSTHOG_ERROR_MESSAGES, PostHogErrorBoundary } from '../PostHogErrorBoundary'
 import posthog from 'posthog-js'
 import { setDefaultPostHogInstance } from '../../context/posthog-default'
@@ -76,7 +77,7 @@ describe('PostHogErrorBoundary component', () => {
         )
 
         expect(posthog.captureException).toHaveBeenCalledWith(expect.any(Error), undefined)
-        const capturedError = (posthog.captureException as jest.Mock).mock.calls[0][0]
+        const capturedError = (posthog.captureException as Mock).mock.calls[0][0]
         expect(capturedError).toEqual(
             expect.objectContaining({
                 message: 'Primitive value captured as exception: undefined',
@@ -109,7 +110,7 @@ describe('captureException processing', () => {
 
     it('should call capture with a stacktrace', () => {
         renderWithError({ message: 'Kaboom', fallback: <div></div>, additionalProperties: {} })
-        const captureCalls = (posthog.capture as jest.Mock).mock.calls
+        const captureCalls = (posthog.capture as Mock).mock.calls
         expect(captureCalls.length).toBe(1)
         const exceptionList = captureCalls[0][1].$exception_list
         expect(exceptionList.length).toBe(2)
@@ -126,7 +127,7 @@ describe('captureException processing', () => {
             </PostHogErrorBoundary>
         )
 
-        const captureCalls = (posthog.capture as jest.Mock).mock.calls
+        const captureCalls = (posthog.capture as Mock).mock.calls
         const exceptionList = captureCalls[0][1].$exception_list
         expect(exceptionList).toHaveLength(1)
         expect(exceptionList[0].type).toBe('React ErrorBoundary Error')
@@ -140,7 +141,7 @@ function expectComponentStackFrames(frames: Array<{ function?: string }>, expect
 }
 
 function expectCapturedReactError() {
-    const capturedError = (posthog.captureException as jest.Mock).mock.calls[0][0]
+    const capturedError = (posthog.captureException as Mock).mock.calls[0][0]
     expect(capturedError.cause.name).toBe('React ErrorBoundary Error')
     expect(capturedError.cause.stack).toContain('PostHogErrorBoundary.test.tsx')
 }
@@ -149,7 +150,7 @@ function mockFunction(object: any, funcName: string) {
     const originalFunc = object[funcName]
 
     beforeEach(() => {
-        object[funcName] = jest.fn()
+        object[funcName] = vi.fn()
     })
 
     afterEach(() => {

@@ -38,10 +38,10 @@ class RoutedTestClient extends PostHogCoreTestClient {
 const createRoutedClient = (options?: PostHogCoreOptions): [RoutedTestClient, PostHogCoreTestClientMocks] => {
   const storageCache: { [key: string]: string | JsonType } = {}
   const mocks: PostHogCoreTestClientMocks = {
-    fetch: jest.fn(),
+    fetch: vi.fn(),
     storage: {
-      getItem: jest.fn((key) => storageCache[key]),
-      setItem: jest.fn((key, val) => {
+      getItem: vi.fn((key) => storageCache[key]),
+      setItem: vi.fn((key, val) => {
         storageCache[key] = val == null ? undefined : val
       }),
     },
@@ -70,7 +70,7 @@ const queueEvents = (client: RoutedTestClient, key: PostHogPersistedProperty): (
 
 describe('PostHog Core queue routes', () => {
   beforeEach(() => {
-    jest.setSystemTime(new Date('2022-01-01'))
+    vi.setSystemTime(new Date('2022-01-01'))
   })
 
   it('routes each event to its route queue at enqueue time', () => {

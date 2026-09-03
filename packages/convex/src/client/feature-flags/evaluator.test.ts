@@ -1,4 +1,4 @@
-import { describe, test, expect } from '@jest/globals'
+import { describe, test, expect } from 'vitest'
 import { LocalFeatureFlagEvaluator } from './evaluator.js'
 import type { FlagDefinitions, PostHogFeatureFlag } from './types.js'
 
