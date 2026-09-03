@@ -795,4 +795,28 @@ describe('PostHogMetrics', () => {
     expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(3)
     expect(Date.now() - closedAt).toBeLessThanOrEqual(5000)
   })
+
+  it('releases a series captured mid-flush once that flush closes the window', async () => {
+    const metrics = createMetrics({ flushIntervalMs: 10_000 })
+    let sends = 0
+    mockInstance._sendMetricsBatch = vi.fn(async (): Promise<SendMetricsBatchOutcome> => {
+      sends += 1
+      if (sends === 1) {
+        return { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }
+      }
+      await Promise.resolve()
+      if (sends === 2) {
+        metrics.count('mid', 1)
+      }
+      return { kind: 'ok' }
+    })
+
+    metrics.count('a', 1)
+    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(10_000)
+    await metrics.flush()
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(3)
+  })
 })

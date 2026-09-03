@@ -359,6 +359,14 @@ export class PostHogMetrics {
       return
     }
     this._retryAfter.record(outcome)
+    // A capture that landed while this send was in flight armed the timer
+    // against whatever the window was at the time. Re-arm outright rather than
+    // through the ratchet, which only ever moves a timer later and so would
+    // hold that capture at a window this very outcome just closed.
+    if (this._flushTimer) {
+      this._clearFlushTimer()
+      this._setFlushTimer(this._nextFlushDelay())
+    }
     switch (outcome.kind) {
       case 'ok':
         return

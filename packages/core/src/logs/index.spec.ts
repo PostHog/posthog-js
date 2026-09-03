@@ -1324,6 +1324,63 @@ describe('PostHogLogs', () => {
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
     })
 
+    it('arms a timer when onReconnect lands inside the window after an explicit flush', async () => {
+      // `flush()` leaves no timer behind, so returning early here without
+      // arming one leaves the records with nothing scheduled at all.
+      mockInstance._sendLogsBatch = vi.fn(() =>
+        Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      )
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 10_000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await logs.flush().catch(() => {})
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      logs.onReconnect()
+
+      await vi.advanceTimersByTimeAsync(289_000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('releases a record captured mid-flush once that flush closes the window', async () => {
+      // The capture arms against the window that was open when it landed; the
+      // outcome then closes that window, so the timer has to come back down.
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 10_000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      let sends = 0
+      mockInstance._sendLogsBatch = vi.fn(async () => {
+        sends += 1
+        if (sends === 1) {
+          return { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }
+        }
+        await Promise.resolve()
+        if (sends === 2) {
+          logs.captureLog({ body: 'mid' })
+        }
+        return { kind: 'ok' }
+      })
+
+      logs.captureLog({ body: 'first' })
+      await vi.advanceTimersByTimeAsync(10_000)
+      await logs.flush().catch(() => {})
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
+    })
+
     it('keeps the Retry-After window when a batch is refused for size', async () => {
       // `too-large` is a verdict on the body's size — the SDK's own or a 413 —
       // so it says nothing about the endpoint's rate limit and must not end the

@@ -108,6 +108,12 @@ export class PostHogLogs {
   onReconnect(): void {
     this._consecutiveFlushFailures = 0
     if (this._retryAfter.isOpen()) {
+      // Connectivity is back but the endpoint's wait is not over. An explicit
+      // `flush()` leaves no timer behind, so returning without arming one is
+      // what strands the queue for the rest of the process.
+      if (this._hasQueuedRecords()) {
+        this._armFlushTimer()
+      }
       return
     }
     this._flushInBackground()
@@ -314,11 +320,13 @@ export class PostHogLogs {
       // window too.
       this._retryAfter.record(outcome)
 
-      // A capture that landed while this send was in flight armed the timer at
-      // the plain interval, before the window existed. Only `_flushInBackground`
-      // re-arms on settle, and an explicit `flush()` does not go through it.
+      // A capture that landed while this send was in flight armed the timer
+      // against whatever the window was at the time. Re-arm outright rather
+      // than through the ratchet, which only ever moves a timer later and so
+      // would hold that capture at a window this very outcome just closed.
       if (this._flushTimer) {
-        this._armFlushTimerNoEarlierThan(Math.max(this._flushIntervalMs, this._retryAfter.remainingMs()))
+        this._clearFlushTimer()
+        this._setFlushTimer(Math.max(this._flushIntervalMs, this._retryAfter.remainingMs()))
       }
 
       if (outcome.kind === 'retry-later') {
