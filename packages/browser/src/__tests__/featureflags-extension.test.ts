@@ -895,9 +895,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
         let distinctId = 'anonymous-id'
-        jest.spyOn(posthog, 'get_distinct_id').mockImplementation(() => distinctId)
+        vi.spyOn(posthog, 'get_distinct_id').mockImplementation(() => distinctId)
         const resolveRequests: Array<(response: ApiResponse) => void> = []
-        const sendRequest = jest.spyOn(client, 'sendRequest').mockImplementation(
+        const sendRequest = vi.spyOn(client, 'sendRequest').mockImplementation(
             () =>
                 new Promise<ApiResponse>((resolve) => {
                     resolveRequests.push(resolve)
@@ -912,17 +912,19 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         featureFlags.reloadFeatureFlags()
 
         resolveRequests[0]({ statusCode: 200, json: { featureFlags: { initial: true } } })
-        await Promise.resolve()
-        jest.advanceTimersByTime(5)
 
-        expect(sendRequest).toHaveBeenCalledTimes(2)
+        await vi.waitFor(() => {
+            expect(sendRequest).toHaveBeenCalledTimes(2)
+        })
         expect(sendRequest.mock.calls[1][1]?.body).toMatchObject({
             distinct_id: 'identified-id',
             $anon_distinct_id: 'anonymous-id',
         })
 
         resolveRequests[1]({ statusCode: 200, json: { featureFlags: { current: true } } })
-        await Promise.resolve()
+        await vi.waitFor(() => {
+            expect(featureFlags.getFlagVariants()).toEqual({ current: true })
+        })
         featureFlags.dispose()
         await posthog.shutdown()
     })
