@@ -3,6 +3,7 @@ import {
     ENABLED_FEATURE_FLAGS,
     PERSISTENCE_ACTIVE_FEATURE_FLAGS,
     PERSISTENCE_FEATURE_FLAG_DETAILS,
+    PERSISTENCE_FEATURE_FLAG_ERRORS,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
@@ -11,7 +12,7 @@ import {
 } from '../constants'
 import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { defaultConfig } from '../posthog-core'
-import { PostHogFeatureFlags } from '../posthog-featureflags'
+import { FeatureFlagError, PostHogFeatureFlags } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
@@ -677,7 +678,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             featureFlagPayloads: { 'bootstrap-flag': { source: 'bootstrap' } },
         }
         const client = posthog._getBrowserClientAdapter()
-        const sendRequest = jest.spyOn(client, 'sendRequest').mockResolvedValueOnce({ statusCode: 0 })
+        const sendRequest = vi.spyOn(client, 'sendRequest').mockResolvedValueOnce({ statusCode: 0 })
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config))
         featureFlags.setup(client)
 
@@ -686,10 +687,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         expect(posthog.persistence?.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'persisted-flag': true })
 
         featureFlags._callFlagsEndpoint()
-        await Promise.resolve()
-        await Promise.resolve()
-
-        expect(featureFlags.getFeatureFlag('bootstrap-flag', { send_event: false })).toBeUndefined()
+        await vi.waitFor(() => {
+            expect(featureFlags.getFeatureFlag('bootstrap-flag', { send_event: false })).toBeUndefined()
+        })
         expect(featureFlags.getFeatureFlagResult('persisted-flag', { send_event: false })).toEqual({
             key: 'persisted-flag',
             enabled: true,
@@ -703,11 +703,11 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             json: { featureFlags: { 'remote-flag': true } },
         })
         featureFlags._callFlagsEndpoint()
-        await Promise.resolve()
-        await Promise.resolve()
+        await vi.waitFor(() => {
+            expect(featureFlags.getFeatureFlag('remote-flag', { send_event: false })).toBe(true)
+        })
 
         expect(featureFlags.getFeatureFlag('persisted-flag', { send_event: false })).toBeUndefined()
-        expect(featureFlags.getFeatureFlag('remote-flag', { send_event: false })).toBe(true)
         expect(posthog.persistence?.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'remote-flag': true })
         featureFlags.dispose()
     })
@@ -717,14 +717,17 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const config = defaultConfig()
         config.bootstrap = { featureFlags: { 'bootstrap-flag': true } }
         const client = posthog._getBrowserClientAdapter()
-        jest.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 0 })
+        vi.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 0 })
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config))
         featureFlags.setup(client)
 
         expect(posthog.persistence?.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'bootstrap-flag': true })
         featureFlags._callFlagsEndpoint()
-        await Promise.resolve()
-        await Promise.resolve()
+        await vi.waitFor(() => {
+            expect(posthog.persistence?.get_property(PERSISTENCE_FEATURE_FLAG_ERRORS)).toEqual([
+                FeatureFlagError.apiError(0),
+            ])
+        })
 
         expect(featureFlags.getFeatureFlag('bootstrap-flag', { send_event: false })).toBe(true)
         featureFlags.dispose()
