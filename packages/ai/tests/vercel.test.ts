@@ -198,6 +198,9 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
   afterEach(() => {
     vi.clearAllMocks()
+    if (vi.isMockFunction(console.warn)) {
+      console.warn.mockRestore()
+    }
   })
 
   it('rejects AI SDK v7 models and points callers to the OpenTelemetry integration', () => {

@@ -540,7 +540,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                 expect(noDocumentFeatureFlags['_refreshInterval']).toBeUndefined()
                 noDocumentFeatureFlags.dispose()
             } finally {
-                vi.unmock('@posthog/browser-common/utils/globals')
+                vi.doUnmock('@posthog/browser-common/utils/globals')
                 vi.resetModules()
             }
 
