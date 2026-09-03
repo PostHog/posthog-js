@@ -110,8 +110,14 @@ describe('OTLP span encoding', () => {
       expect(span.events).toEqual([{ name: 'cache miss', timeUnixNano: '1700000000040000000' }])
     })
 
-    it('sets the sampled bit and marks a local parent as known-not-remote', () => {
+    it('sets the sampled bit and marks a root span as known-not-remote', () => {
+      // A root span has no parent context to be remote, which the OTel Go and
+      // Java exporters also report as known-not-remote rather than unknown.
       expect(buildOtlpSpan(record()).flags).toBe(0x101)
+    })
+
+    it('marks a local parent as known-not-remote', () => {
+      expect(buildOtlpSpan(record({ parentSpanId: 'b7ad6b7169203331' })).flags).toBe(0x101)
     })
 
     it('marks a parent that arrived as a header as remote', () => {

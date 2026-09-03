@@ -30,7 +30,9 @@ const SPAN_STATUS_TO_OTLP: Record<SpanStatusCode, number> = {
 const TRACE_FLAGS_SAMPLED = 0x01
 // OTel's span flags, above the W3C byte: one bit says the parent's remoteness is
 // known, the other says it is remote. Both unset reads as "unknown", which this
-// SDK never has to say — a string parent is remote, a handle parent is local.
+// SDK never has to say — a string parent is remote, a handle parent is local, and
+// a root span's parent context is empty, which is not remote. Setting the known
+// bit on a root span is what the OTel Go and Java exporters do too.
 const SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE = 0x100
 const SPAN_FLAGS_CONTEXT_IS_REMOTE = 0x200
 
