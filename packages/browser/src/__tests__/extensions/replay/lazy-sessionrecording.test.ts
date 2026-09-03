@@ -6859,6 +6859,26 @@ describe('Lazy SessionRecording', () => {
             expect(parkedBuffer().sessionId).toBe(sessionId)
         })
 
+        it('parks a sampled-in buffer the minimum-duration gate is holding', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500, sampleRate: '1.00' },
+                })
+            )
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
+
+            // guard against a vacuous pass: a sampled-in session reports SAMPLED, not ACTIVE, and the
+            // minimum-duration gate must park it the same way
+            expect(sessionRecording.status).toBe('sampled')
+
+            unload()
+
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+            expect(parkedBuffer().data).toHaveLength(1)
+            expect(parkedBuffer().sessionId).toBe(sessionId)
+        })
+
         it('parks markers that would otherwise open a recording with nothing to play', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             releaseInteractionHold()

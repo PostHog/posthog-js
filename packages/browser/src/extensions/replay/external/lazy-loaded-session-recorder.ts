@@ -17,6 +17,7 @@ import {
     EventTriggerMatching,
     LinkedFlagMatching,
     PAUSED,
+    SAMPLED,
     SessionRecordingStatus,
     TriggerType,
     URLTriggerMatching,
@@ -2238,10 +2239,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._maybeLogBufferingReason(status)
 
         if (status === BUFFERING || status === PAUSED || status === DISABLED || isBelowMinimumDuration) {
-            // ACTIVE here means the minimum duration is the only gate left. Shipping past it would
-            // open a recording the customer configured away, so park it instead: it ships from the
-            // next page once the session is long enough, and dies with the tab if it ended here
-            if (isUnloading && status === ACTIVE) {
+            // ACTIVE or SAMPLED here means the minimum duration is the only gate left: both are
+            // shippable statuses that only reach this branch through isBelowMinimumDuration. Shipping
+            // past it would open a recording the customer configured away, so park it instead: it
+            // ships from the next page once the session is long enough, and dies with the tab if it
+            // ended here
+            if (isUnloading && (status === ACTIVE || status === SAMPLED)) {
                 this._parkBufferForNextPage()
             }
             this._scheduleFlushBuffer()
