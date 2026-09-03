@@ -71,7 +71,7 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
     }
 }
 
-function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
+function setupPostHogFromSegment(posthog: PostHog, done: () => void, bootstrapIdentifiedUser: boolean) {
     const segment = posthog.config.segment
     if (!segment) {
         return done()
@@ -82,8 +82,10 @@ function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
         const getSegmentAnonymousId = () => user.anonymousId() || uuidv7()
         posthog.config.get_device_id = getSegmentAnonymousId
 
-        // If a segment user ID exists, set it as the distinct_id
-        if (user.id()) {
+        // During init, adopt an existing Segment user before PostHog starts loading events.
+        // When Segment is configured later, the enrichment plugin handles the identity transition
+        // so identify() can merge events captured before Segment was available.
+        if (bootstrapIdentifiedUser && user.id()) {
             posthog.register({
                 distinct_id: user.id(),
                 $device_id: getSegmentAnonymousId(),
@@ -102,15 +104,19 @@ function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
     }
 }
 
-export function setupSegmentIntegration(posthog: PostHog, done: () => void) {
+export function setupSegmentIntegration(posthog: PostHog, done: () => void, bootstrapIdentifiedUser: boolean = true) {
     const segment = posthog.config.segment
     if (!segment) {
         return done()
     }
 
-    setupPostHogFromSegment(posthog, () => {
-        segment.register(createSegmentIntegration(posthog)).then(() => {
-            done()
-        })
-    })
+    setupPostHogFromSegment(
+        posthog,
+        () => {
+            segment.register(createSegmentIntegration(posthog)).then(() => {
+                done()
+            })
+        },
+        bootstrapIdentifiedUser
+    )
 }

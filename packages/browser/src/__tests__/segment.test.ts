@@ -107,6 +107,44 @@ describe(`Segment integration`, () => {
         expect(posthog.get_property('$device_id')).toBe('test-anonymous-id')
     })
 
+    it('sets up the Segment integration when configured after init', async () => {
+        const posthog = await initPostHogInAPromise(undefined, posthogName)
+        const initialDistinctId = posthog.get_distinct_id()
+        let runtimeIntegration: SegmentPlugin | undefined
+        const runtimeSegment = {
+            ...segment,
+            register: jest.fn((integration: SegmentPlugin) => {
+                runtimeIntegration = integration
+                return Promise.resolve(integration)
+            }),
+        }
+        jest.spyOn(posthog, 'calculateEventProperties').mockReturnValue({
+            $active_feature_flags: ['runtime-flag'],
+        })
+
+        posthog.set_config({ segment: runtimeSegment })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(runtimeSegment.register).toHaveBeenCalledTimes(1)
+        expect(posthog.get_distinct_id()).toBe(initialDistinctId)
+
+        const enrichedContext = runtimeIntegration!.track!({
+            event: {
+                event: 'Runtime Segment Event',
+                userId: 'test-id',
+                anonymousId: 'test-anonymous-id',
+                properties: {},
+            },
+        } as unknown as SegmentContext)
+        expect(enrichedContext.event.properties).toEqual(
+            expect.objectContaining({ $active_feature_flags: ['runtime-flag'] })
+        )
+        expect(posthog.get_distinct_id()).toBe('test-id')
+
+        posthog.set_config({ segment: runtimeSegment })
+        expect(runtimeSegment.register).toHaveBeenCalledTimes(1)
+    })
+
     it('enriches Segment track events with PostHog properties', async () => {
         // Segment supplies a stable identity, so memory persistence should not trigger the volatile-identity warning.
         const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
