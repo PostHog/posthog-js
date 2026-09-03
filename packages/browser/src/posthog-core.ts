@@ -4008,6 +4008,10 @@ export class PostHog implements PostHogInterface {
             this.surveys?.loadIfEnabled()
             this._sync_opt_out_with_persistence()
             this.externalIntegrations?.startIfEnabledOrStop()
+
+            if (!oldConfig.segment && this.config.segment && this.persistence) {
+                setupSegmentIntegration(this, __NOOP, false)
+            }
         }
     }
 
