@@ -195,7 +195,7 @@ export class PostHogSpan implements Span {
     if (this._mutable('addEvent')) {
       // Sanitised before the bucket check, so the name deciding the bucket is the
       // one that ends up on the record.
-      const eventName = sanitizeName(name, 'Span event name', this._logger)
+      const eventName = sanitizeName(name, 'Span event name', this._maxAttributeValueLength, this._logger)
       if (!this._claimEventSlot(eventName)) {
         this._droppedEvents++
         return this
@@ -250,7 +250,7 @@ export class PostHogSpan implements Span {
 
   updateName(name: string): this {
     if (this._mutable('updateName')) {
-      this._name = sanitizeName(name, 'Span name', this._logger)
+      this._name = sanitizeName(name, 'Span name', this._maxAttributeValueLength, this._logger)
     }
     return this
   }
@@ -353,19 +353,36 @@ export function nonNegativeCount(value: unknown): number {
  * Earliest-set entries win, matching the span-side rule; SDK-attached keys are
  * exempt. Counts add to whatever the span already dropped.
  */
+/**
+ * The record's keys with the ones the span itself set first, in that order.
+ *
+ * `Object.keys` hoists integer-like keys to the front whatever the write order,
+ * so a hook adding `attributes['0']` would otherwise outrank an attribute the
+ * caller set before the hook ran — and the cap is documented as earliest-set-wins.
+ */
+function orderedKeys(attributes: SpanAttributes, keysBeforeHook: readonly string[]): string[] {
+  if (!keysBeforeHook.length) {
+    return Object.keys(attributes)
+  }
+  const beforeHook = keysBeforeHook.filter((key) => key in attributes)
+  const seen = new Set(beforeHook)
+  return [...beforeHook, ...Object.keys(attributes).filter((key) => !seen.has(key))]
+}
+
 export function applySpanLimits(
   record: SpanRecord,
   autoKeys: ReadonlySet<string>,
   maxAttributes: number,
   maxEvents: number,
-  maxAttributeValueLength: number
+  maxAttributeValueLength: number,
+  keysBeforeHook: readonly string[] = []
 ): void {
   let kept = 0
   let droppedAttributes = 0
   // Built fresh rather than edited in place: a hook is free to return a record
   // whose attributes it froze, and a `delete` on one throws.
   const attributes: SpanAttributes = {}
-  for (const key of Object.keys(record.attributes)) {
+  for (const key of orderedKeys(record.attributes, keysBeforeHook)) {
     const value = record.attributes[key]
     // Matches `_writeAttribute`: the encoder drops these, so a hook that blanks a
     // value rather than deleting the key must not evict a real attribute.

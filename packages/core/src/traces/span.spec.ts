@@ -334,12 +334,14 @@ describe('PostHogSpan', () => {
   })
 
   describe('maxAttributeValueLength', () => {
-    it('truncates a long string attribute', () => {
+    it('truncates a long string attribute without counting it as dropped', () => {
       const span = createSpan({ maxAttributeValueLength: 10 })
       span.setAttribute('payload', 'x'.repeat(5000))
       span.end()
 
       expect(ended[0].attributes.payload).toBe('xxxxxxxxxx')
+      // The count is for whole entries; a trimmed value is still exported.
+      expect(ended[0].droppedAttributesCount).toBeUndefined()
     })
 
     it('truncates the strings inside an array attribute, and leaves other types alone', () => {
@@ -532,6 +534,19 @@ describe('PostHogSpan', () => {
       const payload = ended[0].attributes.payload as Record<string, unknown>
       expect(Object.keys(payload)).toEqual(['__proto__'])
       expect(Object.getOwnPropertyDescriptor(payload, '__proto__')?.value).toEqual({ body: 'abcd' })
+    })
+
+    it('bounds a span name and an event name, like a status message', () => {
+      // A name built from a URL is caller-controlled, and one large enough takes
+      // the span past the ingestion body limit.
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.updateName('abcdefgh')
+      span.addEvent('abcdefgh')
+      span.end()
+
+      expect(ended[0].name).toBe('abcd')
+      expect(ended[0].events[0].name).toBe('abcd')
     })
 
     it('bounds a status message', () => {

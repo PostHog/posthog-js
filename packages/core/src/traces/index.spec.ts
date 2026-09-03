@@ -757,6 +757,32 @@ describe('PostHogTraces', () => {
       expect(sentSpans(instance).map((s) => s.flags)).toEqual([0x300])
     })
 
+    it('keeps the earliest-set attributes when the hook adds an integer-like key', async () => {
+      // Object.keys hoists integer-like keys whatever the write order, so a key
+      // the hook added last outranked one the caller set before it ran.
+      const instance = createMockInstance()
+      const traces = createTraces(
+        {
+          maxAttributesPerSpan: 3,
+          beforeSpanSend: [
+            (span: SpanRecord) => {
+              span.attributes['0'] = 'added-last'
+              return span
+            },
+          ],
+        },
+        instance
+      )
+      const span = traces.startSpan('ordered')
+      span.setAttribute('alpha', 1)
+      span.setAttribute('beta', 2)
+      span.setAttribute('gamma', 3)
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans(instance)[0].attributes.map((a) => a.key)).toEqual(['alpha', 'beta', 'gamma'])
+    })
+
     it('ignores a forged identity from a frozen hook rather than dropping the span', async () => {
       // Writing the id back onto a frozen return throws, and a throwing hook
       // drops the span, so forging plus freezing used to lose every span.

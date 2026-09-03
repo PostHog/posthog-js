@@ -198,7 +198,7 @@ export class PostHogTraces {
         traceState: parent?.traceState,
         traceFlags: parent?.traceFlags,
         parentIsRemote: parent?.isRemote,
-        name: sanitizeName(name, 'Span name', this._logger),
+        name: sanitizeName(name, 'Span name', this._config.maxAttributeValueLength, this._logger),
         kind: options?.kind ?? 'internal',
         // Auto-context first so user-supplied attributes win on collision.
         attributes: assignUserAttributes({ ...autoAttributes }, options?.attributes),
@@ -498,6 +498,9 @@ export class PostHogTraces {
     // Read here rather than restored onto the hook's return value: writing them
     // back would throw on a frozen record, and neither is on the record a hook
     // is handed, so a rebuilding hook always arrives without them.
+    // The order the span itself wrote them in, so the caps below can keep the
+    // earliest-set entries even when a hook adds an integer-like key.
+    const keysBeforeHook = Object.keys(record.attributes)
     const originalPropagation = {
       traceFlags: record.traceFlags,
       parentIsRemote: record.parentIsRemote,
@@ -559,7 +562,7 @@ export class PostHogTraces {
 
       // Re-applied to whatever the hook returned: one undecodable timestamp 400s
       // the whole request, taking unrelated spans with it.
-      current.name = sanitizeName(current.name, 'Span name', this._logger)
+      current.name = sanitizeName(current.name, 'Span name', this._config.maxAttributeValueLength, this._logger)
       // A status the hook rewrote never went through `setStatus`. An unknown code
       // encodes as an empty status object, which loses an error the span really had.
       if (current.status && current.status.code !== 'ok' && current.status.code !== 'error') {
@@ -576,7 +579,7 @@ export class PostHogTraces {
         try {
           sanitizedEvents.push({
             ...event,
-            name: sanitizeName(event.name, 'Span event name', this._logger),
+            name: sanitizeName(event.name, 'Span event name', this._config.maxAttributeValueLength, this._logger),
             timestamp: resolveSuppliedTime(event.timestamp, current.startTime, 'event timestamp', this._logger),
           })
         } catch {
@@ -591,7 +594,8 @@ export class PostHogTraces {
         autoKeys,
         this._config.maxAttributesPerSpan,
         this._config.maxEventsPerSpan,
-        this._config.maxAttributeValueLength
+        this._config.maxAttributeValueLength,
+        keysBeforeHook
       )
       return current
     } catch (error) {

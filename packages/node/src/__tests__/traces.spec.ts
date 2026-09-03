@@ -341,11 +341,10 @@ describe('PostHog traces', () => {
       })
     })
 
-    it('bounds a stack by maxAttributeValueLength, and beforeSpanSend can scrub it', async () => {
+    it('beforeSpanSend can scrub a stacktrace', async () => {
       const scrubbed = createClient({
         traces: {
           serviceName: 'checkout-api',
-          maxAttributeValueLength: 64,
           beforeSpanSend: (span: any) => {
             for (const event of span.events) {
               if (event.attributes?.['exception.stacktrace']) {

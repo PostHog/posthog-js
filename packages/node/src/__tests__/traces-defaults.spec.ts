@@ -17,6 +17,15 @@ describe('resolveTracesConfig', () => {
     expect(resolved.maxAttributeValueLength).toBe(8192)
   })
 
+  it('honours explicit per-span caps', () => {
+    // Without this the resolver can ignore maxEventsPerSpan entirely and every
+    // other test still passes, because they all assert the default.
+    expect(resolveTracesConfig({ maxAttributesPerSpan: 5, maxEventsPerSpan: 7 })).toMatchObject({
+      maxAttributesPerSpan: 5,
+      maxEventsPerSpan: 7,
+    })
+  })
+
   it('applies the documented defaults', () => {
     expect(resolveTracesConfig(undefined)).toMatchObject({
       flushIntervalMs: 5000,

@@ -183,17 +183,23 @@ export interface Span {
  * @experimental Subject to change in a minor release.
  */
 export interface SpanRecord {
-    /** Assignment is ignored with a debug warning: rewriting ids orphans children that already shipped. */
+    /**
+     * Assignment to any of the three identity fields is ignored with a debug
+     * warning: rewriting ids orphans children that already shipped.
+     */
     readonly traceId: string
     readonly spanId: string
+    /** Absent on a root span. */
     readonly parentSpanId?: string
     name: string
     kind: SpanKind
     status?: { code: SpanStatusCode; message?: string }
+    /** Editable in place; this is where to redact. */
     attributes: SpanAttributes
-    events: { name: string; timestamp: number; attributes?: SpanAttributes }[]
+    events: { name: string; /** Millisecond epoch. */ timestamp: number; attributes?: SpanAttributes }[]
     /** Millisecond epoch. */
     startTime: number
+    /** Millisecond epoch. */
     endTime: number
 }
 
@@ -311,8 +317,8 @@ export interface TracesConfig {
      * and later ones are dropped, with the number dropped reported on the
      * exported span.
      *
-     * Once the cap is spent, a small reserve is still available to `exception`
-     * events, so a span that fills its events and then throws still carries the
+     * Once the cap is spent, up to four more `exception` events are still
+     * accepted, so a span that fills its events and then throws still carries the
      * exception rather than only an `error` status. Below the cap an exception
      * is an ordinary event and spends an ordinary slot.
      *

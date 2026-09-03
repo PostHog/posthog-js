@@ -66,10 +66,6 @@ export interface SpanEventRecord {
 }
 
 /**
- * A completed span in plain, pre-encoding form: strings for kind and status, a
- * plain attribute map, ms-epoch timestamps.
- */
-/**
  * A finished span as the SDK carries it, which is the hook-visible record plus
  * the fields no hook may rewrite. Declaring only the additions keeps the shared
  * half from drifting; a field added here rather than to the public record is a
