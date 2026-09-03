@@ -68,7 +68,7 @@
         "@posthog/types": "workspace:^",
         "core-js": "^3.49.0",
         "dompurify": "^3.4.13",
-        "fflate": "^0.4.8",
+        "fflate": "^0.4.9",
         "preact": "^10.29.3",
         "query-selector-shadow-dom": "^1.0.1",
         "web-vitals": "^6.2.1",

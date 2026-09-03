@@ -276,8 +276,8 @@ importers:
         specifier: ^3.4.13
         version: 3.4.13
       fflate:
-        specifier: ^0.4.8
-        version: 0.4.8
+        specifier: ^0.4.9
+        version: 0.4.9
       preact:
         specifier: ^10.29.3
         version: 10.29.3
@@ -1157,8 +1157,8 @@ importers:
         specifier: workspace:*
         version: link:../types
       fflate:
-        specifier: ^0.4.4
-        version: 0.4.8
+        specifier: ^0.4.9
+        version: 0.4.9
     devDependencies:
       typescript:
         specifier: 'catalog:'
@@ -10854,8 +10854,8 @@ packages:
   fetch-retry@4.1.1:
     resolution: {integrity: sha512-e6eB7zN6UBSwGVwrbWVH+gdLnkW9WwHhmq2YDK1Sh30pzx1onRVGBvogTlUeWxwTa+L86NYdo4hFkh7O8ZjSnA==}
 
-  fflate@0.4.8:
-    resolution: {integrity: sha512-FJqqoDBR00Mdj9ppamLa/Y7vxm+PRmNWA67N846RvsoYVMKB4q3y/de5PA7gUmRMYK/8CMz2GDZQmCRN1wBcWA==}
+  fflate@0.4.9:
+    resolution: {integrity: sha512-zdxgIEddhfsyCaWpJ2SdXEP8ZMrKJ6+5jl4OupODcywU0IhRk6gdXuVGcPICyfx2H97hVK7xmJtRLPjkxAX8Vw==}
 
   figures@3.2.0:
     resolution: {integrity: sha512-yaduQFRKLXYOGgEn6AZau90j3ggSOyiqXU0F9JZfeXYhNa+Jk4X+s45A2zg5jns87GAFa34BBm2kXw4XpNcbdg==}
@@ -30110,7 +30110,7 @@ snapshots:
 
   fetch-retry@4.1.1: {}
 
-  fflate@0.4.8: {}
+  fflate@0.4.9: {}
 
   figures@3.2.0:
     dependencies:
@@ -35547,8 +35547,10 @@ snapshots:
       which: 2.0.2
       yargs: 17.7.2
     transitivePeerDependencies:
+      - bufferutil
       - supports-color
       - typescript
+      - utf-8-validate
 
   react-native-codegen@0.69.2(@babel/preset-env@7.28.5(@babel/core@7.28.5)):
     dependencies:
