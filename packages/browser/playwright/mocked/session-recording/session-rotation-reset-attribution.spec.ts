@@ -2,30 +2,8 @@ import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-tes
 import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page } from '@playwright/test'
 
-// Reproduction hunt for a production attribution bug (posthog-js 1.42x):
-// with compress_events on and continuous DOM mutations, an idle -> wake -> reset()+identify()
-// sequence has been observed to
-//   (a) ship the restarted recorder's Meta+FullSnapshot in batches attributed to the OLD session id,
-//   (b) destroy the $session_id_change custom event entirely,
-//   (c) leave the new session's first batches with no FullSnapshot and no custom events.
-// The SDK's session id was already correct when the snapshots were emitted, so the suspect is the
-// buffer/compression-queue/flush layer. Each scenario below runs the shared attribution oracle.
-//
-// STATUS: reproduced on current master as DESTRUCTION rather than mis-attribution — flaky by
-// design of the race (~20-35% of idle-scenario runs, rarer for active ones; run with
-// --repeat-each=3 or more). Failing runs show the old session's entire unflushed tail destroyed
-// at rotation: clause 5 (tail truncated at the last natural flush, e.g. the sessionIdle
-// proactive flush) and clause 4 (sessionNoLongerIdle + wake heal FullSnapshot gone). The
-// compression-off control (scenario F) has never failed, implicating the async compression
-// queue. Suspect code in src/extensions/replay/external/lazy-loaded-session-recorder.ts:
-//   - stop() -> _stopAfterCompressionQueueDrains(): a rotation stop with a non-empty queue
-//     defers the old buffer's flush to an async drain;
-//   - start() ("Discard the buffer too", the #3822 fix): the synchronous restart invalidates
-//     that drain (generation bump) AND clears the buffer, so the deferred flush never ships;
-//   - _captureSnapshotBuffered's suppressed-flush branch discards a prior session's buffer
-//     rather than relabel it.
-// Pre-#3822 builds (field 1.42x) lacked the discard, which would instead ship the mixed buffer
-// under the OLD session id — matching field signature (a)/(b) where master now destroys.
+// a rotation while the async compression queue is busy must ship the old session's
+// tail under the old session id; the race is timing-dependent, run with --repeat-each>=3
 
 const ROTATION_SLACK_MS = 100
 const FULL_SNAPSHOT_DEADLINE_MS = 2000
@@ -56,8 +34,6 @@ interface ChurnWindow {
 async function installAndStartChurn(page: Page): Promise<void> {
     await page.evaluate(() => {
         const w = window as ChurnWindow & WindowWithPostHog
-        // snapshot of the recorder's buffer/compression-queue internals, taken synchronously
-        // around interesting moments so failures carry direct evidence of flush-layer state
         w.__recDiag = () => {
             const rec = (w.posthog?.sessionRecording as any)?._lazyLoadedSessionRecording
             if (!rec) {
@@ -84,8 +60,7 @@ async function installAndStartChurn(page: Page): Promise<void> {
         target.textContent = 'churn 0'
         document.body.appendChild(target)
         let n = 0
-        // sizeable, non-repeating payload per mutation so the native async gzip path
-        // (CompressionStream) has real work to do and the compression queue stays busy
+        // non-repeating payloads keep the compression queue busy
         const randomPad = () => {
             let s = ''
             while (s.length < 4096) {
@@ -109,23 +84,16 @@ async function installAndStartChurn(page: Page): Promise<void> {
             }
         }
         w.__churn = {
-            // delayFirstMouseMs > 0 matters when resuming after an idle pause: the recorder's
-            // idle detection is event-receipt-driven, so the first post-pause event must be a
-            // non-active mutation (emits sessionIdle) before any active mouse event (which
-            // would otherwise silently reset activity and skip the idle state entirely)
+            // after an idle pause the first event must be a non-active mutation or the idle state is skipped
             start(delayFirstMouseMs = 0) {
                 if (mutationTimer) {
                     return
                 }
-                // continuous DOM churn (~every 8ms): text + attribute so rrweb emits
-                // type-3 source-0 mutation events
                 mutationTimer = setInterval(() => {
                     n++
                     target.textContent = 'churn ' + n + ' ' + randomPad()
                     target.setAttribute('data-churn', String(n))
                 }, 8)
-                // periodic programmatic mouse activity so interactive (active-source)
-                // events flow and the recorder does not idle while churn runs
                 const armMouse = () => {
                     dispatchMouseBurst()
                     mouseTimer = setInterval(dispatchMouseBurst, 300)
@@ -163,8 +131,6 @@ async function stopChurn(page: Page): Promise<void> {
 
 async function resumeChurnAfterIdle(page: Page): Promise<void> {
     await page.evaluate(() => {
-        // mutations first (trigger sessionIdle on receipt), mouse 200ms later (wakes to
-        // sessionNoLongerIdle + heal snapshot) - mirrors a user returning to a live page
         ;(window as ChurnWindow).__churn?.start(200)
     })
 }
@@ -189,7 +155,6 @@ async function collectSnapshotBatches(page: Page): Promise<SnapshotBatch[]> {
             events: ((e.properties['$snapshot_data'] as any[]) || []).map((s: any) => ({
                 type: s.type,
                 timestamp: s.timestamp,
-                // custom-event tags stay plain JSON even with compression on
                 tag: (s.data && typeof s.data === 'object' && s.data.tag) || null,
             })),
         }))
@@ -214,8 +179,7 @@ function runAttributionOracle(
     rotationTime: number,
     { expectIdleMarkers, diag }: { expectIdleMarkers: boolean; diag?: { pre: unknown; post: unknown } }
 ) {
-    // recorder-internal state is only readable on unmangled builds; on the standard dist
-    // (property-mangled) __recDiag returns null and the evidence omits it
+    // __recDiag returns null on mangled builds
     const haveDiag = diag && (diag.pre || diag.post)
     const evidence = () =>
         `\nrotation at t=0ms` +
@@ -227,11 +191,10 @@ function runAttributionOracle(
     const oldBatches = batches.filter((b) => b.sessionId === oldSessionId)
     const newBatches = batches.filter((b) => b.sessionId === newSessionId)
 
-    // sanity: both sessions actually shipped something
     expect(oldBatches.length, `expected old-session batches${evidence()}`).toBeGreaterThan(0)
     expect(newBatches.length, `expected new-session batches${evidence()}`).toBeGreaterThan(0)
 
-    // clause 1: no OLD-session batch may contain any event stamped at/after rotation
+    // no OLD-session batch may contain any event stamped at/after rotation
     const staleAttributed = oldBatches.flatMap((b) =>
         b.events
             .filter((e) => e.timestamp >= rotationTime + ROTATION_SLACK_MS)
@@ -239,7 +202,7 @@ function runAttributionOracle(
     )
     expect(staleAttributed, `clause 1: post-rotation events attributed to the OLD session${evidence()}`).toEqual([])
 
-    // clause 2: exactly one $session_id_change custom event, and it is in a NEW-session batch
+    // exactly one $session_id_change, in a NEW-session batch
     const changeEvents = batches.flatMap((b) =>
         b.events
             .filter((e) => e.tag === '$session_id_change')
@@ -254,7 +217,7 @@ function runAttributionOracle(
         `clause 2: $session_id_change attributed to the wrong session${evidence()}`
     ).toEqual(newSessionId)
 
-    // clause 3: a NEW-session batch contains a FullSnapshot stamped within 2s of rotation
+    // a NEW-session batch contains a FullSnapshot within 2s of rotation
     const newSessionFullSnapshots = newBatches.flatMap((b) => b.events.filter((e) => e.type === 2))
     const timelyFullSnapshot = newSessionFullSnapshots.find(
         (e) => e.timestamp <= rotationTime + FULL_SNAPSHOT_DEADLINE_MS
@@ -267,9 +230,7 @@ function runAttributionOracle(
             )})${evidence()}`
     ).toBeDefined()
 
-    // clause 5: the old session's shipped tail must reach (nearly) up to the rotation.
-    // Churn runs continuously right up to reset(), so events existed in that window; a
-    // truncated tail means buffered/queued old-session events were destroyed, not shipped
+    // the old session's shipped tail must reach up to the rotation; a truncated tail means events were destroyed
     const lastOldEventTs = Math.max(...oldBatches.flatMap((b) => b.events.map((e) => e.timestamp)))
     expect(
         rotationTime - lastOldEventTs,
@@ -277,7 +238,7 @@ function runAttributionOracle(
             `${rotationTime - lastOldEventTs}ms before rotation (churn ran up to rotation)${evidence()}`
     ).toBeLessThan(500)
 
-    // clause 4 (idle scenarios): the wake marker exists and is attributed to the OLD session
+    // idle scenarios: the wake marker exists and is attributed to the OLD session
     if (expectIdleMarkers) {
         const wakeEvents = batches.flatMap((b) =>
             b.events.filter((e) => e.tag === 'sessionNoLongerIdle').map(() => ({ sessionId: b.sessionId }))
@@ -300,7 +261,6 @@ async function bootWithChurn(page: Page, context: any, options: typeof startOpti
     await waitForSessionRecordingToStart(page)
     await page.resetCapturedEvents()
 
-    // start continuous churn and wait for the first flush so the pipeline is proven live
     await page.waitingForNetworkCausedBy({
         urlPatternsToWaitFor: ['**/ses/*'],
         action: async () => {
@@ -309,8 +269,6 @@ async function bootWithChurn(page: Page, context: any, options: typeof startOpti
     })
 }
 
-// pause everything past the idle threshold, then resume so the recorder emits
-// sessionIdle followed by sessionNoLongerIdle + heal snapshot; then postWakeMs of activity
 async function goIdleThenWake(page: Page, postWakeMs = 1000): Promise<void> {
     await stopChurn(page)
     await page.waitForTimeout(1200)
@@ -319,10 +277,8 @@ async function goIdleThenWake(page: Page, postWakeMs = 1000): Promise<void> {
 }
 
 async function settleAndCollect(page: Page, newSessionId: string): Promise<SnapshotBatch[]> {
-    // keep mutations running across two flush windows after rotation
     await page.waitForTimeout(4000)
     await stopChurn(page)
-    // wait for the new session's data to actually ship
     await expect
         .poll(
             async () => {
@@ -332,7 +288,6 @@ async function settleAndCollect(page: Page, newSessionId: string): Promise<Snaps
             { timeout: 8000 }
         )
         .toBe(true)
-    // one more flush window so trailing buffered events land
     await page.waitForTimeout(2500)
     return collectSnapshotBatches(page)
 }
@@ -396,8 +351,7 @@ test.describe('Session recording - reset()+identify() attribution under load', (
 })
 
 test.describe('Session recording - reset() attribution control (compress_events: false)', () => {
-    // control for the compression-queue hypothesis: identical load and rotation, but with
-    // the sync (non-queued) compression path - the oracle should always hold here
+    // compression-off control: the oracle must always hold here
     test.describe.configure({ timeout: 60000 })
 
     const uncompressedStartOptions = {

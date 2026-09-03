@@ -1,5 +1,4 @@
-// jsdom lacks the native gzip primitives; provide them before the recorder module
-// computes its module-level support flag. Import this before any recorder import.
+// import before any recorder import: the recorder computes gzip support at module load
 import { TextEncoder } from 'node:util'
 import { CompressionStream } from 'node:stream/web'
 
