@@ -24,23 +24,23 @@ This is a pnpm monorepo containing multiple PostHog JavaScript SDKs and developm
 
 The repository contains the following SDK packages in `./packages/`:
 
-| Package          | Name                     | Description                                     |
-| ---------------- | ------------------------ | ----------------------------------------------- |
-| `core/`          | `@posthog/core`          | Shared core functionality used by multiple SDKs |
-| `browser/`       | `posthog-js`             | Main browser SDK for capturing events and usage |
-| `web/`           | `posthog-js-lite`        | Lightweight browser SDK                         |
-| `ai/`            | `@posthog/ai`            | AI integrations for Node.js                     |
-| `convex/`        | `@posthog/convex`        | Convex.dev component                            |
-| `node/`          | `posthog-node`           | Node.js backend SDK (requires Node >= 20)       |
-| `react/`         | `@posthog/react`         | React components and hooks                      |
-| `react-native/`  | `posthog-react-native`   | React Native mobile SDK                         |
-| `nuxt/`          | `@posthog/nuxt`          | Nuxt framework module                           |
-| `next/`          | `@posthog/next`          | Next.js framework module                        |
-| `nextjs-config/` | `@posthog/nextjs-config` | Next.js configuration helper                    |
-| `openfeature-node-provider/` | `@posthog/openfeature-node-provider` | OpenFeature server provider (posthog-node)   |
-| `openfeature-web-provider/`  | `@posthog/openfeature-web-provider`  | OpenFeature web provider (posthog-js)        |
-| `plugin-utils/`  | `@posthog/plugin-utils`  | Shared CLI and sourcemap utilities for plugins  |
-| `types/`         | `@posthog/types`         | TypeScript type definitions for the SDK         |
+| Package                      | Name                                 | Description                                     |
+| ---------------------------- | ------------------------------------ | ----------------------------------------------- |
+| `core/`                      | `@posthog/core`                      | Shared core functionality used by multiple SDKs |
+| `browser/`                   | `posthog-js`                         | Main browser SDK for capturing events and usage |
+| `web/`                       | `posthog-js-lite`                    | Lightweight browser SDK                         |
+| `ai/`                        | `@posthog/ai`                        | AI integrations for Node.js                     |
+| `convex/`                    | `@posthog/convex`                    | Convex.dev component                            |
+| `node/`                      | `posthog-node`                       | Node.js backend SDK (requires Node >= 20)       |
+| `react/`                     | `@posthog/react`                     | React components and hooks                      |
+| `react-native/`              | `posthog-react-native`               | React Native mobile SDK                         |
+| `nuxt/`                      | `@posthog/nuxt`                      | Nuxt framework module                           |
+| `next/`                      | `@posthog/next`                      | Next.js framework module                        |
+| `nextjs-config/`             | `@posthog/nextjs-config`             | Next.js configuration helper                    |
+| `openfeature-node-provider/` | `@posthog/openfeature-node-provider` | OpenFeature server provider (posthog-node)      |
+| `openfeature-web-provider/`  | `@posthog/openfeature-web-provider`  | OpenFeature web provider (posthog-js)           |
+| `plugin-utils/`              | `@posthog/plugin-utils`              | Shared CLI and sourcemap utilities for plugins  |
+| `types/`                     | `@posthog/types`                     | TypeScript type definitions for the SDK         |
 
 ## Workspace
 
@@ -173,7 +173,7 @@ Turbo handles build orchestration and ensures packages are built in the correct 
 
 ### Automatic Formatting
 
-Oxfmt checks workspace package code during linting. Pre-commit hooks (via lint-staged) automatically format TypeScript, JavaScript, JSON, and Markdown files with Oxfmt.
+Oxfmt checks workspace package code during linting. Pre-commit hooks (via prek) automatically lint and format staged TypeScript and JavaScript files, and format staged JSON and Markdown files.
 
 ## Release Process
 
