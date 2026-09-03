@@ -108,9 +108,8 @@ export class PostHogLogs {
   onReconnect(): void {
     this._consecutiveFlushFailures = 0
     if (this._retryAfter.isOpen()) {
-      // Connectivity is back but the endpoint's wait is not over. An explicit
-      // `flush()` leaves no timer behind, so returning without arming one is
-      // what strands the queue for the rest of the process.
+      // The wait outlives the reconnect, but something still has to schedule
+      // the retry: an explicit `flush()` leaves no timer behind.
       if (this._hasQueuedRecords()) {
         this._armFlushTimer()
       }
@@ -315,15 +314,12 @@ export class PostHogLogs {
         continue
       }
 
-      // Recorded here rather than on the background wrapper, so an explicit
-      // `flush()` — which every lifecycle hook takes — records and clears the
-      // window too.
+      // Not on the background wrapper: every lifecycle hook takes `flush()`,
+      // which does not go through it.
       this._retryAfter.record(outcome)
 
-      // A capture that landed while this send was in flight armed the timer
-      // against whatever the window was at the time. Re-arm outright rather
-      // than through the ratchet, which only ever moves a timer later and so
-      // would hold that capture at a window this very outcome just closed.
+      // Outright, not through the ratchet: a timer a mid-flight capture armed
+      // is measured against a window this outcome may just have closed.
       if (this._flushTimer) {
         this._clearFlushTimer()
         this._setFlushTimer(Math.max(this._flushIntervalMs, this._retryAfter.remainingMs()))
@@ -413,15 +409,13 @@ export class PostHogLogs {
     if (this._flushTimer) {
       return
     }
-    // Floored by any open window: an explicit `flush()` leaves no timer behind,
-    // so this is the path a capture takes after one, and the plain interval
-    // would land inside the wait the endpoint asked for.
+    // Floored by any open window: `flush()` leaves no timer behind, so a
+    // capture after one arrives here.
     this._setFlushTimer(Math.max(this._flushIntervalMs, this._retryAfter.remainingMs()))
   }
 
-  // Backoff and `Retry-After` are floors, so a timer already armed at the plain
-  // interval has to give way to a longer one — otherwise a capture landing
-  // mid-flush would send inside the window the server asked us to skip.
+  // Both floors, so a timer already armed at the plain interval gives way to a
+  // longer one.
   private _armFlushTimerNoEarlierThan(delayMs: number): void {
     if (this._flushTimer && Date.now() + delayMs <= this._flushTimerFiresAt) {
       return
@@ -443,8 +437,8 @@ export class PostHogLogs {
   // retried every interval.
   private _nextFlushDelay(): number {
     const exponent = Math.min(Math.max(0, this._consecutiveFlushFailures - 1), MAX_FLUSH_BACKOFF_EXPONENT)
-    // `Retry-After` is a floor, not a replacement: never retry before the server
-    // asked, and never more often than our own backoff would have.
+    // A floor, not a replacement: the header never retries us sooner than our
+    // own backoff would have.
     return Math.max(this._flushIntervalMs * 2 ** exponent, this._retryAfter.remainingMs())
   }
 

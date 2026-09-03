@@ -87,10 +87,8 @@ export class RetryAfterWindow {
       return
     }
     if (!outcome.retryAfterMs || this.isOpen()) {
-      // Nothing to install, and nothing that revokes what is installed: the
-      // refusal either named no wait — a network error, a timeout or a
-      // header-less 503, all of which the outage that named the original wait
-      // keeps producing — or arrived while that wait is still being served.
+      // A refusal that names no wait — a network error, a timeout, a
+      // header-less 503 — does not revoke one the endpoint already named.
       return
     }
     this._installedAt = Date.now()

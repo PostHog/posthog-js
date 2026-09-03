@@ -570,17 +570,12 @@ export class PostHogTraces {
 
         if (outcome.kind === 'retry-later') {
           this._consecutiveFlushFailures++
-          // One charge per backoff window. A refusal that arrives before the
-          // window the last one bought has elapsed — an explicit `flush()`, a
-          // per-request serverless drain, or a wait the endpoint asked for with
-          // `Retry-After` — is the same refusal seen again, not new evidence
-          // against the batch, so honoring the endpoint costs a request rather
-          // than the spans.
+          // One charge per backoff window: a refusal arriving before the window
+          // the last charge bought has elapsed is the same refusal seen again,
+          // not new evidence against the batch.
           this._headBatchSize = size
           if (chargeable) {
             this._headBatchFailures++
-            // The window this charge buys is the delay the timer will wait, which
-            // grows with the failure count and honors `Retry-After`.
             this._headBatchChargeableAt = clockNow() + this._nextFlushDelay()
           }
           if (this._headBatchFailures < MAX_RETRIES_PER_BATCH) {
@@ -644,8 +639,8 @@ export class PostHogTraces {
       })
   }
 
-  // Arms the flush timer if none is pending. Every span end can reach this, so
-  // it must leave a pending timer alone rather than pushing the flush out.
+  // Every span end can reach this, so a pending timer is left alone rather than
+  // pushing the flush out.
   private _armFlushTimerIfQueued(): void {
     if (this._flushTimer || !this._queue.length) {
       return
@@ -653,10 +648,8 @@ export class PostHogTraces {
     this._setFlushTimer(this._nextFlushDelay())
   }
 
-  // Backoff and `Retry-After` are floors, so a timer a span end armed at the
-  // plain interval while the send was in flight has to give way to a longer
-  // one — otherwise the retry lands inside the window the server asked us to
-  // skip.
+  // Both floors, so a timer a span end armed at the plain interval gives way to
+  // a longer one.
   private _armFlushTimerIfQueuedNoEarlierThan(): void {
     if (!this._queue.length) {
       return
@@ -683,8 +676,8 @@ export class PostHogTraces {
     const exponent = Math.min(Math.max(0, this._consecutiveFlushFailures - 1), MAX_FLUSH_BACKOFF_EXPONENT)
     const delay = this._config.flushIntervalMs * 2 ** exponent
     const capped = Math.min(delay, Math.max(MAX_FLUSH_BACKOFF_MS, this._config.flushIntervalMs))
-    // `Retry-After` is a floor, not a replacement: never retry before the server
-    // asked, and never more often than our own backoff would have.
+    // A floor, not a replacement: the header never retries us sooner than our
+    // own backoff would have.
     return Math.max(capped, this._retryAfter.remainingMs())
   }
 

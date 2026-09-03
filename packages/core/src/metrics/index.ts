@@ -288,9 +288,8 @@ export class PostHogMetrics {
     return result
   }
 
-  // Arms the flush timer if none is pending. Every capture calls this, so it
-  // must leave a pending timer alone: re-arming on each one would push the
-  // flush out for as long as metrics keep arriving.
+  // Every capture calls this, so a pending timer is left alone — re-arming on
+  // each one would push the flush out for as long as metrics keep arriving.
   private _armFlushTimer(): void {
     if (this._flushTimer) {
       return
@@ -298,9 +297,8 @@ export class PostHogMetrics {
     this._setFlushTimer(this._nextFlushDelay())
   }
 
-  // `Retry-After` is a floor, so a timer already armed at the flush interval has
-  // to give way to a longer one rather than firing inside the window the server
-  // asked us to skip.
+  // A floor, so a timer already armed at the flush interval gives way to a
+  // longer one.
   private _armFlushTimerNoEarlierThan(delayMs: number): void {
     if (this._flushTimer && Date.now() + delayMs <= this._flushTimerFiresAt) {
       return
@@ -309,8 +307,8 @@ export class PostHogMetrics {
     this._setFlushTimer(delayMs)
   }
 
-  // `Retry-After` is a floor, not a replacement: never retry before the server
-  // asked, and never more often than the flush interval.
+  // A floor, not a replacement: the header never retries us sooner than the
+  // flush interval would have.
   private _nextFlushDelay(): number {
     return Math.max(this._config.flushIntervalMs, this._retryAfter.remainingMs())
   }
@@ -333,11 +331,8 @@ export class PostHogMetrics {
   }
 
   private async _doFlush(): Promise<void> {
-    // A flush retires the pending timer, the way the logs and traces queues do.
-    // Without this, `_armFlushTimerNoEarlierThan` — which only ever ratchets a
-    // timer later — leaves a `Retry-After` delay armed after the window it came
-    // from has already been closed by a successful flush, and every later
-    // capture finds a timer pending and declines to arm a sooner one.
+    // A flush retires the pending timer, so a delay armed for a window this
+    // flush may close cannot outlive it.
     this._clearFlushTimer()
     if (this._series.size === 0) {
       return
@@ -359,10 +354,8 @@ export class PostHogMetrics {
       return
     }
     this._retryAfter.record(outcome)
-    // A capture that landed while this send was in flight armed the timer
-    // against whatever the window was at the time. Re-arm outright rather than
-    // through the ratchet, which only ever moves a timer later and so would
-    // hold that capture at a window this very outcome just closed.
+    // Outright, not through the ratchet: a timer a mid-flight capture armed is
+    // measured against a window this outcome may just have closed.
     if (this._flushTimer) {
       this._clearFlushTimer()
       this._setFlushTimer(this._nextFlushDelay())
