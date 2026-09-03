@@ -1749,6 +1749,7 @@ export class PostHogPersistence {
         // split flag from the fresh eligibility. The new backend may no longer be
         // split-eligible (e.g. localStorage -> memory).
         const newStore = persistenceChanged || cookiePrecedenceChanged ? this._buildStorage(config) : this._storage
+        this._truncateExistingPersonInfoForCookie()
         const wantSplit = this._resolveSplitStorage(config)
         const storageMigration = persistenceChanged || wantSplit !== this._splitStorage
         const cookieOptionsChanged =
@@ -1794,6 +1795,23 @@ export class PostHogPersistence {
                 // subdomain can initialize.
                 this._endCookieSyncSuppression()
             }
+        }
+    }
+
+    private _truncateExistingPersonInfoForCookie(): void {
+        const personInfo = this.props[INITIAL_PERSON_INFO]
+        if (!this._storesIdentityInCookie || !isObject(personInfo) || typeof personInfo.r !== 'string') {
+            return
+        }
+
+        const truncatedReferrer = truncateForCookie(personInfo.r)
+        const truncatedUrl = typeof personInfo.u === 'string' ? truncateForCookie(personInfo.u) : personInfo.u
+        if (truncatedReferrer !== personInfo.r || truncatedUrl !== personInfo.u) {
+            this._setProp(INITIAL_PERSON_INFO, {
+                ...personInfo,
+                r: truncatedReferrer,
+                u: truncatedUrl,
+            })
         }
     }
 

@@ -783,6 +783,40 @@ describe('persistence', () => {
             expect(`ph__posthog=${encodedCookieValue}; SameSite=Lax; path=/`.length).toBeLessThan(4096 * 0.9)
         })
 
+        it('should normalize initial person URLs loaded from localStorage', () => {
+            const longUrl = `https://www.example.com/?${'&'.repeat(2000)}`
+            const previousLibrary = new PostHogPersistence(makePostHogConfig('test', 'localStorage'))
+            previousLibrary.register({ [INITIAL_PERSON_INFO]: { r: longUrl, u: longUrl } })
+
+            library = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
+
+            expect(
+                encodeURIComponent(JSON.stringify(library.props[INITIAL_PERSON_INFO].r).slice(1, -1)).length
+            ).toBeLessThanOrEqual(1000)
+            expect(
+                encodeURIComponent(JSON.stringify(library.props[INITIAL_PERSON_INFO].u).slice(1, -1)).length
+            ).toBeLessThanOrEqual(1000)
+            expect(document.cookie.length).toBeLessThan(4096 * 0.9)
+        })
+
+        it('should normalize initial person URLs when switching to cookie persistence', () => {
+            const longUrl = `https://www.example.com/?${'&'.repeat(2000)}`
+            const oldConfig = makePostHogConfig('test', 'localStorage')
+            const newConfig = makePostHogConfig('test', 'localStorage+cookie')
+            library = new PostHogPersistence(oldConfig)
+            library.register({ [INITIAL_PERSON_INFO]: { r: longUrl, u: longUrl } })
+
+            library.update_config(newConfig, oldConfig)
+
+            expect(
+                encodeURIComponent(JSON.stringify(library.props[INITIAL_PERSON_INFO].r).slice(1, -1)).length
+            ).toBeLessThanOrEqual(1000)
+            expect(
+                encodeURIComponent(JSON.stringify(library.props[INITIAL_PERSON_INFO].u).slice(1, -1)).length
+            ).toBeLessThanOrEqual(1000)
+            expect(document.cookie.length).toBeLessThan(4096 * 0.9)
+        })
+
         it('should persist custom properties to cookies when using localStorage+cookie', () => {
             const customProp = 'my_custom_prop'
             const token = uuidv7()
