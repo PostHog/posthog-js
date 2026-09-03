@@ -2066,6 +2066,15 @@ export class PostHog implements PostHogInterface {
         // reports document.referrer (the iframe's own origin) rather than the registered value.
         const persistenceProperties = this.persistence.properties()
         const sessionPersistenceProperties = this.sessionPersistence.properties()
+        const eventGroups = properties['$groups']
+        const persistenceGroups = persistenceProperties['$groups']
+        // An explicit empty object keeps its existing meaning: omit registered groups for this event.
+        if (isObject(eventGroups) && !isEmptyObject(eventGroups)) {
+            properties['$groups'] = {
+                ...(isObject(persistenceGroups) ? persistenceGroups : {}),
+                ...eventGroups,
+            }
+        }
         each(['$referrer', '$referring_domain'], (referrerKey) => {
             if (referrerKey in persistenceProperties) {
                 delete sessionPersistenceProperties[referrerKey]

@@ -1743,6 +1743,46 @@ describe('posthog core', () => {
                     instance: 'app.posthog.com',
                 })
             })
+
+            it('merges event-specific groups with registered groups', () => {
+                posthog.group('company', 'company::5')
+                posthog.capture('some_event', { $groups: { project: 'project::7' } })
+
+                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
+                // eslint-disable-next-line posthog-js/no-direct-array-check
+                if (Array.isArray(eventPayload.data!)) {
+                    throw new Error('')
+                }
+                expect(eventPayload.data!.properties.$groups).toEqual({
+                    company: 'company::5',
+                    project: 'project::7',
+                })
+            })
+
+            it('lets event-specific groups override registered groups without changing persistence', () => {
+                posthog.group('project', 'project::5')
+                posthog.capture('some_event', { $groups: { project: 'project::7' } })
+
+                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
+                // eslint-disable-next-line posthog-js/no-direct-array-check
+                if (Array.isArray(eventPayload.data!)) {
+                    throw new Error('')
+                }
+                expect(eventPayload.data!.properties.$groups).toEqual({ project: 'project::7' })
+                expect(posthog.getGroups()).toEqual({ project: 'project::5' })
+            })
+
+            it('allows an empty event-specific groups object to omit registered groups', () => {
+                posthog.group('company', 'company::5')
+                posthog.capture('some_event', { $groups: {} })
+
+                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
+                // eslint-disable-next-line posthog-js/no-direct-array-check
+                if (Array.isArray(eventPayload.data!)) {
+                    throw new Error('')
+                }
+                expect(eventPayload.data!.properties.$groups).toEqual({})
+            })
         })
 
         describe('error handling', () => {
