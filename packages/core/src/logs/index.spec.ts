@@ -1293,6 +1293,33 @@ describe('PostHogLogs', () => {
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
     })
 
+    it('keeps the Retry-After window when a batch is refused for size', async () => {
+      // `too-large` is a verdict on the body's size — the SDK's own or a 413 —
+      // so it says nothing about the endpoint's rate limit and must not end the
+      // wait.
+      const outcomes: any[] = [{ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }]
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'too-large' }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 1000, maxBatchRecordsPerPost: 1 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'first' })
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+
+      // A batch of one the endpoint cannot accept: the record is dropped.
+      await logs.flush()
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+
+      logs.captureLog({ body: 'second' })
+      logs.onReconnect()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
+    })
+
     it('ends the window when an explicit flush succeeds', async () => {
       // The endpoint just accepted a batch, so the wait it asked for earlier is
       // over — the gated paths must not stay blocked for the rest of it.
@@ -1431,7 +1458,7 @@ describe('PostHogLogs', () => {
         await vi.advanceTimersByTimeAsync(5000)
         // Sampled before the flush: a flush that finds the window closed opens
         // a fresh one, so sampling after it would always look open.
-        if ((logs as any)._retryAfterRemainingMs() === 0) {
+        if ((logs as any)._retryAfter.remainingMs() === 0) {
           sawWindowClosed = true
         }
         logs.captureLog({ body: `line ${i}` })

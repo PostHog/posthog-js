@@ -10,7 +10,7 @@ import type {
 } from '@posthog/types'
 import type { Logger } from '../types'
 import { isArray, safeSetTimeout } from '../utils'
-import { MAX_RETRY_AFTER_MS } from '../utils/retry-after'
+import { RetryAfterWindow } from '../utils/retry-after'
 import { toOtlpKeyValueList } from '../utils/otlp-any-value'
 import {
   DEFAULT_HISTOGRAM_BOUNDS,
@@ -74,13 +74,7 @@ export class PostHogMetrics {
   // types under one name produces charts that blend both series.
   private _typeByName = new Map<string, MetricType>()
   private _typeCollisionWarned = new Set<string>()
-  // Absolute deadline from a `Retry-After` the endpoint sent; cleared on any
-  // other outcome so one throttled response cannot pin the delay for the rest
-  // of the process. A deadline rather than a duration, so a timer armed while
-  // the wait is already part-served counts down the remainder instead of
-  // restarting it.
-  private _retryAfterUntil = 0
-  private _retryAfterInstalledAt = 0
+  private _retryAfter = new RetryAfterWindow()
   private _flushTimerFiresAt = 0
   // Bumped by reset(). A flush that was in flight when reset() ran (e.g. it
   // lost a shutdown race) sees a stale generation when its send settles and
@@ -145,8 +139,7 @@ export class PostHogMetrics {
   /** Clears the flush timer, drops the current window, and invalidates in-flight flushes. */
   reset(): void {
     this._generation++
-    this._retryAfterUntil = 0
-    this._retryAfterInstalledAt = 0
+    this._retryAfter.reset()
     this._clearFlushTimer()
     this._series = new Map()
     this._flushPromise = null
@@ -319,22 +312,7 @@ export class PostHogMetrics {
   // `Retry-After` is a floor, not a replacement: never retry before the server
   // asked, and never more often than the flush interval.
   private _nextFlushDelay(): number {
-    return Math.max(this._config.flushIntervalMs, this._retryAfterRemainingMs())
-  }
-
-  private _isWaitingOutRetryAfter(): boolean {
-    return this._retryAfterRemainingMs() > 0
-  }
-
-  private _retryAfterRemainingMs(): number {
-    const now = Date.now()
-    // The deadline is wall clock. A clock that has moved behind the point the
-    // window was installed can no longer measure it, so end the window rather
-    // than hold the queue for the size of the step; the cap bounds the rest.
-    if (now < this._retryAfterInstalledAt) {
-      return 0
-    }
-    return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, this._retryAfterUntil - now))
+    return Math.max(this._config.flushIntervalMs, this._retryAfter.remainingMs())
   }
 
   private _setFlushTimer(delayMs: number): void {
@@ -368,25 +346,13 @@ export class PostHogMetrics {
     this._typeCollisionWarned = new Set()
 
     const generation = this._generation
-    // Read before the send: the outcome overwrites the window, and a refusal
-    // the endpoint had already told us to expect must not extend it.
-    const insideRetryAfterWindow = this._isWaitingOutRetryAfter()
     const outcome = await this._instance._sendMetricsBatch(this._buildPayload(window))
     if (generation !== this._generation) {
       // reset() ran while the send was in flight — the client was torn down or
       // reconfigured, so this window is dropped whatever the outcome was.
       return
     }
-    // Only a retriable outcome carries a wait; anything else ends it, or a stale
-    // one would pin every later flush at the window the server has moved on from.
-    // A refusal from inside an open window does not extend it, or a host that
-    // flushes on its own cadence keeps the window from ever elapsing.
-    if (outcome.kind !== 'retry-later' || !outcome.retryAfterMs) {
-      this._retryAfterUntil = 0
-    } else if (!insideRetryAfterWindow) {
-      this._retryAfterInstalledAt = Date.now()
-      this._retryAfterUntil = this._retryAfterInstalledAt + outcome.retryAfterMs
-    }
+    this._retryAfter.record(outcome)
     switch (outcome.kind) {
       case 'ok':
         return

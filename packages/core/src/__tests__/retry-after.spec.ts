@@ -1,4 +1,4 @@
-import { parseRetryAfterMs } from '../posthog-core-stateless'
+import { MAX_RETRY_AFTER_MS, parseRetryAfterMs, RetryAfterWindow } from '../utils/retry-after'
 
 describe('parseRetryAfterMs', () => {
   const now = Date.parse('2026-09-01T12:00:00Z')
@@ -47,5 +47,123 @@ describe('parseRetryAfterMs', () => {
 
   it('caps an unbounded value so a bogus header cannot strand a queue', () => {
     expect(parseRetryAfterMs('86400', now)).toBe(5 * 60_000)
+  })
+
+  it('ignores a value that is not a string', () => {
+    // The header comes from injected transport code, so `headers.get` can hand
+    // back anything at all.
+    expect(parseRetryAfterMs(60, now)).toBeUndefined()
+    expect(parseRetryAfterMs(['60'], now)).toBeUndefined()
+    expect(parseRetryAfterMs({}, now)).toBeUndefined()
+  })
+})
+
+describe('RetryAfterWindow', () => {
+  const open = (retryAfterMs: number): RetryAfterWindow => {
+    const window = new RetryAfterWindow()
+    window.record({ kind: 'retry-later', retryAfterMs })
+    return window
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.parse('2026-09-01T12:00:00Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('counts down to the deadline the endpoint named', () => {
+    const window = open(60_000)
+    expect(window.remainingMs()).toBe(60_000)
+
+    vi.setSystemTime(Date.now() + 20_000)
+    expect(window.remainingMs()).toBe(40_000)
+    expect(window.isOpen()).toBe(true)
+  })
+
+  it('does not bring back a window that already ran out', () => {
+    // The deadline is wall clock, so a backward step after the wait was served
+    // would otherwise make the queue wait it out a second time.
+    const window = open(60_000)
+    const installedAt = Date.now()
+
+    vi.setSystemTime(installedAt + 600_000)
+    expect(window.remainingMs()).toBe(0)
+
+    vi.setSystemTime(installedAt + 30_000)
+    expect(window.remainingMs()).toBe(0)
+    expect(window.isOpen()).toBe(false)
+  })
+
+  it('survives a clock correction of a few milliseconds', () => {
+    // NTP nudges the clock backwards by milliseconds routinely; discarding a
+    // five-minute wait over one would send straight back into the rate limit.
+    const window = open(300_000)
+
+    vi.setSystemTime(Date.now() - 1)
+    expect(window.isOpen()).toBe(true)
+  })
+
+  it('discards the window on a real backward clock step', () => {
+    const window = open(300_000)
+
+    vi.setSystemTime(Date.now() - 3_600_000)
+    expect(window.remainingMs()).toBe(0)
+  })
+
+  it('does not extend an open window on a repeated refusal', () => {
+    const window = open(60_000)
+    vi.setSystemTime(Date.now() + 20_000)
+
+    window.record({ kind: 'retry-later', retryAfterMs: 60_000 })
+    expect(window.remainingMs()).toBe(40_000)
+  })
+
+  it('keeps the window when a batch is refused for size', () => {
+    // `too-large` is a verdict on the body's size — the SDK's own or a 413 — so
+    // it carries nothing about the endpoint's rate limit.
+    const window = open(60_000)
+
+    window.record({ kind: 'too-large' })
+    expect(window.remainingMs()).toBe(60_000)
+  })
+
+  it('keeps the window when a retriable failure carries no header', () => {
+    // A network error, a timeout and a header-less 503 are what the outage that
+    // named the wait keeps producing; none of them revokes it.
+    const window = open(300_000)
+    vi.setSystemTime(Date.now() + 10_000)
+
+    window.record({ kind: 'retry-later' })
+    expect(window.remainingMs()).toBe(290_000)
+  })
+
+  it('installs a wait that arrives after the previous one has elapsed', () => {
+    // A send can outlive the window it was made under, and the refusal it comes
+    // back with names a deadline the endpoint still expects to be honored.
+    const window = open(60_000)
+    vi.setSystemTime(Date.now() + 60_000)
+
+    window.record({ kind: 'retry-later', retryAfterMs: 300_000 })
+    expect(window.remainingMs()).toBe(300_000)
+  })
+
+  it('caps a wait longer than the maximum when it is installed', () => {
+    // `retryAfterMs` reaches the window from the exported host interfaces and
+    // export outcomes, so it is not always a value the SDK parsed itself.
+    const window = open(60 * 60_000)
+
+    vi.setSystemTime(Date.now() + MAX_RETRY_AFTER_MS)
+    expect(window.isOpen()).toBe(false)
+  })
+
+  it('ends the window on an outcome that is not a retry', () => {
+    for (const outcome of [{ kind: 'ok' } as const, { kind: 'fatal' } as const]) {
+      const window = open(60_000)
+      window.record(outcome)
+      expect(window.isOpen()).toBe(false)
+    }
   })
 })

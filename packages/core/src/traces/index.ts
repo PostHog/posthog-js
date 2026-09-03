@@ -14,7 +14,7 @@ import { parseTraceparent, sanitizeTracestate } from './traceparent'
 import { assignUserAttributes, resolveStartTime, sanitizeName } from './sanitize'
 import { buildOtlpSpan, buildOtlpTracesPayload, buildTracesResourceAttributes } from './otlp'
 import { isPromise, safeSetTimeout } from '../utils'
-import { MAX_RETRY_AFTER_MS } from '../utils/retry-after'
+import { RetryAfterWindow } from '../utils/retry-after'
 
 // Retriable failures on the same head batch before it is dropped, so a stuck
 // batch cannot pin the queue while fresher spans are refused at the cap. The
@@ -77,13 +77,7 @@ export class PostHogTraces {
   private _lastDropWarningAt = 0
   private _dropReasons = new Set<string>()
   private _consecutiveFlushFailures = 0
-  // Absolute deadline from a `Retry-After` the endpoint sent; cleared on any
-  // other outcome so one throttled response cannot pin the delay for the rest
-  // of the process. A deadline rather than a duration, so a timer armed while
-  // the wait is already part-served counts down the remainder instead of
-  // restarting it.
-  private _retryAfterUntil = 0
-  private _retryAfterInstalledAt = 0
+  private _retryAfter = new RetryAfterWindow()
   private _flushTimerFiresAt = 0
   // Separate from the backoff counter: this one belongs to whatever batch is at
   // the head, and resets whenever that batch is removed or shrunk.
@@ -230,11 +224,12 @@ export class PostHogTraces {
    * A pass reports spans removed — queue length can't stand in, since a send
    * concurrent with an arrival leaves it unchanged.
    *
-   * An open `Retry-After` window does not stop an explicit flush: the caller is
-   * a lifecycle or teardown boundary that has no later attempt, and on a
-   * serverless host the armed timer is unref'd and dies with the isolate. The
-   * window is honoured by not charging such an attempt against the head batch's
-   * retry budget, so the wait costs a request rather than the spans.
+   * An open `Retry-After` window does not stop this: an explicit flush, or one a
+   * host runs to keep a request alive, sends whatever is queued — a serverless
+   * isolate may not be around for the armed timer to fire. The window is honoured
+   * by not charging such an attempt against the head batch's retry budget, so the
+   * wait costs a request rather than the spans. The periodic flush does wait it
+   * out.
    */
   async flush(): Promise<void> {
     for (;;) {
@@ -280,8 +275,7 @@ export class PostHogTraces {
     this._dropReasons.clear()
     this._lastDropWarningAt = 0
     this._consecutiveFlushFailures = 0
-    this._retryAfterUntil = 0
-    this._retryAfterInstalledAt = 0
+    this._retryAfter.reset()
     this._headBatchFailures = 0
   }
 
@@ -415,10 +409,14 @@ export class PostHogTraces {
       this._logger.debug('Span queue notification failed', error)
     }
 
-    // Not while a flush is failing: the queue stays above the batch size for the
-    // whole outage, so every further span end would re-POST immediately and the
-    // retry backoff would never apply.
-    if (this._queue.length >= this._maxExportBatchSize && !this._consecutiveFlushFailures) {
+    // Not while a flush is failing or the endpoint has asked us to wait: the
+    // queue stays above the batch size for the whole outage, so every further
+    // span end would re-POST immediately and the retry backoff would never apply.
+    if (
+      this._queue.length >= this._maxExportBatchSize &&
+      !this._consecutiveFlushFailures &&
+      !this._retryAfter.isOpen()
+    ) {
       this._flushInBackground()
     } else {
       this._armFlushTimerIfQueued()
@@ -514,9 +512,9 @@ export class PostHogTraces {
           continue
         }
 
-        // Read before the send: the outcome overwrites the window, and an attempt
-        // the endpoint had already told us to skip says nothing about this batch.
-        const insideRetryAfterWindow = this._isWaitingOutRetryAfter()
+        // Read before the send, so the retry budget below charges this attempt
+        // against the window it was actually made under.
+        const insideRetryAfterWindow = this._retryAfter.isOpen()
 
         const outcome = await this._instance._sendTracesBatch(
           buildOtlpTracesPayload(spans, resourceAttributes, scopeName, scopeVersion, this._logger)
@@ -527,18 +525,7 @@ export class PostHogTraces {
           return removed
         }
 
-        // Only a retriable outcome carries a wait; anything else ends it, or a
-        // stale one would pin every later flush at the window the server has
-        // moved on from. A refusal from inside an open window does not extend
-        // it: the endpoint is repeating an answer it already gave, and sliding
-        // the deadline on each one means the window never elapses — which would
-        // hold the head batch's retry budget at zero forever.
-        if (outcome.kind !== 'retry-later' || !outcome.retryAfterMs) {
-          this._retryAfterUntil = 0
-        } else if (!insideRetryAfterWindow) {
-          this._retryAfterInstalledAt = Date.now()
-          this._retryAfterUntil = this._retryAfterInstalledAt + outcome.retryAfterMs
-        }
+        this._retryAfter.record(outcome)
 
         if (outcome.kind === 'ok') {
           this._consecutiveFlushFailures = 0
@@ -594,6 +581,11 @@ export class PostHogTraces {
           this._consecutiveFlushFailures = 0
           this._headBatchFailures = 0
           this._recordDrop(size, `the ingestion endpoint failed ${MAX_RETRIES_PER_BATCH} times in a row`)
+          if (this._retryAfter.isOpen()) {
+            // Retiring the batch cleared the failure counters, so carrying on
+            // would send the next one straight away, inside the endpoint's wait.
+            return removed
+          }
           continue
         }
 
@@ -678,22 +670,7 @@ export class PostHogTraces {
     const capped = Math.min(delay, Math.max(MAX_FLUSH_BACKOFF_MS, this._config.flushIntervalMs))
     // `Retry-After` is a floor, not a replacement: never retry before the server
     // asked, and never more often than our own backoff would have.
-    return Math.max(capped, this._retryAfterRemainingMs())
-  }
-
-  private _retryAfterRemainingMs(): number {
-    const now = Date.now()
-    // The deadline is wall clock. A clock that has moved behind the point the
-    // window was installed can no longer measure it, so end the window rather
-    // than hold the queue for the size of the step; the cap bounds the rest.
-    if (now < this._retryAfterInstalledAt) {
-      return 0
-    }
-    return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, this._retryAfterUntil - now))
-  }
-
-  private _isWaitingOutRetryAfter(): boolean {
-    return this._retryAfterRemainingMs() > 0
+    return Math.max(capped, this._retryAfter.remainingMs())
   }
 
   private _clearFlushTimer(): void {

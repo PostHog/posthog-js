@@ -299,6 +299,35 @@ describe('PostHogMetrics', () => {
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(3)
     })
 
+    it('keeps the Retry-After window when a batch is refused for size', async () => {
+      // `too-large` is a verdict on the body's size — the SDK's own or a 413 —
+      // so it says nothing about the endpoint's rate limit. Ending the wait on
+      // it lets the next refusal install a fresh window, pushing the retry out
+      // past the deadline the endpoint actually named — observed here as the
+      // flush landing at 300s rather than at 310s.
+      const outcomes: SendMetricsBatchOutcome[] = [
+        { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 },
+        { kind: 'too-large' },
+        { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 },
+      ]
+      const instance = createMockInstance({
+        _sendMetricsBatch: vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' })),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 1000 }, instance)
+      metrics.count('orders_created', 1)
+      await metrics.flush()
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      await metrics.flush()
+      metrics.count('orders_created', 1)
+      await metrics.flush()
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(3)
+
+      await vi.advanceTimersByTimeAsync(295_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(4)
+    })
+
     it('does not let a host out-pacing the window keep it open forever', async () => {
       // Each refusal sliding the deadline would keep `_nextFlushDelay` pinned at
       // the full window, so the flush cadence would never recover.
@@ -319,7 +348,7 @@ describe('PostHogMetrics', () => {
         await vi.advanceTimersByTimeAsync(5000)
         // Sampled before the flush: a flush that finds the window closed opens
         // a fresh one, so sampling after it would always look open.
-        if ((metrics as any)._retryAfterRemainingMs() === 0) {
+        if ((metrics as any)._retryAfter.remainingMs() === 0) {
           sawWindowClosed = true
         }
         metrics.count('orders_created', 1)

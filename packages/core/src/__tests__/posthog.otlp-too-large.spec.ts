@@ -84,6 +84,17 @@ describe('OTLP bodies over the endpoint limit', () => {
     expect(mocks.fetch).not.toHaveBeenCalled()
   })
 
+  it('does not compress a batch it has already ruled out', async () => {
+    // Gzipping a multi-megabyte body only to throw it away is the whole cost of
+    // the attempt the size check exists to avoid, and the halving loops pay it
+    // again on every step down.
+    const compressPayload = vi.spyOn(posthog as any, 'compressPayload')
+    ;(posthog as any).disableCompression = false
+
+    await expect(posthog._sendTracesBatch(spansOf(3 * 1024 * 1024))).resolves.toEqual({ kind: 'too-large' })
+    expect(compressPayload).not.toHaveBeenCalled()
+  })
+
   it('sends a compressible payload that is inside the limit before compression', async () => {
     vi.spyOn(posthog as any, 'compressPayload').mockResolvedValue(new Uint8Array(1024))
     ;(posthog as any).disableCompression = false

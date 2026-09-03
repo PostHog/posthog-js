@@ -2,7 +2,7 @@ import type { LogAttributeValue } from '@posthog/types'
 import { buildOtlpLogRecord, buildOtlpLogsPayload, buildResourceAttributes } from './logs-utils'
 import { Logger, PostHogPersistedProperty } from '../types'
 import { isArray, raceWithTimeout, safeSetTimeout } from '../utils'
-import { MAX_RETRY_AFTER_MS } from '../utils/retry-after'
+import { RetryAfterWindow } from '../utils/retry-after'
 import type { BufferedLogEntry, CaptureLogOptions, LogSdkContext, LogsHost, ResolvedPostHogLogsConfig } from './types'
 
 // Caps the retry backoff at 2^6 = 64× the flush interval.
@@ -28,12 +28,8 @@ export class PostHogLogs {
   // A batch captures this when it is assembled, so it can tell that the records it is
   // holding no longer correspond to anything queued.
   private _queueGeneration = 0
-  // Absolute deadline from a `Retry-After` the endpoint sent, so every path that
-  // can start a send checks it — not just the retry timer. Cleared on the next
-  // success so one throttled response cannot pin the delay for the rest of the
-  // process.
-  private _retryAfterUntil = 0
-  private _retryAfterInstalledAt = 0
+  // Every path that can start a send checks this, not just the retry timer.
+  private _retryAfter = new RetryAfterWindow()
   private _flushTimerFiresAt = 0
   // Consecutive failed flushes; drives exponential backoff on the retry timer.
   // A successful flush resets it to 0.
@@ -99,8 +95,7 @@ export class PostHogLogs {
     this._intervalLogCount = 0
     this._droppedWarned = false
     this._consecutiveFlushFailures = 0
-    this._retryAfterUntil = 0
-    this._retryAfterInstalledAt = 0
+    this._retryAfter.reset()
     this._maxBatchRecordsPerPost = this._config.maxBatchRecordsPerPost
   }
 
@@ -112,7 +107,7 @@ export class PostHogLogs {
   // network handover.
   onReconnect(): void {
     this._consecutiveFlushFailures = 0
-    if (this._isWaitingOutRetryAfter()) {
+    if (this._retryAfter.isOpen()) {
       return
     }
     this._flushInBackground()
@@ -296,10 +291,6 @@ export class PostHogLogs {
         this._instance.getLibraryVersion()
       )
 
-      // Read before the send: the outcome overwrites the window, and a refusal
-      // the endpoint had already told us to expect must not extend it.
-      const insideRetryAfterWindow = this._isWaitingOutRetryAfter()
-
       const outcome = await this._instance._sendLogsBatch(payload)
 
       if (this._queueGeneration !== generation) {
@@ -318,17 +309,10 @@ export class PostHogLogs {
         continue
       }
 
-      // Only a retriable outcome carries a wait, and it is recorded here rather
-      // than on the background wrapper so an explicit `flush()` — which every
-      // lifecycle hook takes — records and clears it too. A refusal from inside
-      // an open window does not extend it, or a host that flushes on its own
-      // cadence keeps the window from ever elapsing.
-      if (outcome.kind !== 'retry-later' || !outcome.retryAfterMs) {
-        this._retryAfterUntil = 0
-      } else if (!insideRetryAfterWindow) {
-        this._retryAfterInstalledAt = Date.now()
-        this._retryAfterUntil = this._retryAfterInstalledAt + outcome.retryAfterMs
-      }
+      // Recorded here rather than on the background wrapper, so an explicit
+      // `flush()` — which every lifecycle hook takes — records and clears the
+      // window too.
+      this._retryAfter.record(outcome)
 
       if (outcome.kind === 'retry-later') {
         // Transient failure: keep records in the queue for the next flush cycle
@@ -399,7 +383,7 @@ export class PostHogLogs {
     // grow past this up to the eviction cap while the flush is in flight. Not
     // while the endpoint has asked us to wait: the size trigger is the dominant
     // one on a busy host, so sending here would ignore the window entirely.
-    if (queue.length >= this._maxBufferSize && !this._isWaitingOutRetryAfter()) {
+    if (queue.length >= this._maxBufferSize && !this._retryAfter.isOpen()) {
       this._flushInBackground()
       return
     }
@@ -417,7 +401,7 @@ export class PostHogLogs {
     // Floored by any open window: an explicit `flush()` leaves no timer behind,
     // so this is the path a capture takes after one, and the plain interval
     // would land inside the wait the endpoint asked for.
-    this._setFlushTimer(Math.max(this._flushIntervalMs, this._retryAfterRemainingMs()))
+    this._setFlushTimer(Math.max(this._flushIntervalMs, this._retryAfter.remainingMs()))
   }
 
   // Backoff and `Retry-After` are floors, so a timer already armed at the plain
@@ -446,22 +430,7 @@ export class PostHogLogs {
     const exponent = Math.min(Math.max(0, this._consecutiveFlushFailures - 1), MAX_FLUSH_BACKOFF_EXPONENT)
     // `Retry-After` is a floor, not a replacement: never retry before the server
     // asked, and never more often than our own backoff would have.
-    return Math.max(this._flushIntervalMs * 2 ** exponent, this._retryAfterRemainingMs())
-  }
-
-  private _retryAfterRemainingMs(): number {
-    const now = Date.now()
-    // The deadline is wall clock. A clock that has moved behind the point the
-    // window was installed can no longer measure it, so end the window rather
-    // than hold the queue for the size of the step; the cap bounds the rest.
-    if (now < this._retryAfterInstalledAt) {
-      return 0
-    }
-    return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, this._retryAfterUntil - now))
-  }
-
-  private _isWaitingOutRetryAfter(): boolean {
-    return this._retryAfterRemainingMs() > 0
+    return Math.max(this._flushIntervalMs * 2 ** exponent, this._retryAfter.remainingMs())
   }
 
   private _hasQueuedRecords(): boolean {

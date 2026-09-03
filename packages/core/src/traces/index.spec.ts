@@ -1532,6 +1532,61 @@ describe('PostHogTraces', () => {
       expect((traces as any)._queue).toHaveLength(0)
     })
 
+    it('keeps the Retry-After window when a batch is refused for size', async () => {
+      // `too-large` is a verdict on the body's size — the SDK's own or a 413 —
+      // so it says nothing about the endpoint's rate limit and must not end the
+      // wait.
+      let first = true
+      mockInstance._sendTracesBatch.mockImplementation(() => {
+        const outcome: SendTracesBatchOutcome = first
+          ? { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }
+          : { kind: 'too-large' }
+        first = false
+        return Promise.resolve(outcome)
+      })
+      const traces = createTraces({ flushIntervalMs: 1000, maxExportBatchSize: 1 })
+      traces.startSpan('first').end()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      // Batches of one the endpoint cannot accept: the spans are dropped.
+      traces.startSpan('second').end()
+      await traces.flush()
+      const sends = mockInstance._sendTracesBatch.mock.calls.length
+
+      traces.startSpan('third').end()
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(sends)
+    })
+
+    it('stops the drain when it retires a batch inside the window', async () => {
+      // Retiring the head batch clears the failure counters, so the drain would
+      // otherwise carry straight on to the next batch — inside the wait the very
+      // refusal that retired it had just installed. One extra send still lands at
+      // that instant: `flush()`'s outer loop is deliberately not window-aware.
+      const sentAt: number[] = []
+      mockInstance._sendTracesBatch.mockImplementation(() => {
+        sentAt.push(Date.now())
+        return Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 60_000 })
+      })
+      const traces = createTraces({ flushIntervalMs: 1000, maxExportBatchSize: 1 })
+      for (let i = 0; i < 4; i++) {
+        traces.startSpan(`span-${i}`).end()
+      }
+
+      // Every attempt lands after the previous window elapsed, so every refusal
+      // is charged and the eighth retires the head batch.
+      for (let i = 0; i < 12; i++) {
+        await vi.advanceTimersByTimeAsync(61_000)
+      }
+
+      const perInstant = new Map<number, number>()
+      for (const at of sentAt) {
+        perInstant.set(at, (perInstant.get(at) ?? 0) + 1)
+      }
+      expect(Math.max(...perInstant.values())).toBe(2)
+    })
+
     it('does not install a Retry-After that lands after reset', async () => {
       // The generation check must precede the window assignment, or a 429 that
       // settles after teardown pins a wait on the fresh client.

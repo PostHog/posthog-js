@@ -41,7 +41,7 @@ import {
   getEventUuid,
   safeJsonStringify,
 } from './utils'
-import { MAX_RETRY_AFTER_MS } from './utils/retry-after'
+import { parseRetryAfterMs } from './utils/retry-after'
 import { uuidv7 } from './vendor/uuidv7'
 import {
   ErrorPropertiesBuilder,
@@ -51,38 +51,6 @@ import {
   PrimitiveCoercer,
   createDefaultStackParser,
 } from './error-tracking'
-
-/**
- * `Retry-After` as milliseconds from now. The header is either delta-seconds or
- * an HTTP-date; anything else, a date already in the past, or a negative delta
- * yields `undefined` so the caller keeps its own backoff.
- *
- * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
- */
-export function parseRetryAfterMs(value: string | null | undefined, now: number = Date.now()): number | undefined {
-  if (!value) {
-    return undefined
-  }
-  const raw = value.trim()
-  // `headers.get` joins repeated headers with ", ", so a CDN and a load
-  // balancer that each append one yield "60, 120". Read the first, which the
-  // outermost hop set — but only for delta-seconds, since an HTTP-date carries
-  // a comma of its own ("Wed, 21 Oct 2015 07:28:00 GMT").
-  const trimmed = /^\d+\s*,/.test(raw) ? raw.slice(0, raw.indexOf(',')).trim() : raw
-  // Integer seconds. Not parseFloat: "10 minutes" must not read as 10 seconds.
-  const seconds = /^\d+$/.test(trimmed) ? Number(trimmed) : Number.NaN
-  if (!Number.isFinite(seconds) && /^[+-]?[\d.]+$/.test(trimmed)) {
-    // Numeric but not delta-seconds, so it is malformed. `Date.parse` reads
-    // "-5", "+5" and "5.5" as dates in 2001 rather than rejecting them, which
-    // on a device whose clock predates that would surface as a real wait.
-    return undefined
-  }
-  const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(trimmed) - now
-  if (!Number.isFinite(ms) || ms <= 0) {
-    return undefined
-  }
-  return Math.min(ms, MAX_RETRY_AFTER_MS)
-}
 
 class PostHogFetchHttpError extends Error {
   name = 'PostHogFetchHttpError'
@@ -103,7 +71,10 @@ class PostHogFetchHttpError extends Error {
     return this.response.status
   }
 
-  /** The response's `Retry-After` as milliseconds from now, when it sent a usable one. */
+  /**
+   * The response's `Retry-After` as milliseconds from now, when it sent a usable
+   * one, clamped to `MAX_RETRY_AFTER_MS`.
+   */
   get retryAfterMs(): number | undefined {
     try {
       return parseRetryAfterMs(this.response.headers?.get('retry-after'))
@@ -255,24 +226,35 @@ function isRetryableFlagsFetchError(
  * which defaults to 2 MB and is applied to the body after the endpoint
  * decompresses it, not to the compressed bytes on the wire.
  *
- * Used as a floor, never as a promise: the deployment can raise it, and a proxy
- * in front can lower it. A body over this size cannot be accepted, so sending it
- * only buys a 413; one under it is sent and may still be refused.
+ * Applied as a ceiling on what the SDK will put on the wire: a body over it is
+ * reported as too large without a request being made, and a batch of one that
+ * still exceeds it is dropped. The cost is a deployment that raised
+ * `MAX_REQUEST_BODY_SIZE_BYTES` above 2 MB, where such a batch would have been
+ * accepted. A body under the limit is sent and may still be refused, by the
+ * endpoint or by a proxy in front of it with a lower one.
  */
 const OTLP_MAX_BODY_BYTES = 2 * 1024 * 1024
 
-/** A request body's size on the wire. `Buffer` where it exists, `TextEncoder` elsewhere. */
+/**
+ * A request body's size on the wire. `Buffer` where it exists, `TextEncoder`
+ * elsewhere.
+ *
+ * Total by construction: it runs on hosts that define only part of the web
+ * platform — `Blob` in particular is absent on some server runtimes — and a
+ * size that cannot be measured is reported as `0`, leaving the body to be sent
+ * rather than turning a missing global into a failed export.
+ */
 function byteLengthOf(body: string | Blob | Uint8Array): number {
-  if (body instanceof Blob) {
-    return body.size
-  }
-  if (body instanceof Uint8Array) {
-    return body.byteLength
-  }
   try {
-    return Buffer.byteLength(body, STRING_FORMAT)
-  } catch {
+    if (typeof body !== 'string') {
+      return body instanceof Uint8Array ? body.byteLength : body.size
+    }
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.byteLength(body, STRING_FORMAT)
+    }
     return new TextEncoder().encode(body).length
+  } catch {
+    return 0
   }
 }
 
@@ -1736,16 +1718,13 @@ export abstract class PostHogCoreStateless {
     }
 
     const serialized = JSON.stringify(payload)
-    const url =
-      auth === 'bearer'
-        ? `${this.host}/i/v1/${path}`
-        : `${this.host}/i/v1/${path}?token=${encodeURIComponent(this.apiKey)}`
 
-    // Measured before compression: the endpoint decompresses the body and applies
-    // its limit to what comes out, so a payload that gzips small is still refused
-    // on its decompressed size. A batch the endpoint cannot accept is reported
-    // without being sent, so the caller halves it — and ultimately isolates and
-    // drops the one oversized record — without spending a request on each attempt.
+    // Measured on the uncompressed payload: the endpoint decompresses the body
+    // and applies its limit to what comes out, so one that gzips small is still
+    // refused on its decompressed size. A batch the endpoint cannot accept is
+    // reported without being sent — and before it is compressed — so the caller
+    // halves it, and ultimately isolates and drops the one oversized record,
+    // without spending a request or a gzip pass on each attempt.
     const payloadBytes = byteLengthOf(serialized)
     if (payloadBytes > OTLP_MAX_BODY_BYTES) {
       this.logMsgIfDebug(() =>
@@ -1755,6 +1734,11 @@ export abstract class PostHogCoreStateless {
       )
       return { kind: 'too-large' }
     }
+
+    const url =
+      auth === 'bearer'
+        ? `${this.host}/i/v1/${path}`
+        : `${this.host}/i/v1/${path}?token=${encodeURIComponent(this.apiKey)}`
 
     const gzippedPayload = !this.disableCompression ? await this.compressPayload(serialized) : null
     const body = gzippedPayload || serialized
