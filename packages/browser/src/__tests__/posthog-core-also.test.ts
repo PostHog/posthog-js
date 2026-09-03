@@ -1253,7 +1253,7 @@ describe('posthog core', () => {
         })
 
         it('onFeatureFlags should be called immediately with active bootstrapped flags', () => {
-            const callback = jest.fn()
+            const callback = vi.fn()
             const posthog = posthogWith({
                 bootstrap: {
                     featureFlags: { multivariant: 'variant-1', disabled: false },
