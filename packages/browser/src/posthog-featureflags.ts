@@ -340,6 +340,7 @@ export class PostHogFeatureFlags implements Extension {
             this._isCacheStale() ? this._baseEventProperties : this._eventPropertiesWithFlagValues
         )
         this._crossTabPersistenceUnsubscribe = this._instance?.persistence?.onCrossTabFeatureFlagChange(() => {
+            this._clearBootstrapState()
             this._rebuildEventProperties()
             this._fireFeatureFlagsCallbacks()
         })

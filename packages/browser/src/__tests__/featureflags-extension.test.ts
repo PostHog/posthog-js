@@ -119,6 +119,42 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         await posthog.shutdown()
     })
 
+    it('replaces bootstrap flags when a sibling tab persists a fresh snapshot', async () => {
+        const token = uuidv7()
+        const persistenceName = `cross-tab-bootstrap-${token}`
+        const posthog = await createPosthogInstance(token, {
+            advanced_disable_feature_flags: true,
+            persistence: 'localStorage',
+            persistence_name: persistenceName,
+            persistence_save_debounce_ms: 0,
+            bootstrap: {
+                featureFlags: { flag: 'bootstrap' },
+                featureFlagPayloads: { flag: { source: 'bootstrap' } },
+            },
+        })
+        const siblingPersistence = new PostHogPersistence(posthog.config)
+        const callback = vi.fn()
+        posthog.onFeatureFlags(callback)
+        callback.mockClear()
+        const storageKey = `ph_${persistenceName}`
+        const oldValue = window.localStorage.getItem(storageKey)
+
+        siblingPersistence.register({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['flag'],
+            [ENABLED_FEATURE_FLAGS]: { flag: 'fresh-sibling' },
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { flag: { source: 'fresh-sibling' } },
+        })
+        const newValue = window.localStorage.getItem(storageKey)
+        window.dispatchEvent(new StorageEvent('storage', { key: storageKey, oldValue, newValue }))
+
+        expect(posthog.getFeatureFlag('flag', { send_event: false })).toBe('fresh-sibling')
+        expect(posthog.getFeatureFlagPayload('flag')).toEqual({ source: 'fresh-sibling' })
+        expect(callback).toHaveBeenCalledWith(['flag'], { flag: 'fresh-sibling' }, { errorsLoading: undefined })
+
+        siblingPersistence.destroy()
+        await posthog.shutdown()
+    })
+
     it('preserves an explicit enrollment update when sibling state has not been observed yet', async () => {
         const token = uuidv7()
         const persistenceName = `cross-tab-enrollment-${token}`
