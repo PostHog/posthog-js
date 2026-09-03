@@ -9,13 +9,11 @@ const TABLET_UA =
     'Mozilla/5.0 (iPad; CPU OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1'
 
 function setUserAgent(ua: string | undefined) {
-    // @ts-expect-error - overriding readonly export for testing
-    globals['userAgent'] = ua
+    vi.spyOn(globals, 'userAgent', 'get').mockReturnValue(ua)
 }
 
 describe('doesDeviceTypeMatch', () => {
-    const originalUA = globals.userAgent
-    afterEach(() => setUserAgent(originalUA as string | undefined))
+    afterEach(() => vi.restoreAllMocks())
 
     it.each([
         ['no device types', undefined, DESKTOP_UA, true],

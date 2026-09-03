@@ -218,13 +218,13 @@ describe('@posthog/browser extensions', () => {
     it('runs extensions and remote config while gating analytics outputs', async () => {
         const deniedRequests: SentRequest[] = []
         let deniedClient: Client | undefined
-        const deniedSetup = jest.fn(async (client: Client) => {
+        const deniedSetup = vi.fn(async (client: Client) => {
             deniedClient = client
             client.kv.set('private', true)
             await client.capture('denied-output')
             await client.sendRequest('/flags/')
         })
-        const remoteConfigLoader = jest.fn(async () => createRemoteConfig())
+        const remoteConfigLoader = vi.fn(async () => createRemoteConfig())
         const denied = await createPostHog({
             projectToken: 'ph_test',
             storage: false,
@@ -252,7 +252,7 @@ describe('@posthog/browser extensions', () => {
         expect(deniedRequests).toHaveLength(1)
 
         const blockedRequests: SentRequest[] = []
-        const blockedSetup = jest.fn(async (client: Client) => {
+        const blockedSetup = vi.fn(async (client: Client) => {
             await client.capture('bot-output')
             await client.sendRequest('/flags/')
         })
@@ -319,7 +319,7 @@ describe('@posthog/browser extensions', () => {
 
     it('keeps the first configured extension when names are duplicated', async () => {
         const first = flagExtension([])
-        const duplicateSetup = jest.fn()
+        const duplicateSetup = vi.fn()
         const posthog = await createPostHog({
             projectToken: 'ph_test',
             storage: false,
@@ -338,7 +338,7 @@ describe('@posthog/browser extensions', () => {
             marker: true
         }
         const FailingExtension = 'failed' as ExtensionToken<FailingExtension>
-        const dispose = jest.fn()
+        const dispose = vi.fn()
         let resolvedDuringSetup: FailingExtension | undefined
         const failed: FailingExtension = {
             name: FailingExtension,
@@ -366,8 +366,8 @@ describe('@posthog/browser extensions', () => {
 
     it('keeps capture available when configured extension setup fails', async () => {
         const requests: SentRequest[] = []
-        const firstDispose = jest.fn()
-        const failedDispose = jest.fn()
+        const firstDispose = vi.fn()
+        const failedDispose = vi.fn()
         const first: Extension = { name: 'first', setup() {}, dispose: firstDispose }
         const failed: Extension = {
             name: 'failed',
@@ -395,7 +395,7 @@ describe('@posthog/browser extensions', () => {
     })
 
     it('disposes a configured extension once across repeated client disposal', async () => {
-        const dispose = jest.fn(async () => {})
+        const dispose = vi.fn(async () => {})
         const posthog = await createPostHog({
             projectToken: 'ph_test',
             storage: false,

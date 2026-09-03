@@ -8,7 +8,7 @@ import type { Logger } from '../types'
 // change from turning that accounting into a registry of span objects.
 const gc = (globalThis as { gc?: () => void }).gc
 
-// `--expose-gc` is set by the `test:unit` script. A runner that invokes jest
+// `--expose-gc` is set by the `test:unit` script. A runner that invokes vitest
 // directly has no `gc`, and a probe that cannot force a collection proves nothing.
 const itWithGc = gc ? it : process.env.CI ? it : it.skip
 
@@ -32,7 +32,7 @@ describe('live spans', () => {
         _sendTracesBatch: async () => ({ kind: 'ok' }),
       },
       config,
-      { debug: jest.fn(), warn: jest.fn() } as unknown as Logger,
+      { debug: vi.fn(), warn: vi.fn() } as unknown as Logger,
       () => ({}),
       new SyncSpanContextManager()
     )
@@ -41,7 +41,7 @@ describe('live spans', () => {
     if (!gc) {
       throw new Error('Run this suite with NODE_OPTIONS=--expose-gc; see packages/core test:unit')
     }
-    jest.useRealTimers()
+    vi.useRealTimers()
     try {
       const traces = createTraces()
       // Started in their own frame so the handles are unreachable once it returns.
@@ -58,7 +58,7 @@ describe('live spans', () => {
       const alive = refs.filter((ref) => ref.deref() !== undefined).length
       expect(alive).toBeLessThan(100)
     } finally {
-      jest.useFakeTimers()
+      vi.useFakeTimers()
     }
   })
 })

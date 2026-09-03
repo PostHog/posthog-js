@@ -48,10 +48,10 @@ describe('PostHogSpan', () => {
       const start = Date.now()
       withMonotonic([1000, 1025], () => {
         const span = createSpan({ startTime: start })
-        jest.spyOn(Date, 'now').mockReturnValue(start - 60_000)
+        vi.spyOn(Date, 'now').mockReturnValue(start - 60_000)
         span.end()
       })
-      jest.spyOn(Date, 'now').mockRestore()
+      vi.spyOn(Date, 'now').mockRestore()
 
       expect(ended[0].endTime - ended[0].startTime).toBe(25)
     })

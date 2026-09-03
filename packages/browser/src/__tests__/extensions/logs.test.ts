@@ -8,17 +8,17 @@ describe('logs entrypoint', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
     // Console capture routes through the core logs API; assert against that seam.
-    let mockEmit: jest.Mock
+    let mockEmit: vi.Mock
 
     beforeEach(() => {
-        jest.resetModules()
-        jest.clearAllMocks()
+        vi.resetModules()
+        vi.clearAllMocks()
 
         // Store original console
         originalConsole = { ...console }
 
         // Set up capture spy
-        mockEmit = jest.fn()
+        mockEmit = vi.fn()
 
         // Mock PostHog instance
         mockPostHog = {
@@ -27,15 +27,15 @@ describe('logs entrypoint', () => {
                 token: 'test-token',
             },
             sessionManager: {
-                checkAndGetSessionAndWindowId: jest.fn(() => ({
+                checkAndGetSessionAndWindowId: vi.fn(() => ({
                     sessionId: 'session-123',
                     windowId: 'window-456',
                     sessionStartTimestamp: new Date('2023-01-01T10:00:00Z').getTime(),
                     lastActivityTimestamp: new Date('2023-01-01T10:30:00Z').getTime(),
                 })),
             },
-            get_distinct_id: jest.fn(() => 'user-123'),
-            is_capturing: jest.fn(() => true),
+            get_distinct_id: vi.fn(() => 'user-123'),
+            is_capturing: vi.fn(() => true),
             version: '1.392.0',
             logs: { captureLog: mockEmit, captureConsoleLog: mockEmit, le: mockEmit },
         } as unknown as PostHog
@@ -51,11 +51,11 @@ describe('logs entrypoint', () => {
 
         Object.defineProperty(assignableWindow, 'console', {
             value: {
-                log: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn(),
-                debug: jest.fn(),
+                log: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+                debug: vi.fn(),
             },
             writable: true,
         })
@@ -79,7 +79,7 @@ describe('logs entrypoint', () => {
         })
 
         it('should preserve existing PostHog extensions', async () => {
-            const existingExtension = jest.fn()
+            const existingExtension = vi.fn()
             assignableWindow.__PosthogExtensions__ = { logs: { initializeLogs: undefined } } as any
             ;(assignableWindow.__PosthogExtensions__ as any).existingExtension = existingExtension
 
@@ -170,14 +170,14 @@ describe('logs entrypoint', () => {
             'should not select a capture method for unsupported PostHog version %s',
             (version) => {
                 const captures = {
-                    captureLog: jest.fn(),
-                    captureConsoleLog: jest.fn(),
-                    le: jest.fn(),
-                    de: jest.fn(),
-                    he: jest.fn(),
-                    ui: jest.fn(),
-                    ci: jest.fn(),
-                    vi: jest.fn(),
+                    captureLog: vi.fn(),
+                    captureConsoleLog: vi.fn(),
+                    le: vi.fn(),
+                    de: vi.fn(),
+                    he: vi.fn(),
+                    ui: vi.fn(),
+                    ci: vi.fn(),
+                    vi: vi.fn(),
                 }
                 const legacyPostHog = {
                     ...mockPostHog,
@@ -196,11 +196,11 @@ describe('logs entrypoint', () => {
         )
 
         it('should resolve the console capture path from a shared client', () => {
-            const captureLog = jest.fn()
-            const captureConsoleLog = jest.fn()
+            const captureLog = vi.fn()
+            const captureConsoleLog = vi.fn()
             const client = {
                 canCapture: true,
-                getExtension: jest.fn(() => ({ captureLog, captureConsoleLog })),
+                getExtension: vi.fn(() => ({ captureLog, captureConsoleLog })),
             } as unknown as Client
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(client)
@@ -219,12 +219,12 @@ describe('logs entrypoint', () => {
         })
 
         it('should skip extension lookup for empty and re-entrant console calls', () => {
-            const captureConsoleLog = jest.fn(() => {
+            const captureConsoleLog = vi.fn(() => {
                 assignableWindow.console.warn('nested call')
             })
             const client = {
                 canCapture: true,
-                getExtension: jest.fn(() => ({ captureConsoleLog })),
+                getExtension: vi.fn(() => ({ captureConsoleLog })),
             } as unknown as Client
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(client)
@@ -241,7 +241,7 @@ describe('logs entrypoint', () => {
         it('should not resolve the logs extension when a shared client cannot capture', () => {
             const client = {
                 canCapture: false,
-                getExtension: jest.fn(() => mockPostHog.logs),
+                getExtension: vi.fn(() => mockPostHog.logs),
             } as unknown as Client
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(client)
@@ -296,10 +296,10 @@ describe('logs entrypoint', () => {
         })
 
         it('should still call originalConsoleLog when no arguments are provided', () => {
-            // The originalConsoleLog (the jest.fn() mock installed before initializeLogs
+            // The originalConsoleLog (the vi.fn() mock installed before initializeLogs
             // wrapped it) must always run, even when capture is skipped due to empty args.
             // We recover the original by re-installing a fresh mock and re-wrapping.
-            const originalLog = jest.fn()
+            const originalLog = vi.fn()
             assignableWindow.console.log = originalLog
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -641,15 +641,15 @@ describe('logs entrypoint', () => {
             ['1.419.0', 'vi'],
             ['1.419.2', 'vi'],
         ] as const)('should route PostHog %s through the historical %s console method', (version, expectedName) => {
-            const captureLog = jest.fn()
-            const currentConsoleCapture = jest.fn()
+            const captureLog = vi.fn()
+            const currentConsoleCapture = vi.fn()
             const historicalCaptures = {
-                le: jest.fn(),
-                de: jest.fn(),
-                he: jest.fn(),
-                ui: jest.fn(),
-                ci: jest.fn(),
-                vi: jest.fn(),
+                le: vi.fn(),
+                de: vi.fn(),
+                he: vi.fn(),
+                ui: vi.fn(),
+                ci: vi.fn(),
+                vi: vi.fn(),
             }
             mockPostHog.version = version
             mockPostHog.logs = {

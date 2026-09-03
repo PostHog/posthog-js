@@ -5,7 +5,6 @@ import {
   EmbedContentParameters,
   EmbedContentResponse,
   Part,
-  GenerateContentResponseUsageMetadata,
 } from '@google/genai'
 import type { GoogleGenAIOptions } from '@google/genai'
 import { PostHog } from 'posthog-node'
@@ -24,6 +23,7 @@ import { captureAiGeneration } from '../captureAiGeneration'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
 import { isString } from '../typeGuards'
+import { mapGeminiUsage } from './usage'
 
 interface MonitoringGeminiConfig extends GoogleGenAIOptions {
   posthog: PostHog
@@ -73,21 +73,7 @@ export class WrappedModels {
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
         httpStatus: 200,
-        usage: {
-          inputTokens: metadata?.promptTokenCount ?? 0,
-          outputTokens: metadata?.candidatesTokenCount ?? 0,
-          reasoningTokens:
-            (metadata as GenerateContentResponseUsageMetadata & { thoughtsTokenCount?: number })?.thoughtsTokenCount ??
-            0,
-          cacheReadInputTokens: metadata?.cachedContentTokenCount ?? 0,
-          // Gemini counts cachedContentTokenCount inside promptTokenCount, so declare the
-          // accounting model rather than leaving ingestion to infer it. Under explicit
-          // context caching the two counts come from separate measurements and can disagree
-          // by a few percent, which makes inference from the counts alone unreliable.
-          ...(metadata?.cachedContentTokenCount ? { cacheReportingExclusive: false } : {}),
-          webSearchCount: calculateGoogleWebSearchCount(response),
-          rawUsage: metadata,
-        },
+        usage: mapGeminiUsage(metadata, { webSearchCount: calculateGoogleWebSearchCount(response) }),
         stopReason: finishReason ?? undefined,
         tools: availableTools,
       })
@@ -189,20 +175,7 @@ export class WrappedModels {
 
         // Update usage metadata - handle both old and new field names
         if (chunk.usageMetadata) {
-          const metadata = chunk.usageMetadata as GenerateContentResponseUsageMetadata
-          usage = {
-            inputTokens: metadata.promptTokenCount ?? 0,
-            outputTokens: metadata.candidatesTokenCount ?? 0,
-            reasoningTokens:
-              (metadata as GenerateContentResponseUsageMetadata & { thoughtsTokenCount?: number }).thoughtsTokenCount ??
-              0,
-            cacheReadInputTokens: metadata.cachedContentTokenCount ?? 0,
-            // See the non-streaming path: Gemini counts cachedContentTokenCount inside
-            // promptTokenCount, so the accounting model is declared rather than inferred.
-            ...(metadata.cachedContentTokenCount ? { cacheReportingExclusive: false } : {}),
-            webSearchCount: usage.webSearchCount,
-            rawUsage: metadata,
-          }
+          usage = mapGeminiUsage(chunk.usageMetadata, { webSearchCount: usage.webSearchCount })
         }
         yield chunk
       }

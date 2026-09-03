@@ -19,7 +19,7 @@ import {
     isBlockedUA,
     NavigatorUAData,
 } from '@posthog/browser-common/utils/blocked-uas'
-import { expect } from '@jest/globals'
+import { expect } from 'vitest'
 
 import { _base64Encode } from '@posthog/browser-common/utils/encode-utils'
 import { getPersonPropertiesHash, propertyComparisons } from '@posthog/browser-common/utils/property-utils'
@@ -490,7 +490,7 @@ describe('utils', () => {
         })
 
         it('logs deprecation warning when using old field', () => {
-            const mockLogger = { warn: jest.fn() }
+            const mockLogger = { warn: vi.fn() }
             migrateConfigField({ oldField: 'oldValue' }, 'newField', 'oldField', 'default', mockLogger)
             expect(mockLogger.warn).toHaveBeenCalledWith(
                 expect.stringContaining("Config field 'oldField' is deprecated")

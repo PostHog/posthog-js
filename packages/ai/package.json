@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "8.9.3",
+  "version": "8.10.0",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -13,18 +13,19 @@
   "license": "MIT",
   "scripts": {
     "clean": "rimraf dist",
-    "test:unit": "jest && pnpm test:module-load",
+    "test:unit": "vitest run && pnpm test:module-load",
     "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs",
-    "lint": "eslint src tests",
-    "lint:fix": "eslint src tests --fix",
-    "build": "rollup -c",
-    "dev": "rollup -c --watch",
+    "lint": "oxlint --report-unused-disable-directives-severity error src tests",
+    "lint:fix": "oxlint --report-unused-disable-directives-severity error src tests --fix",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
     "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.15",
     "@anthropic-ai/sdk": ">=0.112.3 <0.121.0",
+    "@google/adk": "^2.0.0",
     "@google/genai": "^1.52.0",
     "@langchain/core": "^1.2.9",
     "openai": "^6.49.0",
@@ -36,13 +37,14 @@
     "@opentelemetry/sdk-trace-base": "^2.0.0",
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
-    "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",
-    "@types/jest": "catalog:",
-    "jest": "catalog:",
     "langchain": "^1.5.10",
     "node-fetch": "^3.3.2",
-    "posthog-node": "workspace:^"
+    "posthog-node": "workspace:^",
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
   },
   "keywords": [
     "posthog",
@@ -64,6 +66,7 @@
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=0.112.3 <0.121.0",
+    "@google/adk": "^2.0.0",
     "@google/genai": "^1.52.0",
     "@langchain/core": "^1.2.3",
     "openai": "^6.48.0",
@@ -77,6 +80,9 @@
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "@google/adk": {
       "optional": true
     },
     "@google/genai": {
@@ -155,6 +161,11 @@
       "require": "./dist/openai-agents/index.cjs",
       "import": "./dist/openai-agents/index.mjs",
       "types": "./dist/openai-agents/index.d.ts"
+    },
+    "./adk": {
+      "require": "./dist/adk/index.cjs",
+      "import": "./dist/adk/index.mjs",
+      "types": "./dist/adk/index.d.ts"
     }
   },
   "directories": {

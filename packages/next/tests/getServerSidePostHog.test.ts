@@ -1,12 +1,17 @@
+import { PostHog } from 'posthog-node'
 import { getServerSidePostHog } from '../src/pages/getServerSidePostHog'
 
-const mockEnterContext = jest.fn()
-const mockWithContext = jest.fn((_, fn) => fn())
-const mockGetAllFlags = jest.fn()
-const mockGetAllFlagsAndPayloads = jest.fn()
+vi.mock('@vercel/functions', () => ({}))
 
-jest.mock('posthog-node', () => ({
-    PostHog: jest.fn().mockImplementation(() => ({
+const { mockEnterContext, mockWithContext, mockGetAllFlags, mockGetAllFlagsAndPayloads } = vi.hoisted(() => ({
+    mockEnterContext: vi.fn(),
+    mockWithContext: vi.fn((_, fn) => fn()),
+    mockGetAllFlags: vi.fn(),
+    mockGetAllFlagsAndPayloads: vi.fn(),
+}))
+
+vi.mock('posthog-node', () => ({
+    PostHog: vi.fn().mockImplementation(() => ({
         enterContext: mockEnterContext,
         withContext: mockWithContext,
         getAllFlags: mockGetAllFlags,
@@ -32,12 +37,11 @@ function createMockContext(cookies: Record<string, string> = {}, extraHeaders: R
 
 describe('getServerSidePostHog', () => {
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         delete process.env.NEXT_PUBLIC_POSTHOG_KEY
     })
 
     it('returns a posthog client', async () => {
-        const { PostHog } = require('posthog-node')
         const ctx = createMockContext({
             ph_phc_test123_posthog: JSON.stringify({
                 distinct_id: 'user_abc',
@@ -98,8 +102,7 @@ describe('getServerSidePostHog', () => {
     })
 
     it('warns and returns a disabled client when no apiKey provided and env not set', async () => {
-        const { PostHog } = require('posthog-node')
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         const ctx = createMockContext({})
 
         const posthog = await getServerSidePostHog(ctx)
@@ -116,7 +119,6 @@ describe('getServerSidePostHog', () => {
     })
 
     it('trims apiKey and host before creating the node client', async () => {
-        const { PostHog } = require('posthog-node')
         const ctx = createMockContext({})
 
         await getServerSidePostHog(ctx, '  phc_test123\n', { host: '  https://custom.posthog.com/\t ' })
@@ -127,7 +129,6 @@ describe('getServerSidePostHog', () => {
     })
 
     it('defaults host when it is omitted', async () => {
-        const { PostHog } = require('posthog-node')
         const ctx = createMockContext({})
 
         await getServerSidePostHog(ctx, 'phc_default_host_test')

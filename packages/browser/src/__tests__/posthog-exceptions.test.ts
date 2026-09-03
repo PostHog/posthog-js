@@ -31,7 +31,7 @@ function createSuppressionRule(
 }
 
 describe('PostHogExceptions', () => {
-    const captureMock = jest.fn().mockReturnValue({ uuid: 'test-uuid', event: '$exception', properties: {} })
+    const captureMock = vi.fn().mockReturnValue({ uuid: 'test-uuid', event: '$exception', properties: {} })
     let posthog: PostHog
     let exceptions: PostHogExceptions
     let config: PostHogConfig
@@ -487,7 +487,7 @@ describe('PostHogExceptions', () => {
                 getAttachable: () => {
                     throw new Error('buffer read failed')
                 },
-                clear: jest.fn(),
+                clear: vi.fn(),
             } as any
 
             expect(() => exceptions.sendExceptionEvent({ custom_property: true })).not.toThrow()

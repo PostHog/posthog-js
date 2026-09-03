@@ -29,7 +29,11 @@ export interface CaptureAiGenerationOptions {
   /** Maps to `$ai_model_parameters` (temperature, max_tokens, top_p, …). */
   modelParameters?: Record<string, unknown>
 
-  baseURL?: string
+  /**
+   * `null` explicitly signals no base URL and omits `$ai_base_url` from the event.
+   * `undefined`/omitted keeps the existing `''` default for backward compatibility.
+   */
+  baseURL?: string | null
   httpStatus?: number
   /** Wall-clock latency in seconds. */
   latency?: number
@@ -78,6 +82,8 @@ export interface CaptureAiGenerationOptions {
 
   /** Awaits delivery instead of batching. Useful in serverless environments. */
   captureImmediate?: boolean
+  /** Invoked when generation telemetry cannot be captured. Errors thrown by this callback are ignored. */
+  onError?: (error: unknown) => void
 }
 
 /**
@@ -208,7 +214,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       ...(options.latency !== undefined ? { $ai_latency: options.latency } : {}),
       ...(options.timeToFirstToken !== undefined ? { $ai_time_to_first_token: options.timeToFirstToken } : {}),
       $ai_trace_id: traceId,
-      $ai_base_url: options.baseURL ?? '',
+      ...(options.baseURL === null ? {} : { $ai_base_url: options.baseURL ?? '' }),
       ...options.properties,
       $ai_tokens_source: getTokensSource(options.properties),
       ...(options.distinctId ? {} : { $process_person_profile: false }),
@@ -236,6 +242,11 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     }
   } catch (error) {
     // Telemetry failures must never affect the instrumented provider call.
+    try {
+      options.onError?.(error)
+    } catch {
+      // Error reporting must not affect the instrumented provider call either.
+    }
     console.warn('[PostHog AI] Failed to capture generation telemetry:', error)
   }
 }
