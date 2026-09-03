@@ -1,12 +1,12 @@
-/** @jest-environment jsdom */
+/** @vitest-environment jsdom */
 import React from 'react'
 import { cleanup, render, screen } from '@testing-library/react'
 
-// Minimal react-native shim — jest-expo's full preset chain pulls in
+// Minimal react-native shim — vi-expo's full preset chain pulls in
 // TurboModule code that explodes under jsdom. Styles are flattened onto the
 // DOM node so the resolved padding is readable from the rendered element.
-jest.mock('react-native', () => {
-  const RealReact = jest.requireActual('react')
+vi.mock('react-native', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   const flattenStyle = (style: any) => (Array.isArray(style) ? Object.assign({}, ...style) : style)
   const Box = ({ children, style, ...rest }: any) =>
     RealReact.createElement('div', { ...rest, style: flattenStyle(style) }, children)
@@ -17,7 +17,7 @@ jest.mock('react-native', () => {
     View: Box,
     Text: Box,
     TouchableOpacity: Pressable,
-    Linking: { openURL: jest.fn() },
+    Linking: { openURL: vi.fn() },
     StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
   }
 })
@@ -43,7 +43,7 @@ describe('survey headers', () => {
         appearance={defaultSurveyAppearance}
         header={LONG_HEADER}
         description=""
-        onStart={jest.fn()}
+        onStart={vi.fn()}
       />,
     ],
     [
@@ -53,7 +53,7 @@ describe('survey headers', () => {
         appearance={defaultSurveyAppearance}
         header={LONG_HEADER}
         description=""
-        onClose={jest.fn()}
+        onClose={vi.fn()}
         isModal={true}
       />,
     ],
@@ -67,9 +67,7 @@ describe('survey headers', () => {
   it('reserves room for a headerless intro description', () => {
     const description = 'A long intro description that wraps before it reaches the top-right close button'
 
-    render(
-      <IntroMessage appearance={defaultSurveyAppearance} header="" description={description} onStart={jest.fn()} />
-    )
+    render(<IntroMessage appearance={defaultSurveyAppearance} header="" description={description} onStart={vi.fn()} />)
 
     const introDescription = screen.getByText(description) as HTMLElement
     expect(introDescription.parentElement?.style.paddingRight).toBe(`${closeButtonSize}px`)

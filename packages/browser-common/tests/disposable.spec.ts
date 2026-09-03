@@ -3,7 +3,7 @@ import { createDisposable } from '../src/disposable'
 
 describe('createDisposable', () => {
     it('invokes teardown at most once and discards its result', () => {
-        const teardown = jest.fn(() => 'ignored')
+        const teardown = vi.fn(() => 'ignored')
         const disposable = createDisposable(teardown)
 
         expect(disposable.dispose()).toBeUndefined()
@@ -12,7 +12,7 @@ describe('createDisposable', () => {
     })
 
     it('contains rejected asynchronous teardown without awaiting it', async () => {
-        const teardown = jest.fn(async () => {
+        const teardown = vi.fn(async () => {
             throw new Error('async teardown failed')
         })
         const disposable = createDisposable(teardown)
@@ -24,7 +24,7 @@ describe('createDisposable', () => {
     })
 
     it('does not retry teardown after it throws', () => {
-        const teardown = jest.fn(() => {
+        const teardown = vi.fn(() => {
             throw new Error('failed')
         })
         const disposable = createDisposable(teardown)

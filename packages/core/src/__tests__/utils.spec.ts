@@ -38,23 +38,23 @@ describe('utils', () => {
   })
   describe('raceWithTimeout', () => {
     it('returns the promise value and clears the timeout when the promise resolves first', async () => {
-      const onTimeout = jest.fn()
+      const onTimeout = vi.fn()
 
       await expect(raceWithTimeout(Promise.resolve('done'), 1000, onTimeout)).resolves.toBe('done')
 
       expect(onTimeout).not.toHaveBeenCalled()
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
 
     it('resolves and invokes the callback when the timeout wins', async () => {
-      const onTimeout = jest.fn()
+      const onTimeout = vi.fn()
       const result = raceWithTimeout(new Promise<never>(() => {}), 1000, onTimeout)
 
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
 
       await expect(result).resolves.toBeUndefined()
       expect(onTimeout).toHaveBeenCalledTimes(1)
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
 
     it('rejects when the timeout callback throws', async () => {
@@ -64,20 +64,20 @@ describe('utils', () => {
       })
       const expectation = expect(result).rejects.toBe(error)
 
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
 
       await expectation
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
 
     it('preserves a promise rejection and clears the timeout', async () => {
       const error = new Error('failed')
-      const onTimeout = jest.fn()
+      const onTimeout = vi.fn()
 
       await expect(raceWithTimeout(Promise.reject(error), 1000, onTimeout)).rejects.toBe(error)
 
       expect(onTimeout).not.toHaveBeenCalled()
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
   })
   describe('currentTimestamp', () => {
@@ -87,7 +87,7 @@ describe('utils', () => {
   })
   describe('currentISOTime', () => {
     it('should get the iso time', () => {
-      jest.setSystemTime(new Date('2022-01-01'))
+      vi.setSystemTime(new Date('2022-01-01'))
       expect(currentISOTime()).toEqual('2022-01-01T00:00:00.000Z')
     })
   })

@@ -1,5 +1,5 @@
 /**
- * @jest-environment jsdom
+ * @vitest-environment jsdom
  *
  * Smoke tests for the per-runtime barrels resolved by the `browser`
  * exports condition. Asserts that client-only barrels expose the
@@ -9,19 +9,19 @@
  * bundle in consumer apps.
  */
 
-jest.mock('next/router.js', () => ({ useRouter: jest.fn() }))
-jest.mock('next/navigation.js', () => ({
-    usePathname: jest.fn(),
-    useSearchParams: jest.fn(),
+vi.mock('next/router.js', () => ({ useRouter: vi.fn() }))
+vi.mock('next/navigation.js', () => ({
+    usePathname: vi.fn(),
+    useSearchParams: vi.fn(),
 }))
-jest.mock('@posthog/react', () => ({
+vi.mock('@posthog/react', () => ({
     PostHogContext: { Provider: ({ children }: { children: unknown }) => children },
-    usePostHog: jest.fn(),
-    useFeatureFlagResult: jest.fn(),
-    useActiveFeatureFlags: jest.fn(),
-    PostHogFeature: jest.fn(() => null),
+    usePostHog: vi.fn(),
+    useFeatureFlagResult: vi.fn(),
+    useActiveFeatureFlags: vi.fn(),
+    PostHogFeature: vi.fn(() => null),
 }))
-jest.mock('posthog-js', () => ({ __esModule: true, default: { __loaded: false, init: jest.fn() } }))
+vi.mock('posthog-js', () => ({ __esModule: true, default: { __loaded: false, init: vi.fn() } }))
 
 import * as pagesClient from '../src/pages.client'
 import * as indexClient from '../src/index.client'

@@ -1,5 +1,5 @@
 /**
- * @jest-environment node
+ * @vitest-environment node
  */
 /* eslint-disable @typescript-eslint/no-require-imports */
 
@@ -16,8 +16,8 @@ const browserListUrl = 'https://api.browserstack.com/automate/browsers.json'
 function response(status, payload) {
     return {
         status,
-        body: { destroy: jest.fn() },
-        json: jest.fn(async () => payload),
+        body: { destroy: vi.fn() },
+        json: vi.fn(async () => payload),
     }
 }
 
@@ -27,7 +27,7 @@ describe('browserstack-node-fetch-patch', () => {
     beforeEach(() => {
         process.env.BROWSERSTACK_API_MAX_ATTEMPTS = '3'
         process.env.BROWSERSTACK_API_BACKOFF_MS = '0'
-        warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+        warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     })
 
     afterEach(() => {
@@ -39,7 +39,7 @@ describe('browserstack-node-fetch-patch', () => {
     it.each([408, 409, 425, 429, 500, 503])('retries retryable HTTP status %s', async (status) => {
         const firstResponse = response(status, { status: 13 })
         const secondResponse = response(200, { ok: true })
-        const fetch = jest.fn(async () => (fetch.mock.calls.length === 1 ? firstResponse : secondResponse))
+        const fetch = vi.fn(async () => (fetch.mock.calls.length === 1 ? firstResponse : secondResponse))
 
         const patchedFetch = patchNodeFetch(fetch)
         const patchedResponse = await patchedFetch(browserListUrl)
@@ -51,7 +51,7 @@ describe('browserstack-node-fetch-patch', () => {
 
     it('retries retryable transport errors', async () => {
         const error = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })
-        const fetch = jest
+        const fetch = vi
             .fn()
             .mockRejectedValueOnce(error)
             .mockResolvedValueOnce(response(200, { ok: true }))
@@ -68,7 +68,7 @@ describe('browserstack-node-fetch-patch', () => {
         })
         const firstResponse = response(200, { unused: true })
         firstResponse.json.mockRejectedValueOnce(bodyError)
-        const fetch = jest
+        const fetch = vi
             .fn()
             .mockResolvedValueOnce(firstResponse)
             .mockResolvedValueOnce(response(200, { recovered: true }))
@@ -80,7 +80,7 @@ describe('browserstack-node-fetch-patch', () => {
     })
 
     it('retries BrowserStack setup payload errors for transient server statuses', async () => {
-        const fetch = jest
+        const fetch = vi
             .fn()
             .mockResolvedValueOnce(response(200, { status: 13, value: { message: 'session not created' } }))
             .mockResolvedValueOnce(response(200, { status: 0, sessionId: 'session-id' }))
@@ -93,7 +93,7 @@ describe('browserstack-node-fetch-patch', () => {
 
     it('does not retry deterministic BrowserStack setup payload errors', async () => {
         const payload = { status: 7, value: { message: 'no such element' } }
-        const fetch = jest.fn().mockResolvedValueOnce(response(200, payload))
+        const fetch = vi.fn().mockResolvedValueOnce(response(200, payload))
 
         const patchedResponse = await patchNodeFetch(fetch)(setupUrl, { method: 'POST' })
 
@@ -103,7 +103,7 @@ describe('browserstack-node-fetch-patch', () => {
 
     it('falls back to default backoff when the backoff override is invalid', async () => {
         process.env.BROWSERSTACK_API_BACKOFF_MS = 'abc,def'
-        const fetch = jest
+        const fetch = vi
             .fn()
             .mockResolvedValueOnce(response(500, { status: 13 }))
             .mockResolvedValueOnce(response(200, { ok: true }))
@@ -123,7 +123,7 @@ describe('browserstack-node-fetch-patch', () => {
     })
 
     it('reports actual attempts for non-retryable setup failures', async () => {
-        const fetch = jest.fn().mockRejectedValueOnce(new Error('certificate failed'))
+        const fetch = vi.fn().mockRejectedValueOnce(new Error('certificate failed'))
 
         await expect(patchNodeFetch(fetch)(setupUrl, { method: 'POST' })).rejects.toThrow(
             'POSTHOG_BROWSERSTACK_SETUP_FAILURE: BrowserStack request failed after 1 attempts'
@@ -134,7 +134,7 @@ describe('browserstack-node-fetch-patch', () => {
     it('reports actual attempts for non-retryable body read failures', async () => {
         const firstResponse = response(200, { unused: true })
         firstResponse.json.mockRejectedValueOnce(new Error('not json'))
-        const fetch = jest.fn().mockResolvedValueOnce(firstResponse)
+        const fetch = vi.fn().mockResolvedValueOnce(firstResponse)
 
         const patchedResponse = await patchNodeFetch(fetch)(setupUrl, { method: 'POST' })
 
@@ -145,7 +145,7 @@ describe('browserstack-node-fetch-patch', () => {
     })
 
     it('keeps non-setup BrowserStack API failures distinct', async () => {
-        const fetch = jest.fn().mockRejectedValueOnce(new Error('certificate failed'))
+        const fetch = vi.fn().mockRejectedValueOnce(new Error('certificate failed'))
 
         await expect(
             patchNodeFetch(fetch)('https://hub-cloud.browserstack.com/wd/hub/session/session-id/url')

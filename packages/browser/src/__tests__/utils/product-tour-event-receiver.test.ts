@@ -13,7 +13,7 @@ import { createMockPostHog, createMockConfig } from '../helpers/posthog-instance
 describe('product-tour-event-receiver', () => {
     let config: PostHogConfig
     let instance: PostHog
-    let mockAddCaptureHook: jest.Mock
+    let mockAddCaptureHook: vi.Mock
 
     const makeTour = (overrides: Partial<ProductTour> = {}): ProductTour =>
         ({
@@ -39,7 +39,7 @@ describe('product-tour-event-receiver', () => {
             config,
             persistence: new PostHogPersistence(config),
             _addCaptureHook: mockAddCaptureHook,
-            productTours: { getProductTours: jest.fn((callback) => callback([tour])) },
+            productTours: { getProductTours: vi.fn((callback) => callback([tour])) },
         } as unknown as Partial<PostHog>)
         const receiver = new ProductTourEventReceiver(instance)
         receiver.register([tour])
@@ -48,7 +48,7 @@ describe('product-tour-event-receiver', () => {
     }
 
     beforeEach(() => {
-        mockAddCaptureHook = jest.fn()
+        mockAddCaptureHook = vi.fn()
     })
 
     afterEach(() => {
@@ -62,7 +62,7 @@ describe('product-tour-event-receiver', () => {
             conditions: { events: { values: [{ name: 'second_trigger' }] } },
         })
         const { receiver, hook } = setup(firstTour)
-        ;(instance.productTours.getProductTours as jest.Mock).mockImplementation((callback) =>
+        ;(instance.productTours.getProductTours as vi.Mock).mockImplementation((callback) =>
             callback([firstTour, secondTour])
         )
 

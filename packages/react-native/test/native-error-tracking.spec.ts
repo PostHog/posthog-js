@@ -2,38 +2,39 @@ import { PostHog } from '../src/posthog-rn'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { setupFetch, waitForExpect, waitForNativePluginEvaluation } from './test-utils'
 
-jest.mock('../src/optional/OptionalPlugin', () => ({
+vi.mock('../src/optional/OptionalPlugin', () => ({
+  OptionalReactNativePluginVersion: undefined,
   OptionalReactNativePlugin: {
-    start: jest.fn(() => Promise.resolve()),
-    setup: jest.fn(() => Promise.resolve()),
-    startSession: jest.fn(() => Promise.resolve()),
-    endSession: jest.fn(() => Promise.resolve()),
-    isEnabled: jest.fn(() => Promise.resolve(false)),
-    identify: jest.fn(() => Promise.resolve()),
-    startRecording: jest.fn(() => Promise.resolve()),
-    stopRecording: jest.fn(() => Promise.resolve()),
-    addExceptionStep: jest.fn(() => Promise.resolve()),
+    start: vi.fn(() => Promise.resolve()),
+    setup: vi.fn(() => Promise.resolve()),
+    startSession: vi.fn(() => Promise.resolve()),
+    endSession: vi.fn(() => Promise.resolve()),
+    isEnabled: vi.fn(() => Promise.resolve(false)),
+    identify: vi.fn(() => Promise.resolve()),
+    startRecording: vi.fn(() => Promise.resolve()),
+    stopRecording: vi.fn(() => Promise.resolve()),
+    addExceptionStep: vi.fn(() => Promise.resolve()),
   },
 }))
 
-jest.useRealTimers()
+vi.useRealTimers()
 
 const mockPlugin = OptionalReactNativePlugin as unknown as {
-  start: jest.Mock
-  setup: jest.Mock
-  startSession: jest.Mock
-  endSession: jest.Mock
-  isEnabled: jest.Mock
-  identify: jest.Mock
-  startRecording: jest.Mock
-  stopRecording: jest.Mock
-  addExceptionStep: jest.Mock
+  start: vi.Mock
+  setup: vi.Mock
+  startSession: vi.Mock
+  endSession: vi.Mock
+  isEnabled: vi.Mock
+  identify: vi.Mock
+  startRecording: vi.Mock
+  stopRecording: vi.Mock
+  addExceptionStep: vi.Mock
 }
 
 const resetMockPlugin = (): void => {
   mockPlugin.start.mockImplementation(() => Promise.resolve())
   // `setup` may have been deleted by the legacy-plugin test; restore it if so.
-  mockPlugin.setup = mockPlugin.setup ?? jest.fn()
+  mockPlugin.setup = mockPlugin.setup ?? vi.fn()
   mockPlugin.setup.mockImplementation(() => Promise.resolve())
   mockPlugin.startSession.mockImplementation(() => Promise.resolve())
   mockPlugin.endSession.mockImplementation(() => Promise.resolve())
@@ -47,7 +48,7 @@ const resetMockPlugin = (): void => {
 describe('native error tracking', () => {
   beforeEach(() => {
     resetMockPlugin()
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     setupFetch()
   })
 
@@ -117,11 +118,11 @@ describe('native error tracking', () => {
 
   it('with the legacy plugin (no setup), starts replay via start() and does not report native crash capture as started', async () => {
     // Emulates posthog-react-native-session-replay: the legacy package has no setup().
-    delete (mockPlugin as { setup?: jest.Mock }).setup
+    delete (mockPlugin as { setup?: vi.Mock }).setup
     // _logger only emits when debug is on (isDebug = whether debug() was called), so spy on the
     // console and enable debug before init runs.
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
-    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     const posthog = new PostHog('test-token', {
       persistence: 'memory',
@@ -142,9 +143,9 @@ describe('native error tracking', () => {
     expect(warnSpy.mock.calls.flat().join(' ')).toContain('Native error tracking is not available')
     expect(logSpy.mock.calls.flat().join(' ')).not.toContain('Native error tracking started')
 
+    await posthog.shutdown()
     warnSpy.mockRestore()
     logSpy.mockRestore()
-    await posthog.shutdown()
   })
 
   it('routes to error-tracking-only setup() when session replay is gated off by a linked flag', async () => {
@@ -208,7 +209,7 @@ describe('native error tracking', () => {
   it('pauses and resumes recording across linked-flag changes without re-running setup() when error tracking is on', async () => {
     // Controllable /flags response: the linked flag starts true, flips later.
     let recFlagValue = true
-    ;(globalThis as any).window.fetch = jest.fn(async (url: unknown) => {
+    ;(globalThis as any).window.fetch = vi.fn(async (url: unknown) => {
       const res = String(url).includes('flags')
         ? {
             featureFlags: { 'rec-flag': recFlagValue },

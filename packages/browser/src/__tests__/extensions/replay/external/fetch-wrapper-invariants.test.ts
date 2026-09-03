@@ -1,5 +1,5 @@
 /**
- * @jest-environment node
+ * @vitest-environment node
  */
 
 import { getRecordNetworkPlugin } from '../../../../extensions/replay/external/network-plugin'
@@ -46,8 +46,8 @@ function setupWrappedFetch(
 describe('fetch wrapper', () => {
     // Use fake timers to prevent getRequestPerformanceEntry retry timeouts
     // from keeping the Jest worker alive after tests complete.
-    beforeEach(() => jest.useFakeTimers())
-    afterEach(() => jest.useRealTimers())
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
 
     describe('does not throw for valid inputs', () => {
         let wrappedFetch: typeof fetch
@@ -459,7 +459,7 @@ describe('fetch wrapper', () => {
         // playwright/mocked/session-recording/csrf-headers-preserved.spec.ts
         // is authoritative for the REAL composed wrapper behaviour (it
         // boots posthog-js end-to-end with tracing_headers and session
-        // recording network capture both enabled). The jest test
+        // recording network capture both enabled). The vi test
         // here only proves the structural invariant that two `new
         // Request(url, init)`-style wrappers compose without dropping
         // headers, irrespective of what each one adds.

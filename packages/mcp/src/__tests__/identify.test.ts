@@ -43,7 +43,7 @@ describe('identify option', () => {
       distinctId: 'user-1',
       properties: { name: 'Alice', email: 'alice@example.com' },
     }
-    const identify = jest.fn(async (request: any, extra: any) => {
+    const identify = vi.fn(async (request: any, extra: any) => {
       expect(request).toBeDefined()
       expect(extra).toBeDefined()
       return identity
@@ -65,7 +65,7 @@ describe('identify option', () => {
   it('calls identify on every tool invocation but only publishes an event when the identity changes', async () => {
     const capture = new EventCapture()
     await capture.start()
-    const identify = jest.fn(async () => ({ distinctId: 'user-1', properties: { name: 'Stable' } }))
+    const identify = vi.fn(async () => ({ distinctId: 'user-1', properties: { name: 'Stable' } }))
 
     instrument(server, fakePostHog(), { identify })
 
@@ -88,7 +88,7 @@ describe('identify option', () => {
     // Same distinctId, but the plan changes on the second call and then holds.
     const plans = ['free', 'pro', 'pro']
     let call = 0
-    const identify = jest.fn(async () => ({ distinctId: 'user-1', properties: { plan: plans[call++] } }))
+    const identify = vi.fn(async () => ({ distinctId: 'user-1', properties: { plan: plans[call++] } }))
 
     instrument(server, fakePostHog(), { identify })
 
@@ -111,7 +111,7 @@ describe('identify option', () => {
     const capture = new EventCapture()
     await capture.start()
 
-    const identify = jest.fn(async () => ({ distinctId: 'late-user', properties: { name: 'Late' } }))
+    const identify = vi.fn(async () => ({ distinctId: 'late-user', properties: { name: 'Late' } }))
     instrument(server, fakePostHog(), { context: true, identify })
 
     server.tool!(
@@ -243,7 +243,7 @@ describe('identify option', () => {
   it('identifies tools/list', async () => {
     const capture = new EventCapture()
     await capture.start()
-    const identify = jest.fn(async () => ({
+    const identify = vi.fn(async () => ({
       distinctId: 'list-user',
       properties: { name: 'List Alice' },
     }))

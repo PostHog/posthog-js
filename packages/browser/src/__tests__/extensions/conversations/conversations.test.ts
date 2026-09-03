@@ -13,17 +13,17 @@ describe('PostHogConversations', () => {
     beforeEach(() => {
         // Clear localStorage
         localStorage.clear()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
 
         // Setup mock manager
         mockManager = {
-            show: jest.fn(),
-            hide: jest.fn(),
-            reset: jest.fn(),
-            isVisible: jest.fn().mockReturnValue(true),
-            requestRestoreLink: jest.fn(),
-            restoreFromToken: jest.fn(),
-            restoreFromUrlToken: jest.fn(),
+            show: vi.fn(),
+            hide: vi.fn(),
+            reset: vi.fn(),
+            isVisible: vi.fn().mockReturnValue(true),
+            requestRestoreLink: vi.fn(),
+            restoreFromToken: vi.fn(),
+            restoreFromUrlToken: vi.fn(),
         } as ConversationsManager
 
         // Setup mock PostHog instance
@@ -40,13 +40,13 @@ describe('PostHogConversations', () => {
                 },
             }),
             requestRouter: {
-                endpointFor: jest.fn().mockReturnValue('https://test.posthog.com/api/test'),
+                endpointFor: vi.fn().mockReturnValue('https://test.posthog.com/api/test'),
             } as any,
             consent: {
-                isOptedOut: jest.fn().mockReturnValue(false),
+                isOptedOut: vi.fn().mockReturnValue(false),
             } as any,
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
-            on: jest.fn().mockReturnValue(jest.fn()), // Returns unsubscribe function
+            get_distinct_id: vi.fn().mockReturnValue('test-distinct-id'),
+            on: vi.fn().mockReturnValue(vi.fn()), // Returns unsubscribe function
         })
 
         // Setup PostHog extensions
@@ -54,9 +54,9 @@ describe('PostHogConversations', () => {
         // loadExternalDependency callback will set it (simulating script load)
         assignableWindow.__PosthogExtensions__ = {
             initConversations: undefined,
-            loadExternalDependency: jest.fn((_instance, _path, callback) => {
+            loadExternalDependency: vi.fn((_instance, _path, callback) => {
                 // Simulate script loading by setting initConversations
-                assignableWindow.__PosthogExtensions__!.initConversations = jest.fn().mockReturnValue(mockManager)
+                assignableWindow.__PosthogExtensions__!.initConversations = vi.fn().mockReturnValue(mockManager)
                 callback(null)
             }),
         }
@@ -212,7 +212,7 @@ describe('PostHogConversations', () => {
         })
 
         it('returns load_failed when the lazy bundle fails to load', () => {
-            assignableWindow.__PosthogExtensions__!.loadExternalDependency = jest.fn((_instance, _path, callback) => {
+            assignableWindow.__PosthogExtensions__!.loadExternalDependency = vi.fn((_instance, _path, callback) => {
                 callback(new Error('blocked'))
             })
             conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
@@ -224,7 +224,7 @@ describe('PostHogConversations', () => {
         it('returns initializing while retrying after a load failure', () => {
             let attempt = 0
             let finishRetry: (() => void) | undefined
-            assignableWindow.__PosthogExtensions__!.loadExternalDependency = jest.fn((_instance, _path, callback) => {
+            assignableWindow.__PosthogExtensions__!.loadExternalDependency = vi.fn((_instance, _path, callback) => {
                 attempt++
                 if (attempt === 1) {
                     callback(new Error('blocked'))
@@ -275,7 +275,7 @@ describe('PostHogConversations', () => {
 
         it('should not load in cookieless mode without consent', () => {
             mockPostHog.config.cookieless_mode = 'always'
-            ;(mockPostHog.consent.isOptedOut as jest.Mock).mockReturnValue(true)
+            ;(mockPostHog.consent.isOptedOut as vi.Mock).mockReturnValue(true)
 
             conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
 
@@ -324,7 +324,7 @@ describe('PostHogConversations', () => {
 
         it('should use already loaded conversations code if available', () => {
             assignableWindow.__PosthogExtensions__ = {
-                initConversations: jest.fn().mockReturnValue(mockManager),
+                initConversations: vi.fn().mockReturnValue(mockManager),
             }
 
             conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
@@ -337,7 +337,7 @@ describe('PostHogConversations', () => {
 
         it('should handle load error gracefully', () => {
             assignableWindow.__PosthogExtensions__ = {
-                loadExternalDependency: jest.fn((_instance, _path, callback) => {
+                loadExternalDependency: vi.fn((_instance, _path, callback) => {
                     callback('Load failed')
                 }),
             }
@@ -436,7 +436,7 @@ describe('PostHogConversations', () => {
 
         beforeEach(() => {
             assignableWindow.__PosthogExtensions__ = {
-                initConversations: jest.fn((config, posthog) => {
+                initConversations: vi.fn((config, posthog) => {
                     capturedPosthog = posthog
                     return mockManager
                 }),
@@ -502,9 +502,9 @@ describe('PostHogConversations', () => {
             conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             expect(conversations.isAvailable()).toBe(true)
-            ;(mockManager.isVisible as jest.Mock).mockReturnValue(true)
+            ;(mockManager.isVisible as vi.Mock).mockReturnValue(true)
             expect(conversations.isVisible()).toBe(true)
-            ;(mockManager.isVisible as jest.Mock).mockReturnValue(false)
+            ;(mockManager.isVisible as vi.Mock).mockReturnValue(false)
             expect(conversations.isVisible()).toBe(false)
         })
     })
@@ -537,7 +537,7 @@ describe('PostHogConversations', () => {
                 writable: true,
             })
 
-            const mockInit = jest.fn().mockReturnValue(mockManager)
+            const mockInit = vi.fn().mockReturnValue(mockManager)
             assignableWindow.__PosthogExtensions__ = {
                 initConversations: mockInit,
             }
@@ -571,18 +571,18 @@ describe('PostHogConversations', () => {
                     props: {},
                 }),
                 requestRouter: {
-                    endpointFor: jest.fn().mockReturnValue('https://test.posthog.com/api/test'),
+                    endpointFor: vi.fn().mockReturnValue('https://test.posthog.com/api/test'),
                 } as any,
                 consent: {
-                    isOptedOut: jest.fn().mockReturnValue(false),
+                    isOptedOut: vi.fn().mockReturnValue(false),
                 } as any,
-                get_distinct_id: jest.fn().mockReturnValue('identified-user-123'),
-                on: jest.fn().mockReturnValue(jest.fn()),
-                capture: jest.fn(),
-                _isIdentified: jest.fn().mockReturnValue(true),
+                get_distinct_id: vi.fn().mockReturnValue('identified-user-123'),
+                on: vi.fn().mockReturnValue(vi.fn()),
+                capture: vi.fn(),
+                _isIdentified: vi.fn().mockReturnValue(true),
             })
 
-            const mockInit = jest.fn().mockReturnValue(mockManager)
+            const mockInit = vi.fn().mockReturnValue(mockManager)
             assignableWindow.__PosthogExtensions__ = {
                 initConversations: mockInit,
             }
