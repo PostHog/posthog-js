@@ -5,6 +5,7 @@ import { start, waitForSessionRecordingToStart } from './utils/setup'
 const POST_URL = '/__posthog_fetch_post_body_test'
 const POST_BODY = 'some string'
 const ORIGINAL_HEADER = 'original-header-value'
+const HEADERLESS_RESPONSE_URL = '/__posthog_headerless_response_test'
 
 async function mockPostEndpoint(context: BrowserContext) {
     let capturedRequest: { headers: Record<string, string>; body: string | null } | undefined
@@ -77,6 +78,20 @@ async function installRequestBodyForwardingFetchWrapper(page: Page) {
             return nativeFetch(url, init)
         }
     })
+}
+
+async function installHeaderlessResponseFetchWrapper(page: Page) {
+    await page.addInitScript((headerlessResponseUrl) => {
+        const nativeFetch = window.fetch
+
+        window.fetch = (url, init) => {
+            const requestUrl = url instanceof Request ? url.url : url.toString()
+            if (new URL(requestUrl, window.location.href).pathname === headerlessResponseUrl) {
+                return Promise.resolve({ status: 0, marker: 'headerless-response' } as unknown as Response)
+            }
+            return nativeFetch(url, init)
+        }
+    }, HEADERLESS_RESPONSE_URL)
 }
 
 // Older Safari/WebKit versions can throw `NotSupportedError: ReadableStream uploading is not supported`
@@ -163,5 +178,51 @@ test.describe('fetch wrappers preserve POST string bodies', () => {
             body: POST_BODY,
             headers: expect.objectContaining({ 'x-original-header': ORIGINAL_HEADER }),
         })
+    })
+})
+
+test.describe('fetch wrappers preserve downstream responses', () => {
+    test('returns a response-like value without headers', async ({ page, context }) => {
+        await installHeaderlessResponseFetchWrapper(page)
+
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/*recorder.js*'],
+            action: async () => {
+                await start(
+                    {
+                        options: {
+                            session_recording: {
+                                compress_events: true,
+                                recordHeaders: true,
+                            },
+                        },
+                        flagsResponseOverrides: {
+                            sessionRecording: { endpoint: '/ses/' },
+                            capturePerformance: true,
+                            autocapture_opt_out: true,
+                        },
+                        url: '/playground/cypress/index.html',
+                    },
+                    page,
+                    context
+                )
+            },
+        })
+        await waitForSessionRecordingToStart(page)
+
+        const result = await page.evaluate(async (url) => {
+            try {
+                const response = await fetch(url)
+                return {
+                    ok: true,
+                    status: response.status,
+                    marker: (response as unknown as { marker: string }).marker,
+                }
+            } catch (error) {
+                return { ok: false, message: (error as Error).message }
+            }
+        }, HEADERLESS_RESPONSE_URL)
+
+        expect(result).toEqual({ ok: true, status: 0, marker: 'headerless-response' })
     })
 })

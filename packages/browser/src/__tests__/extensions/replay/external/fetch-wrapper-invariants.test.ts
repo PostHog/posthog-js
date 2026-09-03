@@ -193,6 +193,18 @@ describe('fetch wrapper', () => {
             expect(await response.text()).toBe('test body')
             expect(await clone.text()).toBe('test body')
         })
+
+        // Regression test for https://github.com/PostHog/posthog-js/issues/1459
+        it('returns a downstream response without headers', async () => {
+            const responseWithoutHeaders = { status: 0 } as Response
+            const { wrappedFetch, cleanup } = setupWrappedFetch(async () => responseWithoutHeaders)
+
+            try {
+                await expect(wrappedFetch('https://example.com/api')).resolves.toBe(responseWithoutHeaders)
+            } finally {
+                cleanup()
+            }
+        })
     })
 
     describe('downstream wrapper compatibility', () => {
