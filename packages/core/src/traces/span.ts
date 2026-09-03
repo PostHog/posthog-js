@@ -566,7 +566,7 @@ export function truncateAttributeValue(value: SpanAttributeValue, maxLength: num
 
 /**
  * Walks under the same depth cap, node budget and ancestor set as
- * `encodeAnyValue`. Depth alone does not bound this: a value whose children
+ * `encodeAnyValue`, charging a node per value so the two cost the same. Depth alone does not bound this: a value whose children
  * point back at their siblings costs `fanout ** depth` visits, which is minutes
  * of synchronous work inside the caller's own `setAttribute` call.
  *
@@ -579,14 +579,16 @@ function truncateValue(
   state: TruncateState,
   depth: number
 ): SpanAttributeValue {
-  // A string is a leaf and costs no traversal, so it is bounded before the
-  // budget is consulted. Charging it would let one large collection spend the
-  // budget and leave every string after it on the wire at full length.
-  if (typeof value === 'string') {
-    return truncateString(value, maxLength)
-  }
   if (value === null || typeof value !== 'object') {
-    return value
+    // Charged like every other value, as the encoder charges it. A shared
+    // subtree is re-walked once per path that reaches it, so leaving the leaves
+    // free lets one value cost `budget * items` string copies where the encoder
+    // would have stopped at `budget`.
+    if (state.remainingNodes <= 0) {
+      return value
+    }
+    state.remainingNodes--
+    return typeof value === 'string' ? truncateString(value, maxLength) : value
   }
   if (state.ancestors.has(value)) {
     // The marker the encoder would produce, not the value itself. Handing the
@@ -596,8 +598,8 @@ function truncateValue(
     return CIRCULAR_VALUE
   }
   // Unlike a cycle, these two are bounded by the encoder as well: it stops at
-  // the same depth and charges every value, strings included, so its budget is
-  // spent no later than this one's.
+  // the same depth and charges every value the same way, so its budget is spent
+  // no later than this one's and it marks whatever this walk left unbounded.
   if (state.remainingNodes <= 0 || depth >= MAX_JSON_SAFE_VALUE_DEPTH) {
     return value
   }

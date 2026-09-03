@@ -1,9 +1,9 @@
-import { NOOP_SPAN, PostHogSpan, describeError } from './span'
+import { NOOP_SPAN, PostHogSpan, describeError, truncateAttributeValue } from './span'
 import type { SpanInit } from './span'
 import type { SpanRecord } from './types'
 import type { Logger } from '../types'
 import { createMockLogger } from '@/testing'
-import { MAX_JSON_SAFE_VALUE_ITEMS } from '../utils/json-utils'
+import { MAX_JSON_SAFE_VALUE_ITEMS, MAX_JSON_SAFE_VALUE_NODES } from '../utils/json-utils'
 
 const TRACE_ID = '4bf92f3577b34da6a3ce929d0e0e4736'
 const SPAN_ID = '00f067aa0ba902b7'
@@ -368,6 +368,38 @@ describe('PostHogSpan', () => {
       span.end()
 
       expect(ended[0].attributes.rows).toEqual([{ body: 'abcd' }, ['abcd']])
+    })
+
+    it('bounds the work a shared subtree costs, not just a cyclic one', () => {
+      // Siblings pointing at one object are re-walked once per path, so a DAG
+      // ten levels wide reaches the same leaves ten million times. Only the node
+      // budget stops it, and a leaf that skips the charge does not spend it.
+      const leaf: string[] = []
+      for (let i = 0; i < 1000; i++) {
+        leaf.push('x'.repeat(2000))
+      }
+      const mid = Array.from({ length: 1000 }, () => leaf)
+      const shared = Array.from({ length: 10 }, () => mid)
+
+      const bounded = truncateAttributeValue(shared, 8)
+
+      // Counting what the walk shortened, not what the result can reach: once
+      // the budget is gone the original is handed back by reference, so the
+      // untouched tail of the graph is still reachable through it.
+      const cap = MAX_JSON_SAFE_VALUE_NODES * 2
+      let shortened = 0
+      const stack: unknown[] = [bounded]
+      while (stack.length && shortened <= cap) {
+        const value = stack.pop()
+        if (typeof value === 'string') {
+          if (value.length === 8) {
+            shortened++
+          }
+        } else if (Array.isArray(value) && value !== leaf && value !== mid) {
+          stack.push(...value)
+        }
+      }
+      expect(shortened).toBeLessThanOrEqual(cap)
     })
 
     it('terminates on a self-referencing value', () => {
