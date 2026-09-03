@@ -21,6 +21,7 @@ import type {
   Span,
   SpanAttributes,
   SpanKind,
+  SpanRecord as HookSpanRecord,
   SpanStatusCode,
   TracesConfig,
 } from '@posthog/types'
@@ -68,23 +69,18 @@ export interface SpanEventRecord {
  * A completed span in plain, pre-encoding form: strings for kind and status, a
  * plain attribute map, ms-epoch timestamps.
  */
-export interface SpanRecord {
-  traceId: string
-  spanId: string
-  parentSpanId?: string
+/**
+ * A finished span as the SDK carries it, which is the hook-visible record plus
+ * the fields no hook may rewrite. Declaring only the additions keeps the shared
+ * half from drifting; a field added here rather than to the public record is a
+ * field `beforeSpanSend` cannot see, and so cannot corrupt.
+ */
+export interface SpanRecord extends HookSpanRecord {
   traceState?: string
   /** The W3C trace-flags byte this span propagates, e.g. `01` sampled. */
   traceFlags: string
   /** True when the parent came from a `traceparent` header rather than a local handle. */
   parentIsRemote: boolean
-  name: string
-  kind: SpanKind
-  status?: { code: SpanStatusCode; message?: string }
-  attributes: SpanAttributes
-  events: SpanEventRecord[]
-  /** ms epoch. */
-  startTime: number
-  endTime: number
   droppedAttributesCount?: number
   droppedEventsCount?: number
 }
