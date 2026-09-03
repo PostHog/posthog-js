@@ -7,7 +7,7 @@
             "dependsOn": ["^build"],
             "inputs": [
                 "src/**",
-                "tsconfig.json",
+                "tsconfig*.json",
                 "package.json",
                 ".babelrc",
                 "babel.config.js",
@@ -18,7 +18,7 @@
                 "terser-mangled-names.json",
                 "tsdown.config.mts",
                 "tsdown.config.ts",
-                "rslib.config.mjs",
+                "rslib.config.*",
                 "vite.config.ts",
                 "vite.config.js"
             ],
@@ -53,12 +53,12 @@
         },
         "@posthog/browser-common#build": {
             "dependsOn": ["^build"],
-            "inputs": ["src/**", "tsconfig.json", "tsconfig.build.json", "package.json", "rslib.config.ts"],
+            "inputs": ["src/**", "tsconfig*.json", "package.json", "rslib.config.*"],
             "outputs": ["dist/**"]
         },
         "@posthog/browser#build": {
             "dependsOn": ["^build"],
-            "inputs": ["src/**", "tsconfig.json", "tsconfig.build.json", "package.json", "rslib.config.ts"],
+            "inputs": ["src/**", "tsconfig*.json", "package.json", "rslib.config.*"],
             "outputs": ["dist/**"]
         },
         "lint": {
