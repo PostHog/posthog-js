@@ -7,16 +7,16 @@ import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../../constants'
 import { RemoteConfig } from '../../types'
 
 describe('DeadClicksAutocapture', () => {
-    let mockStart: jest.Mock
+    let mockStart: vi.Mock
 
     beforeEach(() => {
-        mockStart = jest.fn()
+        mockStart = vi.fn()
         assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
         assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = () => ({
             start: mockStart,
-            stop: jest.fn(),
+            stop: vi.fn(),
         })
-        assignableWindow.__PosthogExtensions__.loadExternalDependency = jest
+        assignableWindow.__PosthogExtensions__.loadExternalDependency = vi
             .fn()
             .mockImplementation(() => (_ph: PostHog, _name: string, cb: (err?: Error) => void) => {
                 cb()
@@ -48,7 +48,7 @@ describe('DeadClicksAutocapture', () => {
     it('should call loadExternalDependency if script is not already loaded', async () => {
         assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = undefined
 
-        const mockLoader = assignableWindow.__PosthogExtensions__.loadExternalDependency as jest.Mock
+        const mockLoader = assignableWindow.__PosthogExtensions__.loadExternalDependency as vi.Mock
         mockLoader.mockClear()
 
         const instance = await createPosthogInstance(uuidv7(), { capture_dead_clicks: true })
@@ -59,7 +59,7 @@ describe('DeadClicksAutocapture', () => {
 
     it('should not call loadExternalDependency if script is already loaded', async () => {
         const instance = await createPosthogInstance(uuidv7(), { capture_dead_clicks: true })
-        const mockLoader = assignableWindow.__PosthogExtensions__.loadExternalDependency as jest.Mock
+        const mockLoader = assignableWindow.__PosthogExtensions__.loadExternalDependency as vi.Mock
         mockLoader.mockClear()
 
         instance.deadClicksAutocapture.startIfEnabledOrStop()
@@ -83,13 +83,13 @@ describe('DeadClicksAutocapture', () => {
     })
 
     it('disables dead swipes only for consumers that provide their own capture handler (heatmaps path)', async () => {
-        const mockInit = jest.fn().mockReturnValue({ start: mockStart, stop: jest.fn() })
+        const mockInit = vi.fn().mockReturnValue({ start: mockStart, stop: vi.fn() })
         assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = mockInit
         const instance = await createPosthogInstance(uuidv7(), { capture_dead_clicks: true })
 
         mockInit.mockClear()
         new DeadClicksAutocapture(instance, () => true)
-        new DeadClicksAutocapture(instance, () => true, jest.fn())
+        new DeadClicksAutocapture(instance, () => true, vi.fn())
 
         expect(mockInit.mock.calls[0][1].capture_dead_swipes).toBeUndefined()
         expect(mockInit.mock.calls[1][1].capture_dead_swipes).toBe(false)
@@ -111,7 +111,7 @@ describe('DeadClicksAutocapture', () => {
         expect(dca.lazyLoadedDeadClicksAutocapture).toBeDefined()
         expect(mockStart).toHaveBeenCalled()
 
-        const mockStop = dca.lazyLoadedDeadClicksAutocapture?.stop as jest.Mock
+        const mockStop = dca.lazyLoadedDeadClicksAutocapture?.stop as vi.Mock
 
         dca.onRemoteConfig({ ok: true, config: { captureDeadClicks: false } as any })
 

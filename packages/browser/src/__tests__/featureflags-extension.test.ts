@@ -18,20 +18,20 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 describe('PostHogFeatureFlags extension lifecycle', () => {
     beforeEach(() => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
     })
 
     afterEach(() => {
-        jest.useRealTimers()
-        jest.restoreAllMocks()
+        vi.useRealTimers()
+        vi.restoreAllMocks()
     })
 
     it('has a side-effect-free constructor and disposes setup listeners idempotently', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
-        const addWindowListener = jest.spyOn(window, 'addEventListener')
-        const removeWindowListener = jest.spyOn(window, 'removeEventListener')
-        const addDocumentListener = jest.spyOn(document, 'addEventListener')
-        const removeDocumentListener = jest.spyOn(document, 'removeEventListener')
+        const addWindowListener = vi.spyOn(window, 'addEventListener')
+        const removeWindowListener = vi.spyOn(window, 'removeEventListener')
+        const addDocumentListener = vi.spyOn(document, 'addEventListener')
+        const removeDocumentListener = vi.spyOn(document, 'removeEventListener')
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
 
         expect(addWindowListener).not.toHaveBeenCalled()
@@ -65,7 +65,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         })
         posthog.persistence?.register({ [ENABLED_FEATURE_FLAGS]: { 'early-access-flag': false } })
         const siblingPersistence = new PostHogPersistence(posthog.config)
-        const callback = jest.fn()
+        const callback = vi.fn()
         posthog.onFeatureFlags(callback)
         const storageKey = `ph_${persistenceName}`
         const oldValue = window.localStorage.getItem(storageKey)
@@ -99,7 +99,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             { 'early-access-flag': true },
             { errorsLoading: undefined }
         )
-        const capture = jest.spyOn(posthog, 'capture').mockImplementation()
+        const capture = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
         posthog.getFeatureFlag('early-access-flag')
         expect(capture).toHaveBeenCalledWith(
             '$feature_flag_called',
@@ -288,9 +288,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it('does not start when the internal refresh interval is undefined', async () => {
             const featureFlags = await setupFeatureFlagsWithInternalInterval()
-            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
-            jest.advanceTimersByTime(defaultRefreshIntervalMs)
+            vi.advanceTimersByTime(defaultRefreshIntervalMs)
             document.dispatchEvent(new Event('visibilitychange'))
 
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
@@ -302,7 +302,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             config.remote_config_refresh_interval_ms = refreshIntervalMs
             featureFlags = new PostHogFeatureFlags(posthog)
             featureFlags.updateConfig(config, true)
-            const addDocumentListener = jest.spyOn(document, 'addEventListener')
+            const addDocumentListener = vi.spyOn(document, 'addEventListener')
 
             await featureFlags.setup(posthog._getBrowserClientAdapter())
 
@@ -324,9 +324,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it.each([0, -1])('does not start when the public refresh interval is %s', async (interval) => {
             const featureFlags = await setupFeatureFlags(interval)
-            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
-            jest.advanceTimersByTime(defaultRefreshIntervalMs)
+            vi.advanceTimersByTime(defaultRefreshIntervalMs)
             document.dispatchEvent(new Event('visibilitychange'))
 
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
@@ -334,11 +334,11 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it('uses the existing five-minute default when the public option is undefined', async () => {
             const featureFlags = await setupFeatureFlags()
-            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
-            jest.advanceTimersByTime(defaultRefreshIntervalMs - 1)
+            vi.advanceTimersByTime(defaultRefreshIntervalMs - 1)
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
-            jest.advanceTimersByTime(1)
+            vi.advanceTimersByTime(1)
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
         })
 
@@ -348,9 +348,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                 loaded: (instance) => instance.set_config({ remote_config_refresh_interval_ms: refreshIntervalMs }),
             })
             featureFlags = posthog.featureFlags
-            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
-            jest.advanceTimersByTime(refreshIntervalMs)
+            vi.advanceTimersByTime(refreshIntervalMs)
 
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
             await posthog.shutdown()
@@ -362,22 +362,22 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                 remote_config_refresh_interval_ms: 0,
             })
             featureFlags = posthog.featureFlags
-            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
-            jest.advanceTimersByTime(defaultRefreshIntervalMs)
+            vi.advanceTimersByTime(defaultRefreshIntervalMs)
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
 
             posthog.set_config({ remote_config_refresh_interval_ms: refreshIntervalMs })
-            jest.advanceTimersByTime(refreshIntervalMs / 2)
+            vi.advanceTimersByTime(refreshIntervalMs / 2)
             posthog.set_config({ remote_config_refresh_interval_ms: refreshIntervalMs * 2 })
 
-            jest.advanceTimersByTime(refreshIntervalMs * 2 - 1)
+            vi.advanceTimersByTime(refreshIntervalMs * 2 - 1)
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
-            jest.advanceTimersByTime(1)
+            vi.advanceTimersByTime(1)
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
 
             posthog.set_config({ remote_config_refresh_interval_ms: 0 })
-            jest.advanceTimersByTime(refreshIntervalMs * 2)
+            vi.advanceTimersByTime(refreshIntervalMs * 2)
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
             await posthog.shutdown()
         })
@@ -386,7 +386,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
             const client = posthog._getBrowserClientAdapter()
             let resolveInitialization: (() => void) | undefined
-            jest.spyOn(client.kv, 'initialize').mockReturnValue(
+            vi.spyOn(client.kv, 'initialize').mockReturnValue(
                 new Promise<void>((resolve) => {
                     resolveInitialization = resolve
                 })
@@ -396,32 +396,32 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             const config = defaultConfig()
             config.remote_config_refresh_interval_ms = refreshIntervalMs
             featureFlags.updateConfig(config, false)
-            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             resolveInitialization?.()
             await setup
-            jest.advanceTimersByTime(refreshIntervalMs)
+            vi.advanceTimersByTime(refreshIntervalMs)
 
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
         })
 
         it('reloads flags on the configured interval while visible', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
-            jest.advanceTimersByTime(refreshIntervalMs - 1)
+            vi.advanceTimersByTime(refreshIntervalMs - 1)
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
 
-            jest.advanceTimersByTime(1)
+            vi.advanceTimersByTime(1)
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
         })
 
         it('reloads due flags when a hidden page becomes visible', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             setVisibilityState('hidden')
-            jest.advanceTimersByTime(refreshIntervalMs)
+            vi.advanceTimersByTime(refreshIntervalMs)
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
 
             setVisibilityState('visible')
@@ -431,26 +431,26 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it('starts a full interval after a visibility refresh', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             setVisibilityState('hidden')
-            jest.advanceTimersByTime(refreshIntervalMs + refreshIntervalMs / 2)
+            vi.advanceTimersByTime(refreshIntervalMs + refreshIntervalMs / 2)
             setVisibilityState('visible')
             document.dispatchEvent(new Event('visibilitychange'))
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
 
-            jest.advanceTimersByTime(refreshIntervalMs - 1)
+            vi.advanceTimersByTime(refreshIntervalMs - 1)
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
-            jest.advanceTimersByTime(1)
+            vi.advanceTimersByTime(1)
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
         })
 
         it('does not reload flags when the page becomes visible before the interval elapses', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             setVisibilityState('hidden')
-            jest.advanceTimersByTime(refreshIntervalMs - 1)
+            vi.advanceTimersByTime(refreshIntervalMs - 1)
             setVisibilityState('visible')
             document.dispatchEvent(new Event('visibilitychange'))
 
@@ -459,20 +459,20 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it('keeps automatic refresh active after flag state resets', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             featureFlags.reset()
-            jest.advanceTimersByTime(refreshIntervalMs)
+            vi.advanceTimersByTime(refreshIntervalMs)
 
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
         })
 
         it('stops automatic refresh on dispose', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             featureFlags.dispose()
-            jest.advanceTimersByTime(refreshIntervalMs)
+            vi.advanceTimersByTime(refreshIntervalMs)
             document.dispatchEvent(new Event('visibilitychange'))
 
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
@@ -480,13 +480,13 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         it('stops automatic refresh through the legacy destroy method', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             featureFlags.destroy()
             const config = defaultConfig()
             config.remote_config_refresh_interval_ms = refreshIntervalMs
             featureFlags.updateConfig(config, false)
-            jest.advanceTimersByTime(refreshIntervalMs)
+            vi.advanceTimersByTime(refreshIntervalMs)
             document.dispatchEvent(new Event('visibilitychange'))
 
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
@@ -496,7 +496,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
             const client = posthog._getBrowserClientAdapter()
             let resolveInitialization: (() => void) | undefined
-            jest.spyOn(client.kv, 'initialize').mockReturnValue(
+            vi.spyOn(client.kv, 'initialize').mockReturnValue(
                 new Promise<void>((resolve) => {
                     resolveInitialization = resolve
                 })
@@ -506,12 +506,12 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             config.remote_config_refresh_interval_ms = refreshIntervalMs
             featureFlags.updateConfig(config, false)
             const setup = featureFlags.setup(client)
-            const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             featureFlags.destroy()
             resolveInitialization?.()
             await setup
-            jest.advanceTimersByTime(refreshIntervalMs)
+            vi.advanceTimersByTime(refreshIntervalMs)
 
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
         })
@@ -519,30 +519,29 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         it('does not start without a document', async () => {
             const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
             const config = new MutableFeatureFlagsConfigSource(defaultConfig()).get()
-            const setRefreshInterval = jest.spyOn(globalThis, 'setInterval')
-            const addDocumentListener = jest.spyOn(document, 'addEventListener')
+            const setRefreshInterval = vi.spyOn(globalThis, 'setInterval')
+            const addDocumentListener = vi.spyOn(document, 'addEventListener')
             setRefreshInterval.mockClear()
             addDocumentListener.mockClear()
-            jest.doMock('@posthog/browser-common/utils/globals', () => ({
-                ...jest.requireActual('@posthog/browser-common/utils/globals'),
+            vi.doMock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
+                ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
                 document: undefined,
             }))
 
             try {
-                jest.isolateModules(() => {
-                    // eslint-disable-next-line @typescript-eslint/no-require-imports
-                    const { PostHogFeatureFlags: NoDocumentFeatureFlags } = require('../posthog-featureflags')
-                    const noDocumentFeatureFlags = new NoDocumentFeatureFlags({
-                        get: () => ({ ...config, refreshIntervalMs }),
-                    })
-
-                    noDocumentFeatureFlags.setup(posthog._getBrowserClientAdapter())
-
-                    expect(noDocumentFeatureFlags['_refreshInterval']).toBeUndefined()
-                    noDocumentFeatureFlags.dispose()
+                vi.resetModules()
+                const { PostHogFeatureFlags: NoDocumentFeatureFlags } = await import('../posthog-featureflags')
+                const noDocumentFeatureFlags = new NoDocumentFeatureFlags({
+                    get: () => ({ ...config, refreshIntervalMs }),
                 })
+
+                await noDocumentFeatureFlags.setup(posthog._getBrowserClientAdapter())
+
+                expect(noDocumentFeatureFlags['_refreshInterval']).toBeUndefined()
+                noDocumentFeatureFlags.dispose()
             } finally {
-                jest.dontMock('@posthog/browser-common/utils/globals')
+                vi.doUnmock('@posthog/browser-common/utils/globals')
+                vi.resetModules()
             }
 
             expect(setRefreshInterval).not.toHaveBeenCalled()
@@ -560,9 +559,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
             try {
                 const featureFlags = await setupFeatureFlags(refreshIntervalMs)
-                const reloadFeatureFlags = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation()
+                const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
-                jest.advanceTimersByTime(refreshIntervalMs)
+                vi.advanceTimersByTime(refreshIntervalMs)
 
                 expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
             } finally {
@@ -573,7 +572,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
     it('preserves the legacy initialize and destroy methods', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
-        const removeListener = jest.spyOn(window, 'removeEventListener')
+        const removeListener = vi.spyOn(window, 'removeEventListener')
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(posthog._getBrowserClientAdapter())
 
@@ -587,13 +586,13 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
     it('does not send a debounced request after reset', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
-        const sendRequest = jest.spyOn(client, 'sendRequest')
+        const sendRequest = vi.spyOn(client, 'sendRequest')
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
 
         featureFlags.reloadFeatureFlags()
         featureFlags.reset()
-        jest.advanceTimersByTime(10)
+        vi.advanceTimersByTime(10)
 
         expect(sendRequest).not.toHaveBeenCalled()
         featureFlags.dispose()
@@ -602,13 +601,13 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
     it('continues reloading when a reloading handler throws', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
-        const sendRequest = jest.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: {} })
-        jest.spyOn(client.logger, 'createLogger').mockReturnValue(client.logger)
-        const error = jest.spyOn(client.logger, 'error').mockImplementation()
+        const sendRequest = vi.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: {} })
+        vi.spyOn(client.logger, 'createLogger').mockReturnValue(client.logger)
+        const error = vi.spyOn(client.logger, 'error').mockImplementation(() => {})
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
         const handlerError = new Error('handler failed')
-        const laterHandler = jest.fn()
+        const laterHandler = vi.fn()
         featureFlags.onReloading(() => {
             throw handlerError
         })
@@ -618,14 +617,14 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         expect(laterHandler).toHaveBeenCalledTimes(1)
         expect(error).toHaveBeenCalledWith('Error while running feature flags reloading callback', handlerError)
 
-        jest.advanceTimersByTime(5)
+        vi.advanceTimersByTime(5)
         expect(sendRequest).toHaveBeenCalledTimes(1)
         featureFlags.dispose()
     })
 
     it('propagates set_config updates to the enrolled feature flags extension', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
-        const sendRequest = jest
+        const sendRequest = vi
             .spyOn(posthog._getBrowserClientAdapter(), 'sendRequest')
             .mockResolvedValue({ statusCode: 200, json: {} })
 
@@ -634,7 +633,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             evaluation_contexts: ['updated-context'],
         })
         posthog.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(5)
+        await vi.advanceTimersByTimeAsync(5)
 
         expect(sendRequest).toHaveBeenCalledWith(
             '/flags/?v=2',
@@ -647,27 +646,27 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
     it('logs feature flag request failures through the scoped logger', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
-        const clientError = jest.spyOn(client.logger, 'error').mockImplementation()
+        const clientError = vi.spyOn(client.logger, 'error').mockImplementation(() => {})
         const scopedLogger = client.logger.createLogger('[FeatureFlags]')
-        const scopedError = jest.spyOn(scopedLogger, 'error').mockImplementation()
-        jest.spyOn(client.logger, 'createLogger').mockReturnValue(scopedLogger)
+        const scopedError = vi.spyOn(scopedLogger, 'error').mockImplementation(() => {})
+        vi.spyOn(client.logger, 'createLogger').mockReturnValue(scopedLogger)
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
         const requestError = new Error('request failed')
-        jest.spyOn(client, 'sendRequest').mockRejectedValue(requestError)
+        vi.spyOn(client, 'sendRequest').mockRejectedValue(requestError)
 
         featureFlags._callFlagsEndpoint()
-        await Promise.resolve()
-        await Promise.resolve()
 
-        expect(scopedError).toHaveBeenCalledWith('Feature flag request failed', requestError)
+        await vi.waitFor(() => {
+            expect(scopedError).toHaveBeenCalledWith('Feature flag request failed', requestError)
+        })
         expect(clientError).not.toHaveBeenCalled()
         featureFlags.dispose()
     })
 
     it('reuses cached dynamic event property snapshots until flag state changes', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
-        const registerProperties = jest.spyOn(posthog, '_registerExtensionEventProperties')
+        const registerProperties = vi.spyOn(posthog, '_registerExtensionEventProperties')
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(posthog._getBrowserClientAdapter())
         const producer = registerProperties.mock.calls[0][0]
@@ -767,7 +766,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'cached-request-id',
             [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: evaluatedAt(),
         })
-        const registerProperties = jest.spyOn(posthog, '_registerExtensionEventProperties')
+        const registerProperties = vi.spyOn(posthog, '_registerExtensionEventProperties')
         const config = defaultConfig()
         config.advanced_disable_feature_flags = true
         config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
@@ -805,7 +804,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             { active: { configured: true }, variant: 'payload' }
         )
 
-        const enqueue = jest.spyOn(posthog._requestQueue!, 'enqueue')
+        const enqueue = vi.spyOn(posthog._requestQueue!, 'enqueue')
         posthog.capture('$snapshot', { explicitly_supplied: 'snapshot-value' })
         posthog.capture('ordinary-event')
 
@@ -864,7 +863,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
     it('uses flags transport semantics and semantic request configuration', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
-        const sendRequest = jest.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: {} })
+        const sendRequest = vi.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: {} })
         const config = defaultConfig()
         config.advanced_only_evaluate_survey_feature_flags = true
         config.evaluation_contexts = ['production']
@@ -932,9 +931,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
         let distinctId = 'anonymous-id'
-        jest.spyOn(posthog, 'get_distinct_id').mockImplementation(() => distinctId)
+        vi.spyOn(posthog, 'get_distinct_id').mockImplementation(() => distinctId)
         const resolveRequests: Array<(response: ApiResponse) => void> = []
-        const sendRequest = jest.spyOn(client, 'sendRequest').mockImplementation(
+        const sendRequest = vi.spyOn(client, 'sendRequest').mockImplementation(
             () =>
                 new Promise<ApiResponse>((resolve) => {
                     resolveRequests.push(resolve)
@@ -943,28 +942,30 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
 
-        const firstRequest = featureFlags._callFlagsEndpoint()
+        featureFlags._callFlagsEndpoint()
         distinctId = 'identified-id'
         featureFlags.setAnonymousDistinctId('anonymous-id')
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(5)
+        vi.advanceTimersByTime(5)
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(5)
+        vi.advanceTimersByTime(5)
 
         expect(sendRequest).toHaveBeenCalledTimes(1)
 
         resolveRequests[0]({ statusCode: 200, json: { quotaLimited: ['feature_flags'] } })
-        await Promise.resolve()
 
-        expect(sendRequest).toHaveBeenCalledTimes(2)
+        await vi.waitFor(() => {
+            expect(sendRequest).toHaveBeenCalledTimes(2)
+        })
         expect(sendRequest.mock.calls[1][1]?.body).toMatchObject({
             distinct_id: 'identified-id',
             $anon_distinct_id: 'anonymous-id',
         })
 
         resolveRequests[1]({ statusCode: 200, json: { featureFlags: { current: true } } })
-        await firstRequest
-        expect(featureFlags.getFlagVariants()).toEqual({ current: true })
+        await vi.waitFor(() => {
+            expect(featureFlags.getFlagVariants()).toEqual({ current: true })
+        })
         featureFlags.dispose()
     })
 
@@ -972,9 +973,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
         let distinctId = 'identified-id'
-        jest.spyOn(posthog, 'get_distinct_id').mockImplementation(() => distinctId)
+        vi.spyOn(posthog, 'get_distinct_id').mockImplementation(() => distinctId)
         const resolveRequests: Array<(response: ApiResponse) => void> = []
-        const sendRequest = jest.spyOn(client, 'sendRequest').mockImplementation(
+        const sendRequest = vi.spyOn(client, 'sendRequest').mockImplementation(
             () =>
                 new Promise<ApiResponse>((resolve) => {
                     resolveRequests.push(resolve)
@@ -982,29 +983,31 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         )
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
-        const callback = jest.fn()
+        const callback = vi.fn()
         featureFlags.addFeatureFlagsHandler(callback)
 
-        const firstRequest = featureFlags._callFlagsEndpoint()
+        featureFlags._callFlagsEndpoint()
         distinctId = 'reset-id'
         featureFlags.reset()
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(5)
+        vi.advanceTimersByTime(5)
 
         expect(sendRequest).toHaveBeenCalledTimes(1)
 
         resolveRequests[0]({ statusCode: 200, json: { featureFlags: { stale: true } } })
-        await Promise.resolve()
 
+        await vi.waitFor(() => {
+            expect(sendRequest).toHaveBeenCalledTimes(2)
+        })
         expect(callback).not.toHaveBeenCalled()
         expect(featureFlags.getFlagVariants()).toEqual({})
-        expect(sendRequest).toHaveBeenCalledTimes(2)
         expect(sendRequest.mock.calls[1][1]?.body).toMatchObject({ distinct_id: 'reset-id' })
 
         resolveRequests[1]({ statusCode: 200, json: { featureFlags: { current: true } } })
-        await firstRequest
-        expect(callback).toHaveBeenCalledTimes(1)
-        expect(featureFlags.getFlagVariants()).toEqual({ current: true })
+        await vi.waitFor(() => {
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(featureFlags.getFlagVariants()).toEqual({ current: true })
+        })
         featureFlags.dispose()
     })
 
@@ -1012,7 +1015,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
         let resolveRequest: ((response: ApiResponse) => void) | undefined
-        const sendRequest = jest.spyOn(client, 'sendRequest').mockImplementation(
+        const sendRequest = vi.spyOn(client, 'sendRequest').mockImplementation(
             () =>
                 new Promise<ApiResponse>((resolve) => {
                     resolveRequest = resolve
@@ -1020,12 +1023,12 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         )
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
-        const callback = jest.fn()
+        const callback = vi.fn()
         featureFlags.addFeatureFlagsHandler(callback)
 
         featureFlags._callFlagsEndpoint()
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(5)
+        vi.advanceTimersByTime(5)
         featureFlags.reset()
         resolveRequest?.({ statusCode: 0 })
         await Promise.resolve()
@@ -1040,7 +1043,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
         let resolveRequest: ((response: ApiResponse) => void) | undefined
-        const sendRequest = jest.spyOn(client, 'sendRequest').mockImplementation(
+        const sendRequest = vi.spyOn(client, 'sendRequest').mockImplementation(
             () =>
                 new Promise<ApiResponse>((resolve) => {
                     resolveRequest = resolve
@@ -1048,12 +1051,12 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         )
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
-        const callback = jest.fn()
+        const callback = vi.fn()
         featureFlags.addFeatureFlagsHandler(callback)
 
         featureFlags._callFlagsEndpoint()
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(5)
+        vi.advanceTimersByTime(5)
         featureFlags.dispose()
         resolveRequest?.({
             statusCode: 0,
@@ -1087,9 +1090,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(posthog._getBrowserClientAdapter())
-        const callback = jest.fn()
+        const callback = vi.fn()
         featureFlags.addFeatureFlagsHandler(callback)
-        jest.spyOn(console, 'log').mockImplementation()
+        vi.spyOn(console, 'log').mockImplementation(() => {})
 
         featureFlags.receivedFeatureFlags({ featureFlags: { 'test-flag': true } })
         expect(callback).toHaveBeenCalledTimes(1)
@@ -1099,11 +1102,11 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         expect(callback).toHaveBeenCalledTimes(1)
         expect(featureFlags.getFeatureFlag('test-flag', { send_event: false })).toBe(false)
 
-        const capture = jest.spyOn(posthog, 'capture')
+        const capture = vi.spyOn(posthog, 'capture')
         featureFlags.getFeatureFlag('test-flag')
         expect(capture).toHaveBeenCalledWith('$feature_flag_called', expect.any(Object))
 
-        const reload = jest.spyOn(featureFlags, 'reloadFeatureFlags')
+        const reload = vi.spyOn(featureFlags, 'reloadFeatureFlags')
         featureFlags.setPersonPropertiesForFlags({ plan: 'pro' })
         featureFlags.setGroupPropertiesForFlags({ company: { plan: 'pro' } })
         expect(reload).toHaveBeenCalledTimes(2)
@@ -1119,10 +1122,10 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const client = posthog._getBrowserClientAdapter()
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
-        const callback = jest.fn()
+        const callback = vi.fn()
         featureFlags.addFeatureFlagsHandler(callback)
-        const capture = jest.spyOn(posthog, 'capture').mockImplementation()
-        const setPersistence = jest.spyOn(client.kv, 'set')
+        const capture = vi.spyOn(posthog, 'capture').mockImplementation(() => {})
+        const setPersistence = vi.spyOn(client.kv, 'set')
 
         featureFlags.updateEarlyAccessFeatureEnrollment('test-flag', true)
 
@@ -1143,12 +1146,12 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         posthog.persistence?.register({ [ENABLED_FEATURE_FLAGS]: { initialized: true } })
         const client = posthog._getBrowserClientAdapter()
         let resolveInitialization: (() => void) | undefined
-        jest.spyOn(client.kv, 'initialize').mockReturnValue(
+        vi.spyOn(client.kv, 'initialize').mockReturnValue(
             new Promise<void>((resolve) => {
                 resolveInitialization = resolve
             })
         )
-        const getPersistence = jest.spyOn(client.kv, 'get')
+        const getPersistence = vi.spyOn(client.kv, 'get')
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
 
         const setup = featureFlags.setup(client)
@@ -1167,12 +1170,12 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
         let resolveInitialization: (() => void) | undefined
-        jest.spyOn(client.kv, 'initialize').mockReturnValue(
+        vi.spyOn(client.kv, 'initialize').mockReturnValue(
             new Promise<void>((resolve) => {
                 resolveInitialization = resolve
             })
         )
-        const registerProperties = jest.spyOn(posthog, '_registerExtensionEventProperties')
+        const registerProperties = vi.spyOn(posthog, '_registerExtensionEventProperties')
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
 
         const setup = featureFlags.setup(client)

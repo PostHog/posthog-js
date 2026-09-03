@@ -2,9 +2,9 @@ import { PostHogOptions } from '@/types'
 import { PostHog } from '@/entrypoints/index.node'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation } from './utils'
 
-jest.spyOn(console, 'debug').mockImplementation()
+vi.spyOn(console, 'debug').mockImplementation()
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
@@ -25,7 +25,7 @@ function buildClient(options: Partial<PostHogOptions> = posthogImmediateResolveO
 describe('feature flag dependencies', () => {
   let posthog: LocalPostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
     // ensure clean shutdown & no test interdependencies
