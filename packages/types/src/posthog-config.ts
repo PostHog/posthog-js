@@ -13,7 +13,7 @@ import type {
     NetworkRequest,
     SessionRecordingCanvasOptions,
 } from './session-recording'
-import type { SegmentAnalytics } from './segment'
+import type { SegmentAnalytics, SegmentIntegrationConfig } from './segment'
 import type { PostHog } from './posthog'
 
 export type AutocaptureCompatibleElement = 'a' | 'button' | 'form' | 'input' | 'select' | 'textarea' | 'label'
@@ -2142,11 +2142,26 @@ export interface PostHogConfig {
     bootstrap: BootstrapConfig
 
     /**
-     * The segment analytics object.
+     * The Segment analytics object, or integration configuration.
+     *
+     * @example
+     * ```ts
+     * segment: {
+     *     analytics: window.analytics,
+     *     filterProperties: (properties) => {
+     *         for (const key in properties) {
+     *             if (key.startsWith('$sdk_debug_')) {
+     *                 delete properties[key]
+     *             }
+     *         }
+     *         return properties
+     *     }
+     * }
+     * ```
      *
      * @see https://posthog.com/docs/libraries/segment
      */
-    segment?: SegmentAnalytics
+    segment?: SegmentAnalytics | SegmentIntegrationConfig
 
     /**
      * Determines whether to capture heatmaps.

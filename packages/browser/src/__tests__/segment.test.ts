@@ -107,6 +107,106 @@ describe(`Segment integration`, () => {
         expect(posthog.get_property('$device_id')).toBe('test-anonymous-id')
     })
 
+    it('allows PostHog enrichment properties to be filtered before Segment fan-out', async () => {
+        const firstFilter = jest.fn((properties: Record<string, any>) => {
+            properties.added_by_first_filter = true
+            return properties
+        })
+        const secondFilter = jest.fn((properties: Record<string, any>) => {
+            const filteredProperties = { ...properties }
+            delete filteredProperties.$sdk_debug_future_property
+            return filteredProperties
+        })
+        const posthog = await initPostHogInAPromise(segment, posthogName, {
+            segment: {
+                analytics: segment,
+                filterProperties: [firstFilter, secondFilter],
+            },
+        })
+        const customerMetadata = { source: 'segment' }
+        const calculatedProperties = Object.freeze({
+            $sdk_debug_future_property: true,
+            $session_id: 'session-id',
+            customer_metadata: customerMetadata,
+            token: 'sdk-token',
+        })
+        jest.spyOn(posthog, 'calculateEventProperties').mockReturnValue(calculatedProperties)
+        const context = {
+            event: {
+                event: 'Order Completed',
+                userId: 'test-id',
+                anonymousId: 'test-anonymous-id',
+                properties: { customer_metadata: customerMetadata, token: 'customer-token' },
+            },
+        } as unknown as SegmentContext
+
+        expect(segmentIntegration.track!(context).event.properties).toEqual({
+            $session_id: 'session-id',
+            added_by_first_filter: true,
+            customer_metadata: customerMetadata,
+            token: 'customer-token',
+        })
+        expect(firstFilter).toHaveBeenCalledWith(expect.objectContaining({ $session_id: 'session-id' }))
+        expect(firstFilter.mock.calls[0][0]).not.toBe(calculatedProperties)
+        expect(firstFilter.mock.calls[0][0]).not.toHaveProperty('customer_metadata')
+        expect(firstFilter.mock.calls[0][0]).not.toHaveProperty('token')
+        expect(secondFilter).toHaveBeenCalledWith(expect.objectContaining({ added_by_first_filter: true }))
+    })
+
+    it('leaves the Segment event unenriched when filterProperties returns null', async () => {
+        const filterProperties = jest.fn(() => null)
+        const posthog = await initPostHogInAPromise(segment, posthogName, {
+            segment: { analytics: segment, filterProperties },
+        })
+        const customerMetadata = { source: 'segment' }
+        jest.spyOn(posthog, 'calculateEventProperties').mockReturnValue({
+            $session_id: 'session-id',
+            customer_metadata: customerMetadata,
+        })
+        const properties = { customer_metadata: customerMetadata, order_id: 'order-123' }
+        const context = {
+            event: {
+                event: 'Order Completed',
+                userId: 'test-id',
+                anonymousId: 'test-anonymous-id',
+                properties,
+            },
+        } as unknown as SegmentContext
+
+        expect(segmentIntegration.track!(context).event.properties).toBe(properties)
+        expect(filterProperties.mock.calls[0][0]).not.toHaveProperty('customer_metadata')
+    })
+
+    it('leaves the Segment event unenriched when filterProperties throws', async () => {
+        const filterProperties = jest.fn((enrichmentProperties: Record<string, any>) => {
+            if (enrichmentProperties.customer_metadata) {
+                enrichmentProperties.customer_metadata.source = 'mutated'
+            }
+            throw new Error('filter failed')
+        })
+        const posthog = await initPostHogInAPromise(segment, posthogName, {
+            segment: { analytics: segment, filterProperties },
+        })
+        const customerMetadata = { source: 'segment' }
+        jest.spyOn(posthog, 'calculateEventProperties').mockReturnValue({
+            $session_id: 'session-id',
+            customer_metadata: customerMetadata,
+        })
+        const properties = { customer_metadata: customerMetadata, order_id: 'order-123' }
+        const context = {
+            event: {
+                event: 'Order Completed',
+                userId: 'test-id',
+                anonymousId: 'test-anonymous-id',
+                properties,
+            },
+        } as unknown as SegmentContext
+
+        expect(segmentIntegration.track!(context).event.properties).toBe(properties)
+        expect(customerMetadata).toEqual({ source: 'segment' })
+        expect(filterProperties.mock.calls[0][0]).not.toHaveProperty('customer_metadata')
+    })
+
     it('enriches Segment track events with PostHog properties', async () => {
         // Segment supplies a stable identity, so memory persistence should not trigger the volatile-identity warning.
         const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
