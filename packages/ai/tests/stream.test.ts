@@ -18,10 +18,10 @@ describe('monitorStream', () => {
     const controller = new AbortController()
     const recovered = { sequence: 1 }
     const returned = { sequence: 2 }
-    const sourceThrow = jest.fn().mockResolvedValue({ done: false, value: recovered })
-    const sourceReturn = jest.fn().mockResolvedValue({ done: true, value: returned })
+    const sourceThrow = vi.fn().mockResolvedValue({ done: false, value: recovered })
+    const sourceReturn = vi.fn().mockResolvedValue({ done: true, value: returned })
     const sourceIterator: AsyncIterator<{ sequence: number }> = {
-      next: jest.fn().mockResolvedValue({ done: true, value: undefined }),
+      next: vi.fn().mockResolvedValue({ done: true, value: undefined }),
       throw: sourceThrow,
       return: sourceReturn,
     }
@@ -65,7 +65,7 @@ describe('monitorStream', () => {
         sourceFinalized = true
       }
     })()
-    const sourceReturn = jest.spyOn(sourceIterator, 'return')
+    const sourceReturn = vi.spyOn(sourceIterator, 'return')
     const source = new OpenAIStream<number>(() => sourceIterator, controller)
     const monitored: number[] = []
 
@@ -115,7 +115,7 @@ describe('monitorStream', () => {
         sourceFinalized = true
       }
     })()
-    const sourceReturn = jest.spyOn(sourceIterator, 'return')
+    const sourceReturn = vi.spyOn(sourceIterator, 'return')
     const source = new OpenAIStream<number>(() => sourceIterator, controller)
     const monitored: number[] = []
 
@@ -149,7 +149,7 @@ describe('monitorStream', () => {
       yield 1
       yield 2
     })()
-    const sourceNext = jest.spyOn(sourceIterator, 'next')
+    const sourceNext = vi.spyOn(sourceIterator, 'next')
     const source = createTestStream(() => sourceIterator, new AbortController())
     const [monitoringStream, wrapped] = monitoredStreamTee<number, TestStream<number>>(source, createTestStream)
     const monitoringIterator = monitoringStream[Symbol.asyncIterator]()
@@ -181,7 +181,7 @@ describe('monitorStream', () => {
       yield 2
       yield 3
     })()
-    const sourceNext = jest.spyOn(sourceIterator, 'next')
+    const sourceNext = vi.spyOn(sourceIterator, 'next')
     const source = createTestStream(() => sourceIterator, new AbortController())
     const [monitoringStream, wrapped] = monitoredStreamTee<number, TestStream<number>>(source, createTestStream)
     const monitored: number[] = []
@@ -214,8 +214,8 @@ describe('monitorStream', () => {
 
   test('settles every concurrent next call when the source stream is empty', async () => {
     const controller = new AbortController()
-    const removeAbortListener = jest.spyOn(controller.signal, 'removeEventListener')
-    const sourceNext = jest.fn().mockResolvedValue({ done: true, value: undefined })
+    const removeAbortListener = vi.spyOn(controller.signal, 'removeEventListener')
+    const sourceNext = vi.fn().mockResolvedValue({ done: true, value: undefined })
     const source = createTestStream<number>(() => ({ next: sourceNext }), controller)
     const [monitoringStream, wrapped] = monitoredStreamTee(source, createTestStream)
     const monitoringPromise = (async () => {
@@ -238,7 +238,7 @@ describe('monitorStream', () => {
 
   test('rejects every concurrent next call when the source stream errors', async () => {
     const sourceError = new Error('source failed')
-    const sourceNext = jest.fn().mockRejectedValue(sourceError)
+    const sourceNext = vi.fn().mockRejectedValue(sourceError)
     const source = createTestStream<number>(() => ({ next: sourceNext }), new AbortController())
     const [monitoringStream, wrapped] = monitoredStreamTee(source, createTestStream)
     const monitoringPromise = (async () => {

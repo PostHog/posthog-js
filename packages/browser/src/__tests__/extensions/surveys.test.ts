@@ -24,7 +24,7 @@ import {
     SurveyWidgetType,
 } from '../../posthog-surveys-types'
 
-import { afterAll, beforeAll, beforeEach } from '@jest/globals'
+import { beforeEach } from 'vitest'
 import '@testing-library/jest-dom'
 import * as Preact from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
@@ -38,12 +38,24 @@ import { createMockPostHog } from '../helpers/posthog-instance'
 
 declare const global: any
 
+const realTimers = {
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout,
+    setInterval: globalThis.setInterval,
+    clearInterval: globalThis.clearInterval,
+}
+
+afterEach(() => {
+    vi.useRealTimers()
+    Object.assign(globalThis, realTimers)
+})
+
 describe('survey display logic', () => {
     beforeEach(() => {
         // we have to manually reset the DOM before each test
         document.getElementsByTagName('html')[0].innerHTML = ''
         localStorage.clear()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     test('retrieveSurveyShadow', () => {
@@ -87,18 +99,18 @@ describe('survey display logic', () => {
 
     const mockPostHog = createMockPostHog({
         surveys: {
-            getSurveys: jest.fn().mockImplementation((callback) => callback(mockSurveys)),
+            getSurveys: vi.fn().mockImplementation((callback) => callback(mockSurveys)),
         },
-        get_session_replay_url: jest.fn(),
-        capture: jest.fn().mockImplementation((eventName) => eventName),
+        get_session_replay_url: vi.fn(),
+        capture: vi.fn().mockImplementation((eventName) => eventName),
         config: {
             disable_surveys_automatic_display: false,
         },
     })
 
     test('callSurveysAndEvaluateDisplayLogic runs on interval irrespective of url change', () => {
-        jest.useFakeTimers()
-        jest.spyOn(global, 'setInterval')
+        vi.useFakeTimers()
+        vi.spyOn(global, 'setInterval')
         // generateSurveys constructs a real SurveyManager, which attaches a 'languagechange'
         // window listener (see surveys.tsx). Left undisposed, that listener stays live for the
         // rest of the suite and fires on any later test's window.dispatchEvent(new
@@ -108,12 +120,12 @@ describe('survey display logic', () => {
             expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(1)
             expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
 
-            jest.advanceTimersByTime(1000)
+            vi.advanceTimersByTime(1000)
             expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(2)
             expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
         } finally {
             surveyManager?.dispose()
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 })
@@ -149,12 +161,12 @@ describe('usePopupVisibility', () => {
         feature_flag_keys: null,
     }
     const mockPostHog = createMockPostHog({
-        getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback([mockSurvey])),
-        get_session_replay_url: jest.fn(),
-        capture: jest.fn().mockImplementation((eventName) => eventName),
+        getActiveMatchingSurveys: vi.fn().mockImplementation((callback) => callback([mockSurvey])),
+        get_session_replay_url: vi.fn(),
+        capture: vi.fn().mockImplementation((eventName) => eventName),
     })
 
-    const removeSurvey = jest.fn()
+    const removeSurvey = vi.fn()
 
     test('should set isPopupVisible to true immediately if delay is 0', () => {
         const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
@@ -162,14 +174,14 @@ describe('usePopupVisibility', () => {
     })
 
     test('should set isPopupVisible to true after delay', () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, false, removeSurvey))
         expect(result.current.isPopupVisible).toBe(false)
         act(() => {
-            jest.advanceTimersByTime(1000)
+            vi.advanceTimersByTime(1000)
         })
         expect(result.current.isPopupVisible).toBe(true)
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     test('should hide popup when PHSurveyClosed event is dispatched', () => {
@@ -181,7 +193,7 @@ describe('usePopupVisibility', () => {
     })
 
     test('should show thank you message when survey is sent and handle auto disappear', () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         mockSurvey.appearance = {
             displayThankYouMessage: true,
             autoDisappear: true,
@@ -198,23 +210,23 @@ describe('usePopupVisibility', () => {
         expect(result.current.isPopupVisible).toBe(true)
 
         act(() => {
-            jest.advanceTimersByTime(5000)
+            vi.advanceTimersByTime(5000)
         })
 
         expect(result.current.isPopupVisible).toBe(false)
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     test('should clean up event listeners and timers on unmount', () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         const { unmount } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, false, removeSurvey))
-        const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener')
+        const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
 
         unmount()
 
         expect(removeEventListenerSpy).toHaveBeenCalledWith('PHSurveyClosed', expect.any(Function))
         expect(removeEventListenerSpy).toHaveBeenCalledWith('PHSurveySent', expect.any(Function))
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     test('should set isPopupVisible to true if isPreviewMode is true', () => {
@@ -223,14 +235,14 @@ describe('usePopupVisibility', () => {
     })
 
     test('should set isPopupVisible to true after a delay of 500 milliseconds', () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 500, false, removeSurvey))
         expect(result.current.isPopupVisible).toBe(false)
         act(() => {
-            jest.advanceTimersByTime(500)
+            vi.advanceTimersByTime(500)
         })
         expect(result.current.isPopupVisible).toBe(true)
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     test('should not throw an error if posthog is undefined', () => {
@@ -240,7 +252,7 @@ describe('usePopupVisibility', () => {
 
     test('should clean up event listeners on unmount when delay is 0', () => {
         const { unmount } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
-        const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener')
+        const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
 
         unmount()
 
@@ -249,14 +261,14 @@ describe('usePopupVisibility', () => {
     })
 
     test('should dispatch PHSurveyShown event when survey is shown', () => {
-        const dispatchEventSpy = jest.spyOn(window, 'dispatchEvent')
+        const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent')
         renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
 
         expect(dispatchEventSpy).toHaveBeenCalledWith(new Event('PHSurveyShown'))
     })
 
     test('should handle multiple surveys with overlapping conditions', () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         const mockSurvey2 = { ...mockSurvey, id: 'testSurvey2', name: 'Test survey 2' } as Survey
         const { result: result1 } = renderHook(() =>
             usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey)
@@ -269,11 +281,11 @@ describe('usePopupVisibility', () => {
         expect(result2.current.isPopupVisible).toBe(false)
 
         act(() => {
-            jest.advanceTimersByTime(500)
+            vi.advanceTimersByTime(500)
         })
 
         expect(result2.current.isPopupVisible).toBe(true)
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 })
 
@@ -308,11 +320,11 @@ describe('usePopupVisibility close animation path', () => {
         feature_flag_keys: null,
     }
     const mockPostHog = createMockPostHog({
-        getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback([mockSurvey])),
-        get_session_replay_url: jest.fn(),
-        capture: jest.fn().mockImplementation((eventName) => eventName),
+        getActiveMatchingSurveys: vi.fn().mockImplementation((callback) => callback([mockSurvey])),
+        get_session_replay_url: vi.fn(),
+        capture: vi.fn().mockImplementation((eventName) => eventName),
     })
-    const removeSurvey = jest.fn()
+    const removeSurvey = vi.fn()
 
     const renderWithContainer = (container?: HTMLElement) =>
         renderHook(() =>
@@ -335,11 +347,11 @@ describe('usePopupVisibility close animation path', () => {
 
     beforeEach(() => {
         removeSurvey.mockClear()
-        jest.useFakeTimers()
+        vi.useFakeTimers()
     })
 
     afterEach(() => {
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     test('tears down synchronously when there is no container ref to animate', () => {
@@ -371,7 +383,7 @@ describe('usePopupVisibility close animation path', () => {
         expect(removeSurvey).not.toHaveBeenCalled()
 
         act(() => {
-            jest.advanceTimersByTime(1000)
+            vi.advanceTimersByTime(1000)
         })
 
         expect(result.current.isPopupVisible).toBe(false)
@@ -379,7 +391,7 @@ describe('usePopupVisibility close animation path', () => {
     })
 
     test('never calls document.startViewTransition (no full-page snapshot on heavy pages)', () => {
-        const startViewTransition = jest.fn()
+        const startViewTransition = vi.fn()
         Object.defineProperty(document, 'startViewTransition', {
             configurable: true,
             writable: true,
@@ -389,7 +401,7 @@ describe('usePopupVisibility close animation path', () => {
         const { result } = renderWithContainer(attachedContainer())
         act(() => {
             result.current.hidePopupWithAnimation()
-            jest.advanceTimersByTime(1000)
+            vi.advanceTimersByTime(1000)
         })
 
         // The whole point of the fix: closing a survey must not snapshot the page.
@@ -407,7 +419,7 @@ describe('usePopupVisibility close animation path', () => {
             result.current.hidePopupWithAnimation()
             // A second close while the first is still animating.
             result.current.hidePopupWithAnimation()
-            jest.advanceTimersByTime(1000)
+            vi.advanceTimersByTime(1000)
         })
 
         expect(removeSurvey).toHaveBeenCalledTimes(1)
@@ -502,21 +514,19 @@ describe('SurveyManager', () => {
         ]
 
         mockPostHog = createMockPostHog({
-            getActiveMatchingSurveys: jest.fn(),
-            get_session_replay_url: jest.fn(),
-            capture: jest.fn(),
+            getActiveMatchingSurveys: vi.fn(),
+            get_session_replay_url: vi.fn(),
+            capture: vi.fn(),
             featureFlags: {
                 hasLoadedFlags: true,
-                _send_request: jest
+                _send_request: vi
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
-                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
-                isFeatureEnabled: jest
-                    .fn()
-                    .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
+                getFeatureFlag: vi.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
+                isFeatureEnabled: vi.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
             },
             surveys: {
-                getSurveys: jest.fn().mockImplementation((callback) => callback(mockSurveys)),
+                getSurveys: vi.fn().mockImplementation((callback) => callback(mockSurveys)),
             },
         })
 
@@ -525,9 +535,9 @@ describe('SurveyManager', () => {
 
     it('resolves feature flags through the extension registry', () => {
         const registeredFeatureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(mockPostHog.config))
-        jest.spyOn(registeredFeatureFlags, 'getFeatureFlag').mockReturnValue('control')
-        jest.spyOn(registeredFeatureFlags, 'isFeatureEnabled').mockReturnValue(true)
-        mockPostHog.getExtension = jest.fn(() => registeredFeatureFlags) as PostHog['getExtension']
+        vi.spyOn(registeredFeatureFlags, 'getFeatureFlag').mockReturnValue('control')
+        vi.spyOn(registeredFeatureFlags, 'isFeatureEnabled').mockReturnValue(true)
+        mockPostHog.getExtension = vi.fn(() => registeredFeatureFlags) as PostHog['getExtension']
         const survey = {
             ...mockSurveys[0],
             linked_flag_key: 'linked-flag-key',
@@ -570,8 +580,8 @@ describe('SurveyManager', () => {
     })
 
     test('callSurveysAndEvaluateDisplayLogic should handle a single popover survey correctly', () => {
-        mockPostHog.getActiveMatchingSurveys = jest.fn((callback) => callback([mockSurveys[0]]))
-        const handlePopoverSurveyMock = jest
+        mockPostHog.getActiveMatchingSurveys = vi.fn((callback) => callback([mockSurveys[0]]))
+        const handlePopoverSurveyMock = vi
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
             .mockImplementation(() => {})
 
@@ -605,10 +615,10 @@ describe('SurveyManager', () => {
     it('should only display one popover survey if multiple popovers are eligible', () => {
         const anotherPopover = { ...mockSurveys[0], id: 'popover-2' }
 
-        mockPostHog.surveys.getSurveys = jest.fn((callback) => callback([mockSurveys[0], anotherPopover]))
+        mockPostHog.surveys.getSurveys = vi.fn((callback) => callback([mockSurveys[0], anotherPopover]))
 
-        const handlePopoverSurveySpy = jest.spyOn(surveyManager as any, 'handlePopoverSurvey')
-        const addSurveyToFocusSpy = jest.spyOn(surveyManager as any, '_addSurveyToFocus')
+        const handlePopoverSurveySpy = vi.spyOn(surveyManager as any, 'handlePopoverSurvey')
+        const addSurveyToFocusSpy = vi.spyOn(surveyManager as any, '_addSurveyToFocus')
 
         surveyManager.callSurveysAndEvaluateDisplayLogic(true)
 
@@ -645,7 +655,7 @@ describe('SurveyManager', () => {
         })
 
         const setInternalFlagEnabled = (enabled: boolean): void => {
-            mockPostHog.featureFlags.isFeatureEnabled = jest
+            mockPostHog.featureFlags.isFeatureEnabled = vi
                 .fn()
                 .mockImplementation((key: string) =>
                     key === INTERNAL_FLAG ? enabled : (flagsResponse.featureFlags as Record<string, boolean>)[key]
@@ -653,13 +663,13 @@ describe('SurveyManager', () => {
         }
 
         afterEach(() => {
-            jest.useRealTimers()
+            vi.useRealTimers()
         })
 
         it('does not display a survey that became ineligible during the delay (delay re-check)', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const survey = makeDelayedSurvey('delayed-survey-recheck')
-            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
             setInternalFlagEnabled(true)
 
             // queued while eligible: focus claimed, timer pending, not yet shown
@@ -670,7 +680,7 @@ describe('SurveyManager', () => {
             // identify() during the delay reloads flags; the internal targeting flag is now false
             setInternalFlagEnabled(false)
 
-            jest.advanceTimersByTime(30000)
+            vi.advanceTimersByTime(30000)
 
             // the survey is dropped instead of shown: focus released, timer cleared
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(null)
@@ -678,15 +688,15 @@ describe('SurveyManager', () => {
         })
 
         it('still displays a survey that stays eligible through the delay (regression guard)', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const survey = makeDelayedSurvey('delayed-survey-eligible')
-            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
             setInternalFlagEnabled(true)
 
             surveyManager.callSurveysAndEvaluateDisplayLogic(true)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
 
-            jest.advanceTimersByTime(30000)
+            vi.advanceTimersByTime(30000)
 
             // shown: focus is retained (released only on dismiss/close), pending timer consumed
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
@@ -694,9 +704,9 @@ describe('SurveyManager', () => {
         })
 
         it('cancels a pending survey when a later evaluation cycle finds it ineligible', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const survey = makeDelayedSurvey('delayed-survey-cancel')
-            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
             setInternalFlagEnabled(true)
 
             surveyManager.callSurveysAndEvaluateDisplayLogic(true)
@@ -729,13 +739,13 @@ describe('SurveyManager', () => {
         }
 
         afterEach(() => {
-            jest.useRealTimers()
+            vi.useRealTimers()
         })
 
         it('waits only the remaining delay when the survey was triggered on an earlier page', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const survey = makeDelayedSurvey('resume-survey', 60)
-            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
             // triggered 40s ago, so only 20s of the 60s delay should remain
             stubEventReceiver(survey.id, Date.now() - 40_000)
 
@@ -743,17 +753,17 @@ describe('SurveyManager', () => {
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
 
             // the full 60s has not elapsed, but the remaining 20s has → shown
-            jest.advanceTimersByTime(19_000)
+            vi.advanceTimersByTime(19_000)
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
-            jest.advanceTimersByTime(1_000)
+            vi.advanceTimersByTime(1_000)
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
         })
 
         it('shows immediately when the delay already elapsed on an earlier page', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const survey = makeDelayedSurvey('elapsed-survey', 60)
-            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
             stubEventReceiver(survey.id, Date.now() - 90_000) // 90s ago > 60s delay
 
             surveyManager.callSurveysAndEvaluateDisplayLogic(true)
@@ -763,27 +773,27 @@ describe('SurveyManager', () => {
         })
 
         it('waits the full delay when no activation time is recorded', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const survey = makeDelayedSurvey('no-timestamp-survey', 60)
-            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
             stubEventReceiver(survey.id, undefined)
 
             surveyManager.callSurveysAndEvaluateDisplayLogic(true)
-            jest.advanceTimersByTime(59_000)
+            vi.advanceTimersByTime(59_000)
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
-            jest.advanceTimersByTime(1_000)
+            vi.advanceTimersByTime(1_000)
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
         })
 
         it('waits the full delay when an older core bundle has no activation timestamp method', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const survey = makeDelayedSurvey('older-core-survey', 60)
-            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
             ;(mockPostHog.surveys as any)._surveyEventReceiver = { getSurveys: () => [survey.id] }
 
             expect(() => surveyManager.callSurveysAndEvaluateDisplayLogic(true)).not.toThrow()
-            jest.advanceTimersByTime(60_000)
+            vi.advanceTimersByTime(60_000)
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
         })
@@ -791,29 +801,29 @@ describe('SurveyManager', () => {
         // An explicit displaySurvey() call honors its own `ignoreDelay` option, so it must never
         // shortcut the wait using an activation the display loop recorded.
         it('waits the full delay for an explicit display call even when the trigger fired long ago', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const survey = makeDelayedSurvey('explicit-display-survey', 60)
-            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
             stubEventReceiver(survey.id, Date.now() - 90_000)
 
             surveyManager.handlePopoverSurvey(survey)
 
-            jest.advanceTimersByTime(59_000)
+            vi.advanceTimersByTime(59_000)
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
-            jest.advanceTimersByTime(1_000)
+            vi.advanceTimersByTime(1_000)
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
         })
 
         it('never waits longer than the configured delay when the clock moved backwards', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const survey = makeDelayedSurvey('clock-skew-survey', 60)
-            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            mockPostHog.surveys.getSurveys = vi.fn((cb) => cb([survey]))
             // stamped in the future, so the naive elapsed time is negative
             stubEventReceiver(survey.id, Date.now() + 600_000)
 
             surveyManager.callSurveysAndEvaluateDisplayLogic(true)
-            jest.advanceTimersByTime(60_000)
+            vi.advanceTimersByTime(60_000)
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
         })
@@ -897,11 +907,11 @@ describe('SurveyManager', () => {
     })
 
     test('callSurveysAndEvaluateDisplayLogic should handle popup surveys correctly', () => {
-        const handlePopoverSurveyMock = jest
+        const handlePopoverSurveyMock = vi
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
             .mockImplementation(() => {})
-        const handleWidgetMock = jest.spyOn(surveyManager as any, '_handleWidget').mockImplementation(() => {})
-        const manageWidgetSelectorListener = jest
+        const handleWidgetMock = vi.spyOn(surveyManager as any, '_handleWidget').mockImplementation(() => {})
+        const manageWidgetSelectorListener = vi
             .spyOn(surveyManager as any, '_manageWidgetSelectorListener')
             .mockImplementation(() => {})
 
@@ -935,7 +945,7 @@ describe('SurveyManager', () => {
             feature_flag_keys: [],
         })
         const mockSurvey = mockSurveys[1]
-        const handleWidgetSpy = jest.spyOn(surveyManager as any, '_handleWidget')
+        const handleWidgetSpy = vi.spyOn(surveyManager as any, '_handleWidget')
         surveyManager.getTestAPI().handleWidget(mockSurvey) // Call the actual method
         expect(handleWidgetSpy).toHaveBeenCalledWith(mockSurvey)
         // We can add more specific assertions here if needed, e.g., checking if the shadow DOM was created
@@ -963,10 +973,10 @@ describe('SurveyManager', () => {
             targeting_flag_key: null,
             internal_targeting_flag_key: null,
         }
-        mockPostHog.surveys.getSurveys = jest.fn((callback) => callback([mockSurvey]))
+        mockPostHog.surveys.getSurveys = vi.fn((callback) => callback([mockSurvey]))
         document.body.innerHTML = '<div class="my-selector">Click Me</div>'
 
-        const manageWidgetSelectorListenerSpy = jest.spyOn(surveyManager as any, '_manageWidgetSelectorListener')
+        const manageWidgetSelectorListenerSpy = vi.spyOn(surveyManager as any, '_manageWidgetSelectorListener')
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
@@ -992,7 +1002,7 @@ describe('SurveyManager', () => {
             internal_targeting_flag_key: null,
         } as unknown as Survey
 
-        mockPostHog.surveys.getSurveys = jest.fn().mockImplementation((callback) => callback([survey]))
+        mockPostHog.surveys.getSurveys = vi.fn().mockImplementation((callback) => callback([survey]))
         document.body.innerHTML = '<div class="my-selector">Click Me</div>'
 
         const surveyPopup = () =>
@@ -1041,7 +1051,7 @@ describe('SurveyManager', () => {
             internal_targeting_flag_key: null,
         } as unknown as Survey
 
-        mockPostHog.surveys.getSurveys = jest.fn().mockImplementation((callback) => callback([survey]))
+        mockPostHog.surveys.getSurveys = vi.fn().mockImplementation((callback) => callback([survey]))
         document.body.innerHTML = '<div class="my-selector">Click Me</div>'
 
         const surveyPopup = () =>
@@ -1103,7 +1113,7 @@ describe('SurveyManager', () => {
             internal_targeting_flag_key: null,
         } as unknown as Survey
 
-        mockPostHog.surveys.getSurveys = jest.fn().mockImplementation((callback) => callback([survey]))
+        mockPostHog.surveys.getSurveys = vi.fn().mockImplementation((callback) => callback([survey]))
         document.body.innerHTML = '<div class="my-selector" id="first">Click Me</div>'
 
         const surveyPopup = () =>
@@ -1143,7 +1153,7 @@ describe('SurveyManager', () => {
     })
 
     test('callSurveysAndEvaluateDisplayLogic should not call surveys in focus', () => {
-        mockPostHog.surveys.getSurveys = jest.fn((callback) => callback(mockSurveys))
+        mockPostHog.surveys.getSurveys = vi.fn((callback) => callback(mockSurveys))
 
         surveyManager.getTestAPI().addSurveyToFocus({ id: 'survey1' })
         surveyManager.callSurveysAndEvaluateDisplayLogic()
@@ -1153,12 +1163,12 @@ describe('SurveyManager', () => {
     })
 
     test('surveyInFocus handling works correctly with in callSurveysAndEvaluateDisplayLogic', () => {
-        mockPostHog.surveys.getSurveys = jest.fn((callback) => callback(mockSurveys))
+        mockPostHog.surveys.getSurveys = vi.fn((callback) => callback(mockSurveys))
 
         surveyManager.getTestAPI().addSurveyToFocus({ id: 'survey1' })
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
-        const handlePopoverSurveyMock = jest
+        const handlePopoverSurveyMock = vi
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
             .mockImplementation(() => {})
 
@@ -1310,7 +1320,7 @@ describe('SurveyManager', () => {
             // renderSurvey mounts Preact directly with no teardown, so that timer would outlive
             // the test as an orphan and trip CI's "worker failed to exit gracefully" guard. Fake
             // timers keep it from ever becoming a real pending handle.
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const backSurvey = {
                 ...mockSurvey,
                 id: 'stale-visited-indices-survey',
@@ -1345,7 +1355,7 @@ describe('SurveyManager', () => {
 
             document.body.removeChild(surveyDiv)
             localStorage.clear()
-            jest.useRealTimers()
+            vi.useRealTimers()
         })
 
         it('exposes the current question index on .survey-box for embedders', () => {
@@ -1428,10 +1438,10 @@ describe('SurveyManager', () => {
                     api_host: 'https://test.com',
                     surveys: { prefillFromUrl: true },
                 },
-                getActiveMatchingSurveys: jest.fn(),
-                get_session_replay_url: jest.fn(),
-                capture: jest.fn(),
-                featureFlags: { isFeatureEnabled: jest.fn().mockReturnValue(true) },
+                getActiveMatchingSurveys: vi.fn(),
+                get_session_replay_url: vi.fn(),
+                capture: vi.fn(),
+                featureFlags: { isFeatureEnabled: vi.fn().mockReturnValue(true) },
             })
 
             surveyManager = createSurveyManager(mockPH)
@@ -1493,10 +1503,10 @@ describe('SurveyManager', () => {
                     api_host: 'https://test.com',
                     surveys: { prefillFromUrl: true },
                 },
-                getActiveMatchingSurveys: jest.fn(),
-                get_session_replay_url: jest.fn(),
-                capture: jest.fn(),
-                featureFlags: { isFeatureEnabled: jest.fn().mockReturnValue(true) },
+                getActiveMatchingSurveys: vi.fn(),
+                get_session_replay_url: vi.fn(),
+                capture: vi.fn(),
+                featureFlags: { isFeatureEnabled: vi.fn().mockReturnValue(true) },
             })
             surveyManager = createSurveyManager(mockPH)
 
@@ -1560,14 +1570,14 @@ describe('SurveyManager', () => {
         let mockSurvey: Survey
 
         beforeEach(() => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             // Set up mocks
             mockPostHog = createMockPostHog({
-                getActiveMatchingSurveys: jest.fn(),
-                get_session_replay_url: jest.fn(),
-                capture: jest.fn(),
+                getActiveMatchingSurveys: vi.fn(),
+                get_session_replay_url: vi.fn(),
+                capture: vi.fn(),
                 featureFlags: {
-                    isFeatureEnabled: jest.fn().mockReturnValue(true),
+                    isFeatureEnabled: vi.fn().mockReturnValue(true),
                 },
             })
 
@@ -1600,11 +1610,11 @@ describe('SurveyManager', () => {
             }
 
             // Make the internal methods accessible for testing
-            jest.spyOn(surveyManager as any, '_addSurveyToFocus')
-            jest.spyOn(surveyManager as any, '_removeSurveyFromFocus')
+            vi.spyOn(surveyManager as any, '_addSurveyToFocus')
+            vi.spyOn(surveyManager as any, '_removeSurveyFromFocus')
 
             // Mock doesSurveyUrlMatch to always return true, used in handlePopoverSurvey
-            jest.spyOn(surveyManager as any, 'handlePopoverSurvey').mockImplementation((survey: Survey) => {
+            vi.spyOn(surveyManager as any, 'handlePopoverSurvey').mockImplementation((survey: Survey) => {
                 // Add survey to focus and create a timeout
                 surveyManager.getTestAPI().addSurveyToFocus(survey)
 
@@ -1620,14 +1630,14 @@ describe('SurveyManager', () => {
         })
 
         afterEach(() => {
-            jest.useRealTimers()
-            // restoreAllMocks (not clearAllMocks) so spies installed via jest.spyOn(global,
+            vi.useRealTimers()
+            // restoreAllMocks (not clearAllMocks) so spies installed via vi.spyOn(global,
             // 'clearTimeout') below get their real implementation back. Left merely cleared,
             // the spy stays wrapped around whatever clearTimeout fake timers had installed when
             // the spy was created; once real timers are restored that reference is stale, and a
             // later test's SurveyManager.dispose() (which calls clearTimeout on any pending
             // timeout) throws "clearTimeout is not defined".
-            jest.restoreAllMocks()
+            vi.restoreAllMocks()
         })
 
         test('should track timeouts when scheduling delayed surveys', () => {
@@ -1642,7 +1652,7 @@ describe('SurveyManager', () => {
             expect(timeoutId).toBeDefined()
 
             // Test that clearTimeout is called with correct ID
-            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+            const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout')
             surveyManager.getTestAPI().removeSurveyFromFocus(mockSurvey)
             expect(clearTimeoutSpy).toHaveBeenCalledWith(timeoutId)
 
@@ -1681,7 +1691,7 @@ describe('SurveyManager', () => {
             expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(true)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurvey.id)
 
-            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+            const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout')
             surveyManager.cancelSurvey(mockSurvey.id)
 
             expect(clearTimeoutSpy).toHaveBeenCalled()
@@ -1691,7 +1701,7 @@ describe('SurveyManager', () => {
 
         test('cancelSurvey should do nothing if survey has no pending timeout', () => {
             // Don't schedule the survey, just try to cancel it
-            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+            const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout')
             surveyManager.cancelSurvey('non-existent-survey')
 
             expect(clearTimeoutSpy).not.toHaveBeenCalled()
@@ -1740,7 +1750,7 @@ describe('SurveyManager', () => {
 
         it('updates the rendered question text and keeps the typed answer when the language changes', () => {
             setNavigatorLanguage('en')
-            mockPostHog.get_property = jest.fn().mockReturnValue([langSurvey])
+            mockPostHog.get_property = vi.fn().mockReturnValue([langSurvey])
 
             surveyManager.handlePopoverSurvey(langSurvey)
 
@@ -1762,10 +1772,10 @@ describe('SurveyManager', () => {
         })
 
         it('renders in the flipped language once a delayed popup elapses, even though the flip happened mid-delay', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             try {
                 setNavigatorLanguage('en')
-                mockPostHog.get_property = jest.fn().mockReturnValue([langSurvey])
+                mockPostHog.get_property = vi.fn().mockReturnValue([langSurvey])
 
                 surveyManager.handlePopoverSurvey({
                     ...langSurvey,
@@ -1779,19 +1789,19 @@ describe('SurveyManager', () => {
                 })
 
                 act(() => {
-                    jest.advanceTimersByTime(5000)
+                    vi.advanceTimersByTime(5000)
                 })
 
                 const { shadow } = retrieveSurveyShadow(langSurvey, mockPostHog)
                 expect(within(shadow as unknown as HTMLElement).getByText('Bonjour?')).toBeInTheDocument()
             } finally {
-                jest.useRealTimers()
+                vi.useRealTimers()
             }
         })
 
         it('keeps display overrides (position) applied after a language change', () => {
             setNavigatorLanguage('en')
-            mockPostHog.get_property = jest.fn().mockReturnValue([langSurvey])
+            mockPostHog.get_property = vi.fn().mockReturnValue([langSurvey])
 
             surveyManager.handlePopoverSurvey(langSurvey, {
                 ignoreConditions: false,
@@ -1847,7 +1857,7 @@ describe('SurveyManager', () => {
                 } as unknown as Survey
 
                 setNavigatorLanguage('en')
-                mockPostHog.get_property = jest.fn().mockReturnValue([shuffledSurvey])
+                mockPostHog.get_property = vi.fn().mockReturnValue([shuffledSurvey])
 
                 surveyManager.handlePopoverSurvey(shuffledSurvey)
 
@@ -1893,7 +1903,7 @@ describe('SurveyManager', () => {
                 ],
             } as Survey
 
-            jest.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation(() => true)
+            vi.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation(() => true)
 
             const result = surveyManager.getTestAPI().checkFlags(survey)
             expect(result).toBe(true)
@@ -1909,7 +1919,7 @@ describe('SurveyManager', () => {
                 ],
             } as Survey
 
-            jest.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation((flag) =>
+            vi.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation((flag) =>
                 flag === 'flag-1' ? true : false
             )
 
@@ -1928,7 +1938,7 @@ describe('SurveyManager', () => {
                 ],
             } as Survey
 
-            jest.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation(() => true)
+            vi.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation(() => true)
 
             const result = surveyManager.getTestAPI().checkFlags(survey)
             expect(result).toBe(true)
@@ -1942,18 +1952,18 @@ describe('SurveyManager', () => {
 
         beforeEach(() => {
             localStorage.clear()
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             originalLocation = window.location
             delete (window as any).location
             window.location = { ...originalLocation, search: '' } as Location
 
             mockPostHog = createMockPostHog({
-                getActiveMatchingSurveys: jest.fn(),
-                get_session_replay_url: jest.fn(),
-                capture: jest.fn(),
+                getActiveMatchingSurveys: vi.fn(),
+                get_session_replay_url: vi.fn(),
+                capture: vi.fn(),
                 featureFlags: {
-                    isFeatureEnabled: jest.fn().mockReturnValue(true),
+                    isFeatureEnabled: vi.fn().mockReturnValue(true),
                 },
             })
 
@@ -2233,18 +2243,13 @@ describe('SurveyManager', () => {
 
 describe('usePopupVisibility URL changes should hide surveys accordingly', () => {
     let posthog: PostHog
-    let mockRemoveSurveyFromFocus: jest.Mock
+    let mockRemoveSurveyFromFocus: vi.Mock
     let originalLocationHref: string
     let originalPushState: typeof window.history.pushState
     let originalReplaceState: typeof window.history.replaceState
 
-    // Set up fake timers for all tests in this suite
-    beforeAll(() => {
-        jest.useFakeTimers()
-    })
-
-    afterAll(() => {
-        jest.useRealTimers()
+    beforeEach(() => {
+        vi.useFakeTimers()
     })
 
     const createTestSurvey = (urlCondition?: { url: string; urlMatchType?: string }): Survey =>
@@ -2272,11 +2277,11 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
     beforeEach(() => {
         // Mock PostHog instance
         posthog = createMockPostHog({
-            capture: jest.fn(),
-            get_session_replay_url: jest.fn(),
+            capture: vi.fn(),
+            get_session_replay_url: vi.fn(),
         })
 
-        mockRemoveSurveyFromFocus = jest.fn()
+        mockRemoveSurveyFromFocus = vi.fn()
 
         // Store original history methods
         originalPushState = window.history.pushState
@@ -2423,7 +2428,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
         // Ensure clearTimeout is defined in the global scope for this test
         if (typeof global.clearTimeout === 'undefined') {
-            global.clearTimeout = jest.fn()
+            global.clearTimeout = vi.fn()
         }
 
         // Start the survey visibility hook
@@ -2443,7 +2448,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
         // Advance timers past the delay
         act(() => {
-            jest.runAllTimers()
+            vi.runAllTimers()
         })
 
         // Survey should still not be visible since URL no longer matches
@@ -2456,8 +2461,8 @@ describe('useHideSurveyOnURLChange', () => {
     let originalLocationHref: string
     let originalPushState: typeof window.history.pushState
     let originalReplaceState: typeof window.history.replaceState
-    let mockRemoveSurveyFromFocus: jest.Mock
-    let mockSetSurveyVisible: jest.Mock
+    let mockRemoveSurveyFromFocus: vi.Mock
+    let mockSetSurveyVisible: vi.Mock
 
     const BASE_SURVEY = {
         id: 'test-survey',
@@ -2469,8 +2474,8 @@ describe('useHideSurveyOnURLChange', () => {
         // Store original history methods
         originalPushState = window.history.pushState
         originalReplaceState = window.history.replaceState
-        mockRemoveSurveyFromFocus = jest.fn()
-        mockSetSurveyVisible = jest.fn()
+        mockRemoveSurveyFromFocus = vi.fn()
+        mockSetSurveyVisible = vi.fn()
 
         // Store original location and set initial location
         originalLocationHref = window.location.href
@@ -2491,7 +2496,7 @@ describe('useHideSurveyOnURLChange', () => {
             writable: true,
         })
 
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     it('should not do anything in preview mode', () => {
@@ -2736,7 +2741,7 @@ describe('preview renders', () => {
         // we have to manually reset the DOM before each test
         document.getElementsByTagName('html')[0].innerHTML = ''
         localStorage.clear()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     test('renderSurveysPreview', () => {

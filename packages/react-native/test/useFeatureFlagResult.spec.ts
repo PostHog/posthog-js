@@ -1,4 +1,4 @@
-/** @jest-environment jsdom */
+/** @vitest-environment jsdom */
 import React from 'react'
 import { renderHook, act } from '@testing-library/react'
 import { FeatureFlagResult } from '@posthog/core'
@@ -8,8 +8,8 @@ import type { PostHog } from '../src/posthog-rn'
 
 function createMockPostHog(overrides?: Partial<Pick<PostHog, 'getFeatureFlagResult' | 'onFeatureFlags'>>) {
   return {
-    getFeatureFlagResult: jest.fn(),
-    onFeatureFlags: jest.fn(() => jest.fn()),
+    getFeatureFlagResult: vi.fn(),
+    onFeatureFlags: vi.fn(() => vi.fn()),
     ...overrides,
   } as unknown as PostHog
 }
@@ -22,7 +22,7 @@ describe('useFeatureFlagResult', () => {
   })
 
   afterEach(() => {
-    jest.resetAllMocks()
+    vi.resetAllMocks()
   })
 
   const wrapper = ({ children }: { children: React.ReactNode }) =>
@@ -30,7 +30,7 @@ describe('useFeatureFlagResult', () => {
 
   it('should return boolean true flag result', () => {
     const expected: FeatureFlagResult = { key: 'test-flag', enabled: true }
-    ;(mockPostHog.getFeatureFlagResult as jest.Mock).mockReturnValue(expected)
+    ;(mockPostHog.getFeatureFlagResult as vi.Mock).mockReturnValue(expected)
 
     const { result } = renderHook(() => useFeatureFlagResult('test-flag'), { wrapper })
 
@@ -40,7 +40,7 @@ describe('useFeatureFlagResult', () => {
 
   it('should return boolean false flag result', () => {
     const expected: FeatureFlagResult = { key: 'test-flag', enabled: false }
-    ;(mockPostHog.getFeatureFlagResult as jest.Mock).mockReturnValue(expected)
+    ;(mockPostHog.getFeatureFlagResult as vi.Mock).mockReturnValue(expected)
 
     const { result } = renderHook(() => useFeatureFlagResult('test-flag'), { wrapper })
 
@@ -49,7 +49,7 @@ describe('useFeatureFlagResult', () => {
 
   it('should return multivariate flag result', () => {
     const expected: FeatureFlagResult = { key: 'test-flag', enabled: true, variant: 'control' }
-    ;(mockPostHog.getFeatureFlagResult as jest.Mock).mockReturnValue(expected)
+    ;(mockPostHog.getFeatureFlagResult as vi.Mock).mockReturnValue(expected)
 
     const { result } = renderHook(() => useFeatureFlagResult('test-flag'), { wrapper })
 
@@ -63,7 +63,7 @@ describe('useFeatureFlagResult', () => {
       variant: 'variant-a',
       payload: { color: 'blue' },
     }
-    ;(mockPostHog.getFeatureFlagResult as jest.Mock).mockReturnValue(expected)
+    ;(mockPostHog.getFeatureFlagResult as vi.Mock).mockReturnValue(expected)
 
     const { result } = renderHook(() => useFeatureFlagResult('test-flag'), { wrapper })
 
@@ -71,7 +71,7 @@ describe('useFeatureFlagResult', () => {
   })
 
   it('should return undefined for missing flag', () => {
-    ;(mockPostHog.getFeatureFlagResult as jest.Mock).mockReturnValue(undefined)
+    ;(mockPostHog.getFeatureFlagResult as vi.Mock).mockReturnValue(undefined)
 
     const { result } = renderHook(() => useFeatureFlagResult('missing-flag'), { wrapper })
 
@@ -80,17 +80,17 @@ describe('useFeatureFlagResult', () => {
 
   it('should update result when feature flags change', () => {
     let flagsCallback: (() => void) | undefined
-    ;(mockPostHog.onFeatureFlags as jest.Mock).mockImplementation((cb: () => void) => {
+    ;(mockPostHog.onFeatureFlags as vi.Mock).mockImplementation((cb: () => void) => {
       flagsCallback = cb
-      return jest.fn()
+      return vi.fn()
     })
-    ;(mockPostHog.getFeatureFlagResult as jest.Mock).mockReturnValue(undefined)
+    ;(mockPostHog.getFeatureFlagResult as vi.Mock).mockReturnValue(undefined)
 
     const { result } = renderHook(() => useFeatureFlagResult('test-flag'), { wrapper })
     expect(result.current).toBeUndefined()
 
     const updated: FeatureFlagResult = { key: 'test-flag', enabled: true }
-    ;(mockPostHog.getFeatureFlagResult as jest.Mock).mockReturnValue(updated)
+    ;(mockPostHog.getFeatureFlagResult as vi.Mock).mockReturnValue(updated)
     act(() => {
       flagsCallback?.()
     })
@@ -100,7 +100,7 @@ describe('useFeatureFlagResult', () => {
 
   it('does not reread the feature flag result on an unrelated rerender', () => {
     const { rerender } = renderHook(() => useFeatureFlagResult('test-flag'), { wrapper })
-    ;(mockPostHog.getFeatureFlagResult as jest.Mock).mockClear()
+    ;(mockPostHog.getFeatureFlagResult as vi.Mock).mockClear()
 
     rerender()
 
@@ -108,9 +108,9 @@ describe('useFeatureFlagResult', () => {
   })
 
   it('should unsubscribe on cleanup', () => {
-    const unsubscribe = jest.fn()
-    ;(mockPostHog.onFeatureFlags as jest.Mock).mockReturnValue(unsubscribe)
-    ;(mockPostHog.getFeatureFlagResult as jest.Mock).mockReturnValue(undefined)
+    const unsubscribe = vi.fn()
+    ;(mockPostHog.onFeatureFlags as vi.Mock).mockReturnValue(unsubscribe)
+    ;(mockPostHog.getFeatureFlagResult as vi.Mock).mockReturnValue(undefined)
 
     const { unmount } = renderHook(() => useFeatureFlagResult('test-flag'), { wrapper })
     unmount()
@@ -120,7 +120,7 @@ describe('useFeatureFlagResult', () => {
 
   it('should use provided client over context client', () => {
     const customClient = createMockPostHog()
-    ;(customClient.getFeatureFlagResult as jest.Mock).mockReturnValue({ key: 'flag', enabled: true })
+    ;(customClient.getFeatureFlagResult as vi.Mock).mockReturnValue({ key: 'flag', enabled: true })
 
     const { result } = renderHook(() => useFeatureFlagResult('flag', customClient), { wrapper })
 
@@ -130,7 +130,7 @@ describe('useFeatureFlagResult', () => {
   })
 
   it('should log an error when no client is provided via context or prop', () => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     renderHook(() => useFeatureFlagResult('flag'))
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining('useFeatureFlagResult was called without a PostHog client')
@@ -139,7 +139,7 @@ describe('useFeatureFlagResult', () => {
 
   it('should work with prop client when no context provider exists', () => {
     const propClient = createMockPostHog()
-    ;(propClient.getFeatureFlagResult as jest.Mock).mockReturnValue({ key: 'flag', enabled: true })
+    ;(propClient.getFeatureFlagResult as vi.Mock).mockReturnValue({ key: 'flag', enabled: true })
 
     const { result } = renderHook(() => useFeatureFlagResult('flag', propClient))
 
