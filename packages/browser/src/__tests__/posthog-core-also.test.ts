@@ -4,7 +4,7 @@ import * as globals from '@posthog/browser-common/utils/globals'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
-import { Compression, isUndefined } from '@posthog/core'
+import { Compression, isArray, isUndefined } from '@posthog/core'
 import {
     AUTOCAPTURE_DISABLED_SERVER_SIDE,
     ENABLE_PERSON_PROCESSING,
@@ -1747,8 +1747,7 @@ describe('posthog core', () => {
                 posthog.capture('some_event', { $groups: { project: 'project::7' } })
 
                 const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
-                // eslint-disable-next-line posthog-js/no-direct-array-check
-                if (Array.isArray(eventPayload.data!)) {
+                if (isArray(eventPayload.data!)) {
                     throw new Error('')
                 }
                 expect(eventPayload.data!.properties.$groups).toEqual({
@@ -1762,8 +1761,7 @@ describe('posthog core', () => {
                 posthog.capture('some_event', { $groups: { project: 'project::7' } })
 
                 const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
-                // eslint-disable-next-line posthog-js/no-direct-array-check
-                if (Array.isArray(eventPayload.data!)) {
+                if (isArray(eventPayload.data!)) {
                     throw new Error('')
                 }
                 expect(eventPayload.data!.properties.$groups).toEqual({ project: 'project::7' })
@@ -1775,8 +1773,7 @@ describe('posthog core', () => {
                 posthog.capture('some_event', { $groups: {} })
 
                 const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
-                // eslint-disable-next-line posthog-js/no-direct-array-check
-                if (Array.isArray(eventPayload.data!)) {
+                if (isArray(eventPayload.data!)) {
                     throw new Error('')
                 }
                 expect(eventPayload.data!.properties.$groups).toEqual({})
