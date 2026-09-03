@@ -925,6 +925,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         await vi.waitFor(() => {
             expect(featureFlags.getFlagVariants()).toEqual({ current: true })
         })
+        expect(sendRequest).toHaveBeenCalledTimes(2)
         featureFlags.dispose()
         await posthog.shutdown()
     })
