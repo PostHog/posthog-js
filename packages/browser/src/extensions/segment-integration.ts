@@ -32,7 +32,7 @@ type SegmentIntegrationUser = Awaited<ReturnType<SegmentAnalytics['user']>>
 
 const logger = createLogger('[SegmentIntegration]')
 
-const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
+const createSegmentIntegration = (posthog: PostHog, runtimeAnonymousId?: string): SegmentPlugin => {
     if (typeof Promise === 'undefined' || !Promise.resolve) {
         logger.warn('This browser does not have Promise support, and can not use the segment integration')
     }
@@ -41,10 +41,19 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         if (!eventName) {
             return ctx
         }
-        if (!ctx.event.userId && ctx.event.anonymousId !== posthog.get_distinct_id()) {
+        const preserveRuntimeAnonymousIdentity =
+            !!runtimeAnonymousId && ctx.event.anonymousId === runtimeAnonymousId && !ctx.event.userId
+        if (
+            !preserveRuntimeAnonymousIdentity &&
+            !ctx.event.userId &&
+            ctx.event.anonymousId !== posthog.get_distinct_id()
+        ) {
             // This is our only way of detecting that segment's analytics.reset() has been called so we also call it
             logger.info('No userId set, resetting PostHog')
             posthog.reset()
+        }
+        if (!preserveRuntimeAnonymousIdentity) {
+            runtimeAnonymousId = undefined
         }
         if (ctx.event.userId && ctx.event.userId !== posthog.get_distinct_id()) {
             logger.info('UserId set, identifying with PostHog')
@@ -71,7 +80,11 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
     }
 }
 
-function setupPostHogFromSegment(posthog: PostHog, done: () => void, bootstrapIdentifiedUser: boolean) {
+function setupPostHogFromSegment(
+    posthog: PostHog,
+    done: (runtimeAnonymousId?: string) => void,
+    bootstrapIdentifiedUser: boolean
+) {
     const segment = posthog.config.segment
     if (!segment) {
         return done()
@@ -93,7 +106,7 @@ function setupPostHogFromSegment(posthog: PostHog, done: () => void, bootstrapId
             posthog.persistence!.set_property(USER_STATE, USER_STATE_IDENTIFIED)
         }
 
-        done()
+        done(bootstrapIdentifiedUser ? undefined : user.anonymousId() || undefined)
     }
 
     const segmentUser = segment.user()
@@ -112,10 +125,16 @@ export function setupSegmentIntegration(posthog: PostHog, done: () => void, boot
 
     setupPostHogFromSegment(
         posthog,
-        () => {
-            segment.register(createSegmentIntegration(posthog)).then(() => {
-                done()
-            })
+        (runtimeAnonymousId) => {
+            segment.register(createSegmentIntegration(posthog, runtimeAnonymousId)).then(
+                () => {
+                    done()
+                },
+                (error) => {
+                    logger.error('Failed to register the Segment integration', error)
+                    done()
+                }
+            )
         },
         bootstrapIdentifiedUser
     )
