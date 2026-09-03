@@ -1,5 +1,17 @@
 # @posthog/mcp
 
+## 0.13.0
+
+### Minor Changes
+
+- [#4735](https://github.com/PostHog/posthog-js/pull/4735) [`cbadf11`](https://github.com/PostHog/posthog-js/commit/cbadf116d776c6184d37752b7d39fb35215f989f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Add self-reported model capture to the `PostHogMCP` custom-dispatcher path. The preparation helpers preserve application-owned fields and work across stateless server replicas when given the original tool descriptor. Tool calls and missing-capability reports can record the model properties.
+  (2026-09-03)
+
+### Patch Changes
+
+- Updated dependencies [[`dbbb58e`](https://github.com/PostHog/posthog-js/commit/dbbb58e286db3762673f71995a8aeea89aa44123)]:
+  - @posthog/core@1.50.3
+
 ## 0.12.0
 
 ### Minor Changes
@@ -313,7 +325,7 @@
 - [#3936](https://github.com/PostHog/posthog-js/pull/3936) [`06c23d8`](https://github.com/PostHog/posthog-js/commit/06c23d8959a6a5c1c322d7eb722ac4731121a50f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Re-export `PostHog` (and the `PostHogOptions` type) from `@posthog/mcp`, so you can import the client and `instrument` from a single package:
 
   ```ts
-  import { PostHog, instrument } from '@posthog/mcp'
+  import { PostHog, instrument } from "@posthog/mcp";
   ```
 
   `posthog-node` remains a peer dependency (resolved from the host app's installed copy); this only unifies the import. `PostHogMCP` is also already accepted by `instrument()` if you prefer a single client class. (2026-06-23)

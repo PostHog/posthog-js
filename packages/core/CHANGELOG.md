@@ -1,5 +1,14 @@
 # @posthog/core
 
+## 1.50.3
+
+### Patch Changes
+
+- [#4753](https://github.com/PostHog/posthog-js/pull/4753) [`dbbb58e`](https://github.com/PostHog/posthog-js/commit/dbbb58e286db3762673f71995a8aeea89aa44123) Thanks [@Ashishjob](https://github.com/Ashishjob)! - Fix `clampToRange` discarding a valid fallback value of `0`. It used `fallbackValue || max`, so a `0` fallback (a legitimate value) was treated as absent and replaced by `max`; it now uses `??` so `0` is honored.
+  (2026-09-03)
+- Updated dependencies [[`41ed3af`](https://github.com/PostHog/posthog-js/commit/41ed3af41c1a98776d1686caf4e58875f95b0847)]:
+  - @posthog/types@1.408.1
+
 ## 1.50.2
 
 ### Patch Changes
@@ -352,10 +361,14 @@
   Backend services can now record metrics through the same statsd-style pre-aggregating client the browser SDK ships, with no OpenTelemetry setup:
 
   ```ts
-  const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } })
-  client.metrics.count('invoices.processed', 1, { attributes: { plan: 'pro' } })
-  client.metrics.gauge('queue.depth', 42)
-  client.metrics.histogram('job.duration', 187, { unit: 'ms' })
+  const client = new PostHog("phc_...", {
+    metrics: { serviceName: "billing-worker" },
+  });
+  client.metrics.count("invoices.processed", 1, {
+    attributes: { plan: "pro" },
+  });
+  client.metrics.gauge("queue.depth", 42);
+  client.metrics.histogram("job.duration", 187, { unit: "ms" });
   ```
 
   Samples aggregate in memory and flush as OTLP/JSON to `/i/v1/metrics` (one data point per series per window). Pending metrics are flushed on `shutdown()`. Core gains `_sendMetricsBatch` on `PostHogCoreStateless` (same outcome contract as `_sendLogsBatch`) and a shared `resolveMetricsConfig`, so any core-based SDK can host `PostHogMetrics`. (2026-07-15)
@@ -405,9 +418,9 @@
   A statsd-style pre-aggregating metrics client for the PostHog Metrics product (alpha). Samples are folded into per-series aggregates in memory (counts sum, gauges keep the last value, histograms accumulate buckets) and flushed periodically as OTLP/JSON to `/i/v1/metrics` — one data point per series per flush window, no matter how many calls. No OpenTelemetry SDK setup required:
 
   ```ts
-  posthog.metrics.count('orders_created', 1)
-  posthog.metrics.gauge('active_connections', 42)
-  posthog.metrics.histogram('api_latency', 187, { unit: 'ms' })
+  posthog.metrics.count("orders_created", 1);
+  posthog.metrics.gauge("active_connections", 42);
+  posthog.metrics.histogram("api_latency", 187, { unit: "ms" });
   ```
 
   Configure via `metrics: { serviceName, environment, flushIntervalMs, maxSeriesPerFlush, beforeSend, ... }`. (2026-07-08)
