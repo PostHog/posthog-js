@@ -4,9 +4,9 @@ import type { OtlpSpan, OtlpTracesPayload } from '@posthog/types'
 import { waitForPromises } from './utils'
 import { isGzipSupported, osResourceAttributes } from '@posthog/core'
 
-jest.mock('../version', () => ({ version: '1.2.3' }))
+vi.mock('../version', () => ({ version: '1.2.3' }))
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 describe('PostHog traces', () => {
   let posthog: PostHog
@@ -34,12 +34,12 @@ describe('PostHog traces', () => {
   // Traces run their own flush cycle; this advances it without calling flush().
   const DEFAULT_TRACES_FLUSH_INTERVAL_MS = 5000
   const flushTraces = async (): Promise<void> => {
-    await jest.advanceTimersByTimeAsync(DEFAULT_TRACES_FLUSH_INTERVAL_MS)
+    await vi.advanceTimersByTimeAsync(DEFAULT_TRACES_FLUSH_INTERVAL_MS)
     await waitForPromises()
   }
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     mockedFetch.mockResolvedValue({
       status: 200,
       text: () => Promise.resolve('{}'),
@@ -65,7 +65,7 @@ describe('PostHog traces', () => {
 
     it('still runs a withSpan callback when tracing is off', async () => {
       const untraced = createClient({ traces: undefined })
-      const fn = jest.fn(() => 'value')
+      const fn = vi.fn(() => 'value')
 
       expect(untraced.withSpan('job', fn)).toBe('value')
       expect(fn).toHaveBeenCalledTimes(1)
@@ -293,6 +293,20 @@ describe('PostHog traces', () => {
       expect(span.parentSpanId).toBe(spanId)
     })
 
+    it('hands the next service the flag the caller sent, not an upgraded one', async () => {
+      const inbound = `00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00`
+      let propagated: string | null = null
+
+      await posthog.withSpan('handler', { parent: inbound }, async () => {
+        propagated = posthog.getActiveSpan()!.traceparent()
+      })
+      await flushTraces()
+
+      expect(propagated).toEqual(expect.stringMatching(/-00$/))
+      // Recorded and exported, with the remote-parent bits set.
+      expect(sentSpans()[0].flags).toBe(0x300)
+    })
+
     it('produces a traceparent for the next service', async () => {
       let traceparent: string | null = null
       posthog.withSpan('POST /checkout', () => {
@@ -469,7 +483,7 @@ describe('PostHog traces', () => {
 
   describe('serverless waitUntil', () => {
     it('drains spans on the debounced waitUntil flush, not only on shutdown', async () => {
-      const waitUntil = jest.fn()
+      const waitUntil = vi.fn()
       // High flushAt and a long event interval so the only thing that can flush
       // within the window is the debounced waitUntil cycle.
       const client = createClient({
@@ -482,7 +496,7 @@ describe('PostHog traces', () => {
       // No capture(): a handler that only traces must still hold the invocation open.
       client.startSpan('handler').end()
 
-      await jest.advanceTimersByTimeAsync(100)
+      await vi.advanceTimersByTimeAsync(100)
       await waitForPromises()
 
       expect(waitUntil).toHaveBeenCalled()
@@ -498,7 +512,7 @@ describe('PostHog traces', () => {
       mockedFetch.mockImplementation(() => new Promise(() => {}) as any)
 
       const shutdown = client.shutdown(500)
-      await jest.advanceTimersByTimeAsync(600)
+      await vi.advanceTimersByTimeAsync(600)
 
       await expect(shutdown).resolves.toBeUndefined()
     })
@@ -510,12 +524,12 @@ describe('PostHog traces', () => {
       const client = createClient()
       client.startSpan('checkout').end()
       const shutdown = client.shutdown(100)
-      await jest.advanceTimersByTimeAsync(150)
+      await vi.advanceTimersByTimeAsync(150)
       await shutdown
       const afterShutdown = traceRequests().length
 
       rejectFetch(new Error('connection refused'))
-      await jest.advanceTimersByTimeAsync(60_000)
+      await vi.advanceTimersByTimeAsync(60_000)
 
       expect(traceRequests()).toHaveLength(afterShutdown)
     })

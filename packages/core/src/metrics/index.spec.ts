@@ -14,21 +14,21 @@ const resolveForTest = (partial?: Partial<ResolvedPostHogMetricsConfig>): Resolv
 const createMockInstance = (overrides: Record<string, any> = {}): any => ({
   isDisabled: false,
   optedOut: false,
-  getLibraryId: jest.fn(() => 'posthog-core-tests'),
-  getLibraryVersion: jest.fn(() => '0.0.0-test'),
-  _sendMetricsBatch: jest.fn((): Promise<SendMetricsBatchOutcome> => Promise.resolve({ kind: 'ok' })),
+  getLibraryId: vi.fn(() => 'posthog-core-tests'),
+  getLibraryVersion: vi.fn(() => '0.0.0-test'),
+  _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> => Promise.resolve({ kind: 'ok' })),
   ...overrides,
 })
 
 const createMockLogger = (): Logger => {
   const logger: any = {
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    critical: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    critical: vi.fn(),
   }
-  logger.createLogger = jest.fn(() => logger)
+  logger.createLogger = vi.fn(() => logger)
   return logger as Logger
 }
 
@@ -47,13 +47,13 @@ describe('PostHogMetrics', () => {
     sentPayloads(instance).flatMap((p) => p.resourceMetrics[0].scopeMetrics[0].metrics)
 
   beforeEach(() => {
-    jest.useFakeTimers()
+    vi.useFakeTimers()
     mockInstance = createMockInstance()
     logger = createMockLogger()
   })
 
   afterEach(() => {
-    jest.useRealTimers()
+    vi.useRealTimers()
   })
 
   describe('aggregation semantics', () => {
@@ -182,7 +182,7 @@ describe('PostHogMetrics', () => {
 
       const attrs = sentMetrics()[0].sum!.dataPoints[0].attributes
       expect(attrs).toContainEqual({ key: 'huge', value: { stringValue: '9223372036854775808' } })
-      expect((logger.debug as jest.Mock).mock.calls.some((c) => String(c[0]).includes('outside the int64 range'))).toBe(
+      expect((logger.debug as vi.Mock).mock.calls.some((c) => String(c[0]).includes('outside the int64 range'))).toBe(
         true
       )
     })
@@ -190,7 +190,7 @@ describe('PostHogMetrics', () => {
     it('stamps delta data points with a window: startTimeUnixNano <= timeUnixNano, both nano strings', async () => {
       const metrics = createMetrics()
       metrics.count('orders_created', 1)
-      jest.advanceTimersByTime(2000)
+      vi.advanceTimersByTime(2000)
       await metrics.flush()
 
       const dp = sentMetrics()[0].sum!.dataPoints[0]
@@ -239,7 +239,7 @@ describe('PostHogMetrics', () => {
       metrics.count('orders_created', 1)
       expect(mockInstance._sendMetricsBatch).not.toHaveBeenCalled()
 
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(1)
     })
 
@@ -472,7 +472,7 @@ describe('PostHogMetrics', () => {
 
     it('does not send when the window is empty', async () => {
       createMetrics({ flushIntervalMs: 5000 })
-      await jest.advanceTimersByTimeAsync(15000)
+      await vi.advanceTimersByTimeAsync(15000)
       expect(mockInstance._sendMetricsBatch).not.toHaveBeenCalled()
 
       const metrics = createMetrics()
@@ -525,9 +525,9 @@ describe('PostHogMetrics', () => {
     it('keeps flushing on the interval', async () => {
       const metrics = createMetrics({ flushIntervalMs: 5000 })
       metrics.count('a', 1)
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       metrics.count('a', 1)
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(2)
     })
 
@@ -535,7 +535,7 @@ describe('PostHogMetrics', () => {
       const metrics = createMetrics({ flushIntervalMs: 5000 })
       metrics.count('a', 1)
       metrics.reset()
-      await jest.advanceTimersByTimeAsync(20000)
+      await vi.advanceTimersByTimeAsync(20000)
       expect(mockInstance._sendMetricsBatch).not.toHaveBeenCalled()
     })
 
@@ -558,11 +558,11 @@ describe('PostHogMetrics', () => {
 
       const metrics = createMetrics({ flushIntervalMs: 5000 })
       metrics.count('orders_created', 5)
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(1)
 
       // No new captures — the retained window must not be stranded until shutdown.
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(2)
       const payload: OtlpMetricsPayload = mockInstance._sendMetricsBatch.mock.calls[1][0]
       expect(payload.resourceMetrics[0].scopeMetrics[0].metrics[0].sum!.dataPoints[0].asDouble).toBe(5)
@@ -587,7 +587,7 @@ describe('PostHogMetrics', () => {
       const sent = sentMetrics()
       expect(sent.map((m) => m.name).sort()).toEqual(['a', 'b'])
       expect(sent.find((m) => m.name === 'a')!.sum!.dataPoints[0].asDouble).toBe(2)
-      expect((logger.warn as jest.Mock).mock.calls.length).toBe(1)
+      expect((logger.warn as vi.Mock).mock.calls.length).toBe(1)
     })
 
     it('re-applies the series cap when merging a failed window back', async () => {
@@ -615,7 +615,7 @@ describe('PostHogMetrics', () => {
         0
       )
       expect(dataPointCount).toBeLessThanOrEqual(2)
-      expect((logger.warn as jest.Mock).mock.calls.some((c) => String(c[0]).includes('series cap'))).toBe(true)
+      expect((logger.warn as vi.Mock).mock.calls.some((c) => String(c[0]).includes('series cap'))).toBe(true)
     })
 
     it('drops non-finite values and negative counts', async () => {
@@ -651,7 +651,7 @@ describe('PostHogMetrics', () => {
 
       // Only the well-formed sample ships; the malformed ones are dropped with a warning.
       expect(sentMetrics().map((m) => m.name)).toEqual(['good'])
-      const attrWarns = (logger.warn as jest.Mock).mock.calls.filter((c) => String(c[0]).includes('attributes'))
+      const attrWarns = (logger.warn as vi.Mock).mock.calls.filter((c) => String(c[0]).includes('attributes'))
       expect(attrWarns).toHaveLength(2)
     })
 
@@ -707,7 +707,7 @@ describe('PostHogMetrics', () => {
       const sent = sentMetrics()
       expect(sent.some((m) => m.sum)).toBe(true)
       expect(sent.some((m) => m.gauge)).toBe(true)
-      const typeWarns = (logger.warn as jest.Mock).mock.calls.filter((c) => String(c[0]).includes('already used'))
+      const typeWarns = (logger.warn as vi.Mock).mock.calls.filter((c) => String(c[0]).includes('already used'))
       expect(typeWarns).toHaveLength(1)
     })
 

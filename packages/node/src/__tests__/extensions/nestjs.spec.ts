@@ -4,9 +4,9 @@ import { defer, of, throwError, lastValueFrom } from 'rxjs'
 import { PostHog } from '@/entrypoints/index.node'
 import { PostHogInterceptor } from '@/extensions/nestjs'
 
-jest.mock('../../version', () => ({ version: '1.2.3' }))
+vi.mock('../../version', () => ({ version: '1.2.3' }))
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 /**
  * Deterministically drains all pending promises (including async chains like

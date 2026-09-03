@@ -1,5 +1,15 @@
 # @posthog/nuxt
 
+## 1.7.87
+
+### Patch Changes
+
+- [#4737](https://github.com/PostHog/posthog-js/pull/4737) [`c589ab8`](https://github.com/PostHog/posthog-js/commit/c589ab8f5f06df627bbd0e1899aebd17839be310) Thanks [@cat-ph](https://github.com/cat-ph)! - Bump `@posthog/cli` to `~0.16.2`, which fixes a race in `sourcemap process`: inject and upload used to walk the directory roots separately, so a bundler still writing into the output directory mid-run (e.g. Turbopack's background filesystem-cache flush on Next.js 16.3+) could hand upload a chunk inject never stamped and abort the build with "Chunk ID not found". The CLI now uploads exactly the pairs it injected, and `--delete-after` cleanup skips files that vanished or changed after upload instead of failing the build.
+  (2026-09-02)
+- Updated dependencies [[`dd5888a`](https://github.com/PostHog/posthog-js/commit/dd5888a875f95ba7b1edaec98b1a8ff1b83f51f2), [`9b4008a`](https://github.com/PostHog/posthog-js/commit/9b4008a03ef12e3150d906ca638f24403bc67a41), [`77797c9`](https://github.com/PostHog/posthog-js/commit/77797c9e983f053ee362e98ee880e79b17512ac9)]:
+  - @posthog/plugin-utils@2.0.0
+  - posthog-js@1.425.1
+
 ## 1.7.86
 
 ### Patch Changes

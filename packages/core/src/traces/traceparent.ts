@@ -3,6 +3,8 @@ import { isValidSpanId, isValidTraceId } from './ids'
 export interface RemoteSpanContext {
   traceId: string
   spanId: string
+  /** The inbound trace-flags byte, e.g. `01` sampled, `00` sampled out. */
+  flags: string
 }
 
 // `00-<32 hex>-<16 hex>-<2 hex>`. Version `ff` is invalid per the spec; other
@@ -13,13 +15,23 @@ const TRACEPARENT_RE = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2
  * Parses an incoming `traceparent` header value, returning `undefined` for
  * anything malformed so a bad header starts a fresh root rather than throwing.
  *
- * Incoming trace flags are deliberately ignored: we continue the trace even when
- * the caller sampled it out (`00`), because PostHog records every captured span
- * and dropping the parentage would orphan our own spans.
+ * A trace the caller sampled out (`00`) is still continued — PostHog records
+ * every captured span — but the inbound flag rides along, so what this SDK
+ * propagates onward says what the caller decided rather than overriding it.
  */
 export function parseTraceparent(value: unknown): RemoteSpanContext | undefined {
   const fields = matchTraceparent(value)
-  return fields && { traceId: fields.traceId, spanId: fields.spanId }
+  return fields && { traceId: fields.traceId, spanId: fields.spanId, flags: definedFlags(fields.flags) }
+}
+
+/**
+ * Keeps only the flags version `00` defines — the sampled bit. A span continuing
+ * this trace re-emits the byte under version `00`, and W3C requires a vendor to
+ * zero every flag that version does not define rather than forward one it cannot
+ * interpret.
+ */
+function definedFlags(flags: string): string {
+  return parseInt(flags, 16) & 0x01 ? TRACE_FLAGS_SAMPLED : TRACE_FLAGS_UNSAMPLED
 }
 
 interface TraceparentFields {
@@ -57,12 +69,20 @@ export function normalizeTraceparent(value: unknown): string | undefined {
   return fields && `${fields.version}-${fields.traceId}-${fields.spanId}-${fields.flags}`
 }
 
+/** The W3C sampled bit, set on a trace this SDK started. */
+export const TRACE_FLAGS_SAMPLED = '01'
+
+/** The same byte with the sampled bit clear, for a trace the caller sampled out. */
+const TRACE_FLAGS_UNSAMPLED = '00'
+
 /**
- * Builds the `traceparent` header value for a span. The sampled flag is always
- * set, because a span we exported is by definition recorded.
+ * Builds the `traceparent` header value for a span. A span continuing a remote
+ * trace propagates the flags byte it was handed: a downstream parent-based
+ * sampler must see the decision the head sampler actually made, not one this
+ * SDK invented. A trace started here is sampled, because it is recorded.
  */
-export function formatTraceparent(traceId: string, spanId: string): string {
-  return `00-${traceId}-${spanId}-01`
+export function formatTraceparent(traceId: string, spanId: string, flags: string = TRACE_FLAGS_SAMPLED): string {
+  return `00-${traceId}-${spanId}-${flags}`
 }
 
 // tracestate is a comma-separated list of at most 32 `key=value` members, and

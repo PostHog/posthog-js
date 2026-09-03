@@ -1,5 +1,19 @@
 # @posthog/types
 
+## 1.408.0
+
+### Minor Changes
+
+- [#4741](https://github.com/PostHog/posthog-js/pull/4741) [`61a26e5`](https://github.com/PostHog/posthog-js/commit/61a26e5227bcb79c3b5b512e7a9829449e7d49eb) Thanks [@veryayskiy](https://github.com/veryayskiy)! - Forward generic server-signed identity claims with conversations widget requests.
+  (2026-09-02)
+
+## 1.407.2
+
+### Patch Changes
+
+- [#4712](https://github.com/PostHog/posthog-js/pull/4712) [`7f009dc`](https://github.com/PostHog/posthog-js/commit/7f009dcb937baa28c7b814d5d8355c0d58847cfa) Thanks [@posthog](https://github.com/apps/posthog)! - Document the session replay input masking defaults in the `session_recording` config reference: inputs are masked by default, password inputs stay masked on a partial `maskInputOptions` override, non-input text and images need `maskTextSelector`, and client-side masking options override the project privacy setting.
+  (2026-09-01)
+
 ## 1.407.1
 
 ### Patch Changes
@@ -30,9 +44,9 @@
 
 - [#4476](https://github.com/PostHog/posthog-js/pull/4476) [`ed4dd97`](https://github.com/PostHog/posthog-js/commit/ed4dd97d461f9dd871507c8b929ab38cae376181) Thanks [@posthog](https://github.com/apps/posthog)! - fix(browser): refresh configured feature flags when a hidden tab becomes visible
 
-    Feature flags now own their automatic refresh timer and visibility listener.
-    Hidden tabs reload due flags when they become visible. The existing five-minute
-    default and `remote_config_refresh_interval_ms` behavior remain unchanged. (2026-08-25)
+  Feature flags now own their automatic refresh timer and visibility listener.
+  Hidden tabs reload due flags when they become visible. The existing five-minute
+  default and `remote_config_refresh_interval_ms` behavior remain unchanged. (2026-08-25)
 
 ## 1.406.0
 
@@ -54,7 +68,7 @@
 
 - [#4418](https://github.com/PostHog/posthog-js/pull/4418) [`be2161d`](https://github.com/PostHog/posthog-js/commit/be2161d68946b30d27d7a0a5c2cb5671b04d5ac0) Thanks [@posthog](https://github.com/apps/posthog)! - feat: add granular automatic pageview options for SPA navigation
 
-    `capture_pageview` now accepts an object with `path`, `search`, and `hash` options. Each selected URL component triggers a `$pageview` when it changes, including direct hash changes used by hash-based routers. The existing `'history_change'` option continues to capture pathname changes. (2026-08-24)
+  `capture_pageview` now accepts an object with `path`, `search`, and `hash` options. Each selected URL component triggers a `$pageview` when it changes, including direct hash changes used by hash-based routers. The existing `'history_change'` option continues to capture pathname changes. (2026-08-24)
 
 ## 1.405.1
 
@@ -77,13 +91,13 @@
 
 - [#4503](https://github.com/PostHog/posthog-js/pull/4503) [`eb05237`](https://github.com/PostHog/posthog-js/commit/eb0523729c4f989663a38d3ce9d0e61d4f262ee1) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(dead-clicks): treat visibility and focus changes as liveness signals, not dead-click evidence
 
-    The dead-click detector treated a `visibilitychange` as evidence a click was dead: it measured `Math.abs(clickTimestamp - lastVisibilityChange)` and, once that exceeded the threshold, timed the click out as dead. Because it only recorded the tab becoming visible, any click in a session where the tab had ever been backgrounded (median gap ~1 minute) was flagged.
+  The dead-click detector treated a `visibilitychange` as evidence a click was dead: it measured `Math.abs(clickTimestamp - lastVisibilityChange)` and, once that exceeded the threshold, timed the click out as dead. Because it only recorded the tab becoming visible, any click in a session where the tab had ever been backgrounded (median gap ~1 minute) was flagged.
 
-    A visibility or focus change near a click is the opposite — a sign the click did something (it woke/focused the tab, opened a new tab, or opened a new window/popup) — so these signals now only ever _suppress_ a dead click, never cause one:
-    - Visibility changes are recorded in both directions (a click that opens a new tab sends the current tab to `hidden`), and a window `focus`/`blur` observer is added, since a click that opens a new window/popup may leave the tab visible and only surface as the current window losing focus.
-    - A click within a wake-up/interaction window (1s, wide enough for a real "tab back, then click" gesture) of any such change is suppressed.
-    - The visibility signal no longer feeds the dead-marking path at all. `$dead_click_visibility_changed_timeout` stays in the payload (always false) for shape compatibility, and a new `$dead_click_focus_changed_delay_ms` is emitted for observability.
-    - Visibility/focus changes are now recorded onto each queued candidate the instant they fire (like scroll), instead of being read from a single shared timestamp when the click is checked ~1s later. A click that hides or blurs the tab (opening a new tab/window) suspends that check while the tab is backgrounded; by the time it resumes the tab has usually returned, and the shared timestamp would have been overwritten by that later transition — losing the click-correlated one and wrongly flagging the click dead. Stamping the candidate as the event fires makes delayed hide→show and blur→focus sequences suppress correctly. (2026-08-14)
+  A visibility or focus change near a click is the opposite — a sign the click did something (it woke/focused the tab, opened a new tab, or opened a new window/popup) — so these signals now only ever _suppress_ a dead click, never cause one:
+  - Visibility changes are recorded in both directions (a click that opens a new tab sends the current tab to `hidden`), and a window `focus`/`blur` observer is added, since a click that opens a new window/popup may leave the tab visible and only surface as the current window losing focus.
+  - A click within a wake-up/interaction window (1s, wide enough for a real "tab back, then click" gesture) of any such change is suppressed.
+  - The visibility signal no longer feeds the dead-marking path at all. `$dead_click_visibility_changed_timeout` stays in the payload (always false) for shape compatibility, and a new `$dead_click_focus_changed_delay_ms` is emitted for observability.
+  - Visibility/focus changes are now recorded onto each queued candidate the instant they fire (like scroll), instead of being read from a single shared timestamp when the click is checked ~1s later. A click that hides or blurs the tab (opening a new tab/window) suspends that check while the tab is backgrounded; by the time it resumes the tab has usually returned, and the shared timestamp would have been overwritten by that later transition — losing the click-correlated one and wrongly flagging the click dead. Stamping the candidate as the event fires makes delayed hide→show and blur→focus sequences suppress correctly. (2026-08-14)
 
 ## 1.404.0
 
@@ -97,11 +111,11 @@
 ### Patch Changes
 
 - [#4443](https://github.com/PostHog/posthog-js/pull/4443) [`b2c6830`](https://github.com/PostHog/posthog-js/commit/b2c683051fae7da40be872666a3e8cadf958f804) Thanks [@arnohillen](https://github.com/arnohillen)! - Harden the session replay stylesheet inlining budget (`inlineStylesheetBudgetRules`):
-    - The default budget (10,000 rules) moves from the recorder chunk into posthog-js session recording options, so npm-pinned or cached bundles keep their configured override (including `0` to disable) and direct `rrweb.record()` consumers keep unbounded inlining unless they opt in.
-    - Deferred inlining is bounded inside a sheet: a resumable cursor stringifies 200 rules per idle slice and emits a sheet's `_cssText` atomically, so monolithic sheets no longer produce one long task and partial CSS never reaches the wire.
-    - Deferred sheets are flushed synchronously when recording stops and on `pagehide`; residual failure modes are counted via `$sdk_debug_replay_deferred_stylesheets_failed` / `_abandoned`.
-    - CSSOM-only styles (`insertRule` output, `adoptedStyleSheets`) no longer charge the budget, since deferring `<link>` sheets buys those pages nothing.
-    - Telemetry fixes: full-snapshot duration wraps the whole synchronous task, deferred counts are cumulative per session, new gauges cover non-deferrable rules and idle stringification cost, and duration samples straddling tab suspension are discarded (`$sdk_debug_replay_discarded_duration_samples`). (2026-08-13)
+  - The default budget (10,000 rules) moves from the recorder chunk into posthog-js session recording options, so npm-pinned or cached bundles keep their configured override (including `0` to disable) and direct `rrweb.record()` consumers keep unbounded inlining unless they opt in.
+  - Deferred inlining is bounded inside a sheet: a resumable cursor stringifies 200 rules per idle slice and emits a sheet's `_cssText` atomically, so monolithic sheets no longer produce one long task and partial CSS never reaches the wire.
+  - Deferred sheets are flushed synchronously when recording stops and on `pagehide`; residual failure modes are counted via `$sdk_debug_replay_deferred_stylesheets_failed` / `_abandoned`.
+  - CSSOM-only styles (`insertRule` output, `adoptedStyleSheets`) no longer charge the budget, since deferring `<link>` sheets buys those pages nothing.
+  - Telemetry fixes: full-snapshot duration wraps the whole synchronous task, deferred counts are cumulative per session, new gauges cover non-deferrable rules and idle stringification cost, and duration samples straddling tab suspension are discarded (`$sdk_debug_replay_discarded_duration_samples`). (2026-08-13)
 
 ## 1.403.0
 
@@ -133,7 +147,7 @@
 
 - [#4286](https://github.com/PostHog/posthog-js/pull/4286) [`d108d66`](https://github.com/PostHog/posthog-js/commit/d108d668d1fcae8fdc5834dd50230e5814f8023f) Thanks [@posthog](https://github.com/apps/posthog)! - fix(replay): preserve privacy masking for initial network metadata
 
-    Initial navigation and performance-timing entries are now passed through `maskCapturedNetworkRequestFn`, including when they have no method. URL rewrites are respected. When the callback returns nullish for an initial entry, replay-required timing metadata is retained without its URL, headers, or body so method-gated callbacks do not drop the metadata or expose deliberately filtered customer data. Derived server-timing entries are also suppressed when this strict fallback is used. Enforced PostHog filtering and payload cleaning still run first. (2026-08-05)
+  Initial navigation and performance-timing entries are now passed through `maskCapturedNetworkRequestFn`, including when they have no method. URL rewrites are respected. When the callback returns nullish for an initial entry, replay-required timing metadata is retained without its URL, headers, or body so method-gated callbacks do not drop the metadata or expose deliberately filtered customer data. Derived server-timing entries are also suppressed when this strict fallback is used. Enforced PostHog filtering and payload cleaning still run first. (2026-08-05)
 
 ## 1.402.0
 
@@ -155,7 +169,7 @@
 
 - [#4266](https://github.com/PostHog/posthog-js/pull/4266) [`43d1850`](https://github.com/PostHog/posthog-js/commit/43d18506565b491c4a1013f9237aa732ae3d6f4e) Thanks [@posthog](https://github.com/apps/posthog)! - feat: add opt-in `capture_performance.__preview_web_vitals_soft_navs` to fix inflated web vitals on single-page apps
 
-    Client-side route changes in SPAs previously left web vitals (LCP especially) accumulating against the original hard-navigation timestamp, inflating the top tail of Core Web Vitals. Setting `capture_performance: { __preview_web_vitals_soft_navs: true }` now scopes metrics to the browser's Soft Navigation entries so each route change starts a fresh measurement window. It's a preview option because it relies on Chrome's experimental Soft Navigation Detection API and loads pinned stable web-vitals 6.x callbacks; when disabled (the default), the existing web-vitals 5.x behavior remains unchanged. (2026-08-04)
+  Client-side route changes in SPAs previously left web vitals (LCP especially) accumulating against the original hard-navigation timestamp, inflating the top tail of Core Web Vitals. Setting `capture_performance: { __preview_web_vitals_soft_navs: true }` now scopes metrics to the browser's Soft Navigation entries so each route change starts a fresh measurement window. It's a preview option because it relies on Chrome's experimental Soft Navigation Detection API and loads pinned stable web-vitals 6.x callbacks; when disabled (the default), the existing web-vitals 5.x behavior remains unchanged. (2026-08-04)
 
 ## 1.400.2
 
@@ -170,7 +184,7 @@
 
 - [#4314](https://github.com/PostHog/posthog-js/pull/4314) [`feb9e2a`](https://github.com/PostHog/posthog-js/commit/feb9e2a101c234ebacbe920d03a317e61dcf2a18) Thanks [@posthog](https://github.com/apps/posthog)! - fix: warn when `reset()` silently opts the user back out
 
-    `reset()` clears stored consent along with the rest of the user's state. With `opt_out_capturing_by_default`, this returns the instance to the opted-out default, so calling `reset()` after `opt_in_capturing()` would stop capturing without warning. It now logs a warning when that happens and documents the required ordering. (2026-08-04)
+  `reset()` clears stored consent along with the rest of the user's state. With `opt_out_capturing_by_default`, this returns the instance to the opted-out default, so calling `reset()` after `opt_in_capturing()` would stop capturing without warning. It now logs a warning when that happens and documents the required ordering. (2026-08-04)
 
 ## 1.400.0
 
@@ -185,14 +199,14 @@
 
 - [#4270](https://github.com/PostHog/posthog-js/pull/4270) [`92427a1`](https://github.com/PostHog/posthog-js/commit/92427a12ace70dd6ab2a1e62c88d84465edbc856) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add canvas mask regions to session replay canvas capture: `session_recording.canvasCapture.maskRegionsFn` is called once per canvas per captured frame, and the returned regions (CSS pixels, relative to the canvas) are painted black in the captured frame before it is encoded — letting apps that render into canvas (e.g. Flutter web via CanvasKit) mask content that DOM-based masking cannot see.
 
-    The return value decides what happens to that canvas's frame:
-    - `[]` — nothing to mask; the frame is recorded as is.
-    - `null` — regions could not be computed; the frame is skipped rather than recorded unmasked.
-    - `maskRegionsFn` not set — canvases are recorded unmasked and canvas capture behavior is unchanged.
+  The return value decides what happens to that canvas's frame:
+  - `[]` — nothing to mask; the frame is recorded as is.
+  - `null` — regions could not be computed; the frame is skipped rather than recorded unmasked.
+  - `maskRegionsFn` not set — canvases are recorded unmasked and canvas capture behavior is unchanged.
 
-    Configuring `maskRegionsFn` also disables canvas pixel serialization in DOM full snapshots (`rr_dataURL`) — that path never sees the mask regions, so skipping it closes the route that could otherwise embed unmasked canvas stills in a snapshot; the canvas repaints from the masked frame stream instead. Every canvas the provider answers — with regions or `[]` — re-sends an unchanged frame as a keyframe every 30s, so after a full snapshot or a seek an idle canvas repaints within at most 30s.
+  Configuring `maskRegionsFn` also disables canvas pixel serialization in DOM full snapshots (`rr_dataURL`) — that path never sees the mask regions, so skipping it closes the route that could otherwise embed unmasked canvas stills in a snapshot; the canvas repaints from the masked frame stream instead. Every canvas the provider answers — with regions or `[]` — re-sends an unchanged frame as a keyframe every 30s, so after a full snapshot or a seek an idle canvas repaints within at most 30s.
 
-    An app whose real provider only exists once its runtime has booted chooses what happens in between by what it declares in `posthog.init`: a function covering the whole canvas blacks those frames out, `() => null` skips them, and declaring nothing records them. Client-side only, cannot be set via remote configuration. (2026-07-29)
+  An app whose real provider only exists once its runtime has booted chooses what happens in between by what it declares in `posthog.init`: a function covering the whole canvas blacks those frames out, `() => null` skips them, and declaring nothing records them. Client-side only, cannot be set via remote configuration. (2026-07-29)
 
 ## 1.398.0
 
@@ -200,7 +214,7 @@
 
 - [#4222](https://github.com/PostHog/posthog-js/pull/4222) [`0f2407b`](https://github.com/PostHog/posthog-js/commit/0f2407bbd98cab7d38a23f0466bbdccf3e0bdbf3) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - feat: add a default-value option to `isFeatureEnabled`
 
-    `isFeatureEnabled(key, { defaultValue: false })` now returns the given default when the flag has no value — flags not loaded yet, or no flag with that key — and the return type narrows to `boolean`. The option name is the same in posthog-js, posthog-js-lite, and posthog-react-native. Without `defaultValue`, behavior is unchanged: `boolean | undefined`. (2026-07-22)
+  `isFeatureEnabled(key, { defaultValue: false })` now returns the given default when the flag has no value — flags not loaded yet, or no flag with that key — and the return type narrows to `boolean`. The option name is the same in posthog-js, posthog-js-lite, and posthog-react-native. Without `defaultValue`, behavior is unchanged: `boolean | undefined`. (2026-07-22)
 
 ## 1.397.1
 
@@ -222,7 +236,7 @@
 
 - [#4159](https://github.com/PostHog/posthog-js/pull/4159) [`fad6d9a`](https://github.com/PostHog/posthog-js/commit/fad6d9adae4163cd63859766916cdcbae629a110) Thanks [@haacked](https://github.com/haacked)! - add `$feature_flag_has_experiment` to `$feature_flag_called` events
 
-    `$feature_flag_called` events now carry a `$feature_flag_has_experiment` boolean sourced from the server's `has_experiment` flag metadata (the `/flags?v=2` response for remote evaluation, the `/api/feature_flag/local_evaluation` definitions for posthog-node local evaluation). The property is only sent when the server explicitly reports `has_experiment`; it is omitted entirely when the value is unknown (older servers, missing metadata, bootstrapped or locally injected flags). (2026-07-16)
+  `$feature_flag_called` events now carry a `$feature_flag_has_experiment` boolean sourced from the server's `has_experiment` flag metadata (the `/flags?v=2` response for remote evaluation, the `/api/feature_flag/local_evaluation` definitions for posthog-node local evaluation). The property is only sent when the server explicitly reports `has_experiment`; it is omitted entirely when the value is unknown (older servers, missing metadata, bootstrapped or locally injected flags). (2026-07-16)
 
 ## 1.395.0
 
@@ -244,15 +258,15 @@
 
 - [#4115](https://github.com/PostHog/posthog-js/pull/4115) [`86bb3a5`](https://github.com/PostHog/posthog-js/commit/86bb3a50c122852b47b7ced16bec239b801d05f2) Thanks [@DanielVisca](https://github.com/DanielVisca)! - add the posthog.metrics API (count, gauge, histogram) — alpha
 
-    A statsd-style pre-aggregating metrics client for the PostHog Metrics product (alpha). Samples are folded into per-series aggregates in memory (counts sum, gauges keep the last value, histograms accumulate buckets) and flushed periodically as OTLP/JSON to `/i/v1/metrics` — one data point per series per flush window, no matter how many calls. No OpenTelemetry SDK setup required:
+  A statsd-style pre-aggregating metrics client for the PostHog Metrics product (alpha). Samples are folded into per-series aggregates in memory (counts sum, gauges keep the last value, histograms accumulate buckets) and flushed periodically as OTLP/JSON to `/i/v1/metrics` — one data point per series per flush window, no matter how many calls. No OpenTelemetry SDK setup required:
 
-    ```ts
-    posthog.metrics.count('orders_created', 1)
-    posthog.metrics.gauge('active_connections', 42)
-    posthog.metrics.histogram('api_latency', 187, { unit: 'ms' })
-    ```
+  ```ts
+  posthog.metrics.count("orders_created", 1);
+  posthog.metrics.gauge("active_connections", 42);
+  posthog.metrics.histogram("api_latency", 187, { unit: "ms" });
+  ```
 
-    Configure via `metrics: { serviceName, environment, flushIntervalMs, maxSeriesPerFlush, beforeSend, ... }`. (2026-07-08)
+  Configure via `metrics: { serviceName, environment, flushIntervalMs, maxSeriesPerFlush, beforeSend, ... }`. (2026-07-08)
 
 ## 1.392.1
 
@@ -281,7 +295,7 @@
 
 - [#3921](https://github.com/PostHog/posthog-js/pull/3921) [`c28b161`](https://github.com/PostHog/posthog-js/commit/c28b16143d04caade1d024819017b89cef3162ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `disable_capture_url_hashes` to strip URL fragments from automatically captured URLs. It is disabled by default for backwards compatibility, and enabled automatically when `config.defaults` is `'2026-06-25'` or later. Enabling it (either explicitly or via the `'2026-06-25'` defaults) is a breaking behavior change for SPAs that rely on URL hashes for routing or analytics, because hash-based routes will be collapsed to the same URL without the fragment in fields such as `$current_url`, `$initial_current_url`, `$session_entry_url`, autocapture `$elements[*].attr__href`, `$external_click_url`, replay `href` URLs, heatmaps, web vitals `$current_url`, logs `url.full`, conversations `current_url`/`request_url`, or Next.js Pages Router `$pageview` `$current_url`.
 
-    If you only want to capture some hashes, leave hash capture enabled and use `before_send` to remove or redact sensitive hash values before events are sent. (2026-06-23)
+  If you only want to capture some hashes, leave hash capture enabled and use `before_send` to remove or redact sensitive hash values before events are sent. (2026-06-23)
 
 ## 1.390.2
 
@@ -296,11 +310,11 @@
 
 - [#3885](https://github.com/PostHog/posthog-js/pull/3885) [`5392a55`](https://github.com/PostHog/posthog-js/commit/5392a55f75ac94e98bb49a04db9453e62e188927) Thanks [@pauldambra](https://github.com/pauldambra)! - feat(replay): capture canvas at reduced resolution
 
-    Adds `session_recording.canvasCapture.resolutionScale` - a `(0, 1]` fraction of the canvas display size to capture replay frames at. The captured bitmap is downscaled (pixel-area savings are quadratic) while the canvas's true display size is still recorded, so playback stretches the smaller frame back to the correct dimensions and aspect ratio - only sharpness drops, never layout. It defaults to `1` (full resolution, matching today's behaviour), and the latest `defaults` bundle (`2026-05-30`) opts new installs into `0.6`.
+  Adds `session_recording.canvasCapture.resolutionScale` - a `(0, 1]` fraction of the canvas display size to capture replay frames at. The captured bitmap is downscaled (pixel-area savings are quadratic) while the canvas's true display size is still recorded, so playback stretches the smaller frame back to the correct dimensions and aspect ratio - only sharpness drops, never layout. It defaults to `1` (full resolution, matching today's behaviour), and the latest `defaults` bundle (`2026-05-30`) opts new installs into `0.6`.
 
-    The canvas's true display size travels with each frame through the encode worker (as required message fields), so the encoded reply is always drawn back to the correct dimensions — no per-canvas state is retained on the main thread, and downscaling can never mislabel a canvas's dimensions. At full resolution the captured pixels are unchanged (the quality resampling hint is only applied when actually downscaling); the emitted `drawImage` now always uses the explicit destination-size form, which is pixel-equivalent on replay.
+  The canvas's true display size travels with each frame through the encode worker (as required message fields), so the encoded reply is always drawn back to the correct dimensions — no per-canvas state is retained on the main thread, and downscaling can never mislabel a canvas's dimensions. At full resolution the captured pixels are unchanged (the quality resampling hint is only applied when actually downscaling); the emitted `drawImage` now always uses the explicit destination-size form, which is pixel-equivalent on replay.
 
-    Mechanically, `@posthog/rrweb`'s canvas FPS-snapshot observer takes an optional `canvasResolutionScale` record option and downscales each captured frame accordingly. (2026-06-19)
+  Mechanically, `@posthog/rrweb`'s canvas FPS-snapshot observer takes an optional `canvasResolutionScale` record option and downscales each captured frame accordingly. (2026-06-19)
 
 ## 1.390.0
 
@@ -308,21 +322,21 @@
 
 - [#3869](https://github.com/PostHog/posthog-js/pull/3869) [`81b79fb`](https://github.com/PostHog/posthog-js/commit/81b79fb9bcab3f4619e8fc7f1022f2ab24936b4e) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add a `beforeSend` option to the logs config, so you can inspect, redact, or drop log records before they're sent:
 
-    ```js
-    posthog.init('<token>', {
-        logs: {
-            beforeSend: (log) => {
-                // return null to drop the log, or return the (optionally modified) log to keep it
-                if (log.body.includes('password')) {
-                    return null
-                }
-                return log
-            },
-        },
-    })
-    ```
+  ```js
+  posthog.init("<token>", {
+    logs: {
+      beforeSend: (log) => {
+        // return null to drop the log, or return the (optionally modified) log to keep it
+        if (log.body.includes("password")) {
+          return null;
+        }
+        return log;
+      },
+    },
+  });
+  ```
 
-    `beforeSend` accepts a single function or an array of functions (applied left to right); returning `null` from any of them drops the record. It runs for logs sent via both `posthog.captureLog()` and `posthog.logger.*`. (2026-06-17)
+  `beforeSend` accepts a single function or an array of functions (applied left to right); returning `null` from any of them drops the record. It runs for logs sent via both `posthog.captureLog()` and `posthog.logger.*`. (2026-06-17)
 
 ## 1.389.0
 
@@ -363,9 +377,9 @@
 
 - [#3690](https://github.com/PostHog/posthog-js/pull/3690) [`dbf2377`](https://github.com/PostHog/posthog-js/commit/dbf23777e1c14a811c67697684d56145518ebe16) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(sessionid): keep the session id stable across tabs
 
-    A session now rotates only when every tab has been idle past the timeout, rather than whenever a single background tab decides it is idle. On the active event path an idle tab re-reads the session id from storage before rotating: if a sibling tab kept the session alive it does not rotate, and if a sibling already rotated it adopts that id instead of minting a new one. This removes spurious cross-tab session fragmentation (inflated session counts, truncated session durations, split replays). When a sibling session is adopted, `onSessionId` handlers fire with `changeReason.crossTabAdoption: true` so session recording, pageview state, and session-scoped properties follow the new session. When `persistence_save_debounce_ms > 0` (the `2026-05-30` default) the refresh reads only the session-id key so it cannot clobber a sibling's write.
+  A session now rotates only when every tab has been idle past the timeout, rather than whenever a single background tab decides it is idle. On the active event path an idle tab re-reads the session id from storage before rotating: if a sibling tab kept the session alive it does not rotate, and if a sibling already rotated it adopts that id instead of minting a new one. This removes spurious cross-tab session fragmentation (inflated session counts, truncated session durations, split replays). When a sibling session is adopted, `onSessionId` handlers fire with `changeReason.crossTabAdoption: true` so session recording, pageview state, and session-scoped properties follow the new session. When `persistence_save_debounce_ms > 0` (the `2026-05-30` default) the refresh reads only the session-id key so it cannot clobber a sibling's write.
 
-    Note: projects with significant multi-tab usage will see fewer but longer sessions after upgrading — this is a correction of previously over-counted sessions, not a traffic change. (2026-06-11)
+  Note: projects with significant multi-tab usage will see fewer but longer sessions after upgrading — this is a correction of previously over-counted sessions, not a traffic change. (2026-06-11)
 
 ## 1.386.2
 
@@ -407,7 +421,7 @@
 
 - [#3782](https://github.com/PostHog/posthog-js/pull/3782) [`0c2acb9`](https://github.com/PostHog/posthog-js/commit/0c2acb9f30d545bb89d1f950ba8f840c76e47dc2) Thanks [@pauldambra](https://github.com/pauldambra)! - Detect the Google Search App (GSA) as its own `$browser` value (`Google Search App`) via the cross-platform `GSA/` UA marker, instead of reporting the embedded webview as Mobile Safari (iOS) or Chrome (Android). Gated behind the new `detect_google_search_app` config option, which the `2026-05-30` config defaults opt into automatically — left off otherwise to keep existing browser attribution backwards-compatible.
 
-    Note: `$browser_version` for `Google Search App` is not comparable across platforms — iOS yields a version like `284.0` (from `GSA/284.0.564099828`) while Android yields a version like `14.21` (from `GSA/14.21.20.28.arm64`), since Google maintains separate versioning schemes for the two apps. Avoid building cross-platform version dashboards on `$browser_version` for this browser. (2026-06-10)
+  Note: `$browser_version` for `Google Search App` is not comparable across platforms — iOS yields a version like `284.0` (from `GSA/284.0.564099828`) while Android yields a version like `14.21` (from `GSA/14.21.20.28.arm64`), since Google maintains separate versioning schemes for the two apps. Avoid building cross-platform version dashboards on `$browser_version` for this browser. (2026-06-10)
 
 ## 1.383.3
 
@@ -575,7 +589,7 @@
 
 - [#3432](https://github.com/PostHog/posthog-js/pull/3432) [`1a8b727`](https://github.com/PostHog/posthog-js/commit/1a8b7277c50a42bbb3f736afd530ff1c3389a7de) Thanks [@richardsolomou](https://github.com/richardsolomou)! - refactor: rename `__add_tracing_headers` to `addTracingHeaders`. The `__` prefix signalled an internal/experimental option, but the config is a public API (documented for linking LLM traces to session replays). `__add_tracing_headers` continues to work as a deprecated alias on the browser SDK.
 
-    Also exposes `patchFetchForTracingHeaders` from `@posthog/core` so non-browser SDKs can reuse the implementation. (2026-04-23)
+  Also exposes `patchFetchForTracingHeaders` from `@posthog/core` so non-browser SDKs can reuse the implementation. (2026-04-23)
 
 ## 1.370.1
 

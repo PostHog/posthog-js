@@ -61,10 +61,10 @@ function responseBody(status: ResponseStatus): Record<string, unknown> {
   }
 }
 
-function createFetchMock(): jest.Mock {
+function createFetchMock(): vi.Mock {
   let retrieveCount = 0
 
-  return jest.fn(async (input: string | URL | Request, init?: RequestInit) => {
+  return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
     const body =
       method === 'POST' ? responseBody('queued') : responseBody(++retrieveCount === 1 ? 'in_progress' : 'completed')
@@ -79,8 +79,8 @@ function createFetchMock(): jest.Mock {
   })
 }
 
-function createTerminalFetchMock(status: 'completed' | 'failed' | 'incomplete'): jest.Mock {
-  return jest.fn(async (input: string | URL | Request, init?: RequestInit) => {
+function createTerminalFetchMock(status: 'completed' | 'failed' | 'incomplete'): vi.Mock {
+  return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
     const body = method === 'POST' ? responseBody('queued') : responseBody(status)
 
@@ -94,8 +94,8 @@ function createTerminalFetchMock(status: 'completed' | 'failed' | 'incomplete'):
   })
 }
 
-function createCancelFetchMock(): jest.Mock {
-  return jest.fn(async (input: string | URL | Request) => {
+function createCancelFetchMock(): vi.Mock {
+  return vi.fn(async (input: string | URL | Request) => {
     const url = input instanceof Request ? input.url : String(input)
     const body = new URL(url).pathname.endsWith(`/${responseID}/cancel`)
       ? responseBody('cancelled')
@@ -121,8 +121,8 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 
 function createPostHogMock() {
   return {
-    capture: jest.fn(),
-    captureImmediate: jest.fn().mockResolvedValue(undefined),
+    capture: vi.fn(),
+    captureImmediate: vi.fn().mockResolvedValue(undefined),
     privacy_mode: false,
   }
 }
@@ -130,8 +130,8 @@ function createPostHogMock() {
 function createStreamingFetchMock(
   events: Record<string, unknown>[],
   options: { invalidEvent?: boolean; streamError?: Error } = {}
-): jest.Mock {
-  return jest.fn(async (input: string | URL | Request, init?: RequestInit) => {
+): vi.Mock {
+  return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
     if (method === 'POST') {
       return new Response(JSON.stringify(responseBody('queued')), {
@@ -162,8 +162,8 @@ function createStreamingFetchMock(
   })
 }
 
-function createResumedStreamFetchMock(): jest.Mock {
-  return jest.fn(async (input: string | URL | Request, init?: RequestInit) => {
+function createResumedStreamFetchMock(): vi.Mock {
+  return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
     const url = input instanceof Request ? input.url : String(input)
     const requestBody = init?.body ? JSON.parse(init.body as string) : undefined
@@ -183,7 +183,7 @@ function createResumedStreamFetchMock(): jest.Mock {
 const providerCases = [
   {
     provider: 'openai',
-    createClient: (fetchMock: jest.Mock, posthog: ReturnType<typeof createPostHogMock>) =>
+    createClient: (fetchMock: vi.Mock, posthog: ReturnType<typeof createPostHogMock>) =>
       new PostHogOpenAI({
         apiKey: 'test-api-key',
         baseURL: 'https://openai.test/v1',
@@ -200,7 +200,7 @@ const providerCases = [
   },
   {
     provider: 'azure',
-    createClient: (fetchMock: jest.Mock, posthog: ReturnType<typeof createPostHogMock>) =>
+    createClient: (fetchMock: vi.Mock, posthog: ReturnType<typeof createPostHogMock>) =>
       new PostHogAzureOpenAI({
         apiKey: 'test-api-key',
         apiVersion: '2025-04-01-preview',
@@ -319,7 +319,7 @@ describe.each(providerCases)('$provider background Responses', ({ provider, crea
       $ai_input_tokens: 12,
       $ai_output_tokens: 7,
       $ai_usage: usage,
-      $ai_stop_reason: status,
+      $ai_stop_reason: status === 'incomplete' ? 'max_output_tokens' : status,
       $ai_provider_metadata: {
         request_id: `req_background_${status}`,
         ...(status === 'incomplete' ? { incomplete_details: { reason: 'max_output_tokens' } } : {}),
@@ -370,15 +370,18 @@ describe.each(providerCases)('$provider background Responses', ({ provider, crea
 
   test('returns the upstream retrieve promise unchanged for untracked responses', () => {
     const posthog = createPostHogMock()
-    const client = createClient(jest.fn(), posthog)
+    const client = createClient(vi.fn(), posthog)
     const upstreamPrototype = Object.getPrototypeOf(Object.getPrototypeOf(client.responses))
-    const upstreamPromise = Promise.resolve(responseBody('completed')) as any
-    const retrieve = jest.spyOn(upstreamPrototype, 'retrieve').mockReturnValue(upstreamPromise)
+    const upstreamRetrieve = upstreamPrototype.retrieve
+    const upstreamPromise = { marker: 'upstream-promise' } as any
+    upstreamPrototype.retrieve = () => upstreamPromise
 
-    expect(client.responses.retrieve('untracked-response')).toBe(upstreamPromise)
-    expect(client.responses.retrieve('untracked-response', { stream: true })).toBe(upstreamPromise)
+    const nonStreamingPromise = client.responses.retrieve('untracked-response')
+    const streamingPromise = client.responses.retrieve('untracked-response', { stream: true })
+    upstreamPrototype.retrieve = upstreamRetrieve
 
-    retrieve.mockRestore()
+    expect(nonStreamingPromise).toBe(upstreamPromise)
+    expect(streamingPromise).toBe(upstreamPromise)
   })
 
   test('keeps the raw retrieve response body readable through asResponse', async () => {

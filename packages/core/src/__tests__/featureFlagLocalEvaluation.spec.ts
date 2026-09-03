@@ -140,7 +140,7 @@ describe('feature flag local evaluation primitives', () => {
     })
 
     test('keeps explicit undefined values from matching non-exact operators', () => {
-      const warnFunction = jest.fn()
+      const warnFunction = vi.fn()
       expect(matchFeatureFlagProperty(property('icontains', 'undefined'), { key: undefined }, { warnFunction })).toBe(
         false
       )
@@ -200,7 +200,7 @@ describe('feature flag local evaluation primitives', () => {
     })
 
     test('preserves absolute and relative date matching under fixed time', () => {
-      jest.setSystemTime(new Date('2025-01-10T12:00:00.000Z'))
+      vi.setSystemTime(new Date('2025-01-10T12:00:00.000Z'))
       expect(relativeDateParseForFeatureFlagMatching('-2d')).toEqual(new Date('2025-01-08T12:00:00.000Z'))
       expect(matchFeatureFlagProperty(property('is_date_after', '-2d'), { key: '2025-01-09T00:00:00Z' })).toBe(true)
       expect(

@@ -172,7 +172,7 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
     const server = makeServer()
     instrument(server, fakePostHog(), { context: true })
 
-    const handler = jest.fn(async (params: unknown) => ({ echoed: params }))
+    const handler = vi.fn(async (params: unknown) => ({ echoed: params }))
     const schemas = { params: { parse: (value: unknown) => value } }
 
     // Before the fix this threw `setRequestHandler: handler is required`, and
@@ -191,7 +191,7 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
 
     // `patches['toString']` resolves to `Object.prototype.toString` under a bare
     // index, which a truthiness check would accept as a handler patch.
-    const handler = jest.fn(async (params: unknown) => ({ ok: params }))
+    const handler = vi.fn(async (params: unknown) => ({ ok: params }))
     expect(() =>
       (server.setRequestHandler as any)('toString', { params: { parse: (v: unknown) => v } }, handler)
     ).not.toThrow()

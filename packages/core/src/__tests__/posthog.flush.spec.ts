@@ -7,7 +7,7 @@ describe('PostHog Core', () => {
 
   describe('flush', () => {
     beforeEach(() => {
-      jest.useFakeTimers()
+      vi.useFakeTimers()
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 5,
         fetchRetryCount: 3,
@@ -17,7 +17,7 @@ describe('PostHog Core', () => {
     })
 
     it("doesn't fail when queue is empty", async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       await expect(posthog.flush()).resolves.not.toThrow()
       expect(mocks.fetch).not.toHaveBeenCalled()
     })
@@ -154,7 +154,7 @@ describe('PostHog Core', () => {
     })
 
     it.each([
-      ['with ReadableStream body', { cancel: jest.fn().mockResolvedValue(undefined) }, true],
+      ['with ReadableStream body', { cancel: vi.fn().mockResolvedValue(undefined) }, true],
       ['with null body', null, false],
     ])('consumes response body after flush (%s)', async (_label, body, expectCancel) => {
       const cancelFn = body?.cancel
@@ -169,7 +169,7 @@ describe('PostHog Core', () => {
       })
 
       posthog.capture('test-event-1')
-      jest.useRealTimers()
+      vi.useRealTimers()
       await expect(posthog.flush()).resolves.not.toThrow()
 
       if (expectCancel) {
@@ -189,7 +189,7 @@ describe('PostHog Core', () => {
       })
 
       it('does not retry capture after a successful response body cancellation stalls', async () => {
-        const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+        const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
         mocks.fetch.mockResolvedValue({
           status: 200,
           text: () => Promise.resolve('ok'),
@@ -199,16 +199,16 @@ describe('PostHog Core', () => {
 
         posthog.capture('test-event-1')
         const flushPromise = posthog.flush()
-        await jest.advanceTimersByTimeAsync(1000)
+        await vi.advanceTimersByTimeAsync(1000)
 
         await expect(flushPromise).resolves.toBeUndefined()
         expect(mocks.fetch).toHaveBeenCalledTimes(1)
         expect(cancel).toHaveBeenCalledTimes(1)
-        expect(jest.getTimerCount()).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
       })
 
       it('does not retry logs after a successful response body cancellation stalls', async () => {
-        const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+        const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
         mocks.fetch.mockResolvedValue({
           status: 200,
           text: () => Promise.resolve('ok'),
@@ -217,16 +217,16 @@ describe('PostHog Core', () => {
         })
 
         const sendPromise = posthog._sendLogsBatch({ resourceLogs: [] })
-        await jest.advanceTimersByTimeAsync(1000)
+        await vi.advanceTimersByTimeAsync(1000)
 
         await expect(sendPromise).resolves.toEqual({ kind: 'ok' })
         expect(mocks.fetch).toHaveBeenCalledTimes(1)
         expect(cancel).toHaveBeenCalledTimes(1)
-        expect(jest.getTimerCount()).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
       })
 
       it('does not retry metrics after a successful response body cancellation stalls', async () => {
-        const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+        const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
         mocks.fetch.mockResolvedValue({
           status: 200,
           text: () => Promise.resolve('ok'),
@@ -235,17 +235,17 @@ describe('PostHog Core', () => {
         })
 
         const sendPromise = posthog._sendMetricsBatch({ resourceMetrics: [] })
-        await jest.advanceTimersByTimeAsync(1000)
+        await vi.advanceTimersByTimeAsync(1000)
 
         await expect(sendPromise).resolves.toEqual({ kind: 'ok' })
         expect(mocks.fetch).toHaveBeenCalledTimes(1)
         expect(cancel).toHaveBeenCalledTimes(1)
-        expect(jest.getTimerCount()).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
       })
 
       it('preserves terminal HTTP status and reports when the error response body stalls', async () => {
-        const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
-        const text = jest.fn(() => new Promise<string>(() => {}))
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
+        const text = vi.fn(() => new Promise<string>(() => {}))
         mocks.fetch.mockResolvedValue({
           status: 400,
           text,
@@ -261,19 +261,19 @@ describe('PostHog Core', () => {
         expect(cancel).not.toHaveBeenCalled()
 
         const textExpectation = expect(error.text).rejects.toHaveProperty('name', 'AbortError')
-        await jest.advanceTimersByTimeAsync(1000)
+        await vi.advanceTimersByTimeAsync(1000)
         await textExpectation
 
         expect(error.bodyReadTimedOut).toBe(true)
         await expect(error.json).rejects.toHaveProperty('name', 'AbortError')
         expect(text).toHaveBeenCalledTimes(1)
         expect(cancel).toHaveBeenCalledTimes(1)
-        expect(jest.getTimerCount()).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
       })
 
       it('does not read an error response body after its absolute deadline', async () => {
-        const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
-        const text = jest.fn().mockResolvedValue('too late')
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
+        const text = vi.fn().mockResolvedValue('too late')
         mocks.fetch.mockResolvedValue({
           status: 400,
           text,
@@ -283,18 +283,18 @@ describe('PostHog Core', () => {
 
         posthog.capture('test-event-1')
         const error = await posthog.flush().catch((error) => error)
-        await jest.advanceTimersByTimeAsync(1000)
+        await vi.advanceTimersByTimeAsync(1000)
 
         await expect(error.text).rejects.toHaveProperty('name', 'AbortError')
         expect(error.bodyReadTimedOut).toBe(true)
         expect(text).not.toHaveBeenCalled()
         expect(cancel).toHaveBeenCalledTimes(1)
-        expect(jest.getTimerCount()).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
       })
 
       it('caches the error response body across text and JSON access', async () => {
-        const text = jest.fn().mockResolvedValue('{"error":"bad request"}')
-        const json = jest.fn().mockResolvedValue({ error: 'bad request' })
+        const text = vi.fn().mockResolvedValue('{"error":"bad request"}')
+        const json = vi.fn().mockResolvedValue({ error: 'bad request' })
         mocks.fetch.mockResolvedValue({ status: 400, text, json })
 
         posthog.capture('test-event-1')
@@ -308,8 +308,8 @@ describe('PostHog Core', () => {
       })
 
       it('cancels stalled retryable HTTP error bodies without waiting for them', async () => {
-        const text = jest.fn(() => new Promise<string>(() => {}))
-        const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+        const text = vi.fn(() => new Promise<string>(() => {}))
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
         mocks.fetch.mockImplementation(async () => ({
           status: 500,
           text,
@@ -319,27 +319,27 @@ describe('PostHog Core', () => {
 
         posthog.capture('test-event-1')
         const errorPromise = posthog.flush().catch((error) => error)
-        await jest.advanceTimersByTimeAsync(300)
+        await vi.advanceTimersByTimeAsync(300)
 
         const error = await errorPromise
         expect(error).toMatchObject({ name: 'PostHogFetchHttpError', status: 500, bodyReadTimedOut: false })
         expect(mocks.fetch).toHaveBeenCalledTimes(4)
         expect(text).not.toHaveBeenCalled()
         expect(cancel).toHaveBeenCalledTimes(3)
-        expect(jest.getTimerCount()).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
 
         const textExpectation = expect(error.text).rejects.toHaveProperty('name', 'AbortError')
-        expect(jest.getTimerCount()).toBe(1)
-        await jest.advanceTimersByTimeAsync(1000)
+        expect(vi.getTimerCount()).toBe(1)
+        await vi.advanceTimersByTimeAsync(1000)
         await textExpectation
         expect(error.bodyReadTimedOut).toBe(true)
         expect(cancel).toHaveBeenCalledTimes(4)
-        expect(jest.getTimerCount()).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
       })
 
       it('bounds an injected fetch that ignores abort and cancels its late response', async () => {
         let resolveFetch!: (response: any) => void
-        const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
         ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
           flushAt: 5,
           fetchRetryCount: 0,
@@ -355,10 +355,10 @@ describe('PostHog Core', () => {
 
         posthog.capture('test-event-1')
         const flushPromise = posthog.flush()
-        await jest.advanceTimersByTimeAsync(1000)
+        await vi.advanceTimersByTimeAsync(1000)
 
         await expect(flushPromise).rejects.toHaveProperty('name', 'PostHogFetchNetworkError')
-        expect(jest.getTimerCount()).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
 
         resolveFetch({
           status: 200,
@@ -366,14 +366,13 @@ describe('PostHog Core', () => {
           json: () => Promise.resolve({ status: 'ok' }),
           body: { cancel },
         })
-        await Promise.resolve()
-        await Promise.resolve()
+        await waitForPromises()
 
         expect(cancel).toHaveBeenCalledTimes(1)
       })
 
       it('clears the request deadline after successful response consumption', async () => {
-        const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
         mocks.fetch.mockResolvedValue({
           status: 200,
           text: () => Promise.resolve('ok'),
@@ -385,7 +384,7 @@ describe('PostHog Core', () => {
         await expect(posthog.flush()).resolves.toBeUndefined()
 
         expect(cancel).toHaveBeenCalledTimes(1)
-        expect(jest.getTimerCount()).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
       })
 
       it.each([
@@ -393,7 +392,7 @@ describe('PostHog Core', () => {
         ['feature flags', (client: PostHogCoreTestClient) => client.getFlags('distinct-id')],
         ['surveys', (client: PostHogCoreTestClient) => client.getSurveysStateless()],
       ])('bounds a stalled body for required %s responses', async (_name, request) => {
-        const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+        const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
         ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
           requestTimeout: 1000,
           fetchRetryCount: 0,
@@ -410,14 +409,14 @@ describe('PostHog Core', () => {
         })
 
         const requestPromise = request(posthog)
-        await jest.advanceTimersByTimeAsync(0)
-        await jest.advanceTimersByTimeAsync(1000)
+        await vi.advanceTimersByTimeAsync(0)
+        await vi.advanceTimersByTimeAsync(1000)
 
         await requestPromise
         expect(mocks.fetch).toHaveBeenCalledTimes(1)
         expect(mocks.fetch.mock.calls[0][1].signal?.aborted).toBe(true)
         expect(cancel).toHaveBeenCalledTimes(1)
-        expect(jest.getTimerCount()).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
       })
     })
 
@@ -431,7 +430,7 @@ describe('PostHog Core', () => {
       })
       posthog.capture('test-event-1')
 
-      jest.useRealTimers()
+      vi.useRealTimers()
       await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
       expect(mocks.fetch).toHaveBeenCalledTimes(1)
     })
@@ -447,7 +446,7 @@ describe('PostHog Core', () => {
       posthog.capture('test-event-1')
 
       const time = Date.now()
-      jest.useRealTimers()
+      vi.useRealTimers()
       await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
       expect(Date.now() - time).toBeGreaterThan(300)
@@ -461,7 +460,7 @@ describe('PostHog Core', () => {
       posthog.capture('test-event-1')
 
       const time = Date.now()
-      jest.useRealTimers()
+      vi.useRealTimers()
       await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchNetworkError')
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
       expect(Date.now() - time).toBeGreaterThan(300)
@@ -485,7 +484,7 @@ describe('PostHog Core', () => {
     })
 
     it('does not get stuck in a loop when new events are added while flushing', async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       mocks.fetch.mockImplementation(async () => {
         posthog.capture('another-event')
         await delay(10)
@@ -502,7 +501,7 @@ describe('PostHog Core', () => {
     })
 
     it('coalesces flush calls made while a flush is already queued', async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       let resolveFetch!: () => void
       mocks.fetch.mockImplementation(async () => {
         await new Promise<void>((resolve) => (resolveFetch = resolve))
@@ -531,7 +530,7 @@ describe('PostHog Core', () => {
     })
 
     it('sends events captured during an in-flight flush via the coalesced follow-up', async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       const batches: any[][] = []
       let resolveFirstFetch!: () => void
       mocks.fetch.mockImplementation(async (_, options) => {
@@ -563,7 +562,7 @@ describe('PostHog Core', () => {
     })
 
     it('preserves replacement events captured into a full queue during an in-flight flush', async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 3,
         maxQueueSize: 3,
@@ -616,7 +615,7 @@ describe('PostHog Core', () => {
     })
 
     it('does not chain one flush per capture while flushes fail', async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 2,
         fetchRetryCount: 0,
@@ -725,7 +724,7 @@ describe('PostHog Core', () => {
     })
 
     it('should stop at first error', async () => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10, fetchRetryDelay: 1 })
       posthog['maxBatchSize'] = 1 // a bit contrived because usually maxBatchSize >= flushAt
       const successfulMessages: any[] = []
@@ -808,7 +807,7 @@ describe('PostHog Core', () => {
         [413, 1],
         [400, 1],
       ])('sends %i %i time(s) before returning', async (status, attempts) => {
-        jest.useRealTimers()
+        vi.useRealTimers()
         ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
           fetchRetryCount: 2,
           fetchRetryDelay: 1,

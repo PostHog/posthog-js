@@ -5,7 +5,8 @@
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
     --ph-survey-box-padding: 20px 24px;
     --ph-survey-max-width: 300px;
-    --ph-survey-z-index: 2147483645; /* Z_INDEX_SURVEYS from constants.ts */
+    /* Split to avoid precision loss when Lightning CSS minifies large custom-property numbers. */
+    --ph-survey-z-index: calc(2147480000 + 3645); /* Z_INDEX_SURVEYS from constants.ts */
     --ph-survey-border-color: #dcdcdc;
     --ph-survey-border-bottom: 1.5px solid var(--ph-survey-border-color);
     --ph-survey-border-radius: 10px;

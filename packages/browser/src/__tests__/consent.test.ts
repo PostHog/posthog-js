@@ -25,7 +25,7 @@ function deleteAllCookies() {
 }
 
 // periodically flakes because of unexpected console logging
-jest.retryTimes(3)
+vi.setConfig({ retry: 3 })
 
 describe('consentManager', () => {
     const createPostHog = async (config: Partial<PostHogConfig> = {}) => {
@@ -43,8 +43,8 @@ describe('consentManager', () => {
         clearLoggerMocks()
 
         // we don't want unexpected console errors/warnings to fail these tests
-        console.error = jest.fn()
-        console.warn = jest.fn()
+        console.error = vi.fn()
+        console.warn = vi.fn()
     })
 
     afterEach(() => {
@@ -100,9 +100,9 @@ describe('consentManager', () => {
     })
 
     describe('opt out event', () => {
-        let beforeSendMock = jest.fn().mockImplementation((...args) => args)
+        let beforeSendMock = vi.fn().mockImplementation((...args) => args)
         beforeEach(async () => {
-            beforeSendMock = jest.fn().mockImplementation((e) => e)
+            beforeSendMock = vi.fn().mockImplementation((e) => e)
             posthog = await createPostHog({ opt_out_capturing_by_default: true, before_send: beforeSendMock })
         })
 
@@ -167,7 +167,7 @@ describe('consentManager', () => {
 
         it('should send $pageview on opt in if is has not been captured', async () => {
             // Some other tests might call setTimeout after they've passed, so creating a new instance here.
-            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
             const posthog = await createPostHog({ before_send: beforeSendMock })
 
             posthog.opt_in_capturing()
@@ -181,7 +181,7 @@ describe('consentManager', () => {
 
         it('should not send $pageview on subsequent opt in', async () => {
             // Some other tests might call setTimeout after they've passed, so creating a new instance here.
-            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
             const posthog = await createPostHog({ before_send: beforeSendMock })
 
             posthog.opt_in_capturing()
@@ -198,7 +198,7 @@ describe('consentManager', () => {
 
     describe('reset() and consent', () => {
         it('warns when a caller directly resets after opting in and capturing changes from on to off', async () => {
-            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
             posthog = await createPostHog({ opt_out_capturing_by_default: true, before_send: beforeSendMock })
 
             posthog.opt_in_capturing({ captureEventName: false })
@@ -232,7 +232,7 @@ describe('consentManager', () => {
                 } else {
                     posthog.opt_out_capturing()
                 }
-                ;(console.warn as jest.Mock).mockClear()
+                ;(console.warn as vi.Mock).mockClear()
 
                 if (endsOptedIn) {
                     posthog.opt_in_capturing({ captureEventName: false })
@@ -250,7 +250,7 @@ describe('consentManager', () => {
         )
 
         it('keeps capturing when reset() is called before opting in', async () => {
-            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const beforeSendMock = vi.fn().mockImplementation((e) => e)
             posthog = await createPostHog({ opt_out_capturing_by_default: true, before_send: beforeSendMock })
 
             posthog.reset()
@@ -283,7 +283,7 @@ describe('consentManager', () => {
         it.each(['always', 'on_reject'] as const)('does not warn in cookieless %s mode', async (cookieless_mode) => {
             posthog = await createPostHog({ cookieless_mode, opt_out_capturing_by_default: true })
             posthog.opt_in_capturing({ captureEventName: false })
-            ;(console.warn as jest.Mock).mockClear()
+            ;(console.warn as vi.Mock).mockClear()
 
             posthog.reset()
 
@@ -383,7 +383,7 @@ describe('consentManager', () => {
                 })
 
                 it(`should capture an event recording the opt-in action`, () => {
-                    const beforeSendMock = jest.fn()
+                    const beforeSendMock = vi.fn()
                     posthog.on('eventCaptured', beforeSendMock)
 
                     posthog.opt_in_capturing()
@@ -465,7 +465,7 @@ describe('consentManager', () => {
 
 describe('consent storage when no browser storage is available', () => {
     afterEach(() => {
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
     })
 
     // A Figma plugin loads its UI from a `data:` URL, where Chrome disables both
@@ -474,9 +474,9 @@ describe('consent storage when no browser storage is available', () => {
     it.each(['localStorage', 'cookie'] as const)(
         'keeps opt-out working in memory when %s is unusable',
         async (persistenceType) => {
-            jest.spyOn(localStore, '_is_supported').mockReturnValue(false)
-            jest.spyOn(cookieStore, '_is_supported').mockReturnValue(false)
-            const memorySet = jest.spyOn(memoryStore, '_set')
+            vi.spyOn(localStore, '_is_supported').mockReturnValue(false)
+            vi.spyOn(cookieStore, '_is_supported').mockReturnValue(false)
+            const memorySet = vi.spyOn(memoryStore, '_set')
 
             const posthog = await new Promise<PostHog>((resolve) =>
                 defaultPostHog().init(

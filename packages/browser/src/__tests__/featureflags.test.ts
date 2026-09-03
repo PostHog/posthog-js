@@ -1,5 +1,3 @@
-/*eslint @typescript-eslint/no-empty-function: "off" */
-
 import {
     filterActiveFeatureFlags,
     parseFlagsResponse as normalizeFlagsResponse,
@@ -18,13 +16,14 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { CAMPAIGN_PARAMS } from '@posthog/browser-common/utils/event-utils'
 import { normalizeCaptureResult } from './helpers/normalize-capture-result'
 
-jest.mock(
-    '@posthog/browser-common/utils/globals',
-    () => jest.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
-)
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
+    userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+}))
 
-jest.useFakeTimers()
-jest.spyOn(global, 'setTimeout')
+vi.useFakeTimers()
+vi.spyOn(global, 'setTimeout')
 
 const expectedFeatureFlagDebugMessages = new Set([
     'All overrides cleared',
@@ -36,7 +35,7 @@ const expectedFeatureFlagDebugMessages = new Set([
 
 const mockExpectedFeatureFlagDebugLogs = (): void => {
     const failOnUnexpectedLog = console.log
-    jest.spyOn(console, 'log').mockImplementation((...args) => {
+    vi.spyOn(console, 'log').mockImplementation((...args) => {
         if (args[0] !== '[PostHog.js] [FeatureFlags]' || !expectedFeatureFlagDebugMessages.has(args[1])) {
             failOnUnexpectedLog(...args)
         }
@@ -59,9 +58,9 @@ const parseFlagsResponse = (
 
 const createFeatureFlags = (instance: any): PostHogFeatureFlags => {
     instance.config.remote_config_refresh_interval_ms ??= 0
-    instance._shouldDisableFlags ??= jest.fn(() => false)
-    instance._registerExtensionEventProperties ??= jest.fn(() => () => {})
-    instance.on ??= jest.fn(() => () => {})
+    instance._shouldDisableFlags ??= vi.fn(() => false)
+    instance._registerExtensionEventProperties ??= vi.fn(() => () => {})
+    instance.on ??= vi.fn(() => () => {})
     instance.sessionManager ??= {
         checkAndGetSessionAndWindowId: () => ({
             sessionId: instance.get_session_id?.() ?? '',
@@ -205,13 +204,13 @@ describe('featureflags', () => {
             get_property: (key) => instance.persistence.props[key],
             capture: () => {},
             flagsEndpointWasHit: false,
-            _send_request: jest.fn().mockImplementation(({ callback }) =>
+            _send_request: vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {},
                 })
             ),
-            _onRemoteConfig: jest.fn(),
+            _onRemoteConfig: vi.fn(),
             reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
             _shouldDisableFlags: () =>
                 instance.config.advanced_disable_flags || instance.config.advanced_disable_decide || false,
@@ -221,8 +220,8 @@ describe('featureflags', () => {
 
         featureFlags = createFeatureFlags(instance)
 
-        jest.spyOn(instance, 'capture').mockReturnValue(undefined)
-        mockWarn = jest.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(instance, 'capture').mockReturnValue(undefined)
+        mockWarn = vi.spyOn(window.console, 'warn').mockImplementation(() => {})
 
         instance.persistence.register({
             $feature_flag_payloads: {
@@ -1115,7 +1114,7 @@ describe('featureflags', () => {
                     featureFlagPayloads: { 'beta-feature': false },
                 }
                 instance.persistence.props.$feature_flag_payloads = { 'beta-feature': false }
-                instance.capture = jest.fn()
+                instance.capture = vi.fn()
                 featureFlags._hasLoadedFlags = true
 
                 featureFlags.getFeatureFlag('beta-feature')
@@ -1238,10 +1237,10 @@ describe('featureflags', () => {
         })
 
         describe('callback behavior', () => {
-            let callbackSpy: jest.Mock
+            let callbackSpy: vi.Mock
 
             beforeEach(() => {
-                callbackSpy = jest.fn()
+                callbackSpy = vi.fn()
                 featureFlags.onFeatureFlags(callbackSpy)
             })
 
@@ -1279,7 +1278,7 @@ describe('featureflags', () => {
         it('should not call /flags if advanced_disable_decide is true', () => {
             instance.config.advanced_disable_decide = true
             featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(0)
         })
@@ -1287,14 +1286,14 @@ describe('featureflags', () => {
         it('should not call /flags if advanced_disable_flags is true', () => {
             instance.config.advanced_disable_flags = true
             featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(0)
         })
 
         it('should call /flags via reloadFeatureFlags', () => {
             featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0]).toEqual(
@@ -1319,7 +1318,7 @@ describe('featureflags', () => {
             instance.config.flag_keys = ['checkout-redesign', 'new-dashboard']
 
             featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             const request = instance._send_request.mock.calls[0][0]
@@ -1345,7 +1344,7 @@ describe('featureflags', () => {
             // Call _callFlagsEndpoint directly because reloadFeatureFlags() returns early
             // when advanced_disable_feature_flags is true
             featureFlags._callFlagsEndpoint({ disableFlags: true })
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
@@ -1353,7 +1352,7 @@ describe('featureflags', () => {
 
         it('should always include timezone in request data', () => {
             featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.timezone).toBeDefined()
@@ -1362,7 +1361,7 @@ describe('featureflags', () => {
         it('should call /flags with evaluation_contexts when configured', () => {
             instance.config.evaluation_contexts = ['production', 'web']
             featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toEqual(['production', 'web'])
@@ -1385,13 +1384,13 @@ describe('featureflags', () => {
             ['configured with an invalid non-array value', 'beta-feature' as any, undefined, 1],
             ['not configured', undefined, undefined, 0],
         ])('should handle flag_keys when %s', (_description, configuredFlagKeys, expectedFlagKeys, expectedErrors) => {
-            const errorSpy = jest.spyOn(window.console, 'error').mockImplementation()
+            const errorSpy = vi.spyOn(window.console, 'error').mockImplementation(() => {})
             if (!isUndefined(configuredFlagKeys)) {
                 instance.config.flag_keys = configuredFlagKeys as any
             }
 
             featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             if (isUndefined(expectedFlagKeys)) {
@@ -1430,7 +1429,7 @@ describe('featureflags', () => {
             })
 
             instance.config.flag_keys = ['checkout-redesign']
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {
@@ -1442,7 +1441,7 @@ describe('featureflags', () => {
             )
 
             featureFlags.reloadFeatureFlags()
-            await jest.runOnlyPendingTimersAsync()
+            await vi.runOnlyPendingTimersAsync()
 
             expect(instance.persistence.props.$enabled_feature_flags).toEqual({
                 'checkout-redesign': true,
@@ -1451,7 +1450,7 @@ describe('featureflags', () => {
 
         it('should not include evaluation_contexts when not configured', () => {
             featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBe(undefined)
@@ -1460,7 +1459,7 @@ describe('featureflags', () => {
         it('should not include evaluation_contexts when configured as empty array', () => {
             instance.config.evaluation_contexts = []
             featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toBe(undefined)
@@ -1469,7 +1468,7 @@ describe('featureflags', () => {
         it('should support deprecated evaluation_environments field', () => {
             instance.config.evaluation_environments = ['production', 'web']
             featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toEqual(['production', 'web'])
@@ -1486,7 +1485,7 @@ describe('featureflags', () => {
                 )
 
                 featureFlags.reloadFeatureFlags()
-                await jest.advanceTimersByTimeAsync(10)
+                await vi.advanceTimersByTimeAsync(10)
             }
 
             afterEach(() => {
@@ -1537,13 +1536,13 @@ describe('featureflags', () => {
 
                 instance._send_request.mockImplementationOnce(({ callback }) => callback({ statusCode: 0, json: null }))
                 window.dispatchEvent(new Event('online'))
-                await jest.advanceTimersByTimeAsync(10)
+                await vi.advanceTimersByTimeAsync(10)
 
                 expect(instance._send_request).toHaveBeenCalledTimes(4)
             })
 
             it('removes the online event listener on dispose', () => {
-                const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener')
+                const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
 
                 featureFlags.dispose()
 
@@ -1555,7 +1554,7 @@ describe('featureflags', () => {
 
     describe('onFeatureFlags', () => {
         beforeEach(() => {
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {
@@ -1586,7 +1585,7 @@ describe('featureflags', () => {
             featureFlags.setAnonymousDistinctId('rando_id')
             featureFlags.reloadFeatureFlags()
 
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
             expect(called).toEqual(true)
             expect(_error).toEqual(false)
             expect(_flags).toEqual(['first', 'second'])
@@ -1631,7 +1630,7 @@ describe('featureflags', () => {
 
             featureFlags.setAnonymousDistinctId('rando_id')
             featureFlags.reloadFeatureFlags()
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(called).toEqual(true)
 
@@ -1641,7 +1640,7 @@ describe('featureflags', () => {
 
             featureFlags.setAnonymousDistinctId('rando_id')
             featureFlags.reloadFeatureFlags()
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(called).toEqual(false)
         })
@@ -1649,14 +1648,14 @@ describe('featureflags', () => {
         it('should isolate a throwing callback so later callbacks still fire', () => {
             // The logged error is expected here, so swallow it rather than letting the
             // test setup's console.error guard throw.
-            console.error = jest.fn()
+            console.error = vi.fn()
 
             featureFlags._hasLoadedFlags = true
 
-            const throwingCallback = jest.fn(() => {
+            const throwingCallback = vi.fn(() => {
                 throw new Error('user callback blew up')
             })
-            const laterCallback = jest.fn()
+            const laterCallback = vi.fn()
 
             featureFlags.onFeatureFlags(throwingCallback)
             featureFlags.onFeatureFlags(laterCallback)
@@ -1675,7 +1674,7 @@ describe('featureflags', () => {
 
     describe('featureFlagsReloading event', () => {
         beforeEach(() => {
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {
@@ -1689,7 +1688,7 @@ describe('featureflags', () => {
         })
 
         it('should emit featureFlagsReloading event when reloadFeatureFlags is called', () => {
-            const loadingCallback = jest.fn()
+            const loadingCallback = vi.fn()
             instance.on('featureFlagsReloading', loadingCallback)
 
             featureFlags.reloadFeatureFlags()
@@ -1699,7 +1698,7 @@ describe('featureflags', () => {
         })
 
         it('should not emit featureFlagsReloading event if already debouncing', () => {
-            const loadingCallback = jest.fn()
+            const loadingCallback = vi.fn()
             instance.on('featureFlagsReloading', loadingCallback)
 
             featureFlags.reloadFeatureFlags()
@@ -1722,13 +1721,13 @@ describe('featureflags', () => {
             })
 
             featureFlags.reloadFeatureFlags()
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(callOrder).toEqual(['loading', 'loaded'])
         })
 
         it('should not emit featureFlagsReloading if reloading is disabled', () => {
-            const loadingCallback = jest.fn()
+            const loadingCallback = vi.fn()
             instance.on('featureFlagsReloading', loadingCallback)
 
             featureFlags.setReloadingPaused(true)
@@ -1738,7 +1737,7 @@ describe('featureflags', () => {
         })
 
         it('should not emit featureFlagsReloading if feature flags are disabled', () => {
-            const loadingCallback = jest.fn()
+            const loadingCallback = vi.fn()
             instance.on('featureFlagsReloading', loadingCallback)
 
             instance.config.advanced_disable_feature_flags = true
@@ -1772,7 +1771,7 @@ describe('featureflags', () => {
         }
 
         beforeEach(() => {
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {
@@ -1786,7 +1785,7 @@ describe('featureflags', () => {
             featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(instance._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -1800,7 +1799,7 @@ describe('featureflags', () => {
 
             expect(instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
 
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {
@@ -1813,7 +1812,7 @@ describe('featureflags', () => {
             featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
             expect(instance._send_request).toHaveBeenCalledTimes(0)
         })
 
@@ -1821,7 +1820,7 @@ describe('featureflags', () => {
             featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(instance._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -1835,7 +1834,7 @@ describe('featureflags', () => {
 
             expect(instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
 
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {
@@ -1848,7 +1847,7 @@ describe('featureflags', () => {
             featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_SECOND])
             }, true)
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
             expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
 
@@ -1873,10 +1872,10 @@ describe('featureflags', () => {
 
         it('continues requesting early access features when automatic flag requests are disabled', async () => {
             instance.config.advanced_disable_flags = true
-            const callback = jest.fn()
+            const callback = vi.fn()
 
             featureFlags.getEarlyAccessFeatures(callback)
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(callback).toHaveBeenCalledWith([EARLY_ACCESS_FEATURE_FIRST])
@@ -1884,12 +1883,12 @@ describe('featureflags', () => {
 
         it('isolates early access feature callback failures', async () => {
             const callbackError = new Error('callback failed')
-            const error = jest.spyOn(window.console, 'error').mockImplementation()
+            const error = vi.spyOn(window.console, 'error').mockImplementation(() => {})
 
             featureFlags.getEarlyAccessFeatures(() => {
                 throw callbackError
             })
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(error).toHaveBeenCalledWith(
                 '[PostHog.js] [FeatureFlags]',
@@ -1908,12 +1907,12 @@ describe('featureflags', () => {
                 EARLY_ACCESS_FEATURE_FIRST,
                 { ...EARLY_ACCESS_FEATURE_SECOND, flagKey: 'old-feature' },
             ]
-            const registerSpy = jest.spyOn(instance.persistence, 'register')
+            const registerSpy = vi.spyOn(instance.persistence, 'register')
 
             featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             }, true)
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(registerSpy).toHaveBeenCalledWith({
                 $early_access_features: [EARLY_ACCESS_FEATURE_FIRST],
@@ -1949,9 +1948,9 @@ describe('featureflags', () => {
             // Restore persistence for afterEach cleanup
             instance.persistence = {
                 props: {},
-                register: jest.fn(),
-                unregister: jest.fn(),
-                clear: jest.fn(),
+                register: vi.fn(),
+                unregister: vi.fn(),
+                clear: vi.fn(),
             }
         })
 
@@ -2061,7 +2060,7 @@ describe('featureflags', () => {
             })
 
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            vi.runAllTimers()
             // check the request sent person properties
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
@@ -2086,7 +2085,7 @@ describe('featureflags', () => {
             instance.persistence.unregister('$stored_person_properties')
             instance.persistence.unregister('$stored_group_properties')
 
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {
@@ -2112,7 +2111,7 @@ describe('featureflags', () => {
             })
 
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
@@ -2136,7 +2135,7 @@ describe('featureflags', () => {
             })
 
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
@@ -2157,7 +2156,7 @@ describe('featureflags', () => {
         it('should omit device_id when it is undefined', () => {
             // Don't register device_id at all
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
@@ -2182,7 +2181,7 @@ describe('featureflags', () => {
 
             featureFlags.setAnonymousDistinctId('anon_id_789')
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
@@ -2206,7 +2205,7 @@ describe('featureflags', () => {
             })
 
             featureFlags.setPersonPropertiesForFlags({ plan: 'pro', beta_tester: true })
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
@@ -2232,7 +2231,7 @@ describe('featureflags', () => {
             })
 
             featureFlags.setGroupPropertiesForFlags({ company: { name: 'Acme', seats: 50 } })
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
@@ -2253,7 +2252,7 @@ describe('featureflags', () => {
 
     describe('reloadFeatureFlags', () => {
         beforeEach(() => {
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {
@@ -2270,7 +2269,7 @@ describe('featureflags', () => {
             featureFlags.setAnonymousDistinctId('rando_id')
             featureFlags.reloadFeatureFlags()
 
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 first: 'variant-1',
@@ -2297,7 +2296,7 @@ describe('featureflags', () => {
             featureFlags.reloadFeatureFlags()
             featureFlags.reloadFeatureFlags()
 
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 first: 'variant-1',
@@ -2320,7 +2319,7 @@ describe('featureflags', () => {
 
             featureFlags.reloadFeatureFlags()
             featureFlags.reloadFeatureFlags()
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             // check the request didn't send $anon_distinct_id the second time around
             expect(instance._send_request.mock.calls[1][0].data).toEqual({
@@ -2337,7 +2336,7 @@ describe('featureflags', () => {
             })
 
             featureFlags.reloadFeatureFlags()
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             // check the request didn't send $anon_distinct_id the second time around
             expect(instance._send_request.mock.calls[2][0].data).toEqual({
@@ -2357,7 +2356,7 @@ describe('featureflags', () => {
         it('on providing personProperties runs reload automatically', async () => {
             featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' })
 
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 first: 'variant-1',
@@ -2397,7 +2396,7 @@ describe('featureflags', () => {
             })
 
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'beta-feature': true,
@@ -2411,7 +2410,7 @@ describe('featureflags', () => {
 
             featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' })
 
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'beta-feature': true,
@@ -2429,7 +2428,7 @@ describe('featureflags', () => {
             }
 
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(instance._send_request.mock.calls[0][0].compression).toEqual(undefined)
         })
@@ -2437,7 +2436,7 @@ describe('featureflags', () => {
 
     describe('override person and group properties', () => {
         beforeEach(() => {
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {
@@ -2454,7 +2453,7 @@ describe('featureflags', () => {
             featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' })
             featureFlags.setPersonPropertiesForFlags({ x: 'y', c: 'e' })
 
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 first: 'variant-1',
@@ -2482,7 +2481,7 @@ describe('featureflags', () => {
         it('doesnt reload flags if explicitly asked not to', () => {
             featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' }, false)
 
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             // still old flags
             expect(featureFlags.getFlagVariants()).toEqual({
@@ -2498,12 +2497,12 @@ describe('featureflags', () => {
         it('resetPersonProperties resets all properties and reloads flags by default', () => {
             featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' }, false)
             featureFlags.setPersonPropertiesForFlags({ x: 'y', c: 'e' }, false)
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(instance.persistence.props.$stored_person_properties).toEqual({ a: 'b', c: 'e', x: 'y' })
 
             featureFlags.resetPersonPropertiesForFlags()
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(instance.persistence.props.$stored_person_properties).toEqual(undefined)
 
@@ -2524,12 +2523,12 @@ describe('featureflags', () => {
 
         it('doesnt reload flags when resetting person properties if explicitly asked not to', () => {
             featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' }, false)
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(instance.persistence.props.$stored_person_properties).toEqual({ a: 'b', c: 'd' })
 
             featureFlags.resetPersonPropertiesForFlags(false)
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(instance.persistence.props.$stored_person_properties).toEqual(undefined)
             expect(instance._send_request).not.toHaveBeenCalled()
@@ -2537,13 +2536,13 @@ describe('featureflags', () => {
 
         it('coalesces the default reset reload with an explicit reloadFeatureFlags call', () => {
             featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' }, false)
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(instance.persistence.props.$stored_person_properties).toEqual({ a: 'b', c: 'd' })
 
             featureFlags.resetPersonPropertiesForFlags()
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             // this ensures backwards compatibility with users who would previously call
             // resetPersonPropertiesForFlags followed by reloadFeatureFlags. we will still
@@ -2609,7 +2608,7 @@ describe('featureflags', () => {
             })
 
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
@@ -2638,7 +2637,7 @@ describe('featureflags', () => {
                 projects: { x: 'y', c: 'e' },
             })
 
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 first: 'variant-1',
@@ -2688,13 +2687,13 @@ describe('featureflags', () => {
 
             expect(instance.persistence.props.$stored_group_properties).toEqual(undefined)
 
-            jest.runAllTimers()
+            vi.runAllTimers()
         })
 
         it('doesnt reload group flags if explicitly asked not to', () => {
             featureFlags.setGroupPropertiesForFlags({ orgs: { a: 'b', c: 'd' } }, false)
 
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             // still old flags
             expect(featureFlags.getFlagVariants()).toEqual({
@@ -2710,7 +2709,7 @@ describe('featureflags', () => {
 
     describe('when subsequent /flags?v=1 calls return partial results', () => {
         beforeEach(() => {
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {
@@ -2724,7 +2723,7 @@ describe('featureflags', () => {
         it('should return combined results', async () => {
             featureFlags.reloadFeatureFlags()
 
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'alpha-feature-2': true,
@@ -2782,7 +2781,7 @@ describe('featureflags', () => {
                 },
                 $override_feature_flags: false,
             })
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {
@@ -2799,7 +2798,7 @@ describe('featureflags', () => {
         it('should return combined results', async () => {
             featureFlags.reloadFeatureFlags()
 
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'alpha-feature-2': true,
@@ -2857,7 +2856,7 @@ describe('featureflags', () => {
                 },
                 $override_feature_flags: false,
             })
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {
@@ -2888,7 +2887,7 @@ describe('featureflags', () => {
         it('should filter out failed flags and preserve their cached values', async () => {
             featureFlags.reloadFeatureFlags()
 
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'alpha-feature-2': true,
@@ -2906,7 +2905,7 @@ describe('featureflags', () => {
 
     describe('when subsequent /flags?v=1 calls return results without errors', () => {
         beforeEach(() => {
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {
@@ -2920,7 +2919,7 @@ describe('featureflags', () => {
         it('should return combined results', async () => {
             featureFlags.reloadFeatureFlags()
 
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'x-flag': 'x-value',
@@ -2931,7 +2930,7 @@ describe('featureflags', () => {
 
     describe('when /flags times out or errors out', () => {
         beforeEach(() => {
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 500,
                     text: 'Internal Server Error',
@@ -2948,7 +2947,7 @@ describe('featureflags', () => {
             })
 
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            vi.runAllTimers()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'beta-feature': true,
@@ -2976,7 +2975,7 @@ describe('featureflags', () => {
 
             featureFlags.reloadFeatureFlags()
 
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
             expect(called).toEqual(true)
             expect(_errors).toEqual(true)
             expect(_flags).toEqual([])
@@ -2999,7 +2998,7 @@ describe('featureflags', () => {
 
             featureFlags.reloadFeatureFlags()
 
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
             expect(called).toEqual(true)
             expect(_errors).toEqual(true)
             expect(_flags).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
@@ -3011,7 +3010,7 @@ describe('featureflags', () => {
         })
 
         it('should call onFeatureFlags with existing flags on timeouts', async () => {
-            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            instance._send_request = vi.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 0,
                     text: '',
@@ -3033,7 +3032,7 @@ describe('featureflags', () => {
 
             featureFlags.reloadFeatureFlags()
 
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
             expect(called).toEqual(true)
             expect(_errors).toEqual(true)
             expect(_flags).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
@@ -3337,7 +3336,7 @@ describe('parseFlagsResponse', () => {
 
     beforeEach(() => {
         window.POSTHOG_DEBUG = true
-        persistence = { register: jest.fn(), unregister: jest.fn() }
+        persistence = { register: vi.fn(), unregister: vi.fn() }
     })
 
     it('enables multivariate feature flags from /flags?v=2 response', () => {
@@ -3352,7 +3351,7 @@ describe('parseFlagsResponse', () => {
                 'alpha-feature-2': 'fake-payload',
             },
         }
-        jest.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
 
         parseFlagsResponse(flagsResponse, persistence)
 
@@ -3409,7 +3408,7 @@ describe('parseFlagsResponse', () => {
                 'alpha-feature-2': '"fake-payload"',
             },
         }
-        jest.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
 
         parseFlagsResponse(flagsResponse, persistence)
 
@@ -3589,7 +3588,7 @@ describe('parseFlagsResponse', () => {
     it('enables feature flags from /flags response (v1 backwards compatibility)', () => {
         // checks that nothing fails when asking for ?v=2 and getting a ?v=1 response
         const flagsResponse = { featureFlags: ['beta-feature', 'alpha-feature-2'] }
-        jest.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
 
         // @ts-expect-error testing backwards compatibility
         parseFlagsResponse(flagsResponse, persistence)
@@ -3606,7 +3605,7 @@ describe('parseFlagsResponse', () => {
     })
 
     it('doesnt remove existing feature flags when no flags are returned', () => {
-        jest.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
         parseFlagsResponse({}, persistence)
 
         expect(persistence.register).not.toHaveBeenCalled()
@@ -3632,7 +3631,7 @@ describe('parseFlagsResponse', () => {
         // restore the previous value so this test stays self-contained.
         const previousDebug = (window as any).POSTHOG_DEBUG
         ;(window as any).POSTHOG_DEBUG = true
-        jest.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
 
         // @ts-expect-error testing partial/legacy response shapes
         parseFlagsResponse(response, persistence)
@@ -3651,7 +3650,7 @@ describe('parseFlagsResponse', () => {
             featureFlags: { 'test-flag': true },
             requestId: 'test-request-id-123',
         }
-        jest.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
 
         parseFlagsResponse(flagsResponse, persistence)
 
@@ -3848,9 +3847,9 @@ describe('getRemoteConfigPayload', () => {
                 api_host: 'https://test.com',
             } as PostHogConfig,
             get_distinct_id: () => 'test-distinct-id',
-            _send_request: jest.fn(),
+            _send_request: vi.fn(),
             requestRouter: {
-                endpointFor: jest.fn().mockImplementation((endpoint, path) => `${endpoint}${path}`),
+                endpointFor: vi.fn().mockImplementation((endpoint, path) => `${endpoint}${path}`),
             },
         })
 
@@ -3860,7 +3859,7 @@ describe('getRemoteConfigPayload', () => {
     it('should include evaluation_contexts when configured', () => {
         instance.config.evaluation_contexts = ['staging', 'backend']
 
-        const callback = jest.fn()
+        const callback = vi.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
 
         const requestData = instance._send_request.mock.calls[0][0].data
@@ -3893,7 +3892,7 @@ describe('getRemoteConfigPayload', () => {
             instance.config.flag_keys = configuredFlagKeys as any
         }
 
-        const callback = jest.fn()
+        const callback = vi.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
 
         expect(instance._send_request).toHaveBeenCalledWith(
@@ -3916,37 +3915,37 @@ describe('getRemoteConfigPayload', () => {
 
     it('continues requesting remote config payloads when automatic flag requests are disabled', async () => {
         featureFlags.dispose()
-        instance._shouldDisableFlags = jest.fn(() => true)
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._shouldDisableFlags = vi.fn(() => true)
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
                 json: { featureFlagPayloads: { 'test-flag': 'payload' } },
             })
         )
         featureFlags = createFeatureFlags(instance)
-        const callback = jest.fn()
+        const callback = vi.fn()
 
         featureFlags.getRemoteConfigPayload('test-flag', callback)
-        await jest.runAllTimersAsync()
+        await vi.runAllTimersAsync()
 
         expect(instance._send_request).toHaveBeenCalledTimes(1)
         expect(callback).toHaveBeenCalledWith('payload')
     })
 
     it('isolates remote config payload callback failures', async () => {
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
                 json: { featureFlagPayloads: { 'test-flag': 'payload' } },
             })
         )
         const callbackError = new Error('callback failed')
-        const error = jest.spyOn(window.console, 'error').mockImplementation()
+        const error = vi.spyOn(window.console, 'error').mockImplementation(() => {})
 
         featureFlags.getRemoteConfigPayload('test-flag', () => {
             throw callbackError
         })
-        await jest.runAllTimersAsync()
+        await vi.runAllTimersAsync()
 
         expect(error).toHaveBeenCalledWith(
             '[PostHog.js] [FeatureFlags]',
@@ -3961,7 +3960,7 @@ describe('getRemoteConfigPayload', () => {
     })
 
     it('should not include evaluation_contexts when not configured', () => {
-        const callback = jest.fn()
+        const callback = vi.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
 
         expect(instance._send_request).toHaveBeenCalledWith(
@@ -3982,7 +3981,7 @@ describe('getRemoteConfigPayload', () => {
     it('should not include evaluation_contexts when configured as empty array', () => {
         instance.config.evaluation_contexts = []
 
-        const callback = jest.fn()
+        const callback = vi.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
 
         expect(instance._send_request).toHaveBeenCalledWith(
@@ -4001,11 +4000,11 @@ describe('getRemoteConfigPayload', () => {
     })
 
     it('should support deprecated evaluation_environments field', () => {
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
         instance.config.evaluation_environments = ['staging', 'backend']
 
-        const callback = jest.fn()
+        const callback = vi.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
 
         expect(warnSpy).toHaveBeenCalledWith(
@@ -4040,12 +4039,12 @@ describe('getRemoteConfigPayload', () => {
                     ...apiConfig,
                 } as PostHogConfig,
                 get_distinct_id: () => 'test-distinct-id',
-                _send_request: jest.fn(),
+                _send_request: vi.fn(),
                 requestRouter: new RequestRouter({ config: apiConfig } as any),
             })
 
             const customFeatureFlags = createFeatureFlags(customInstance)
-            const callback = jest.fn()
+            const callback = vi.fn()
             customFeatureFlags.getRemoteConfigPayload('test-flag', callback)
 
             expect(customInstance._send_request).toHaveBeenCalledWith(
@@ -4063,7 +4062,7 @@ describe('getRemoteConfigPayload', () => {
                     api_host: 'https://app.posthog.com',
                 } as PostHogConfig,
                 get_distinct_id: () => 'test-distinct-id',
-                _send_request: jest.fn(),
+                _send_request: vi.fn(),
                 requestRouter: new RequestRouter({
                     config: {
                         api_host: 'https://app.posthog.com',
@@ -4072,7 +4071,7 @@ describe('getRemoteConfigPayload', () => {
             })
 
             const customFeatureFlags = createFeatureFlags(customInstance)
-            const callback = jest.fn()
+            const callback = vi.fn()
             customFeatureFlags.getRemoteConfigPayload('test-flag', callback)
 
             expect(customInstance._send_request).toHaveBeenCalledWith(
@@ -4087,7 +4086,7 @@ describe('getRemoteConfigPayload', () => {
 
 describe('updateFlags', () => {
     beforeEach(() => {
-        jest.spyOn(window.console, 'warn').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
     })
 
     it('should update feature flags without making a network request', async () => {
@@ -4105,7 +4104,7 @@ describe('updateFlags', () => {
 
     it('reports the same flag value again after identify', async () => {
         const posthog = await createPosthogInstance()
-        const capture = jest.spyOn(posthog, 'capture')
+        const capture = vi.spyOn(posthog, 'capture')
         posthog.updateFlags({ 'test-flag': true })
 
         posthog.getFeatureFlag('test-flag')
@@ -4179,7 +4178,7 @@ describe('updateFlags', () => {
 
     it('should fire onFeatureFlags callbacks when flags are updated', async () => {
         const posthog = await createPosthogInstance()
-        const callback = jest.fn()
+        const callback = vi.fn()
         posthog.onFeatureFlags(callback)
 
         posthog.updateFlags({ 'new-flag': true })
@@ -4271,7 +4270,7 @@ describe('updateFlags', () => {
 
     it('should not make any network requests', async () => {
         const posthog = await createPosthogInstance()
-        const sendRequestSpy = jest.spyOn(posthog, '_send_request')
+        const sendRequestSpy = vi.spyOn(posthog, '_send_request')
 
         posthog.updateFlags({ 'test-flag': true })
 
@@ -4334,7 +4333,7 @@ describe('updateFlags', () => {
 describe('$feature_flag_error tracking', () => {
     let instance: any
     let featureFlags: PostHogFeatureFlags
-    let mockWarn: jest.SpyInstance
+    let mockWarn: vi.SpyInstance
 
     const config = {
         token: 'random fake token',
@@ -4353,9 +4352,9 @@ describe('$feature_flag_error tracking', () => {
             register: (props: any) => instance.persistence.register(props),
             unregister: (key: string) => instance.persistence.unregister(key),
             get_property: (key: string) => instance.persistence.props[key],
-            capture: jest.fn(),
-            _send_request: jest.fn(),
-            _onRemoteConfig: jest.fn(),
+            capture: vi.fn(),
+            _send_request: vi.fn(),
+            _onRemoteConfig: vi.fn(),
             reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
             _shouldDisableFlags: () => false,
             _internalEventEmitter: internalEventEmitter,
@@ -4363,7 +4362,7 @@ describe('$feature_flag_error tracking', () => {
         }
 
         featureFlags = createFeatureFlags(instance)
-        mockWarn = jest.spyOn(window.console, 'warn').mockImplementation()
+        mockWarn = vi.spyOn(window.console, 'warn').mockImplementation(() => {})
         instance.persistence.unregister('$flag_call_reported')
         instance.persistence.unregister('$feature_flag_errors')
     })
@@ -4371,11 +4370,11 @@ describe('$feature_flag_error tracking', () => {
     afterEach(() => {
         mockWarn.mockRestore()
         delete window.POSTHOG_DEBUG
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     it('should set $feature_flag_error to api_error_{status} on server error', async () => {
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 500,
                 json: {},
@@ -4383,7 +4382,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(10)
+        await vi.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual(['api_error_500'])
     })
@@ -4392,7 +4391,7 @@ describe('$feature_flag_error tracking', () => {
         const networkError = new Error('Network request failed')
         networkError.name = 'TypeError'
 
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 0,
                 error: networkError,
@@ -4401,7 +4400,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(10)
+        await vi.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.CONNECTION_ERROR])
     })
@@ -4410,7 +4409,7 @@ describe('$feature_flag_error tracking', () => {
         const abortError = new Error('Aborted')
         abortError.name = 'AbortError'
 
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 0,
                 error: abortError,
@@ -4419,13 +4418,13 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(10)
+        await vi.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.TIMEOUT])
     })
 
     it('should set $feature_flag_error to errors_while_computing_flags when errorsWhileComputingFlags is true', async () => {
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
                 json: {
@@ -4438,14 +4437,14 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(10)
+        await vi.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.ERRORS_WHILE_COMPUTING])
     })
 
     it('should set $feature_flag_error to quota_limited when quota limited', async () => {
         window.POSTHOG_DEBUG = true
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
                 json: {
@@ -4456,7 +4455,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(10)
+        await vi.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.QUOTA_LIMITED])
         expect(mockWarn).toHaveBeenCalledWith(
@@ -4466,7 +4465,7 @@ describe('$feature_flag_error tracking', () => {
     })
 
     it('should set $feature_flag_error to unknown_error when error is not an Error instance', async () => {
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 0,
                 error: 'String error message',
@@ -4475,7 +4474,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(10)
+        await vi.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.UNKNOWN_ERROR])
     })
@@ -4483,19 +4482,19 @@ describe('$feature_flag_error tracking', () => {
     it.each([401, 403, 404, 502, 503])(
         'should set $feature_flag_error to api_error_%i for status %i',
         async (status) => {
-            instance._send_request = jest
+            instance._send_request = vi
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: status, json: {} }))
 
             featureFlags.reloadFeatureFlags()
-            await jest.advanceTimersByTimeAsync(10)
+            await vi.advanceTimersByTimeAsync(10)
 
             expect(instance.persistence.props.$feature_flag_errors).toEqual([`api_error_${status}`])
         }
     )
 
     it('should include $feature_flag_error in $feature_flag_called event capture', async () => {
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
                 json: {
@@ -4508,7 +4507,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(10)
+        await vi.advanceTimersByTimeAsync(10)
 
         featureFlags.getFeatureFlag('test-flag')
 
@@ -4523,7 +4522,7 @@ describe('$feature_flag_error tracking', () => {
     })
 
     it('should set $feature_flag_error to flag_missing when flag is not in response', async () => {
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
                 json: {
@@ -4535,7 +4534,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(10)
+        await vi.advanceTimersByTimeAsync(10)
 
         featureFlags.getFeatureFlag('non-existent-flag')
 
@@ -4550,7 +4549,7 @@ describe('$feature_flag_error tracking', () => {
     })
 
     it('should join multiple errors with commas', async () => {
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
                 json: {
@@ -4561,7 +4560,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(10)
+        await vi.advanceTimersByTimeAsync(10)
 
         // Flag is not in response, and errorsWhileComputingFlags is true
         featureFlags.getFeatureFlag('missing-flag')
@@ -4577,7 +4576,7 @@ describe('$feature_flag_error tracking', () => {
     })
 
     it('should not include $feature_flag_error when there are no errors', async () => {
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
                 json: {
@@ -4590,7 +4589,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(10)
+        await vi.advanceTimersByTimeAsync(10)
 
         featureFlags.getFeatureFlag('success-flag')
 
@@ -4604,7 +4603,7 @@ describe('$feature_flag_error tracking', () => {
 
     it('should clear errors on successful subsequent request', async () => {
         // First request with error
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 500,
                 json: {},
@@ -4612,12 +4611,12 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(10)
+        await vi.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual(['api_error_500'])
 
         // Second successful request
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
                 json: {
@@ -4629,13 +4628,13 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(10)
+        await vi.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([])
     })
 
     it('should track quota_limited and flag_missing together', async () => {
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
                 json: {
@@ -4646,7 +4645,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(10)
+        await vi.advanceTimersByTimeAsync(10)
 
         featureFlags.getFeatureFlag('some-flag')
 
@@ -4662,7 +4661,7 @@ describe('$feature_flag_error tracking', () => {
 
     it('should include persisted errors in $feature_flag_called event after reload', async () => {
         // Setup: flags loaded with errors_while_computing
-        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+        instance._send_request = vi.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
                 json: {
@@ -4672,7 +4671,7 @@ describe('$feature_flag_error tracking', () => {
             })
         )
         featureFlags.reloadFeatureFlags()
-        await jest.advanceTimersByTimeAsync(10)
+        await vi.advanceTimersByTimeAsync(10)
 
         // Simulate reload - new FeatureFlags instance with same persistence
         const newFeatureFlags = createFeatureFlags(instance)
@@ -4801,7 +4800,7 @@ describe('$feature_flag_error tracking', () => {
         })
 
         it('should trigger reloadFeatureFlags when cache is stale', () => {
-            const reloadSpy = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+            const reloadSpy = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             // Set TTL to 1 hour
             instance.config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
@@ -4826,7 +4825,7 @@ describe('$feature_flag_error tracking', () => {
         })
 
         it('should reset staleCacheRefreshTriggered after successful flag load', () => {
-            const reloadSpy = jest.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+            const reloadSpy = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             // Set TTL to 1 hour
             instance.config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
@@ -4868,8 +4867,8 @@ describe('minimal $feature_flag_called events', () => {
     beforeEach(() => {
         // Events are dropped via before_send (expected warn) and bootstrap flags go through
         // the legacy-shape path (expected upgrade warn).
-        jest.spyOn(window.console, 'warn').mockImplementation()
-        jest.spyOn(window.console, 'error').mockImplementation()
+        vi.spyOn(window.console, 'warn').mockImplementation(() => {})
+        vi.spyOn(window.console, 'error').mockImplementation(() => {})
     })
 
     const gatedFlagsResponse = (options: { minimalFlagCalledEvents?: boolean; hasExperiment?: boolean } = {}) => ({

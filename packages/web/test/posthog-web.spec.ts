@@ -1,16 +1,16 @@
 /**
- * @jest-environment jsdom
+ * @vitest-environment jsdom
  */
 
 import { waitForPromises } from '@posthog/core/testing'
 import { PostHog } from '../src'
 
 describe('PostHogWeb', () => {
-  let fetch: jest.Mock
-  jest.useRealTimers()
+  let fetch: vi.Mock
+  vi.useRealTimers()
 
   beforeEach(() => {
-    ;(global as any).window.fetch = fetch = jest.fn(async (url) => {
+    ;(global as any).window.fetch = fetch = vi.fn(async (url) => {
       let res: any = { status: 'ok' }
       if (url.includes('flags')) {
         res = {
@@ -49,9 +49,8 @@ describe('PostHogWeb', () => {
       expect(posthog.optedOut).toEqual(false)
 
       posthog.capture('test')
-      await waitForPromises()
 
-      expect(fetch).toHaveBeenCalledTimes(2)
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
     })
 
     it('should load feature flags on init', async () => {
@@ -150,7 +149,7 @@ describe('PostHogWeb', () => {
         flushAt: 1,
       })
 
-      const captureSpy = jest.spyOn(posthog, 'capture')
+      const captureSpy = vi.spyOn(posthog, 'capture')
 
       // Change pathname
       setPathname('/test-page')
@@ -170,7 +169,7 @@ describe('PostHogWeb', () => {
         flushAt: 1,
       })
 
-      const captureSpy = jest.spyOn(posthog, 'capture')
+      const captureSpy = vi.spyOn(posthog, 'capture')
       captureSpy.mockClear()
 
       // Don't change pathname
@@ -185,7 +184,7 @@ describe('PostHogWeb', () => {
         flushAt: 1,
       })
 
-      const captureSpy = jest.spyOn(posthog, 'capture')
+      const captureSpy = vi.spyOn(posthog, 'capture')
 
       // Change pathname
       setPathname('/replaced-page')
@@ -205,7 +204,7 @@ describe('PostHogWeb', () => {
         flushAt: 1,
       })
 
-      const captureSpy = jest.spyOn(posthog, 'capture')
+      const captureSpy = vi.spyOn(posthog, 'capture')
       captureSpy.mockClear()
 
       // Don't change pathname
@@ -220,7 +219,7 @@ describe('PostHogWeb', () => {
         flushAt: 1,
       })
 
-      const captureSpy = jest.spyOn(posthog, 'capture')
+      const captureSpy = vi.spyOn(posthog, 'capture')
 
       // Change pathname
       setPathname('/popstate-page')
@@ -240,7 +239,7 @@ describe('PostHogWeb', () => {
         flushAt: 1,
       })
 
-      const captureSpy = jest.spyOn(posthog, 'capture')
+      const captureSpy = vi.spyOn(posthog, 'capture')
       captureSpy.mockClear()
 
       // Don't change pathname
@@ -256,11 +255,11 @@ describe('PostHogWeb', () => {
       })
 
       const commonEventProps = { $lib: 'posthog-js-lite', $lib_version: '1.0.0' }
-      const getCommonEventPropertiesSpy = jest
+      const getCommonEventPropertiesSpy = vi
         .spyOn(posthog, 'getCommonEventProperties')
         .mockImplementation(() => commonEventProps)
 
-      const coreCaptureMethod = jest.spyOn(PostHog.prototype, 'capture')
+      const coreCaptureMethod = vi.spyOn(PostHog.prototype, 'capture')
 
       // Change pathname
       setPathname('/captured-page')

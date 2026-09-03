@@ -1,10 +1,10 @@
 import { platform, release } from 'node:os'
 import { hostOsResourceAttributes } from '../host-os.node'
 
-jest.mock('node:os', () => ({ platform: jest.fn(), release: jest.fn() }))
+vi.mock('node:os', () => ({ platform: vi.fn(), release: vi.fn() }))
 
-const mockPlatform = platform as jest.Mock
-const mockRelease = release as jest.Mock
+const mockPlatform = platform as vi.Mock
+const mockRelease = release as vi.Mock
 
 describe('hostOsResourceAttributes', () => {
   it('reports the host OS', () => {
