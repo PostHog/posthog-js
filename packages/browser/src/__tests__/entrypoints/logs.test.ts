@@ -5,21 +5,25 @@ import { patch as rrwebPatch } from '@posthog/rrweb-utils'
 import { LOGS_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import type { Client } from '@posthog/browser-common'
 
+const loadLogsEntrypoint = async (): Promise<void> => {
+    await import('../../entrypoints/logs')
+}
+
 describe('logs entrypoint', () => {
     let mockPostHog: PostHog
     let originalConsole: Console
     // Legacy PostHog capture routes through its historical console capture ABI.
-    let mockEmit: jest.Mock
+    let mockEmit: vi.Mock
 
     beforeEach(() => {
-        jest.resetModules()
-        jest.clearAllMocks()
+        vi.resetModules()
+        vi.clearAllMocks()
 
         // Store original console
         originalConsole = { ...console }
 
         // Set up capture spy
-        mockEmit = jest.fn()
+        mockEmit = vi.fn()
 
         // Mock PostHog instance
         mockPostHog = {
@@ -28,15 +32,15 @@ describe('logs entrypoint', () => {
                 token: 'test-token',
             },
             sessionManager: {
-                checkAndGetSessionAndWindowId: jest.fn(() => ({
+                checkAndGetSessionAndWindowId: vi.fn(() => ({
                     sessionId: 'session-123',
                     windowId: 'window-456',
                     sessionStartTimestamp: new Date('2023-01-01T10:00:00Z').getTime(),
                     lastActivityTimestamp: new Date('2023-01-01T10:30:00Z').getTime(),
                 })),
             },
-            get_distinct_id: jest.fn(() => 'user-123'),
-            is_capturing: jest.fn(() => true),
+            get_distinct_id: vi.fn(() => 'user-123'),
+            is_capturing: vi.fn(() => true),
             version: '1.392.0',
             logs: { le: mockEmit },
         } as unknown as PostHog
@@ -52,11 +56,11 @@ describe('logs entrypoint', () => {
 
         Object.defineProperty(assignableWindow, 'console', {
             value: {
-                log: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn(),
-                debug: jest.fn(),
+                log: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+                debug: vi.fn(),
             },
             writable: true,
         })
@@ -71,10 +75,7 @@ describe('logs entrypoint', () => {
     })
 
     describe('core capture routing', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('routes legacy PostHog capture through its historical console method with the mapped level', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
@@ -131,10 +132,7 @@ describe('logs entrypoint', () => {
     })
 
     describe('log truncation features', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('should truncate log body when it exceeds size limit', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
@@ -182,7 +180,7 @@ describe('logs entrypoint', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
-            const getterAfterLimit = jest.fn(() => {
+            const getterAfterLimit = vi.fn(() => {
                 throw new Error('should not be read')
             })
             const objectWithUnreadPropertyAfterLimit: any = {
@@ -362,7 +360,7 @@ describe('logs entrypoint', () => {
         })
 
         it('should omit unreadable properties when logging', () => {
-            const originalConsoleLog = assignableWindow.console.log as jest.Mock
+            const originalConsoleLog = assignableWindow.console.log as vi.Mock
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
 
@@ -382,7 +380,8 @@ describe('logs entrypoint', () => {
 
             expect(() => assignableWindow.console.log(objectWithUnreadableProperties)).not.toThrow()
 
-            expect(originalConsoleLog).toHaveBeenCalledWith(objectWithUnreadableProperties)
+            expect(originalConsoleLog).toHaveBeenCalledTimes(1)
+            expect(originalConsoleLog.mock.calls[0][0]).toBe(objectWithUnreadableProperties)
             expect(mockEmit).toHaveBeenCalledWith(
                 expect.objectContaining({
                     body: '{"readable":"value"}',
@@ -586,13 +585,10 @@ describe('logs entrypoint', () => {
     })
 
     describe('console output safety', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('still calls the original console method when capture throws', () => {
-            const originalConsoleLog = assignableWindow.console.log as jest.Mock
+            const originalConsoleLog = assignableWindow.console.log as vi.Mock
             mockEmit.mockImplementation(() => {
                 throw new Error('capture blew up')
             })
@@ -606,10 +602,7 @@ describe('logs entrypoint', () => {
     })
 
     describe('re-entrancy protection', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('exposes the original console method via __rrweb_original__ so the internal logger does not re-enter capture', () => {
             const originalConsoleLog = assignableWindow.console.log
@@ -620,9 +613,9 @@ describe('logs entrypoint', () => {
         })
 
         it('flattens an existing __rrweb_original__ marker while preserving the wrapper chain for user logs', () => {
-            const deepestOriginalConsoleLog = jest.fn()
-            const firstWrapper = jest.fn()
-            const secondWrapper = jest.fn()
+            const deepestOriginalConsoleLog = vi.fn()
+            const firstWrapper = vi.fn()
+            const secondWrapper = vi.fn()
             ;(firstWrapper as any).__rrweb_original__ = deepestOriginalConsoleLog
             ;(secondWrapper as any).__rrweb_original__ = firstWrapper
             assignableWindow.console.log = secondWrapper as any
@@ -675,14 +668,11 @@ describe('logs entrypoint', () => {
     })
 
     describe('consent / opt-out handling', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('should not emit logs when capturing is opted out', () => {
-            const originalConsoleLog = assignableWindow.console.log as jest.Mock
-            ;(mockPostHog.is_capturing as jest.Mock).mockReturnValue(false)
+            const originalConsoleLog = assignableWindow.console.log as vi.Mock
+            ;(mockPostHog.is_capturing as vi.Mock).mockReturnValue(false)
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -695,7 +685,7 @@ describe('logs entrypoint', () => {
         })
 
         it('should resume emitting once capturing is opted back in', () => {
-            const isCapturing = mockPostHog.is_capturing as jest.Mock
+            const isCapturing = mockPostHog.is_capturing as vi.Mock
             isCapturing.mockReturnValue(false)
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
@@ -716,7 +706,7 @@ describe('logs entrypoint', () => {
         })
 
         it('should check capturing status on every log, not just at init', () => {
-            const isCapturing = mockPostHog.is_capturing as jest.Mock
+            const isCapturing = mockPostHog.is_capturing as vi.Mock
 
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -731,10 +721,7 @@ describe('logs entrypoint', () => {
     })
 
     describe('performance tests', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('should not take more than 50ms to log a 2MB object with big body', () => {
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
@@ -829,10 +816,7 @@ describe('logs entrypoint', () => {
         })
     })
     describe('re-entrancy across multiple nested logs', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('keeps the guard held when a nested log skips capture', () => {
             // The capture path can write to the console more than once; the first nested
@@ -851,13 +835,10 @@ describe('logs entrypoint', () => {
     })
 
     describe('teardown under another console wrapper', () => {
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
-        })
+        beforeEach(loadLogsEntrypoint)
 
         it('splices itself out when a later wrapper sits on top', () => {
-            const realLog = assignableWindow.console.log as jest.Mock
+            const realLog = assignableWindow.console.log as vi.Mock
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             const dispose = initializeLogs(mockPostHog)
             const ourWrapper = assignableWindow.console.log
@@ -889,30 +870,29 @@ describe('logs entrypoint', () => {
         // Client path; `loadIfEnabled` hands it `this._client`, so drive it the same way.
         const noopClient = () =>
             ({
-                onRemoteConfig: jest.fn(() => ({ dispose: jest.fn() })),
+                onRemoteConfig: vi.fn(() => ({ dispose: vi.fn() })),
                 canCapture: true,
                 getExtension: () => (mockPostHog as any).logs,
             }) as unknown as Client
         let logs: PostHogLogs
-        let realConsoleLog: jest.Mock
-        let capturedBuffered: jest.Mock
+        let realConsoleLog: vi.Mock
+        let capturedBuffered: vi.Mock
 
-        beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../../entrypoints/logs')
+        beforeEach(async () => {
+            await loadLogsEntrypoint()
 
-            realConsoleLog = assignableWindow.console.log as jest.Mock
-            capturedBuffered = jest.fn()
+            realConsoleLog = assignableWindow.console.log as vi.Mock
+            capturedBuffered = vi.fn()
             ;(mockPostHog as any).config = { logs: {} }
             ;(mockPostHog as any).persistence = {
-                register: jest.fn(),
+                register: vi.fn(),
                 props: { [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: true },
             }
             ;(mockPostHog as any).logs = {
                 captureConsoleLog: mockEmit,
                 captureBufferedConsoleLog: capturedBuffered,
             }
-            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn(
                 (_instance: any, _name: any, callback: any) => callback(null)
             ) as any
 
@@ -998,7 +978,7 @@ describe('logs entrypoint', () => {
         })
 
         it('replays a buffered entry stamped at the console call, not at the handover', () => {
-            const nowSpy = jest.spyOn(Date, 'now')
+            const nowSpy = vi.spyOn(Date, 'now')
             try {
                 logs.setup(noopClient())
                 nowSpy.mockReturnValue(1700000000000)
@@ -1025,7 +1005,7 @@ describe('logs entrypoint', () => {
             expect(entry.context).toEqual(expect.objectContaining({ distinctId: 'user-123', sessionId: 'session-123' }))
 
             // A later identify must not re-stamp the buffered entry.
-            ;(mockPostHog.get_distinct_id as jest.Mock).mockReturnValue('identified-456')
+            ;(mockPostHog.get_distinct_id as vi.Mock).mockReturnValue('identified-456')
 
             logs.onRemoteConfig({ ok: true, config: { logs: { captureConsoleLogs: true } } } as any)
 

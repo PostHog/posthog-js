@@ -32,7 +32,7 @@ describe('browser-next initial pageview', () => {
     const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document')
 
     afterEach(() => {
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
         if (originalDocument) {
             Object.defineProperty(globalThis, 'document', originalDocument)
         } else {
@@ -79,7 +79,7 @@ describe('browser-next initial pageview', () => {
     })
 
     it('does no pageview DOM work when disabled', async () => {
-        const document = jest.fn(() => {
+        const document = vi.fn(() => {
             throw new Error('document should not be read')
         })
         Object.defineProperty(globalThis, 'document', { configurable: true, get: document })
@@ -98,8 +98,8 @@ describe('browser-next initial pageview', () => {
 
     it('waits for a hidden document and captures once when it becomes visible', async () => {
         const document = new TestDocument('hidden')
-        const add = jest.spyOn(document, 'addEventListener')
-        const remove = jest.spyOn(document, 'removeEventListener')
+        const add = vi.spyOn(document, 'addEventListener')
+        const remove = vi.spyOn(document, 'removeEventListener')
         setDocument(document)
         const observed: string[] = []
         const extension: Extension = {
@@ -136,7 +136,7 @@ describe('browser-next initial pageview', () => {
             storage.values.set('__ph_opt_in_out_ph_test', priorConsent)
         }
         const document = new TestDocument('visible')
-        const documentRead = jest.fn(() => document)
+        const documentRead = vi.fn(() => document)
         Object.defineProperty(globalThis, 'document', { configurable: true, get: documentRead })
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -157,7 +157,7 @@ describe('browser-next initial pageview', () => {
 
     it('keeps a hidden listener through denial and retries capture only after opt-in', async () => {
         const document = new TestDocument('hidden')
-        const remove = jest.spyOn(document, 'removeEventListener')
+        const remove = vi.spyOn(document, 'removeEventListener')
         setDocument(document)
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -324,8 +324,8 @@ describe('browser-next initial pageview', () => {
     it('moves a hidden listener to a replacement document and captures from the replacement', async () => {
         const first = new TestDocument('hidden')
         const second = new TestDocument('hidden')
-        const removeFirst = jest.spyOn(first, 'removeEventListener')
-        const addSecond = jest.spyOn(second, 'addEventListener')
+        const removeFirst = vi.spyOn(first, 'removeEventListener')
+        const addSecond = vi.spyOn(second, 'addEventListener')
         setDocument(first)
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -348,7 +348,7 @@ describe('browser-next initial pageview', () => {
 
     it('removes an old hidden listener when document access later fails', async () => {
         const document = new TestDocument('hidden')
-        const remove = jest.spyOn(document, 'removeEventListener')
+        const remove = vi.spyOn(document, 'removeEventListener')
         setDocument(document)
         await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
         Object.defineProperty(globalThis, 'document', {
@@ -381,7 +381,7 @@ describe('browser-next initial pageview', () => {
 
     it('removes a hidden-document listener during disposal', async () => {
         const document = new TestDocument('hidden')
-        const remove = jest.spyOn(document, 'removeEventListener')
+        const remove = vi.spyOn(document, 'removeEventListener')
         setDocument(document)
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -404,7 +404,7 @@ describe('browser-next initial pageview', () => {
         const firstResponse = new Promise<Response>((resolve) => {
             finish = resolve
         })
-        const fetch = jest
+        const fetch = vi
             .fn()
             .mockImplementationOnce(() => firstResponse)
             .mockResolvedValue(new Response('{}', { status: 200 }))
@@ -442,7 +442,7 @@ describe('browser-next initial pageview', () => {
         const response = new Promise<Response>((resolve) => {
             finish = resolve
         })
-        const fetch = jest.fn(() => response)
+        const fetch = vi.fn(() => response)
 
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -462,7 +462,7 @@ describe('browser-next initial pageview', () => {
 
     it('does not wait for or start remote configuration', async () => {
         setDocument(new TestDocument('visible'))
-        const loader = jest.fn(() => new Promise<never>(() => {}))
+        const loader = vi.fn(() => new Promise<never>(() => {}))
 
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -477,9 +477,9 @@ describe('browser-next initial pageview', () => {
     })
 
     it('uses UTF-8 bytes for admission and does not publish rejected work or lose a pending session reason', async () => {
-        jest.useFakeTimers({ now: new Date('2026-01-01T00:00:00.000Z') })
+        vi.useFakeTimers({ now: new Date('2026-01-01T00:00:00.000Z') })
         try {
-            const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
             const observed: string[] = []
             const sessions: string[] = []
             const posthog = await createPostHog({
@@ -493,7 +493,7 @@ describe('browser-next initial pageview', () => {
             posthog.onEvent(({ event }) => observed.push(event))
             posthog.onNewSession(({ reason }) => sessions.push(reason))
             await posthog.capture('ascii', { value: 'a'.repeat(4_194_304) })
-            jest.advanceTimersByTime(1_800_001)
+            vi.advanceTimersByTime(1_800_001)
 
             await posthog.capture('private_multibyte', { value: '😀'.repeat(2_097_152) })
 
@@ -508,7 +508,7 @@ describe('browser-next initial pageview', () => {
             expect(observed).toEqual(['ascii', 'after_drop'])
             expect(sessions).toEqual(['idleTimeout'])
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 })

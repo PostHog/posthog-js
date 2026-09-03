@@ -4,12 +4,12 @@ import type { PostHogConfig } from '../../types'
 
 describe('HistoryAutocapture', () => {
     let posthog: any
-    let capture: jest.Mock
+    let capture: vi.Mock
     let historyAutocapture: HistoryAutocapture
     let originalPushState: typeof window.history.pushState
     let originalReplaceState: typeof window.history.replaceState
-    let pageViewManagerDoPageView: jest.Mock
-    let scrollManagerResetContext: jest.Mock
+    let pageViewManagerDoPageView: vi.Mock
+    let scrollManagerResetContext: vi.Mock
     let mockLocation: { pathname: string; search: string; hash: string; href: string }
 
     const restartWithCapturePageview = (capturePageview: PostHogConfig['capture_pageview']): void => {
@@ -39,9 +39,9 @@ describe('HistoryAutocapture', () => {
             configurable: true,
         })
 
-        capture = jest.fn()
-        pageViewManagerDoPageView = jest.fn().mockReturnValue({ $pageview_id: 'test-id' })
-        scrollManagerResetContext = jest.fn()
+        capture = vi.fn()
+        pageViewManagerDoPageView = vi.fn().mockReturnValue({ $pageview_id: 'test-id' })
+        scrollManagerResetContext = vi.fn()
 
         posthog = {
             capture,
@@ -540,8 +540,8 @@ describe('HistoryAutocapture', () => {
 
     describe('Cleanup', () => {
         it('should properly clean up event listeners when stopped', () => {
-            const addEventListenerSpy = jest.spyOn(window, 'addEventListener')
-            const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener')
+            const addEventListenerSpy = vi.spyOn(window, 'addEventListener')
+            const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
 
             // Create a new instance to track the fresh add/remove calls
             posthog.config.capture_pageview = { hash: true }

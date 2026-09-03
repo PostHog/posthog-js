@@ -1,11 +1,11 @@
 import { patchFetchForTracingHeaders, TracingHeadersClient } from '../tracing-headers'
 
 describe('patchFetchForTracingHeaders', () => {
-  jest.useRealTimers()
+  vi.useRealTimers()
 
   const globalAny = globalThis as unknown as { fetch: typeof fetch | undefined }
   let originalFetch: typeof fetch | undefined
-  let mockFetch: jest.Mock
+  let mockFetch: vi.Mock
   let restore: (() => void) | undefined
 
   const makeClient = (distinctId: string, sessionId: string): TracingHeadersClient => ({
@@ -15,7 +15,7 @@ describe('patchFetchForTracingHeaders', () => {
 
   beforeEach(() => {
     originalFetch = globalAny.fetch
-    mockFetch = jest.fn(async () => ({ status: 200 }))
+    mockFetch = vi.fn(async () => ({ status: 200 }))
     globalAny.fetch = mockFetch as unknown as typeof fetch
   })
 

@@ -13,21 +13,21 @@ const createConfigSource = (overrides: Partial<SurveysConfig> = {}) => {
         ...overrides,
     }
     const manager = {
-        dispose: jest.fn(),
+        dispose: vi.fn(),
     }
     const receiver = {
-        dispose: jest.fn(),
-        register: jest.fn(),
-        replace: jest.fn(),
+        dispose: vi.fn(),
+        register: vi.fn(),
+        replace: vi.fn(),
     }
     const extensions: SurveysExtensionHost = {
-        generateSurveys: jest.fn(() => manager as any),
+        generateSurveys: vi.fn(() => manager as any),
     }
     const source: SurveysConfigSource = {
-        get: jest.fn(() => ({ ...config })),
-        isOptedOut: jest.fn(() => false),
-        getExtensions: jest.fn(() => extensions),
-        createEventReceiver: jest.fn(() => receiver as any),
+        get: vi.fn(() => ({ ...config })),
+        isOptedOut: vi.fn(() => false),
+        getExtensions: vi.fn(() => extensions),
+        createEventReceiver: vi.fn(() => receiver as any),
     }
     return { config, manager, receiver, extensions, source }
 }
@@ -40,18 +40,18 @@ const createClient = (
 ) => {
     const values: Record<string, unknown> = {}
     const remoteConfigHandlers = new Set<(result: RemoteConfigResult) => void>()
-    const remoteConfigDispose = jest.fn()
+    const remoteConfigDispose = vi.fn()
     const client = {
         projectToken: 'test-token',
         kv: {
-            initialize: jest.fn(options.initialize ?? (() => {})),
+            initialize: vi.fn(options.initialize ?? (() => {})),
             get: (key: string) => values[key],
-            set: jest.fn((keyOrValues: string | Record<string, unknown>, value?: unknown) => {
+            set: vi.fn((keyOrValues: string | Record<string, unknown>, value?: unknown) => {
                 Object.assign(values, typeof keyOrValues === 'string' ? { [keyOrValues]: value } : keyOrValues)
             }),
-            remove: jest.fn(),
+            remove: vi.fn(),
         },
-        onRemoteConfig: jest.fn((handler: (result: RemoteConfigResult) => void): Disposable => {
+        onRemoteConfig: vi.fn((handler: (result: RemoteConfigResult) => void): Disposable => {
             remoteConfigHandlers.add(handler)
             return {
                 dispose: () => {
@@ -60,7 +60,7 @@ const createClient = (
                 },
             }
         }),
-        sendRequest: options.sendRequest ?? jest.fn(async () => ({ statusCode: 200, json: { surveys: [] } })),
+        sendRequest: options.sendRequest ?? vi.fn(async () => ({ statusCode: 200, json: { surveys: [] } })),
     } as unknown as Client
     return {
         client,
@@ -91,16 +91,16 @@ describe('PostHogSurveys shared extension lifecycle', () => {
         const { extensions, manager, source } = createConfigSource()
         extensions.generateSurveys = undefined
         let finishLoading!: () => void
-        extensions.loadExternalDependency = jest.fn((callback) => {
+        extensions.loadExternalDependency = vi.fn((callback) => {
             finishLoading = () => {
-                extensions.generateSurveys = jest.fn(() => manager as any)
+                extensions.generateSurveys = vi.fn(() => manager as any)
                 callback()
             }
         })
         const { client } = createClient()
-        ;(client.onRemoteConfig as jest.Mock).mockImplementation((handler: (result: RemoteConfigResult) => void) => {
+        ;(client.onRemoteConfig as vi.Mock).mockImplementation((handler: (result: RemoteConfigResult) => void) => {
             handler({ ok: true, config: { surveys: true } as any })
-            return { dispose: jest.fn() }
+            return { dispose: vi.fn() }
         })
         const surveys = new PostHogSurveys(source)
 
@@ -151,7 +151,7 @@ describe('PostHogSurveys shared extension lifecycle', () => {
             end_date: null,
             conditions: { events: { values: [{ name: 'trigger-event' }] } },
         } as Survey
-        const sendRequest = jest.fn(async () => ({ statusCode: 200, json: { surveys: [survey] } }))
+        const sendRequest = vi.fn(async () => ({ statusCode: 200, json: { surveys: [survey] } }))
         const { receiver, source } = createConfigSource({ advancedEnableSurveys: true })
         const { client } = createClient({ sendRequest })
         const surveys = new PostHogSurveys(source)
@@ -167,7 +167,7 @@ describe('PostHogSurveys shared extension lifecycle', () => {
 
     it('disposes synchronously and idempotently and blocks late remote config and request work', async () => {
         let resolveRequest!: (response: ApiResponse) => void
-        const sendRequest = jest.fn(
+        const sendRequest = vi.fn(
             () =>
                 new Promise<ApiResponse>((resolve) => {
                     resolveRequest = resolve
@@ -177,7 +177,7 @@ describe('PostHogSurveys shared extension lifecycle', () => {
         const { client, publishRemoteConfig } = createClient({ sendRequest })
         const surveys = new PostHogSurveys(source)
         surveys.setup(client)
-        const callback = jest.fn()
+        const callback = vi.fn()
         surveys.getSurveys(callback, true)
 
         surveys.dispose()
@@ -194,7 +194,7 @@ describe('PostHogSurveys shared extension lifecycle', () => {
 
     it('does not acquire resources when disposed during asynchronous KV initialization', async () => {
         let finishInitialization!: () => void
-        const initialize = jest.fn(
+        const initialize = vi.fn(
             () =>
                 new Promise<void>((resolve) => {
                     finishInitialization = resolve
