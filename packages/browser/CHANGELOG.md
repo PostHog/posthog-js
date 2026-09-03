@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.425.1
+
+### Patch Changes
+
+- [#4731](https://github.com/PostHog/posthog-js/pull/4731) [`9b4008a`](https://github.com/PostHog/posthog-js/commit/9b4008a03ef12e3150d906ca638f24403bc67a41) Thanks [@fasyy612](https://github.com/fasyy612)! - fix(replay): re-adopt constructed stylesheets when a shadow host is removed and re-added mid-replay. An SPA navigation can detach and reattach the same web component element; the browser keeps its shadow root and adopted sheets, so the recorder (which already tracks that shadow root) emits no new AdoptedStyleSheet event. The replayer rebuilds the element with a fresh shadow root and previously dropped the adopted styles for the rest of playback, rendering the component unstyled. The replayer now remembers the last adopted styleIds per host and re-adopts them when the shadow root is rebuilt, in both live playback and fast-forward. Fixes playback of existing recordings.
+  (2026-09-02)
+
+- [#4744](https://github.com/PostHog/posthog-js/pull/4744) [`77797c9`](https://github.com/PostHog/posthog-js/commit/77797c9e983f053ee362e98ee880e79b17512ac9) Thanks [@fasyy612](https://github.com/fasyy612)! - fix(replay): keep recording through a session-id rotation when the persisted remote config is past its TTL. A rotation restart transits through stop() before start(), which made the config TTL check treat it as a cold boot: the stale config was discarded, start() bailed silently, and the recorder died with session attribution stuck on the old session id. The rotated session then shipped events with no initial full snapshot, producing recordings whose prefix cannot be played until something else restarted recording. Affects any rotation on a session older than one hour, most visibly posthog.reset() on logout. Cold-boot TTL behavior is unchanged.
+  (2026-09-02)
+
 ## 1.425.0
 
 ### Minor Changes

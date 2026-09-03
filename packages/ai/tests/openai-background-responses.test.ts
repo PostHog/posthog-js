@@ -319,7 +319,7 @@ describe.each(providerCases)('$provider background Responses', ({ provider, crea
       $ai_input_tokens: 12,
       $ai_output_tokens: 7,
       $ai_usage: usage,
-      $ai_stop_reason: status,
+      $ai_stop_reason: status === 'incomplete' ? 'max_output_tokens' : status,
       $ai_provider_metadata: {
         request_id: `req_background_${status}`,
         ...(status === 'incomplete' ? { incomplete_details: { reason: 'max_output_tokens' } } : {}),

@@ -2,6 +2,6 @@ export * from './PostHogFeature'
 export * from './PostHogCaptureOnViewed'
 export {
     PostHogErrorBoundary,
-    PostHogErrorBoundaryProps,
-    PostHogErrorBoundaryFallbackProps,
+    type PostHogErrorBoundaryProps,
+    type PostHogErrorBoundaryFallbackProps,
 } from './PostHogErrorBoundary'

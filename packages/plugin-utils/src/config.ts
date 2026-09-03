@@ -16,8 +16,9 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
 /**
  * How an exception gets associated with a release, mirroring posthog-cli's `--release-mode`.
  *
- * `symbol-set` binds the uploaded symbol sets to a release. `event` leaves them unbound and
- * injects the release id into each chunk instead, so the release is resolved per exception.
+ * `event`, the default, leaves the uploaded symbol sets unbound and injects the release id into
+ * each chunk, so the release is resolved per exception. `symbol-set` binds the uploaded symbol
+ * sets to a release instead.
  */
 export type ReleaseMode = 'symbol-set' | 'event'
 
@@ -25,7 +26,7 @@ const RELEASE_MODES: ReleaseMode[] = ['symbol-set', 'event']
 
 function normalizeReleaseMode(value: string | undefined): ReleaseMode {
     if (value === undefined || value === '') {
-        return 'symbol-set'
+        return 'event'
     }
     if (!(RELEASE_MODES as string[]).includes(value)) {
         throw new Error(`sourcemaps.releaseMode must be one of ${RELEASE_MODES.join(', ')}, got '${value}'`)
@@ -53,9 +54,10 @@ export interface PluginConfig {
         deleteAfterUpload?: boolean
         batchSize?: number
         /**
-         * EXPERIMENTAL. Defaults to the `POSTHOG_RELEASE_MODE` env var, the same one posthog-cli
-         * reads, then to `symbol-set`. Event mode needs a posthog-cli that supports
-         * `release resolve` and `--release-mode`.
+         * Defaults to the `POSTHOG_RELEASE_MODE` env var, the same one posthog-cli reads, then to
+         * `event`. Event mode needs a posthog-cli that supports `release resolve` and
+         * `--release-mode`. Set `symbol-set` to bind the uploaded symbol sets to a release
+         * instead.
          */
         releaseMode?: ReleaseMode
     }
