@@ -610,6 +610,32 @@ describe('PostHogTraces', () => {
     })
   })
 
+  describe('reset', () => {
+    it('says so when it discards queued spans', async () => {
+      // Terminal loss: there is no next flush to retry on, and the export
+      // failure the caller already saw promises one.
+      const instance = createMockInstance({
+        _sendTracesBatch: vi.fn(() => Promise.resolve({ kind: 'retry-later' as const, error: new Error('down') })),
+      })
+      const traces = createTraces({}, instance)
+      traces.startSpan('a').end()
+      traces.startSpan('b').end()
+      await traces.flush()
+
+      traces.reset()
+
+      expect(logger.critical).toHaveBeenCalledWith(expect.stringContaining('Discarding 2 span(s)'))
+    })
+
+    it('stays quiet when nothing was queued', () => {
+      const traces = createTraces()
+
+      traces.reset()
+
+      expect(logger.critical).not.toHaveBeenCalled()
+    })
+  })
+
   describe('flush reentrancy', () => {
     it('does not re-send the head batch when a span ends during the flush prefix', async () => {
       // `_flushInner` runs synchronously as far as its first await, and it reads

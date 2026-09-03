@@ -324,6 +324,16 @@ export class PostHogTraces {
   /** Clears the queue and timer. Used on shutdown and between tests. */
   reset(): void {
     this._clearFlushTimer()
+    if (this._queue.length) {
+      // Critical, and said here rather than counted: this is the last chance to
+      // say anything about these spans, the drop warning is gated behind `debug`
+      // on some hosts, and the only other line the caller sees is the export
+      // failure promising a retry on a flush that will never come.
+      this._logger.critical(
+        `Discarding ${this._queue.length} span(s) that were still queued when tracing was shut down. ` +
+          'Raise the shutdown timeout or flush earlier if they matter.'
+      )
+    }
     this._queue = []
     this._liveSpans.clear()
     this._flushPromise = null
