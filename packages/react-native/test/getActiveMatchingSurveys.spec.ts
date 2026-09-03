@@ -3,7 +3,7 @@ import { Survey, SurveyMatchType, SurveySchedule, SurveyType } from '@posthog/co
 import { FeatureFlagValue } from '@posthog/core'
 
 // Mock the native-deps module
-jest.mock('../src/native-deps', () => ({
+vi.mock('../src/native-deps', () => ({
   currentDeviceType: 'Mobile',
 }))
 

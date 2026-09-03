@@ -2,9 +2,9 @@ import { PostHog } from '@/entrypoints/index.node'
 import { PostHogSentryIntegration } from '@/extensions/sentry-integration'
 import { waitForPromises } from '../utils'
 
-jest.mock('../../version', () => ({ version: '1.2.3' }))
+vi.mock('../../version', () => ({ version: '1.2.3' }))
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const getLastBatchEvents = (): any[] | undefined => {
   expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.objectContaining({ method: 'POST' }))
@@ -62,7 +62,7 @@ describe('PostHogSentryIntegration', () => {
   let posthog: PostHog
   let posthogSentry: PostHogSentryIntegration
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   beforeEach(() => {
     posthog = new PostHog('TEST_API_KEY', {
@@ -109,7 +109,7 @@ describe('PostHogSentryIntegration', () => {
     processorFunction(createMockSentryException())
 
     await waitForPromises() // First flush
-    jest.runOnlyPendingTimers() // Flush timer
+    vi.runOnlyPendingTimers() // Flush timer
     await waitForPromises() // Second flush
     const batchEvents = getLastBatchEvents()
 

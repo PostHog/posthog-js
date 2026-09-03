@@ -7,23 +7,26 @@
  * Loading these modules must not call native-only APIs.
  */
 describe('surveys import side effects (#3740)', () => {
-  const surveyModulesWithStyles = [
-    '../src/surveys/icons',
-    '../src/surveys/components/Cancel',
-    '../src/surveys/components/ConfirmationMessage',
-    '../src/surveys/components/BottomSection',
-    '../src/surveys/components/QuestionTypes',
-    '../src/surveys/components/SurveyModal',
-    '../src/surveys/components/QuestionHeader',
+  const surveyModulesWithStyles: [string, () => Promise<unknown>][] = [
+    ['../src/surveys/icons', () => import('../src/surveys/icons')],
+    ['../src/surveys/components/Cancel', () => import('../src/surveys/components/Cancel')],
+    ['../src/surveys/components/ConfirmationMessage', () => import('../src/surveys/components/ConfirmationMessage')],
+    ['../src/surveys/components/BottomSection', () => import('../src/surveys/components/BottomSection')],
+    ['../src/surveys/components/QuestionTypes', () => import('../src/surveys/components/QuestionTypes')],
+    ['../src/surveys/components/SurveyModal', () => import('../src/surveys/components/SurveyModal')],
+    ['../src/surveys/components/QuestionHeader', () => import('../src/surveys/components/QuestionHeader')],
   ]
 
-  it.each(surveyModulesWithStyles)('imports %s without calling native StyleSheet.create', (modulePath) => {
-    jest.isolateModules(() => {
-      // Simulate a runtime where react-native resolves but StyleSheet is unavailable
-      // (e.g. Jest `testEnvironment: node` without the React Native preset).
-      jest.doMock('react-native', () => ({ StyleSheet: undefined }))
-      // eslint-disable-next-line @typescript-eslint/no-require-imports -- dynamic require is required to test import-time side effects under an isolated module registry
-      expect(() => require(modulePath)).not.toThrow()
-    })
+  afterEach(() => {
+    vi.doUnmock('react-native')
+  })
+
+  it.each(surveyModulesWithStyles)('imports %s without calling native StyleSheet.create', async (_, loadModule) => {
+    vi.resetModules()
+    // Simulate a runtime where react-native resolves but StyleSheet is unavailable
+    // (e.g. a node test environment without the React Native preset).
+    vi.doMock('react-native', () => ({ StyleSheet: undefined }))
+
+    await expect(loadModule()).resolves.toBeDefined()
   })
 })

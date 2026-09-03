@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`FunctionalTests / Feature Flags snapshots the decoded /flags wire envelope from the real transport 1`] = `
+exports[`FunctionalTests / Feature Flags > snapshots the decoded /flags wire envelope from the real transport 1`] = `
 {
   "bodyWrapper": "<gzip>",
   "compression": null,

@@ -13,7 +13,7 @@ describe('logs: captureConsoleLogs set in init()', () => {
         setupConsoleMethods = {}
         for (const level of BUFFERED_CONSOLE_LEVELS) {
             setupConsoleMethods[level] = assignableWindow.console[level]
-            assignableWindow.console[level] = jest.fn()
+            assignableWindow.console[level] = vi.fn()
         }
     })
 

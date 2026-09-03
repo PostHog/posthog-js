@@ -1,9 +1,9 @@
 import { PostHog } from '../src'
 import { Linking, AppState } from 'react-native'
 
-Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
-AppState.addEventListener = jest.fn()
-jest.useRealTimers()
+Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
+AppState.addEventListener = vi.fn()
+vi.useRealTimers()
 
 const clients: PostHog[] = []
 
@@ -18,16 +18,16 @@ const newPostHog = (errorTracking?: Record<string, unknown>): PostHog => {
   return client
 }
 
-const captureSpy = (posthog: PostHog): jest.SpyInstance => jest.spyOn(posthog as any, 'capture')
+const captureSpy = (posthog: PostHog): vi.SpyInstance => vi.spyOn(posthog as any, 'capture')
 
-const exceptionSteps = (spy: jest.SpyInstance): any => {
+const exceptionSteps = (spy: vi.SpyInstance): any => {
   const call = spy.mock.calls.find(([event]) => event === '$exception')
   return call?.[1]?.$exception_steps
 }
 
 describe('PostHog React Native exception steps capture', () => {
   beforeEach(() => {
-    global.fetch = jest.fn(async () => ({
+    global.fetch = vi.fn(async () => ({
       status: 200,
       json: () => Promise.resolve({ featureFlags: {} }),
     })) as unknown as typeof fetch
