@@ -587,6 +587,12 @@ function truncateValue(
   state.remainingNodes--
   state.ancestors.add(value)
   try {
+    // A Date is emitted by the encoder from its own branch, ahead of any
+    // `toJSON` probe, so bounding it here would ship a truncated timestamp
+    // rather than a shorter one.
+    if (value instanceof Date) {
+      return value
+    }
     // The representation the value defines for itself is what the encoder puts
     // on the wire, so it is what has to be bounded — a `toJSON` returning a
     // megabyte of text is invisible to a walk over the object's own keys.

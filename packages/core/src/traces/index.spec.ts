@@ -757,6 +757,56 @@ describe('PostHogTraces', () => {
       expect(sentSpans(instance).map((s) => s.flags)).toEqual([0x300])
     })
 
+    it('ignores a forged identity from a frozen hook rather than dropping the span', async () => {
+      // Writing the id back onto a frozen return throws, and a throwing hook
+      // drops the span, so forging plus freezing used to lose every span.
+      const instance = createMockInstance()
+      const traces = createTraces(
+        { beforeSpanSend: [(span: SpanRecord) => Object.freeze({ ...span, traceId: '0'.repeat(32) }) as SpanRecord] },
+        instance
+      )
+      traces.startSpan('forged').end()
+      await traces.flush()
+
+      expect(sentSpans(instance)).toHaveLength(1)
+      expect(sentSpans(instance)[0].traceId).not.toBe('0'.repeat(32))
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('keeping the original ids'))
+    })
+
+    it('exports a child span whose record a frozen hook rebuilt without the parent id', async () => {
+      // The shape that loses children but keeps roots: a rebuilt record has no
+      // parentSpanId to match, so restoring it wrote to a frozen object.
+      const instance = createMockInstance()
+      const traces = createTraces(
+        {
+          beforeSpanSend: [
+            (span: SpanRecord) =>
+              Object.freeze({
+                traceId: span.traceId,
+                spanId: span.spanId,
+                name: span.name,
+                kind: span.kind,
+                attributes: span.attributes,
+                events: span.events,
+                startTime: span.startTime,
+                endTime: span.endTime,
+              }) as SpanRecord,
+          ],
+        },
+        instance
+      )
+      const root = traces.startSpan('root')
+      traces.startSpan('child', { parent: root }).end()
+      root.end()
+      await traces.flush()
+
+      expect(
+        sentSpans(instance)
+          .map((s) => s.name)
+          .sort()
+      ).toEqual(['child', 'root'])
+    })
+
     it('runs hooks left to right and stops at the first null', async () => {
       const order: string[] = []
       await endOneSpan([

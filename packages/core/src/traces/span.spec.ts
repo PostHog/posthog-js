@@ -625,6 +625,17 @@ describe('PostHogSpan', () => {
       expect(ended[0].attributes.payload).toEqual({ nested: { body: 'ok' } })
     })
 
+    it('leaves a Date whole rather than truncating its timestamp', () => {
+      // The encoder emits a Date from its own branch ahead of any `toJSON`, so
+      // bounding it here shipped a cut-off timestamp instead of a shorter one.
+      const span = createSpan({ maxAttributeValueLength: 10 })
+
+      span.setAttribute('when', new Date('2020-01-02T03:04:05.000Z') as never)
+      span.end()
+
+      expect(ended[0].attributes.when).toEqual(new Date('2020-01-02T03:04:05.000Z'))
+    })
+
     it('bounds an SDK-attached value, which is exempt from the count cap only', () => {
       const span = createSpan({
         maxAttributeValueLength: 4,

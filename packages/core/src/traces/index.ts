@@ -522,11 +522,13 @@ export class PostHogTraces {
       // class instance whose fields are prototype getters a spread would miss.
       // Naming them also bounds what can reach the wire.
       current = {
-        traceId: hooked.traceId,
-        spanId: hooked.spanId,
-        parentSpanId: hooked.parentSpanId,
-        // From the snapshot: `_keepSpanIdentity` has already put it back on the
-        // record, but no public type declares it, so it cannot be read off one.
+        // All four from the snapshot, never from the hook's return value. A hook
+        // that forges an id has it ignored, which is the documented behaviour,
+        // and one that also freezes what it returns keeps its span: writing the
+        // id back onto a frozen object throws, and a throw here drops the span.
+        traceId: identity.traceId,
+        spanId: identity.spanId,
+        parentSpanId: identity.parentSpanId,
         traceState: identity.traceState,
         name: hooked.name,
         kind: hooked.kind,
@@ -616,12 +618,19 @@ export class PostHogTraces {
     // Only the fields that actually differ are written back. Assigning a value
     // to a frozen property throws even when it is the value already there, and
     // a hook that freezes the record it returns would otherwise drop every span.
-    restoreField(hooked, 'traceId', original.traceId)
-    restoreField(hooked, 'spanId', original.spanId)
-    restoreField(hooked, 'parentSpanId', original.parentSpanId)
-    // A hook that rebuilds the record instead of spreading it would otherwise
-    // drop tracestate, which is not part of the record the hook is handed.
-    restoreField(hooked, 'traceState', original.traceState)
+    // Best-effort, for the next hook in the chain only: the record this builds
+    // is not what gets exported. A frozen return refuses every write, and the
+    // span must survive that.
+    try {
+      restoreField(hooked, 'traceId', original.traceId)
+      restoreField(hooked, 'spanId', original.spanId)
+      restoreField(hooked, 'parentSpanId', original.parentSpanId)
+      // A hook that rebuilds the record instead of spreading it would otherwise
+      // drop tracestate, which is not part of the record the hook is handed.
+      restoreField(hooked, 'traceState', original.traceState)
+    } catch {
+      // Frozen. The rebuild reads the identity from the snapshot regardless.
+    }
     return hooked
   }
 
