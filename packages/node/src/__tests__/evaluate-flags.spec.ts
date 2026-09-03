@@ -5,9 +5,9 @@ import { EventMessage, PostHogOptions } from '@/types'
 import { apiImplementation, apiImplementationV4, waitForPromises } from './utils'
 import { PostHogV2FlagsResponse } from '@posthog/core'
 
-jest.spyOn(console, 'debug').mockImplementation()
+vi.spyOn(console, 'debug').mockImplementation()
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
@@ -324,7 +324,7 @@ describe('evaluateFlags', () => {
     })
 
     it('featureFlagsLogWarnings=false silences filter warnings', async () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
       setup({ featureFlagsLogWarnings: false })
 
       const flags = await posthog.evaluateFlags('user-1')
@@ -336,7 +336,7 @@ describe('evaluateFlags', () => {
     })
 
     it('only returns a filtered snapshot and warns about missing keys', async () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
       const flags = await posthog.evaluateFlags('user-1')
       const only = flags.only(['boolean-flag', 'does-not-exist'])
@@ -429,7 +429,7 @@ describe('evaluateFlags', () => {
     })
 
     it('flags option takes precedence over sendFeatureFlags and warns when both passed', async () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
       const flags = await posthog.evaluateFlags('user-1')
       const callsBefore = mockedFetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/?v=2')).length
 
@@ -484,7 +484,7 @@ describe('evaluateFlags', () => {
       // directly), so we verify forwarding by spying on captureImmediate itself.
       const flags = await posthog.evaluateFlags('user-1')
       const filtered = flags.only(['boolean-flag'])
-      const spy = jest.spyOn(posthog, 'captureImmediate').mockResolvedValue(undefined)
+      const spy = vi.spyOn(posthog, 'captureImmediate').mockResolvedValue(undefined)
 
       await posthog.captureExceptionImmediate(new Error('boom'), 'user-1', undefined, filtered)
       await waitForPromises()
@@ -614,7 +614,7 @@ describe('evaluateFlags', () => {
     })
 
     it('getFeatureFlag emits a deprecation warning pointing at evaluateFlags', async () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
       await posthog.getFeatureFlag('boolean-flag', 'user-1')
 
@@ -624,7 +624,7 @@ describe('evaluateFlags', () => {
     })
 
     it('isFeatureEnabled emits exactly one deprecation warning per call (no cascade)', async () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
       await posthog.isFeatureEnabled('boolean-flag', 'user-1')
 
@@ -637,7 +637,7 @@ describe('evaluateFlags', () => {
     })
 
     it('getFeatureFlagPayload emits a deprecation warning', async () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
       await posthog.getFeatureFlagPayload('variant-flag', 'user-1')
 
@@ -646,7 +646,7 @@ describe('evaluateFlags', () => {
     })
 
     it('capture(sendFeatureFlags: true) emits a deprecation warning', async () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
       posthog.capture({ distinctId: 'user-1', event: 'page_viewed', sendFeatureFlags: true })
       await posthog.flush()
@@ -656,7 +656,7 @@ describe('evaluateFlags', () => {
     })
 
     it('dedupes deprecation warnings across repeated calls', async () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
 
       await posthog.getFeatureFlag('boolean-flag', 'user-1')
       await posthog.getFeatureFlag('variant-flag', 'user-2')
@@ -712,11 +712,11 @@ describe('evaluateFlags', () => {
     it('returns an empty snapshot without property setup or local/remote work for an empty key list', async () => {
       await posthog.reloadFeatureFlags()
       const poller = (posthog as any).featureFlagsPoller
-      const propertySetupSpy = jest.spyOn(posthog as any, 'addLocalPersonAndGroupProperties')
-      const contextSetupSpy = jest.spyOn(posthog as any, 'createFeatureFlagEvaluationContext')
-      const localEvaluationSpy = jest.spyOn(poller, 'getAllFlagsAndPayloads')
-      const definitionsLoadSpy = jest.spyOn(poller, 'loadFeatureFlags')
-      const definitionsReadSpy = jest.spyOn(poller, 'getFlagDefinitionsLoadedAt')
+      const propertySetupSpy = vi.spyOn(posthog as any, 'addLocalPersonAndGroupProperties')
+      const contextSetupSpy = vi.spyOn(posthog as any, 'createFeatureFlagEvaluationContext')
+      const localEvaluationSpy = vi.spyOn(poller, 'getAllFlagsAndPayloads')
+      const definitionsLoadSpy = vi.spyOn(poller, 'loadFeatureFlags')
+      const definitionsReadSpy = vi.spyOn(poller, 'getFlagDefinitionsLoadedAt')
       mockedFetch.mockClear()
 
       const flags = await posthog.evaluateFlags('user-1', { flagKeys: [] })

@@ -1,4 +1,4 @@
-/** @jest-environment jsdom */
+/** @vitest-environment jsdom */
 import React from 'react'
 import { act, fireEvent, render, cleanup, waitFor } from '@testing-library/react'
 import { Survey, SurveyType } from '@posthog/core'
@@ -6,8 +6,8 @@ import { Survey, SurveyType } from '@posthog/core'
 // Minimal react-native shim — the full preset pulls in TurboModule code that
 // explodes under jsdom. The provider itself renders no RN primitives, but its
 // import chain (surveys-utils etc.) touches a few.
-jest.mock('react-native', () => {
-  const RealReact = jest.requireActual('react')
+vi.mock('react-native', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
   const Box = RealReact.forwardRef(({ children, testID, ...rest }: any, ref: any) =>
     RealReact.createElement('div', { ref, 'data-testid': testID, ...rest }, children)
   )
@@ -17,18 +17,18 @@ jest.mock('react-native', () => {
     Text: Box,
     Platform: { OS: 'android', select: (o: any) => o.android ?? o.default },
     StyleSheet: { create: (s: any) => s, flatten: (s: any) => s, absoluteFill: {} },
-    Appearance: { getColorScheme: () => 'light', addChangeListener: () => ({ remove: jest.fn() }) },
+    Appearance: { getColorScheme: () => 'light', addChangeListener: () => ({ remove: vi.fn() }) },
     useColorScheme: () => 'light',
     useWindowDimensions: () => ({ width: 375, height: 800 }),
   }
 })
 
-jest.mock('../src/native-deps', () => ({ currentDeviceType: 'Mobile' }))
+vi.mock('../src/native-deps', () => ({ currentDeviceType: 'Mobile' }))
 
 // Stub the modal: mirror the real behavior (fires onShow once on mount, exposes
 // a close hook) without dragging in the SurveyModal render tree.
-jest.mock('../src/surveys/components/SurveyModal', () => {
-  const R = jest.requireActual('react')
+vi.mock('../src/surveys/components/SurveyModal', async () => {
+  const R = await vi.importActual<typeof import('react')>('react')
   return {
     SurveyModal: (props: any) => {
       R.useEffect(() => {
@@ -43,18 +43,18 @@ jest.mock('../src/surveys/components/SurveyModal', () => {
 })
 
 // Spy on the shown/dismissed events without executing the real capture path.
-jest.mock('../src/surveys/components/Surveys', () => ({
-  sendSurveyShownEvent: jest.fn(),
-  dismissedSurveyEvent: jest.fn(),
+vi.mock('../src/surveys/components/Surveys', () => ({
+  sendSurveyShownEvent: vi.fn(),
+  dismissedSurveyEvent: vi.fn(),
 }))
 
 // Skip translation resolution — irrelevant to presentation gating.
-jest.mock('../src/surveys/survey-translations', () => ({
+vi.mock('../src/surveys/survey-translations', () => ({
   applySurveyTranslationForUser: (survey: Survey) => ({ survey, language: null }),
 }))
 
 let mockClient: any
-jest.mock('../src/hooks/usePostHog', () => ({ usePostHog: () => mockClient }))
+vi.mock('../src/hooks/usePostHog', () => ({ usePostHog: () => mockClient }))
 
 import { PostHogSurveyProvider } from '../src/surveys/PostHogSurveyProvider'
 import { sendSurveyShownEvent, dismissedSurveyEvent } from '../src/surveys/components/Surveys'
@@ -74,15 +74,15 @@ const popoverSurvey: Survey = {
 } as unknown as Survey
 
 const makeClient = (surveys: Survey[] = [popoverSurvey]) => ({
-  ready: jest.fn(() => Promise.resolve()),
-  _onSurveysReady: jest.fn(() => Promise.resolve()),
-  getSurveys: jest.fn(() => Promise.resolve(surveys)),
-  getFeatureFlags: jest.fn(() => ({})),
-  onFeatureFlags: jest.fn(() => () => {}),
-  getPersistedProperty: jest.fn(() => undefined),
-  setPersistedProperty: jest.fn(),
-  capture: jest.fn(),
-  on: jest.fn(() => () => {}),
+  ready: vi.fn(() => Promise.resolve()),
+  _onSurveysReady: vi.fn(() => Promise.resolve()),
+  getSurveys: vi.fn(() => Promise.resolve(surveys)),
+  getFeatureFlags: vi.fn(() => ({})),
+  onFeatureFlags: vi.fn(() => () => {}),
+  getPersistedProperty: vi.fn(() => undefined),
+  setPersistedProperty: vi.fn(),
+  capture: vi.fn(),
+  on: vi.fn(() => () => {}),
 })
 
 const renderProvider = (autoPresentSurveys?: boolean) =>
@@ -92,7 +92,7 @@ const renderProvider = (autoPresentSurveys?: boolean) =>
     </PostHogSurveyProvider>
   )
 
-// The provider loads surveys via a real-promise chain; the shared jest config
+// The provider loads surveys via a real-promise chain; the shared vi config
 // enables fake timers globally, which deadlocks async act()/waitFor(). This file
 // drives no timer-based logic (the modal is stubbed), so real timers are safe.
 const flush = async () => {
@@ -103,12 +103,12 @@ const flush = async () => {
 
 describe('PostHogSurveyProvider — autoPresentSurveys gating', () => {
   beforeEach(() => {
-    jest.useRealTimers()
+    vi.useRealTimers()
     mockClient = makeClient()
   })
   afterEach(() => {
     cleanup()
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   it('defers presentation while gated: no modal, no "survey shown"', async () => {
@@ -184,8 +184,8 @@ describe('PostHogSurveyProvider — autoPresentSurveys gating', () => {
     const flaggedSurvey = { ...popoverSurvey, id: 's-flag', linked_flag_key: 'f1' } as unknown as Survey
     mockClient = {
       ...makeClient([flaggedSurvey]),
-      getFeatureFlags: jest.fn(() => flags),
-      onFeatureFlags: jest.fn((cb: any) => {
+      getFeatureFlags: vi.fn(() => flags),
+      onFeatureFlags: vi.fn((cb: any) => {
         flagCb = cb
         return () => {}
       }),

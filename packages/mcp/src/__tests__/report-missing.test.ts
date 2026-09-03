@@ -93,7 +93,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     })
 
     it('warns and runs a default-named real tool normally when reportMissing is enabled', async () => {
-      const logger = jest.fn()
+      const logger = vi.fn()
       registerRealTool(server, GET_MORE_TOOLS)
       instrument(server, fakePostHog(), { reportMissing: true, enableConversationId: true, logger })
 
@@ -125,7 +125,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
 
     it('warns and runs a custom-named real tool normally when the configured name collides', async () => {
       const customName = 'posthog_find_tools'
-      const logger = jest.fn()
+      const logger = vi.fn()
       registerRealTool(server, customName)
       instrument(server, fakePostHog(), { reportMissing: true, missingCapabilityToolName: customName, logger })
 

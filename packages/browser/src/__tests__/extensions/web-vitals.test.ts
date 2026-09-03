@@ -18,18 +18,18 @@ import {
     COOKIELESS_MODE_FLAG_PROPERTY,
 } from '../../constants'
 
-jest.useFakeTimers()
+vi.useFakeTimers()
 
-// `var` so the hoisted jest.mock factory below can assign to it without TDZ.
-// Previously masked by babel-jest transpiling `let` -> `var` because IE 11
-// was in package.json#browserslist. `jest.hoisted()` would be the modern
-// fix but needs babel-plugin-jest-hoist 30 (jest 30 catalog bump).
+// `var` so the hoisted vi.mock factory below can assign to it without TDZ.
+// Previously masked by babel-vi transpiling `let` -> `var` because IE 11
+// was in package.json#browserslist. `vi.hoisted()` would be the modern
+// fix but needs babel-plugin-vi-hoist 30 (vi 30 catalog bump).
 // eslint-disable-next-line no-var
-var mockLocation: jest.Mock
+var mockLocation: vi.Mock
 
-jest.mock('@posthog/browser-common/utils/globals', () => {
-    const original = jest.requireActual('@posthog/browser-common/utils/globals')
-    mockLocation = jest.fn().mockReturnValue({
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const original = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
+    mockLocation = vi.fn().mockReturnValue({
         protocol: 'http:',
         host: 'localhost',
         pathname: '/',
@@ -59,12 +59,12 @@ jest.mock('@posthog/browser-common/utils/globals', () => {
 
 describe('web vitals', () => {
     let posthog: PostHog
-    let beforeSendMock = jest.fn().mockImplementation((e) => e)
+    let beforeSendMock = vi.fn().mockImplementation((e) => e)
     let onLCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onCLSCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onFCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onINPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
-    const loadScriptMock = jest.fn()
+    const loadScriptMock = vi.fn()
 
     const emitAllMetrics = () => {
         onLCPCallback?.({ name: 'LCP', value: 123.45, extra: 'property' })
@@ -206,7 +206,7 @@ describe('web vitals', () => {
 
                 expect(beforeSendMock).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
                 // for some reason advancing the timer emits a $pageview event as well 🤷
                 expect(beforeSendMock.mock.lastCall).toMatchObject([
@@ -226,7 +226,7 @@ describe('web vitals', () => {
 
                 expect(beforeSendMock).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(1000 + 1)
+                vi.advanceTimersByTime(1000 + 1)
 
                 expect(beforeSendMock.mock.lastCall).toMatchObject([
                     {
@@ -244,7 +244,7 @@ describe('web vitals', () => {
 
                 expect(beforeSendMock).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
                 expect(beforeSendMock.mock.calls).toEqual([])
             })
@@ -255,7 +255,7 @@ describe('web vitals', () => {
 
                 expect(beforeSendMock).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
                 expect(beforeSendMock).toBeCalledTimes(1)
             })
@@ -341,7 +341,7 @@ describe('web vitals', () => {
         it('emits on delayed flush without nested session ids when only one metric is captured', async () => {
             onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
 
-            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+            vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
             expect(beforeSendMock).toBeCalledTimes(1)
             const payload = beforeSendMock.mock.calls[0][0]
@@ -457,13 +457,13 @@ describe('web vitals', () => {
             [false, 'web-vitals'],
             [true, 'web-vitals-with-attribution'],
         ])('when web_vitals_attribution is %p, should load %s bundle', async (attributionConfig, expectedBundle) => {
-            const loadScriptMock = jest.fn().mockImplementation((_ph, _kind, callback) => {
+            const loadScriptMock = vi.fn().mockImplementation((_ph, _kind, callback) => {
                 assignableWindow.__PosthogExtensions__ = {}
                 assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
-                    onLCP: jest.fn(),
-                    onCLS: jest.fn(),
-                    onFCP: jest.fn(),
-                    onINP: jest.fn(),
+                    onLCP: vi.fn(),
+                    onCLS: vi.fn(),
+                    onFCP: vi.fn(),
+                    onINP: vi.fn(),
                 }
                 callback()
             })
@@ -488,18 +488,18 @@ describe('web vitals', () => {
 
         it('uses unattributed observers for metrics excluded from the default attribution list', async () => {
             const attributed = {
-                onLCP: jest.fn(),
-                onCLS: jest.fn(),
-                onFCP: jest.fn(),
-                onINP: jest.fn(),
+                onLCP: vi.fn(),
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
             }
             const withoutAttribution = {
-                onLCP: jest.fn(),
-                onCLS: jest.fn(),
-                onFCP: jest.fn(),
-                onINP: jest.fn(),
+                onLCP: vi.fn(),
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
             }
-            const loadScriptMock = jest.fn().mockImplementation((_ph, kind, callback) => {
+            const loadScriptMock = vi.fn().mockImplementation((_ph, kind, callback) => {
                 assignableWindow.__PosthogExtensions__ = {
                     postHogWebVitalsCallbacksByFlavor: {
                         [kind]: { ...attributed, withoutAttribution },
@@ -526,18 +526,18 @@ describe('web vitals', () => {
 
         it('opts out of processedEventEntries on the attributed onINP only', async () => {
             const attributed = {
-                onLCP: jest.fn(),
-                onCLS: jest.fn(),
-                onFCP: jest.fn(),
-                onINP: jest.fn(),
+                onLCP: vi.fn(),
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
             }
             const withoutAttribution = {
-                onLCP: jest.fn(),
-                onCLS: jest.fn(),
-                onFCP: jest.fn(),
-                onINP: jest.fn(),
+                onLCP: vi.fn(),
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
             }
-            const loadScriptMock = jest.fn().mockImplementation((_ph, kind, callback) => {
+            const loadScriptMock = vi.fn().mockImplementation((_ph, kind, callback) => {
                 assignableWindow.__PosthogExtensions__ = {
                     postHogWebVitalsCallbacksByFlavor: {
                         [kind]: { ...attributed, withoutAttribution },
@@ -564,12 +564,12 @@ describe('web vitals', () => {
 
         it('does not pass attribution-only opts to the default bundle', async () => {
             const callbacks = {
-                onLCP: jest.fn(),
-                onCLS: jest.fn(),
-                onFCP: jest.fn(),
-                onINP: jest.fn(),
+                onLCP: vi.fn(),
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
             }
-            const loadScriptMock = jest.fn().mockImplementation((_ph, kind, callback) => {
+            const loadScriptMock = vi.fn().mockImplementation((_ph, kind, callback) => {
                 assignableWindow.__PosthogExtensions__ = {
                     postHogWebVitalsCallbacksByFlavor: { [kind]: callbacks },
                 }
@@ -593,10 +593,10 @@ describe('web vitals', () => {
             emit: () => void,
             posthogConfig: Partial<PostHogConfig> = {}
         ): Promise<Record<string, any>> => {
-            beforeSendMock = jest.fn().mockImplementation((e) => e)
+            beforeSendMock = vi.fn().mockImplementation((e) => e)
             onLCPCallback = onCLSCallback = onFCPCallback = onINPCallback = undefined
 
-            const loadScriptMock = jest.fn().mockImplementation((_ph, kind, callback) => {
+            const loadScriptMock = vi.fn().mockImplementation((_ph, kind, callback) => {
                 assignableWindow.__PosthogExtensions__ = {
                     postHogWebVitalsCallbacksByFlavor: {
                         [kind]: {
@@ -623,7 +623,7 @@ describe('web vitals', () => {
             })
 
             emit()
-            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+            vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
             const call = beforeSendMock.mock.calls.find((c: any[]) => c[0].event === '$web_vitals')
             return call![0].properties
         }
@@ -740,14 +740,14 @@ describe('web vitals', () => {
         ])(
             'when __preview_web_vitals_soft_navs is %p and web_vitals_attribution is %p, should load %s bundle',
             async (softNavsConfig, attributionConfig, expectedBundle) => {
-                const loadScriptMock = jest.fn().mockImplementation((_ph, kind, callback) => {
+                const loadScriptMock = vi.fn().mockImplementation((_ph, kind, callback) => {
                     assignableWindow.__PosthogExtensions__ = {
                         postHogWebVitalsCallbacksByFlavor: {
                             [kind]: {
-                                onLCP: jest.fn(),
-                                onCLS: jest.fn(),
-                                onFCP: jest.fn(),
-                                onINP: jest.fn(),
+                                onLCP: vi.fn(),
+                                onCLS: vi.fn(),
+                                onFCP: vi.fn(),
+                                onINP: vi.fn(),
                             },
                         },
                     }
@@ -784,12 +784,12 @@ describe('web vitals', () => {
         ])(
             'when __preview_web_vitals_soft_navs is %p, passes reportSoftNavs=%p to the observers',
             async (softNavsConfig, expectedReportSoftNavs) => {
-                const onLCP = jest.fn()
-                const onCLS = jest.fn()
-                const onFCP = jest.fn()
-                const onINP = jest.fn()
+                const onLCP = vi.fn()
+                const onCLS = vi.fn()
+                const onFCP = vi.fn()
+                const onINP = vi.fn()
 
-                const loadScriptMock = jest.fn().mockImplementation((_ph, kind, callback) => {
+                const loadScriptMock = vi.fn().mockImplementation((_ph, kind, callback) => {
                     assignableWindow.__PosthogExtensions__ = {
                         postHogWebVitalsCallbacksByFlavor: {
                             [kind]: { onLCP, onCLS, onFCP, onINP },
@@ -822,21 +822,21 @@ describe('web vitals', () => {
         )
 
         it('loads soft-nav callbacks when stable callbacks were preloaded by another instance', async () => {
-            const stableOnLCP = jest.fn()
-            const softOnLCP = jest.fn()
+            const stableOnLCP = vi.fn()
+            const softOnLCP = vi.fn()
             const softCallbacks = {
                 onLCP: softOnLCP,
-                onCLS: jest.fn(),
-                onFCP: jest.fn(),
-                onINP: jest.fn(),
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
             }
             const stableCallbacks = {
                 onLCP: stableOnLCP,
-                onCLS: jest.fn(),
-                onFCP: jest.fn(),
-                onINP: jest.fn(),
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
             }
-            const loadExternalDependency = jest.fn((_ph, kind, callback) => {
+            const loadExternalDependency = vi.fn((_ph, kind, callback) => {
                 assignableWindow.__PosthogExtensions__!.postHogWebVitalsCallbacksByFlavor![kind] = softCallbacks
                 callback()
             })
@@ -865,21 +865,21 @@ describe('web vitals', () => {
         })
 
         it('loads default callbacks when a non-default flavor overwrote the legacy callback slot', async () => {
-            const softAttributionOnLCP = jest.fn()
-            const stableOnLCP = jest.fn()
+            const softAttributionOnLCP = vi.fn()
+            const stableOnLCP = vi.fn()
             const softAttributionCallbacks = {
                 onLCP: softAttributionOnLCP,
-                onCLS: jest.fn(),
-                onFCP: jest.fn(),
-                onINP: jest.fn(),
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
             }
             const stableCallbacks = {
                 onLCP: stableOnLCP,
-                onCLS: jest.fn(),
-                onFCP: jest.fn(),
-                onINP: jest.fn(),
+                onCLS: vi.fn(),
+                onFCP: vi.fn(),
+                onINP: vi.fn(),
             }
-            const loadExternalDependency = jest.fn((_ph, kind, callback) => {
+            const loadExternalDependency = vi.fn((_ph, kind, callback) => {
                 assignableWindow.__PosthogExtensions__!.postHogWebVitalsCallbacksByFlavor![kind] = stableCallbacks
                 callback()
             })
@@ -902,22 +902,22 @@ describe('web vitals', () => {
         })
 
         it('uses the requested preloaded callback flavor without loading another bundle', async () => {
-            const stableOnLCP = jest.fn()
-            const softOnLCP = jest.fn()
-            const loadExternalDependency = jest.fn()
+            const stableOnLCP = vi.fn()
+            const softOnLCP = vi.fn()
+            const loadExternalDependency = vi.fn()
             assignableWindow.__PosthogExtensions__ = {
                 postHogWebVitalsCallbacksByFlavor: {
                     'web-vitals': {
                         onLCP: stableOnLCP,
-                        onCLS: jest.fn(),
-                        onFCP: jest.fn(),
-                        onINP: jest.fn(),
+                        onCLS: vi.fn(),
+                        onFCP: vi.fn(),
+                        onINP: vi.fn(),
                     },
                     'web-vitals-soft-navs': {
                         onLCP: softOnLCP,
-                        onCLS: jest.fn(),
-                        onFCP: jest.fn(),
-                        onINP: jest.fn(),
+                        onCLS: vi.fn(),
+                        onFCP: vi.fn(),
+                        onINP: vi.fn(),
                     },
                 },
                 loadExternalDependency,
@@ -940,7 +940,7 @@ describe('web vitals', () => {
 
     describe('onRemoteConfig empty config handling', () => {
         beforeEach(async () => {
-            beforeSendMock = jest.fn()
+            beforeSendMock = vi.fn()
             posthog = await createPosthogInstance(uuidv7(), {
                 before_send: beforeSendMock,
             })
@@ -998,7 +998,7 @@ describe('web vitals', () => {
                 },
             }
 
-            beforeSendMock = jest.fn()
+            beforeSendMock = vi.fn()
             posthog = await createPosthogInstance(uuidv7(), {
                 before_send: beforeSendMock,
             })
@@ -1176,7 +1176,7 @@ describe('web vitals', () => {
 
     describe('soft-navigation metric attribution', () => {
         const initializeWebVitals = async () => {
-            beforeSendMock = jest.fn().mockImplementation((event) => event)
+            beforeSendMock = vi.fn().mockImplementation((event) => event)
             assignableWindow.__PosthogExtensions__ = {
                 postHogWebVitalsCallbacksByFlavor: {
                     'web-vitals-soft-navs': {
@@ -1186,8 +1186,8 @@ describe('web vitals', () => {
                         onCLS: (callback) => {
                             onCLSCallback = callback
                         },
-                        onFCP: jest.fn(),
-                        onINP: jest.fn(),
+                        onFCP: vi.fn(),
+                        onINP: vi.fn(),
                     },
                 },
             }
@@ -1227,7 +1227,7 @@ describe('web vitals', () => {
                 navigationId: 2,
                 navigationURL: 'http://localhost/new?gclid=secret',
             })
-            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+            vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
             expect(beforeSendMock).toHaveBeenCalledTimes(2)
             expect(beforeSendMock.mock.calls[0][0]).toMatchObject({
@@ -1269,7 +1269,7 @@ describe('web vitals', () => {
                 navigationId: 'soft-navigation-11',
                 navigationURL: 'http://localhost/route',
             })
-            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+            vi.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
             expect(beforeSendMock).toHaveBeenCalledTimes(2)
             expect(beforeSendMock.mock.calls[0][0].properties.$web_vitals_LCP_event.navigationId).toBe(
