@@ -140,6 +140,43 @@ describe('real-core reset rotation', () => {
         expect(recordCalls).toBe(2)
     })
 
+    it('ships zero recordings across a rotation with a busy queue when there is no interaction', async () => {
+        captured = []
+        installFakeRRweb()
+
+        const posthog: PostHog = await createPosthogInstance(
+            uuidv7(),
+            {
+                disable_session_recording: false,
+                advanced_disable_flags: true,
+                session_recording: { compress_events: true },
+                before_send: (cr: any) => {
+                    if (cr) {
+                        captured.push({ event: cr.event, properties: cr.properties })
+                    }
+                    return null
+                },
+            },
+            { sessionRecording: { endpoint: '/s/' } } as any
+        )
+
+        await waitFor(() => expect(_emit).toBeDefined())
+
+        _emit(mutation())
+        _emit(mutation())
+
+        posthog.reset()
+
+        _emit(mutation())
+        _emit(mutation())
+
+        await drain()
+        ;(posthog.sessionRecording as any)['_lazyLoadedSessionRecording']['_flushBuffer']()
+        await drain()
+
+        expect(captured.filter((c) => c.event === '$snapshot')).toEqual([])
+    })
+
     it('attributes the restart snapshot to the new session when reset follows an idle wake with compression in flight', async () => {
         captured = []
         installFakeRRweb()

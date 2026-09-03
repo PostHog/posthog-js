@@ -3212,7 +3212,7 @@ describe('Lazy SessionRecording', () => {
                 beforeEach(() => {
                     recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
                     // real rrweb delivers addCustomEvent back through emit
-                    assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = jest.fn(
+                    assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = vi.fn(
                         (tag: string, payload: any) => {
                             _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
                         }
