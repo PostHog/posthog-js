@@ -610,6 +610,34 @@ describe('PostHogTraces', () => {
     })
   })
 
+  describe('flush reentrancy', () => {
+    it('does not re-send the head batch when a span ends during the flush prefix', async () => {
+      // `_flushInner` runs synchronously as far as its first await, and it reads
+      // the resource attributes in that window. A getter there that ends a span
+      // used to re-enter the flush with no pass yet recorded, and the same head
+      // batch went out again on every pass — thousands of times, unbounded.
+      const resourceAttributes: Record<string, unknown> = {}
+      Object.defineProperty(resourceAttributes, 'tenant', {
+        enumerable: true,
+        // Reads `traces` only when a flush runs, which is after it is assigned.
+        get: () => {
+          traces.startSpan('late').end()
+          return 'acme'
+        },
+      })
+      const instance = createMockInstance()
+      const traces = createTraces({ maxExportBatchSize: 2, resourceAttributes }, instance)
+
+      traces.startSpan('a').end()
+      traces.startSpan('b').end()
+      await traces.flush()
+      await traces.flush()
+
+      expect(sentPayloads(instance)).toHaveLength(2)
+      expect(sentSpans(instance).map((s) => s.name)).toEqual(['a', 'b', 'late'])
+    })
+  })
+
   describe('beforeSpanSend', () => {
     const endOneSpan = (beforeSpanSend: any): PostHogTraces => {
       const traces = createTraces({ beforeSpanSend: [beforeSpanSend].flat() })
@@ -786,6 +814,50 @@ describe('PostHogTraces', () => {
       await traces.flush()
 
       expect(sentSpans(instance).map((s) => s.flags)).toEqual([0x300])
+    })
+
+    it('does not resurrect a prototype-named attribute the hook removed', async () => {
+      // `key in attributes` walks the prototype chain, so a deleted `constructor`
+      // read back as the inherited function and shipped as [Function].
+      const instance = createMockInstance()
+      const traces = createTraces(
+        {
+          beforeSpanSend: [
+            (span: SpanRecord) => {
+              delete (span.attributes as Record<string, unknown>).constructor
+              return span
+            },
+          ],
+        },
+        instance
+      )
+      const span = traces.startSpan('ghost')
+      span.setAttribute('constructor', 'user-value')
+      span.setAttribute('safe', 'ok')
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans(instance)[0].attributes.map((a) => a.key)).toEqual(['safe'])
+    })
+
+    it('does not let prototype-named ghosts evict what the hook kept', async () => {
+      // Worse than resurrection: at the cap the ghosts won the slots and the
+      // attribute the hook deliberately kept was the one dropped.
+      const instance = createMockInstance()
+      const traces = createTraces(
+        {
+          maxAttributesPerSpan: 2,
+          beforeSpanSend: [(span: SpanRecord) => ({ ...span, attributes: { onlyThis: 'yes' } }) as SpanRecord],
+        },
+        instance
+      )
+      const span = traces.startSpan('ghosts')
+      span.setAttribute('toString', 1)
+      span.setAttribute('valueOf', 2)
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans(instance)[0].attributes.map((a) => a.key)).toEqual(['onlyThis'])
     })
 
     it('keeps the earliest-set attributes when the hook adds an integer-like key', async () => {

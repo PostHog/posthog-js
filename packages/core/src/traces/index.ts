@@ -14,6 +14,7 @@ import {
   PostHogSpan,
   applySpanLimits,
   describeError,
+  eventNameBound,
   inertSpan,
   monotonicNow,
   truncateAttributes,
@@ -297,14 +298,21 @@ export class PostHogTraces {
 
   private _startFlush(): Promise<number> {
     this._clearFlushTimer()
-    const promise = this._flushInner().finally(() => {
-      // Only clear the slot this call installed: a `reset()` mid-flight may
-      // already have installed a newer one.
-      if (this._flushPromise === promise) {
-        this._flushPromise = null
-      }
-      this._armFlushTimerIfQueued()
-    })
+    // Deferred by a microtask so the slot below is installed before the pass
+    // reads anything: `_flushInner` runs synchronously as far as its first
+    // await, and a resource-attribute getter or `toJSON` that ends a span in
+    // that window would otherwise re-enter here, find no pass in flight, and
+    // send the same head batch again — without bound.
+    const promise = Promise.resolve()
+      .then(() => this._flushInner())
+      .finally(() => {
+        // Only clear the slot this call installed: a `reset()` mid-flight may
+        // already have installed a newer one.
+        if (this._flushPromise === promise) {
+          this._flushPromise = null
+        }
+        this._armFlushTimerIfQueued()
+      })
     this._flushPromise = promise
     return promise
   }
@@ -587,7 +595,12 @@ export class PostHogTraces {
         try {
           sanitizedEvents.push({
             ...event,
-            name: sanitizeName(event.name, 'Span event name', this._config.maxAttributeValueLength, this._logger),
+            name: sanitizeName(
+              event.name,
+              'Span event name',
+              eventNameBound(this._config.maxAttributeValueLength),
+              this._logger
+            ),
             timestamp: resolveSuppliedTime(event.timestamp, current.startTime, 'event timestamp', this._logger),
           })
         } catch {

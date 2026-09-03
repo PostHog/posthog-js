@@ -186,6 +186,17 @@ describe('resourceAttributes guarding', () => {
     expect(logger.critical).toHaveBeenCalledWith(expect.stringContaining('ignoring 1 of 2 entries'))
   })
 
+  it('stays quiet for a conditionally disabled hook', () => {
+    // `[featureEnabled && scrub]` is ordinary JS; nothing was configured to
+    // redact, so claiming redaction is broken would be false alarm.
+    const logger = createMockLogger()
+
+    const resolved = resolveTracesConfig({ beforeSpanSend: [false, null, undefined] as never }, undefined, logger)
+
+    expect(resolved.beforeSpanSend).toEqual([])
+    expect(logger.critical).not.toHaveBeenCalled()
+  })
+
   it('stays quiet when every hook is callable', () => {
     const logger = createMockLogger()
 

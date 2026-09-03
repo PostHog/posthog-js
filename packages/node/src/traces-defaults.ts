@@ -1,4 +1,4 @@
-import { assignUserAttributes } from '@posthog/core'
+import { assignUserAttributes, isNullish } from '@posthog/core'
 import type { BeforeSpanSendFn, Logger, ResolvedTracesConfig, TracesConfig } from '@posthog/core'
 
 // OpenTelemetry's BatchSpanProcessor defaults, which sit comfortably under the
@@ -78,7 +78,10 @@ function resolveBeforeSpanSend(beforeSpanSend: TracesConfig['beforeSpanSend'], l
   if (!beforeSpanSend) {
     return []
   }
-  const supplied = [beforeSpanSend].flat()
+  // `[featureEnabled && scrub]` is ordinary JS, and a caller who wrote it did not
+  // configure a hook at all — only a value that was meant to be one is worth
+  // shouting about.
+  const supplied = [beforeSpanSend].flat().filter((hook) => (hook as unknown) !== false && !isNullish(hook))
   const hooks = supplied.filter((hook): hook is BeforeSpanSendFn => typeof hook === 'function')
   if (hooks.length !== supplied.length) {
     logger?.critical(

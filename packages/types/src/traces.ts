@@ -330,8 +330,8 @@ export interface TracesConfig {
      * Maximum length of a string attribute value. Longer values are truncated,
      * and the bound reaches every string the value contains, including the ones
      * nested inside arrays and objects. It applies to span attributes, event
-     * attributes, status messages and resource attributes alike — including
-     * `exception.stacktrace`.
+     * attributes, span names, event names, status messages and resource
+     * attributes alike — including `exception.stacktrace`.
      *
      * The bound is what keeps one large value from making a span too large for
      * the ingestion endpoint, which drops an oversized span whole.

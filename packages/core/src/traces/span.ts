@@ -195,7 +195,12 @@ export class PostHogSpan implements Span {
     if (this._mutable('addEvent')) {
       // Sanitised before the bucket check, so the name deciding the bucket is the
       // one that ends up on the record.
-      const eventName = sanitizeName(name, 'Span event name', this._maxAttributeValueLength, this._logger)
+      const eventName = sanitizeName(
+        name,
+        'Span event name',
+        eventNameBound(this._maxAttributeValueLength),
+        this._logger
+      )
       if (!this._claimEventSlot(eventName)) {
         this._droppedEvents++
         return this
@@ -312,6 +317,17 @@ export class PostHogSpan implements Span {
 const EXCEPTION_EVENT_NAME = 'exception'
 
 /**
+ * The value bound as it applies to an event name, floored at the reserved name.
+ *
+ * `isExceptionEvent` compares against the whole constant, so a bound short
+ * enough to cut it would silently disable the exception reserve and drop the
+ * event the reserve exists to keep.
+ */
+export function eventNameBound(maxAttributeValueLength: number): number {
+  return Math.max(maxAttributeValueLength, EXCEPTION_EVENT_NAME.length)
+}
+
+/**
  * How many `exception` events may sit past the event cap.
  *
  * A span that fills its events and then throws would otherwise lose the only
@@ -364,7 +380,11 @@ function orderedKeys(attributes: SpanAttributes, keysBeforeHook: readonly string
   if (!keysBeforeHook.length) {
     return Object.keys(attributes)
   }
-  const beforeHook = keysBeforeHook.filter((key) => key in attributes)
+  // hasOwnProperty, not `in`: `in` walks the prototype chain, so a key the caller
+  // set that collides with Object.prototype survives the hook deleting it and
+  // reads back as the inherited member — the same trap the attribute store's own
+  // Object.keys comment describes.
+  const beforeHook = keysBeforeHook.filter((key) => Object.prototype.hasOwnProperty.call(attributes, key))
   const seen = new Set(beforeHook)
   return [...beforeHook, ...Object.keys(attributes).filter((key) => !seen.has(key))]
 }
@@ -536,7 +556,14 @@ export function inertSpan(options?: { parent?: unknown; tracestate?: unknown }):
   return new PassThroughSpan(traceparent, sanitizeTracestate(options?.tracestate))
 }
 
-/** Mirrors `encodeAnyValue`'s traversal budget so the two walks cost the same. */
+/**
+ * The same depth, node and item caps `encodeAnyValue` uses, but spent per
+ * attribute rather than per bag: the encoder allocates one budget for a whole
+ * attribute map, this walk allocates one per value. That makes the encoder's
+ * budget the stricter of the two — whatever this walk hands back unbounded, the
+ * encoder has already stopped short of — at the cost of a wide span paying for
+ * a walk whose results the encoder then discards.
+ */
 interface TruncateState {
   /** Containers on the current path, so a back-reference stops the walk. */
   ancestors: WeakSet<object>
@@ -596,8 +623,8 @@ function truncateValue(
     return CIRCULAR_VALUE
   }
   // Unlike a cycle, these two are bounded by the encoder as well: it stops at
-  // the same depth and charges every value, strings included, so its budget is
-  // spent no later than this one's.
+  // the same depth, charges every value rather than only containers, and spends
+  // one budget across the whole bag, so it runs out no later than this walk.
   if (state.remainingNodes <= 0 || depth >= MAX_JSON_SAFE_VALUE_DEPTH) {
     return value
   }
