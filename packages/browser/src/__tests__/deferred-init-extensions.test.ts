@@ -3,11 +3,12 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { RemoteConfig, RemoteConfigResult } from '../types'
 import type { Client } from '@posthog/browser-common'
 import { PostHog } from '../posthog-core'
+import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 
-jest.mock('@posthog/browser-common/utils/globals', () => {
-    const orig = jest.requireActual('@posthog/browser-common/utils/globals')
-    const mockURLGetter = jest.fn()
-    const mockReferrerGetter = jest.fn()
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
+    const mockURLGetter = vi.fn()
+    const mockReferrerGetter = vi.fn()
     return {
         ...orig,
         mockURLGetter,
@@ -33,12 +34,11 @@ jest.mock('@posthog/browser-common/utils/globals', () => {
     }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter } = require('@posthog/browser-common/utils/globals')
+const { mockURLGetter, mockReferrerGetter } = mockedGlobals as any
 
 describe('deferred extension initialization', () => {
     beforeEach(() => {
-        console.error = jest.fn()
+        console.error = vi.fn()
         mockReferrerGetter.mockReturnValue('https://referrer.com')
         mockURLGetter.mockReturnValue('https://example.com')
     })
@@ -81,7 +81,7 @@ describe('deferred extension initialization', () => {
                 disable_session_recording: true,
             })
             const initTasks: Array<() => void> = []
-            const processInitTaskQueue = jest
+            const processInitTaskQueue = vi
                 .spyOn(posthog as any, '_processInitTaskQueue')
                 .mockImplementation((queue: Array<() => void>) => initTasks.push(...queue))
 
@@ -260,7 +260,7 @@ describe('deferred extension initialization', () => {
         })
 
         it('does not set up autocapture after shutdown', async () => {
-            const setup = jest.fn()
+            const setup = vi.fn()
             class TestAutocapture {
                 readonly name = 'autocapture'
                 setup = setup
@@ -280,8 +280,8 @@ describe('deferred extension initialization', () => {
         it('disposes logs created after shutdown', async () => {
             const savedDefaults = PostHog.__defaultExtensionClasses
             PostHog.__defaultExtensionClasses = {}
-            const setup = jest.fn()
-            const dispose = jest.fn()
+            const setup = vi.fn()
+            const dispose = vi.fn()
             class TestLogs {
                 readonly name = 'logs'
                 setup = setup

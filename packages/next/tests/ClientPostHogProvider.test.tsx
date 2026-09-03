@@ -4,12 +4,12 @@ import { ClientPostHogProvider } from '../src/client/ClientPostHogProvider'
 import { PostHogContext, useFeatureFlagEnabled } from '@posthog/react'
 import { posthog as posthogJs } from 'posthog-js'
 
-jest.mock('posthog-js', () => {
+vi.mock('posthog-js', () => {
     const posthog = {
         __loaded: false,
-        init: jest.fn(),
-        isFeatureEnabled: jest.fn(() => undefined),
-        onFeatureFlags: jest.fn(() => () => {}),
+        init: vi.fn(),
+        isFeatureEnabled: vi.fn(() => undefined),
+        onFeatureFlags: vi.fn(() => () => {}),
     }
 
     return {
@@ -22,7 +22,7 @@ jest.mock('posthog-js', () => {
     }
 })
 
-const mockPostHogJs = posthogJs as jest.Mocked<typeof posthogJs> & { __loaded: boolean }
+const mockPostHogJs = posthogJs as vi.Mocked<typeof posthogJs> & { __loaded: boolean }
 
 /** Helper component that exposes the PostHogContext value for assertions. */
 function ContextReader({ onContext }: { onContext: (ctx: { client: any; bootstrap?: any }) => void }) {
@@ -33,9 +33,9 @@ function ContextReader({ onContext }: { onContext: (ctx: { client: any; bootstra
 
 describe('ClientPostHogProvider', () => {
     beforeEach(() => {
-        ;(mockPostHogJs.init as jest.Mock).mockClear()
-        ;(mockPostHogJs.isFeatureEnabled as jest.Mock).mockClear()
-        ;(mockPostHogJs.onFeatureFlags as jest.Mock).mockClear()
+        ;(mockPostHogJs.init as vi.Mock).mockClear()
+        ;(mockPostHogJs.isFeatureEnabled as vi.Mock).mockClear()
+        ;(mockPostHogJs.onFeatureFlags as vi.Mock).mockClear()
         mockPostHogJs.__loaded = false
     })
 
@@ -193,7 +193,7 @@ describe('ClientPostHogProvider', () => {
     })
 
     it('renders children and warns when apiKey is empty', () => {
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation()
         render(
             <ClientPostHogProvider apiKey="">
                 <div data-testid="child">Child</div>
