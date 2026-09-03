@@ -19,6 +19,10 @@ export interface PolymorphicEvent {
 
 export interface EventHint {
   mechanism?: Partial<Mechanism>
+  /** Trusted capture-boundary severity. Generic event properties are not metadata overrides. */
+  level?: string
+  /** Trusted, stable identifier for the concrete capture integration or runtime hook. */
+  source?: string
   syntheticException?: Error | null
   skipFirstLines?: number
 }
@@ -30,6 +34,7 @@ export interface PreviouslyCapturedError {
 export interface ErrorProperties {
   $exception_list: Exception[]
   $exception_level?: SeverityLevel
+  $exception_source?: string
 }
 
 export interface Exception {
@@ -45,9 +50,12 @@ export type ExceptionList = Exception[]
 
 export interface Mechanism {
   handled?: boolean
-  type?: 'generic' | 'onunhandledrejection' | 'onuncaughtexception' | 'onconsole' | 'middleware'
+  type?: string
   source?: string
   synthetic?: boolean
+  exception_id?: number
+  parent_id?: number
+  [key: string]: unknown
 }
 
 export type GetModuleFn = (filename: string | undefined) => string | undefined

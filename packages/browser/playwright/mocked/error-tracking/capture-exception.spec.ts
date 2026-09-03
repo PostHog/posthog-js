@@ -41,7 +41,7 @@ test.describe('ErrorTracking captureException', () => {
             errorWithCause.cause = errorWithCause
             ph.captureException(errorWithCause)
         })
-        exceptionMatch(exception, 'Error', 'wat even am I', 5)
+        exceptionMatch(exception, 'Error', 'wat even am I', 1)
     })
 
     test('captureException(string)', async ({ posthog, events }) => {

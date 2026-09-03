@@ -6,6 +6,7 @@ exports[`Error conversion should use cause when it is an error 1`] = `
   "$exception_list": [
     {
       "mechanism": {
+        "exception_id": 0,
         "handled": true,
         "synthetic": false,
         "type": "generic",
@@ -19,9 +20,11 @@ exports[`Error conversion should use cause when it is an error 1`] = `
     },
     {
       "mechanism": {
-        "handled": true,
+        "exception_id": 1,
+        "parent_id": 0,
+        "source": "cause",
         "synthetic": false,
-        "type": "generic",
+        "type": "chained",
       },
       "stacktrace": {
         "frames": "<normalized stack frames>",

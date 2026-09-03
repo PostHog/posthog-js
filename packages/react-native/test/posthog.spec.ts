@@ -666,7 +666,7 @@ describe('PostHog React Native', () => {
       posthog.setPersistedProperty(PostHogPersistedProperty.LogsQueue, [{ message: 'log' }])
       ;(storage.setItem as jest.Mock).mockClear()
 
-      posthog.captureException(new Error('boom'), { $exception_level: 'fatal' })
+      posthog.captureException(new Error('boom'), {}, { level: 'fatal' })
 
       // A fatal exception can crash the app within the debounce window, so both
       // pipelines reach disk synchronously: the events file (holding the

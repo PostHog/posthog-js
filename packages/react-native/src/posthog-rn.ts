@@ -1863,7 +1863,7 @@ export class PostHog extends PostHogCore {
     super.captureException(error, additionalProperties, resolvedHint)
 
     // On a fatal crash, persist the exception + recent logs before the app may die.
-    if (additionalProperties?.$exception_level === 'fatal') {
+    if (CoreErrorTracking.normalizeExceptionLevel(resolvedHint.level) === 'fatal') {
       void this._eventsStorage.waitForPersist()
       void this._logsStorage.waitForPersist()
     }

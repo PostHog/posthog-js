@@ -43,7 +43,7 @@ import {
 } from './posthog-core-stateless'
 import { uuidv7 } from './vendor/uuidv7'
 import { isEmptyObject, isNullish, getPersonPropertiesHash, isObject, isArray, isString, getEventUuid } from './utils'
-import { EventHint } from './error-tracking'
+import { EventHint, sanitizeAdditionalExceptionProperties } from './error-tracking'
 
 // Stores the parameters for a pending feature flags reload request
 interface FlagsAsyncOptions {
@@ -1359,9 +1359,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   captureException(error: unknown, additionalProperties?: PostHogEventProperties, hint?: EventHint): void {
     try {
       const exceptionProperties = this.getErrorPropertiesBuilder().buildFromUnknown(error, hint)
+      const safeAdditionalProperties = sanitizeAdditionalExceptionProperties(additionalProperties)
       this.capture(
         '$exception',
-        { ...exceptionProperties, ...additionalProperties } as unknown as PostHogEventProperties,
+        { ...safeAdditionalProperties, ...exceptionProperties } as unknown as PostHogEventProperties,
         { _originatedFromCaptureException: true }
       )
     } catch (e) {

@@ -1,6 +1,7 @@
 import type { IncomingHttpHeaders } from 'node:http'
 import { Observable, throwError } from 'rxjs'
 import { catchError } from 'rxjs/operators'
+import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
 import ErrorTracking from './error-tracking'
 import { addProperty, getFirstHeaderValue, getPostHogTracingHeaderValues } from './tracing-headers'
@@ -114,7 +115,21 @@ export class PostHogInterceptor implements NestInterceptor {
                 const responseStatus = status ?? response?.statusCode
                 const additionalProperties: Record<string, any> | undefined =
                   responseStatus !== undefined ? { $response_status_code: responseStatus } : undefined
-                this.posthog.captureException(exception, distinctId, additionalProperties)
+                const hint: CoreErrorTracking.EventHint = {
+                  level: 'error',
+                  source: 'nestjs.interceptor',
+                  mechanism: { type: 'middleware', handled: false },
+                  syntheticException: new Error('Synthetic exception'),
+                }
+                this.posthog.addPendingPromise(
+                  ErrorTracking.buildEventMessage(
+                    this.posthog.getErrorPropertiesBuilder(),
+                    exception,
+                    hint,
+                    distinctId,
+                    additionalProperties
+                  ).then((message) => this.posthog._capturePreparedEvent(message, false))
+                )
                 return throwError(() => exception)
               })
             )

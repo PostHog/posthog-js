@@ -261,16 +261,14 @@ export class ErrorTracking {
       }
 
       const hint: CoreErrorTracking.EventHint = {
+        level: isFatal ? 'fatal' : 'error',
+        source: 'react_native.error_utils',
         mechanism: {
           type: 'onuncaughtexception',
           handled: false,
         },
       }
       const additionalProperties: any = {}
-
-      if (isFatal) {
-        additionalProperties['$exception_level'] = 'fatal' as CoreErrorTracking.SeverityLevel
-      }
 
       this.instance.captureException(error, additionalProperties, hint)
 
@@ -300,6 +298,8 @@ export class ErrorTracking {
       }
 
       const hint: CoreErrorTracking.EventHint = {
+        level: 'error',
+        source: 'react_native.unhandled_rejection',
         mechanism: {
           type: 'onunhandledrejection',
           handled: false,
@@ -323,16 +323,15 @@ export class ErrorTracking {
       }
 
       const hint: CoreErrorTracking.EventHint = {
+        level,
+        source: 'react_native.console',
         mechanism: {
           type: 'onconsole',
           handled: true,
         },
         syntheticException,
       }
-      const additionalProperties = {
-        $exception_level: level as CoreErrorTracking.SeverityLevel,
-      }
-      this.instance.captureException(error, additionalProperties, hint)
+      this.instance.captureException(error, {}, hint)
     }
 
     try {

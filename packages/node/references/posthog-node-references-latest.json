@@ -1995,6 +1995,10 @@
         {
           "type": "Exception[]",
           "name": "$exception_list"
+        },
+        {
+          "type": "string",
+          "name": "$exception_source"
         }
       ],
       "path": "../core/src/error-tracking/types.ts"
@@ -2018,12 +2022,22 @@
       "name": "EventHint",
       "properties": [
         {
+          "description": "Trusted capture-boundary severity. Generic event properties are not metadata overrides.",
+          "type": "string",
+          "name": "level"
+        },
+        {
           "type": "Partial<Mechanism>",
           "name": "mechanism"
         },
         {
           "type": "number",
           "name": "skipFirstLines"
+        },
+        {
+          "description": "Trusted, stable identifier for the concrete capture integration or runtime hook.",
+          "type": "string",
+          "name": "source"
         },
         {
           "type": "Error | null",
@@ -2584,8 +2598,16 @@
       "name": "Mechanism",
       "properties": [
         {
+          "type": "number",
+          "name": "exception_id"
+        },
+        {
           "type": "boolean",
           "name": "handled"
+        },
+        {
+          "type": "number",
+          "name": "parent_id"
         },
         {
           "type": "string",
@@ -2596,7 +2618,7 @@
           "name": "synthetic"
         },
         {
-          "type": "'generic' | 'onunhandledrejection' | 'onuncaughtexception' | 'onconsole' | 'middleware'",
+          "type": "string",
           "name": "type"
         }
       ],

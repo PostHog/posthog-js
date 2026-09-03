@@ -95,9 +95,23 @@ export function createEventProcessor(
 
         const exceptions: _SentryException[] = event.exception?.values || []
 
-        const exceptionList = exceptions.map((exception) => {
+        const exceptionList = exceptions.slice(0, 50).map((exception, index) => {
+            const mechanism: Record<string, any> = {
+                ...(exception.mechanism || {}),
+                exception_id: index,
+            }
+            if (index === 0) {
+                delete mechanism.parent_id
+                delete mechanism.source
+            } else {
+                mechanism.type = 'chained'
+                mechanism.source = 'cause'
+                mechanism.parent_id = index - 1
+                delete mechanism.handled
+            }
             return {
                 ...exception,
+                mechanism,
                 stacktrace: exception.stacktrace
                     ? {
                           ...exception.stacktrace,
@@ -117,11 +131,13 @@ export function createEventProcessor(
             $exception_type: any
             $exception_list: any
             $exception_level: SeverityLevel
+            $exception_source: string
         } = {
             // PostHog Exception Properties,
             $exception_message: exceptions[0]?.value || event.message,
             $exception_type: exceptions[0]?.type,
             $exception_level: event.level,
+            $exception_source: 'sentry.integration',
             $exception_list: exceptionList,
             // Sentry Exception Properties
             $sentry_event_id: event.event_id,

@@ -32,7 +32,9 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
 
     win.onerror = function (...args: ErrorEventArgs): boolean {
         const errorProperties = errorPropertiesBuilder.buildFromUnknown(resolveOnErrorInput(args), {
-            mechanism: { handled: false },
+            level: 'error',
+            source: 'browser.window_onerror',
+            mechanism: { type: 'onuncaughtexception', handled: false },
         })
         captureFn(errorProperties)
         return isFunction(originalOnError) ? (originalOnError(...args) ?? false) : false
@@ -58,7 +60,9 @@ const wrapUnhandledRejection = (
 
     win.onunhandledrejection = function (ev: PromiseRejectionEvent): boolean {
         const errorProperties = errorPropertiesBuilder.buildFromUnknown(ev, {
-            mechanism: { handled: false },
+            level: 'error',
+            source: 'browser.unhandledrejection',
+            mechanism: { type: 'onunhandledrejection', handled: false },
         })
         captureFn(errorProperties)
         return isFunction(originalOnUnhandledRejection)
@@ -90,7 +94,9 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
         }
         const error = args.find((arg) => arg instanceof Error)
         const errorProperties = errorPropertiesBuilder.buildFromUnknown(error || event, {
-            mechanism: { handled: false },
+            level: 'error',
+            source: 'browser.console',
+            mechanism: { type: 'onconsole', handled: true },
             syntheticException: new Error('PostHog syntheticException'),
             skipFirstLines: 2,
         })

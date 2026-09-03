@@ -49,7 +49,8 @@ export default class ErrorTracking {
     distinctId?: string,
     additionalProperties?: Record<string | number, any>
   ): Promise<EventMessage> {
-    const properties: EventMessage['properties'] = { ...additionalProperties }
+    const properties: EventMessage['properties'] =
+      CoreErrorTracking.sanitizeAdditionalExceptionProperties(additionalProperties)
 
     const exceptionProperties = builder.buildFromUnknown(error, hint)
     exceptionProperties.$exception_list = await builder.modifyFrames(exceptionProperties.$exception_list)
@@ -65,8 +66,10 @@ export default class ErrorTracking {
       // and falls back to a random UUID with $process_person_profile = false
       distinctId: distinctId,
       properties: {
-        ...exceptionProperties,
         ...properties,
+        // Canonical exception metadata is SDK-owned and cannot be impersonated through
+        // the generic application properties bag.
+        ...exceptionProperties,
       },
       _originatedFromCaptureException: true,
     }
