@@ -114,12 +114,12 @@ describe(`Segment integration`, () => {
         let runtimeIntegration: SegmentPlugin | undefined
         const runtimeSegment = {
             ...segment,
-            register: jest.fn((integration: SegmentPlugin) => {
+            register: vi.fn((integration: SegmentPlugin) => {
                 runtimeIntegration = integration
                 return Promise.resolve(integration)
             }),
         }
-        jest.spyOn(posthog, 'calculateEventProperties').mockReturnValue({
+        vi.spyOn(posthog, 'calculateEventProperties').mockReturnValue({
             $active_feature_flags: ['runtime-flag'],
         })
 
