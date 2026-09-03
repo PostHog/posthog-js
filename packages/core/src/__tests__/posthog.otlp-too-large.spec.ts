@@ -56,7 +56,7 @@ describe('OTLP bodies over the endpoint limit', () => {
   it('measures the payload, not the compressed body it is sent as', async () => {
     // The endpoint decompresses before it measures, so a payload that gzips
     // down to nothing is still refused on its decompressed size.
-    jest.spyOn(posthog as any, 'compressPayload').mockResolvedValue(new Uint8Array(1024))
+    vi.spyOn(posthog as any, 'compressPayload').mockResolvedValue(new Uint8Array(1024))
     ;(posthog as any).disableCompression = false
 
     await expect(posthog._sendTracesBatch(spansOf(3 * 1024 * 1024))).resolves.toEqual({ kind: 'too-large' })
@@ -85,7 +85,7 @@ describe('OTLP bodies over the endpoint limit', () => {
   })
 
   it('sends a compressible payload that is inside the limit before compression', async () => {
-    jest.spyOn(posthog as any, 'compressPayload').mockResolvedValue(new Uint8Array(1024))
+    vi.spyOn(posthog as any, 'compressPayload').mockResolvedValue(new Uint8Array(1024))
     ;(posthog as any).disableCompression = false
 
     await expect(posthog._sendTracesBatch(spansOf(1024))).resolves.toEqual({ kind: 'ok' })

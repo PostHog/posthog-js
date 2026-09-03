@@ -250,7 +250,7 @@ describe('PostHogMetrics', () => {
 
       for (let i = 0; i < 60; i++) {
         metrics.count('orders_created', 1)
-        await jest.advanceTimersByTimeAsync(1000)
+        await vi.advanceTimersByTimeAsync(1000)
       }
 
       expect(mockInstance._sendMetricsBatch).toHaveBeenCalled()
@@ -260,7 +260,7 @@ describe('PostHogMetrics', () => {
       // The capture arms a timer at the flush interval; the failed flush then asks
       // for far longer. The pending timer must not fire first.
       const instance = createMockInstance({
-        _sendMetricsBatch: jest.fn((): Promise<SendMetricsBatchOutcome> =>
+        _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> =>
           Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
         ),
       })
@@ -269,10 +269,10 @@ describe('PostHogMetrics', () => {
       await metrics.flush()
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(11_000)
+      await vi.advanceTimersByTimeAsync(11_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(300_000)
+      await vi.advanceTimersByTimeAsync(300_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
     })
 
@@ -284,18 +284,18 @@ describe('PostHogMetrics', () => {
         { kind: 'fatal', error: new Error('400') },
       ]
       const instance = createMockInstance({
-        _sendMetricsBatch: jest.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' })),
+        _sendMetricsBatch: vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' })),
       })
       const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
       metrics.count('orders_created', 1)
       await metrics.flush()
 
       // The wait elapses, the retry lands a 400, and that ends the wait.
-      await jest.advanceTimersByTimeAsync(300_000)
+      await vi.advanceTimersByTimeAsync(300_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
 
       metrics.count('orders_created', 1)
-      await jest.advanceTimersByTimeAsync(10_000)
+      await vi.advanceTimersByTimeAsync(10_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(3)
     })
 
@@ -303,7 +303,7 @@ describe('PostHogMetrics', () => {
       // Each refusal sliding the deadline would keep `_nextFlushDelay` pinned at
       // the full window, so the flush cadence would never recover.
       const instance = createMockInstance({
-        _sendMetricsBatch: jest.fn((): Promise<SendMetricsBatchOutcome> =>
+        _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> =>
           Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 30_000 })
         ),
       })
@@ -316,7 +316,7 @@ describe('PostHogMetrics', () => {
       // dependent, but it must fall outside one sometimes.
       let sawWindowClosed = false
       for (let i = 0; i < 12; i++) {
-        await jest.advanceTimersByTimeAsync(5000)
+        await vi.advanceTimersByTimeAsync(5000)
         // Sampled before the flush: a flush that finds the window closed opens
         // a fresh one, so sampling after it would always look open.
         if ((metrics as any)._retryAfterRemainingMs() === 0) {
@@ -331,7 +331,7 @@ describe('PostHogMetrics', () => {
     it('does not install a Retry-After that lands after reset', async () => {
       let settle: ((outcome: SendMetricsBatchOutcome) => void) | undefined
       const instance = createMockInstance({
-        _sendMetricsBatch: jest.fn(
+        _sendMetricsBatch: vi.fn(
           (): Promise<SendMetricsBatchOutcome> =>
             new Promise((resolve) => {
               settle = resolve
@@ -340,7 +340,7 @@ describe('PostHogMetrics', () => {
       })
       const metrics = createMetrics({ flushIntervalMs: 1000 }, instance)
       metrics.count('orders_created', 1)
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
 
       metrics.reset()
@@ -348,16 +348,16 @@ describe('PostHogMetrics', () => {
       // Settle first: the capture that arms the next timer must not find a
       // window belonging to the client that was just torn down.
       settle?.({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       metrics.count('orders_created', 1)
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
     })
 
     it('drops a Retry-After wait on reset', async () => {
       const instance = createMockInstance({
-        _sendMetricsBatch: jest.fn((): Promise<SendMetricsBatchOutcome> =>
+        _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> =>
           Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
         ),
       })
@@ -367,7 +367,7 @@ describe('PostHogMetrics', () => {
 
       metrics.reset()
       metrics.count('orders_created', 1)
-      await jest.advanceTimersByTimeAsync(10_000)
+      await vi.advanceTimersByTimeAsync(10_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
     })
 
@@ -380,7 +380,7 @@ describe('PostHogMetrics', () => {
       let settleRetry: ((outcome: SendMetricsBatchOutcome) => void) | undefined
       let call = 0
       const instance = createMockInstance({
-        _sendMetricsBatch: jest.fn((): Promise<SendMetricsBatchOutcome> => {
+        _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> => {
           call++
           if (call === 1) {
             return Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
@@ -392,37 +392,37 @@ describe('PostHogMetrics', () => {
       })
       const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
       metrics.count('orders_created', 1)
-      await jest.advanceTimersByTimeAsync(10_000)
+      await vi.advanceTimersByTimeAsync(10_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
 
       // The wait elapses and the retry goes out, but hangs.
-      await jest.advanceTimersByTimeAsync(300_000)
+      await vi.advanceTimersByTimeAsync(300_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
 
       metrics.count('orders_created', 1)
       settleRetry?.({ kind: 'ok' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       // One interval, not another window.
-      await jest.advanceTimersByTimeAsync(10_000)
+      await vi.advanceTimersByTimeAsync(10_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(3)
     })
 
     it('keeps its own interval when the endpoint asks for less', async () => {
       const instance = createMockInstance({
-        _sendMetricsBatch: jest.fn((): Promise<SendMetricsBatchOutcome> =>
+        _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> =>
           Promise.resolve({ kind: 'retry-later', error: new Error('503'), retryAfterMs: 10 })
         ),
       })
       const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
       metrics.count('orders_created', 1)
-      await jest.advanceTimersByTimeAsync(10_000)
+      await vi.advanceTimersByTimeAsync(10_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(10_000)
+      await vi.advanceTimersByTimeAsync(10_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
     })
 
@@ -433,13 +433,13 @@ describe('PostHogMetrics', () => {
         { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 },
       ]
       const instance = createMockInstance({
-        _sendMetricsBatch: jest.fn((): Promise<SendMetricsBatchOutcome> =>
+        _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> =>
           Promise.resolve(outcomes.shift() ?? { kind: 'ok' })
         ),
       })
       const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
       metrics.count('orders_created', 1)
-      await jest.advanceTimersByTimeAsync(10_000)
+      await vi.advanceTimersByTimeAsync(10_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
 
       metrics.count('orders_created', 1)
@@ -453,20 +453,20 @@ describe('PostHogMetrics', () => {
         { kind: 'retry-later', error: new Error('503') },
       ]
       const instance = createMockInstance({
-        _sendMetricsBatch: jest.fn((): Promise<SendMetricsBatchOutcome> =>
+        _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> =>
           Promise.resolve(outcomes.shift() ?? { kind: 'ok' })
         ),
       })
       const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
       metrics.count('orders_created', 1)
-      await jest.advanceTimersByTimeAsync(10_000)
+      await vi.advanceTimersByTimeAsync(10_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(300_000)
+      await vi.advanceTimersByTimeAsync(300_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
 
       // Back on the plain interval, not another 300s.
-      await jest.advanceTimersByTimeAsync(10_000)
+      await vi.advanceTimersByTimeAsync(10_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(3)
     })
 

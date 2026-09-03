@@ -1170,7 +1170,7 @@ describe('PostHogLogs', () => {
       // The capture that lands while the send is in flight arms a timer at the
       // plain interval; the 429 then asks for far longer. The earlier timer must
       // not fire first, or the SDK sends inside the window it was told to skip.
-      mockInstance._sendLogsBatch = jest.fn(async () => {
+      mockInstance._sendLogsBatch = vi.fn(async () => {
         logs.captureLog({ body: 'arrived mid-flush' })
         return { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }
       })
@@ -1184,18 +1184,18 @@ describe('PostHogLogs', () => {
       )
       logs.captureLog({ body: 'first' })
 
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(6000)
+      await vi.advanceTimersByTimeAsync(6000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(300_000)
+      await vi.advanceTimersByTimeAsync(300_000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
     })
 
     it('does not let the size trigger send inside a Retry-After window', async () => {
-      mockInstance._sendLogsBatch = jest.fn(() =>
+      mockInstance._sendLogsBatch = vi.fn(() =>
         Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
       )
       const logs = new PostHogLogs(
@@ -1206,23 +1206,23 @@ describe('PostHogLogs', () => {
         immediateOnReady
       )
       logs.captureLog({ body: 'first' })
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
       // Enough records to trip the size trigger, well inside the window.
       logs.captureLog({ body: 'second' })
       logs.captureLog({ body: 'third' })
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(300_000)
+      await vi.advanceTimersByTimeAsync(300_000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
     })
 
     it('does not let onReconnect send inside a Retry-After window', async () => {
       // `online` fires on every network handover; it says nothing about the
       // rate-limit window the endpoint set.
-      mockInstance._sendLogsBatch = jest.fn(() =>
+      mockInstance._sendLogsBatch = vi.fn(() =>
         Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
       )
       const logs = new PostHogLogs(
@@ -1233,17 +1233,17 @@ describe('PostHogLogs', () => {
         immediateOnReady
       )
       logs.captureLog({ body: 'first' })
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
       logs.onReconnect()
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
     })
 
     it('flushes on reconnect once the Retry-After window has passed', async () => {
       const outcomes: any[] = [{ kind: 'retry-later', error: new Error('429'), retryAfterMs: 5000 }]
-      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest({ flushIntervalMs: 1000 }),
@@ -1252,18 +1252,18 @@ describe('PostHogLogs', () => {
         immediateOnReady
       )
       logs.captureLog({ body: 'first' })
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
       // Stop just short of the deadline, then cross it without letting the
       // re-armed timer fire — otherwise the timer satisfies the assertion and
       // the test says nothing about onReconnect.
-      await jest.advanceTimersByTimeAsync(4999)
+      await vi.advanceTimersByTimeAsync(4999)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
-      jest.setSystemTime(Date.now() + 2)
+      vi.setSystemTime(Date.now() + 2)
 
       logs.onReconnect()
-      await jest.advanceTimersByTimeAsync(1)
+      await vi.advanceTimersByTimeAsync(1)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
     })
 
@@ -1271,7 +1271,7 @@ describe('PostHogLogs', () => {
       // `flush()` is the lifecycle path (RN foreground/background, shutdown).
       // It leaves no timer behind, so the next capture is the one that arms
       // one — at the plain interval unless the window floors it.
-      mockInstance._sendLogsBatch = jest.fn(() =>
+      mockInstance._sendLogsBatch = vi.fn(() =>
         Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
       )
       const logs = new PostHogLogs(
@@ -1286,10 +1286,10 @@ describe('PostHogLogs', () => {
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
       logs.captureLog({ body: 'second' })
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(295_000)
+      await vi.advanceTimersByTimeAsync(295_000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
     })
 
@@ -1297,7 +1297,7 @@ describe('PostHogLogs', () => {
       // The endpoint just accepted a batch, so the wait it asked for earlier is
       // over — the gated paths must not stay blocked for the rest of it.
       const outcomes: any[] = [{ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }]
-      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest({ flushIntervalMs: 5000, maxBufferSize: 2 }),
@@ -1306,7 +1306,7 @@ describe('PostHogLogs', () => {
         immediateOnReady
       )
       logs.captureLog({ body: 'first' })
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
       await logs.flush()
@@ -1314,13 +1314,13 @@ describe('PostHogLogs', () => {
 
       logs.captureLog({ body: 'second' })
       logs.onReconnect()
-      await jest.advanceTimersByTimeAsync(1)
+      await vi.advanceTimersByTimeAsync(1)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
     })
 
     it('drops a Retry-After wait on reset', async () => {
       const outcomes: any[] = [{ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }]
-      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest({ flushIntervalMs: 1000 }),
@@ -1329,21 +1329,21 @@ describe('PostHogLogs', () => {
         immediateOnReady
       )
       logs.captureLog({ body: 'first' })
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
       // Asserted through a gated path: a plain capture would flush either way.
       logs.reset()
       logs.captureLog({ body: 'second' })
       logs.onReconnect()
-      await jest.advanceTimersByTimeAsync(1)
+      await vi.advanceTimersByTimeAsync(1)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
     })
 
     it('keeps its own backoff when the endpoint asks for less', async () => {
       // A proxy answering `Retry-After: 1` must not turn the retry into a
       // one-second hot loop against an endpoint already refusing traffic.
-      mockInstance._sendLogsBatch = jest.fn(() =>
+      mockInstance._sendLogsBatch = vi.fn(() =>
         Promise.resolve({ kind: 'retry-later', error: new Error('503'), retryAfterMs: 10 })
       )
       const logs = new PostHogLogs(
@@ -1354,13 +1354,13 @@ describe('PostHogLogs', () => {
         immediateOnReady
       )
       logs.captureLog({ body: 'first' })
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
     })
 
@@ -1372,7 +1372,7 @@ describe('PostHogLogs', () => {
       // endpoint that has already recovered.
       let settle: ((outcome: any) => void) | undefined
       let call = 0
-      mockInstance._sendLogsBatch = jest.fn(() => {
+      mockInstance._sendLogsBatch = vi.fn(() => {
         call++
         if (call === 1) {
           return Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
@@ -1389,19 +1389,19 @@ describe('PostHogLogs', () => {
         immediateOnReady
       )
       logs.captureLog({ body: 'first' })
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
       // The wait elapses and the retry goes out, but hangs.
-      await jest.advanceTimersByTimeAsync(300_000)
+      await vi.advanceTimersByTimeAsync(300_000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
 
       logs.captureLog({ body: 'second' })
       settle?.({ kind: 'ok' })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
       // One interval, not another window.
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
     })
 
@@ -1409,7 +1409,7 @@ describe('PostHogLogs', () => {
       // RN takes flush() on every app-state transition. If each refusal slid the
       // deadline forward, the window would never elapse and the gated paths —
       // the size trigger and onReconnect — would stay suppressed indefinitely.
-      mockInstance._sendLogsBatch = jest.fn(() =>
+      mockInstance._sendLogsBatch = vi.fn(() =>
         Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 30_000 })
       )
       const logs = new PostHogLogs(
@@ -1428,7 +1428,7 @@ describe('PostHogLogs', () => {
       // a window is timing-dependent, but it must fall outside one *sometimes*.
       let sawWindowClosed = false
       for (let i = 0; i < 12; i++) {
-        await jest.advanceTimersByTimeAsync(5000)
+        await vi.advanceTimersByTimeAsync(5000)
         // Sampled before the flush: a flush that finds the window closed opens
         // a fresh one, so sampling after it would always look open.
         if ((logs as any)._retryAfterRemainingMs() === 0) {
@@ -1442,7 +1442,7 @@ describe('PostHogLogs', () => {
 
     it('keeps flushing after a backward clock step', async () => {
       const outcomes: any[] = [{ kind: 'retry-later', error: new Error('429'), retryAfterMs: 60_000 }]
-      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest({ flushIntervalMs: 1000, maxBufferSize: 2 }),
@@ -1451,16 +1451,16 @@ describe('PostHogLogs', () => {
         immediateOnReady
       )
       logs.captureLog({ body: 'first' })
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
       const real = Date.now()
-      jest.spyOn(Date, 'now').mockImplementation(() => real - 3_600_000)
+      vi.spyOn(Date, 'now').mockImplementation(() => real - 3_600_000)
 
       // A gated path: suppressed for the size of the step without the guard.
       logs.captureLog({ body: 'second' })
       logs.onReconnect()
-      await jest.advanceTimersByTimeAsync(1)
+      await vi.advanceTimersByTimeAsync(1)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
     })
 
@@ -1471,7 +1471,7 @@ describe('PostHogLogs', () => {
         { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 },
         { kind: 'retry-later', error: new Error('503') },
       ]
-      mockInstance._sendLogsBatch = jest.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
       const logs = new PostHogLogs(
         mockInstance,
         resolveForTest({ flushIntervalMs: 1000 }),
@@ -1480,14 +1480,14 @@ describe('PostHogLogs', () => {
         immediateOnReady
       )
       logs.captureLog({ body: 'first' })
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(300_000)
+      await vi.advanceTimersByTimeAsync(300_000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(2)
 
       // Back on the plain backoff, not another 300s.
-      await jest.advanceTimersByTimeAsync(4000)
+      await vi.advanceTimersByTimeAsync(4000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
     })
 
@@ -1505,7 +1505,7 @@ describe('PostHogLogs', () => {
 
       for (let i = 0; i < 30; i++) {
         logs.captureLog({ body: `line ${i}` })
-        await jest.advanceTimersByTimeAsync(2000)
+        await vi.advanceTimersByTimeAsync(2000)
       }
 
       expect(mockInstance._sendLogsBatch).toHaveBeenCalled()

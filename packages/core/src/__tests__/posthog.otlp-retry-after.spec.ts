@@ -54,7 +54,7 @@ describe('OTLP Retry-After', () => {
     })
 
     const pending = client._sendTracesBatch({ resourceSpans: [] } as any)
-    await jest.advanceTimersByTimeAsync(60_000)
+    await vi.advanceTimersByTimeAsync(60_000)
 
     expect(await pending).toMatchObject({ kind: 'retry-later', retryAfterMs: 120_000 })
     expect(clientMocks.fetch).toHaveBeenCalledTimes(1)
@@ -74,7 +74,7 @@ describe('OTLP Retry-After', () => {
     })
 
     const pending = client._sendTracesBatch({ resourceSpans: [] } as any)
-    await jest.advanceTimersByTimeAsync(60_000)
+    await vi.advanceTimersByTimeAsync(60_000)
 
     expect((await pending).kind).toBe('retry-later')
     expect(clientMocks.fetch.mock.calls.length).toBeGreaterThan(1)

@@ -1307,12 +1307,12 @@ describe('PostHogTraces', () => {
 
       // One attempt, then a wait longer than the 30s exponential cap would give.
       while (mockInstance._sendTracesBatch.mock.calls.length < 1) {
-        await jest.advanceTimersByTimeAsync(1000)
+        await vi.advanceTimersByTimeAsync(1000)
       }
-      await jest.advanceTimersByTimeAsync(60_000)
+      await vi.advanceTimersByTimeAsync(60_000)
       expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(31_000)
+      await vi.advanceTimersByTimeAsync(31_000)
       expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
     })
 
@@ -1326,14 +1326,14 @@ describe('PostHogTraces', () => {
       traces.startSpan('held').end()
 
       while (mockInstance._sendTracesBatch.mock.calls.length < 1) {
-        await jest.advanceTimersByTimeAsync(1000)
+        await vi.advanceTimersByTimeAsync(1000)
       }
       // A 10ms Retry-After must not turn the retry loop into a hot loop: the
       // next attempt still waits out the queue's own backoff, not 10ms.
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(5000)
+      await vi.advanceTimersByTimeAsync(5000)
       expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
     })
 
@@ -1348,10 +1348,10 @@ describe('PostHogTraces', () => {
       const traces = createTraces({ flushIntervalMs: 1000 })
       traces.startSpan('first').end()
 
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
 
-      await jest.advanceTimersByTimeAsync(10_000)
+      await vi.advanceTimersByTimeAsync(10_000)
       expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
     })
 
@@ -1366,15 +1366,15 @@ describe('PostHogTraces', () => {
       const traces = createTraces({ flushIntervalMs: 1000, maxExportBatchSize: 1 })
       traces.startSpan('first').end()
 
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
 
       // The wait elapses, the retry lands a 400, and that ends the wait.
-      await jest.advanceTimersByTimeAsync(300_000)
+      await vi.advanceTimersByTimeAsync(300_000)
       expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
 
       traces.startSpan('second').end()
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(3)
     })
 
@@ -1388,7 +1388,7 @@ describe('PostHogTraces', () => {
       })
       const traces = createTraces({ flushIntervalMs: 1000, maxExportBatchSize: 1 })
       traces.startSpan('first').end()
-      await jest.advanceTimersByTimeAsync(200_000)
+      await vi.advanceTimersByTimeAsync(200_000)
 
       traces.startSpan('second').end()
       await traces.flush()
@@ -1398,7 +1398,7 @@ describe('PostHogTraces', () => {
       mockInstance._sendTracesBatch.mockResolvedValue({ kind: 'retry-later', error: new Error('down') })
       traces.startSpan('third').end()
       const before = mockInstance._sendTracesBatch.mock.calls.length
-      await jest.advanceTimersByTimeAsync(2000)
+      await vi.advanceTimersByTimeAsync(2000)
       expect(mockInstance._sendTracesBatch.mock.calls.length).toBeGreaterThan(before)
     })
 
@@ -1436,7 +1436,7 @@ describe('PostHogTraces', () => {
 
       for (let i = 0; i < 12; i++) {
         await traces.flush()
-        await jest.advanceTimersByTimeAsync(10_000)
+        await vi.advanceTimersByTimeAsync(10_000)
       }
 
       expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Dropping'))
@@ -1446,7 +1446,7 @@ describe('PostHogTraces', () => {
       // must retire — a deadline that slid forward on each refusal would keep
       // the window open forever and strand everything behind the head batch.
       for (let i = 0; i < 12; i++) {
-        await jest.advanceTimersByTimeAsync(310_000)
+        await vi.advanceTimersByTimeAsync(310_000)
         await traces.flush()
       }
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('failed 8 times in a row'))
@@ -1466,7 +1466,7 @@ describe('PostHogTraces', () => {
       traces.startSpan('first').end()
 
       for (let i = 0; i < 12; i++) {
-        await jest.advanceTimersByTimeAsync(61_000)
+        await vi.advanceTimersByTimeAsync(61_000)
       }
 
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('failed 8 times in a row'))
@@ -1486,7 +1486,7 @@ describe('PostHogTraces', () => {
       for (let i = 0; i < 60; i++) {
         traces.startSpan(`span-${i}`).end()
         await traces.flush()
-        await jest.advanceTimersByTimeAsync(5_000)
+        await vi.advanceTimersByTimeAsync(5_000)
       }
 
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('failed 8 times in a row'))
@@ -1501,7 +1501,7 @@ describe('PostHogTraces', () => {
 
       for (let i = 0; i < 12; i++) {
         await traces.flush()
-        await jest.advanceTimersByTimeAsync(10_000)
+        await vi.advanceTimersByTimeAsync(10_000)
       }
 
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Dropping'))
@@ -1521,13 +1521,13 @@ describe('PostHogTraces', () => {
       await traces.flush()
 
       // Step the clock back an hour and let simulated time run from there.
-      jest.setSystemTime(Date.now() - 3_600_000)
+      vi.setSystemTime(Date.now() - 3_600_000)
 
       // Asserted on the queue, not the drop warning: `_recordDrop` paces that
       // warning off the same clock and would suppress it here.
       for (let i = 0; i < 12; i++) {
         await traces.flush()
-        await jest.advanceTimersByTimeAsync(61_000)
+        await vi.advanceTimersByTimeAsync(61_000)
       }
       expect((traces as any)._queue).toHaveLength(0)
     })
@@ -1544,16 +1544,16 @@ describe('PostHogTraces', () => {
       )
       const traces = createTraces({ flushIntervalMs: 1000 })
       traces.startSpan('before-reset').end()
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
 
       traces.reset()
       traces.startSpan('after-reset').end()
 
       settle?.({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
-      await jest.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(0)
 
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
     })
 
@@ -1564,12 +1564,12 @@ describe('PostHogTraces', () => {
       mockInstance._sendTracesBatch.mockImplementation(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
       const traces = createTraces({ flushIntervalMs: 1000 })
       traces.startSpan('first').end()
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
 
       traces.reset()
       traces.startSpan('second').end()
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
     })
   })
