@@ -50,12 +50,17 @@ describe('traceparent', () => {
       expect(parseTraceparent(`00-${TRACE_ID}-${SPAN_ID}-01-`)).toBeUndefined()
     })
 
-    it('normalizes case and surrounding whitespace', () => {
-      expect(parseTraceparent(`  00-${TRACE_ID.toUpperCase()}-${SPAN_ID.toUpperCase()}-01 `)).toEqual({
+    it('trims surrounding whitespace', () => {
+      expect(parseTraceparent(`  00-${TRACE_ID}-${SPAN_ID}-01 `)).toEqual({
         traceId: TRACE_ID,
         spanId: SPAN_ID,
         flags: '01',
       })
+    })
+
+    it('rejects uppercase hex, which W3C requires a vendor to ignore', () => {
+      expect(parseTraceparent(`00-${TRACE_ID.toUpperCase()}-${SPAN_ID}-01`)).toBeUndefined()
+      expect(parseTraceparent(`00-${TRACE_ID}-${SPAN_ID.toUpperCase()}-01`)).toBeUndefined()
     })
 
     it.each([
@@ -138,10 +143,8 @@ describe('normalizeTraceparent', () => {
     expect(normalizeTraceparent(`01-${TRACE_ID}-${SPAN_ID}-01`)).toBe(`01-${TRACE_ID}-${SPAN_ID}-01`)
   })
 
-  it("canonicalises whitespace and case, and drops a higher version's trailing fields", () => {
-    expect(normalizeTraceparent(`  01-${TRACE_ID.toUpperCase()}-${SPAN_ID}-01-extra `)).toBe(
-      `01-${TRACE_ID}-${SPAN_ID}-01`
-    )
+  it("trims surrounding whitespace, and drops a higher version's trailing fields", () => {
+    expect(normalizeTraceparent(`  01-${TRACE_ID}-${SPAN_ID}-01-extra `)).toBe(`01-${TRACE_ID}-${SPAN_ID}-01`)
   })
 
   it.each([
@@ -149,6 +152,7 @@ describe('normalizeTraceparent', () => {
     ['the invalid ff version', `ff-${TRACE_ID}-${SPAN_ID}-01`],
     ['an all-zero trace id', `00-${'0'.repeat(32)}-${SPAN_ID}-01`],
     ['version 00 with trailing fields', `00-${TRACE_ID}-${SPAN_ID}-01-extra`],
+    ['an uppercase trace id', `00-${TRACE_ID.toUpperCase()}-${SPAN_ID}-01`],
     ['a non-string', ['a', 'b']],
   ])('rejects %s', (_name, value) => {
     expect(normalizeTraceparent(value)).toBeUndefined()

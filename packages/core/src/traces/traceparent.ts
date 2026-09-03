@@ -46,7 +46,10 @@ function matchTraceparent(value: unknown): TraceparentFields | undefined {
   if (typeof value !== 'string') {
     return undefined
   }
-  const match = TRACEPARENT_RE.exec(value.trim().toLowerCase())
+  // Only surrounding whitespace is forgiven. W3C spells every field lowercase hex
+  // and requires a vendor to ignore a `traceparent` whose ids are not, so folding
+  // the case here would continue a trace that a conformant peer restarts.
+  const match = TRACEPARENT_RE.exec(value.trim())
   if (!match) {
     return undefined
   }
