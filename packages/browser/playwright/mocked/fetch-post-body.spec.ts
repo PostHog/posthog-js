@@ -87,7 +87,10 @@ async function installHeaderlessResponseFetchWrapper(page: Page) {
         window.fetch = (url, init) => {
             const requestUrl = url instanceof Request ? url.url : url.toString()
             if (new URL(requestUrl, window.location.href).pathname === headerlessResponseUrl) {
-                return Promise.resolve({ status: 0, marker: 'headerless-response' } as unknown as Response)
+                const responseWithoutHeaders = Response.error()
+                Object.defineProperty(responseWithoutHeaders, 'headers', { value: undefined })
+                Reflect.set(window, '__headerlessResponse', responseWithoutHeaders)
+                return Promise.resolve(responseWithoutHeaders)
             }
             return nativeFetch(url, init)
         }
@@ -216,13 +219,13 @@ test.describe('fetch wrappers preserve downstream responses', () => {
                 return {
                     ok: true,
                     status: response.status,
-                    marker: (response as unknown as { marker: string }).marker,
+                    sameResponse: response === Reflect.get(window, '__headerlessResponse'),
                 }
             } catch (error) {
                 return { ok: false, message: (error as Error).message }
             }
         }, HEADERLESS_RESPONSE_URL)
 
-        expect(result).toEqual({ ok: true, status: 0, marker: 'headerless-response' })
+        expect(result).toEqual({ ok: true, status: 0, sameResponse: true })
     })
 })

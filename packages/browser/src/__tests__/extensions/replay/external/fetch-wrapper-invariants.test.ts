@@ -196,7 +196,8 @@ describe('fetch wrapper', () => {
 
         // Regression test for https://github.com/PostHog/posthog-js/issues/1459
         it('returns a downstream response without headers', async () => {
-            const responseWithoutHeaders = { status: 0 } as Response
+            const responseWithoutHeaders = Response.error()
+            Object.defineProperty(responseWithoutHeaders, 'headers', { value: undefined })
             const { wrappedFetch, cleanup } = setupWrappedFetch(async () => responseWithoutHeaders)
 
             try {
