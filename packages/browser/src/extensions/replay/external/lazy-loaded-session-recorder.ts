@@ -1523,7 +1523,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // flush below, or they are cleared unshipped.
         this._stopRecordingProducers()
 
-        if (this._stopAfterCompressionQueueDrains()) {
+        // a rotation's synchronous start() would invalidate a deferred drain and destroy
+        // the old session's unflushed tail, so drain synchronously instead
+        if (this._isRestartingForSessionIdChange) {
+            this._drainCompressionQueueSync()
+        } else if (this._stopAfterCompressionQueueDrains()) {
             return
         }
 
