@@ -1,5 +1,30 @@
 # posthog-js
 
+## 1.426.2
+
+### Patch Changes
+
+- [#4763](https://github.com/PostHog/posthog-js/pull/4763) [`7b30da7`](https://github.com/PostHog/posthog-js/commit/7b30da7009fdb7608b8edfb569ae5a949ba7c5be) Thanks [@marandaneto](https://github.com/marandaneto)! - Ship the package ESM entrypoint with an `.mjs` extension so Node recognizes its module format, while retaining the existing `.js` bundle for backwards compatibility.
+  (2026-09-03)
+
+- [#4759](https://github.com/PostHog/posthog-js/pull/4759) [`c475070`](https://github.com/PostHog/posthog-js/commit/c47507068cd8156334afb3c48758a1b92d590f99) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve explicitly false feature flag values supplied through bootstrap configuration.
+  (2026-09-03)
+
+- [#4767](https://github.com/PostHog/posthog-js/pull/4767) [`9d683ca`](https://github.com/PostHog/posthog-js/commit/9d683ca1764c1ecb01fe15a5bacac3d8982f4273) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve the anonymous distinct ID used for feature flag persistence when `identify()` queues a reload behind an in-flight flags request.
+  (2026-09-03)
+
+- [#4766](https://github.com/PostHog/posthog-js/pull/4766) [`ed4ba23`](https://github.com/PostHog/posthog-js/commit/ed4ba23f74edd8a1600756b9a70fc9ebe9b49f9f) Thanks [@marandaneto](https://github.com/marandaneto)! - Limit persisted initial URLs by their encoded cookie size to prevent long URLs and referrers from exceeding browser cookie limits.
+  (2026-09-03)
+
+- [#4762](https://github.com/PostHog/posthog-js/pull/4762) [`fbf10d4`](https://github.com/PostHog/posthog-js/commit/fbf10d43ca97e29eab060af00aed30dce876c2e5) Thanks [@marandaneto](https://github.com/marandaneto)! - Merge event-specific `$groups` with groups registered on the browser client.
+  (2026-09-03)
+
+- [#4732](https://github.com/PostHog/posthog-js/pull/4732) [`f00e24d`](https://github.com/PostHog/posthog-js/commit/f00e24d0109c88f667b6e477edae31a04dd18ac6) Thanks [@posthog](https://github.com/apps/posthog)! - Polyfill `Array.prototype.findLast` in the web vitals attribution bundles so they keep capturing on browsers older than Chrome 97 and Safari 15.4
+  (2026-09-03)
+- Updated dependencies [[`c475070`](https://github.com/PostHog/posthog-js/commit/c47507068cd8156334afb3c48758a1b92d590f99), [`f00e24d`](https://github.com/PostHog/posthog-js/commit/f00e24d0109c88f667b6e477edae31a04dd18ac6)]:
+  - @posthog/core@1.50.4
+  - @posthog/browser-common@0.7.2
+
 ## 1.426.1
 
 ### Patch Changes
