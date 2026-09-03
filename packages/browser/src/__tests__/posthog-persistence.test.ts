@@ -119,6 +119,7 @@ describe('persistence', () => {
         library?.clear()
         document.cookie = ''
         referrer = ''
+        vi.restoreAllMocks()
     })
 
     const persistenceModes: string[] = ['cookie', 'localStorage', 'localStorage+cookie']
@@ -663,8 +664,7 @@ describe('persistence', () => {
         'should preserve initial person URL length with %s persistence',
         (persistenceMode) => {
             const longUrl = `https://www.example.com/?${'&'.repeat(2000)}`
-            // @ts-expect-error ok to set global in test
-            globals.location = { href: longUrl }
+            vi.spyOn(globals, 'location', 'get').mockReturnValue({ href: longUrl } as Location)
             referrer = longUrl
             library = new PostHogPersistence(makePostHogConfig('test', persistenceMode))
 
@@ -762,8 +762,7 @@ describe('persistence', () => {
 
         it('should limit initial person URLs by their encoded cookie size', () => {
             const longUrl = `https://www.example.com/?${'&'.repeat(2000)}`
-            // @ts-expect-error ok to set global in test
-            globals.location = { href: longUrl }
+            vi.spyOn(globals, 'location', 'get').mockReturnValue({ href: longUrl } as Location)
             referrer = longUrl
             library = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
             library.register({
