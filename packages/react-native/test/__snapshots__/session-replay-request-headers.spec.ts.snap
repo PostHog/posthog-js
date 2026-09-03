@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`PostHog RN session replay request headers snapshots the complete legacy native start envelope 1`] = `
+exports[`PostHog RN session replay request headers > snapshots the complete legacy native start envelope 1`] = `
 {
   "cachedConfig": {},
   "pluginConfig": {
@@ -34,7 +34,7 @@ exports[`PostHog RN session replay request headers snapshots the complete legacy
 }
 `;
 
-exports[`PostHog RN session replay request headers snapshots the complete native setup envelope used by session replay 1`] = `
+exports[`PostHog RN session replay request headers > snapshots the complete native setup envelope used by session replay 1`] = `
 {
   "pluginConfig": {
     "errorTracking": {

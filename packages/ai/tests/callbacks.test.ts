@@ -5,7 +5,7 @@ import type { ChatGeneration } from '@langchain/core/outputs'
 import { version } from '../package.json'
 
 const mockPostHogClient = {
-  capture: jest.fn(),
+  capture: vi.fn(),
 } as unknown as PostHog
 
 describe('LangChainCallbackHandler', () => {
@@ -15,7 +15,7 @@ describe('LangChainCallbackHandler', () => {
     handler = new LangChainCallbackHandler({
       client: mockPostHogClient,
     })
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   it('should include $ai_lib and $ai_lib_version in captured events', async () => {
@@ -65,7 +65,7 @@ describe('LangChainCallbackHandler', () => {
 
     // Verify capture was called
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     // Check $ai_lib and $ai_lib_version
     expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
@@ -81,7 +81,7 @@ describe('LangChainCallbackHandler', () => {
   })
 
   it('does not throw when generation capture fails', () => {
-    const capture = mockPostHogClient.capture as jest.Mock
+    const capture = mockPostHogClient.capture as vi.Mock
     capture.mockImplementationOnce(() => {
       throw new Error('telemetry failed')
     })
@@ -110,7 +110,7 @@ describe('LangChainCallbackHandler', () => {
   })
 
   it('does not throw when trace capture fails', () => {
-    const capture = mockPostHogClient.capture as jest.Mock
+    const capture = mockPostHogClient.capture as vi.Mock
     capture.mockImplementationOnce(() => {
       throw new Error('telemetry failed')
     })
@@ -372,7 +372,7 @@ describe('LangChainCallbackHandler', () => {
       }
       handler.handleLLMEnd(llmResult, runId)
 
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
       expect(captureCall[0].properties['$ai_input_tokens']).toBe(expectedInputTokens)
       expect(captureCall[0].properties['$ai_output_tokens']).toBe(expectedOutputTokens)
       expect(captureCall[0].properties['$ai_stop_reason']).toBe(expectedStopReason)
@@ -381,9 +381,9 @@ describe('LangChainCallbackHandler', () => {
 
   it('routes generation events through captureAi when the client opted into the AI lane', async () => {
     const aiLaneClient = {
-      capture: jest.fn(),
+      capture: vi.fn(),
       enableFullAiCapture: true,
-      captureAi: jest.fn(),
+      captureAi: vi.fn(),
     } as unknown as PostHog
     const aiLaneHandler = new LangChainCallbackHandler({
       client: aiLaneClient,
@@ -443,8 +443,8 @@ describe('LangChainCallbackHandler', () => {
 
   it('strips wrapper-sanitized state when privacy mode wins over the full-capture flag', () => {
     const privacyModeClient = {
-      capture: jest.fn(),
-      captureAi: jest.fn(),
+      capture: vi.fn(),
+      captureAi: vi.fn(),
       enableFullAiCapture: true,
       privacy_mode: true,
     } as unknown as PostHog
@@ -515,9 +515,9 @@ describe('LangChainCallbackHandler', () => {
 
   it('should handle LLM start with tool calls correctly', () => {
     // Spy on private methods
-    const logDebugEventSpy = jest.spyOn(handler as any, '_logDebugEvent')
-    const setParentOfRunSpy = jest.spyOn(handler as any, '_setParentOfRun')
-    const setLLMMetadataSpy = jest.spyOn(handler as any, '_setLLMMetadata')
+    const logDebugEventSpy = vi.spyOn(handler as any, '_logDebugEvent')
+    const setParentOfRunSpy = vi.spyOn(handler as any, '_setParentOfRun')
+    const setLLMMetadataSpy = vi.spyOn(handler as any, '_setLLMMetadata')
 
     const serialized = {
       lc: 1,
@@ -603,7 +603,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should NOT be reduced for OpenAI: 150 (no subtraction)
@@ -657,7 +657,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should NOT be reduced for OpenAI: 80 (no subtraction)
@@ -708,7 +708,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should remain unchanged at 100
@@ -760,7 +760,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should remain 0 (no subtraction because input_tokens is falsy)
@@ -805,7 +805,7 @@ describe('LangChainCallbackHandler', () => {
       runId
     )
 
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(21)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(9)
   })
@@ -849,7 +849,7 @@ describe('LangChainCallbackHandler', () => {
       runId
     )
 
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(21)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(9)
   })
@@ -888,7 +888,7 @@ describe('LangChainCallbackHandler', () => {
       runId
     )
 
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(21)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(9)
   })
@@ -932,7 +932,7 @@ describe('LangChainCallbackHandler', () => {
       runId
     )
 
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(20)
   })
@@ -982,7 +982,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should be reduced for Anthropic: 1200 - 800 = 400
@@ -1035,7 +1035,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Should subtract because model name contains "anthropic": 500 - 200 = 300
@@ -1088,7 +1088,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Should be max(100 - 150, 0) = 0
@@ -1140,7 +1140,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should be reduced for Anthropic: 1000 - 800 = 200
@@ -1197,7 +1197,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should be reduced for Anthropic: 2000 - 800 - 500 = 700
@@ -1256,7 +1256,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(18)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
@@ -1314,7 +1314,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(18)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
@@ -1372,7 +1372,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(18)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
@@ -1433,7 +1433,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(18)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
@@ -1496,7 +1496,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(18)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
@@ -1528,7 +1528,7 @@ describe('LangChainCallbackHandler', () => {
       handler.handleLLMEnd({ generations }, runId)
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      return (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      return (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
     }
 
     it('falls back to Bedrock invocation metrics when raw usage is empty', () => {
@@ -1802,7 +1802,7 @@ describe('LangChainCallbackHandler', () => {
     )
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(18)
     expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(aggregate)
     expect(captureCall[0].properties['$ai_cache_creation_5m_input_tokens']).toBe(expected5m)
@@ -1853,7 +1853,7 @@ describe('LangChainCallbackHandler', () => {
     handler.handleLLMEnd(llmResult, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
     expect(captureCall[0].event).toBe('$ai_generation')
     // Input tokens should NOT be reduced for OpenAI
@@ -1866,7 +1866,7 @@ describe('LangChainCallbackHandler', () => {
 describe('LangChainCallbackHandler span naming', () => {
   it('names a tool span from runName rather than the serialized class', () => {
     const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
-    jest.clearAllMocks()
+    vi.clearAllMocks()
 
     const serialized = {
       lc: 1,
@@ -1880,7 +1880,7 @@ describe('LangChainCallbackHandler span naming', () => {
     handler.handleToolStart(serialized, '{"city":"Paris"}', runId, 'parent_run', [], {}, 'get_weather')
     handler.handleToolEnd('sunny', runId, 'parent_run')
 
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].event).toBe('$ai_span')
     expect(captureCall[0].properties['$ai_span_name']).toBe('get_weather')
   })
@@ -1889,7 +1889,7 @@ describe('LangChainCallbackHandler span naming', () => {
 describe('LangChainCallbackHandler trace/span state sanitization', () => {
   it('redacts base64 data URLs from $ai_input_state and $ai_output_state', () => {
     const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
-    jest.clearAllMocks()
+    vi.clearAllMocks()
 
     const dataUrl = 'data:image/jpeg;base64,' + 'A'.repeat(2000)
     const serialized = {
@@ -1917,7 +1917,7 @@ describe('LangChainCallbackHandler trace/span state sanitization', () => {
     handler.handleChainEnd({ echoed: dataUrl, parsed: { title: 'ok' } }, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].event).toBe('$ai_trace')
 
     const inputState = JSON.stringify(captureCall[0].properties['$ai_input_state'])
@@ -1933,7 +1933,7 @@ describe('LangChainCallbackHandler trace/span state sanitization', () => {
 
   it('preserves base64 data URLs in a $ai_span input/output state when full AI capture is enabled', () => {
     const fullCaptureClient = {
-      capture: jest.fn(),
+      capture: vi.fn(),
       enableFullAiCapture: true,
     } as unknown as PostHog
     const handler = new LangChainCallbackHandler({ client: fullCaptureClient })
@@ -1966,7 +1966,7 @@ describe('LangChainCallbackHandler trace/span state sanitization', () => {
     handler.handleChainEnd({ echoed: dataUrl, parsed: { title: 'ok' } }, runId, parentRunId)
 
     expect(fullCaptureClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (fullCaptureClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (fullCaptureClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].event).toBe('$ai_span')
 
     const inputState = JSON.stringify(captureCall[0].properties['$ai_input_state'])
@@ -1994,7 +1994,7 @@ describe('LangChainCallbackHandler LangGraph interrupts', () => {
   }
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   // Mirror LangGraph's error hierarchy: control-flow exceptions expose `is_bubble_up` as a
@@ -2027,7 +2027,7 @@ describe('LangChainCallbackHandler LangGraph interrupts', () => {
     handler.handleChainError(interrupt, runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0]).toMatchObject({
       event: '$ai_trace',
       properties: {
@@ -2051,7 +2051,7 @@ describe('LangChainCallbackHandler LangGraph interrupts', () => {
     handler.handleToolError(interrupt, runId, 'parent-run')
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0]).toMatchObject({
       event: '$ai_span',
       properties: {
@@ -2074,7 +2074,7 @@ describe('LangChainCallbackHandler LangGraph interrupts', () => {
     handler.handleChainError(new FakeGraphInterrupt('NodeInterrupt'), runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties).not.toHaveProperty('$ai_error')
     expect(captureCall[0].properties).not.toHaveProperty('$ai_is_error')
   })
@@ -2087,7 +2087,7 @@ describe('LangChainCallbackHandler LangGraph interrupts', () => {
     handler.handleChainError(new FakeGraphBubbleUp('ParentCommand'), runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties).not.toHaveProperty('$ai_error')
     expect(captureCall[0].properties).not.toHaveProperty('$ai_is_error')
     expect(captureCall[0].properties).not.toHaveProperty('$ai_output_state')
@@ -2101,7 +2101,7 @@ describe('LangChainCallbackHandler LangGraph interrupts', () => {
     handler.handleChainError(new Error('model invocation failed'), runId)
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
     expect(captureCall[0].properties['$ai_is_error']).toBe(true)
     expect(captureCall[0].properties['$ai_error']).toContain('model invocation failed')
     expect(captureCall[0].properties).not.toHaveProperty('$ai_output_state')

@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals'
+import { describe, expect, it } from 'vitest'
 import { SurveySchedule } from '../types'
 import { canSurveyActivateRepeatedly, doesSurveyActivateByEvent } from './activation'
 

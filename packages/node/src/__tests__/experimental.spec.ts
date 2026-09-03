@@ -2,11 +2,11 @@ const deprecationWarning =
   "[PostHog] `posthog-node/experimental` is deprecated. Use `import type { FlagDefinitionCacheData, FlagDefinitionCacheProvider } from 'posthog-node'` instead."
 
 describe('experimental entrypoint', () => {
-  let warnSpy: jest.SpyInstance
+  let warnSpy: vi.SpyInstance
 
   beforeEach(() => {
-    jest.resetModules()
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+    vi.resetModules()
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation()
   })
 
   afterEach(() => {
