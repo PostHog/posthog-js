@@ -3,6 +3,7 @@ import type { SpanInit } from './span'
 import type { SpanRecord } from './types'
 import type { Logger } from '../types'
 import { createMockLogger } from '@/testing'
+import { MAX_JSON_SAFE_VALUE_ITEMS } from '../utils/json-utils'
 
 const TRACE_ID = '4bf92f3577b34da6a3ce929d0e0e4736'
 const SPAN_ID = '00f067aa0ba902b7'
@@ -550,6 +551,78 @@ describe('PostHogSpan', () => {
 
       expect(ended[0].status?.message).toBe('abcd')
       expect(ended[0].events[0].attributes?.['exception.message']).toBe('abcd')
+    })
+
+    it('replaces a back-reference with the marker rather than the value itself', () => {
+      // Handing the raw ancestor back left it inside a copied parent, where the
+      // encoder's own cycle detection no longer recognised it and walked one
+      // more level of its strings at full length.
+      const cyclic: any = { body: 'abcdefgh' }
+      cyclic.self = cyclic
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('payload', cyclic)
+      span.end()
+
+      expect(ended[0].attributes.payload).toEqual({ body: 'abcd', self: '[Circular]' })
+    })
+
+    it('still bounds an array whose accessor past the encoder cap throws', () => {
+      // `slice()` read the whole array to copy it, so one throwing accessor
+      // beyond the encoder's cap cost every item in range its bound.
+      const rows: unknown[] = ['abcdefgh']
+      for (let index = 1; index < MAX_JSON_SAFE_VALUE_ITEMS + 200; index++) {
+        rows.push('x')
+      }
+      Object.defineProperty(rows, MAX_JSON_SAFE_VALUE_ITEMS + 100, {
+        get: () => {
+          throw new Error('lazy relation')
+        },
+        enumerable: true,
+        configurable: true,
+      })
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('rows', rows as any)
+      span.end()
+
+      expect((ended[0].attributes.rows as unknown[])[0]).toBe('abcd')
+    })
+
+    it('stops reading keys where the encoder stops emitting them', () => {
+      // Every key was read even though the encoder emits at most the cap, so a
+      // wide object charged `setAttribute` for getters that never ship.
+      let reads = 0
+      const wide: Record<string, unknown> = {}
+      for (let index = 0; index < MAX_JSON_SAFE_VALUE_ITEMS * 2; index++) {
+        Object.defineProperty(wide, `k${index}`, {
+          get: () => {
+            reads++
+            return 'v'
+          },
+          enumerable: true,
+          configurable: true,
+        })
+      }
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('payload', wide)
+      span.end()
+
+      expect(reads).toBe(MAX_JSON_SAFE_VALUE_ITEMS)
+    })
+
+    it('copies a nested value the caller goes on to mutate', () => {
+      // A value that needed no truncation was attached as it came, so the span
+      // held caller-owned state and shipped whatever it was changed to.
+      const nested = { body: 'ok' }
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('payload', { nested })
+      nested.body = 'abcdefgh'
+      span.end()
+
+      expect(ended[0].attributes.payload).toEqual({ nested: { body: 'ok' } })
     })
 
     it('bounds an SDK-attached value, which is exempt from the count cap only', () => {

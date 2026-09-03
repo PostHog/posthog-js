@@ -5,6 +5,7 @@ import { formatTraceparent, normalizeTraceparent, sanitizeTracestate, TRACE_FLAG
 import { assignUserAttributes, clampEndTime, resolveSuppliedTime, sanitizeName } from './sanitize'
 import { isArray, isError, isNullish } from '../utils'
 import {
+  CIRCULAR_VALUE,
   MAX_JSON_SAFE_VALUE_DEPTH,
   MAX_JSON_SAFE_VALUE_ITEMS,
   MAX_JSON_SAFE_VALUE_NODES,
@@ -570,7 +571,17 @@ function truncateValue(
   if (value === null || typeof value !== 'object') {
     return value
   }
-  if (state.remainingNodes <= 0 || depth >= MAX_JSON_SAFE_VALUE_DEPTH || state.ancestors.has(value)) {
+  if (state.ancestors.has(value)) {
+    // The marker the encoder would produce, not the value itself. Handing the
+    // raw ancestor back puts it inside a *copied* parent, where the encoder's
+    // own cycle detection no longer recognises it and walks one more level of
+    // its strings at full length.
+    return CIRCULAR_VALUE
+  }
+  // Unlike a cycle, these two are bounded by the encoder as well: it stops at
+  // the same depth and charges every value, strings included, so its budget is
+  // spent no later than this one's.
+  if (state.remainingNodes <= 0 || depth >= MAX_JSON_SAFE_VALUE_DEPTH) {
     return value
   }
   state.remainingNodes--
@@ -586,37 +597,49 @@ function truncateValue(
       // self-describing, putting the internals of a redacted value on the wire.
       return isNullish(resolved.value) ? value : truncateValue(resolved.value, maxLength, state, depth + 1)
     }
-    let changed = false
     if (isArray(value)) {
       // Only the items the encoder will emit are walked; it stops at the same
       // cap, so bounding the rest is work spent on values that never ship.
       const walked = Math.min(value.length, MAX_JSON_SAFE_VALUE_ITEMS)
-      let boundedItems: SpanAttributeValue[] | undefined
+      // Accumulated rather than copied from the value: `slice()` reads every
+      // element, accessors past the cap included, and one of those throwing
+      // would reach the outer catch and cost the whole array its bound.
+      const boundedItems: SpanAttributeValue[] = []
       for (let index = 0; index < walked; index++) {
-        const item = value[index]
-        const boundedItem = truncateValue(item, maxLength, state, depth + 1)
-        if (boundedItem !== item) {
-          // Copied lazily, so an array that needed nothing allocates nothing.
-          boundedItems = boundedItems ?? value.slice()
-          boundedItems[index] = boundedItem
+        try {
+          boundedItems.push(truncateValue(value[index], maxLength, state, depth + 1))
+        } catch {
+          // A throwing accessor costs its own item, as it does in the encoder.
+          boundedItems.push(UNSERIALIZABLE_VALUE)
         }
       }
-      return boundedItems ?? value
+      // Carried so the encoder still marks what it cut.
+      if (value.length > walked) {
+        boundedItems.length = value.length
+      }
+      return boundedItems
     }
     const bounded: SpanAttributes = {}
+    // Counted the way the encoder counts, so the walk stops where its output
+    // does: a key it skips costs no slot, and reading past the last one it can
+    // emit is getter work on values that never ship.
+    let emittable = 0
     for (const key of Object.keys(value)) {
+      if (emittable >= MAX_JSON_SAFE_VALUE_ITEMS) {
+        break
+      }
       let boundedItem: SpanAttributeValue
       try {
         // Read once: re-reading to compare would run a getter a second time.
-        const item = (value as SpanAttributes)[key]
-        boundedItem = truncateValue(item, maxLength, state, depth + 1)
-        changed = changed || boundedItem !== item
+        boundedItem = truncateValue((value as SpanAttributes)[key], maxLength, state, depth + 1)
       } catch {
         // A throwing accessor costs its own key. Reaching the walk's own catch
         // would abandon the whole value unbounded, which is how a lazy ORM
         // relation next to a large field puts that field on the wire whole.
         boundedItem = UNSERIALIZABLE_VALUE
-        changed = true
+      }
+      if (key && !isNullish(boundedItem)) {
+        emittable++
       }
       // defineProperty, not assignment: a nested `__proto__` key would otherwise
       // swap the copy's prototype and vanish.
@@ -627,7 +650,7 @@ function truncateValue(
         configurable: true,
       })
     }
-    return changed ? bounded : value
+    return bounded
   } catch {
     // Whatever is left — a hostile `Object.keys`, a `slice` that throws — costs
     // this value its bound rather than the span. Per-key reads are guarded

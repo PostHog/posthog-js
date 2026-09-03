@@ -662,7 +662,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (!this._traces) {
       this._traces = new PostHogTraces(
         this,
-        resolveTracesConfig(this.options.traces, this.hostResourceAttributes()),
+        resolveTracesConfig(this.options.traces, this.hostResourceAttributes(), this._logger),
         this._logger,
         () => this._tracingContext(),
         this._spanContextManager,

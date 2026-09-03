@@ -1,3 +1,4 @@
+import { createMockLogger } from '@posthog/core/testing'
 import { resolveTracesConfig } from '../traces-defaults'
 
 describe('resolveTracesConfig', () => {
@@ -164,6 +165,23 @@ describe('resourceAttributes guarding', () => {
     const resolved = resolveTracesConfig({ beforeSpanSend: ['not a function', scrub] as never })
 
     expect(resolved.beforeSpanSend).toEqual([scrub])
+  })
+
+  it('warns about a dropped hook, since the redaction it was configured for is gone', () => {
+    const logger = createMockLogger()
+    const scrub = (span: any): any => span
+
+    resolveTracesConfig({ beforeSpanSend: ['not a function', scrub] as never }, undefined, logger)
+
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('ignoring 1 of 2 entries'))
+  })
+
+  it('stays quiet when every hook is callable', () => {
+    const logger = createMockLogger()
+
+    resolveTracesConfig({ beforeSpanSend: [(span: any): any => span] }, undefined, logger)
+
+    expect(logger.warn).not.toHaveBeenCalled()
   })
 
   it('resolves to no hooks when beforeSpanSend is the wrong type entirely', () => {

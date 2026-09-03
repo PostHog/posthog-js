@@ -1,5 +1,5 @@
 import { assignUserAttributes } from '@posthog/core'
-import type { BeforeSpanSendFn, ResolvedTracesConfig, TracesConfig } from '@posthog/core'
+import type { BeforeSpanSendFn, Logger, ResolvedTracesConfig, TracesConfig } from '@posthog/core'
 
 // OpenTelemetry's BatchSpanProcessor defaults, which sit comfortably under the
 // server's 2 MB body cap.
@@ -66,12 +66,25 @@ function withUsableIdentityKeys(attributes: TracesConfig['resourceAttributes']):
  * Keeps only the callable hooks. Anything else is dropped rather than called: an
  * untyped caller passing the wrong shape would otherwise have every span dropped
  * by a hook that throws, leaving tracing silently off.
+ *
+ * Dropping one is warned about rather than thrown on. `beforeSpanSend` is where
+ * redaction lives, so a configuration that silently filters nothing ships the
+ * values it was meant to remove — but a client constructor that throws takes the
+ * application down with it, which is the worse of the two.
  */
-function resolveBeforeSpanSend(beforeSpanSend: TracesConfig['beforeSpanSend']): BeforeSpanSendFn[] {
+function resolveBeforeSpanSend(beforeSpanSend: TracesConfig['beforeSpanSend'], logger?: Logger): BeforeSpanSendFn[] {
   if (!beforeSpanSend) {
     return []
   }
-  return [beforeSpanSend].flat().filter((hook): hook is BeforeSpanSendFn => typeof hook === 'function')
+  const supplied = [beforeSpanSend].flat()
+  const hooks = supplied.filter((hook): hook is BeforeSpanSendFn => typeof hook === 'function')
+  if (hooks.length !== supplied.length) {
+    logger?.warn(
+      `beforeSpanSend: ignoring ${supplied.length - hooks.length} of ${supplied.length} entries that are not functions. ` +
+        'Spans export without them, so whatever they were redacting is not redacted.'
+    )
+  }
+  return hooks
 }
 
 /**
@@ -82,7 +95,8 @@ function resolveBeforeSpanSend(beforeSpanSend: TracesConfig['beforeSpanSend']): 
  */
 export function resolveTracesConfig(
   config: TracesConfig | undefined,
-  hostResourceAttributes?: Record<string, string>
+  hostResourceAttributes?: Record<string, string>,
+  logger?: Logger
 ): ResolvedTracesConfig {
   // Copied key by key rather than spread: a throwing accessor on a user-supplied
   // attribute would otherwise escape the first `startSpan`.
@@ -96,7 +110,7 @@ export function resolveTracesConfig(
     serviceVersion: (resourceAttributes?.['service.version'] as string | undefined) ?? config?.serviceVersion,
     environment: (resourceAttributes?.['deployment.environment'] as string | undefined) ?? config?.environment,
     resourceAttributes,
-    beforeSpanSend: resolveBeforeSpanSend(config?.beforeSpanSend),
+    beforeSpanSend: resolveBeforeSpanSend(config?.beforeSpanSend, logger),
     maxAttributesPerSpan: positiveInteger(config?.maxAttributesPerSpan, DEFAULT_MAX_ATTRIBUTES_PER_SPAN),
     maxEventsPerSpan: positiveInteger(config?.maxEventsPerSpan, DEFAULT_MAX_EVENTS_PER_SPAN),
     maxAttributeValueLength: positiveInteger(config?.maxAttributeValueLength, DEFAULT_MAX_ATTRIBUTE_VALUE_LENGTH),
