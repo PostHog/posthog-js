@@ -922,7 +922,6 @@ export function is2DCanvasBlank(canvas: HTMLCanvasElement): boolean {
   // get chunks of the canvas and check if it is blank
   for (let x = 0; x < canvas.width; x += chunkSize) {
     for (let y = 0; y < canvas.height; y += chunkSize) {
-      // oxlint-disable-next-line typescript/unbound-method
       const getImageData = ctx.getImageData as PatchedGetImageData;
       const originalGetImageData =
         ORIGINAL_ATTRIBUTE_NAME in getImageData
@@ -933,7 +932,6 @@ export function is2DCanvasBlank(canvas: HTMLCanvasElement): boolean {
       // even if we can already tell from the first chunk(s) that
       // the canvas isn't blank
       const pixelBuffer = new Uint32Array(
-        // oxlint-disable-next-line typescript/no-unsafe-argument, typescript/no-unsafe-member-access
         originalGetImageData.call(
           ctx,
           x,
@@ -989,7 +987,7 @@ export function getInputType(element: HTMLElement): Lowercase<string> | null {
     return element.hasAttribute('data-rr-is-password')
       ? 'password'
       : type
-      ? // oxlint-disable-next-line typescript/no-unnecessary-type-assertion
+      ?
         toLowerCase(type)
       : null;
   } catch {

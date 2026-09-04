@@ -204,7 +204,6 @@ export class MediaManager {
       }
     } catch (error) {
       this.warn(
-        // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/restrict-template-expressions
         `Failed to replay media interactions: ${error.message || error}`,
       );
     }

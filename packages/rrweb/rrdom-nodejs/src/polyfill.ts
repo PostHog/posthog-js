@@ -8,7 +8,6 @@ import { RRDocument } from './document-nodejs';
  */
 export function polyfillPerformance() {
   if (typeof window !== 'undefined' || 'performance' in global) return;
-  // oxlint-disable-next-line typescript/no-unsafe-assignment, typescript/no-unsafe-member-access, typescript/no-var-requires
   const performance = require('perf_hooks').performance;
   ((global as Window & typeof globalThis).performance as unknown) = performance;
 }

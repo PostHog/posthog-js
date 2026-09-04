@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* oxlint-disable no-undef */
 /**
  * PostHog Node.js library example
  *

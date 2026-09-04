@@ -39,6 +39,5 @@ function render(result: Record<string, unknown>): void {
 }
 
 main().catch((err) => {
-  // oxlint-disable-next-line no-console
   console.error('OpenFeature example failed:', err)
 })

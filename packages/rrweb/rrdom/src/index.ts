@@ -59,11 +59,8 @@ export class RRDocument extends BaseRRDocument {
   }
 
   createDocument(
-    // oxlint-disable-next-line typescript/no-unused-vars
     _namespace: string | null,
-    // oxlint-disable-next-line typescript/no-unused-vars
     _qualifiedName: string | null,
-    // oxlint-disable-next-line typescript/no-unused-vars
     _doctype?: DocumentType | null,
   ) {
     return new RRDocument();
@@ -274,7 +271,6 @@ export function buildFromNode(
     case NodeType.DOCUMENT_FRAGMENT_NODE: {
       const shadowHost = parentRRNode as IRRElement;
       if (!attachShadowRootSafely(shadowHost)) return null;
-      // oxlint-disable-next-line typescript/no-non-null-assertion
       rrNode = shadowHost.shadowRoot!;
       break;
     }
@@ -334,7 +330,6 @@ export function buildFromDom(
         node.nodeType === NodeType.ELEMENT_NODE &&
         (node as HTMLElement).shadowRoot
       )
-        // oxlint-disable-next-line typescript/no-non-null-assertion
         walk((node as HTMLElement).shadowRoot!, rrNode);
       node.childNodes.forEach((childNode) => walk(childNode, rrNode));
     }

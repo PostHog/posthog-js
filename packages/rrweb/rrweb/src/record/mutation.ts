@@ -409,7 +409,6 @@ export default class MutationBuffer {
               true,
             )
           ) {
-            // oxlint-disable-next-line typescript/no-non-null-assertion
             this.shadowDomManager.addShadowRoot(
               dom.shadowRoot(currentN)!,
               this.doc,
@@ -939,7 +938,6 @@ export default class MutationBuffer {
     if (!isBlocked(n, this.blockClass, this.blockSelector, false)) {
       dom.childNodes(n).forEach((childN) => this.genAdds(childN));
       if (hasShadowRoot(n)) {
-        // oxlint-disable-next-line typescript/no-non-null-assertion
         dom.childNodes(dom.shadowRoot(n)!).forEach((childN) => {
           this.processedNodeManager.add(childN, this);
           this.genAdds(childN, n);
@@ -959,7 +957,6 @@ function deepDelete(addsSet: Set<Node>, n: Node) {
   const stack = [n];
 
   while (stack.length) {
-    // oxlint-disable-next-line typescript/no-non-null-assertion
     const next = stack.pop()!;
     addsSet.delete(next);
     dom.childNodes(next).forEach((childN) => stack.push(childN));
@@ -970,7 +967,6 @@ function processRemoves(n: Node, cache: Set<Node>) {
   const queue = [n];
 
   while (queue.length) {
-    // oxlint-disable-next-line typescript/no-non-null-assertion
     const next = queue.pop()!;
     if (cache.has(next)) continue;
     cache.add(next);

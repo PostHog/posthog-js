@@ -142,7 +142,6 @@ export class ShadowDomManager {
     },
     doc: Document,
   ) {
-    // oxlint-disable-next-line typescript/no-this-alias
     const manager = this;
     this.restoreHandlers.push({
       doc,

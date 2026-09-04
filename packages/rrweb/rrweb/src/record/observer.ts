@@ -767,7 +767,6 @@ function initStyleSheetObserver(
     };
   }
 
-  // oxlint-disable-next-line typescript/unbound-method
   const insertRule = win.CSSStyleSheet.prototype.insertRule;
   win.CSSStyleSheet.prototype.insertRule = new Proxy(insertRule, {
     apply: callbackWrapper(
@@ -816,7 +815,6 @@ function initStyleSheetObserver(
     return win.CSSStyleSheet.prototype.insertRule.apply(this, [rule, index]);
   };
 
-  // oxlint-disable-next-line typescript/unbound-method
   const deleteRule = win.CSSStyleSheet.prototype.deleteRule;
   win.CSSStyleSheet.prototype.deleteRule = new Proxy(deleteRule, {
     apply: callbackWrapper(
@@ -863,7 +861,6 @@ function initStyleSheetObserver(
   let replace: (text: string) => Promise<CSSStyleSheet>;
 
   if (win.CSSStyleSheet.prototype.replace) {
-    // oxlint-disable-next-line typescript/unbound-method
     replace = win.CSSStyleSheet.prototype.replace;
     win.CSSStyleSheet.prototype.replace = new Proxy(replace, {
       apply: callbackWrapper(
@@ -938,7 +935,6 @@ function initStyleSheetObserver(
 
   let replaceSync: (text: string) => void;
   if (win.CSSStyleSheet.prototype.replaceSync) {
-    // oxlint-disable-next-line typescript/unbound-method
     replaceSync = win.CSSStyleSheet.prototype.replaceSync;
     win.CSSStyleSheet.prototype.replaceSync = new Proxy(replaceSync, {
       apply: callbackWrapper(
@@ -1003,9 +999,7 @@ function initStyleSheetObserver(
 
   Object.entries(supportedNestedCSSRuleTypes).forEach(([typeKey, type]) => {
     unmodifiedFunctions[typeKey] = {
-      // oxlint-disable-next-line typescript/unbound-method
       insertRule: type.prototype.insertRule,
-      // oxlint-disable-next-line typescript/unbound-method
       deleteRule: type.prototype.deleteRule,
     };
 
@@ -1198,9 +1192,7 @@ export function initAdoptedStyleSheetObserver(
     Object.defineProperty(host, 'adoptedStyleSheets', {
       configurable: originalPropertyDescriptor.configurable,
       enumerable: originalPropertyDescriptor.enumerable,
-      // oxlint-disable-next-line typescript/unbound-method
       get: originalPropertyDescriptor.get,
-      // oxlint-disable-next-line typescript/unbound-method
       set: originalPropertyDescriptor.set,
     });
   });
@@ -1218,7 +1210,6 @@ function initStyleDeclarationObserver(
     mutationQueue,
   }: { win: IWindow; mutationQueue: StyleSheetMutationQueue },
 ): listenerHandler {
-  // oxlint-disable-next-line typescript/unbound-method
   const setProperty = win.CSSStyleDeclaration.prototype.setProperty;
   win.CSSStyleDeclaration.prototype.setProperty = new Proxy(setProperty, {
     apply: callbackWrapper(
@@ -1243,7 +1234,6 @@ function initStyleDeclarationObserver(
           stylesheetManager.styleMirror,
         );
         if ((id && id !== -1) || (styleId && styleId !== -1)) {
-          // oxlint-disable-next-line typescript/no-non-null-assertion
           const index = getNestedCSSRulePositions(thisArg.parentRule!);
           mutationQueue.queueMutation(sheet, () =>
             styleDeclarationCb({
@@ -1264,7 +1254,6 @@ function initStyleDeclarationObserver(
     ),
   });
 
-  // oxlint-disable-next-line typescript/unbound-method
   const removeProperty = win.CSSStyleDeclaration.prototype.removeProperty;
   win.CSSStyleDeclaration.prototype.removeProperty = new Proxy(removeProperty, {
     apply: callbackWrapper(
@@ -1289,7 +1278,6 @@ function initStyleDeclarationObserver(
           stylesheetManager.styleMirror,
         );
         if ((id && id !== -1) || (styleId && styleId !== -1)) {
-          // oxlint-disable-next-line typescript/no-non-null-assertion
           const index = getNestedCSSRulePositions(thisArg.parentRule!);
           mutationQueue.queueMutation(sheet, () =>
             styleDeclarationCb({
@@ -1470,7 +1458,6 @@ function initCustomElementObserver({
   customElementCb,
 }: observerParam): listenerHandler {
   const win = doc.defaultView as IWindow;
-  // oxlint-disable-next-line typescript/no-empty-function
   if (!win || !win.customElements) return () => {};
   const restoreHandler = patch(
     win.customElements,

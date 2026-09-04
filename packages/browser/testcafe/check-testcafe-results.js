@@ -14,9 +14,7 @@ const testCafeMock = {
     requestHooks: () => testCafeMock,
     afterEach: () => testCafeMock,
 }
-// oxlint-disable-next-line no-undef
 globalThis.fixture = () => testCafeMock
-// oxlint-disable-next-line no-undef
 globalThis.test = () => testCafeMock
 import {
     assertConfigOptionsChangeAutocaptureBehaviourAccordingly,

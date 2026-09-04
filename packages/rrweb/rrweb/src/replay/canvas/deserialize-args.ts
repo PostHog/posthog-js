@@ -23,7 +23,6 @@ export function variableListFor(
   if (!contextMap.has(ctor)) {
     contextMap.set(ctor, []);
   }
-  // oxlint-disable-next-line typescript/no-unsafe-return
   return contextMap.get(ctor) as any[];
 }
 
@@ -46,21 +45,17 @@ export function deserializeArg(
     if (arg && typeof arg === 'object' && 'rr_type' in arg) {
       if (preload) preload.isUnchanged = false;
       if (arg.rr_type === 'ImageBitmap' && 'args' in arg) {
-        // oxlint-disable-next-line typescript/no-unsafe-assignment
         const args = await deserializeArg(imageMap, ctx, preload)(arg.args);
         // oxlint-disable-next-line prefer-spread
         return await createImageBitmap.apply(null, args);
       } else if ('index' in arg) {
         if (preload || ctx === null) return arg; // we are preloading, ctx is unknown
         const { rr_type: name, index } = arg;
-        // oxlint-disable-next-line typescript/no-unsafe-return
         return variableListFor(ctx, name)[index];
       } else if ('args' in arg) {
         const { rr_type: name, args } = arg;
-        // oxlint-disable-next-line typescript/no-unsafe-assignment
         const ctor = window[name as keyof Window];
 
-        // oxlint-disable-next-line typescript/no-unsafe-return, typescript/no-unsafe-call
         return new ctor(
           ...(await Promise.all(
             args.map(deserializeArg(imageMap, ctx, preload)),
@@ -91,7 +86,6 @@ export function deserializeArg(
       const result = await Promise.all(
         arg.map(deserializeArg(imageMap, ctx, preload)),
       );
-      // oxlint-disable-next-line typescript/no-unsafe-return
       return result;
     }
     return arg;

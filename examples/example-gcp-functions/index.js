@@ -1,4 +1,3 @@
-/* oxlint-disable no-undef */
 /* oxlint-disable typescript/no-require-imports */
 const functions = require('@google-cloud/functions-framework')
 const { PostHog } = require('posthog-node')

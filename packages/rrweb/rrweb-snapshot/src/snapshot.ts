@@ -106,7 +106,6 @@ function getAbsoluteSrcsetString(doc: Document, attributeValue: string) {
   }
 
   const output = [];
-  // oxlint-disable-next-line no-constant-condition
   while (true) {
     collectCharacters(SRCSET_COMMAS_OR_SPACES);
     if (pos >= attributeValue.length) {
@@ -124,7 +123,6 @@ function getAbsoluteSrcsetString(doc: Document, attributeValue: string) {
       let descriptorsStr = '';
       url = absoluteToDoc(doc, url);
       let inParens = false;
-      // oxlint-disable-next-line no-constant-condition
       while (true) {
         const c = attributeValue.charAt(pos);
         if (c === '') {
@@ -269,7 +267,6 @@ export function transformAttribute(
 export function ignoreAttribute(
   tagName: string,
   name: string,
-  // oxlint-disable-next-line typescript/no-unused-vars
   _value: unknown,
 ): boolean {
   return (tagName === 'video' || tagName === 'audio') && name === 'autoplay';

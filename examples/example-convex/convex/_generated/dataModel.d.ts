@@ -1,4 +1,3 @@
-/* oxlint-disable */
 /**
  * Generated data model types.
  *

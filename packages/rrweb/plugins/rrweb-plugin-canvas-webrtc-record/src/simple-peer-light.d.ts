@@ -1,4 +1,3 @@
-/* oxlint-disable */
 /// <reference types="node" />
 declare module 'simple-peer-light' {
   import * as stream from 'stream';

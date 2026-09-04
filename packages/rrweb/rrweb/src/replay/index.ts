@@ -973,7 +973,6 @@ export class Replayer {
               }
               if (this.isUserInteraction(_event)) {
                 if (
-                  // oxlint-disable-next-line typescript/no-non-null-assertion
                   _event.delay! - event.delay! >
                   this.config.inactivePeriodThreshold *
                     this.speedService.state.context.timer.speed
@@ -985,7 +984,6 @@ export class Replayer {
             }
             if (this.nextUserInteractionEvent) {
               const skipTime =
-                // oxlint-disable-next-line typescript/no-non-null-assertion
                 this.nextUserInteractionEvent.delay! - event.delay!;
               const payload = {
                 speed: Math.min(
@@ -1378,7 +1376,6 @@ export class Replayer {
         try {
           this.applyMutation(d, isSync);
         } catch (error) {
-          // oxlint-disable-next-line typescript/no-unsafe-member-access, typescript/restrict-template-expressions
           this.warn(`Exception in mutation ${error.message || error}`, d);
         }
         break;
@@ -1412,7 +1409,6 @@ export class Replayer {
             doAction() {
               //
             },
-            // oxlint-disable-next-line typescript/no-non-null-assertion
             delay: e.delay! - d.positions[0]?.timeOffset,
           });
         }
@@ -2408,7 +2404,6 @@ export class Replayer {
       let adopted = false;
       try {
         if (hasShadowRoot(targetHost)) {
-          // oxlint-disable-next-line typescript/no-non-null-assertion
           (targetHost as HTMLElement).shadowRoot!.adoptedStyleSheets =
             stylesToAdopt;
           adopted = true;

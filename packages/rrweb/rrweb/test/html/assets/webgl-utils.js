@@ -30,7 +30,6 @@
  */
 
 (function (root, factory) {
-  // oxlint-disable-line
   if (typeof define === 'function' && define.amd) {
     // AMD. Register as an anonymous module.
     define([], function () {
@@ -57,12 +56,12 @@
       '%c%s',
       'color:blue;font-weight:bold;',
       'for more about webgl-utils.js see:',
-    ); // oxlint-disable-line
+    );
     console.log(
       '%c%s',
       'color:blue;font-weight:bold;',
       'https://webglfundamentals.org/webgl/lessons/webgl-boilerplate.html',
-    ); // oxlint-disable-line
+    );
   }
 
   /**
@@ -308,8 +307,8 @@
    * Returns the corresponding bind point for a given sampler type
    */
   function getBindPointForSamplerType(gl, type) {
-    if (type === gl.SAMPLER_2D) return gl.TEXTURE_2D; // oxlint-disable-line
-    if (type === gl.SAMPLER_CUBE) return gl.TEXTURE_CUBE_MAP; // oxlint-disable-line
+    if (type === gl.SAMPLER_2D) return gl.TEXTURE_2D;
+    if (type === gl.SAMPLER_CUBE) return gl.TEXTURE_CUBE_MAP;
     return undefined;
   }
 
@@ -965,25 +964,25 @@
   function getGLTypeForTypedArray(gl, typedArray) {
     if (typedArray instanceof Int8Array) {
       return gl.BYTE;
-    } // oxlint-disable-line
+    }
     if (typedArray instanceof Uint8Array) {
       return gl.UNSIGNED_BYTE;
-    } // oxlint-disable-line
+    }
     if (typedArray instanceof Int16Array) {
       return gl.SHORT;
-    } // oxlint-disable-line
+    }
     if (typedArray instanceof Uint16Array) {
       return gl.UNSIGNED_SHORT;
-    } // oxlint-disable-line
+    }
     if (typedArray instanceof Int32Array) {
       return gl.INT;
-    } // oxlint-disable-line
+    }
     if (typedArray instanceof Uint32Array) {
       return gl.UNSIGNED_INT;
-    } // oxlint-disable-line
+    }
     if (typedArray instanceof Float32Array) {
       return gl.FLOAT;
-    } // oxlint-disable-line
+    }
     throw 'unsupported typed array type';
   }
 
@@ -992,10 +991,10 @@
   function getNormalizationForTypedArray(typedArray) {
     if (typedArray instanceof Int8Array) {
       return true;
-    } // oxlint-disable-line
+    }
     if (typedArray instanceof Uint8Array) {
       return true;
-    } // oxlint-disable-line
+    }
     return false;
   }
 

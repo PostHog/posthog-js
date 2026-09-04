@@ -80,7 +80,6 @@ const worker: ImageBitmapDataURLResponseWorker = self;
 let reusableCanvas: OffscreenCanvas | null = null;
 let reusableCtx: OffscreenCanvasRenderingContext2D | null = null;
 
-// oxlint-disable-next-line typescript/no-misused-promises
 worker.onmessage = async function (e) {
   if ('resetFrameDedup' in e.data) {
     // a full snapshot starts a new epoch: forget fingerprints so each canvas

@@ -549,7 +549,6 @@ describe('utils', () => {
       ].join('\n');
       document.head.appendChild(styleEl);
       try {
-        // oxlint-disable-next-line typescript/no-non-null-assertion
         const sheet = styleEl.sheet!;
         const singlePass = stringifyStylesheet(sheet);
         expect(singlePass).toContain('@media (min-width: 500px)');
@@ -585,9 +584,7 @@ describe('utils', () => {
       ].join('\n');
       document.head.appendChild(styleEl);
       try {
-        // oxlint-disable-next-line typescript/no-non-null-assertion
         const sheet = styleEl.sheet!;
-        // oxlint-disable-next-line typescript/no-non-null-assertion
         const singlePass = stringifyStylesheet(sheet)!;
         expect(singlePass).toContain('@keyframes spin');
 
@@ -598,7 +595,6 @@ describe('utils', () => {
         }
         // the keyframes were traversed child-by-child across several slices
         expect(boundedSlices).toBeGreaterThanOrEqual(3);
-        // oxlint-disable-next-line typescript/no-non-null-assertion
         const text = cursor.text()!;
         expect(text).toContain('@keyframes spin {');
         expect(text.replace(/\s+/g, '')).toBe(singlePass.replace(/\s+/g, ''));
@@ -644,7 +640,6 @@ describe('utils', () => {
 
       expect(maxReadsPerSlice).toBeLessThanOrEqual(100);
       expect(childReads).toBe(500);
-      // oxlint-disable-next-line typescript/no-non-null-assertion
       const text = cursor.text()!;
       expect(text).toContain('@layer framework.utilities {');
       expect(text).toContain('.layer-499');
@@ -677,7 +672,6 @@ describe('utils', () => {
       while (!cursor.advance(100)) {
         // drain
       }
-      // oxlint-disable-next-line typescript/no-non-null-assertion
       const text = cursor.text()!;
       expect(text).toContain(
         '@container sidebar (min-width: 400px) {.c { color: red; }}',
@@ -721,7 +715,6 @@ describe('utils', () => {
       while (!cursor.advance(100)) {
         // drain
       }
-      // oxlint-disable-next-line typescript/no-non-null-assertion
       const text = cursor.text()!;
       expect(text).toContain(
         '@container sidebar (min-width: 400px) { .old { color: red; } }',
@@ -802,7 +795,6 @@ describe('utils', () => {
 
       expect(maxReadsPerSlice).toBeLessThanOrEqual(100);
       expect(childReads).toBe(300);
-      // oxlint-disable-next-line typescript/no-non-null-assertion
       const text = cursor.text()!;
       expect(text).toContain('@keyframes spin {');
       expect(text).toContain('299% { opacity: ');
@@ -836,7 +828,6 @@ describe('utils', () => {
 
       expect(maxReadsPerSlice).toBeLessThanOrEqual(100);
       expect(childReads).toBe(300);
-      // oxlint-disable-next-line typescript/no-non-null-assertion
       const text = cursor.text()!;
       // the declaration block never appears among cssRules, so it must ride
       // in the prelude exactly once, absolutified against the sheet href
@@ -863,7 +854,6 @@ describe('utils', () => {
       }
       // the single pass runs fixSafariColons over the whole top-level rule
       // text, nested children included; the reassembled frame must match
-      // oxlint-disable-next-line typescript/no-non-null-assertion
       const text = cursor.text()!;
       expect(text).toContain('[data\\:attr]');
       expect(text).toContain('[nested\\:attr]');

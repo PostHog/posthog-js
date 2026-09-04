@@ -41,15 +41,11 @@ function saveToWebGLVarMap(
   ctx: WebGLRenderingContext | WebGL2RenderingContext,
   result: any,
 ) {
-  // oxlint-disable-next-line typescript/no-unsafe-member-access
   if (!result?.constructor) return; // probably null or undefined
 
-  // oxlint-disable-next-line typescript/no-unsafe-assignment, typescript/no-unsafe-member-access
   const { name } = result.constructor;
-  // oxlint-disable-next-line typescript/no-unsafe-argument
   if (!WebGLVariableConstructorsNames.includes(name)) return; // not a WebGL variable
 
-  // oxlint-disable-next-line typescript/no-unsafe-argument
   const variables = variableListFor(ctx, name);
   if (!variables.includes(result)) variables.push(result);
 }
@@ -77,7 +73,6 @@ export default async function webglMutation({
 
     if (mutation.setter) {
       // skip some read-only type checks
-      // oxlint-disable-next-line typescript/no-unsafe-member-access
       (ctx as any)[mutation.property] = mutation.args[0];
       return;
     }
@@ -98,21 +93,16 @@ export default async function webglMutation({
     const debugMode = false;
     if (debugMode) {
       if (mutation.property === 'compileShader') {
-        // oxlint-disable-next-line typescript/no-unsafe-argument
         if (!ctx.getShaderParameter(args[0], ctx.COMPILE_STATUS))
           console.warn(
             'something went wrong in replay',
-            // oxlint-disable-next-line typescript/no-unsafe-argument
             ctx.getShaderInfoLog(args[0]),
           );
       } else if (mutation.property === 'linkProgram') {
-        // oxlint-disable-next-line typescript/no-unsafe-argument
         ctx.validateProgram(args[0]);
-        // oxlint-disable-next-line typescript/no-unsafe-argument
         if (!ctx.getProgramParameter(args[0], ctx.LINK_STATUS))
           console.warn(
             'something went wrong in replay',
-            // oxlint-disable-next-line typescript/no-unsafe-argument
             ctx.getProgramInfoLog(args[0]),
           );
       }
@@ -123,7 +113,6 @@ export default async function webglMutation({
           webglError,
           'on command:',
           mutation.property,
-          // oxlint-disable-next-line typescript/no-unsafe-argument
           ...args,
         );
       }

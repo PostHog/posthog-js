@@ -192,7 +192,6 @@ function diffBeforeUpdatingChildren(
         // abandon the rest of the diff.
         if (oldElement.shadowRoot || attachShadowRootSafely(oldElement)) {
           diffChildren(
-            // oxlint-disable-next-line typescript/no-non-null-assertion
             oldElement.shadowRoot!,
             newRRElement.shadowRoot,
             replayer,

@@ -1,4 +1,3 @@
-/* oxlint-disable */
 /**
  * Generated `api` utility.
  *

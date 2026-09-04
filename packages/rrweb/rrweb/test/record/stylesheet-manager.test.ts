@@ -148,13 +148,11 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
   });
 
   it('stringifies a 50k-rule sheet across many bounded slices and emits one atomic mutation', () => {
-    // oxlint-disable-next-line typescript/no-non-null-assertion
     const singlePass = stringifyStylesheet(linkEl.sheet!);
     const task = makeManager().beginDeferredLinkInlining(linkEl, LINK_ID);
     expect(task).not.toBeNull();
 
     let boundedSlices = 0;
-    // oxlint-disable-next-line typescript/no-non-null-assertion
     while (!task!.advance(RULES_PER_SLICE)) {
       boundedSlices += 1;
       // no partial _cssText ever reaches the wire
@@ -169,7 +167,6 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
 
   it('emits nothing when the task is dropped mid-sheet, and a fresh task still works', () => {
     const manager = makeManager();
-    // oxlint-disable-next-line typescript/no-non-null-assertion
     const abandoned = manager.beginDeferredLinkInlining(linkEl, LINK_ID)!;
     abandoned.advance(RULES_PER_SLICE);
     abandoned.advance(RULES_PER_SLICE);
@@ -177,7 +174,6 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
     expect(mutationCb).not.toHaveBeenCalled();
 
     // no state leaks outside the task: a restart stringifies the full sheet
-    // oxlint-disable-next-line typescript/no-non-null-assertion
     const restarted = manager.beginDeferredLinkInlining(linkEl, LINK_ID)!;
     while (!restarted.advance(RULES_PER_SLICE)) {
       // drain
@@ -187,7 +183,6 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
   });
 
   it('emits nothing when the link is detached while slicing, and does not count it as failed', () => {
-    // oxlint-disable-next-line typescript/no-non-null-assertion
     const task = makeManager().beginDeferredLinkInlining(linkEl, LINK_ID)!;
     task.advance(RULES_PER_SLICE);
     linkEl.remove();
@@ -210,7 +205,6 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
     replacementStyle.textContent = '.new { color: blue; }';
     document.head.appendChild(replacementStyle);
     try {
-      // oxlint-disable-next-line typescript/no-non-null-assertion
       const task = makeManager().beginDeferredLinkInlining(
         swapLink,
         LINK_ID,
@@ -236,7 +230,6 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
 
   it('discards the emit and counts a failure when the captured sheet is mutated mid-slicing', () => {
     const manager = makeManager();
-    // oxlint-disable-next-line typescript/no-non-null-assertion
     const task = manager.beginDeferredLinkInlining(linkEl, LINK_ID)!;
     task.advance(RULES_PER_SLICE);
 
@@ -258,7 +251,6 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
     document.head.appendChild(otherStyle);
     try {
       const manager = makeManager();
-      // oxlint-disable-next-line typescript/no-non-null-assertion
       const task = manager.beginDeferredLinkInlining(linkEl, LINK_ID)!;
       task.advance(RULES_PER_SLICE);
 
@@ -279,7 +271,6 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
 
   it('ignores mutations that arrive after the sheet finished emitting', () => {
     const manager = makeManager();
-    // oxlint-disable-next-line typescript/no-non-null-assertion
     const task = manager.beginDeferredLinkInlining(linkEl, LINK_ID)!;
     while (!task.advance(RULES_PER_SLICE)) {
       // drain
@@ -318,7 +309,6 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
       value: makeBurningSheet(6, 2),
     });
     try {
-      // oxlint-disable-next-line typescript/no-non-null-assertion
       const task = makeManager().beginDeferredLinkInlining(
         burningLink,
         LINK_ID,
@@ -349,7 +339,6 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
     };
     Object.defineProperty(brokenLink, 'sheet', { value: throwingSheet });
     try {
-      // oxlint-disable-next-line typescript/no-non-null-assertion
       const task = makeManager().beginDeferredLinkInlining(
         brokenLink,
         LINK_ID,
