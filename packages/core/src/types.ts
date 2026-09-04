@@ -427,6 +427,7 @@ export type FeatureFlagValue = string | boolean
  */
 export type FeatureFlagResult = {
   readonly key: string
+  /** Whether the returned feature flag evaluation is enabled. `false` is a conclusive off result. */
   readonly enabled: boolean
   readonly variant?: string
   readonly payload?: JsonType

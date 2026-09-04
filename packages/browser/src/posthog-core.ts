@@ -2385,7 +2385,10 @@ export class PostHog implements PostHogInterface {
      *
      * @remarks
      * Returns the feature flag value which can be a boolean, string, or undefined.
-     * Supports multivariate flags that can return custom string values.
+     * Supports multivariate flags that can return custom string values. An evaluated boolean flag
+     * returns `true` or `false`; `undefined` means no current evaluation is available for the key.
+     * Globally inactive flags are omitted from the remote `/flags` response, so after that response
+     * loads they are unavailable rather than represented by a `false` result.
      *
      * {@label Feature flags}
      *
@@ -2444,6 +2447,10 @@ export class PostHog implements PostHogInterface {
     /**
      * Get a feature flag evaluation result including both the flag value and payload.
      *
+     * A result with `enabled: false` is a conclusive off evaluation. `undefined` means no current
+     * evaluation is available for the key. This includes globally inactive flags, which are omitted
+     * from the remote `/flags` response.
+     *
      * By default, this method emits the `$feature_flag_called` event.
      *
      * {@label Feature flags}
@@ -2480,7 +2487,9 @@ export class PostHog implements PostHogInterface {
     /**
      * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
      * the flags from the last load (no network request); call `reloadFeatureFlags()` first to refresh.
-     * Unlike `getFeatureFlag()`, it does not send a `$feature_flag_called` event.
+     * Conclusive off evaluations are included with `enabled: false`; keys omitted from the response,
+     * including globally inactive flags, are absent. Unlike `getFeatureFlag()`, this method does not
+     * send a `$feature_flag_called` event.
      *
      * @returns {FeatureFlagResult[]} All loaded flags, or an empty array if none are loaded.
      */
@@ -2492,9 +2501,11 @@ export class PostHog implements PostHogInterface {
      * Checks if a feature flag is enabled for the current user.
      *
      * @remarks
-     * Returns true if the flag is enabled, false if disabled, or undefined if not found
-     * (unless `defaultValue` is given, which is returned instead of undefined).
-     * This is a convenience method that treats any truthy value as enabled.
+     * Returns `true` or `false` when the flag has an evaluation value. A `false` result means the
+     * value evaluated off; it does not mean the SDK observed the flag's global active setting.
+     * Returns `undefined` when no current evaluation is available, unless `defaultValue` is given.
+     * Globally inactive flags are omitted from the remote `/flags` response and therefore have no
+     * value. This is a convenience method that treats any truthy value as enabled.
      *
      * {@label Feature flags}
      *
