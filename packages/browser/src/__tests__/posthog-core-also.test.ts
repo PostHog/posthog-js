@@ -4,7 +4,7 @@ import * as globals from '@posthog/browser-common/utils/globals'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
-import { Compression, isUndefined } from '@posthog/core'
+import { Compression, isArray, isUndefined } from '@posthog/core'
 import {
     AUTOCAPTURE_DISABLED_SERVER_SIDE,
     ENABLE_PERSON_PROCESSING,
@@ -1192,9 +1192,13 @@ describe('posthog core', () => {
             expect(posthog.get_distinct_id()).not.toBe('abcd')
             expect(posthog.get_distinct_id()).not.toEqual(undefined)
             expect(posthog.getFeatureFlag('multivariant')).toBe('variant-1')
-            expect(posthog.getFeatureFlag('disabled')).toBe(undefined)
+            expect(posthog.getFeatureFlag('disabled')).toBe(false)
             expect(posthog.getFeatureFlag('undef')).toBe(undefined)
-            expect(posthog.featureFlags.getFlagVariants()).toEqual({ multivariant: 'variant-1', enabled: true })
+            expect(posthog.featureFlags.getFlagVariants()).toEqual({
+                multivariant: 'variant-1',
+                enabled: true,
+                disabled: false,
+            })
         })
 
         it('sets the right feature flag payloads', () => {
@@ -1248,16 +1252,16 @@ describe('posthog core', () => {
             expect(posthog.featureFlags.getFlagVariants()).toEqual({})
         })
 
-        it('onFeatureFlags should be called immediately if feature flags are bootstrapped', () => {
-            let called = false
+        it('onFeatureFlags should be called immediately with active bootstrapped flags', () => {
+            const callback = vi.fn()
             const posthog = posthogWith({
                 bootstrap: {
-                    featureFlags: { multivariant: 'variant-1' },
+                    featureFlags: { multivariant: 'variant-1', disabled: false },
                 },
             })
 
-            posthog.featureFlags.onFeatureFlags(() => (called = true))
-            expect(called).toEqual(true)
+            posthog.featureFlags.onFeatureFlags(callback)
+            expect(callback).toHaveBeenCalledWith(['multivariant'], { multivariant: 'variant-1' })
         })
 
         it('onFeatureFlags should not be called immediately if feature flags bootstrap is empty', () => {
@@ -1740,6 +1744,43 @@ describe('posthog core', () => {
                     organization: 'org::5',
                     instance: 'app.posthog.com',
                 })
+            })
+
+            it('merges event-specific groups with registered groups', () => {
+                posthog.group('company', 'company::5')
+                posthog.capture('some_event', { $groups: { project: 'project::7' } })
+
+                const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
+                if (isArray(eventPayload.data!)) {
+                    throw new Error('')
+                }
+                expect(eventPayload.data!.properties.$groups).toEqual({
+                    company: 'company::5',
+                    project: 'project::7',
+                })
+            })
+
+            it('lets event-specific groups override registered groups without changing persistence', () => {
+                posthog.group('project', 'project::5')
+                posthog.capture('some_event', { $groups: { project: 'project::7' } })
+
+                const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
+                if (isArray(eventPayload.data!)) {
+                    throw new Error('')
+                }
+                expect(eventPayload.data!.properties.$groups).toEqual({ project: 'project::7' })
+                expect(posthog.getGroups()).toEqual({ project: 'project::5' })
+            })
+
+            it('allows an empty event-specific groups object to omit registered groups', () => {
+                posthog.group('company', 'company::5')
+                posthog.capture('some_event', { $groups: {} })
+
+                const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[1][0]
+                if (isArray(eventPayload.data!)) {
+                    throw new Error('')
+                }
+                expect(eventPayload.data!.properties.$groups).toEqual({})
             })
         })
 

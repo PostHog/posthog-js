@@ -996,6 +996,45 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         featureFlags.dispose()
     })
 
+    it('preserves the anonymous id when a reload is queued before an in-flight response completes', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const client = posthog._getBrowserClientAdapter()
+        let distinctId = 'anonymous-id'
+        vi.spyOn(posthog, 'get_distinct_id').mockImplementation(() => distinctId)
+        const resolveRequests: Array<(response: ApiResponse) => void> = []
+        const sendRequest = vi.spyOn(client, 'sendRequest').mockImplementation(
+            () =>
+                new Promise<ApiResponse>((resolve) => {
+                    resolveRequests.push(resolve)
+                })
+        )
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        featureFlags.setup(client)
+
+        featureFlags._callFlagsEndpoint()
+        distinctId = 'identified-id'
+        featureFlags.setAnonymousDistinctId('anonymous-id')
+        featureFlags.reloadFeatureFlags()
+
+        resolveRequests[0]({ statusCode: 200, json: { featureFlags: { initial: true } } })
+
+        await vi.waitFor(() => {
+            expect(sendRequest).toHaveBeenCalledTimes(2)
+        })
+        expect(sendRequest.mock.calls[1][1]?.body).toMatchObject({
+            distinct_id: 'identified-id',
+            $anon_distinct_id: 'anonymous-id',
+        })
+
+        resolveRequests[1]({ statusCode: 200, json: { featureFlags: { current: true } } })
+        await vi.waitFor(() => {
+            expect(featureFlags.getFlagVariants()).toEqual({ current: true })
+        })
+        expect(sendRequest).toHaveBeenCalledTimes(2)
+        featureFlags.dispose()
+        await posthog.shutdown()
+    })
+
     it('coalesces reloads behind an in-flight request after a quota-limited response', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()

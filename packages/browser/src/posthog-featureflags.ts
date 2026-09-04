@@ -636,20 +636,20 @@ export class PostHogFeatureFlags implements Extension {
         const hasBootstrappedFlags = Object.keys(bootstrapFlags).length
         if (hasBootstrappedFlags) {
             const bootstrapPayloads = config.bootstrap?.featureFlagPayloads ?? {}
-            const activeFlags = Object.keys(bootstrapFlags)
-                .filter((flag) => !!bootstrapFlags[flag])
+            const featureFlags = Object.keys(bootstrapFlags)
+                .filter((flag) => !isUndefined(bootstrapFlags[flag]))
                 .reduce((res: Record<string, string | boolean>, key) => {
-                    res[key] = bootstrapFlags[key] || false
+                    res[key] = bootstrapFlags[key]
                     return res
                 }, {})
             const featureFlagPayloads = Object.keys(bootstrapPayloads)
-                .filter((key) => activeFlags[key])
+                .filter((key) => featureFlags[key])
                 .reduce((res: Record<string, JsonType>, key) => {
                     res[key] = bootstrapPayloads[key]
                     return res
                 }, {})
 
-            return this._receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads }, undefined, {
+            return this._receivedFeatureFlags({ featureFlags, featureFlagPayloads }, undefined, {
                 persist: false,
             })
         }
@@ -847,6 +847,12 @@ export class PostHogFeatureFlags implements Extension {
 
         if (this._hasStatusZeroCircuitBreakerTripped()) {
             return
+        }
+
+        if (this._requestInFlight) {
+            // Record the queued reload before the debounce fires so the in-flight response
+            // cannot clear identity state needed by the next request.
+            this._additionalReloadRequested = true
         }
 
         if (this._reloadDebouncer) {

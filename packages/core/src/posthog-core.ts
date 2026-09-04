@@ -1294,7 +1294,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const finalFlags = { ...existingFlags, ...flags }
       const finalPayloads = { ...existingPayloads, ...(payloads ?? {}) }
 
-      // Built by hand, not via createFlagsResponseFromFlagsAndPayloads, which drops false flags.
       const flagDetails: Record<string, FeatureFlagDetail> = {}
       for (const [key, value] of Object.entries(finalFlags)) {
         const payload = finalPayloads[key]
