@@ -43,9 +43,6 @@ describe('traceparent', () => {
     })
 
     it('rejects version 00 with extra fields, which only a higher version may carry', () => {
-      // W3C defines version 00 as exactly three fields. A peer that follows the
-      // spec restarts the trace here, so continuing it would split the trace in
-      // half across the two services.
       expect(parseTraceparent(`00-${TRACE_ID}-${SPAN_ID}-01-something`)).toBeUndefined()
       expect(parseTraceparent(`00-${TRACE_ID}-${SPAN_ID}-01-`)).toBeUndefined()
     })

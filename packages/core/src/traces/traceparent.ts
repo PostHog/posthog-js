@@ -7,9 +7,9 @@ export interface RemoteSpanContext {
   flags: string
 }
 
-// `00-<32 hex>-<16 hex>-<2 hex>`. Version `ff` is invalid per the spec; other
-// unknown versions are forwards-compatible, so we parse the first four fields
-// and tolerate whatever a later version appends after them.
+// Version `ff` is invalid per the spec, and a higher version may append fields
+// after the first four, so the trailing group captures them rather than failing
+// the match.
 const TRACEPARENT_RE = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})(-.*)?$/
 
 /**
@@ -46,9 +46,9 @@ function matchTraceparent(value: unknown): TraceparentFields | undefined {
   if (typeof value !== 'string') {
     return undefined
   }
-  // Only surrounding whitespace is forgiven. W3C spells every field lowercase hex
-  // and requires a vendor to ignore a `traceparent` whose ids are not, so folding
-  // the case here would continue a trace that a conformant peer restarts.
+  // W3C spells every field lowercase hex and requires a vendor to ignore a
+  // `traceparent` whose ids are not, so folding the case here would continue a
+  // trace that a conformant peer restarts.
   const match = TRACEPARENT_RE.exec(value.trim())
   if (!match) {
     return undefined
@@ -59,8 +59,7 @@ function matchTraceparent(value: unknown): TraceparentFields | undefined {
   }
   // Version `00` is defined as exactly `trace-id "-" parent-id "-" trace-flags`.
   // W3C scopes the tolerate-what-you-don't-know rule to a *higher* version, so a
-  // version `00` header with anything appended is malformed and starts a fresh
-  // trace, the way a conformant peer handles it.
+  // version `00` header with anything appended is malformed.
   if (version === '00' && trailing) {
     return undefined
   }
