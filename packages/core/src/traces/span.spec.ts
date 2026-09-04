@@ -1,4 +1,5 @@
 import { NOOP_SPAN, PostHogSpan, describeError, truncateAttributeValue } from './span'
+import { buildOtlpSpan } from './otlp'
 import type { SpanInit } from './span'
 import type { SpanRecord } from './types'
 import type { Logger } from '../types'
@@ -471,6 +472,29 @@ describe('PostHogSpan', () => {
 
       expect(calls).toBe(1)
       expect(ended[0].attributes.doc).toBe('null')
+    })
+
+    it('keeps a stateful toJSON bounded through to the encoded span', () => {
+      // End to end, because the second call is the encoder's: what the span
+      // stored has to leave it nothing to call.
+      let calls = 0
+      const stateful = {
+        toJSON: () => {
+          calls++
+          return calls === 1 ? null : 'x'.repeat(100)
+        },
+      }
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('doc', stateful as any)
+      span.end()
+      const encoded = buildOtlpSpan(ended[0])
+
+      expect(calls).toBe(1)
+      expect(encoded.attributes?.find((attribute) => attribute.key === 'doc')).toEqual({
+        key: 'doc',
+        value: { stringValue: 'null' },
+      })
     })
 
     it('describes a toJSON resolving to undefined the way the encoder would', () => {
