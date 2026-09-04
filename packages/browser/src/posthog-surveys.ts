@@ -54,6 +54,7 @@ export class PostHogSurveys implements Extension {
     private _surveyManager: SurveyManager | null = null
     private _isInitializingSurveys = false
     private _surveyCallbacks: SurveyCallback[] = []
+    private _activeMatchingSurveyCallbacks: SurveyCallback[] = []
     // Promise for in-flight survey fetch - allows multiple callers to await the same request
     private _getSurveysInFlightPromise: Promise<SurveyFetchResult> | null = null
     // Backs off the stale-cache refresh for one TTL after a failure, so a surveys-API outage can't
@@ -104,6 +105,7 @@ export class PostHogSurveys implements Extension {
         this._surveyManager?.dispose?.()
         this._surveyManager = null
         this._surveyCallbacks = []
+        this._activeMatchingSurveyCallbacks = []
         this._getSurveysInFlightPromise = null
         this._renderTimeouts.forEach((timeout) => clearTimeout(timeout))
         this._renderTimeouts.clear()
@@ -250,8 +252,15 @@ export class PostHogSurveys implements Extension {
             return
         }
         this._surveyManager = generateSurveysFn(isSurveysEnabled)
-        this._surveyEventReceiver = this._configSource.createEventReceiver()
+        this._surveyEventReceiver = this._configSource.createEventReceiver(this._notifyActiveMatchingSurveyCallbacks)
+        const cachedSurveys = (this._client ?? this._initialClientState)?.kv.get<Survey[]>(SURVEYS)
+        if (cachedSurveys) {
+            this._registerEventOrActionBasedSurveys(cachedSurveys)
+        }
         logger.info('Surveys loaded successfully')
+        // Establish the subscription's initial value before existing load callbacks can capture
+        // events and cause activation transitions.
+        this._notifyActiveMatchingSurveyCallbacks()
         this._notifySurveyCallbacks({ isLoaded: true })
     }
 
@@ -385,6 +394,15 @@ export class PostHogSurveys implements Extension {
 
         this._lastSurveyRefreshFailedAt = null
         const surveys = (response.json as { surveys?: Survey[] }).surveys || []
+        this._registerEventOrActionBasedSurveys(surveys)
+
+        // Stamp when these definitions were fetched so the split-storage loader can tell a fresher
+        // main-blob write-back from a stale `__surveys` entry.
+        client.kv.set({ [SURVEYS]: surveys, [SURVEYS_LOADED_AT]: Date.now() })
+        return { surveys, context: { isLoaded: true } }
+    }
+
+    private _registerEventOrActionBasedSurveys(surveys: Survey[]): void {
         const eventOrActionBasedSurveys = surveys.filter(
             (survey) =>
                 isSurveyRunning(survey) && (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
@@ -392,11 +410,6 @@ export class PostHogSurveys implements Extension {
         if (eventOrActionBasedSurveys.length > 0) {
             this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
         }
-
-        // Stamp when these definitions were fetched so the split-storage loader can tell a fresher
-        // main-blob write-back from a stale `__surveys` entry.
-        client.kv.set({ [SURVEYS]: surveys, [SURVEYS_LOADED_AT]: Date.now() })
-        return { surveys, context: { isLoaded: true } }
     }
 
     /**
@@ -467,6 +480,28 @@ export class PostHogSurveys implements Extension {
             return
         }
         return this._surveyManager.getActiveMatchingSurveys(callback, forceReload)
+    }
+
+    onActiveMatchingSurveysChanged(callback: SurveyCallback): () => void {
+        this._activeMatchingSurveyCallbacks.push(callback)
+        if (this._surveyManager) {
+            this._notifyActiveMatchingSurveyCallback(callback)
+        }
+        return () => {
+            this._activeMatchingSurveyCallbacks = this._activeMatchingSurveyCallbacks.filter((cb) => cb !== callback)
+        }
+    }
+
+    private _notifyActiveMatchingSurveyCallback(callback: SurveyCallback): void {
+        try {
+            this.getActiveMatchingSurveys(callback)
+        } catch (error) {
+            logger.error('Error in active matching surveys callback', error)
+        }
+    }
+
+    private _notifyActiveMatchingSurveyCallbacks = (): void => {
+        this._activeMatchingSurveyCallbacks.forEach((callback) => this._notifyActiveMatchingSurveyCallback(callback))
     }
 
     private _getSurveyById(surveyId: string): Survey | null {
