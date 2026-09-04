@@ -1538,6 +1538,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         logger.info('stopped')
     }
 
+    // called by reset() while the old distinct_id is still in persistence
+    flushBeforeIdentityReset(): void {
+        if (!this.isStarted) {
+            return
+        }
+        this._drainCompressionQueueSync()
+        this._flushBuffer()
+    }
+
     // ordering matters: the hold is set after stop() (so the stop discards or ships the
     // old epoch per its own flag) and after start() (whose fresh-start reset would
     // otherwise clobber it); no flush can run synchronously in between

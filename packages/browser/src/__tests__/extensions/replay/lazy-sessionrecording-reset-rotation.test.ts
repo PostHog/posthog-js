@@ -140,6 +140,58 @@ describe('real-core reset rotation', () => {
         expect(recordCalls).toBe(2)
     })
 
+    it('ships the pre-reset tail under the pre-reset distinct_id', async () => {
+        captured = []
+        installFakeRRweb()
+
+        const posthog: PostHog = await createPosthogInstance(
+            uuidv7(),
+            {
+                disable_session_recording: false,
+                advanced_disable_flags: true,
+                session_recording: { compress_events: true },
+                before_send: (cr: any) => {
+                    if (cr) {
+                        captured.push({ event: cr.event, properties: cr.properties })
+                    }
+                    return null
+                },
+            },
+            { sessionRecording: { endpoint: '/s/' } } as any
+        )
+
+        await waitFor(() => expect(_emit).toBeDefined())
+        const firstSessionId = posthog.get_session_id()
+        const firstDistinctId = posthog.get_distinct_id()
+
+        _emit(mouse())
+        _emit(mutation())
+
+        posthog.reset()
+        posthog.identify('user-after-logout')
+
+        _emit(mouse())
+        _emit(mutation())
+
+        await drain()
+        ;(posthog.sessionRecording as any)['_lazyLoadedSessionRecording']['_flushBuffer']()
+        await drain()
+
+        const snapshots = captured.filter((c) => c.event === '$snapshot')
+        const oldSession = snapshots.filter((c) => c.properties.$session_id === firstSessionId)
+        expect(oldSession.length).toBeGreaterThan(0)
+        expect(oldSession.map((c) => c.properties.distinct_id)).toEqual(oldSession.map(() => firstDistinctId))
+        expect(
+            snapshots
+                .filter((c) => c.properties.$session_id === posthog.get_session_id())
+                .map((c) => c.properties.distinct_id)
+        ).toEqual(
+            snapshots
+                .filter((c) => c.properties.$session_id === posthog.get_session_id())
+                .map(() => 'user-after-logout')
+        )
+    })
+
     it('ships zero recordings across a rotation with a busy queue when there is no interaction', async () => {
         captured = []
         installFakeRRweb()

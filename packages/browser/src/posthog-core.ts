@@ -3597,6 +3597,9 @@ export class PostHog implements PostHogInterface {
             console.warn('[PostHog.js]', RESET_CONSENT_WARN)
         }
 
+        // ship the replay tail while the old distinct_id is still in persistence
+        this.sessionRecording?.flushBeforeIdentityReset()
+
         const cookieSyncSuppressionStarted = this.persistence?._beginCookieSyncSuppression?.()
         let resetCompleted = false
         try {

@@ -235,6 +235,7 @@ export interface LazyLoadedSessionRecordingInterface {
     isStarted: boolean
     tryAddCustomEvent(tag: string, payload: any): boolean
     setDocumentWasEverVisible?: (documentWasEverVisible: boolean) => void
+    flushBeforeIdentityReset?: () => void
 }
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {
