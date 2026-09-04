@@ -233,6 +233,7 @@ describe('reset()', () => {
                 'false-payload-flag',
                 'zero-payload-flag',
                 'empty-payload-flag',
+                'inactive-flag',
             ])
             expect(instance.featureFlags.getFlagVariants()).toEqual({
                 'active-flag': true,
@@ -240,6 +241,7 @@ describe('reset()', () => {
                 'false-payload-flag': true,
                 'zero-payload-flag': true,
                 'empty-payload-flag': true,
+                'inactive-flag': false,
             })
             expect(instance.featureFlags.getFeatureFlagPayload('active-flag')).toEqual({ key: 'value' })
             expect(instance.featureFlags.getFeatureFlagPayload('false-payload-flag')).toBe(false)

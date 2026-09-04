@@ -2066,6 +2066,15 @@ export class PostHog implements PostHogInterface {
         // reports document.referrer (the iframe's own origin) rather than the registered value.
         const persistenceProperties = this.persistence.properties()
         const sessionPersistenceProperties = this.sessionPersistence.properties()
+        const eventGroups = properties['$groups']
+        const persistenceGroups = persistenceProperties['$groups']
+        // An explicit empty object keeps its existing meaning: omit registered groups for this event.
+        if (isObject(eventGroups) && !isEmptyObject(eventGroups)) {
+            properties['$groups'] = {
+                ...(isObject(persistenceGroups) ? persistenceGroups : {}),
+                ...eventGroups,
+            }
+        }
         each(['$referrer', '$referring_domain'], (referrerKey) => {
             if (referrerKey in persistenceProperties) {
                 delete sessionPersistenceProperties[referrerKey]
@@ -3027,12 +3036,12 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
-     * @param {String} [new_distinct_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
+     * @param {String} [new_distinct_id] A non-empty string that uniquely identifies a user.
      * @param {Object} [userPropertiesToSet] Optional: An associative array of properties to store about the user. Note: For feature flag evaluations, if the same key is present in the userPropertiesToSetOnce,
      *  it will be overwritten by the value in userPropertiesToSet.
      * @param {Object} [userPropertiesToSetOnce] Optional: An associative array of properties to store about the user. If property is previously set, this does not override that value.
      */
-    identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void {
+    identify(new_distinct_id: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void {
         if (!this.__loaded || !this.persistence) {
             return logger.uninitializedWarning('posthog.identify')
         }
@@ -4008,6 +4017,10 @@ export class PostHog implements PostHogInterface {
             this.surveys?.loadIfEnabled()
             this._sync_opt_out_with_persistence()
             this.externalIntegrations?.startIfEnabledOrStop()
+
+            if (!oldConfig.segment && this.config.segment && this.persistence) {
+                setupSegmentIntegration(this, __NOOP, false)
+            }
         }
     }
 

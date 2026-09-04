@@ -29,7 +29,7 @@ import {
 import { PERSISTENCE_KEY_POLICY } from '../persistence-key-policy'
 import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
-import { window } from '@posthog/browser-common/utils/globals'
+import * as globals from '@posthog/browser-common/utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import {
     cookieStore,
@@ -44,6 +44,7 @@ import {
 import { defaultPostHog } from './helpers/posthog-instance'
 import Mock = vi.Mock
 
+const { window } = globals
 let referrer = '' // No referrer by default
 Object.defineProperty(document, 'referrer', { get: () => referrer })
 
@@ -118,6 +119,7 @@ describe('persistence', () => {
         library?.clear()
         document.cookie = ''
         referrer = ''
+        vi.restoreAllMocks()
     })
 
     const persistenceModes: string[] = ['cookie', 'localStorage', 'localStorage+cookie']
@@ -658,6 +660,21 @@ describe('persistence', () => {
         })
     })
 
+    it.each(['localStorage', 'sessionStorage', 'memory'])(
+        'should preserve initial person URL length with %s persistence',
+        (persistenceMode) => {
+            const longUrl = `https://www.example.com/?${'&'.repeat(2000)}`
+            vi.spyOn(globals, 'location', 'get').mockReturnValue({ href: longUrl } as Location)
+            referrer = longUrl
+            library = new PostHogPersistence(makePostHogConfig('test', persistenceMode))
+
+            library.set_initial_person_info()
+
+            expect(library.props[INITIAL_PERSON_INFO].r).toHaveLength(1000)
+            expect(library.props[INITIAL_PERSON_INFO].u).toHaveLength(1000)
+        }
+    )
+
     describe('localStorage+cookie', () => {
         const encode = (props: any) => encodeURIComponent(JSON.stringify(props))
 
@@ -741,6 +758,62 @@ describe('persistence', () => {
                 $initial_person_info: { u: 'https://www.example.com', r: 'https://www.referrer.com' },
                 $user_state: 'identified',
             })
+        })
+
+        it('should limit initial person URLs by their encoded cookie size', () => {
+            const longUrl = `https://www.example.com/?${'&'.repeat(2000)}`
+            vi.spyOn(globals, 'location', 'get').mockReturnValue({ href: longUrl } as Location)
+            referrer = longUrl
+            library = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
+            library.register({
+                distinct_id: '0195ad79-114c-7cba-b50c-f5669fc3c9c9',
+                $device_id: '0195ad79-114c-7cba-b50c-f5669fc3c9c9',
+                $sesid: [1742372694303, '0195ad79-1843-77fd-a2c8-274d23d9c647', 1742372149315],
+            })
+
+            library.set_initial_person_info()
+
+            const personInfo = library.props[INITIAL_PERSON_INFO]
+            expect(encodeURIComponent(JSON.stringify(personInfo.r).slice(1, -1)).length).toBeLessThanOrEqual(1000)
+            expect(encodeURIComponent(JSON.stringify(personInfo.u).slice(1, -1)).length).toBeLessThanOrEqual(1000)
+            const persistedCookieValue = cookieStore._get('ph__posthog')
+            expect(persistedCookieValue).toBeTruthy()
+            const encodedCookieValue = encodeURIComponent(persistedCookieValue || '')
+            expect(`ph__posthog=${encodedCookieValue}; SameSite=Lax; path=/`.length).toBeLessThan(4096 * 0.9)
+        })
+
+        it('should normalize initial person URLs loaded from localStorage', () => {
+            const longUrl = `https://www.example.com/?${'&'.repeat(2000)}`
+            const previousLibrary = new PostHogPersistence(makePostHogConfig('test', 'localStorage'))
+            previousLibrary.register({ [INITIAL_PERSON_INFO]: { r: longUrl, u: longUrl } })
+
+            library = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
+
+            expect(
+                encodeURIComponent(JSON.stringify(library.props[INITIAL_PERSON_INFO].r).slice(1, -1)).length
+            ).toBeLessThanOrEqual(1000)
+            expect(
+                encodeURIComponent(JSON.stringify(library.props[INITIAL_PERSON_INFO].u).slice(1, -1)).length
+            ).toBeLessThanOrEqual(1000)
+            expect(document.cookie.length).toBeLessThan(4096 * 0.9)
+        })
+
+        it('should normalize initial person URLs when switching to cookie persistence', () => {
+            const longUrl = `https://www.example.com/?${'&'.repeat(2000)}`
+            const oldConfig = makePostHogConfig('test', 'localStorage')
+            const newConfig = makePostHogConfig('test', 'localStorage+cookie')
+            library = new PostHogPersistence(oldConfig)
+            library.register({ [INITIAL_PERSON_INFO]: { r: longUrl, u: longUrl } })
+
+            library.update_config(newConfig, oldConfig)
+
+            expect(
+                encodeURIComponent(JSON.stringify(library.props[INITIAL_PERSON_INFO].r).slice(1, -1)).length
+            ).toBeLessThanOrEqual(1000)
+            expect(
+                encodeURIComponent(JSON.stringify(library.props[INITIAL_PERSON_INFO].u).slice(1, -1)).length
+            ).toBeLessThanOrEqual(1000)
+            expect(document.cookie.length).toBeLessThan(4096 * 0.9)
         })
 
         it('should persist custom properties to cookies when using localStorage+cookie', () => {
