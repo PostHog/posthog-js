@@ -8,8 +8,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { USER_STATE } from '../constants'
-import { SegmentContext, SegmentPlugin } from '../extensions/segment-integration'
+import { EVENT_IDENTIFY, USER_STATE } from '../constants'
+import { SegmentContext, SegmentPlugin, setupSegmentIntegration } from '../extensions/segment-integration'
 import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { PostHogConfig } from '../types'
@@ -106,6 +106,111 @@ describe(`Segment integration`, () => {
 
         expect(posthog.get_distinct_id()).toBe('test-id')
         expect(posthog.get_property('$device_id')).toBe('test-anonymous-id')
+    })
+
+    it('sets up the Segment integration when configured after init', async () => {
+        const posthog = await initPostHogInAPromise(undefined, posthogName)
+        const initialDistinctId = posthog.get_distinct_id()
+        let runtimeIntegration: SegmentPlugin | undefined
+        const runtimeSegment = {
+            ...segment,
+            register: vi.fn((integration: SegmentPlugin) => {
+                runtimeIntegration = integration
+                return Promise.resolve(integration)
+            }),
+        }
+        vi.spyOn(posthog, 'calculateEventProperties').mockReturnValue({
+            $active_feature_flags: ['runtime-flag'],
+        })
+
+        posthog.set_config({ segment: runtimeSegment })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(runtimeSegment.register).toHaveBeenCalledTimes(1)
+        expect(posthog.get_distinct_id()).toBe(initialDistinctId)
+
+        const enrichedContext = runtimeIntegration!.track!({
+            event: {
+                event: 'Runtime Segment Event',
+                userId: 'test-id',
+                anonymousId: 'test-anonymous-id',
+                properties: {},
+            },
+        } as unknown as SegmentContext)
+        expect(enrichedContext.event.properties).toEqual(
+            expect.objectContaining({ $active_feature_flags: ['runtime-flag'] })
+        )
+        expect(posthog.get_distinct_id()).toBe('test-id')
+
+        posthog.set_config({ segment: runtimeSegment })
+        expect(runtimeSegment.register).toHaveBeenCalledTimes(1)
+    })
+
+    it('preserves the pre-Segment anonymous identity until Segment identifies the user', async () => {
+        const posthog = await initPostHogInAPromise(undefined, posthogName)
+        const initialDistinctId = posthog.get_distinct_id()
+        let runtimeIntegration: SegmentPlugin | undefined
+        const runtimeSegment = {
+            user: () => ({
+                anonymousId: () => 'segment-anonymous-id',
+                id: () => undefined,
+            }),
+            register: vi.fn((integration: SegmentPlugin) => {
+                runtimeIntegration = integration
+                return Promise.resolve(integration)
+            }),
+        }
+        const captureSpy = vi.spyOn(posthog, 'capture')
+
+        posthog.set_config({ segment: runtimeSegment })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        runtimeIntegration!.track!({
+            event: {
+                event: 'Anonymous Segment Event',
+                anonymousId: 'segment-anonymous-id',
+                properties: {},
+            },
+        } as unknown as SegmentContext)
+        expect(posthog.get_distinct_id()).toBe(initialDistinctId)
+
+        runtimeIntegration!.identify!({
+            event: {
+                event: EVENT_IDENTIFY,
+                userId: 'identified-user',
+                anonymousId: 'segment-anonymous-id',
+                properties: {},
+            },
+        } as unknown as SegmentContext)
+        expect(posthog.get_distinct_id()).toBe('identified-user')
+        expect(captureSpy).toHaveBeenCalledWith(
+            EVENT_IDENTIFY,
+            {
+                distinct_id: 'identified-user',
+                $anon_distinct_id: initialDistinctId,
+            },
+            { $set: {}, $set_once: {} }
+        )
+    })
+
+    it('completes setup when Segment registration rejects', async () => {
+        const posthog = await initPostHogInAPromise(undefined, posthogName)
+        const registrationError = new Error('Segment registration failed')
+        const done = vi.fn()
+        const rejectedRegistration = {
+            then: vi.fn((_onFulfilled: () => void, onRejected?: (error: Error) => void) => {
+                onRejected?.(registrationError)
+                return Promise.resolve()
+            }),
+        }
+        posthog.config.segment = {
+            ...segment,
+            register: vi.fn(() => rejectedRegistration as unknown as Promise<SegmentPlugin>),
+        }
+
+        setupSegmentIntegration(posthog, done, false)
+
+        expect(done).toHaveBeenCalledTimes(1)
     })
 
     it('enriches Segment track events with PostHog properties', async () => {

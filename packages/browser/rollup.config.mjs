@@ -14,7 +14,7 @@ import crossBundlePropertyConfig from './terser-cross-bundle-properties.cjs'
 const { crossBundlePrivateProperties, globallyReservedPrivateProperties } = crossBundlePropertyConfig
 const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
 const nameCachePath = './terser-mangled-names.json'
-let nameCache = {}
+const nameCache = {}
 
 // Shared across all entries so mangled property names are consistent between
 // module.slim.js and extension-bundles.js — see #3313.
@@ -361,32 +361,32 @@ const entrypointTargets = entrypoints.map((file) => {
     // eslint-disable-next-line no-console
     console.log(`Building ${fileName} in ${format} format`)
 
+    const outputExtensions = format === 'es' && fileName === 'module' ? ['js', 'mjs'] : ['js']
+
     /** @type {import('rollup').RollupOptions} */
     return {
         input: `src/entrypoints/${file}`,
-        output: [
-            {
-                file: `dist/${fileName}.js`,
-                sourcemap: true,
-                // Mark every source in our bundles as third-party so devtools skip our frames.
-                // Without this, wrappers we install on globals (most visibly the console capture
-                // in entrypoints/logs.ts and rrweb's console plugin) become the reported location
-                // of the caller's own `console.*` calls (e.g. everything blamed on `logs.ts`).
-                // Rollup's default only ignore-lists paths containing node_modules, which misses
-                // both our `src/` and workspace packages (they resolve through symlinks).
-                sourcemapIgnoreList: () => true,
-                format,
-                ...(format === 'iife'
-                    ? {
-                          name: 'posthog',
-                          globals: {
-                              preact: 'preact',
-                          },
-                      }
-                    : {}),
-                ...(format === 'cjs' ? { exports: 'named' } : {}),
-            },
-        ],
+        output: outputExtensions.map((extension) => ({
+            file: `dist/${fileName}.${extension}`,
+            sourcemap: true,
+            // Mark every source in our bundles as third-party so devtools skip our frames.
+            // Without this, wrappers we install on globals (most visibly the console capture
+            // in entrypoints/logs.ts and rrweb's console plugin) become the reported location
+            // of the caller's own `console.*` calls (e.g. everything blamed on `logs.ts`).
+            // Rollup's default only ignore-lists paths containing node_modules, which misses
+            // both our `src/` and workspace packages (they resolve through symlinks).
+            sourcemapIgnoreList: () => true,
+            format,
+            ...(format === 'iife'
+                ? {
+                      name: 'posthog',
+                      globals: {
+                          preact: 'preact',
+                      },
+                  }
+                : {}),
+            ...(format === 'cjs' ? { exports: 'named' } : {}),
+        })),
         plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true })],
     }
 })

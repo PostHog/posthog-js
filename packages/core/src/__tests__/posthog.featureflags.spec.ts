@@ -1977,6 +1977,7 @@ describe('PostHog Feature Flags v4', () => {
       expect(posthog.getFeatureFlags()).toEqual({
         'bootstrap-1': 'variant-1',
         enabled: true,
+        disabled: false,
         'feature-1': 'feature-1-bootstrap-value',
         'not-in-featureFlags': true,
       })
