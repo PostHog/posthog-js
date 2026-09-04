@@ -182,9 +182,9 @@ const RESET_CONSENT_WARN =
     'Call opt_in_capturing() again, and prefer calling reset() before opting in rather than after.'
 const BOOTSTRAP_AUTO_IDENTIFY_WARN =
     'bootstrap.isIdentifiedID is true (the identity_distinct_id config sets it too), so init() called identify() ' +
-    'with the bootstrapped distinctID and merged the local anonymous ID into it. Only set isIdentifiedID when the ID ' +
-    'is a stable ID of a logged-in user. An ID that is new for every browser creates one identified person per ' +
-    'browser, and those persons cannot merge at login.'
+    'with the bootstrapped distinctID. Only set isIdentifiedID when the ID is a stable ID of a logged-in user. ' +
+    'An ID that is new for every browser creates one identified person per browser, and those persons cannot ' +
+    'merge at login.'
 const BOOTSTRAP_ANONYMOUS_OVER_IDENTIFIED_WARN =
     'The bootstrapped distinctID is not marked as identified, but this browser already holds an identified user. ' +
     'The identified user is replaced without an $identify event. Call reset() before you reinitialize for a new user, ' +
