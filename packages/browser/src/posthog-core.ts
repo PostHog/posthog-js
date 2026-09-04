@@ -180,6 +180,15 @@ const CONSENT_COOKIELESS_WARN = 'Consent opt in/out is not valid with cookieless
 const RESET_CONSENT_WARN =
     'reset() cleared the stored consent, and capturing is now off because of `opt_out_capturing_by_default`. ' +
     'Call opt_in_capturing() again, and prefer calling reset() before opting in rather than after.'
+const BOOTSTRAP_AUTO_IDENTIFY_WARN =
+    'bootstrap.isIdentifiedID is true (the identity_distinct_id config sets it too), so init() called identify() ' +
+    'with the bootstrapped distinctID. Only set isIdentifiedID when the ID is a stable ID of a logged-in user. ' +
+    'An ID that is new for every browser creates one identified person per browser, and those persons cannot ' +
+    'merge at login.'
+const BOOTSTRAP_ANONYMOUS_OVER_IDENTIFIED_WARN =
+    'The bootstrapped distinctID is not marked as identified, but this browser already holds an identified user. ' +
+    'The identified user is replaced without an $identify event. Call reset() before you reinitialize for a new user, ' +
+    'or set bootstrap.isIdentifiedID to true if the bootstrapped ID belongs to a logged-in user.'
 const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
@@ -971,6 +980,13 @@ export class PostHog implements PostHogInterface {
                 // reloadFeatureFlags() call inside identify() sets _reloadDebouncer, so the
                 // subsequent ensureFlagsLoaded() from _onRemoteConfig is a no-op (no double request).
                 this.identify(bootstrapDistinctId)
+                // identify() ignores an invalid ID, and does nothing at all when person_profiles is
+                // 'never', so only warn once the identity really moved to the bootstrapped ID.
+                if (this.get_distinct_id() === bootstrapDistinctId) {
+                    // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
+                    // oxlint-disable-next-line no-console
+                    console.warn('[PostHog.js]', BOOTSTRAP_AUTO_IDENTIFY_WARN)
+                }
             } else if (
                 config.bootstrap.isIdentifiedID &&
                 existingDistinctId != null &&
@@ -986,6 +1002,16 @@ export class PostHog implements PostHogInterface {
                         'if you intend to switch users.'
                 )
             } else {
+                if (
+                    !config.bootstrap.isIdentifiedID &&
+                    existingDistinctId != null &&
+                    existingDistinctId !== bootstrapDistinctId &&
+                    existingUserState === USER_STATE_IDENTIFIED
+                ) {
+                    // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
+                    // oxlint-disable-next-line no-console
+                    console.warn('[PostHog.js]', BOOTSTRAP_ANONYMOUS_OVER_IDENTIFIED_WARN)
+                }
                 const uuid = this.config.get_device_id(uuidv7())
                 const deviceID = config.bootstrap.isIdentifiedID ? uuid : bootstrapDistinctId
                 this.persistence.set_property(

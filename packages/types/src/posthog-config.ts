@@ -168,6 +168,9 @@ export interface BootstrapConfig {
 
     /**
      * Whether `distinctID` already identifies a known person profile.
+     *
+     * Only set this for a stable ID of a logged-in user. An ID that is new for every browser
+     * creates one identified person per browser, and those persons cannot merge at login.
      */
     isIdentifiedID?: boolean
 
