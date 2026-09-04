@@ -1,7 +1,7 @@
 /**
  * @vitest-environment node
  */
-/* eslint-disable @typescript-eslint/no-require-imports */
+/* oxlint-disable typescript/no-require-imports */
 
 const {
     isRetryableError,

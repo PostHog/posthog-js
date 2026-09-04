@@ -3511,6 +3511,11 @@
           "name": "person_profiles"
         },
         {
+          "description": "When true, `identify()` omits `$anon_distinct_id` from the `$identify` event\nand the follow-up feature flag request, so PostHog does not merge the\nprevious anonymous identity into the identified person.",
+          "type": "boolean",
+          "name": "reuseAnonymousId"
+        },
+        {
           "description": "Deprecated: - use `person_profiles` instead",
           "type": "\"always\" | \"never\" | \"identified_only\"",
           "name": "process_person",

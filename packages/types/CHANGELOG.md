@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.409.0
+
+### Minor Changes
+
+- [#4774](https://github.com/PostHog/posthog-js/pull/4774) [`426e1fd`](https://github.com/PostHog/posthog-js/commit/426e1fd6c001c030e5753d0d25a0bdb9adc99448) Thanks [@Fhatu12](https://github.com/Fhatu12)! - Add `reuseAnonymousId` support to browser identify calls.
+  (2026-09-04)
+
 ## 1.408.1
 
 ### Patch Changes

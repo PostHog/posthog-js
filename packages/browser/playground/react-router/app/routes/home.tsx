@@ -1,7 +1,7 @@
 import { Welcome } from '../welcome/welcome'
 import type { Route } from './+types/home'
 
-// eslint-disable-next-line no-empty-pattern
+// oxlint-disable-next-line no-empty-pattern
 export function meta({}: Route.MetaArgs) {
     return [{ title: 'PostHog React Router Demo' }]
 }

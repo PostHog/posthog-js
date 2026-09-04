@@ -110,7 +110,7 @@ test.describe('product tours - auto triggers', () => {
             ;(window as any).buttonClickCount = 0
             const btn = document.getElementById('click-trigger-btn')
             if (btn) {
-                // eslint-disable-next-line posthog-js/no-add-event-listener
+                // oxlint-disable-next-line posthog-js/no-add-event-listener
                 btn.addEventListener('click', () => {
                     ;(window as any).buttonClickCount++
                 })

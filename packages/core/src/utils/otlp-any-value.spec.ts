@@ -237,7 +237,7 @@ describe('otlp-any-value', () => {
     // Both `null` and `{}` here are rejected for the whole request; iOS and
     // Android drop them too.
     it('drops holes and nullish elements from arrays', () => {
-      // eslint-disable-next-line no-sparse-arrays
+      // oxlint-disable-next-line no-sparse-arrays
       expect(toOtlpAnyValue([1, , 3])).toEqual({
         arrayValue: { values: [{ intValue: '1' }, { intValue: '3' }] },
       })

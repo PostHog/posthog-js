@@ -571,7 +571,7 @@ export class PostHogLogs implements Extension {
     }
 
     private _sendLogsBatch(payload: OtlpLogsPayload): Promise<SendLogsBatchOutcome> {
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve) => {
             if (
                 isStatusZeroFailureCircuitBreakerTripped(

@@ -65,7 +65,7 @@ const readGroups = (value: unknown): Record<string, string> => {
 }
 
 const isTimestamp = (value: unknown): value is number =>
-    // eslint-disable-next-line posthog-js/no-direct-number-check
+    // oxlint-disable-next-line posthog-js/no-direct-number-check
     typeof value === 'number' && Number.isFinite(value) && value >= 0
 
 const readRevision = (value: unknown, fallback?: unknown): string | undefined => {
@@ -663,14 +663,14 @@ export class BrowserState {
             return
         }
         try {
-            // eslint-disable-next-line posthog-js/no-add-event-listener
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
             globalThis.addEventListener('beforeunload', this._beforeUnload)
             this._windowListenerInstalled = true
         } catch {
             // Try the unload fallback used by Firefox reloads.
         }
         try {
-            // eslint-disable-next-line posthog-js/no-add-event-listener
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
             globalThis.addEventListener('unload', this._beforeUnload)
             this._windowListenerInstalled = true
         } catch {
