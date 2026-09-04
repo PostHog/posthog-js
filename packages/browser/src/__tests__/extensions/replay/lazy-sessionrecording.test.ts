@@ -2357,6 +2357,25 @@ describe('Lazy SessionRecording', () => {
                         assignableWindow.POSTHOG_DEBUG = undefined
                     })
 
+                    it('logs a new held epoch after an explicit stop and restart in the same session', () => {
+                        assignableWindow.POSTHOG_DEBUG = true
+                        const logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+                        const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                        lazyRecorder.stop()
+                        logSpy.mockClear()
+                        lazyRecorder.start()
+
+                        const holdLogs = logSpy.mock.calls.filter(
+                            (call) => typeof call[1] === 'string' && call[1].includes('holding buffer')
+                        )
+                        expect(holdLogs).toHaveLength(1)
+                        expect(holdLogs[0][1]).toContain('no_interaction_since_recording_started')
+
+                        logSpy.mockRestore()
+                        assignableWindow.POSTHOG_DEBUG = undefined
+                    })
+
                     it('logs one reason for a rotation-born epoch even when the dedup key does not absorb the transient fresh-start hold', () => {
                         // the "logs once" guarantee also has to hold when the previous dedup key
                         // does not happen to match the transient fresh-start hold that start()

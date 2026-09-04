@@ -1550,11 +1550,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // held buffer. Without this a stopped or discarded recorder keeps reporting a stale
     // $sdk_debug_replay_flush_hold_reason on later captured events, because the
     // sdkDebugProperties getter still runs after stop() (the recorder is torn down, not dropped).
-    // preserveLogDedup keeps _lastLoggedFlushHold: a rotation restart sets a transient
-    // fresh-start hold in start() that _restartForSessionIdChange immediately overwrites with the
-    // real rotation reason, and the surviving dedup key is what keeps that transient from logging.
+    // During a rotation restart, preserveLogDedup keeps _lastLoggedFlushHold: start() sets a
+    // transient fresh-start hold that _restartForSessionIdChange immediately overwrites with the
+    // real rotation reason. Explicit stops clear the key so a later held epoch logs again.
     private _releaseHoldAfterStop() {
-        this._setFlushHold(undefined, { preserveLogDedup: true })
+        this._setFlushHold(undefined, { preserveLogDedup: this._isRestartingForSessionIdChange })
         this._heldEpochShipsOnUnload = false
     }
 
