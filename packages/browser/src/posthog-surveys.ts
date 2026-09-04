@@ -258,8 +258,10 @@ export class PostHogSurveys implements Extension {
             this._registerEventOrActionBasedSurveys(cachedSurveys)
         }
         logger.info('Surveys loaded successfully')
-        this._notifySurveyCallbacks({ isLoaded: true })
+        // Establish the subscription's initial value before existing load callbacks can capture
+        // events and cause activation transitions.
         this._notifyActiveMatchingSurveyCallbacks()
+        this._notifySurveyCallbacks({ isLoaded: true })
     }
 
     /** Helper to handle errors during survey loading */

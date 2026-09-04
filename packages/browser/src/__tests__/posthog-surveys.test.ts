@@ -972,6 +972,7 @@ describe('posthog-surveys', () => {
                 const eventSurvey: Survey = {
                     ...survey,
                     id: 'event-targeted-survey',
+                    type: SurveyType.API,
                     conditions: {
                         events: { values: [{ name: 'user_subscribed' }] },
                         cancelEvents: { values: [{ name: 'user_unsubscribed' }] },
@@ -980,7 +981,9 @@ describe('posthog-surveys', () => {
                         },
                     },
                 }
-                mockPostHog.get_property.mockReturnValue([eventSurvey])
+                mockPostHog.get_property.mockImplementation((key: string) =>
+                    key === SURVEYS ? [eventSurvey] : undefined
+                )
                 mockPostHog._addCaptureHook = vi.fn((hook) => {
                     captureHooks.push(hook)
                     return () => {
@@ -993,12 +996,7 @@ describe('posthog-surveys', () => {
                 mockPostHog.surveys = surveys
                 mockPostHog.getSurveys = surveys.getSurveys.bind(surveys)
                 mockPostHog.cancelPendingSurvey = vi.fn()
-                mockGenerateSurveys.mockImplementation(() => ({
-                    getActiveMatchingSurveys: (callback: (matchingSurveys: Survey[]) => void) => {
-                        const isActive = surveys._surveyEventReceiver?.getSurveys().includes(eventSurvey.id)
-                        callback(isActive ? [eventSurvey] : [])
-                    },
-                }))
+                mockGenerateSurveys.mockImplementation(() => new SurveyManager(mockPostHog))
                 surveys['_isSurveysEnabled'] = true
                 const callback = vi.fn()
 
@@ -1029,6 +1027,39 @@ describe('posthog-surveys', () => {
                 unsubscribe()
                 capture('user_subscribed')
                 expect(callback).toHaveBeenCalledTimes(5)
+            })
+
+            it('emits the initial set before a survey-loaded callback can trigger activation', () => {
+                const captureHooks: Array<(eventName: string, eventPayload?: any) => void> = []
+                const eventSurvey: Survey = {
+                    ...survey,
+                    id: 'api-event-targeted-survey',
+                    type: SurveyType.API,
+                    conditions: {
+                        events: { values: [{ name: 'my_event' }] },
+                    },
+                }
+                mockPostHog.get_property.mockImplementation((key: string) =>
+                    key === SURVEYS ? [eventSurvey] : undefined
+                )
+                mockPostHog._addCaptureHook = vi.fn((hook) => {
+                    captureHooks.push(hook)
+                    return () => {}
+                })
+                mockPostHog.surveys = surveys
+                mockPostHog.getSurveys = surveys.getSurveys.bind(surveys)
+                mockPostHog.cancelPendingSurvey = vi.fn()
+                mockGenerateSurveys.mockImplementation(() => new SurveyManager(mockPostHog))
+                surveys['_isSurveysEnabled'] = true
+                const callback = vi.fn()
+
+                surveys.onActiveMatchingSurveysChanged(callback)
+                surveys.onSurveysLoaded(() => {
+                    captureHooks.forEach((hook) => hook('my_event', { event: 'my_event', properties: {} } as any))
+                })
+                surveys.loadIfEnabled()
+
+                expect(callback.mock.calls.map(([matchingSurveys]) => matchingSurveys)).toEqual([[], [eventSurvey]])
             })
         })
 
