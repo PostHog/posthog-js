@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.50.4
+
+### Patch Changes
+
+- [#4759](https://github.com/PostHog/posthog-js/pull/4759) [`c475070`](https://github.com/PostHog/posthog-js/commit/c47507068cd8156334afb3c48758a1b92d590f99) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve explicitly false feature flag values supplied through bootstrap configuration.
+  (2026-09-03)
+
 ## 1.50.3
 
 ### Patch Changes
