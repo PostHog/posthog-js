@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.427.1
+
+### Patch Changes
+
+- [#4786](https://github.com/PostHog/posthog-js/pull/4786) [`a04c333`](https://github.com/PostHog/posthog-js/commit/a04c33378dede5060dcdf645e7d2d58952670061) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent automatic and manual exception capture from recursively recapturing stack overflows raised while sending an exception.
+  (2026-09-04)
+
 ## 1.427.0
 
 ### Minor Changes
