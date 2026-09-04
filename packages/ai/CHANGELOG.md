@@ -1,5 +1,14 @@
 # posthog-ai
 
+## 8.10.1
+
+### Patch Changes
+
+- [#4736](https://github.com/PostHog/posthog-js/pull/4736) [`c16a7ce`](https://github.com/PostHog/posthog-js/commit/c16a7ce9997a37a48119645d43fddf51384cf9c5) Thanks [@bernatixer](https://github.com/bernatixer)! - Only terminal Responses API statuses become `$ai_stop_reason` (a queued or in-progress background run no longer records a lifecycle state as its stop reason), and the native OpenAI wrapper now names a truncated run by `incomplete_details.reason` (e.g. `max_output_tokens`) instead of the bare `incomplete`, matching the LangChain callback
+  (2026-09-03)
+- Updated dependencies [[`dbbb58e`](https://github.com/PostHog/posthog-js/commit/dbbb58e286db3762673f71995a8aeea89aa44123)]:
+  - @posthog/core@1.50.3
+
 ## 8.10.0
 
 ### Minor Changes

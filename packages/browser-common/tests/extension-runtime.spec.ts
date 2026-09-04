@@ -1,4 +1,4 @@
-/* eslint-disable compat/compat */
+/* oxlint-disable compat/compat */
 import type { Logger } from '@posthog/core'
 
 import type { Client } from '../src/client'
@@ -8,18 +8,18 @@ import type { ExtensionToken } from '../src/token'
 import { createTestClient } from './helpers/test-client'
 
 const logger: Logger = {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-    critical: jest.fn(),
-    createLogger: jest.fn(() => logger),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    critical: vi.fn(),
+    createLogger: vi.fn(() => logger),
 }
 
 function testExtension(
     name: string,
-    setup: (client: Client) => void | Promise<void> = jest.fn(),
-    dispose: (() => void) | undefined = jest.fn()
+    setup: (client: Client) => void | Promise<void> = vi.fn(),
+    dispose: (() => void) | undefined = vi.fn()
 ): Extension {
     return { name, setup, dispose }
 }
@@ -37,7 +37,7 @@ function createRuntime(): {
 
 describe('ExtensionRuntime', () => {
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     it('passes the client adapter and reserves names while setup is pending', async () => {
@@ -70,7 +70,7 @@ describe('ExtensionRuntime', () => {
         const ConsumerLogsExtension = `${'logs'}` as ExtensionToken<LogsExtension>
         const MissingExtension = 'missing' as ExtensionToken<LogsExtension>
         const { runtime, add } = createRuntime()
-        const captureLog = jest.fn()
+        const captureLog = vi.fn()
         let resolvedDuringSetup: LogsExtension | undefined
         const extension: LogsExtension = {
             name: LogsExtension,
@@ -103,7 +103,7 @@ describe('ExtensionRuntime', () => {
         { label: 'asynchronous', setup: () => Promise.reject(new Error('setup failed')) },
     ])('releases names and cleans up after $label setup failure', async ({ setup }) => {
         const { add } = createRuntime()
-        const dispose = jest.fn()
+        const dispose = vi.fn()
 
         await add(testExtension('failed', setup, dispose))
 
@@ -116,7 +116,7 @@ describe('ExtensionRuntime', () => {
     it.each(['resolve', 'reject'] as const)('cleans pending setup immediately after late %s', async (outcome) => {
         const { runtime, add } = createRuntime()
         let settle: (() => void) | undefined
-        const dispose = jest.fn()
+        const dispose = vi.fn()
         const registration = add(
             testExtension(
                 'pending',
@@ -166,7 +166,7 @@ describe('ExtensionRuntime', () => {
         const { runtime, add } = createRuntime()
         const error = new Error('async dispose failed')
         await add(
-            testExtension('async', jest.fn(), async () => {
+            testExtension('async', vi.fn(), async () => {
                 throw error
             })
         )
@@ -179,13 +179,13 @@ describe('ExtensionRuntime', () => {
 
     it('isolates cleanup errors, cleans each extension once, and rejects later additions', async () => {
         const { runtime, add } = createRuntime()
-        const successfulDispose = jest.fn()
+        const successfulDispose = vi.fn()
         await add(
-            testExtension('failing', jest.fn(), () => {
+            testExtension('failing', vi.fn(), () => {
                 throw new Error('dispose failed')
             })
         )
-        await add(testExtension('successful', jest.fn(), successfulDispose))
+        await add(testExtension('successful', vi.fn(), successfulDispose))
 
         expect(() => runtime.dispose()).not.toThrow()
         runtime.dispose()

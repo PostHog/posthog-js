@@ -1,4 +1,4 @@
-/** @jest-environment node */
+/** @vitest-environment node */
 
 import type { PostHogFetchOptions } from '@posthog/core'
 
@@ -54,11 +54,11 @@ function snapshotRequest([url, options]: FetchCall): unknown {
 }
 
 describe('server wire snapshots', () => {
-  const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+  const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
   const clients: PostHog[] = []
 
   beforeEach(() => {
-    jest.setSystemTime(FIXED_NOW)
+    vi.setSystemTime(FIXED_NOW)
     mockedFetch.mockImplementation((url) =>
       Promise.resolve((url as string).includes('/i/v1/analytics/events') ? v1Response() : v0Response())
     )

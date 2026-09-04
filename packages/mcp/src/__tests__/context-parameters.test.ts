@@ -7,20 +7,20 @@ import { log } from '../extensions/logger'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
-jest.mock('../extensions/logger', () => ({
+vi.mock('../extensions/logger', () => ({
   createLogger: (logger?: (message: string) => void) => logger ?? (() => undefined),
-  log: jest.fn(),
-  setLogger: jest.fn(),
+  log: vi.fn(),
+  setLogger: vi.fn(),
 }))
 
-const mockedLog = jest.mocked(log)
+const mockedLog = vi.mocked(log)
 
 beforeEach(() => {
   mockedLog.mockClear()
 })
 
 afterEach(() => {
-  jest.restoreAllMocks()
+  vi.restoreAllMocks()
 })
 
 /**
@@ -287,7 +287,7 @@ describe('Context Parameters — integration with an instrumented server', () =>
   it('prefers an explicit `context` argument over the fallback', async () => {
     const capture = new EventCapture()
     await capture.start()
-    const intentFallback = jest.fn(() => 'Fallback intent')
+    const intentFallback = vi.fn(() => 'Fallback intent')
     instrument(server, fakePostHog(), { context: true, intentFallback })
 
     await client.request(

@@ -349,7 +349,7 @@ function buildCompressedIncrementalEvent(
 ): compressedEventWithTime {
     // reshapes rrweb incremental `data` into its compressed string-field variant — the
     // compiler cannot relate the incoming union member to the matching compressed member
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+    // oxlint-disable-next-line typescript/consistent-type-assertions
     return {
         ...event,
         cv: '2024-10' as const,
@@ -936,7 +936,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _scheduleJsonLdScan(force = false): void {
         // Run the scan after the current rrweb event updates the JSON-LD capture state.
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         Promise.resolve().then(() => this._jsonLdCapture?.scan(force))
     }
 
@@ -947,7 +947,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
             // Preserve the previous normalization behavior for this fallback (e.g. https://test.com -> https://test.com/)
             // while still applying query masking. This path was already hashless before disable_capture_url_hashes.
-            // eslint-disable-next-line compat/compat
+            // oxlint-disable-next-line compat/compat
             const url = new URL(window.location.href)
             const currentUrl = this._maskReplayUrl(url.origin + url.pathname + url.search)
             if (this._lastHref !== currentUrl) {
@@ -2097,7 +2097,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // not convertToURL: it resolves invalid input (e.g. a masking fn returning "REDACTED")
             // against the current page and would return the real hostname we're trying to mask.
             // new URL throws instead, so bad input falls through to the catch and we omit the property.
-            // eslint-disable-next-line compat/compat
+            // oxlint-disable-next-line compat/compat
             return new URL(maskedUrl).hostname || undefined
         } catch {
             return undefined
@@ -2703,7 +2703,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     }
                     sessionRecordingOptions.sampling = sampling
                 } else {
-                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // oxlint-disable-next-line typescript/ban-ts-comment
                     // @ts-ignore
                     sessionRecordingOptions[key] = value
                 }

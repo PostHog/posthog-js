@@ -213,9 +213,9 @@ export class IframeManager {
         if (iframeEl.contentDocument) {
           this.mirror.removeNodeFromMap(iframeEl.contentDocument);
         }
-        if (iframeEl.contentWindow) {
-          this.crossOriginIframeMap.delete(iframeEl.contentWindow);
-        }
+        // The WindowProxy belongs to the iframe's browsing context and survives
+        // document navigations. Keep its mapping until the iframe is detached so
+        // a cross-origin destination can relay its new snapshot to this iframe.
       };
       pageHideWindow.addEventListener('pagehide', handler);
       if (!bucket) {

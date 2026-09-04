@@ -3,7 +3,7 @@ import { captureAiGeneration } from '../src/captureAiGeneration'
 import { AIEvent } from '../src/utils'
 import { version } from '../package.json'
 
-jest.mock('posthog-node')
+vi.mock('posthog-node')
 
 const baseRequiredOptions = {
   model: 'gpt-5',
@@ -14,19 +14,19 @@ const baseRequiredOptions = {
 
 const buildClient = (overrides: Partial<{ enableExceptionAutocapture: boolean; privacy_mode: boolean }> = {}) =>
   ({
-    capture: jest.fn(),
-    captureImmediate: jest.fn(),
-    captureException: jest.fn(),
+    capture: vi.fn(),
+    captureImmediate: vi.fn(),
+    captureException: vi.fn(),
     options: { enableExceptionAutocapture: overrides.enableExceptionAutocapture ?? false },
     privacy_mode: overrides.privacy_mode ?? false,
-  }) as unknown as jest.Mocked<PostHog>
+  }) as unknown as vi.Mocked<PostHog>
 
-const lastCaptureProperties = (client: jest.Mocked<PostHog>) =>
-  (client.capture as jest.Mock).mock.calls[0][0].properties as Record<string, any>
+const lastCaptureProperties = (client: vi.Mocked<PostHog>) =>
+  (client.capture as vi.Mock).mock.calls[0][0].properties as Record<string, any>
 
 describe('captureAiGeneration', () => {
   afterEach(() => {
-    jest.restoreAllMocks()
+    vi.restoreAllMocks()
   })
 
   it('emits a $ai_generation event with the canonical property shape', async () => {
@@ -53,7 +53,7 @@ describe('captureAiGeneration', () => {
     expect(client.capture).toHaveBeenCalledTimes(1)
     expect(client.captureImmediate).not.toHaveBeenCalled()
 
-    const event = (client.capture as jest.Mock).mock.calls[0][0]
+    const event = (client.capture as vi.Mock).mock.calls[0][0]
     expect(event.event).toBe(AIEvent.Generation)
     expect(event.distinctId).toBe('user-123')
     expect(event.groups).toEqual({ company: 'acme' })
@@ -101,7 +101,7 @@ describe('captureAiGeneration', () => {
 
     await captureAiGeneration(client, baseRequiredOptions)
 
-    const event = (client.capture as jest.Mock).mock.calls[0][0]
+    const event = (client.capture as vi.Mock).mock.calls[0][0]
     expect(event.properties.$ai_trace_id).toEqual(expect.any(String))
     expect(event.properties).not.toHaveProperty('$ai_latency')
     expect(event.distinctId).toBe(event.properties.$ai_trace_id)
@@ -121,7 +121,7 @@ describe('captureAiGeneration', () => {
   it('swallows synchronous capture delivery failures', async () => {
     const client = buildClient()
     const captureError = new Error('capture failed')
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     client.capture.mockImplementation(() => {
       throw captureError
     })
@@ -134,7 +134,7 @@ describe('captureAiGeneration', () => {
   it('awaits the immediate delivery attempt but swallows its rejection', async () => {
     const client = buildClient()
     const captureError = new Error('captureImmediate failed')
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     client.captureImmediate.mockRejectedValue(captureError)
 
     await expect(
@@ -148,7 +148,7 @@ describe('captureAiGeneration', () => {
   it('swallows exception autocapture failures', async () => {
     const client = buildClient({ enableExceptionAutocapture: true })
     const captureError = new Error('captureException failed')
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     client.captureException.mockImplementation(() => {
       throw captureError
     })
@@ -164,7 +164,7 @@ describe('captureAiGeneration', () => {
   it('swallows event construction failures', async () => {
     const client = buildClient()
     const constructionError = new Error('properties failed')
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const properties = new Proxy<Record<string, unknown>>(
       {},
       {
@@ -209,10 +209,10 @@ describe('captureAiGeneration', () => {
 
   it('redacts input and output before inspecting them in privacy mode', async () => {
     const client = buildClient()
-    const inspectInput = jest.fn(() => {
+    const inspectInput = vi.fn(() => {
       throw new Error('input inspected')
     })
-    const inspectOutput = jest.fn(() => {
+    const inspectOutput = vi.fn(() => {
       throw new Error('output inspected')
     })
     const input = new Proxy({}, { ownKeys: inspectInput })
@@ -229,7 +229,7 @@ describe('captureAiGeneration', () => {
 
   it('converts circular, BigInt, function, and throwing-toJSON input/output to JSON-safe values', async () => {
     const client = buildClient()
-    const throwingToJSON = jest.fn(() => {
+    const throwingToJSON = vi.fn(() => {
       throw new Error('cannot serialize')
     })
     const input: Record<string, unknown> = {
@@ -258,8 +258,8 @@ describe('captureAiGeneration', () => {
 
   it('uses intrinsic Date methods instead of caller-provided overrides', async () => {
     const client = buildClient()
-    const getTimeOverride = jest.fn(() => 0)
-    const toISOStringOverride = jest.fn(() => 2n)
+    const getTimeOverride = vi.fn(() => 0)
+    const toISOStringOverride = vi.fn(() => 2n)
     const validDate = new Date('2025-01-02T03:04:05.000Z')
     const invalidDate = new Date(Number.NaN)
 
@@ -377,7 +377,7 @@ describe('captureAiGeneration', () => {
     await captureAiGeneration(client, { ...baseRequiredOptions, error })
 
     expect(client.captureException).toHaveBeenCalledTimes(1)
-    const [capturedError, , properties, exceptionId] = (client.captureException as jest.Mock).mock.calls[0]
+    const [capturedError, , properties, exceptionId] = (client.captureException as vi.Mock).mock.calls[0]
     expect(capturedError).toBe(error)
     expect(properties).toEqual({ $ai_trace_id: expect.any(String) })
     expect(typeof exceptionId).toBe('string')
@@ -467,7 +467,7 @@ describe('captureAiGeneration', () => {
 
     await captureAiGeneration(client, { ...baseRequiredOptions, eventType: AIEvent.Embedding })
 
-    expect((client.capture as jest.Mock).mock.calls[0][0].event).toBe(AIEvent.Embedding)
+    expect((client.capture as vi.Mock).mock.calls[0][0].event).toBe(AIEvent.Embedding)
   })
 
   it.each([
@@ -485,7 +485,7 @@ describe('captureAiGeneration', () => {
   })
 
   it('skips emission when client.capture is unavailable', async () => {
-    const client = { options: {} } as unknown as jest.Mocked<PostHog>
+    const client = { options: {} } as unknown as vi.Mocked<PostHog>
 
     await expect(captureAiGeneration(client, baseRequiredOptions)).resolves.toBeUndefined()
   })
@@ -506,10 +506,10 @@ describe('AI lane routing', () => {
   const baseOptions = { provider: 'openai', model: 'gpt-4', input: 'hi', output: 'hello' }
 
   const makeClient = (overrides: Record<string, unknown> = {}): any => ({
-    capture: jest.fn(),
-    captureImmediate: jest.fn().mockResolvedValue(undefined),
-    captureAi: jest.fn(),
-    captureAiImmediate: jest.fn().mockResolvedValue(undefined),
+    capture: vi.fn(),
+    captureImmediate: vi.fn().mockResolvedValue(undefined),
+    captureAi: vi.fn(),
+    captureAiImmediate: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   })
 

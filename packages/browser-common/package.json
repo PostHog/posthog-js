@@ -1,6 +1,6 @@
 {
     "name": "@posthog/browser-common",
-    "version": "0.7.1",
+    "version": "0.7.2",
     "description": "Internal shared browser utilities and extension primitives for PostHog Browser SDKs",
     "license": "MIT",
     "repository": {
@@ -9,8 +9,8 @@
         "directory": "packages/browser-common"
     },
     "sideEffects": [
-        "./dist/utils/array-at-polyfill.js",
-        "./dist/utils/array-at-polyfill.mjs",
+        "./dist/utils/*-polyfill.js",
+        "./dist/utils/*-polyfill.mjs",
         "./dist/utils/uuidv7.js",
         "./dist/utils/uuidv7.mjs"
     ],
@@ -78,7 +78,7 @@
         "lint:fix": "oxlint --report-unused-disable-directives-severity error src tests --fix",
         "build": "rslib build",
         "dev": "rslib build -w",
-        "test:unit": "jest -c jest.config.cjs",
+        "test:unit": "vitest run",
         "check-types": "pnpm build",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
@@ -89,10 +89,8 @@
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
-        "@types/jest": "catalog:",
-        "jest": "catalog:",
-        "jest-environment-jsdom": "catalog:",
-        "ts-jest": "catalog:",
-        "typescript": "catalog:"
+        "jsdom": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:"
     }
 }

@@ -16,6 +16,8 @@
                 "scripts/check-sourcemap-ignore-list.js",
                 "terser-cross-bundle-properties.cjs",
                 "terser-mangled-names.json",
+                "tsdown.config.mts",
+                "tsdown.config.ts",
                 "rslib.config.*",
                 "vite.config.ts",
                 "vite.config.js"
@@ -35,6 +37,10 @@
             "dependsOn": ["^package", "build"],
             "inputs": ["dist/**", "package.json"],
             "env": ["PACKAGE_DEST"]
+        },
+        "@posthog/react#build": {
+            "dependsOn": ["^build"],
+            "cache": false
         },
         "@posthog/next#build": {
             "dependsOn": ["^build", "@posthog/react#build"]

@@ -62,7 +62,7 @@ function loadExpoMetroConfigModule(): {
   ) => MetroConfig
 } {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // oxlint-disable-next-line typescript/no-var-requires
     return require('expo/metro-config')
   } catch (e) {
     throw new Error('Unable to load `expo/metro-config`. Make sure you have Expo installed.')

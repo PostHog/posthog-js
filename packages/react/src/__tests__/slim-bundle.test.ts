@@ -9,7 +9,7 @@ import { resolve } from 'path'
  * Today this works because every shared module (hooks, components, helpers)
  * only reaches PostHogContext.ts — never the full PostHogProvider.tsx — and
  * PostHogProvider.tsx's posthog-js import is type-only. But if someone
- * accidentally adds a runtime import, Rollup's `external` config means
+ * accidentally adds a runtime import, the bundler's externalization config means
  * `posthog-js` would appear as a bare import/require in the output instead of
  * being bundled, making it easy to grep for.
  */

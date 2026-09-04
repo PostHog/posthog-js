@@ -218,7 +218,7 @@ export class BrowserClientAdapter implements Client, Disposable {
             return { statusCode: 202 }
         }
 
-        // eslint-disable-next-line compat/compat -- The shared Client transport is intentionally awaitable.
+        // oxlint-disable-next-line compat/compat -- The shared Client transport is intentionally awaitable.
         return new Promise((resolve) => {
             requestOptions.callback = resolve
             this.instance._send_request(requestOptions)

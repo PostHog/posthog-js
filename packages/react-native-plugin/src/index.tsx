@@ -160,13 +160,13 @@ export function setPushIdentityProvider(provider: PostHogPushIdentityProvider): 
         const minted = await provider(request.distinctId, request.appId)
         token = typeof minted === 'string' ? minted : null
       } catch (e) {
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn(`[PostHog] pushIdentityProvider threw: ${e}. Push subscription will be sent unauthenticated.`)
       }
       try {
         await PosthogReactNativePlugin.providePushIdentityToken(request.requestId, token)
       } catch (e) {
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn(`[PostHog] Failed to deliver push identity token to native: ${e}`)
       }
     }

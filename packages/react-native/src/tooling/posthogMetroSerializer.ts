@@ -3,7 +3,7 @@
 // Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 
 import * as crypto from 'crypto'
-// eslint-disable-next-line import/no-extraneous-dependencies
+// oxlint-disable-next-line import/no-extraneous-dependencies
 import type { MixedOutput, Module, ReadOnlyGraph } from 'metro'
 import type { Bundle, MetroSerializer, MetroSerializerOutput, SerializedBundle, VirtualJSOutput } from './utils'
 import {
@@ -49,7 +49,7 @@ export function unstableBeforeAssetSerializationDebugIdPlugin({
 
   const debugIdModuleExists = premodules.some((module) => module.path === DEBUG_ID_MODULE_PATH)
   if (debugIdModuleExists) {
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.warn('\n\nChunk ID module found. Skipping PostHog Chunk ID module...\n\n')
     return premodules
   }
@@ -73,7 +73,7 @@ export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer)
 
     const debugIdModuleExists = premodules.some((module) => module.path === DEBUG_ID_MODULE_PATH)
     if (debugIdModuleExists) {
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.warn('Chunk ID module found. Skipping PostHog Chunk ID module...')
       return serializer(entryPoint, premodules, graph, options)
     }
@@ -95,7 +95,7 @@ export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer)
     }
 
     // Only print Chunk ID for command line builds => not hot reload from dev server
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.log('info ' + `Bundle Chunk ID: ${debugId}`)
 
     const debugIdComment = `${DEBUG_ID_COMMENT}${debugId}`

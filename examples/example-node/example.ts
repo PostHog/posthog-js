@@ -10,9 +10,7 @@
 // 1. Copy .env.example to .env and fill in your PostHog credentials
 // 2. Run this script and choose from the interactive menu
 
-/* eslint-disable no-console */
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 import { PostHog } from 'posthog-node'
 
 // Helper function to satisfy ESLint rule
@@ -433,7 +431,6 @@ function createInterface() {
 }
 
 function askQuestion(rl: any, question: string): Promise<string> {
-    // eslint-disable-next-line compat/compat
     return new Promise((resolve) => {
         rl.question(question, (answer: string) => {
             resolve(answer.trim())
