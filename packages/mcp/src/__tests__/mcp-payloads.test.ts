@@ -100,6 +100,11 @@ describe('redactPii', () => {
       'Calling back on +1 (415) 555-0142 about the outage.',
       'Calling back on [redacted] about the outage.',
     ],
+    [
+      'a NANP phone with a parenthesized area code and no following separator',
+      'Reaching them at (415)555-0142 today.',
+      'Reaching them at [redacted] today.',
+    ],
     ['an international phone with a + country code', 'Ring +44 (0) 20 7946 0958 please.', 'Ring [redacted] please.'],
     [
       'a phone grouped with NBSP spaces',

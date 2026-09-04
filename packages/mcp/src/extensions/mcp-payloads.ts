@@ -54,10 +54,12 @@ const US_SSN_PATTERN = /\b\d{3}[ .-]\d{2}[ .-]\d{4}\b/g
 const CREDIT_CARD_CANDIDATE_PATTERN = /\b\d(?:[ ./-]?\d){12,18}\b/g
 // Phone matching is structural rather than "any 10–15 digits", so dates
 // (`2024-01-15 12:30`) and dotted versions are not mistaken for numbers. Two
-// forms: a North-American 3-3-4 grouping that requires a real separator (space,
-// dot, dash, or slash, optional parens and `+1`), and an international number
-// that must start with `+` and a country code.
-const PHONE_NANP_PATTERN = /(?<![\w+])(?:\+?1[ ./-]?)?\(?\d{3}\)?[ ./-]\d{3}[ ./-]\d{4}(?![\w])/g
+// forms: a North-American 3-3-4 grouping, and an international number that must
+// start with `+` and a country code. The area code is either `(415)` (the
+// separator after it is optional, so `(415)555-0142` matches) or a bare `415`
+// that must be followed by a separator (space, dot, dash, or slash) — so a bare
+// digit run is never taken for a phone number.
+const PHONE_NANP_PATTERN = /(?<![\w+])(?:\+?1[ ./-]?)?(?:\(\d{3}\)[ ./-]?|\d{3}[ ./-])\d{3}[ ./-]\d{4}(?![\w])/g
 const PHONE_INTL_PATTERN = /(?<!\w)\+\d{1,3}(?:[ ./()-]{0,2}\d){7,13}(?![\w])/g
 
 type JsonRecord = Record<string, unknown>
