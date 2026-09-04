@@ -56,7 +56,7 @@ export async function captureNextRequestError(
     try {
         beforeCaptureResult = await options.beforeCapture?.({ error, request, context, distinctId, properties })
     } catch (captureError) {
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn('[PostHog Next.js] Failed to run beforeCapture for server-side exception:', captureError)
         return
     }
@@ -76,7 +76,7 @@ export async function captureNextRequestError(
 
         await client.captureExceptionImmediate(error, distinctId, properties)
     } catch (captureError) {
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn('[PostHog Next.js] Failed to capture server-side exception:', captureError)
     }
 }
@@ -128,7 +128,7 @@ function normalizeRequestPath(request: NextRequestErrorRequest, shouldStripUrlHa
     }
 
     try {
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const parsed = new URL(url, 'http://localhost')
         return shouldStripUrlHash ? parsed.pathname : `${parsed.pathname}${parsed.hash}`
     } catch {

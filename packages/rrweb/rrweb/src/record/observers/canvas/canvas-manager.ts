@@ -305,7 +305,7 @@ export class CanvasManager {
       lastSnapshotTime = timestamp;
 
       getCanvas()
-        // eslint-disable-next-line @typescript-eslint/no-misused-promises
+        // oxlint-disable-next-line typescript/no-misused-promises
         .forEach(async (canvas: HTMLCanvasElement) => {
           const id = this.mirror.getId(canvas);
           if (snapshotInProgressMap.get(id)) return;

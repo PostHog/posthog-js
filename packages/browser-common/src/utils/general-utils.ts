@@ -74,7 +74,7 @@ export const trySafe = function <T>(fn: () => T): T | undefined {
 export const safewrap = function <F extends (...args: any[]) => any = (...args: any[]) => any>(f: F): F {
     return function (...args) {
         try {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // oxlint-disable-next-line typescript/ban-ts-comment
             // @ts-ignore
             return f.apply(this, args)
         } catch (e) {
@@ -86,7 +86,7 @@ export const safewrap = function <F extends (...args: any[]) => any = (...args: 
     } as F
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+// oxlint-disable-next-line typescript/no-unsafe-function-type
 export const safewrapClass = function (klass: Function, functions: string[]): void {
     for (let i = 0; i < functions.length; i++) {
         klass.prototype[functions[i]!] = safewrap(klass.prototype[functions[i]!])
@@ -193,7 +193,7 @@ export function addEventListener(
 
     // This is the only place where we are allowed to call this function
     // because the whole idea is that we should be calling this instead of the built-in one
-    // eslint-disable-next-line posthog-js/no-add-event-listener
+    // oxlint-disable-next-line posthog-js/no-add-event-listener
     element?.addEventListener(event, callback, { capture, passive })
 }
 

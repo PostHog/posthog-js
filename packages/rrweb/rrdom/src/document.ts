@@ -142,7 +142,7 @@ export abstract class BaseRRNode implements IRRNode {
   public readonly nodeName!: string;
   public readonly RRNodeType!: RRNodeType;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line typescript/no-unused-vars, typescript/no-explicit-any
   constructor(..._args: any[]) {
     //
   }
@@ -169,21 +169,21 @@ export abstract class BaseRRNode implements IRRNode {
     return false;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // oxlint-disable-next-line typescript/no-unused-vars
   public appendChild(_newChild: IRRNode): IRRNode {
     throw new Error(
       `RRDomException: Failed to execute 'appendChild' on 'RRNode': This RRNode type does not support this method.`,
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // oxlint-disable-next-line typescript/no-unused-vars
   public insertBefore(_newChild: IRRNode, _refChild: IRRNode | null): IRRNode {
     throw new Error(
       `RRDomException: Failed to execute 'insertBefore' on 'RRNode': This RRNode type does not support this method.`,
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // oxlint-disable-next-line typescript/no-unused-vars
   public removeChild(_node: IRRNode): IRRNode {
     throw new Error(
       `RRDomException: Failed to execute 'removeChild' on 'RRNode': This RRNode type does not support this method.`,
@@ -202,7 +202,7 @@ export class BaseRRDocument extends BaseRRNode implements IRRDocument {
   public readonly RRNodeType = RRNodeType.Document;
   public textContent: string | null = null;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line typescript/no-explicit-any
   constructor(...args: any[]) {
     super(args);
     this.ownerDocument = this;
@@ -325,11 +325,11 @@ export class BaseRRDocument extends BaseRRNode implements IRRDocument {
   }
 
   createDocument(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // oxlint-disable-next-line typescript/no-unused-vars
     _namespace: string | null,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // oxlint-disable-next-line typescript/no-unused-vars
     _qualifiedName: string | null,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // oxlint-disable-next-line typescript/no-unused-vars
     _doctype?: DocumentType | null,
   ): IRRDocument {
     return new BaseRRDocument();
@@ -506,14 +506,14 @@ export class BaseRRElement extends BaseRRNode implements IRRElement {
     return removeChild(this, node);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // oxlint-disable-next-line typescript/no-unused-vars
   public attachShadow(_init: ShadowRootInit): IRRElement {
     const shadowRoot = this.ownerDocument.createElement('SHADOWROOT');
     this.shadowRoot = shadowRoot;
     return shadowRoot;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // oxlint-disable-next-line typescript/no-unused-vars
   public dispatchEvent(_event: Event) {
     return true;
   }
@@ -534,7 +534,7 @@ export class BaseRRMediaElement extends BaseRRElement {
   public muted?: boolean;
   public playbackRate?: number;
   public loop?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // oxlint-disable-next-line typescript/no-unused-vars
   attachShadow(_init: ShadowRootInit): IRRElement {
     throw new Error(
       `RRDomException: Failed to execute 'attachShadow' on 'RRElement': This RRElement does not support attachShadow`,

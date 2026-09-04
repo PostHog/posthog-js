@@ -46,7 +46,7 @@ describe('initAdoptedStyleSheetObserver()', () => {
         originalDescriptor,
       );
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line typescript/no-explicit-any
       delete (Document.prototype as any).adoptedStyleSheets;
     }
   });

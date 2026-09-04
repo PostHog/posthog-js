@@ -116,7 +116,7 @@ export function getUntaintedPrototype<T extends keyof BasePrototypeCache>(
     const win = iframeEl.contentWindow;
     if (!win) return candidate.prototype as BasePrototypeCache[T];
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line typescript/no-unsafe-assignment, typescript/no-unsafe-member-access, typescript/no-explicit-any
     const untaintedObject = (win as any)[key]
       .prototype as BasePrototypeCache[T];
 
@@ -170,7 +170,7 @@ export function getUntaintedAccessor<
     ) as BasePrototypeCache[K][T];
 
   const untaintedPrototype = getUntaintedPrototype(key);
-  // eslint-disable-next-line @typescript-eslint/unbound-method
+  // oxlint-disable-next-line typescript/unbound-method
   const untaintedAccessor = Object.getOwnPropertyDescriptor(
     untaintedPrototype,
     accessor,
@@ -188,7 +188,7 @@ type BaseMethod<K extends keyof BasePrototypeCache> = (
   ...args: unknown[]
 ) => unknown;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line typescript/no-explicit-any
 const untaintedMethodCache: Record<string, BaseMethod<any>> = {};
 export function getUntaintedMethod<
   K extends keyof BasePrototypeCache,
@@ -284,7 +284,7 @@ interface PatchLayer {
   next: (...args: unknown[]) => unknown;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line typescript/no-explicit-any
 function isFunction(value: any): value is (...args: any[]) => any {
   return typeof value === 'function';
 }
@@ -319,7 +319,7 @@ export function patch(
     // Make sure it's a function first, as we need to attach an empty prototype for `defineProperties` to work
     // otherwise it'll throw "TypeError: Object.defineProperties called on non-object"
     if (typeof wrapped === 'function') {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      // oxlint-disable-next-line typescript/no-unsafe-assignment
       wrapped.prototype = wrapped.prototype || {};
       Object.defineProperties(wrapped, {
         __rrweb_original__: {
@@ -352,10 +352,10 @@ export function patch(
       // and leave our wrapper in the call path for the life of the page.
       const layerOf = (method: unknown): PatchLayer | undefined =>
         isFunction(method)
-          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ? // oxlint-disable-next-line typescript/no-explicit-any
             (((method as any).__rrweb_layer__ ?? (method as any).__posthog_layer__) as PatchLayer | undefined)
           : undefined;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line typescript/no-explicit-any
       let current: any = source[name];
       let currentLayer = layerOf(current);
       while (currentLayer) {

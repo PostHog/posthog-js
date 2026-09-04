@@ -113,7 +113,7 @@ const phConsoleLogger: Logger = createLogger('[PostHog Action RateLimiting]')
 export function browserConsoleLogger(title: string, stateEvent: StateEvent): void {
     // but the posthog logger swallows messages unless debug is on
     // so we don't want to use it in this default logger
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.log(title, stateEvent)
 }
 
@@ -259,7 +259,7 @@ export function posthogKeaLogger<S = any>(config: PostHogStateLoggerConfig<S> = 
 export function posthogReduxLogger<S = any>(
     config: PostHogStateLoggerConfig<S> = {}
     // the empty object is the recommended typing from redux docs
-    //eslint-disable-next-line @typescript-eslint/no-empty-object-type
+    //oxlint-disable-next-line typescript/no-empty-object-type
 ): ReduxMiddleware<{}, S> {
     const {
         maskAction,
@@ -291,12 +291,12 @@ export function posthogReduxLogger<S = any>(
             const prevState = store.getState()
 
             // Track execution time
-            // eslint-disable-next-line compat/compat
+            // oxlint-disable-next-line compat/compat
             const startTime = performance.now()
 
             const result = next(typedAction)
 
-            // eslint-disable-next-line compat/compat
+            // oxlint-disable-next-line compat/compat
             const endTime = performance.now()
             const executionTimeMs = endTime - startTime
 

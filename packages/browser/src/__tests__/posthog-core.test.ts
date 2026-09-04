@@ -29,7 +29,7 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
             ...orig.document,
             createElement: (...args: any[]) => orig.document.createElement(...args),
             // Forwarding the mocked document's listener registration requires calling the DOM API directly.
-            // eslint-disable-next-line posthog-js/no-add-event-listener
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
             addEventListener: (...args: any[]) => orig.document.addEventListener(...args),
             removeEventListener: (...args: any[]) => orig.document.removeEventListener(...args),
             get referrer() {

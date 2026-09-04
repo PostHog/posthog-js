@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+// oxlint-disable-next-line typescript/no-require-imports
 import type { MixedOutput, Module, ReadOnlyGraph } from 'metro'
 
 // https://github.com/expo/expo/blob/44d03f59e25b01fbfee82075da18dd7f8ce44e96/packages/%40expo/metro-config/src/ExpoMetroConfig.ts

@@ -476,9 +476,9 @@ export function buildNodeWithSN(
    */
   let staleNode: Node | null = null;
   if (mirror.has(n.id)) {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    // oxlint-disable-next-line typescript/no-non-null-assertion
     const nodeInMirror = mirror.getNode(n.id)!;
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    // oxlint-disable-next-line typescript/no-non-null-assertion
     const meta = mirror.getMeta(nodeInMirror)!;
     // For safety concern, check if the node in mirror is the same as the node we are trying to build
     if (isNodeMetaEqual(meta, n)) return mirror.getNode(n.id);
@@ -622,7 +622,7 @@ function visit(mirror: Mirror, onVisit: (node: Node) => void) {
 
   for (const id of mirror.getIds()) {
     if (mirror.has(id)) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      // oxlint-disable-next-line typescript/no-non-null-assertion
       walk(mirror.getNode(id)!);
     }
   }

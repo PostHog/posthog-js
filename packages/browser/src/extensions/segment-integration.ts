@@ -71,7 +71,7 @@ const createSegmentIntegration = (posthog: PostHog, runtimeAnonymousId?: string)
         version: '1.0.0',
         isLoaded: () => true,
         // check and early return above
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         load: () => Promise.resolve(),
         track: (ctx) => enrichEvent(ctx, ctx.event.event),
         page: (ctx) => enrichEvent(ctx, EVENT_PAGEVIEW),

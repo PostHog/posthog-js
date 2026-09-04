@@ -39,6 +39,6 @@ function render(result: Record<string, unknown>): void {
 }
 
 main().catch((err) => {
-  // eslint-disable-next-line no-console
+  // oxlint-disable-next-line no-console
   console.error('OpenFeature example failed:', err)
 })

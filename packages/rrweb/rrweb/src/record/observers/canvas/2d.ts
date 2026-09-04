@@ -72,7 +72,7 @@ export default function initCanvas2DMutationObserver(
         {
           set(v) {
             if (!isBlocked(this.canvas, blockClass, blockSelector, true)) {
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
+              // oxlint-disable-next-line typescript/no-unsafe-argument, typescript/no-unsafe-member-access
               cb(this.canvas, {
                 type: CanvasContext['2D'],
                 property: prop,
