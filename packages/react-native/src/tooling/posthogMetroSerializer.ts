@@ -101,7 +101,7 @@ export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer)
       // A custom serializer cannot know about posthogBundleCallback, so the
       // placeholder stays in its output. Serialize again without the Chunk ID
       // module: a placeholder Chunk ID reaches error tracking as a real one.
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.warn('Chunk ID was not found in the bundle. Skipping PostHog Chunk ID...')
       delete serializerOptions.posthogBundleCallback
       return serializer(entryPoint, premodules, graph, options)
