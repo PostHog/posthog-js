@@ -591,21 +591,22 @@ export class PostHog implements PostHogInterface {
         fix += createsAnonymousProfiles
             ? "set person_profiles to 'identified_only' so anonymous visitors get no profile."
             : 'enable reuseAnonymousId.'
-        const consequence = createsAnonymousProfiles
-            ? `PostHog will mint a new distinct ID ${lifetime}. person_profiles is set to 'always', so each ` +
-              'new ID becomes a separate anonymous person, which inflates person counts and feature flag estimates.'
-            : `PostHog will mint a new distinct ID ${lifetime}, so calling identify() merges a new ` +
-              'ID onto the person each time. A person can then pass the distinct-ID limit and its events stop ' +
-              'appearing on person pages and the session tab.'
+        const consequence =
+            `PostHog will mint a new distinct ID ${lifetime}` +
+            (createsAnonymousProfiles
+                ? ". person_profiles is set to 'always', so each new ID becomes a separate anonymous person, " +
+                  'which inflates person counts and feature flag estimates.'
+                : ', so calling identify() merges a new ID onto the person each time. A person can then pass ' +
+                  'the distinct-ID limit and its events stop appearing on person pages and the session tab.')
         this._hasWarnedAboutVolatileIdentity = true
         // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
         // oxlint-disable-next-line no-console
         console.warn('[PostHog.js]', `${cause} but no bootstrap.distinctID was provided. ${consequence} ${fix}`)
     }
 
-    // person_profiles: 'always' creates a person for anonymous visitors with no identify() call, so the
-    // warning's only other trigger is calculateEventProperties() on the first captured event, which a consent
-    // gate or capture_pageview: false can defer long past init. Warn at init and on set_config so it lands first.
+    // person_profiles: 'always' creates a person for anonymous visitors with no identify() call. The warning's
+    // only other call site is _requirePersonProcessing(), which nothing on that path reaches, so it would never
+    // fire for the configuration that mints the most persons. Warn at init and on set_config instead.
     private _warnIfVolatileIdentityCreatesAnonymousPersons(): void {
         if (this._hasResolvedInitialDistinctId && this.config.person_profiles === 'always') {
             this._warnIfVolatileIdentityWithoutStableId()
