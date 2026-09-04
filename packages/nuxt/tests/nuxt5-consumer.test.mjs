@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { waitForPackages } from './wait-for-packages.mjs'
+
 const packageDir = dirname(fileURLToPath(import.meta.url))
 const fixtureDir = mkdtempSync(join(tmpdir(), 'posthog-nuxt5-consumer-'))
 const packageRoot = join(packageDir, '..')
@@ -35,43 +37,6 @@ async function waitForServer(url) {
     }
   }
   throw new Error('Nuxt server did not start')
-}
-
-async function waitForPackages(packages) {
-  const pending = new Map(packages)
-
-  for (let attempt = 1; attempt <= 30; attempt++) {
-    for (const [name, version] of pending) {
-      let publishedVersion
-      try {
-        publishedVersion = execFileSync('pnpm', ['view', `${name}@${version}`, 'version'], {
-          encoding: 'utf8',
-          stdio: ['ignore', 'pipe', 'ignore'],
-        }).trim()
-      } catch {
-        // Keep polling while npm propagates the package.
-      }
-
-      if (publishedVersion === version) {
-        console.log(`${name}@${version} is available on npm.`)
-        pending.delete(name)
-      }
-    }
-
-    if (pending.size === 0) {
-      return
-    }
-    if (attempt === 30) {
-      throw new Error(
-        `${[...pending].map(([name, version]) => `${name}@${version}`).join(', ')} did not become available on npm within 15 minutes`
-      )
-    }
-
-    console.log(
-      `${[...pending].map(([name, version]) => `${name}@${version}`).join(', ')} not available on npm yet (attempt ${attempt}/30). Retrying in 30 seconds...`
-    )
-    await new Promise((resolve) => setTimeout(resolve, 30_000))
-  }
 }
 
 function withTimeout(promise, milliseconds, message) {
