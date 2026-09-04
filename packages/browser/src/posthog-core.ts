@@ -93,7 +93,7 @@ import {
 import { isLikelyBot } from '@posthog/browser-common/utils/blocked-uas'
 import { getDeviceModel } from '@posthog/browser-common/utils/device-model-utils'
 import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
-import { document, location, navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
+import { document, fetch, location, navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { getPersonPropertiesHash } from '@posthog/browser-common/utils/property-utils'
@@ -472,6 +472,7 @@ export class PostHog implements PostHogInterface {
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
+    _isPageUnloading = false
     sessionRecording?: SessionRecording
     externalIntegrations?: ExternalIntegrations
     webPerformance = new DeprecatedWebPerformanceObserver()
@@ -1030,6 +1031,13 @@ export class PostHog implements PostHogInterface {
         addEventListener(window, 'onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this), {
             passive: false,
         })
+        // `pagehide` also fires when the browser freezes the page into the back-forward cache, and
+        // the same instance resumes on `pageshow`. Without this the page would stay marked as
+        // unloading for the rest of its life, and every later unbatched capture would take the
+        // beacon path on a fully active page.
+        addEventListener(window, 'pageshow', () => {
+            this._isPageUnloading = false
+        })
 
         // We want to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
@@ -1343,6 +1351,8 @@ export class PostHog implements PostHogInterface {
     }
 
     _handle_unload(): void {
+        this._isPageUnloading = true
+
         // Optional-call the method, not just the receiver: after a deploy a cached older
         // lazy-loaded surveys chunk can yield an instance whose prototype lacks handlePageUnload,
         // and `this.surveys?.handlePageUnload()` would still throw "handlePageUnload is not a function".
@@ -1870,6 +1880,8 @@ export class PostHog implements PostHogInterface {
                 : {}),
         }
 
+        // NB an options object without a `_batchKey` also skips the queue, so most calls that pass
+        // options are unbatched already and `send_instantly` changes nothing for them
         if (
             this.config.request_batching &&
             (!options || options?._batchKey) &&
@@ -1878,6 +1890,18 @@ export class PostHog implements PostHogInterface {
         ) {
             this._requestQueue.enqueue(requestOptions)
         } else {
+            // The queue drains with `sendBeacon` on pagehide, an unbatched send has no such safety
+            // net. `sendBeacon` gives no response, so requests that need one keep their transport,
+            // and it cannot carry `request_headers`, so a project that sets them (e.g. for an
+            // authenticating proxy) keeps a transport that can.
+            if (
+                !requestOptions.transport &&
+                !requestOptions.callback &&
+                isEmptyObject(this.config.request_headers ?? {}) &&
+                (this._isPageUnloading || !fetch)
+            ) {
+                requestOptions.transport = 'sendBeacon'
+            }
             this._send_retriable_request(requestOptions)
         }
 
