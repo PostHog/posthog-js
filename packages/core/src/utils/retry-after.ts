@@ -18,9 +18,9 @@ const CLOCK_STEP_TOLERANCE_MS = 5_000
 
 /**
  * `Retry-After` as milliseconds from now. The header is either delta-seconds or
- * an HTTP-date; anything else, a date already in the past, or a negative delta
- * yields `undefined` so the caller keeps its own backoff. The result is capped
- * at `MAX_RETRY_AFTER_MS`.
+ * an HTTP-date; anything else, a date already in the past, or a non-positive
+ * delta yields `undefined` so the caller keeps its own backoff. The result is
+ * capped at `MAX_RETRY_AFTER_MS`.
  */
 export function parseRetryAfterMs(value: unknown, now: number = Date.now()): number | undefined {
   if (typeof value !== 'string' || !value) {
@@ -68,11 +68,14 @@ export class RetryAfterWindow {
   /**
    * Folds one export outcome into the window.
    *
-   * A window still open is left as it stands: the refusal repeats an answer the
-   * endpoint has already given, and sliding the deadline on each one means the
-   * window never elapses for a host that sends on its own cadence. Whether it
-   * is still open is read here rather than passed in, so a send that outlives
-   * the wait it was made under installs the fresh deadline it came back with.
+   * A window still open is left as it stands, even when the refusal names a
+   * longer wait than the one being served. Sliding the deadline on each refusal
+   * means the window never elapses for a host that flushes faster than the
+   * window is long: logs gates its size trigger and `onReconnect` on the
+   * window, and metrics re-arms its timer from it, so neither would recover
+   * while such a host kept sending. Whether it is still open is read here
+   * rather than passed in, so a send that outlives the wait it was made under
+   * installs the fresh deadline it came back with.
    */
   record(outcome: RetryAfterOutcome): void {
     if (outcome.kind === 'too-large') {
