@@ -980,9 +980,13 @@ export class PostHog implements PostHogInterface {
                 // reloadFeatureFlags() call inside identify() sets _reloadDebouncer, so the
                 // subsequent ensureFlagsLoaded() from _onRemoteConfig is a no-op (no double request).
                 this.identify(bootstrapDistinctId)
-                // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
-                // oxlint-disable-next-line no-console
-                console.warn('[PostHog.js]', BOOTSTRAP_AUTO_IDENTIFY_WARN)
+                // identify() ignores an invalid ID, and does nothing at all when person_profiles is
+                // 'never', so only warn once the identity really moved to the bootstrapped ID.
+                if (this.get_distinct_id() === bootstrapDistinctId) {
+                    // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
+                    // oxlint-disable-next-line no-console
+                    console.warn('[PostHog.js]', BOOTSTRAP_AUTO_IDENTIFY_WARN)
+                }
             } else if (
                 config.bootstrap.isIdentifiedID &&
                 existingDistinctId != null &&

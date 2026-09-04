@@ -1479,6 +1479,45 @@ describe('posthog core', () => {
 
                 expect(warnSpy).not.toHaveBeenCalled()
             })
+
+            it('does not warn when person_profiles is never, because identify() is ignored', () => {
+                const token = 'bootstrap-no-person-processing-' + uuidv7()
+
+                posthogWith({ token })
+
+                const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+                const second = posthogWith({
+                    token,
+                    person_profiles: 'never',
+                    bootstrap: {
+                        distinctID: 'user-123',
+                        isIdentifiedID: true,
+                    },
+                })
+
+                expect(warnSpy).not.toHaveBeenCalled()
+                expect(second.get_distinct_id()).not.toBe('user-123')
+            })
+
+            it('does not warn when the bootstrapped distinctID is rejected as invalid', () => {
+                const token = 'bootstrap-invalid-distinct-id-' + uuidv7()
+
+                posthogWith({ token })
+
+                const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+                const second = posthogWith({
+                    token,
+                    bootstrap: {
+                        distinctID: 'null',
+                        isIdentifiedID: true,
+                    },
+                })
+
+                expect(warnSpy).not.toHaveBeenCalled()
+                expect(second.get_distinct_id()).not.toBe('null')
+            })
         })
     })
 
