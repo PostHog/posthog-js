@@ -4181,17 +4181,23 @@ export class PostHog implements PostHogInterface {
      * @returns The result of the capture, or undefined if exception capture is unavailable.
      */
     captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined {
-        if (!this.exceptions) return
+        try {
+            if (!this.exceptions) return
 
-        const syntheticException = new Error('PostHog syntheticException')
-        const errorToProperties = this.exceptions.buildProperties(error, {
-            handled: true,
-            syntheticException,
-        })
-        return this.exceptions.sendExceptionEvent({
-            ...errorToProperties,
-            ...additionalProperties,
-        })
+            const syntheticException = new Error('PostHog syntheticException')
+            const errorToProperties = this.exceptions.buildProperties(error, {
+                handled: true,
+                syntheticException,
+            })
+            return this.exceptions.sendExceptionEvent({
+                ...errorToProperties,
+                ...additionalProperties,
+            })
+        } catch {
+            // Exception capture must never throw into customer code. Do not log here because
+            // console.error may be instrumented and would re-enter exception autocapture.
+            return
+        }
     }
 
     /**

@@ -6,6 +6,15 @@ const { wrapOnError, wrapUnhandledRejection, wrapConsoleError } = posthogErrorWr
 describe('error wrapping functions', () => {
     const captureFn = vi.fn<[ErrorTracking.ErrorProperties], void>()
     const win = window as any
+    const errorWithThrowingMessage = () => {
+        const error = new Error('boom')
+        Object.defineProperty(error, 'message', {
+            get() {
+                throw new TypeError('property building failed')
+            },
+        })
+        return error
+    }
 
     afterEach(() => {
         captureFn.mockClear()
@@ -38,6 +47,40 @@ describe('error wrapping functions', () => {
             expect(original).toHaveBeenCalledWith('message', 'source', 1, 1, expect.any(Error))
             expect(result).toBe(true)
             expect(captureFn).toHaveBeenCalled()
+        })
+
+        it('still chains to the original handler when building exception properties throws', () => {
+            const original = vi.fn().mockReturnValue(true)
+            const error = errorWithThrowingMessage()
+            win.onerror = original
+            unwrap = wrapOnError(captureFn)
+
+            expect(() => win.onerror('message', 'source', 1, 1, error)).not.toThrow()
+            expect(original).toHaveBeenCalledTimes(1)
+            expect(original.mock.calls[0][4]).toBe(error)
+            expect(captureFn).not.toHaveBeenCalled()
+        })
+
+        it('still chains to the original handler when the capture callback throws', () => {
+            const original = vi.fn().mockReturnValue(true)
+            captureFn.mockImplementationOnce(() => {
+                throw new TypeError('capture failed')
+            })
+            win.onerror = original
+            unwrap = wrapOnError(captureFn)
+
+            expect(() => win.onerror('message', 'source', 1, 1, new Error('boom'))).not.toThrow()
+            expect(original).toHaveBeenCalledTimes(1)
+        })
+
+        it('does not swallow errors from the original handler', () => {
+            const error = new TypeError('original handler failed')
+            win.onerror = vi.fn(() => {
+                throw error
+            })
+            unwrap = wrapOnError(captureFn)
+
+            expect(() => win.onerror('message', 'source', 1, 1, new Error('boom'))).toThrow(error)
         })
 
         it('collects source/lineno/colno from the positional args when there is no Error object', () => {
@@ -87,6 +130,42 @@ describe('error wrapping functions', () => {
             expect(result).toBe(true)
             expect(captureFn).toHaveBeenCalled()
         })
+
+        it('still chains to the original handler when building exception properties throws', () => {
+            const original = vi.fn().mockReturnValue(true)
+            const ev = { reason: errorWithThrowingMessage() } as any
+            win.onunhandledrejection = original
+            unwrap = wrapUnhandledRejection(captureFn)
+
+            expect(() => win.onunhandledrejection(ev)).not.toThrow()
+            expect(original).toHaveBeenCalledTimes(1)
+            expect(original.mock.calls[0][0]).toBe(ev)
+            expect(captureFn).not.toHaveBeenCalled()
+        })
+
+        it('still chains to the original handler when the capture callback throws', () => {
+            const original = vi.fn().mockReturnValue(true)
+            const ev = { reason: new Error('boom') } as any
+            captureFn.mockImplementationOnce(() => {
+                throw new TypeError('capture failed')
+            })
+            win.onunhandledrejection = original
+            unwrap = wrapUnhandledRejection(captureFn)
+
+            expect(() => win.onunhandledrejection(ev)).not.toThrow()
+            expect(original).toHaveBeenCalledTimes(1)
+        })
+
+        it('does not swallow errors from the original handler', () => {
+            const error = new TypeError('original handler failed')
+            const ev = { reason: new Error('boom') } as any
+            win.onunhandledrejection = vi.fn(() => {
+                throw error
+            })
+            unwrap = wrapUnhandledRejection(captureFn)
+
+            expect(() => win.onunhandledrejection(ev)).toThrow(error)
+        })
     })
 
     describe('wrapConsoleError', () => {
@@ -115,6 +194,43 @@ describe('error wrapping functions', () => {
 
             expect(original).toHaveBeenCalledWith('boom')
             expect(captureFn).toHaveBeenCalled()
+        })
+
+        it('still calls the original console when building exception properties throws', () => {
+            const con = console as any
+            const original = vi.fn()
+            const error = errorWithThrowingMessage()
+            con.error = original
+            unwrap = wrapConsoleError(captureFn)
+
+            expect(() => con.error(error)).not.toThrow()
+            expect(original).toHaveBeenCalledTimes(1)
+            expect(original.mock.calls[0][0]).toBe(error)
+            expect(captureFn).not.toHaveBeenCalled()
+        })
+
+        it('still calls the original console when the capture callback throws', () => {
+            const con = console as any
+            const original = vi.fn()
+            captureFn.mockImplementationOnce(() => {
+                throw new TypeError('capture failed')
+            })
+            con.error = original
+            unwrap = wrapConsoleError(captureFn)
+
+            expect(() => con.error('boom')).not.toThrow()
+            expect(original).toHaveBeenCalledTimes(1)
+        })
+
+        it('does not swallow errors from the original console', () => {
+            const con = console as any
+            const error = new TypeError('original console failed')
+            con.error = vi.fn(() => {
+                throw error
+            })
+            unwrap = wrapConsoleError(captureFn)
+
+            expect(() => con.error('boom')).toThrow(error)
         })
     })
 })

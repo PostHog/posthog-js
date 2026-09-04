@@ -35,23 +35,41 @@ describe('ExceptionObserver', () => {
             new RangeError('Invalid array length'),
             Object.assign(new Error('allocation size overflow'), { name: 'InternalError' }),
             new TypeError('something else'),
-        ])('rethrows unrelated errors from exception capture', (error) => {
+        ])('swallows unrelated errors from exception capture', (error) => {
             vi.spyOn(instance.exceptions, 'sendExceptionEvent').mockImplementation(() => {
                 throw error
             })
 
-            expect(() => instance.exceptionObserver.captureException(errorProperties)).toThrow(error)
+            expect(() => instance.exceptionObserver.captureException(errorProperties)).not.toThrow()
         })
 
-        it('swallows a stack overflow raised before sending the exception', () => {
-            const stackOverflowError = new RangeError('Maximum call stack size exceeded')
-            vi.spyOn(instance.exceptionObserver['_rateLimiter'], 'consumeRateLimit').mockImplementation(() => {
-                throw stackOverflowError
-            })
-            const sendExceptionEvent = vi.spyOn(instance.exceptions, 'sendExceptionEvent')
+        it.each([new RangeError('Maximum call stack size exceeded'), new TypeError('rate limiter failed')])(
+            'swallows errors raised before sending the exception',
+            (error) => {
+                vi.spyOn(instance.exceptionObserver['_rateLimiter'], 'consumeRateLimit').mockImplementation(() => {
+                    throw error
+                })
+                const sendExceptionEvent = vi.spyOn(instance.exceptions, 'sendExceptionEvent')
 
-            expect(() => instance.exceptionObserver.captureException(errorProperties)).not.toThrow()
-            expect(sendExceptionEvent).not.toHaveBeenCalled()
+                expect(() => instance.exceptionObserver.captureException(errorProperties)).not.toThrow()
+                expect(sendExceptionEvent).not.toHaveBeenCalled()
+            }
+        )
+
+        it('swallows errors while building a manually captured exception', () => {
+            vi.spyOn(instance.exceptions, 'buildProperties').mockImplementation(() => {
+                throw new TypeError('property building failed')
+            })
+
+            expect(() => instance.captureException(new Error('original exception'))).not.toThrow()
+        })
+
+        it('swallows errors while sending a manually captured exception', () => {
+            vi.spyOn(instance.exceptions, 'sendExceptionEvent').mockImplementation(() => {
+                throw new TypeError('exception sending failed')
+            })
+
+            expect(() => instance.captureException(new Error('original exception'))).not.toThrow()
         })
 
         it.each(['automatic', 'manual'])('does not re-enter autocapture after a %s capture overflows', (mode) => {
