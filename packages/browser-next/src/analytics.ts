@@ -55,7 +55,7 @@ const observeLifecycle = (context: AnalyticsDeliveryContext, setOnline: (online:
     }
     const register = (event: string, listener: EventListener): void => {
         try {
-            // eslint-disable-next-line posthog-js/no-add-event-listener
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
             globalThis.addEventListener(event, listener)
             listeners.push([event, listener])
         } catch {

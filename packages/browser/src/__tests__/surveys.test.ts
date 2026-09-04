@@ -1913,7 +1913,7 @@ describe('surveys', () => {
         })
 
         it('tracks the language flip but does not re-render while the survey is still pending delay', () => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            // oxlint-disable-next-line typescript/no-require-imports
             const preactModule = require('preact')
             const renderSpy = vi.spyOn(preactModule, 'render')
             const translateSpy = vi.fn().mockReturnValue({ survey: frSurvey, language: 'fr' })

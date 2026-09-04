@@ -1,4 +1,4 @@
-/* eslint-disable compat/compat */
+/* oxlint-disable compat/compat */
 import type { Logger } from '@posthog/core'
 
 import type { Client } from '../src/client'

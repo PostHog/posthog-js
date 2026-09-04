@@ -78,7 +78,7 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
         document: {
             ...orig.document,
             createElement: (...args: any[]) => orig.document.createElement(...args),
-            // eslint-disable-next-line posthog-js/no-add-event-listener
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
             addEventListener: (...args: any[]) => orig.document.addEventListener(...args),
             removeEventListener: (...args: any[]) => orig.document.removeEventListener(...args),
             body: {},

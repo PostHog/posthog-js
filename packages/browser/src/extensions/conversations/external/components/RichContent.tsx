@@ -32,7 +32,7 @@ function sanitizeUrl(url: string): string | undefined {
 
     // Remove ASCII control characters (0x00-0x1F, 0x7F DEL) that could obfuscate protocols
     // Also remove zero-width characters (U+200B-U+200D, U+FEFF) that could be used for obfuscation
-    // eslint-disable-next-line no-control-regex
+    // oxlint-disable-next-line no-control-regex
     const cleanedUrl = url.replace(/[\x00-\x1f\x7f\u200b-\u200d\ufeff]/g, '')
     const trimmedUrl = cleanedUrl.trim()
     if (!trimmedUrl) {

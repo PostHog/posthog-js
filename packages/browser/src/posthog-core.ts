@@ -578,7 +578,7 @@ export class PostHog implements PostHogInterface {
         }
         this._hasWarnedAboutVolatileIdentity = true
         // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn(
             '[PostHog.js]',
             `${cause} but no bootstrap.distinctID was provided. ` +
@@ -799,13 +799,13 @@ export class PostHog implements PostHogInterface {
             if (normalizedToken !== this.config?.token) {
                 // A second init() with a different project token often means that someone is trying to send
                 // events to a second project without giving that instance a name.
-                // eslint-disable-next-line no-console
+                // oxlint-disable-next-line no-console
                 console.warn(
                     '[PostHog.js]',
                     `You have already initialized PostHog with a different project token! Re-initializing is a no-op, so events will keep going to the project this instance was initialized with. To capture into a second project, load PostHog once, then initialize a named instance after the SDK has loaded, e.g. posthog.init('${normalizedToken}', { ... }, 'project2')`
                 )
             } else {
-                // eslint-disable-next-line no-console
+                // oxlint-disable-next-line no-console
                 console.warn('[PostHog.js]', 'You have already initialized PostHog! Re-initializing is a no-op')
             }
             return this
@@ -949,7 +949,7 @@ export class PostHog implements PostHogInterface {
         this._hasStableInitialDistinctId = !!initialDistinctId && !isEmptyString(initialDistinctId)
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
-        // eslint-disable-next-line posthog-js/no-direct-undefined-check
+        // oxlint-disable-next-line posthog-js/no-direct-undefined-check
         if (config.bootstrap?.distinctID !== undefined) {
             const bootstrapDistinctId = config.bootstrap.distinctID
             const existingDistinctId = this.get_distinct_id()
@@ -1109,7 +1109,7 @@ export class PostHog implements PostHogInterface {
 
     private _initExtensions(startInCookielessMode: boolean): void {
         // we don't support IE11 anymore, so performance.now is safe
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const initStartTime = performance.now()
         const ext = { ...PostHog.__defaultExtensionClasses, ...this.config.__extensionClasses }
         const initTasks: Array<() => void> = []
@@ -1227,7 +1227,7 @@ export class PostHog implements PostHogInterface {
 
         // All tasks complete - record timing for both sync and deferred modes
         // we don't support IE11 anymore, so performance.now is safe
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const taskInitTiming = Math.round(performance.now() - initStartTime)
         this.register_for_session({
             [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: this.config.__preview_deferred_init_extensions
@@ -2980,7 +2980,7 @@ export class PostHog implements PostHogInterface {
     canRenderSurveyAsync(surveyId: string, forceReload = false): Promise<SurveyRenderReason> {
         return (
             this.surveys?.canRenderSurveyAsync(surveyId, forceReload) ??
-            // eslint-disable-next-line compat/compat
+            // oxlint-disable-next-line compat/compat
             Promise.resolve({ visible: false, disabledReason: SURVEYS_NOT_AVAILABLE })
         )
     }
@@ -3600,7 +3600,7 @@ export class PostHog implements PostHogInterface {
 
         if (!isConsentTransition && wasCapturing && !this.is_capturing()) {
             // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
-            // eslint-disable-next-line no-console
+            // oxlint-disable-next-line no-console
             console.warn('[PostHog.js]', RESET_CONSENT_WARN)
         }
 
@@ -3654,7 +3654,7 @@ export class PostHog implements PostHogInterface {
 
             if (bootstrap) {
                 // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
-                // eslint-disable-next-line posthog-js/no-direct-undefined-check
+                // oxlint-disable-next-line posthog-js/no-direct-undefined-check
                 if (bootstrap.distinctID !== undefined && !this._inCookielessMode()) {
                     this.persistence?.set_property(
                         USER_STATE,

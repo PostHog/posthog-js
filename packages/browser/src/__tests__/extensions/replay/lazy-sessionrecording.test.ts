@@ -8718,7 +8718,7 @@ describe('Lazy SessionRecording', () => {
                 recordMock.mockImplementation(({ emit }) => {
                     _emit = emit
                     const flushDeferredCss = () => emit(deferredCssMutation)
-                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
                     window!.addEventListener('pagehide', flushDeferredCss)
                     return () => window!.removeEventListener('pagehide', flushDeferredCss)
                 })

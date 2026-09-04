@@ -100,7 +100,7 @@ export class BrowserSurveys extends PostHogSurveys {
 
     protected override _sendSurveysRequest(path: string, init: SendRequestInit): Promise<ApiResponse> {
         const pathWithQuery = init.query ? extendURLParams(path, init.query) : path
-        // eslint-disable-next-line compat/compat -- Shared extension transport is intentionally Promise-based.
+        // oxlint-disable-next-line compat/compat -- Shared extension transport is intentionally Promise-based.
         return new Promise((resolve) => {
             this._instance._send_request({
                 method: init.method,

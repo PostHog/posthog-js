@@ -80,7 +80,7 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
         if (React.isValidElement(element)) {
             return element as React.ReactElement
         }
-        //eslint-disable-next-line no-console
+        //oxlint-disable-next-line no-console
         console.warn(__POSTHOG_ERROR_MESSAGES.INVALID_FALLBACK)
         return <></>
     }

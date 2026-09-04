@@ -42,7 +42,7 @@ export function PostHogProvider({ apiKey: apiKeyProp, clientOptions, children }:
 
     if (!apiKeyWarned && !apiKey.startsWith('phc_')) {
         apiKeyWarned = true
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn(
             `[PostHog Next.js] apiKey "${apiKey}" does not start with "phc_". This may not be a valid PostHog project API key.`
         )
