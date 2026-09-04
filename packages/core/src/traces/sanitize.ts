@@ -75,6 +75,10 @@ export function resolveStartTime(value: SpanTimeInput | undefined, now: number, 
     logger?.debug(
       'Span startTime is more than 24 hours in the past; the server will clamp it to receive time and keep the original in $originalTimestamp'
     )
+  } else if (supplied > now) {
+    // Warned rather than clamped, matching the deep-backdate rule: the value is
+    // the caller's. The duration is what suffers, since the end clamps to it.
+    logger?.debug('Span startTime is in the future; the span may export with a zero duration')
   }
   return supplied
 }
