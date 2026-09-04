@@ -8906,7 +8906,7 @@ describe('Lazy SessionRecording', () => {
             timestamp: Date.now(),
         })
 
-        it('ships mutations the recorder emits while stopping, not just buffers them', () => {
+        function startWithStopEmittingRecorder(): void {
             loadScriptMock.mockImplementation((_ph, _path, callback) => {
                 addRRwebToWindow()
                 const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as vi.Mock
@@ -8921,6 +8921,14 @@ describe('Lazy SessionRecording', () => {
                 callback()
             })
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+        }
+
+        afterEach(() => {
+            vi.useRealTimers()
+        })
+
+        it('ships mutations the recorder emits while stopping, not just buffers them', () => {
+            startWithStopEmittingRecorder()
             releaseInteractionHold()
             _emit(createFullSnapshot())
 
@@ -8933,6 +8941,22 @@ describe('Lazy SessionRecording', () => {
                 expect.objectContaining({ $snapshot_data: expect.arrayContaining([deferredCssMutation]) }),
                 expect.any(Object)
             )
+        })
+
+        it('drops mutations the recorder emits while discarding a held epoch', () => {
+            startWithStopEmittingRecorder()
+            // no interaction, so the epoch is still held - the usual state when remote config
+            // arrives and turns recording off
+            _emit(createFullSnapshot())
+            vi.useFakeTimers()
+
+            sessionRecording['_lazyLoadedSessionRecording'].discard()
+
+            // discard means nothing from this epoch is billable, so the mutation rrweb emits as it
+            // stops must not schedule a flush that outlives teardown's timer clear
+            vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT * 2)
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
         })
     })
 

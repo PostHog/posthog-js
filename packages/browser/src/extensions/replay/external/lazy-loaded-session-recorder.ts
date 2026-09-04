@@ -1641,9 +1641,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._clearBuffer()
             this._stopRecordingProducers()
         }
+        // rrweb can synchronously emit deferred stylesheet mutations while _teardown() stops it,
+        // so clear on both sides of it: the first clear stops those emissions flushing this epoch's
+        // data at the size cap, the second drops the emissions themselves. The hold is released
+        // only afterwards — _teardown() clears the flush timer before it stops rrweb, so a flush
+        // an unheld emission schedules outlives teardown and ships a discarded epoch.
+        this._clearBuffer()
+        this._teardown()
         this._clearBuffer()
         this._releaseHoldAfterStop()
-        this._teardown()
         logger.info('discarded')
     }
 
