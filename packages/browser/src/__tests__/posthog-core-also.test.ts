@@ -1305,6 +1305,7 @@ describe('posthog core', () => {
 
                 const identifySpy = vi.spyOn(PostHog.prototype, 'identify')
                 const captureSpy = vi.spyOn(PostHog.prototype, 'capture')
+                vi.spyOn(console, 'warn').mockImplementation(() => {})
 
                 // Second instance bootstraps with an identified user
                 const second = posthogWith({
@@ -1422,6 +1423,61 @@ describe('posthog core', () => {
                 // Existing identity should be preserved (bootstrap should NOT silently switch identities)
                 expect(second.get_distinct_id()).toBe('existing-user')
                 expect(second.persistence.get_property(USER_STATE)).toBe('identified')
+            })
+
+            it('warns when bootstrap auto-identifies during init', () => {
+                const token = 'auto-identify-warn-' + uuidv7()
+                posthogWith({ token })
+
+                const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+                posthogWith({
+                    token,
+                    bootstrap: {
+                        distinctID: 'user-123',
+                        isIdentifiedID: true,
+                    },
+                })
+
+                expect(warnSpy).toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining('init() called identify() with the bootstrapped distinctID')
+                )
+            })
+
+            it('warns when a bootstrapped anonymous ID replaces an identified user', () => {
+                const token = 'bootstrap-anon-over-identified-' + uuidv7()
+
+                const first = posthogWith({ token }, { capture: vi.fn() })
+                first.identify('existing-user')
+
+                const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+                const second = posthogWith({
+                    token,
+                    bootstrap: {
+                        distinctID: 'anon-abcd',
+                    },
+                })
+
+                expect(warnSpy).toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining('this browser already holds an identified user')
+                )
+                expect(second.get_distinct_id()).toBe('anon-abcd')
+                expect(second.persistence.get_property(USER_STATE)).toBe('anonymous')
+            })
+
+            it('does not warn when the same identified ID is bootstrapped on every load', () => {
+                const token = 'bootstrap-repeat-load-no-warn-' + uuidv7()
+                const bootstrap = { distinctID: 'user-789', isIdentifiedID: true }
+
+                const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+                posthogWith({ token, bootstrap })
+                posthogWith({ token, bootstrap })
+
+                expect(warnSpy).not.toHaveBeenCalled()
             })
         })
     })
