@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.426.4
+
+### Patch Changes
+
+- [#4764](https://github.com/PostHog/posthog-js/pull/4764) [`fa2924d`](https://github.com/PostHog/posthog-js/commit/fa2924dae4d1fd2a6ee5c979edbcce1cbd5cb5a9) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve previously persisted feature flags as an offline fallback when bootstrap flags are provided.
+  (2026-09-04)
+
 ## 1.426.3
 
 ### Patch Changes
