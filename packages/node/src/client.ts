@@ -19,10 +19,11 @@ import {
   PostHogMetrics,
   PostHogPersistedProperty,
   PostHogTraces,
-  NOOP_SPAN,
   inertSpan,
   Properties,
   resolveMetricsConfig,
+  resolveTracesConfig,
+  runWithActiveSpan,
   RetriableOptions,
   raceWithTimeout,
   safeSetTimeout,
@@ -30,7 +31,6 @@ import {
   uuidv7,
 } from '@posthog/core'
 import type { Metrics, Span, SpanContextManager, StartSpanOptions, TraceSdkContext } from '@posthog/core'
-import { resolveTracesConfig } from './traces-defaults'
 import {
   AllFlagsOptions,
   EventMessage,
@@ -756,8 +756,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       // Tracing off: still run the callback exactly once, with an inert handle.
       // A handle carrying an inbound `parent` is activated, so `getActiveSpan()`
       // inside the callback can propagate the trace onward.
-      const span = inertSpan(options)
-      return span === NOOP_SPAN ? fn(span) : this._spanContextManager.with(span, () => fn(span))
+      return runWithActiveSpan(this._spanContextManager, inertSpan(options), fn)
     }
     return options ? pipeline.withSpan(name, options, fn) : pipeline.withSpan(name, fn)
   }

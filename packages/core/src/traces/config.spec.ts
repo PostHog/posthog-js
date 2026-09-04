@@ -1,5 +1,5 @@
-import { createMockLogger } from '@posthog/core/testing'
-import { resolveTracesConfig } from '../traces-defaults'
+import { createMockLogger } from '@/testing'
+import { resolveTracesConfig } from './config'
 
 describe('resolveTracesConfig', () => {
   it.each([

@@ -17,18 +17,13 @@ import {
   eventNameBound,
   inertSpan,
   monotonicNow,
+  runWithActiveSpan,
   truncateAttributes,
 } from './span'
 import { newSpanId, newTraceId } from './ids'
 import { parseTraceparent, sanitizeTracestate } from './traceparent'
-import {
-  assignUserAttributes,
-  clampEndTime,
-  resolveStartTime,
-  resolveSuppliedTime,
-  sanitizeName,
-  toEpochMs,
-} from './sanitize'
+import { clampEndTime, resolveStartTime, resolveSuppliedTime, sanitizeName, toEpochMs } from './sanitize'
+import { assignUserAttributes } from '../utils/json-utils'
 import { buildOtlpSpan, buildOtlpTracesPayload, buildTracesResourceAttributes } from './otlp'
 import { isPromise, safeSetTimeout } from '../utils'
 
@@ -238,11 +233,7 @@ export class PostHogTraces {
     const span = this.startSpan(name, options)
 
     try {
-      // The shared no-op is never activated, so `getActiveSpan()` inside the
-      // callback reads null — callbacks should use the handle they're given. A
-      // pass-through handle is activated, so `getActiveSpan()?.traceparent()`
-      // still propagates an inbound trace through a service with tracing off.
-      const result = span === NOOP_SPAN ? fn(span) : this._contextManager.with(span, () => fn(span))
+      const result = runWithActiveSpan(this._contextManager, span, fn)
 
       if (isPromise(result)) {
         return result.then(
