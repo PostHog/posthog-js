@@ -7,9 +7,6 @@ import { safeSetTimeout } from './index'
  * flush further out (every capture reaches it), and one that must not pull a
  * flush back in front of a wait the endpoint asked for. Holding the deadline
  * next to the handle is what lets the second kind compare against the first.
- *
- * Deliberately outside the `utils` barrel, like `RetryAfterWindow`: that barrel
- * is re-exported wholesale from the package entry point, and this is internal.
  */
 export class FlushTimer {
   private _timer?: ReturnType<typeof safeSetTimeout>

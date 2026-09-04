@@ -50,9 +50,10 @@ describe('OTLP bodies over the endpoint limit', () => {
     ['logs', (payload: any) => posthog._sendLogsBatch(payload)],
     ['metrics', (payload: any) => posthog._sendMetricsBatch(payload)],
   ])('reports a %s batch it cannot serialize as too-large rather than throwing', async (_signal, send) => {
-    // A payload past the runtime's max string length throws out of
-    // `JSON.stringify`. Unguarded that escapes the tagged-outcome contract, and
-    // the caller retries a batch it can never send instead of halving it away.
+    // A circular payload stands in for the reachable case: a batch past the
+    // runtime's max string length, which is too large to build in a test. Both
+    // leave `JSON.stringify` throwing, which unguarded escapes the tagged-outcome
+    // contract and leaves the caller retrying a batch it can never send.
     const unserializable: any = spansOf(8)
     unserializable.resourceSpans[0].scopeSpans[0].spans[0].self = unserializable
 
