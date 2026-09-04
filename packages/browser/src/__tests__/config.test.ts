@@ -319,6 +319,68 @@ describe('config', () => {
 
             expect(bootstrapWarnings()).toHaveLength(1)
         })
+
+        // person_profiles: 'always' gives every anonymous visitor a person, so no identify() call is needed
+        // and the deferred person-processing path never runs. Each page load then creates a new person.
+        it.each(['memory', 'sessionStorage'] as const)(
+            "warns at init when person_profiles is 'always' and persistence is '%s'",
+            (persistence) => {
+                new PostHog()._init('test-token', { persistence, person_profiles: 'always' })
+
+                expect(bootstrapWarnings()).toHaveLength(1)
+                expect(warnSpy).toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining('separate anonymous person')
+                )
+                expect(warnSpy).toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining("set person_profiles to 'identified_only'")
+                )
+            }
+        )
+
+        // reuseAnonymousId only stops identify() from merging IDs. A fresh anonymous person is still created
+        // on each load, so it must not suppress this warning.
+        it("warns at init under person_profiles: 'always' even when reuseAnonymousId is enabled", () => {
+            new PostHog()._init('test-token', {
+                persistence: 'memory',
+                person_profiles: 'always',
+                reuseAnonymousId: true,
+            })
+
+            expect(bootstrapWarnings()).toHaveLength(1)
+        })
+
+        it("does not warn at init under person_profiles: 'always' when bootstrap.distinctID is set", () => {
+            new PostHog()._init('test-token', {
+                persistence: 'memory',
+                person_profiles: 'always',
+                bootstrap: { distinctID: 'stable-id' },
+            })
+
+            expect(bootstrapWarnings()).toHaveLength(0)
+        })
+
+        it("does not warn at init under person_profiles: 'always' with durable persistence", () => {
+            new PostHog()._init('test-token', {
+                persistence: 'localStorage+cookie',
+                person_profiles: 'always',
+            })
+
+            expect(bootstrapWarnings()).toHaveLength(0)
+        })
+
+        it("warns once when set_config switches person_profiles to 'always' under volatile persistence", () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { persistence: 'memory', person_profiles: 'identified_only' })
+            warnSpy.mockClear()
+
+            posthog.set_config({ person_profiles: 'always' })
+            expect(bootstrapWarnings()).toHaveLength(1)
+
+            posthog.identify('identified-id')
+            expect(bootstrapWarnings()).toHaveLength(1)
+        })
     })
 
     describe('compatibilityDate', () => {
