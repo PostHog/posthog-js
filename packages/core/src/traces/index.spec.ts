@@ -22,6 +22,7 @@ const resolveForTest = (partial?: Partial<ResolvedTracesConfig>): ResolvedTraces
   beforeSpanSend: [],
   maxAttributesPerSpan: 128,
   maxEventsPerSpan: 128,
+  maxAttributesPerEvent: 128,
   maxAttributeValueLength: 8192,
   maxLiveSpans: 10000,
   maxSpanAgeMs: 3600000,
@@ -1507,6 +1508,26 @@ describe('PostHogTraces', () => {
       const [sent] = sentSpans()
       expect(sent.events!.map((event) => event.name)).toEqual(['original'])
       expect(sent.droppedEventsCount).toBe(1)
+    })
+
+    it('re-applies the event attribute cap to what beforeSpanSend widened', async () => {
+      const traces = createTraces({
+        maxAttributesPerEvent: 2,
+        beforeSpanSend: [
+          (span) => {
+            span.events[0].attributes = { a: 1, b: 2, c: 3, d: 4 }
+            return span
+          },
+        ],
+      })
+      const span = traces.startSpan('checkout')
+      span.addEvent('query', { a: 1 })
+      span.end()
+      await traces.flush()
+
+      const event = sentSpans()[0].events![0]
+      expect(event.attributes!.map((attribute) => attribute.key)).toEqual(['a', 'b'])
+      expect(event.droppedAttributesCount).toBe(2)
     })
 
     it('keeps the auto-context keys when beforeSpanSend pushes past the cap', async () => {

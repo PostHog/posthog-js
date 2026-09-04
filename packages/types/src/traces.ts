@@ -120,6 +120,10 @@ export interface Span {
     /**
      * Record a timestamped event within the span, e.g. a cache miss or a retry.
      * Defaults to the current time.
+     *
+     * One event carries at most 128 attributes; further keys are dropped and
+     * counted on the exported event. Use `maxEventsPerSpan` to bound how many
+     * events a span carries.
      */
     addEvent(name: string, attributes?: SpanAttributes, timestamp?: SpanTimeInput): this
 
@@ -378,6 +382,8 @@ export interface OtlpSpanEvent {
     name: string
     timeUnixNano: string
     attributes?: OtlpSpanKeyValue[]
+    /** Attributes dropped by the SDK's per-event attribute cap. Omitted when none were. */
+    droppedAttributesCount?: number
 }
 
 export interface OtlpSpanStatus {

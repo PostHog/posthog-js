@@ -110,6 +110,30 @@ describe('OTLP span encoding', () => {
       expect(span.events).toEqual([{ name: 'cache miss', timeUnixNano: '1700000000040000000' }])
     })
 
+    it('carries an event attribute drop as the proto counter', () => {
+      const span = buildOtlpSpan(
+        record({
+          events: [{ name: 'query', timestamp: 1_700_000_000_040, droppedAttributesCount: 3 }],
+        })
+      )
+      expect(span.events?.[0]).toMatchObject({ name: 'query', droppedAttributesCount: 3 })
+    })
+
+    it.each([
+      ['none were dropped', 0],
+      ['a hook wrote a negative', -2],
+      ['a hook wrote a non-number', 'lots' as unknown as number],
+    ])('omits the event drop counter when %s', (_label, dropped) => {
+      // Coerced like the span's own counters: a non-integer here is refused for
+      // the whole request, taking unrelated spans with it.
+      const span = buildOtlpSpan(
+        record({
+          events: [{ name: 'query', timestamp: 1_700_000_000_040, droppedAttributesCount: dropped }],
+        })
+      )
+      expect(span.events?.[0].droppedAttributesCount).toBeUndefined()
+    })
+
     it('sets the sampled bit and marks a root span as known-not-remote', () => {
       // A root span has no parent context to be remote, which the OTel Go and
       // Java exporters also report as known-not-remote rather than unknown.
@@ -143,6 +167,7 @@ describe('OTLP span encoding', () => {
       beforeSpanSend: [],
       maxAttributesPerSpan: 128,
       maxEventsPerSpan: 128,
+      maxAttributesPerEvent: 128,
       maxAttributeValueLength: 8192,
       maxLiveSpans: 10000,
       maxSpanAgeMs: 3600000,

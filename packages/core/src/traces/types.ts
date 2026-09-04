@@ -63,6 +63,7 @@ export interface SpanEventRecord {
   /** ms epoch. */
   timestamp: number
   attributes?: SpanAttributes
+  droppedAttributesCount?: number
 }
 
 /**
@@ -72,6 +73,8 @@ export interface SpanEventRecord {
  * field `beforeSpanSend` cannot see, and so cannot corrupt.
  */
 export interface SpanRecord extends HookSpanRecord {
+  /** The hook-visible event plus the SDK's own per-event drop count. */
+  events: SpanEventRecord[]
   traceState?: string
   /** The W3C trace-flags byte this span propagates, e.g. `01` sampled. */
   traceFlags: string
@@ -108,6 +111,7 @@ export interface ResolvedTracesConfig extends TracesConfig {
   beforeSpanSend: BeforeSpanSendFn[]
   maxAttributesPerSpan: number
   maxEventsPerSpan: number
+  maxAttributesPerEvent: number
   maxAttributeValueLength: number
   /** Bound on spans started but not yet ended. At the bound `startSpan` returns a no-op handle. */
   maxLiveSpans: number

@@ -11,6 +11,11 @@ const DEFAULT_MAX_QUEUE_SIZE = 2048
 // OpenTelemetry's per-span defaults.
 const DEFAULT_MAX_ATTRIBUTES_PER_SPAN = 128
 const DEFAULT_MAX_EVENTS_PER_SPAN = 128
+// OpenTelemetry's per-event limit, which is the same number. Fixed rather than
+// configurable: `maxAttributesPerSpan` and `maxEventsPerSpan` already give a
+// caller room to shape a span, and this one only has to stop an event holding
+// an unbounded bag.
+const DEFAULT_MAX_ATTRIBUTES_PER_EVENT = 128
 // OpenTelemetry leaves the value length unlimited, which is what lets one
 // multi-MB attribute make a span too large for the endpoint to accept — and an
 // oversized span is dropped whole. 8 KB holds a deep stack trace and any
@@ -121,6 +126,7 @@ export function resolveTracesConfig(
     beforeSpanSend: resolveBeforeSpanSend(config?.beforeSpanSend, logger),
     maxAttributesPerSpan: positiveInteger(config?.maxAttributesPerSpan, DEFAULT_MAX_ATTRIBUTES_PER_SPAN),
     maxEventsPerSpan: positiveInteger(config?.maxEventsPerSpan, DEFAULT_MAX_EVENTS_PER_SPAN),
+    maxAttributesPerEvent: DEFAULT_MAX_ATTRIBUTES_PER_EVENT,
     maxAttributeValueLength: positiveInteger(config?.maxAttributeValueLength, DEFAULT_MAX_ATTRIBUTE_VALUE_LENGTH),
     flushIntervalMs: positiveInteger(config?.flushIntervalMs, DEFAULT_FLUSH_INTERVAL_MS),
     maxExportBatchSize,

@@ -31,6 +31,11 @@ describe('resolveTracesConfig', () => {
     })
   })
 
+  it('keeps the per-event attribute cap fixed', () => {
+    // The cap is internal, so an untyped caller naming it gets the default.
+    expect(resolveTracesConfig({ maxAttributesPerEvent: 9 } as any).maxAttributesPerEvent).toBe(128)
+  })
+
   it('applies the documented defaults', () => {
     expect(resolveTracesConfig(undefined)).toMatchObject({
       flushIntervalMs: 5000,
@@ -38,6 +43,7 @@ describe('resolveTracesConfig', () => {
       maxQueueSize: 2048,
       maxAttributesPerSpan: 128,
       maxEventsPerSpan: 128,
+      maxAttributesPerEvent: 128,
       maxAttributeValueLength: 8192,
       maxLiveSpans: 10_000,
       maxSpanAgeMs: 3_600_000,
