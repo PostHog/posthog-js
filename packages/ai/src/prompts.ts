@@ -14,6 +14,10 @@ import type {
 
 const DEFAULT_CACHE_TTL_SECONDS = 300 // 5 minutes
 const DEFAULT_PROMPTS_HOST = 'https://us.posthog.com'
+// After a failed refetch the stale entry is served for this long before the next network attempt.
+// The server's tightest prompt limit is per-minute, so a minute lets the bucket refill.
+const DEFAULT_REFETCH_COOLDOWN_SECONDS = 60
+const MAX_REFETCH_COOLDOWN_SECONDS = 3600
 // Keyed by version number, label string, or undefined for the latest version.
 // Version and label keys can't collide: one is always a number, the other a string.
 type PromptVersionCache = Map<number | string | undefined, CachedPrompt>
@@ -38,6 +42,29 @@ function extractConfig(value: unknown): Record<string, unknown> | null {
 /** Copied so a caller mutating result.config can't pollute the cache entry later reads are served from. */
 function cloneConfig(config: Record<string, unknown> | null): Record<string, unknown> | null {
   return config === null ? null : structuredClone(config)
+}
+
+/** Reads a Retry-After header of the delta-seconds form the API sends. */
+function parseRetryAfterSeconds(value: string | null | undefined): number | undefined {
+  if (!value) {
+    return undefined
+  }
+  const seconds = Number(value.trim())
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return undefined
+  }
+  return Math.min(seconds, MAX_REFETCH_COOLDOWN_SECONDS)
+}
+
+/** Carries the server's own cooldown so a rate-limited client waits as long as it was told to. */
+class PromptFetchError extends Error {
+  readonly retryAfterSeconds?: number
+
+  constructor(message: string, retryAfterSeconds?: number) {
+    super(message)
+    this.name = 'PromptFetchError'
+    this.retryAfterSeconds = retryAfterSeconds
+  }
 }
 
 function isPromptApiResponse(data: unknown): data is PromptApiResponse {
@@ -204,8 +231,13 @@ export class Prompts {
       const isFresh = now - cached.fetchedAt < cacheTtlSeconds * 1000
 
       if (isFresh) {
-        const { fetchedAt: _, ...cachedResult } = cached
-        return { source: 'cache', ...cachedResult, config: cloneConfig(cached.config) }
+        return { source: 'cache', ...this.readCacheEntry(cached) }
+      }
+
+      // A failed refetch left this entry in cooldown. Serving it keeps one throttled client from
+      // turning every later get() into another request, which is what holds it against the limit.
+      if (cached.retryNotBefore !== undefined && now < cached.retryNotBefore) {
+        return { source: 'stale_cache', ...this.readCacheEntry(cached) }
       }
     }
 
@@ -230,13 +262,20 @@ export class Prompts {
     } catch (error) {
       // Return stale cache (with warning)
       if (cached) {
-        const { fetchedAt: _, ...cachedResult } = cached
+        const cooldownSeconds =
+          (error instanceof PromptFetchError ? error.retryAfterSeconds : undefined) ?? DEFAULT_REFETCH_COOLDOWN_SECONDS
+        cached.retryNotBefore = Math.max(cached.retryNotBefore ?? 0, Date.now() + cooldownSeconds * 1000)
         console.warn(`[PostHog Prompts] Failed to fetch prompt ${promptReference}, using stale cache:`, error)
-        return { source: 'stale_cache', ...cachedResult, config: cloneConfig(cached.config) }
+        return { source: 'stale_cache', ...this.readCacheEntry(cached) }
       }
 
       throw error
     }
+  }
+
+  private readCacheEntry(cached: CachedPrompt): Omit<PromptRemoteResult, 'source'> {
+    const { fetchedAt: _fetchedAt, retryNotBefore: _retryNotBefore, ...cachedResult } = cached
+    return { ...cachedResult, config: cloneConfig(cached.config) }
   }
 
   /**
@@ -332,7 +371,10 @@ export class Prompts {
         )
       }
 
-      throw new Error(`[PostHog Prompts] Failed to fetch prompt ${promptReference}: HTTP ${response.status}`)
+      throw new PromptFetchError(
+        `[PostHog Prompts] Failed to fetch prompt ${promptReference}: HTTP ${response.status}`,
+        response.status === 429 ? parseRetryAfterSeconds(response.headers?.get('Retry-After')) : undefined
+      )
     }
 
     const data: unknown = await response.json()
