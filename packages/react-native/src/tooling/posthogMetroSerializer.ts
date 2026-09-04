@@ -98,9 +98,13 @@ export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer)
 
     const debugId = determineDebugIdFromBundleSource(bundleCode)
     if (!debugId) {
+      // A custom serializer cannot know about posthogBundleCallback, so the
+      // placeholder stays in its output. Serialize again without the Chunk ID
+      // module: a placeholder Chunk ID reaches error tracking as a real one.
       // eslint-disable-next-line no-console
       console.warn('Chunk ID was not found in the bundle. Skipping PostHog Chunk ID...')
-      return serializerResult
+      delete serializerOptions.posthogBundleCallback
+      return serializer(entryPoint, premodules, graph, options)
     }
 
     // Only print Chunk ID for command line builds => not hot reload from dev server

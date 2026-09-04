@@ -52,14 +52,24 @@ describe('PostHog Metro serializer', () => {
     consoleWarnSpy.mockRestore()
   })
 
-  test('returns the inner result when the bundle holds no chunk id', async () => {
+  test('drops the chunk id module when a custom serializer keeps the placeholder', async () => {
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const innerSerializer: MetroSerializer = () => ({ code: 'module code', map: '{}' })
+    const innerSerializer = vi.fn<MetroSerializer>((_entryPoint, premodules) => ({
+      code: premodules.map((module) => module.getSource().toString()).join('\n'),
+      map: '{}',
+    }))
     const serializer = createPostHogMetroSerializer(innerSerializer)
 
     const result = await serializer(...mockSerializerArgs())
 
-    expect(result).toEqual({ code: 'module code', map: '{}' })
+    expect(typeof result).not.toBe('string')
+    if (typeof result === 'string') {
+      throw new Error('Expected serialized bundle output')
+    }
+
+    expect(result.code).not.toContain('__POSTHOG_CHUNK_ID__')
+    expect(result.code).not.toContain('_posthogChunkIds')
+    expect(innerSerializer).toHaveBeenCalledTimes(2)
     expect(consoleWarnSpy).toHaveBeenCalledTimes(1)
     consoleWarnSpy.mockRestore()
   })
