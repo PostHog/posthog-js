@@ -1317,6 +1317,94 @@ describe('PostHogTraces', () => {
       expect(sentSpans()[0].name).toBe('renamed')
     })
 
+    it('keeps the exception reserve through a hook that edits events in place', async () => {
+      // The re-apply after the hook has to reach the same verdict as the span
+      // writer, and it reads a mark the hook never sees.
+      const traces = createTraces({
+        maxEventsPerSpan: 1,
+        beforeSpanSend: [
+          (span) => {
+            for (const event of span.events) {
+              event.attributes = { ...event.attributes, scrubbed: true }
+            }
+            return span
+          },
+        ],
+      })
+      const span = traces.startSpan('checkout')
+      span.addEvent('step-0')
+      span.recordException(new Error('boom'))
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans()[0].events!.map((event) => event.name)).toEqual(['step-0', 'exception'])
+    })
+
+    it('does not give the reserve to an exception-named event a hook appended', async () => {
+      // The hook writes plain records carrying no mark, so an event it invents
+      // cannot claim slots the SDK reserved for what it recorded itself.
+      const traces = createTraces({
+        maxEventsPerSpan: 1,
+        beforeSpanSend: [
+          (span) => {
+            span.events.push({ name: 'exception', timestamp: Date.now() })
+            span.events.push({ name: 'exception', timestamp: Date.now() })
+            return span
+          },
+        ],
+      })
+      const span = traces.startSpan('checkout')
+      span.addEvent('step-0')
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans()[0].events!.map((event) => event.name)).toEqual(['step-0'])
+    })
+
+    it('drops a recorded exception when a hook rebuilds its events from scratch', async () => {
+      // The documented residual of keying on a mark rather than the name: a hook
+      // that constructs fresh event objects field by field drops it, and the
+      // event falls back to an ordinary slot. Fail-safe — the reserve is never
+      // handed to an event the SDK did not record — but worth pinning so the
+      // behaviour is deliberate rather than discovered.
+      const traces = createTraces({
+        maxEventsPerSpan: 1,
+        beforeSpanSend: [
+          (span) => {
+            span.events = span.events.map((event) => ({ name: event.name, timestamp: event.timestamp }))
+            return span
+          },
+        ],
+      })
+      const span = traces.startSpan('checkout')
+      span.addEvent('step-0')
+      span.recordException(new Error('boom'))
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans()[0].events!.map((event) => event.name)).toEqual(['step-0'])
+    })
+
+    it('keeps the reserve through a hook that spreads its events', async () => {
+      // A spread carries the mark, so the common "copy and edit" shape is safe.
+      const traces = createTraces({
+        maxEventsPerSpan: 1,
+        beforeSpanSend: [
+          (span) => {
+            span.events = span.events.map((event) => ({ ...event }))
+            return span
+          },
+        ],
+      })
+      const span = traces.startSpan('checkout')
+      span.addEvent('step-0')
+      span.recordException(new Error('boom'))
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans()[0].events!.map((event) => event.name)).toEqual(['step-0', 'exception'])
+    })
+
     it('exports the span when the hook status message refuses to stringify', async () => {
       // The encoder downstream only marks the field, so coercing here must not
       // be the thing that costs the span.

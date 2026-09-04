@@ -226,6 +226,33 @@ describe('PostHogSpan', () => {
       expect(ended[0].events.map((event) => event.name)).toEqual(['step-0', 'step-1'])
       expect(ended[0].droppedEventsCount).toBe(3)
     })
+
+    it('does not give the reserve to a caller who names their own event exception', () => {
+      // The reserve is for what the SDK records on your behalf. Keying it on the
+      // name handed it to anyone who happened to use that name.
+      const span = createSpan({ maxEvents: 2 })
+      for (let i = 0; i < 7; i++) {
+        span.addEvent('exception', { mine: i })
+      }
+      span.end()
+
+      expect(ended[0].events).toHaveLength(2)
+      expect(ended[0].droppedEventsCount).toBe(5)
+    })
+
+    it('gives the reserve to a recorded exception alongside a caller using the same name', () => {
+      // Both land on a full span; only the one the SDK recorded draws on it.
+      const span = createSpan({ maxEvents: 1 })
+      span.addEvent('step-0')
+      span.addEvent('exception', { mine: true })
+      span.recordException(new Error('boom'))
+      span.end()
+
+      expect(ended[0].events).toHaveLength(2)
+      expect(ended[0].events[0].name).toBe('step-0')
+      expect(ended[0].events[1].attributes?.['exception.type']).toBe('Error')
+      expect(ended[0].droppedEventsCount).toBe(1)
+    })
   })
 
   describe('attribute store hygiene', () => {
@@ -629,9 +656,10 @@ describe('PostHogSpan', () => {
       expect(Object.getOwnPropertyDescriptor(payload, '__proto__')?.value).toEqual({ body: 'abcd' })
     })
 
-    it('never cuts the reserved exception event name', () => {
-      // The reserve compares against the whole constant, so a bound short enough
-      // to cut it silently dropped the exception event it exists to keep.
+    it('keeps the reserve when the value bound cuts the event name', () => {
+      // The reserve keys on what the SDK recorded, not on the name, so a bound
+      // short enough to trim `exception` no longer decides whether the event
+      // survives. The name is bounded like any other, and the event is kept.
       const span = createSpan({ maxAttributeValueLength: 8, maxEvents: 2 })
 
       span.addEvent('a')
@@ -639,13 +667,14 @@ describe('PostHogSpan', () => {
       span.recordException(new Error('boom'))
       span.end()
 
-      expect(ended[0].events.map((e) => e.name)).toEqual(['a', 'b', 'exception'])
+      expect(ended[0].events).toHaveLength(3)
+      expect(ended[0].events[2].name).toBe('exceptio')
+      expect(ended[0].events[2].attributes?.['exception.type']).toBe('Error')
     })
 
     it('bounds a span name and an event name, like a status message', () => {
       // A name built from a URL is caller-controlled, and one large enough takes
-      // the span past the ingestion body limit. The bound is 12 rather than 4
-      // because an event name is floored at the reserved `exception`.
+      // the span past the ingestion body limit.
       const span = createSpan({ maxAttributeValueLength: 12 })
 
       span.updateName('abcdefghijklmnop')

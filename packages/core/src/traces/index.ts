@@ -14,7 +14,6 @@ import {
   PostHogSpan,
   applySpanLimits,
   describeError,
-  eventNameBound,
   inertSpan,
   monotonicNow,
   runWithActiveSpan,
@@ -639,12 +638,7 @@ export class PostHogTraces {
         try {
           sanitizedEvents.push({
             ...event,
-            name: sanitizeName(
-              event.name,
-              'Span event name',
-              eventNameBound(this._config.maxAttributeValueLength),
-              this._logger
-            ),
+            name: sanitizeName(event.name, 'Span event name', this._config.maxAttributeValueLength, this._logger),
             timestamp: resolveSuppliedTime(event.timestamp, current.startTime, 'event timestamp', this._logger),
           })
         } catch {

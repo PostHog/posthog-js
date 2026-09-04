@@ -180,12 +180,12 @@ export class PostHogSpan implements Span {
    * included — the reserve is what an exception falls back on once the cap is
    * spent, not a smaller budget it is confined to.
    */
-  private _claimEventSlot(name: string): boolean {
+  private _claimEventSlot(sdkException: boolean): boolean {
     if (this._userEventCount < this._maxEvents) {
       this._userEventCount++
       return true
     }
-    if (isExceptionEvent(name) && this._exceptionEventCount < MAX_EXCEPTION_EVENTS_PER_SPAN) {
+    if (sdkException && this._exceptionEventCount < MAX_EXCEPTION_EVENTS_PER_SPAN) {
       this._exceptionEventCount++
       return true
     }
@@ -193,26 +193,33 @@ export class PostHogSpan implements Span {
   }
 
   addEvent(name: string, attributes?: SpanAttributes, timestamp?: SpanTimeInput): this {
+    return this._pushEvent(name, attributes, timestamp, false)
+  }
+
+  /**
+   * The shared body of `addEvent` and `recordException`. `sdkException` is what
+   * the reserve keys on, so it is set only where the SDK records an exception
+   * itself and can never be reached through the public surface.
+   */
+  private _pushEvent(
+    name: string,
+    attributes: SpanAttributes | undefined,
+    timestamp: SpanTimeInput | undefined,
+    sdkException: boolean
+  ): this {
     if (this._mutable('addEvent')) {
-      // Sanitised before the bucket check, so the name deciding the bucket is the
-      // one that ends up on the record.
-      const eventName = sanitizeName(
-        name,
-        'Span event name',
-        eventNameBound(this._maxAttributeValueLength),
-        this._logger
-      )
-      if (!this._claimEventSlot(eventName)) {
+      if (!this._claimEventSlot(sdkException)) {
         this._droppedEvents++
         return this
       }
       this._events.push({
-        name: eventName,
+        name: sanitizeName(name, 'Span event name', this._maxAttributeValueLength, this._logger),
         timestamp: resolveSuppliedTime(timestamp, this._now(), 'event timestamp', this._logger),
         // Copied so a caller reusing one object across events can't mutate a recorded one.
         ...(attributes && {
           attributes: truncateAttributes(assignUserAttributes({}, attributes), this._maxAttributeValueLength),
         }),
+        ...(sdkException && { [SDK_EXCEPTION_EVENT]: true }),
       })
     }
     return this
@@ -244,11 +251,16 @@ export class PostHogSpan implements Span {
       return this
     }
     const { type, message, stack } = describeError(error)
-    this.addEvent(EXCEPTION_EVENT_NAME, {
-      'exception.type': type,
-      'exception.message': message,
-      ...(stack && { 'exception.stacktrace': stack }),
-    })
+    this._pushEvent(
+      EXCEPTION_EVENT_NAME,
+      {
+        'exception.type': type,
+        'exception.message': message,
+        ...(stack && { 'exception.stacktrace': stack }),
+      },
+      undefined,
+      true
+    )
     // recordException is itself an explicit call, so it follows last-write-wins
     // rather than deferring to an earlier `ok`.
     return this.setStatus('error', message)
@@ -318,18 +330,19 @@ export class PostHogSpan implements Span {
 const EXCEPTION_EVENT_NAME = 'exception'
 
 /**
- * The value bound as it applies to an event name, floored at the reserved name.
+ * Marks an event the SDK recorded itself, which is what the reserve below is
+ * for. Symbol-keyed rather than a field: `Object.keys`, `for...in` and
+ * `JSON.stringify` all skip it, so it is invisible to `beforeSpanSend` and
+ * cannot reach the wire, while an object spread still carries it — which is how
+ * it survives the re-sanitising pass that runs after the hook.
  *
- * `isExceptionEvent` compares against the whole constant, so a bound short
- * enough to cut it would silently disable the exception reserve and drop the
- * event the reserve exists to keep.
+ * The alternative, matching on the event name, hands the reserve to a caller who
+ * names their own event `exception` too.
  */
-export function eventNameBound(maxAttributeValueLength: number): number {
-  return Math.max(maxAttributeValueLength, EXCEPTION_EVENT_NAME.length)
-}
+const SDK_EXCEPTION_EVENT = Symbol('posthog.sdkExceptionEvent')
 
 /**
- * How many `exception` events may sit past the event cap.
+ * How many SDK-recorded exception events may sit past the event cap.
  *
  * A span that fills its events and then throws would otherwise lose the only
  * record of why it failed — the span you most want to read. Fixed and small
@@ -340,11 +353,13 @@ export function eventNameBound(maxAttributeValueLength: number): number {
 const MAX_EXCEPTION_EVENTS_PER_SPAN = 4
 
 /**
- * Identified by name, the same trade-off the attribute exemption makes: a
- * caller who names their own event `exception` gets the exemption too.
+ * Whether the SDK recorded this event, and so whether it may draw on the
+ * reserve. A hook that rebuilds its events into fresh objects drops the mark,
+ * and those events fall back to ordinary slots — the safe direction, since the
+ * reserve is never handed to an event the SDK did not record.
  */
-function isExceptionEvent(name: string): boolean {
-  return name === EXCEPTION_EVENT_NAME
+function isSdkExceptionEvent(event: SpanEventRecord): boolean {
+  return (event as { [SDK_EXCEPTION_EVENT]?: boolean })[SDK_EXCEPTION_EVENT] === true
 }
 
 /** A value as its string form, or the encoder's marker when it refuses to produce one. */
@@ -442,7 +457,7 @@ export function applySpanLimits(
   for (const event of record.events) {
     if (keptEvents < maxEvents) {
       keptEvents++
-    } else if (isExceptionEvent(event.name) && keptExceptions < MAX_EXCEPTION_EVENTS_PER_SPAN) {
+    } else if (isSdkExceptionEvent(event) && keptExceptions < MAX_EXCEPTION_EVENTS_PER_SPAN) {
       keptExceptions++
     } else {
       droppedEvents++
