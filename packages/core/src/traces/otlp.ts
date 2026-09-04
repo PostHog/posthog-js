@@ -37,11 +37,7 @@ const TRACE_FLAGS_SAMPLED = 0x01
 const SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE = 0x100
 const SPAN_FLAGS_CONTEXT_IS_REMOTE = 0x200
 
-/**
- * The `flags` field for a span: its W3C trace-flags byte, plus OTel's
- * parent-remoteness bits. Nothing reads the remoteness today, but a span
- * exported without it can never be backfilled with it.
- */
+/** The `flags` field for a span: its W3C trace-flags byte, plus OTel's parent-remoteness bits. */
 function spanFlags(record: SpanRecord): number {
   const traceFlags = parseInt(record.traceFlags, 16)
   const w3c = Number.isFinite(traceFlags) ? traceFlags & 0xff : TRACE_FLAGS_SAMPLED

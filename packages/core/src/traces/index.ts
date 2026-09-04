@@ -553,12 +553,12 @@ export class PostHogTraces {
       attributes: record.droppedAttributesCount,
       events: record.droppedEventsCount,
     }
-    // Read here rather than restored onto the hook's return value: writing them
-    // back would throw on a frozen record, and neither is on the record a hook
-    // is handed, so a rebuilding hook always arrives without them.
     // The order the span itself wrote them in, so the caps below can keep the
     // earliest-set entries even when a hook adds an integer-like key.
     const keysBeforeHook = Object.keys(record.attributes)
+    // Read here rather than restored onto the hook's return value: writing them
+    // back would throw on a frozen record, and neither is on the record a hook
+    // is handed, so a rebuilding hook always arrives without them.
     const originalPropagation = {
       traceFlags: record.traceFlags,
       parentIsRemote: record.parentIsRemote,
@@ -679,12 +679,10 @@ export class PostHogTraces {
     ) {
       this._logger.debug('beforeSpanSend changed a span identity field; keeping the original ids')
     }
-    // Only the fields that actually differ are written back. Assigning a value
-    // to a frozen property throws even when it is the value already there, and
-    // a hook that freezes the record it returns would otherwise drop every span.
-    // Best-effort, for the next hook in the chain only: the record this builds
-    // is not what gets exported. A frozen return refuses every write, and the
-    // span must survive that.
+    // Only the fields that actually differ are written back: assigning to a
+    // frozen property throws even when the value is the one already there, and
+    // a hook that freezes what it returns would otherwise drop every span. The
+    // record this builds is for the next hook in the chain, not for the export.
     try {
       restoreField(hooked, 'traceId', original.traceId)
       restoreField(hooked, 'spanId', original.spanId)
