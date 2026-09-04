@@ -13,7 +13,7 @@ import { SURVEYS, SURVEYS_CACHE_TTL_MS, SURVEYS_LOADED_AT, SURVEYS_REQUEST_TIMEO
 import { SurveyManager } from '../extensions/surveys'
 import { PostHog } from '../posthog-core'
 import { BrowserSurveys } from '../browser-surveys'
-import { Survey, SurveySchedule, SurveyType } from '../posthog-surveys-types'
+import { Survey, SurveyEventName, SurveySchedule, SurveyType } from '../posthog-surveys-types'
 import { FlagsResponse } from '../types'
 import { assignableWindow } from '../utils/globals'
 import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
@@ -963,6 +963,72 @@ describe('posthog-surveys', () => {
                 surveys['_surveyManager'] = {} as unknown as SurveyManager
 
                 expect(() => surveys.handlePageUnload()).not.toThrow()
+            })
+        })
+
+        describe('onActiveMatchingSurveysChanged', () => {
+            it('notifies when an event- or action-targeted survey changes, until unsubscribed', () => {
+                const captureHooks: Array<(eventName: string, eventPayload?: any) => void> = []
+                const eventSurvey: Survey = {
+                    ...survey,
+                    id: 'event-targeted-survey',
+                    conditions: {
+                        events: { values: [{ name: 'user_subscribed' }] },
+                        cancelEvents: { values: [{ name: 'user_unsubscribed' }] },
+                        actions: {
+                            values: [{ id: 1, name: 'account_upgraded', steps: [{ event: 'account_upgraded' }] }],
+                        },
+                    },
+                }
+                mockPostHog.get_property.mockReturnValue([eventSurvey])
+                mockPostHog._addCaptureHook = vi.fn((hook) => {
+                    captureHooks.push(hook)
+                    return () => {
+                        const index = captureHooks.indexOf(hook)
+                        if (index !== -1) {
+                            captureHooks.splice(index, 1)
+                        }
+                    }
+                })
+                mockPostHog.surveys = surveys
+                mockPostHog.getSurveys = surveys.getSurveys.bind(surveys)
+                mockPostHog.cancelPendingSurvey = vi.fn()
+                mockGenerateSurveys.mockImplementation(() => ({
+                    getActiveMatchingSurveys: (callback: (matchingSurveys: Survey[]) => void) => {
+                        const isActive = surveys._surveyEventReceiver?.getSurveys().includes(eventSurvey.id)
+                        callback(isActive ? [eventSurvey] : [])
+                    },
+                }))
+                surveys['_isSurveysEnabled'] = true
+                const callback = vi.fn()
+
+                const unsubscribe = surveys.onActiveMatchingSurveysChanged(callback)
+                surveys.loadIfEnabled()
+                const capture = (eventName: string, properties = {}): void => {
+                    captureHooks.forEach((hook) => hook(eventName, { event: eventName, properties } as any))
+                }
+
+                expect(captureHooks).toHaveLength(2)
+                expect(callback).toHaveBeenLastCalledWith([])
+
+                capture('user_subscribed')
+                expect(callback).toHaveBeenLastCalledWith([eventSurvey])
+
+                capture('user_subscribed')
+                expect(callback).toHaveBeenCalledTimes(2)
+
+                capture('user_unsubscribed')
+                expect(callback).toHaveBeenLastCalledWith([])
+
+                capture('account_upgraded')
+                expect(callback).toHaveBeenLastCalledWith([eventSurvey])
+
+                capture(SurveyEventName.DISMISSED, { $survey_id: eventSurvey.id })
+                expect(callback).toHaveBeenLastCalledWith([])
+
+                unsubscribe()
+                capture('user_subscribed')
+                expect(callback).toHaveBeenCalledTimes(5)
             })
         })
 

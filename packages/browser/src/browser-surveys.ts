@@ -87,8 +87,8 @@ class BrowserSurveysConfigSource implements SurveysConfigSource {
         }
     }
 
-    createEventReceiver(): SurveyEventReceiver {
-        return new SurveyEventReceiver(this._instance)
+    createEventReceiver(onActivationChanged: () => void): SurveyEventReceiver {
+        return new SurveyEventReceiver(this._instance, onActivationChanged)
     }
 }
 

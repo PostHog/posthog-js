@@ -2856,6 +2856,33 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
+     * Register an event listener that runs when the set of active matching surveys changes.
+     * The listener is called with the initial matching set once surveys are loaded, and again
+     * after an event or action activates, cancels, or consumes a survey.
+     *
+     * {@label Surveys}
+     *
+     * @example
+     * ```js
+     * const unsubscribe = posthog.onActiveMatchingSurveysChanged((surveys) => {
+     *     // respond to changes in currently matching surveys
+     * })
+     * ```
+     *
+     * @public
+     *
+     * @param {SurveyCallback} callback The callback to call with active matching surveys.
+     * @returns A function that can be called to unsubscribe the listener.
+     */
+    onActiveMatchingSurveysChanged(callback: SurveyCallback): () => void {
+        if (!this.surveys) {
+            callback([], { isLoaded: false, error: SURVEYS_NOT_AVAILABLE })
+            return () => {}
+        }
+        return this.surveys.onActiveMatchingSurveysChanged(callback)
+    }
+
+    /**
      * Although we recommend using popover surveys and display conditions,
      * if you want to show surveys programmatically without setting up all
      * the extra logic needed for API surveys, you can render surveys

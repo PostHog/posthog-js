@@ -631,6 +631,15 @@ export interface PostHog {
     getActiveMatchingSurveys(callback: (surveys: any[]) => void, forceReload?: boolean): void
 
     /**
+     * Register a callback that is called with the initial active matching surveys and whenever
+     * event or action activation changes that set.
+     *
+     * @param callback - Callback to receive the active matching surveys
+     * @returns A function to unsubscribe
+     */
+    onActiveMatchingSurveysChanged(callback: (surveys: any[]) => void): () => void
+
+    /**
      * Render a survey in a specific container.
      *
      * @param surveyId - The survey ID

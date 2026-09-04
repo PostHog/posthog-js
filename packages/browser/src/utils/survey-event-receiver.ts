@@ -8,8 +8,8 @@ import { ActivationOutcome, EventReceiver } from './event-receiver'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 
 export class SurveyEventReceiver extends EventReceiver<Survey> {
-    constructor(instance: PostHog) {
-        super(instance)
+    constructor(instance: PostHog, onActivationChanged?: () => void) {
+        super(instance, onActivationChanged)
     }
 
     protected _getActivatedKey(): string {
