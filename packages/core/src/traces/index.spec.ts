@@ -1273,6 +1273,50 @@ describe('PostHogTraces', () => {
       expect(sentSpans()[0].attributes!.map((a) => a.key)).not.toContain('secret')
     })
 
+    it('gives a later hook the real identity after an earlier one froze a forged record', async () => {
+      // The export reads the snapshot either way, but a hook that samples or
+      // routes on an id must not see one an earlier hook invented.
+      const seen: { traceId: string; spanId: string }[] = []
+      const traces = createTraces({
+        beforeSpanSend: [
+          (span) => Object.freeze({ ...span, traceId: '0'.repeat(32), spanId: 'f'.repeat(16) }),
+          (span) => {
+            seen.push({ traceId: span.traceId, spanId: span.spanId })
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      expect(sentSpans()).toHaveLength(1)
+      expect(seen[0].traceId).toBe(sentSpans()[0].traceId)
+      expect(seen[0].spanId).toBe(sentSpans()[0].spanId)
+      expect(seen[0].traceId).not.toBe('0'.repeat(32))
+    })
+
+    it('leaves the rest of a frozen forged record readable to the next hook', async () => {
+      // The corrected view is built from the record's own descriptors, so a hook
+      // reading anything but identity sees exactly what the previous one returned.
+      let seen: SpanRecord | undefined
+      const traces = createTraces({
+        beforeSpanSend: [
+          (span) => Object.freeze({ ...span, name: 'renamed', traceId: '0'.repeat(32) }),
+          (span) => {
+            seen = span
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout', { attributes: { keep: 1 } }).end()
+      await traces.flush()
+
+      expect(seen!.name).toBe('renamed')
+      expect(seen!.attributes.keep).toBe(1)
+      expect(Object.keys(seen!)).toContain('name')
+      expect(sentSpans()[0].name).toBe('renamed')
+    })
+
     it('exports the span when the hook status message refuses to stringify', async () => {
       // The encoder downstream only marks the field, so coercing here must not
       // be the thing that costs the span.

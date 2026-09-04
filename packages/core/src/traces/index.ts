@@ -105,6 +105,35 @@ function restoreField<K extends keyof SpanIdentity>(record: SpanIdentity, field:
   }
 }
 
+/**
+ * A stand-in for a record whose identity could not be written back, carrying the
+ * original ids and everything else the hook returned.
+ *
+ * Built from the descriptors rather than spread so a class instance keeps its
+ * prototype — `instanceof` and a field exposed as a prototype getter both still
+ * answer — and so `Object.keys` reads what it read before. Only the four
+ * identity descriptors are replaced, which is what makes the copy writable where
+ * the original was frozen.
+ */
+function withRestoredIdentity(hooked: HookSpanRecord, original: SpanIdentity): HookSpanRecord {
+  try {
+    const descriptors = Object.getOwnPropertyDescriptors(hooked) as Record<string, PropertyDescriptor>
+    for (const field of ['traceId', 'spanId', 'parentSpanId', 'traceState'] as const) {
+      descriptors[field] = {
+        value: original[field],
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      }
+    }
+    return Object.create(Object.getPrototypeOf(hooked) as object | null, descriptors) as HookSpanRecord
+  } catch {
+    // A hostile descriptor read. The export still uses the snapshot, so this
+    // costs the next hook a correct id rather than the span.
+    return hooked
+  }
+}
+
 interface ParentContext {
   traceId: string
   parentSpanId?: string
@@ -669,7 +698,11 @@ export class PostHogTraces {
       // drop tracestate, which is not part of the record the hook is handed.
       restoreField(hooked, 'traceState', original.traceState)
     } catch {
-      // Frozen. The rebuild reads the identity from the snapshot regardless.
+      // Frozen, so the writes above were refused and this record still carries
+      // whatever identity the hook forged. The export reads the snapshot either
+      // way, but the next hook in the chain reads this — and would sample or
+      // route on a forged id, which identity immutability exists to prevent.
+      return withRestoredIdentity(hooked, original)
     }
     return hooked
   }
