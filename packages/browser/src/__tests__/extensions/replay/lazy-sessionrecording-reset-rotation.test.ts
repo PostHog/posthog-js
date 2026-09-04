@@ -192,6 +192,43 @@ describe('real-core reset rotation', () => {
         )
     })
 
+    it('uploads nothing at reset after an opt-out', async () => {
+        captured = []
+        installFakeRRweb()
+
+        const posthog: PostHog = await createPosthogInstance(
+            uuidv7(),
+            {
+                disable_session_recording: false,
+                advanced_disable_flags: true,
+                opt_out_capturing_persistence_type: 'memory',
+                session_recording: { compress_events: true },
+                before_send: (cr: any) => {
+                    if (cr) {
+                        captured.push({ event: cr.event, properties: cr.properties })
+                    }
+                    return null
+                },
+            },
+            { sessionRecording: { endpoint: '/s/' } } as any
+        )
+
+        await waitFor(() => expect(_emit).toBeDefined())
+
+        _emit(mouse())
+        _emit(mutation())
+
+        posthog.opt_out_capturing()
+        const uploadsAtOptOut = captured.filter((c) => c.event === '$snapshot').length
+
+        posthog.reset()
+        posthog.identify('user-after-logout')
+
+        await drain()
+
+        expect(captured.filter((c) => c.event === '$snapshot').length).toBe(uploadsAtOptOut)
+    })
+
     it('ships zero recordings across a rotation with a busy queue when there is no interaction', async () => {
         captured = []
         installFakeRRweb()

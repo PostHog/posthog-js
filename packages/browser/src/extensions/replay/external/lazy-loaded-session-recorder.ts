@@ -1538,7 +1538,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         logger.info('stopped')
     }
 
-    // called by reset() while the old distinct_id is still in persistence
     flushBeforeIdentityReset(): void {
         if (!this.isStarted) {
             return
