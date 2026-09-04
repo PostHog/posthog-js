@@ -264,7 +264,7 @@ export class Prompts {
       if (cached) {
         const cooldownSeconds =
           (error instanceof PromptFetchError ? error.retryAfterSeconds : undefined) ?? DEFAULT_REFETCH_COOLDOWN_SECONDS
-        cached.retryNotBefore = Date.now() + cooldownSeconds * 1000
+        cached.retryNotBefore = Math.max(cached.retryNotBefore ?? 0, Date.now() + cooldownSeconds * 1000)
         console.warn(`[PostHog Prompts] Failed to fetch prompt ${promptReference}, using stale cache:`, error)
         return { source: 'stale_cache', ...this.readCacheEntry(cached) }
       }
