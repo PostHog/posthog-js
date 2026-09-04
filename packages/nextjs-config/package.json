@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nextjs-config",
-  "version": "1.10.0",
+  "version": "1.11.1",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -24,7 +24,7 @@
     "lint": "oxlint --report-unused-disable-directives-severity error src",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "build": "rslib build",
-    "test:unit": "jest --passWithNoTests",
+    "test:unit": "vitest run --passWithNoTests",
     "dev": "rslib build --watch",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
@@ -58,12 +58,10 @@
     "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
-    "@types/jest": "catalog:",
     "@types/node": "^22.15.23",
     "@types/semver": "^7.7.1",
-    "jest": "catalog:",
     "next": "^15.5.22",
-    "ts-jest": "catalog:"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "next": ">12.1.0"

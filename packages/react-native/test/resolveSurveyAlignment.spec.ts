@@ -31,7 +31,7 @@ describe('resolveSurveyAlignment', () => {
   })
 
   it('warns and falls back to the default for non-string positions', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
       const result = resolveSurveyAlignment(42 as unknown as string)
       expect(result).toEqual({ vertical: 'flex-end', horizontal: 'center' })
@@ -47,7 +47,7 @@ describe('resolveSurveyAlignment', () => {
     const suffix = Math.random().toString(36).slice(2)
     const unknownWithHyphen = `unknown-${suffix}`
     const unknownWithUnderscore = `unknown_${suffix}`
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
       const result = resolveSurveyAlignment(unknownWithHyphen)
       expect(result).toEqual({ vertical: 'flex-end', horizontal: 'center' })

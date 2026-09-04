@@ -27,8 +27,8 @@ interface MockSpan {
 
 function createMockClient() {
   return {
-    capture: jest.fn(),
-    flush: jest.fn().mockResolvedValue(undefined),
+    capture: vi.fn(),
+    flush: vi.fn().mockResolvedValue(undefined),
     privacy_mode: false,
   } as any
 }
@@ -122,7 +122,7 @@ describe('PostHogTracingProcessor', () => {
       const aiLaneClient = {
         ...createMockClient(),
         enableFullAiCapture: true,
-        captureAi: jest.fn(),
+        captureAi: vi.fn(),
       }
       const aiLaneProcessor = new PostHogTracingProcessor({
         client: aiLaneClient,
@@ -1060,7 +1060,7 @@ describe('PostHogTracingProcessor', () => {
       mockClient.capture.mockImplementation(() => {
         throw captureError
       })
-      const onError = jest.fn()
+      const onError = vi.fn()
       const proc = new PostHogTracingProcessor({
         client: mockClient,
         distinctId: 'test-user',
@@ -1076,7 +1076,7 @@ describe('PostHogTracingProcessor', () => {
       mockClient.capture.mockImplementation(() => {
         throw new Error('capture failed')
       })
-      const onError = jest.fn(() => {
+      const onError = vi.fn(() => {
         throw new Error('onError failed')
       })
       const proc = new PostHogTracingProcessor({
@@ -1094,7 +1094,7 @@ describe('PostHogTracingProcessor', () => {
     it('reports flush failures through onError without throwing', async () => {
       const flushError = new Error('flush failed')
       mockClient.flush.mockRejectedValueOnce(flushError)
-      const onError = jest.fn()
+      const onError = vi.fn()
       const proc = new PostHogTracingProcessor({
         client: mockClient,
         onError,
@@ -1113,8 +1113,7 @@ describe('PostHogTracingProcessor', () => {
       })
 
       const now = Date.now()
-      jest
-        .spyOn(Date, 'now')
+      vi.spyOn(Date, 'now')
         .mockReturnValueOnce(now)
         .mockReturnValueOnce(now + 1500)
 
@@ -1124,7 +1123,7 @@ describe('PostHogTracingProcessor', () => {
       const call = mockClient.capture.mock.calls[0][0]
       expect(call.properties.$ai_latency).toBeCloseTo(1.5, 1)
 
-      jest.restoreAllMocks()
+      vi.restoreAllMocks()
     })
 
     it('falls back to ISO timestamp parsing', async () => {
@@ -1256,8 +1255,8 @@ describe('PostHogTracingProcessor', () => {
   })
 })
 
-const mockAddTraceProcessor = jest.fn()
-jest.mock('@openai/agents', () => ({
+const { mockAddTraceProcessor } = vi.hoisted(() => ({ mockAddTraceProcessor: vi.fn() }))
+vi.mock('@openai/agents', () => ({
   addTraceProcessor: mockAddTraceProcessor,
 }))
 

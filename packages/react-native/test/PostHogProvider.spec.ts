@@ -1,4 +1,4 @@
-/** @jest-environment jsdom */
+/** @vitest-environment jsdom */
 import React, { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { render, cleanup } from '@testing-library/react'
@@ -8,8 +8,8 @@ import { PostHogProvider } from '../src/PostHogProvider'
 import { usePostHog } from '../src/hooks/usePostHog'
 import type { PostHog } from '../src/posthog-rn'
 
-Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
-AppState.addEventListener = jest.fn()
+Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
+AppState.addEventListener = vi.fn()
 
 const CaptureClient = ({ onClient }: { onClient: (client: PostHog) => void }) => {
   const posthog = usePostHog()
@@ -21,7 +21,7 @@ const CaptureClient = ({ onClient }: { onClient: (client: PostHog) => void }) =>
   return null
 }
 
-const createClient = (): any => ({ debug: jest.fn(), autocapture: jest.fn() })
+const createClient = (): any => ({ debug: vi.fn(), autocapture: vi.fn() })
 
 // Named so the element walk finds a label for it; a bare <button> yields no label at all,
 // which would make the outside-the-provider assertion pass for the wrong reason.
@@ -162,7 +162,7 @@ describe('PostHogProvider web click capture', () => {
   })
 
   it('should detach the shared listener only when the last provider unmounts', () => {
-    const removeEventListener = jest.spyOn(document, 'removeEventListener')
+    const removeEventListener = vi.spyOn(document, 'removeEventListener')
     const client = createClient()
     const { rerender, unmount } = renderTwoProvidersOnWeb(client, client)
 
@@ -182,7 +182,7 @@ describe('PostHogProvider web click capture', () => {
   })
 
   it('should listen in the capture phase, since RNW Pressable stops propagation', () => {
-    const addEventListener = jest.spyOn(document, 'addEventListener')
+    const addEventListener = vi.spyOn(document, 'addEventListener')
 
     renderOnWeb(createClient())
 
@@ -207,7 +207,7 @@ describe('PostHogProvider web click capture', () => {
 
   it('should keep the same listener across re-renders when autocapture options are inline', () => {
     const client = createClient()
-    const addEventListener = jest.spyOn(document, 'addEventListener')
+    const addEventListener = vi.spyOn(document, 'addEventListener')
     const element = React.createElement(
       PostHogProvider,
       { client, autocapture: { captureTouches: true, captureScreens: false } },
@@ -224,7 +224,7 @@ describe('PostHogProvider web click capture', () => {
   })
 
   it('should remove the click listener on unmount', () => {
-    const removeEventListener = jest.spyOn(document, 'removeEventListener')
+    const removeEventListener = vi.spyOn(document, 'removeEventListener')
     const client = createClient()
     const { unmount, container } = renderOnWeb(client)
     const button = container.querySelector('button') as HTMLButtonElement
@@ -240,7 +240,7 @@ describe('PostHogProvider web click capture', () => {
   })
 
   it('should not listen for clicks on native, where onTouchEndCapture already fires', () => {
-    const addEventListener = jest.spyOn(document, 'addEventListener')
+    const addEventListener = vi.spyOn(document, 'addEventListener')
     const client = createClient()
 
     render(
@@ -257,7 +257,7 @@ describe('PostHogProvider web click capture', () => {
   })
 
   it('should not listen for clicks when captureTouches is off', () => {
-    const addEventListener = jest.spyOn(document, 'addEventListener')
+    const addEventListener = vi.spyOn(document, 'addEventListener')
 
     Platform.OS = 'web'
     render(
@@ -275,7 +275,7 @@ describe('PostHogProvider web click capture', () => {
 
 describe('PostHogProvider', () => {
   beforeEach(() => {
-    ;(globalThis as any).window.fetch = jest.fn(async () => ({
+    ;(globalThis as any).window.fetch = vi.fn(async () => ({
       status: 200,
       json: () => Promise.resolve({ featureFlags: {} }),
     }))
@@ -290,8 +290,8 @@ describe('PostHogProvider', () => {
     ['empty', ''],
     ['blank', '   '],
   ])('should render a disabled client instead of throwing when the api key is %s', (_case, apiKey) => {
-    const onClient = jest.fn()
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    const onClient = vi.fn()
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     try {
       expect(() => {

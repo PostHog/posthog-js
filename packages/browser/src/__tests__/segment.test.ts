@@ -6,18 +6,19 @@
  *   - Enrich Segment events with PostHog event properties.
  */
 
-import { beforeEach, describe, expect, it, jest } from '@jest/globals'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { USER_STATE } from '../constants'
-import { SegmentContext, SegmentPlugin } from '../extensions/segment-integration'
+import { EVENT_IDENTIFY, USER_STATE } from '../constants'
+import { SegmentContext, SegmentPlugin, setupSegmentIntegration } from '../extensions/segment-integration'
 import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { PostHogConfig } from '../types'
 
-jest.mock(
-    '@posthog/browser-common/utils/globals',
-    () => jest.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
-)
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()),
+    userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+}))
 
 const initPostHogInAPromise = (
     segment: any,
@@ -43,14 +44,14 @@ const initPostHogInAPromise = (
 }
 
 // sometimes flakes because of unexpected console.logs
-jest.retryTimes(6)
+vi.setConfig({ retry: 6 })
 
 describe(`Segment integration`, () => {
     let segment: any
     let segmentIntegration: SegmentPlugin
     let posthogName: string
 
-    jest.setTimeout(500)
+    vi.setConfig({ testTimeout: 500 })
 
     beforeEach(() => {
         // Clear localStorage to avoid state leakage between tests
@@ -90,7 +91,7 @@ describe(`Segment integration`, () => {
         }
 
         // logging of network requests during init causes this to flake
-        console.error = jest.fn()
+        console.error = vi.fn()
     })
 
     it('should call loaded after the segment integration has been set up', async () => {
@@ -107,9 +108,114 @@ describe(`Segment integration`, () => {
         expect(posthog.get_property('$device_id')).toBe('test-anonymous-id')
     })
 
+    it('sets up the Segment integration when configured after init', async () => {
+        const posthog = await initPostHogInAPromise(undefined, posthogName)
+        const initialDistinctId = posthog.get_distinct_id()
+        let runtimeIntegration: SegmentPlugin | undefined
+        const runtimeSegment = {
+            ...segment,
+            register: vi.fn((integration: SegmentPlugin) => {
+                runtimeIntegration = integration
+                return Promise.resolve(integration)
+            }),
+        }
+        vi.spyOn(posthog, 'calculateEventProperties').mockReturnValue({
+            $active_feature_flags: ['runtime-flag'],
+        })
+
+        posthog.set_config({ segment: runtimeSegment })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(runtimeSegment.register).toHaveBeenCalledTimes(1)
+        expect(posthog.get_distinct_id()).toBe(initialDistinctId)
+
+        const enrichedContext = runtimeIntegration!.track!({
+            event: {
+                event: 'Runtime Segment Event',
+                userId: 'test-id',
+                anonymousId: 'test-anonymous-id',
+                properties: {},
+            },
+        } as unknown as SegmentContext)
+        expect(enrichedContext.event.properties).toEqual(
+            expect.objectContaining({ $active_feature_flags: ['runtime-flag'] })
+        )
+        expect(posthog.get_distinct_id()).toBe('test-id')
+
+        posthog.set_config({ segment: runtimeSegment })
+        expect(runtimeSegment.register).toHaveBeenCalledTimes(1)
+    })
+
+    it('preserves the pre-Segment anonymous identity until Segment identifies the user', async () => {
+        const posthog = await initPostHogInAPromise(undefined, posthogName)
+        const initialDistinctId = posthog.get_distinct_id()
+        let runtimeIntegration: SegmentPlugin | undefined
+        const runtimeSegment = {
+            user: () => ({
+                anonymousId: () => 'segment-anonymous-id',
+                id: () => undefined,
+            }),
+            register: vi.fn((integration: SegmentPlugin) => {
+                runtimeIntegration = integration
+                return Promise.resolve(integration)
+            }),
+        }
+        const captureSpy = vi.spyOn(posthog, 'capture')
+
+        posthog.set_config({ segment: runtimeSegment })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        runtimeIntegration!.track!({
+            event: {
+                event: 'Anonymous Segment Event',
+                anonymousId: 'segment-anonymous-id',
+                properties: {},
+            },
+        } as unknown as SegmentContext)
+        expect(posthog.get_distinct_id()).toBe(initialDistinctId)
+
+        runtimeIntegration!.identify!({
+            event: {
+                event: EVENT_IDENTIFY,
+                userId: 'identified-user',
+                anonymousId: 'segment-anonymous-id',
+                properties: {},
+            },
+        } as unknown as SegmentContext)
+        expect(posthog.get_distinct_id()).toBe('identified-user')
+        expect(captureSpy).toHaveBeenCalledWith(
+            EVENT_IDENTIFY,
+            {
+                distinct_id: 'identified-user',
+                $anon_distinct_id: initialDistinctId,
+            },
+            { $set: {}, $set_once: {} }
+        )
+    })
+
+    it('completes setup when Segment registration rejects', async () => {
+        const posthog = await initPostHogInAPromise(undefined, posthogName)
+        const registrationError = new Error('Segment registration failed')
+        const done = vi.fn()
+        const rejectedRegistration = {
+            then: vi.fn((_onFulfilled: () => void, onRejected?: (error: Error) => void) => {
+                onRejected?.(registrationError)
+                return Promise.resolve()
+            }),
+        }
+        posthog.config.segment = {
+            ...segment,
+            register: vi.fn(() => rejectedRegistration as unknown as Promise<SegmentPlugin>),
+        }
+
+        setupSegmentIntegration(posthog, done, false)
+
+        expect(done).toHaveBeenCalledTimes(1)
+    })
+
     it('enriches Segment track events with PostHog properties', async () => {
         // Segment supplies a stable identity, so memory persistence should not trigger the volatile-identity warning.
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
         await initPostHogInAPromise(segment, posthogName, { persistence: 'memory' })
         expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
         warnSpy.mockRestore()

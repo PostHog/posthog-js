@@ -88,7 +88,7 @@ describe('hasWaitPeriodPassed', () => {
     })
 
     it('should not throw when localStorage.getItem is unavailable', () => {
-        const getItemSpy = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
             throw new Error('storage unavailable')
         })
 
@@ -133,7 +133,7 @@ describe('getSurveySeen', () => {
         })
 
         it('should return false when localStorage access throws', () => {
-            const getItemSpy = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+            const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
                 throw new Error('storage unavailable')
             })
 
@@ -654,8 +654,8 @@ describe('sendSurveyEvent', () => {
     })
 
     it('includes custom properties in captured event', () => {
-        const mockCapture = jest.fn()
-        const mockPostHog = { capture: mockCapture, reloadFeatureFlags: jest.fn() } as unknown as PostHog
+        const mockCapture = vi.fn()
+        const mockPostHog = { capture: mockCapture, reloadFeatureFlags: vi.fn() } as unknown as PostHog
 
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },
@@ -681,8 +681,8 @@ describe('sendSurveyEvent', () => {
     })
 
     it('works without custom properties', () => {
-        const mockCapture = jest.fn()
-        const mockPostHog = { capture: mockCapture, reloadFeatureFlags: jest.fn() } as unknown as PostHog
+        const mockCapture = vi.fn()
+        const mockPostHog = { capture: mockCapture, reloadFeatureFlags: vi.fn() } as unknown as PostHog
 
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },
@@ -699,8 +699,8 @@ describe('sendSurveyEvent', () => {
     })
 
     it('reloads feature flags when the survey is completed so the internal targeting flag recomputes', () => {
-        const mockReload = jest.fn()
-        const mockPostHog = { capture: jest.fn(), reloadFeatureFlags: mockReload } as unknown as PostHog
+        const mockReload = vi.fn()
+        const mockPostHog = { capture: vi.fn(), reloadFeatureFlags: mockReload } as unknown as PostHog
 
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },
@@ -714,8 +714,8 @@ describe('sendSurveyEvent', () => {
     })
 
     it('does not reload feature flags for a partial (not completed) response', () => {
-        const mockReload = jest.fn()
-        const mockPostHog = { capture: jest.fn(), reloadFeatureFlags: mockReload } as unknown as PostHog
+        const mockReload = vi.fn()
+        const mockPostHog = { capture: vi.fn(), reloadFeatureFlags: mockReload } as unknown as PostHog
 
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },

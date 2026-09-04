@@ -3,11 +3,12 @@
  */
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 
-jest.mock('@posthog/browser-common/utils/globals', () => {
-    const orig = jest.requireActual('@posthog/browser-common/utils/globals')
-    const mockURLGetter = jest.fn()
-    const mockReferrerGetter = jest.fn()
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
+    const mockURLGetter = vi.fn()
+    const mockReferrerGetter = vi.fn()
     return {
         ...orig,
         mockURLGetter,
@@ -33,8 +34,7 @@ jest.mock('@posthog/browser-common/utils/globals', () => {
     }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter } = require('@posthog/browser-common/utils/globals')
+const { mockURLGetter, mockReferrerGetter } = mockedGlobals as any
 
 describe('group before identify bug', () => {
     beforeEach(() => {
@@ -44,11 +44,12 @@ describe('group before identify bug', () => {
 
     it('should include initial UTM params in $identify even when group() is called first', async () => {
         const token = uuidv7()
-        const beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const beforeSendMock = vi.fn().mockImplementation((e) => e)
 
         const posthog = await createPosthogInstance(token, {
             before_send: beforeSendMock,
             person_profiles: 'identified_only',
+            capture_pageview: false,
         })
 
         // Simulate what Clerk does: call group() with properties before identify()
@@ -71,11 +72,12 @@ describe('group before identify bug', () => {
 
     it('should include initial UTM params when identify() is called without group() first', async () => {
         const token = uuidv7()
-        const beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const beforeSendMock = vi.fn().mockImplementation((e) => e)
 
         const posthog = await createPosthogInstance(token, {
             before_send: beforeSendMock,
             person_profiles: 'identified_only',
+            capture_pageview: false,
         })
 
         // Just call identify without group first

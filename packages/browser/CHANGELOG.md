@@ -1,5 +1,97 @@
 # posthog-js
 
+## 1.427.0
+
+### Minor Changes
+
+- [#4774](https://github.com/PostHog/posthog-js/pull/4774) [`426e1fd`](https://github.com/PostHog/posthog-js/commit/426e1fd6c001c030e5753d0d25a0bdb9adc99448) Thanks [@Fhatu12](https://github.com/Fhatu12)! - Add `reuseAnonymousId` support to browser identify calls.
+  (2026-09-04)
+
+### Patch Changes
+
+- [#4782](https://github.com/PostHog/posthog-js/pull/4782) [`b64b113`](https://github.com/PostHog/posthog-js/commit/b64b1135ce377360075cfdbaf8e0a74b46330116) Thanks [@posthog](https://github.com/apps/posthog)! - Stop counting stack frames that have no filename (in-app browser bridge scripts and other code the runtime reports without a script URL) as in-app code.
+  (2026-09-04)
+
+- [#4758](https://github.com/PostHog/posthog-js/pull/4758) [`dd74222`](https://github.com/PostHog/posthog-js/commit/dd742227d86a764d0017374ecc3709b6468dea17) Thanks [@marandaneto](https://github.com/marandaneto)! - Keep relaying session recording events when a cross-origin iframe redirects through the parent page's origin.
+  (2026-09-04)
+- Updated dependencies [[`b64b113`](https://github.com/PostHog/posthog-js/commit/b64b1135ce377360075cfdbaf8e0a74b46330116), [`426e1fd`](https://github.com/PostHog/posthog-js/commit/426e1fd6c001c030e5753d0d25a0bdb9adc99448)]:
+  - @posthog/core@1.50.5
+  - @posthog/types@1.409.0
+
+## 1.426.4
+
+### Patch Changes
+
+- [#4764](https://github.com/PostHog/posthog-js/pull/4764) [`fa2924d`](https://github.com/PostHog/posthog-js/commit/fa2924dae4d1fd2a6ee5c979edbcce1cbd5cb5a9) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve previously persisted feature flags as an offline fallback when bootstrap flags are provided.
+  (2026-09-04)
+
+## 1.426.3
+
+### Patch Changes
+
+- [#4761](https://github.com/PostHog/posthog-js/pull/4761) [`ebf7318`](https://github.com/PostHog/posthog-js/commit/ebf7318bef6775f3cd7aa4ce4c0813ce69a8a9ca) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent session replay network capture from replacing a downstream fetch wrapper's response with an instrumentation error when the response has no headers.
+  (2026-09-04)
+
+## 1.426.2
+
+### Patch Changes
+
+- [#4763](https://github.com/PostHog/posthog-js/pull/4763) [`7b30da7`](https://github.com/PostHog/posthog-js/commit/7b30da7009fdb7608b8edfb569ae5a949ba7c5be) Thanks [@marandaneto](https://github.com/marandaneto)! - Ship the package ESM entrypoint with an `.mjs` extension so Node recognizes its module format, while retaining the existing `.js` bundle for backwards compatibility.
+  (2026-09-03)
+
+- [#4759](https://github.com/PostHog/posthog-js/pull/4759) [`c475070`](https://github.com/PostHog/posthog-js/commit/c47507068cd8156334afb3c48758a1b92d590f99) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve explicitly false feature flag values supplied through bootstrap configuration.
+  (2026-09-03)
+
+- [#4767](https://github.com/PostHog/posthog-js/pull/4767) [`9d683ca`](https://github.com/PostHog/posthog-js/commit/9d683ca1764c1ecb01fe15a5bacac3d8982f4273) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve the anonymous distinct ID used for feature flag persistence when `identify()` queues a reload behind an in-flight flags request.
+  (2026-09-03)
+
+- [#4766](https://github.com/PostHog/posthog-js/pull/4766) [`ed4ba23`](https://github.com/PostHog/posthog-js/commit/ed4ba23f74edd8a1600756b9a70fc9ebe9b49f9f) Thanks [@marandaneto](https://github.com/marandaneto)! - Limit persisted initial URLs by their encoded cookie size to prevent long URLs and referrers from exceeding browser cookie limits.
+  (2026-09-03)
+
+- [#4762](https://github.com/PostHog/posthog-js/pull/4762) [`fbf10d4`](https://github.com/PostHog/posthog-js/commit/fbf10d43ca97e29eab060af00aed30dce876c2e5) Thanks [@marandaneto](https://github.com/marandaneto)! - Merge event-specific `$groups` with groups registered on the browser client.
+  (2026-09-03)
+
+- [#4732](https://github.com/PostHog/posthog-js/pull/4732) [`f00e24d`](https://github.com/PostHog/posthog-js/commit/f00e24d0109c88f667b6e477edae31a04dd18ac6) Thanks [@posthog](https://github.com/apps/posthog)! - Polyfill `Array.prototype.findLast` in the web vitals attribution bundles so they keep capturing on browsers older than Chrome 97 and Safari 15.4
+  (2026-09-03)
+- Updated dependencies [[`c475070`](https://github.com/PostHog/posthog-js/commit/c47507068cd8156334afb3c48758a1b92d590f99), [`f00e24d`](https://github.com/PostHog/posthog-js/commit/f00e24d0109c88f667b6e477edae31a04dd18ac6)]:
+  - @posthog/core@1.50.4
+  - @posthog/browser-common@0.7.2
+
+## 1.426.1
+
+### Patch Changes
+
+- [#4765](https://github.com/PostHog/posthog-js/pull/4765) [`d8508b6`](https://github.com/PostHog/posthog-js/commit/d8508b6416105e7197f98617a8345b14a1c67634) Thanks [@marandaneto](https://github.com/marandaneto)! - Initialize the Segment enrichment integration when Segment is configured through `set_config`, so Segment events include PostHog properties such as active feature flags.
+  (2026-09-03)
+
+## 1.426.0
+
+### Minor Changes
+
+- [#4740](https://github.com/PostHog/posthog-js/pull/4740) [`6325953`](https://github.com/PostHog/posthog-js/commit/6325953c32555407ad043cd41d8976cf90839bd5) Thanks [@mayteio](https://github.com/mayteio)! - Capture Meta's `$fbc` person property when a new `fbclid` is observed.
+  (2026-09-03)
+
+### Patch Changes
+
+- [#4760](https://github.com/PostHog/posthog-js/pull/4760) [`41ed3af`](https://github.com/PostHog/posthog-js/commit/41ed3af41c1a98776d1686caf4e58875f95b0847) Thanks [@marandaneto](https://github.com/marandaneto)! - Require a distinct ID when calling `identify` and correct its API documentation to match the existing runtime validation.
+  (2026-09-03)
+
+- [#4713](https://github.com/PostHog/posthog-js/pull/4713) [`7a027ad`](https://github.com/PostHog/posthog-js/commit/7a027ad1a5d3539f2381293b8ca886d1fff509b8) Thanks [@posthog](https://github.com/apps/posthog)! - Gate `$groupidentify` on person processing. Under `identified_only`, a `group()` call promotes the user to identified so the event is kept instead of dropped. Under `never`, the local group association is retained for subsequent events and feature flags, but `$groupidentify` is not sent because the server always drops it.
+  (2026-09-03)
+- Updated dependencies [[`41ed3af`](https://github.com/PostHog/posthog-js/commit/41ed3af41c1a98776d1686caf4e58875f95b0847), [`dbbb58e`](https://github.com/PostHog/posthog-js/commit/dbbb58e286db3762673f71995a8aeea89aa44123)]:
+  - @posthog/types@1.408.1
+  - @posthog/core@1.50.3
+
+## 1.425.1
+
+### Patch Changes
+
+- [#4731](https://github.com/PostHog/posthog-js/pull/4731) [`9b4008a`](https://github.com/PostHog/posthog-js/commit/9b4008a03ef12e3150d906ca638f24403bc67a41) Thanks [@fasyy612](https://github.com/fasyy612)! - fix(replay): re-adopt constructed stylesheets when a shadow host is removed and re-added mid-replay. An SPA navigation can detach and reattach the same web component element; the browser keeps its shadow root and adopted sheets, so the recorder (which already tracks that shadow root) emits no new AdoptedStyleSheet event. The replayer rebuilds the element with a fresh shadow root and previously dropped the adopted styles for the rest of playback, rendering the component unstyled. The replayer now remembers the last adopted styleIds per host and re-adopts them when the shadow root is rebuilt, in both live playback and fast-forward. Fixes playback of existing recordings.
+  (2026-09-02)
+
+- [#4744](https://github.com/PostHog/posthog-js/pull/4744) [`77797c9`](https://github.com/PostHog/posthog-js/commit/77797c9e983f053ee362e98ee880e79b17512ac9) Thanks [@fasyy612](https://github.com/fasyy612)! - fix(replay): keep recording through a session-id rotation when the persisted remote config is past its TTL. A rotation restart transits through stop() before start(), which made the config TTL check treat it as a cold boot: the stale config was discarded, start() bailed silently, and the recorder died with session attribution stuck on the old session id. The rotated session then shipped events with no initial full snapshot, producing recordings whose prefix cannot be played until something else restarted recording. Affects any rotation on a session older than one hour, most visibly posthog.reset() on logout. Cold-boot TTL behavior is unchanged.
+  (2026-09-02)
+
 ## 1.425.0
 
 ### Minor Changes

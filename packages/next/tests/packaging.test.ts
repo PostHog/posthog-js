@@ -1,5 +1,5 @@
 /**
- * @jest-environment node
+ * @vitest-environment node
  *
  * Validates the packaging that routes `@posthog/next` and
  * `@posthog/next/pages` to the correct per-runtime barrel:

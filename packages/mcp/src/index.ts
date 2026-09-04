@@ -233,6 +233,7 @@ export type {
   MCPAnalyticsOptions,
   MissingCapabilityCaptureData,
   PreparedToolCall,
+  PrepareToolCallOptions,
   PrepareToolListOptions,
   RequestHeaderBag,
   ToolCallCaptureData,

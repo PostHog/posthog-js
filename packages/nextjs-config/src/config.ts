@@ -53,6 +53,13 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
     }
     if (turbopackEnabled && sourceMapEnabled) {
       nextConfig.productionBrowserSourceMaps = true
+    } else if (sourceMapEnabled && resolvedConfig.sourcemaps.deleteAfterUpload) {
+      // Next.js traces server source maps before the webpack plugin deletes them. Exclude the maps
+      // from the trace so standalone/Vercel packaging does not try to copy the deleted files.
+      nextConfig.outputFileTracingExcludes = {
+        ...userConfig.outputFileTracingExcludes,
+        '*': [...(userConfig.outputFileTracingExcludes?.['*'] ?? []), `${distDir ?? '.next'}/server/**/*.map`],
+      }
     }
     return nextConfig
   }
@@ -101,21 +108,10 @@ function withWebpackConfig(userWebpackConfig: NextConfig['webpack'], posthogConf
   const turbopackEnabled = isTurbopackEnabled()
   return (config: any, options: any) => {
     const webpackConfig = defaultWebpackConfig(config, options)
-    const isServer = options.isServer
     if (sourceMapEnabled) {
       if (!turbopackEnabled) {
         webpackConfig.plugins = webpackConfig.plugins || []
-        let currentConfig = posthogConfig
-        if (isServer) {
-          currentConfig = {
-            ...posthogConfig,
-            sourcemaps: {
-              ...posthogConfig.sourcemaps,
-              deleteAfterUpload: false,
-            },
-          }
-        }
-        webpackConfig.plugins.push(new PosthogWebpackPlugin(currentConfig, true))
+        webpackConfig.plugins.push(new PosthogWebpackPlugin(posthogConfig, true))
       }
     }
     return webpackConfig

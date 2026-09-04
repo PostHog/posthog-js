@@ -817,14 +817,14 @@ function initFetchObserver(
                 res = isRequest(url) ? await originalFetch(req) : await originalFetch(url, init)
                 end = win.performance.now()
 
-                const responseHeaders: Headers = {}
-                res.headers.forEach((value: string, header: string | number) => {
-                    responseHeaders[header] = value
-                })
-                if (recordResponseHeaders) {
-                    networkRequest.responseHeaders = responseHeaders
-                }
                 try {
+                    const responseHeaders: Headers = {}
+                    res.headers.forEach((value: string, header: string | number) => {
+                        responseHeaders[header] = value
+                    })
+                    if (recordResponseHeaders) {
+                        networkRequest.responseHeaders = responseHeaders
+                    }
                     if (
                         shouldRecordBody({
                             type: 'response',

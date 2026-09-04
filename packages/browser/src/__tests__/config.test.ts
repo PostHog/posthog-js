@@ -8,10 +8,10 @@ describe('config', () => {
         // The warning must reach customers running the default debug:false config, so it goes through
         // console.warn directly rather than logger.warn (which is silent unless debug is enabled). These
         // tests spy on console.warn to prove the message is actually visible.
-        let warnSpy: jest.SpyInstance
+        let warnSpy: vi.SpyInstance
 
         beforeEach(() => {
-            warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
         })
 
         afterEach(() => {
@@ -30,6 +30,33 @@ describe('config', () => {
                 posthog.identify('identified-id')
 
                 expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
+            }
+        )
+
+        it.each(['memory', 'sessionStorage'] as const)(
+            "does not warn when reuseAnonymousId is enabled with volatile persistence '%s'",
+            (persistence) => {
+                const posthog = new PostHog()._init('test-token', { persistence, reuseAnonymousId: true })
+
+                posthog.identify('identified-id')
+
+                expect(warnSpy).not.toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining('bootstrap.distinctID')
+                )
+            }
+        )
+
+        it.each(['memory', 'sessionStorage'] as const)(
+            "includes reuseAnonymousId in the volatile persistence '%s' warning remedies",
+            (persistence) => {
+                const posthog = new PostHog()._init('test-token', { persistence })
+
+                posthog.identify('identified-id')
+
+                expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
+                expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('localStorage+cookie'))
+                expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('reuseAnonymousId'))
             }
         )
 

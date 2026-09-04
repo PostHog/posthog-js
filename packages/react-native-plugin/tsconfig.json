@@ -21,6 +21,7 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "ESNext",
+    "types": ["vitest/globals"],
     "verbatimModuleSyntax": true
   },
   "exclude": ["lib"]

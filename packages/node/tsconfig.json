@@ -5,6 +5,7 @@
     "outDir": "dist",
     "module": "ES2020",
     "moduleResolution": "node",
+    "skipLibCheck": true,
     "isolatedModules": true,
     "declaration": true,
     "declarationMap": true,

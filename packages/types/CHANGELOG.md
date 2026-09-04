@@ -1,5 +1,19 @@
 # @posthog/types
 
+## 1.409.0
+
+### Minor Changes
+
+- [#4774](https://github.com/PostHog/posthog-js/pull/4774) [`426e1fd`](https://github.com/PostHog/posthog-js/commit/426e1fd6c001c030e5753d0d25a0bdb9adc99448) Thanks [@Fhatu12](https://github.com/Fhatu12)! - Add `reuseAnonymousId` support to browser identify calls.
+  (2026-09-04)
+
+## 1.408.1
+
+### Patch Changes
+
+- [#4760](https://github.com/PostHog/posthog-js/pull/4760) [`41ed3af`](https://github.com/PostHog/posthog-js/commit/41ed3af41c1a98776d1686caf4e58875f95b0847) Thanks [@marandaneto](https://github.com/marandaneto)! - Require a distinct ID when calling `identify` and correct its API documentation to match the existing runtime validation.
+  (2026-09-03)
+
 ## 1.408.0
 
 ### Minor Changes

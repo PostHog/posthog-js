@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* oxlint-disable no-console, typescript/no-require-imports -- This CommonJS CLI reports validation results. */
 
 /**
  * Post-build check: verify every source map we ship ignore-lists all of its sources.
@@ -22,7 +23,7 @@ const DIST = path.resolve(__dirname, '../dist')
 // ignore list isn't ours to set.
 const NOT_OURS = /^image-bitmap-data-url-worker-/
 
-const mapFiles = fs.readdirSync(DIST).filter((file) => file.endsWith('.js.map') && !NOT_OURS.test(file))
+const mapFiles = fs.readdirSync(DIST).filter((file) => /\.m?js\.map$/.test(file) && !NOT_OURS.test(file))
 
 if (mapFiles.length === 0) {
     console.error('FAIL: no source maps found in dist/. Is `sourcemap: true` still set in rollup.config.mjs?')

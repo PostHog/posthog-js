@@ -6,10 +6,7 @@ import { dts } from 'rollup-plugin-dts'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import commonjs from '@rollup/plugin-commonjs'
-import postcss from 'rollup-plugin-postcss'
-import postcssImport from 'postcss-import'
-import postcssNesting from 'postcss-nesting'
-import cssnano from 'cssnano'
+import { Features, transform as transformCss } from 'lightningcss'
 import fs from 'fs'
 import path from 'path'
 import crossBundlePropertyConfig from './terser-cross-bundle-properties.cjs'
@@ -17,7 +14,7 @@ import crossBundlePropertyConfig from './terser-cross-bundle-properties.cjs'
 const { crossBundlePrivateProperties, globallyReservedPrivateProperties } = crossBundlePropertyConfig
 const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
 const nameCachePath = './terser-mangled-names.json'
-let nameCache = {}
+const nameCache = {}
 
 // Shared across all entries so mangled property names are consistent between
 // module.slim.js and extension-bundles.js — see #3313.
@@ -35,47 +32,31 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
     resolve({ browser: true }),
     typescript({ sourceMap: true, outDir: './dist', module: 'es2015' }),
     commonjs(),
-    postcss({
-        plugins: [
-            postcssImport(),
-            postcssNesting(),
-            cssnano({
-                preset: [
-                    'default',
-                    {
-                        discardComments: { removeAll: true },
-                        discardDuplicates: true,
-                        discardEmpty: true,
-                        discardUnused: true,
-                        mergeIdents: true,
-                        mergeLonghand: true,
-                        mergeRules: true,
-                        minifyFontValues: true,
-                        minifyGradients: true,
-                        minifyParams: true,
-                        minifySelectors: true,
-                        normalizeCharset: true,
-                        normalizeDisplayValues: true,
-                        normalizePositions: true,
-                        normalizeRepeatStyle: true,
-                        normalizeString: true,
-                        normalizeTimingFunctions: true,
-                        normalizeUnicode: true,
-                        normalizeUrl: true,
-                        normalizeWhitespace: true,
-                        orderedValues: true,
-                        reduceIdents: true,
-                        reduceInitial: true,
-                        reduceTransforms: true,
-                        svgo: true,
-                        uniqueSelectors: true,
-                    },
-                ],
-            }),
-        ],
-        minimize: true,
-        inject: false,
-    }),
+    {
+        name: 'lightningcss',
+        transform(code, id) {
+            if (!id.endsWith('.css')) {
+                return null
+            }
+
+            const result = transformCss({
+                filename: id,
+                code: Buffer.from(code),
+                minify: true,
+                // Match the previous PostCSS output by lowering nesting and media query ranges.
+                include: Features.Nesting | Features.MediaQueries,
+            })
+
+            for (const warning of result.warnings) {
+                this.warn(warning.message)
+            }
+
+            return {
+                code: `export default ${JSON.stringify(result.code.toString())}`,
+                map: { mappings: '' },
+            }
+        },
+    },
     babel({
         extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
@@ -380,32 +361,32 @@ const entrypointTargets = entrypoints.map((file) => {
     // eslint-disable-next-line no-console
     console.log(`Building ${fileName} in ${format} format`)
 
+    const outputExtensions = format === 'es' && fileName === 'module' ? ['js', 'mjs'] : ['js']
+
     /** @type {import('rollup').RollupOptions} */
     return {
         input: `src/entrypoints/${file}`,
-        output: [
-            {
-                file: `dist/${fileName}.js`,
-                sourcemap: true,
-                // Mark every source in our bundles as third-party so devtools skip our frames.
-                // Without this, wrappers we install on globals (most visibly the console capture
-                // in entrypoints/logs.ts and rrweb's console plugin) become the reported location
-                // of the caller's own `console.*` calls (e.g. everything blamed on `logs.ts`).
-                // Rollup's default only ignore-lists paths containing node_modules, which misses
-                // both our `src/` and workspace packages (they resolve through symlinks).
-                sourcemapIgnoreList: () => true,
-                format,
-                ...(format === 'iife'
-                    ? {
-                          name: 'posthog',
-                          globals: {
-                              preact: 'preact',
-                          },
-                      }
-                    : {}),
-                ...(format === 'cjs' ? { exports: 'named' } : {}),
-            },
-        ],
+        output: outputExtensions.map((extension) => ({
+            file: `dist/${fileName}.${extension}`,
+            sourcemap: true,
+            // Mark every source in our bundles as third-party so devtools skip our frames.
+            // Without this, wrappers we install on globals (most visibly the console capture
+            // in entrypoints/logs.ts and rrweb's console plugin) become the reported location
+            // of the caller's own `console.*` calls (e.g. everything blamed on `logs.ts`).
+            // Rollup's default only ignore-lists paths containing node_modules, which misses
+            // both our `src/` and workspace packages (they resolve through symlinks).
+            sourcemapIgnoreList: () => true,
+            format,
+            ...(format === 'iife'
+                ? {
+                      name: 'posthog',
+                      globals: {
+                          preact: 'preact',
+                      },
+                  }
+                : {}),
+            ...(format === 'cjs' ? { exports: 'named' } : {}),
+        })),
         plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true })],
     }
 })
