@@ -53,6 +53,8 @@ const CREDIT_CARD_CANDIDATE_PATTERN = /\b\d(?:[ ./-]?\d){12,18}\b/g
 // least one grouping character (`+`, parentheses, space, dash, or dot) so bare
 // numeric IDs are left intact.
 const PHONE_CANDIDATE_PATTERN = /\+?\d[\d ().-]{7,16}\d/g
+// Strips every non-digit from a card/phone candidate to count its digits.
+const NON_DIGIT_PATTERN = /\D/g
 
 type JsonRecord = Record<string, unknown>
 
@@ -121,21 +123,35 @@ function passesLuhn(digits: string): boolean {
  * match. Returns a new string; leaves the input's identifiers untouched when
  * nothing matches.
  */
+// A candidate substring (already matched by a card/phone pattern, so it holds
+// only digits and its own separators) becomes `[redacted]` only when its digit
+// count is in range and `confirm` accepts it — Luhn for cards, a grouping char
+// for phones. This keeps bare numeric IDs and non-card digit runs intact.
+function redactConfirmedCandidate(
+  match: string,
+  minDigits: number,
+  maxDigits: number,
+  confirm: (match: string, digits: string) => boolean
+): string {
+  const digits = match.replace(NON_DIGIT_PATTERN, '')
+  return digits.length >= minDigits && digits.length <= maxDigits && confirm(match, digits) ? REDACTED_VALUE : match
+}
+
 export function redactPii(value: string): string {
   let result = value.replace(UNICODE_SPACE_PATTERN, ' ')
   result = result.replace(EMAIL_PATTERN, REDACTED_VALUE)
   result = result.replace(IPV4_PATTERN, REDACTED_VALUE)
   result = result.replace(IPV6_PATTERN, REDACTED_VALUE)
-  result = result.replace(CREDIT_CARD_CANDIDATE_PATTERN, (match) => {
-    const digits = match.replace(/[ ./-]/g, '')
-    return digits.length >= 13 && digits.length <= 19 && passesLuhn(digits) ? REDACTED_VALUE : match
-  })
+  result = result.replace(CREDIT_CARD_CANDIDATE_PATTERN, (match) =>
+    redactConfirmedCandidate(match, 13, 19, (_, digits) => passesLuhn(digits))
+  )
   result = result.replace(US_SSN_PATTERN, REDACTED_VALUE)
-  result = result.replace(PHONE_CANDIDATE_PATTERN, (match) => {
-    const digits = match.replace(/\D/g, '')
-    const hasGrouping = /[+() .-]/.test(match)
-    return digits.length >= 10 && digits.length <= 15 && hasGrouping ? REDACTED_VALUE : match
-  })
+  // The phone candidate only admits digits plus grouping chars, so a length
+  // gap means a grouping char is present — this keeps a bare digit run (an ID)
+  // from being redacted, without a second scan of the match.
+  result = result.replace(PHONE_CANDIDATE_PATTERN, (match) =>
+    redactConfirmedCandidate(match, 10, 15, (phone, digits) => digits.length !== phone.length)
+  )
   return result
 }
 
