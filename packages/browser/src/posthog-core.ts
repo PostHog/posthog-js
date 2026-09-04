@@ -603,8 +603,9 @@ export class PostHog implements PostHogInterface {
         console.warn('[PostHog.js]', `${cause} but no bootstrap.distinctID was provided. ${consequence} ${fix}`)
     }
 
-    // person_profiles: 'always' creates a person for anonymous visitors, so no identify() call and no
-    // _requirePersonProcessing() ever runs. Check at init and on set_config instead.
+    // person_profiles: 'always' creates a person for anonymous visitors with no identify() call, so the
+    // warning's only other trigger is calculateEventProperties() on the first captured event, which a consent
+    // gate or capture_pageview: false can defer long past init. Warn at init and on set_config so it lands first.
     private _warnIfVolatileIdentityCreatesAnonymousPersons(): void {
         if (this._hasResolvedInitialDistinctId && this.config.person_profiles === 'always') {
             this._warnIfVolatileIdentityWithoutStableId()
