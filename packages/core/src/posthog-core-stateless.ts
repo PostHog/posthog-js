@@ -225,8 +225,9 @@ function isRetryableFlagsFetchError(
  * Ceiling on what the SDK will put on the wire: a body over it is reported as
  * too large without a request being made, and a batch of one that still exceeds
  * it is dropped. The ingestion service applies its own
- * `MAX_REQUEST_BODY_SIZE_BYTES` to the body after it decompresses it, not to
- * the compressed bytes on the wire, so this is measured the same way.
+ * `MAX_REQUEST_BODY_SIZE_BYTES` twice at the same value — once to the raw
+ * request body and again to the gzip output it decompresses — so measuring the
+ * uncompressed payload here matches the stricter of the two.
  *
  * Set to the largest limit any known deployment configures — 10 MiB, what the
  * ingestion service runs with — rather than the 2 MB the service falls back to
