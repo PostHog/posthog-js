@@ -1230,6 +1230,13 @@ describe('PostHogTraces', () => {
       ['attributes replaced with an array', (span: SpanRecord) => ({ ...span, attributes: ['a'] as never })],
       ['events replaced with null', (span: SpanRecord) => ({ ...span, events: null as never })],
       ['an async hook returning a promise', (span: SpanRecord) => Promise.resolve(span) as never],
+      // Carrying both collections was the whole shape check, so these reached
+      // the wire as a span named `unknown` at a fallback time with no join keys.
+      ['only the two collections', () => ({ attributes: {}, events: [] }) as never],
+      ['no name', (span: SpanRecord) => ({ ...span, name: undefined as never })],
+      ['no kind', (span: SpanRecord) => ({ ...span, kind: undefined as never })],
+      ['no start time', (span: SpanRecord) => ({ ...span, startTime: undefined as never })],
+      ['no end time', (span: SpanRecord) => ({ ...span, endTime: undefined as never })],
     ])('drops the span when the hook returns %s', async (_label, beforeSpanSend) => {
       // Repairing these would export a nameless span carrying no join keys.
       const traces = createTraces({ beforeSpanSend: [beforeSpanSend] })
@@ -1237,6 +1244,33 @@ describe('PostHogTraces', () => {
       await traces.flush()
 
       expect(sentSpans()).toHaveLength(0)
+    })
+
+    it('counts an incomplete hook result as a drop rather than losing it silently', async () => {
+      const traces = createTraces({ beforeSpanSend: [() => ({ attributes: {}, events: [] }) as never] })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('beforeSpanSend returned an unusable record'))
+    })
+
+    it('still exports a span whose required fields the hook left in place', async () => {
+      // The shape check reads presence, so an ordinary scrub is untouched by it.
+      const traces = createTraces({
+        beforeSpanSend: [
+          (span) => {
+            delete span.attributes.secret
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout', { attributes: { secret: 'shh', keep: 1 } }).end()
+      await traces.flush()
+
+      expect(sentSpans()).toHaveLength(1)
+      expect(sentSpans()[0].name).toBe('checkout')
+      expect(sentSpans()[0].attributes!.map((a) => a.key)).toContain('keep')
+      expect(sentSpans()[0].attributes!.map((a) => a.key)).not.toContain('secret')
     })
 
     it('exports the span when the hook status message refuses to stringify', async () => {

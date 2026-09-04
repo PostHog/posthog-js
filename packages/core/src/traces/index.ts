@@ -76,16 +76,25 @@ interface SpanIdentity {
 }
 
 /**
- * Whether a `beforeSpanSend` return value still carries the two collections the
- * rest of the pipeline reads. An array is rejected for `attributes`: it would
- * encode as `{ "0": ... }` rather than fail.
+ * Whether a `beforeSpanSend` return value still carries every field the public
+ * `SpanRecord` declares as required. An array is rejected for `attributes`: it
+ * would encode as `{ "0": ... }` rather than fail.
+ *
+ * Presence, not usability: a field that is there but holds the wrong type is a
+ * hook editing a real record badly, and the sanitising below is what answers
+ * that. A field that is absent means the hook returned something that was never
+ * a span record, and the fallbacks would dress it up as one.
  */
 function isSpanRecordShape(record: SpanRecord): boolean {
   return (
     !!record.attributes &&
     typeof record.attributes === 'object' &&
     !Array.isArray(record.attributes) &&
-    Array.isArray(record.events)
+    Array.isArray(record.events) &&
+    record.name !== undefined &&
+    record.kind !== undefined &&
+    record.startTime !== undefined &&
+    record.endTime !== undefined
   )
 }
 
@@ -572,9 +581,10 @@ export class PostHogTraces {
         droppedEventsCount: originalDropped.events,
       }
       current = rebuilt
-      // A value missing either collection is not a span record — an `async`
-      // hook returns a Promise, truthy and `undefined` for every field. Filling
-      // the gaps in would export a nameless span carrying no person or session.
+      // A value missing a required field is not a span record — an `async` hook
+      // returns a Promise, truthy and `undefined` for every field. Filling the
+      // gaps in would export a span named `unknown` at a fallback time carrying
+      // no person or session, joinable to nothing and silent about it.
       if (!isSpanRecordShape(current)) {
         this._logger.debug('beforeSpanSend did not return a span record; dropping the span')
         this._recordDrop(1, 'beforeSpanSend returned an unusable record')
