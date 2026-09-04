@@ -133,8 +133,10 @@ export interface Span {
 
     /**
      * Record an exception on the span: sets status `error` and attaches an
-     * `exception` event carrying `exception.type` and `exception.message`.
-     * Does not end the span.
+     * `exception` event carrying `exception.type`, `exception.message` and,
+     * where the thrown value has one, `exception.stacktrace`. The stack is
+     * truncated to `maxAttributeValueLength` like any other attribute value,
+     * and `beforeSpanSend` sees it before it is exported. Does not end the span.
      */
     recordException(error: unknown): this
 
@@ -173,6 +175,43 @@ export interface Span {
      */
     end(endTime?: SpanTimeInput): void
 }
+
+/**
+ * A completed span as `beforeSpanSend` sees it: plain values, not the OTLP wire
+ * encoding — `userId: 42` reads as `42`, not `{ intValue: "42" }`.
+ *
+ * @experimental Subject to change in a minor release.
+ */
+export interface SpanRecord {
+    /**
+     * Assignment to any of the three identity fields is ignored with a debug
+     * warning: rewriting ids orphans children that already shipped.
+     */
+    readonly traceId: string
+    readonly spanId: string
+    /** Absent on a root span. */
+    readonly parentSpanId?: string
+    name: string
+    kind: SpanKind
+    status?: { code: SpanStatusCode; message?: string }
+    /** Editable in place; this is where to redact. */
+    attributes: SpanAttributes
+    events: { name: string; /** Millisecond epoch. */ timestamp: number; attributes?: SpanAttributes }[]
+    /** Millisecond epoch. */
+    startTime: number
+    /** Millisecond epoch. */
+    endTime: number
+}
+
+/**
+ * Inspects, edits or drops a finished span. Return `null` to drop it.
+ *
+ * The hook runs synchronously as part of `end()`; a returned promise is not
+ * awaited and the span is dropped.
+ *
+ * @experimental Subject to change in a minor release.
+ */
+export type BeforeSpanSendFn = (span: SpanRecord) => SpanRecord | null
 
 /**
  * Configuration for distributed tracing, passed as the `traces` client option.
@@ -240,6 +279,68 @@ export interface TracesConfig {
     maxQueueSize?: number
 
     /**
+     * Runs on every finished span before it is queued. Edit the span in place,
+     * or return `null` to drop it. An array runs left to right, and the first
+     * hook to return `null` stops the chain.
+     *
+     * This is the place to scrub sensitive attributes, so a hook that throws
+     * drops the span rather than exporting an unscrubbed one.
+     *
+     * @example Drop health checks and redact a header
+     * ```ts
+     * traces: {
+     *   beforeSpanSend: (span) => {
+     *     if (span.attributes['http.route'] === '/health') return null
+     *     delete span.attributes['http.request.header.authorization']
+     *     return span
+     *   },
+     * }
+     * ```
+     */
+    beforeSpanSend?: BeforeSpanSendFn | BeforeSpanSendFn[]
+
+    /**
+     * Maximum user-supplied attributes on a single span. Attributes the SDK
+     * attaches itself — `posthogDistinctId`, `sessionId` and friends — are
+     * exempt and are never evicted, because they are what links a span to a
+     * person and a session.
+     *
+     * On overflow the earliest-set attributes are kept and later ones are
+     * dropped, with the number dropped reported on the exported span.
+     *
+     * @default 128
+     */
+    maxAttributesPerSpan?: number
+
+    /**
+     * Maximum events on a single span. On overflow the earliest events are kept
+     * and later ones are dropped, with the number dropped reported on the
+     * exported span.
+     *
+     * The cap is absolute: an `exception` event the SDK records on your behalf
+     * spends an ordinary slot like any other, so a span that fills its events
+     * and then throws keeps its `error` status but not the exception detail.
+     * Raise the cap on spans that record many events and can also fail.
+     *
+     * @default 128
+     */
+    maxEventsPerSpan?: number
+
+    /**
+     * Maximum length of a string attribute value. Longer values are truncated,
+     * and the bound reaches every string the value contains, including the ones
+     * nested inside arrays and objects. It applies to span attributes, event
+     * attributes, span names, event names, status messages and resource
+     * attributes alike — including `exception.stacktrace`.
+     *
+     * The bound is what keeps one large value from making a span too large for
+     * the ingestion endpoint, which drops an oversized span whole.
+     *
+     * @default 8192
+     */
+    maxAttributeValueLength?: number
+
+    /**
      * Bound on how many spans may be live (started but not ended) at once. At
      * the bound `startSpan` returns an inert handle, so code that leaks spans
      * cannot grow the SDK's bookkeeping without limit. The SDK tracks only an
@@ -305,6 +406,10 @@ export interface OtlpSpan {
      * it — plus OTel's parent-remoteness bits (`0x100` known, `0x200` remote).
      */
     flags?: number
+    /** User attributes dropped by `maxAttributesPerSpan`. Omitted when none were. */
+    droppedAttributesCount?: number
+    /** Events dropped by `maxEventsPerSpan`. Omitted when none were. */
+    droppedEventsCount?: number
 }
 
 export interface OtlpTracesPayload {

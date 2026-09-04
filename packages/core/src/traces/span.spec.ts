@@ -1,8 +1,10 @@
-import { NOOP_SPAN, PostHogSpan, describeError } from './span'
+import { NOOP_SPAN, PostHogSpan, describeError, truncateAttributeValue } from './span'
+import { buildOtlpSpan } from './otlp'
 import type { SpanInit } from './span'
 import type { SpanRecord } from './types'
 import type { Logger } from '../types'
 import { createMockLogger } from '@/testing'
+import { MAX_JSON_SAFE_VALUE_ITEMS, MAX_JSON_SAFE_VALUE_NODES } from '../utils/json-utils'
 
 const TRACE_ID = '4bf92f3577b34da6a3ce929d0e0e4736'
 const SPAN_ID = '00f067aa0ba902b7'
@@ -21,6 +23,10 @@ describe('PostHogSpan', () => {
         attributes: {},
         startTime: Date.now(),
         backdated: false,
+        autoAttributeKeys: [],
+        maxAttributes: 128,
+        maxEvents: 128,
+        maxAttributeValueLength: 8192,
         ...init,
       },
       (record) => ended.push(record),
@@ -166,6 +172,75 @@ describe('PostHogSpan', () => {
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('OK'))
   })
 
+  describe('event cap', () => {
+    const fillEvents = (span: PostHogSpan, count: number): void => {
+      for (let i = 0; i < count; i++) {
+        span.addEvent(`step-${i}`)
+      }
+    }
+
+    it('drops an exception event on a span that has filled its events', () => {
+      // The cap is absolute, so an exception arriving last is dropped like any
+      // other event. The span keeps its `error` status and `droppedEventsCount`
+      // reports the loss, which is what makes the case findable in production.
+      const span = createSpan({ maxEvents: 2 })
+      fillEvents(span, 2)
+      span.recordException(new Error('boom'))
+      span.end()
+
+      expect(ended[0].events.map((event) => event.name)).toEqual(['step-0', 'step-1'])
+      expect(ended[0].status).toEqual({ code: 'error', message: 'boom' })
+      expect(ended[0].droppedEventsCount).toBe(1)
+    })
+
+    it('records an exception like any other event while the cap has room', () => {
+      const span = createSpan({ maxEvents: 128 })
+      for (let i = 0; i < 20; i++) {
+        span.recordException(new Error(`boom-${i}`))
+      }
+      span.end()
+
+      expect(ended[0].events).toHaveLength(20)
+      expect(ended[0].droppedEventsCount).toBeUndefined()
+    })
+
+    it('does not let an exception-named event bypass the cap', () => {
+      // The cap counts events, not names: nothing about the name `exception`
+      // buys a slot, whoever wrote it.
+      const span = createSpan({ maxEvents: 2 })
+      for (let i = 0; i < 7; i++) {
+        span.addEvent('exception', { mine: i })
+      }
+      span.end()
+
+      expect(ended[0].events).toHaveLength(2)
+      expect(ended[0].droppedEventsCount).toBe(5)
+    })
+
+    it('drops ordinary events past the cap', () => {
+      const span = createSpan({ maxEvents: 2 })
+      fillEvents(span, 5)
+      span.end()
+
+      expect(ended[0].events.map((event) => event.name)).toEqual(['step-0', 'step-1'])
+      expect(ended[0].droppedEventsCount).toBe(3)
+    })
+  })
+
+  describe('attribute store hygiene', () => {
+    it('does not copy a polluted Object.prototype key into the span', () => {
+      ;(Object.prototype as any).polluted = 'yes'
+      try {
+        const span = createSpan({ attributes: { real: 1 } })
+        span.end()
+
+        expect(Object.keys(ended[0].attributes)).toEqual(['real'])
+      } finally {
+        delete (Object.prototype as any).polluted
+      }
+    })
+  })
+
   describe('poison attributes', () => {
     const withThrowingGetter = (): any => {
       const attributes: any = { ok: 1 }
@@ -224,9 +299,470 @@ describe('PostHogSpan', () => {
       expect(ended[0].events).toEqual([
         expect.objectContaining({
           name: 'exception',
-          attributes: { 'exception.type': 'TypeError', 'exception.message': 'boom' },
+          attributes: expect.objectContaining({ 'exception.type': 'TypeError', 'exception.message': 'boom' }),
         }),
       ])
+    })
+
+    it('attaches the stack as exception.stacktrace', () => {
+      const span = createSpan()
+      span.recordException(new TypeError('boom'))
+      span.end()
+
+      const stack = ended[0].events[0].attributes?.['exception.stacktrace']
+      expect(stack).toEqual(expect.stringContaining('TypeError: boom'))
+    })
+
+    it('bounds the stack by maxAttributeValueLength', () => {
+      const span = createSpan({ maxAttributeValueLength: 40 })
+      const error = new Error('boom')
+      error.stack = `Error: boom\n${'    at somewhere deep\n'.repeat(500)}`
+
+      span.recordException(error)
+      span.end()
+
+      expect(ended[0].events[0].attributes?.['exception.stacktrace']).toHaveLength(40)
+    })
+
+    it('records an exception with no stack without inventing one', () => {
+      const span = createSpan()
+      span.recordException('just a string')
+      span.end()
+
+      expect(ended[0].events[0].attributes).not.toHaveProperty('exception.stacktrace')
+    })
+  })
+
+  describe('maxAttributeValueLength', () => {
+    it('truncates a long string attribute without counting it as dropped', () => {
+      const span = createSpan({ maxAttributeValueLength: 10 })
+      span.setAttribute('payload', 'x'.repeat(5000))
+      span.end()
+
+      expect(ended[0].attributes.payload).toBe('xxxxxxxxxx')
+      // The count is for whole entries; a trimmed value is still exported.
+      expect(ended[0].droppedAttributesCount).toBeUndefined()
+    })
+
+    it('truncates the strings inside an array attribute, and leaves other types alone', () => {
+      const span = createSpan({ maxAttributeValueLength: 3 })
+      span.setAttributes({ tags: ['abcdef', 'ab'], count: 1234567, flag: true })
+      span.end()
+
+      expect(ended[0].attributes).toMatchObject({ tags: ['abc', 'ab'], count: 1234567, flag: true })
+    })
+
+    it('truncates strings nested inside an object value', () => {
+      // `setAttribute('payload', { body: res.body })` is the natural way to attach
+      // a response, and an unbounded one is what pushes a span past the endpoint.
+      const span = createSpan({ maxAttributeValueLength: 4 })
+      span.setAttribute('payload', { body: 'abcdefgh', status: 200 })
+      span.end()
+
+      expect(ended[0].attributes.payload).toEqual({ body: 'abcd', status: 200 })
+    })
+
+    it('truncates strings nested inside an array value', () => {
+      const span = createSpan({ maxAttributeValueLength: 4 })
+      span.setAttribute('rows', [{ body: 'abcdefgh' }, ['abcdefgh']])
+      span.end()
+
+      expect(ended[0].attributes.rows).toEqual([{ body: 'abcd' }, ['abcd']])
+    })
+
+    it('bounds the work a shared subtree costs, not just a cyclic one', () => {
+      // Siblings pointing at one object are re-walked once per path, so this
+      // reaches the same leaves ten million times. Only the node budget stops it.
+      const leaf: string[] = []
+      for (let i = 0; i < 1000; i++) {
+        leaf.push('x'.repeat(2000))
+      }
+      const mid = Array.from({ length: 1000 }, () => leaf)
+      const shared = Array.from({ length: 10 }, () => mid)
+
+      const bounded = truncateAttributeValue(shared, 8)
+
+      // Counting what the walk shortened, not what the result can reach: past
+      // the budget the original is handed back by reference.
+      const cap = MAX_JSON_SAFE_VALUE_NODES * 2
+      let shortened = 0
+      const stack: unknown[] = [bounded]
+      while (stack.length && shortened <= cap) {
+        const value = stack.pop()
+        if (typeof value === 'string') {
+          if (value.length === 8) {
+            shortened++
+          }
+        } else if (Array.isArray(value) && value !== leaf && value !== mid) {
+          stack.push(...value)
+        }
+      }
+      expect(shortened).toBeLessThanOrEqual(cap)
+    })
+
+    it('terminates on a self-referencing value', () => {
+      const cyclic: any = { body: 'abcdefgh' }
+      cyclic.self = cyclic
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      expect(() => {
+        span.setAttribute('payload', cyclic)
+        span.end()
+      }).not.toThrow()
+    })
+
+    it('charges a throwing accessor to its own key, still bounding its siblings', () => {
+      // A lazy ORM relation next to a large field is the shape that matters: if
+      // the throw abandons the whole walk, the large field ships at full length.
+      const span = createSpan({ maxAttributeValueLength: 4 })
+      const hostile = {
+        ok: 'abcdefgh',
+        get boom() {
+          throw new Error('getter exploded')
+        },
+      }
+
+      expect(() => {
+        span.setAttribute('payload', hostile as any)
+        span.end()
+      }).not.toThrow()
+
+      const payload = ended[0].attributes.payload as Record<string, unknown>
+      expect(payload.ok).toBe('abcd')
+      expect(payload.boom).toBe('[Unserializable]')
+    })
+
+    it('does not walk into a value whose toJSON redacts it', () => {
+      // Copying the object's own keys would hand the encoder a plain object it
+      // no longer recognises as self-describing, putting the internals of a
+      // value that redacts itself on the wire.
+      class Redacted {
+        constructor(public secret: string) {}
+        toJSON(): null {
+          return null
+        }
+      }
+      const span = createSpan({ maxAttributeValueLength: 10 })
+
+      span.setAttribute('payload', { inner: new Redacted('S'.repeat(50)) } as any)
+      span.end()
+
+      // The string the encoder builds from the same `null`, so the wire is
+      // unchanged, and the secret is nowhere in what the span kept.
+      expect((ended[0].attributes.payload as any).inner).toBe('null')
+      expect(JSON.stringify(ended[0].attributes)).not.toContain('S')
+    })
+
+    it('materializes a toJSON that resolves to nothing, so a second call cannot answer differently', () => {
+      // Keeping the object itself left the encoder to probe toJSON again. A
+      // serializer that answered `null` here could answer with a megabyte
+      // there, past the bound entirely.
+      let calls = 0
+      const stateful = {
+        toJSON: () => {
+          calls++
+          return calls === 1 ? null : 'x'.repeat(100)
+        },
+      }
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('doc', stateful as any)
+      span.end()
+
+      expect(calls).toBe(1)
+      expect(ended[0].attributes.doc).toBe('null')
+    })
+
+    it('keeps a stateful toJSON bounded through to the encoded span', () => {
+      // End to end, because the second call is the encoder's: what the span
+      // stored has to leave it nothing to call.
+      let calls = 0
+      const stateful = {
+        toJSON: () => {
+          calls++
+          return calls === 1 ? null : 'x'.repeat(100)
+        },
+      }
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('doc', stateful as any)
+      span.end()
+      const encoded = buildOtlpSpan(ended[0])
+
+      expect(calls).toBe(1)
+      expect(encoded.attributes?.find((attribute) => attribute.key === 'doc')).toEqual({
+        key: 'doc',
+        value: { stringValue: 'null' },
+      })
+    })
+
+    it('describes a toJSON resolving to undefined the way the encoder would', () => {
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('ghost', { toJSON: () => undefined } as any)
+      span.end()
+
+      // Not trimmed to the bound: this is the SDK's own marker, like
+      // `[Circular]`, and `unde` reads as nothing at all.
+      expect(ended[0].attributes.ghost).toBe('undefined')
+    })
+
+    it('bounds event attributes too', () => {
+      const span = createSpan({ maxAttributeValueLength: 4 })
+      span.addEvent('cache.miss', { key: 'abcdefgh' })
+      span.end()
+
+      expect(ended[0].events[0].attributes).toEqual({ key: 'abcd' })
+    })
+
+    it('walks a value that points at itself twice only once', () => {
+      // Depth alone is not a bound. Two back-references at each level cost
+      // 2 ** 20 visits, which is a quarter-second inside the caller's own
+      // `setAttribute` call, and a third reference is minutes.
+      let reads = 0
+      const cyclic: any = {
+        get body() {
+          reads++
+          return 'abcdefgh'
+        },
+      }
+      cyclic.self1 = cyclic
+      cyclic.self2 = cyclic
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('payload', cyclic)
+      span.end()
+
+      expect(reads).toBe(1)
+    })
+
+    it('bounds the nodes an acyclic value costs, not just its depth', () => {
+      // Siblings sharing a subtree are not a cycle, so the ancestor set does not
+      // catch them: 3 ** 12 visits without a node budget.
+      let reads = 0
+      let level: any = {
+        get body() {
+          reads++
+          return 'abcdefgh'
+        },
+      }
+      for (let i = 0; i < 12; i++) {
+        level = { a: level, b: level, c: level }
+      }
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('payload', level)
+      span.end()
+
+      expect(reads).toBeLessThanOrEqual(10_000)
+    })
+
+    it('bounds the value a toJSON produces, which is what the encoder puts on the wire', () => {
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('doc', { toJSON: () => 'abcdefgh' } as any)
+      span.end()
+
+      expect(ended[0].attributes.doc).toBe('abcd')
+    })
+
+    it('resolves toJSON exactly once, so a second call cannot dodge the bound', () => {
+      // Returning the original object when nothing needed shortening left the
+      // encoder to call toJSON again — a value that answered differently the
+      // second time reached the wire unbounded.
+      let calls = 0
+      const doc = {
+        toJSON: () => {
+          calls++
+          return calls === 1 ? 'ab' : 'x'.repeat(4000)
+        },
+      }
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('doc', doc as any)
+      span.end()
+
+      expect(calls).toBe(1)
+      expect(ended[0].attributes.doc).toBe('ab')
+    })
+
+    it('bounds a string that follows a large collection of nulls', () => {
+      // The encoder drops a nullish value without spending its budget, so a walk
+      // that charges for one runs out first and leaves the string after it
+      // unbounded on both sides — a 2 MB value under a bound of 8.
+      const span = createSpan({ maxAttributeValueLength: 8 })
+
+      span.setAttribute('payload', {
+        rows: Array.from({ length: 400 }, () =>
+          Object.fromEntries(Array.from({ length: 50 }, (_unused, index) => [`c${index}`, null]))
+        ),
+        html: 'X'.repeat(50000),
+      })
+      span.end()
+
+      expect((ended[0].attributes.payload as any).html).toHaveLength(8)
+    })
+
+    it('bounds a string that follows a large collection', () => {
+      // The traversal budget is spent on containers, not leaves: a big array
+      // used to exhaust it and leave every later string at full length.
+      const span = createSpan({ maxAttributeValueLength: 8 })
+
+      span.setAttribute('payload', {
+        rows: Array.from({ length: 20000 }, (_, index) => index),
+        html: 'X'.repeat(50000),
+      })
+      span.end()
+
+      expect((ended[0].attributes.payload as any).html).toHaveLength(8)
+    })
+
+    it('keeps a nested __proto__ key as an ordinary entry', () => {
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('payload', JSON.parse('{"__proto__": {"body": "abcdefgh"}}'))
+      span.end()
+
+      const payload = ended[0].attributes.payload as Record<string, unknown>
+      expect(Object.keys(payload)).toEqual(['__proto__'])
+      expect(Object.getOwnPropertyDescriptor(payload, '__proto__')?.value).toEqual({ body: 'abcd' })
+    })
+
+    it('bounds an event name the SDK records like any other', () => {
+      const span = createSpan({ maxAttributeValueLength: 8, maxEvents: 4 })
+
+      span.recordException(new Error('boom'))
+      span.end()
+
+      expect(ended[0].events[0].name).toBe('exceptio')
+      expect(ended[0].events[0].attributes?.['exception.type']).toBe('Error')
+    })
+
+    it('bounds a span name and an event name, like a status message', () => {
+      // A name built from a URL is caller-controlled, and one large enough takes
+      // the span past the ingestion body limit.
+      const span = createSpan({ maxAttributeValueLength: 12 })
+
+      span.updateName('abcdefghijklmnop')
+      span.addEvent('abcdefghijklmnop')
+      span.end()
+
+      expect(ended[0].name).toBe('abcdefghijkl')
+      expect(ended[0].events[0].name).toBe('abcdefghijkl')
+    })
+
+    it('bounds a status message', () => {
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setStatus('error', 'abcdefgh')
+      span.end()
+
+      expect(ended[0].status).toEqual({ code: 'error', message: 'abcd' })
+    })
+
+    it('bounds the status message recordException sets, like the event attribute', () => {
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.recordException(new Error('abcdefgh'))
+      span.end()
+
+      expect(ended[0].status?.message).toBe('abcd')
+      expect(ended[0].events[0].attributes?.['exception.message']).toBe('abcd')
+    })
+
+    it('replaces a back-reference with the marker rather than the value itself', () => {
+      // Handing the raw ancestor back left it inside a copied parent, where the
+      // encoder's own cycle detection no longer recognised it and walked one
+      // more level of its strings at full length.
+      const cyclic: any = { body: 'abcdefgh' }
+      cyclic.self = cyclic
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('payload', cyclic)
+      span.end()
+
+      expect(ended[0].attributes.payload).toEqual({ body: 'abcd', self: '[Circular]' })
+    })
+
+    it('still bounds an array whose accessor past the encoder cap throws', () => {
+      // `slice()` read the whole array to copy it, so one throwing accessor
+      // beyond the encoder's cap cost every item in range its bound.
+      const rows: unknown[] = ['abcdefgh']
+      for (let index = 1; index < MAX_JSON_SAFE_VALUE_ITEMS + 200; index++) {
+        rows.push('x')
+      }
+      Object.defineProperty(rows, MAX_JSON_SAFE_VALUE_ITEMS + 100, {
+        get: () => {
+          throw new Error('lazy relation')
+        },
+        enumerable: true,
+        configurable: true,
+      })
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('rows', rows as any)
+      span.end()
+
+      expect((ended[0].attributes.rows as unknown[])[0]).toBe('abcd')
+    })
+
+    it('stops reading keys where the encoder stops emitting them', () => {
+      // Every key was read even though the encoder emits at most the cap, so a
+      // wide object charged `setAttribute` for getters that never ship.
+      let reads = 0
+      const wide: Record<string, unknown> = {}
+      for (let index = 0; index < MAX_JSON_SAFE_VALUE_ITEMS * 2; index++) {
+        Object.defineProperty(wide, `k${index}`, {
+          get: () => {
+            reads++
+            return 'v'
+          },
+          enumerable: true,
+          configurable: true,
+        })
+      }
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('payload', wide)
+      span.end()
+
+      expect(reads).toBe(MAX_JSON_SAFE_VALUE_ITEMS)
+    })
+
+    it('copies a nested value the caller goes on to mutate', () => {
+      // A value that needed no truncation was attached as it came, so the span
+      // held caller-owned state and shipped whatever it was changed to.
+      const nested = { body: 'ok' }
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('payload', { nested })
+      nested.body = 'abcdefgh'
+      span.end()
+
+      expect(ended[0].attributes.payload).toEqual({ nested: { body: 'ok' } })
+    })
+
+    it('leaves a Date whole rather than truncating its timestamp', () => {
+      // The encoder emits a Date from its own branch ahead of any `toJSON`, so
+      // bounding it here shipped a cut-off timestamp instead of a shorter one.
+      const span = createSpan({ maxAttributeValueLength: 10 })
+
+      span.setAttribute('when', new Date('2020-01-02T03:04:05.000Z') as never)
+      span.end()
+
+      expect(ended[0].attributes.when).toEqual(new Date('2020-01-02T03:04:05.000Z'))
+    })
+
+    it('bounds an SDK-attached value, which is exempt from the count cap only', () => {
+      const span = createSpan({
+        maxAttributeValueLength: 4,
+        attributes: { posthogDistinctId: 'user-12345' },
+        autoAttributeKeys: ['posthogDistinctId'],
+      })
+      span.setAttribute('posthogDistinctId', 'user-12345')
+      span.end()
+
+      expect(ended[0].attributes.posthogDistinctId).toBe('user')
     })
   })
 
@@ -349,6 +885,61 @@ describe('NoopSpan', () => {
   })
 })
 
+describe('attribute store', () => {
+  it('hands out a record whose attributes behave like an ordinary object', () => {
+    const ended: SpanRecord[] = []
+    const span = new PostHogSpan(
+      {
+        traceId: TRACE_ID,
+        spanId: SPAN_ID,
+        name: 'checkout',
+        kind: 'internal',
+        attributes: { plan: 'pro' },
+        startTime: Date.now(),
+        backdated: false,
+        autoAttributeKeys: [],
+        maxAttributes: 128,
+        maxEvents: 128,
+        maxAttributeValueLength: 8192,
+      },
+      (record) => ended.push(record)
+    )
+    span.end()
+
+    const { attributes } = ended[0]
+    expect(Object.getPrototypeOf(attributes)).toBe(Object.prototype)
+    expect(Object.prototype.hasOwnProperty.call(attributes, 'plan')).toBe(true)
+    expect(() => JSON.stringify(attributes)).not.toThrow()
+  })
+
+  it('keeps a parsed __proto__ key as an ordinary attribute', () => {
+    const ended: SpanRecord[] = []
+    const span = new PostHogSpan(
+      {
+        traceId: TRACE_ID,
+        spanId: SPAN_ID,
+        name: 'checkout',
+        kind: 'internal',
+        attributes: JSON.parse('{"__proto__": {"leaked": 1}, "orderId": "abc"}'),
+        startTime: Date.now(),
+        backdated: false,
+        autoAttributeKeys: [],
+        maxAttributes: 128,
+        maxEvents: 128,
+        maxAttributeValueLength: 8192,
+      },
+      (record) => ended.push(record)
+    )
+    span.end()
+
+    const keys: string[] = []
+    for (const key in ended[0].attributes) {
+      keys.push(key)
+    }
+    expect(keys).not.toContain('leaked')
+  })
+})
+
 describe('describeError', () => {
   it.each([
     ['an Error', new Error('boom'), { type: 'Error', message: 'boom' }],
@@ -357,7 +948,23 @@ describe('describeError', () => {
     ['an object with a message', { name: 'CustomError', message: 'oops' }, { type: 'CustomError', message: 'oops' }],
     ['an object without a name', { message: 'oops' }, { type: 'Object', message: 'oops' }],
   ])('describes %s', (_name, error, expected) => {
-    expect(describeError(error)).toEqual(expected)
+    expect(describeError(error)).toMatchObject(expected)
+  })
+
+  it('carries the stack where the thrown value has one, and nothing where it does not', () => {
+    expect(describeError(new Error('boom')).stack).toEqual(expect.stringContaining('Error: boom'))
+    expect(describeError('just a string').stack).toBeUndefined()
+    expect(describeError({ message: 'oops' }).stack).toBeUndefined()
+  })
+
+  it('survives a throwing stack accessor', () => {
+    const hostile = {
+      message: 'oops',
+      get stack() {
+        throw new Error('nope')
+      },
+    }
+    expect(describeError(hostile)).toEqual({ type: 'Object', message: 'oops' })
   })
 
   it('describes a thrown primitive', () => {

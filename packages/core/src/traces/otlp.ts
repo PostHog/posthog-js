@@ -9,6 +9,7 @@ import type {
 } from '@posthog/types'
 import type { Logger } from '../types'
 import type { ResolvedTracesConfig, SpanRecord } from './types'
+import { nonNegativeCount } from './span'
 import { toOtlpKeyValueList } from '../utils/otlp-any-value'
 import { UNSERIALIZABLE_VALUE, sanitizeString } from '../utils/json-utils'
 import { buildOtlpResourceAttributes } from '../utils/otlp-resource'
@@ -129,6 +130,16 @@ export function buildOtlpSpan(record: SpanRecord, logger?: Logger): OtlpSpan {
   }
   if (record.events.length) {
     span.events = record.events.map((event) => toOtlpEvent(event, logger))
+  }
+  // Coerced: a `beforeSpanSend` hook can write anything onto the record, and a
+  // non-integer here is refused for the whole request.
+  const droppedAttributes = nonNegativeCount(record.droppedAttributesCount)
+  if (droppedAttributes) {
+    span.droppedAttributesCount = droppedAttributes
+  }
+  const droppedEvents = nonNegativeCount(record.droppedEventsCount)
+  if (droppedEvents) {
+    span.droppedEventsCount = droppedEvents
   }
   if (record.status) {
     span.status = {

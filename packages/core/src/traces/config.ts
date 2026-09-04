@@ -1,12 +1,24 @@
 import { assignUserAttributes } from '../utils/json-utils'
 import type { ResolvedTracesConfig } from './types'
-import type { TracesConfig } from '@posthog/types'
+import type { BeforeSpanSendFn, TracesConfig } from '@posthog/types'
+import type { Logger } from '../types'
 
 // OpenTelemetry's BatchSpanProcessor defaults, which sit comfortably under the
 // server's request body cap.
 const DEFAULT_FLUSH_INTERVAL_MS = 5000
 const DEFAULT_MAX_EXPORT_BATCH_SIZE = 512
 const DEFAULT_MAX_QUEUE_SIZE = 2048
+// OpenTelemetry's per-span defaults.
+const DEFAULT_MAX_ATTRIBUTES_PER_SPAN = 128
+const DEFAULT_MAX_EVENTS_PER_SPAN = 128
+// OpenTelemetry leaves the value length unlimited, which is what lets one
+// multi-MB attribute make a span too large for the endpoint to accept — and an
+// oversized span is dropped whole. 8 KB holds a deep stack trace and any
+// realistic header, query string or payload excerpt, and keeps a span at the
+// attribute cap under 1 MB. Events are bounded by count and by this length, not
+// by how many attributes each one carries, so a span is not bounded overall;
+// the body limit is enforced per batch, where it can be measured once.
+const DEFAULT_MAX_ATTRIBUTE_VALUE_LENGTH = 8192
 
 // Live-span bounds. A server can legitimately hold thousands of spans open at
 // once, and refusing a legitimate span is worse than tolerating a leak, so the
@@ -20,9 +32,13 @@ const DEFAULT_MAX_SPAN_AGE_MS = 3_600_000
 /**
  * Coerces a caller-supplied positive-integer option. `0`, a negative, or `NaN`
  * reaching the export loop would stall it.
+ *
+ * A fraction takes the default rather than being floored: these are documented
+ * as positive integers, and silently reading `maxAttributesPerSpan: 1.5` as `1`
+ * caps a span an order of magnitude below what the caller wrote.
  */
 function positiveInteger(value: number | undefined, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 1 ? Math.floor(value) : fallback
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : fallback
 }
 
 const IDENTITY_KEYS = ['service.name', 'service.version', 'deployment.environment'] as const
@@ -55,6 +71,36 @@ function withUsableIdentityKeys(attributes: TracesConfig['resourceAttributes']):
 }
 
 /**
+ * Keeps only the callable hooks. Anything else is dropped rather than called: an
+ * untyped caller passing the wrong shape would otherwise have every span dropped
+ * by a hook that throws, leaving tracing silently off.
+ *
+ * Dropping one is reported rather than thrown on. `beforeSpanSend` is where
+ * redaction lives, so a configuration that silently filters nothing ships the
+ * values it was meant to remove — but a client constructor that throws takes the
+ * application down with it, which is the worse of the two. `critical`, because
+ * every other level is gated behind `debug: true`, and a redaction hook that is
+ * quietly inert is exactly what an operator has to hear about without opting in.
+ */
+function resolveBeforeSpanSend(beforeSpanSend: TracesConfig['beforeSpanSend'], logger?: Logger): BeforeSpanSendFn[] {
+  if (!beforeSpanSend) {
+    return []
+  }
+  // `[featureEnabled && scrub]` is ordinary JS, and a caller who wrote it did not
+  // configure a hook at all — only a value that was meant to be one is worth
+  // shouting about.
+  const supplied = [beforeSpanSend].flat().filter((hook) => Boolean(hook))
+  const hooks = supplied.filter((hook): hook is BeforeSpanSendFn => typeof hook === 'function')
+  if (hooks.length !== supplied.length) {
+    logger?.critical(
+      `beforeSpanSend: ignoring ${supplied.length - hooks.length} of ${supplied.length} entries that are not functions. ` +
+        'Spans export without them, so whatever they were redacting is not redacted.'
+    )
+  }
+  return hooks
+}
+
+/**
  * Resolves the public `traces` config into the shape core `PostHogTraces` consumes.
  * OTLP resource attributes take precedence over the named fields, matching the
  * logs config. `hostResourceAttributes` are runtime-detected by the entrypoint and
@@ -62,7 +108,8 @@ function withUsableIdentityKeys(attributes: TracesConfig['resourceAttributes']):
  */
 export function resolveTracesConfig(
   config: TracesConfig | undefined,
-  hostResourceAttributes?: Record<string, string>
+  hostResourceAttributes?: Record<string, string>,
+  logger?: Logger
 ): ResolvedTracesConfig {
   // Copied key by key rather than spread: a throwing accessor on a user-supplied
   // attribute would otherwise escape the first `startSpan`.
@@ -76,6 +123,10 @@ export function resolveTracesConfig(
     serviceVersion: (resourceAttributes?.['service.version'] as string | undefined) ?? config?.serviceVersion,
     environment: (resourceAttributes?.['deployment.environment'] as string | undefined) ?? config?.environment,
     resourceAttributes,
+    beforeSpanSend: resolveBeforeSpanSend(config?.beforeSpanSend, logger),
+    maxAttributesPerSpan: positiveInteger(config?.maxAttributesPerSpan, DEFAULT_MAX_ATTRIBUTES_PER_SPAN),
+    maxEventsPerSpan: positiveInteger(config?.maxEventsPerSpan, DEFAULT_MAX_EVENTS_PER_SPAN),
+    maxAttributeValueLength: positiveInteger(config?.maxAttributeValueLength, DEFAULT_MAX_ATTRIBUTE_VALUE_LENGTH),
     flushIntervalMs: positiveInteger(config?.flushIntervalMs, DEFAULT_FLUSH_INTERVAL_MS),
     maxExportBatchSize,
     // Never below the flush trigger, or the depth-based flush could never fire.

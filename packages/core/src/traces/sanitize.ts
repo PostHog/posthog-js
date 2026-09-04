@@ -23,9 +23,12 @@ const DEEP_BACKDATE_WARNING_MS = 24 * 60 * 60 * 1000
  * replaced rather than dropped, so a mis-instrumented call site loses its name,
  * not its span. `label` names what is being sanitized in the warning.
  */
-export function sanitizeName(name: unknown, label: string, logger?: Logger): string {
+export function sanitizeName(name: unknown, label: string, maxLength: number, logger?: Logger): string {
   if (typeof name === 'string' && name.trim()) {
-    return name
+    // Bounded like a status message and an attribute value: a name built from a
+    // URL or a payload is caller-controlled too, and one large enough takes the
+    // span past the ingestion body limit, which drops it whole.
+    return name.length > maxLength ? name.slice(0, maxLength) : name
   }
   logger?.debug(`${label} must be a non-empty string; using "${FALLBACK_SPAN_NAME}"`)
   return FALLBACK_SPAN_NAME
@@ -75,6 +78,10 @@ export function resolveStartTime(value: SpanTimeInput | undefined, now: number, 
     logger?.debug(
       'Span startTime is more than 24 hours in the past; the server will clamp it to receive time and keep the original in $originalTimestamp'
     )
+  } else if (supplied > now) {
+    // Warned rather than clamped, matching the deep-backdate rule: the value is
+    // the caller's. The duration is what suffers, since the end clamps to it.
+    logger?.debug('Span startTime is in the future; the span may export with a zero duration')
   }
   return supplied
 }

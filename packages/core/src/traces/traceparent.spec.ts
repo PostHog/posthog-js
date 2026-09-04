@@ -140,8 +140,12 @@ describe('normalizeTraceparent', () => {
     expect(normalizeTraceparent(`01-${TRACE_ID}-${SPAN_ID}-01`)).toBe(`01-${TRACE_ID}-${SPAN_ID}-01`)
   })
 
-  it("trims surrounding whitespace, and drops a higher version's trailing fields", () => {
-    expect(normalizeTraceparent(`  01-${TRACE_ID}-${SPAN_ID}-01-extra `)).toBe(`01-${TRACE_ID}-${SPAN_ID}-01`)
+  it("keeps a higher version's trailing fields, so a peer that reads them still can", () => {
+    expect(normalizeTraceparent(`01-${TRACE_ID}-${SPAN_ID}-01-extra`)).toBe(`01-${TRACE_ID}-${SPAN_ID}-01-extra`)
+  })
+
+  it('trims surrounding whitespace', () => {
+    expect(normalizeTraceparent(`  00-${TRACE_ID}-${SPAN_ID}-01 `)).toBe(`00-${TRACE_ID}-${SPAN_ID}-01`)
   })
 
   it.each([

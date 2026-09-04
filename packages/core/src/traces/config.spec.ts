@@ -1,14 +1,51 @@
+import { createMockLogger } from '@/testing'
 import { resolveTracesConfig } from './config'
 
 describe('resolveTracesConfig', () => {
+  it.each([
+    ['zero', 0],
+    ['negative', -1],
+    ['not a number', NaN],
+    // Floored, these read as 1, 2 and 3 — caps an order of magnitude below what
+    // the caller wrote, applied silently.
+    ['a fraction', 1.5],
+    ['a large fraction', 200.5],
+    ['infinity', Infinity],
+  ])('falls back to the default per-span caps when given %s', (_label, value) => {
+    const resolved = resolveTracesConfig({
+      maxAttributesPerSpan: value,
+      maxEventsPerSpan: value,
+      maxAttributeValueLength: value,
+    })
+    expect(resolved.maxAttributesPerSpan).toBe(128)
+    expect(resolved.maxEventsPerSpan).toBe(128)
+    expect(resolved.maxAttributeValueLength).toBe(8192)
+  })
+
+  it('honours explicit per-span caps', () => {
+    // Without this the resolver can ignore maxEventsPerSpan entirely and every
+    // other test still passes, because they all assert the default.
+    expect(resolveTracesConfig({ maxAttributesPerSpan: 5, maxEventsPerSpan: 7 })).toMatchObject({
+      maxAttributesPerSpan: 5,
+      maxEventsPerSpan: 7,
+    })
+  })
+
   it('applies the documented defaults', () => {
     expect(resolveTracesConfig(undefined)).toMatchObject({
       flushIntervalMs: 5000,
       maxExportBatchSize: 512,
       maxQueueSize: 2048,
+      maxAttributesPerSpan: 128,
+      maxEventsPerSpan: 128,
+      maxAttributeValueLength: 8192,
       maxLiveSpans: 10_000,
       maxSpanAgeMs: 3_600_000,
     })
+  })
+
+  it('honours an explicit attribute value bound', () => {
+    expect(resolveTracesConfig({ maxAttributeValueLength: 256 }).maxAttributeValueLength).toBe(256)
   })
 
   it('honours explicit live-span bounds', () => {
@@ -65,12 +102,21 @@ describe('resolveTracesConfig', () => {
     }
   )
 
-  it('floors a fractional batch size to an integer', () => {
-    expect(resolveTracesConfig({ maxExportBatchSize: 10.9 }).maxExportBatchSize).toBe(10)
+  it('takes the default for a fractional batch size rather than flooring it', () => {
+    // Every numeric knob resolves the same way, so a fraction is a value the
+    // caller did not mean rather than one to round down behind their back.
+    expect(resolveTracesConfig({ maxExportBatchSize: 10.9 }).maxExportBatchSize).toBe(512)
   })
 
-  it.each([0, -1, Number.NaN])('falls back to the default for an unusable flushIntervalMs (%p)', (value) => {
+  it.each([0, -1, 1.5, Number.NaN])('falls back to the default for an unusable flushIntervalMs (%p)', (value) => {
     expect(resolveTracesConfig({ flushIntervalMs: value }).flushIntervalMs).toBe(5000)
+  })
+
+  it.each([0.5, 10_000.5])('falls back to the defaults for fractional live-span bounds (%p)', (value) => {
+    expect(resolveTracesConfig({ maxLiveSpans: value, maxSpanAgeMs: value })).toMatchObject({
+      maxLiveSpans: 10_000,
+      maxSpanAgeMs: 3_600_000,
+    })
   })
 
   it('keeps the queue at least as large as the export batch', () => {
@@ -133,6 +179,50 @@ describe('resourceAttributes guarding', () => {
 
     expect(resolved.serviceName).toBe('checkout-api')
     expect(resolved.resourceAttributes).toEqual({ region: 'us' })
+  })
+
+  it('ignores a beforeSpanSend entry that is not a function', () => {
+    // A plain-JS caller passing the wrong shape would otherwise have every span
+    // dropped by a hook that throws on call, with tracing silently off.
+    const scrub = (span: any): any => span
+    const resolved = resolveTracesConfig({ beforeSpanSend: ['not a function', scrub] as never })
+
+    expect(resolved.beforeSpanSend).toEqual([scrub])
+  })
+
+  it('warns about a dropped hook, since the redaction it was configured for is gone', () => {
+    const logger = createMockLogger()
+    const scrub = (span: any): any => span
+
+    resolveTracesConfig({ beforeSpanSend: ['not a function', scrub] as never }, undefined, logger)
+
+    // `critical`, not `warn`: every other level is gated behind `debug: true`.
+    expect(logger.critical).toHaveBeenCalledWith(expect.stringContaining('ignoring 1 of 2 entries'))
+  })
+
+  it('stays quiet for a conditionally disabled hook', () => {
+    // `[featureEnabled && scrub]` is ordinary JS; nothing was configured to
+    // redact, so claiming redaction is broken would be false alarm.
+    const logger = createMockLogger()
+
+    const resolved = resolveTracesConfig({ beforeSpanSend: [false, null, undefined] as never }, undefined, logger)
+
+    expect(resolved.beforeSpanSend).toEqual([])
+    expect(logger.critical).not.toHaveBeenCalled()
+  })
+
+  it('stays quiet when every hook is callable', () => {
+    const logger = createMockLogger()
+
+    resolveTracesConfig({ beforeSpanSend: [(span: any): any => span] }, undefined, logger)
+
+    expect(logger.critical).not.toHaveBeenCalled()
+  })
+
+  it('resolves to no hooks when beforeSpanSend is the wrong type entirely', () => {
+    const resolved = resolveTracesConfig({ beforeSpanSend: { scrub: true } as never })
+
+    expect(resolved.beforeSpanSend).toEqual([])
   })
 
   it('does not throw when an identity accessor throws', () => {
