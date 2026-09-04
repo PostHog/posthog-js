@@ -189,6 +189,9 @@ export default defineNuxtModule<ModuleOptions>({
     nuxt.hook('close', async () => {
       // We don't want to run this process during prepare and friends
       if (!isBuildProcess || !serverDir || !publicDir) return
+      // Each directory is handled on its own: a failing server command must not skip the
+      // public upload, which is the only client sourcemap upload of the build when
+      // `deleteAfterUpload` is false or when the early upload failed.
       try {
         // Nitro reports a serverDir for every build but only writes one when it builds a
         // server bundle. `ssr: false` still builds one, so read the directory on disk
@@ -198,12 +201,16 @@ export default defineNuxtModule<ModuleOptions>({
           await cliRunner(getInjectArgs(serverDir, sourcemapsConfig))
           await cliRunner(getUploadArgs(serverDir, sourcemapsConfig))
         }
-        // Keep the public sourcemaps on disk here: Nitro's asset manifest already lists them.
-        if (!publicSourcemapsUploaded) {
-          await cliRunner(getUploadArgs(publicDir, { ...sourcemapsConfig, deleteAfterUpload: false }))
-        }
       } catch (error) {
-        console.error('Failed to process or upload sourcemaps:', error)
+        console.error(`Failed to process or upload server sourcemaps (${serverDir}):`, error)
+      }
+      if (!publicSourcemapsUploaded) {
+        try {
+          // Keep the public sourcemaps on disk here: Nitro's asset manifest already lists them.
+          await cliRunner(getUploadArgs(publicDir, { ...sourcemapsConfig, deleteAfterUpload: false }))
+        } catch (error) {
+          console.error(`Failed to upload public sourcemaps (${publicDir}):`, error)
+        }
       }
     })
   },

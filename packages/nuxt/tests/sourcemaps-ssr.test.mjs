@@ -45,7 +45,12 @@ const executableSource = source
   // Turn the module's `export default` into a value the wrapper returns.
   .replace('export default defineNuxtModule(', 'return defineNuxtModule(')
 
-function loadModule({ failPublicUpload = false, nuxtVersion = '4.1.2', existingDirs = [] } = {}) {
+function loadModule({
+  failPublicUpload = false,
+  failServerUpload = false,
+  nuxtVersion = '4.1.2',
+  existingDirs = [],
+} = {}) {
   const spawnCalls = []
   const pluginCalls = []
   const serverPluginCalls = []
@@ -61,6 +66,9 @@ function loadModule({ failPublicUpload = false, nuxtVersion = '4.1.2', existingD
       spawnCalls.push({ bin, args: [...args] })
       if (failPublicUpload && args.includes('upload') && args.includes('/build/.output/public')) {
         throw new Error('public upload failed')
+      }
+      if (failServerUpload && args.includes('upload') && args.includes('/build/.output/server')) {
+        throw new Error('server upload failed')
       }
       return { code: 0 }
     },
@@ -114,11 +122,13 @@ async function runLifecycle({
   ssr,
   deleteAfterUpload,
   failPublicUpload = false,
+  failServerUpload = false,
   serverBundleOnDisk = true,
   sourcemaps = {},
 }) {
   const { mod, spawnCalls } = loadModule({
     failPublicUpload,
+    failServerUpload,
     existingDirs: serverBundleOnDisk ? ['/build/.output/server'] : [],
   })
   const hooks = {}
@@ -261,6 +271,16 @@ assert.equal(
 assert.ok(
   !publicUploads[1].args.includes('--delete-after'),
   `failed public upload: expected the retry to retain manifest-listed maps. Got: ${failedPublicUploadDump}`
+)
+
+// A failing server command must not take the public upload down with it. With
+// `deleteAfterUpload: false` the early hook uploads nothing, so the close hook holds the
+// only client sourcemap upload of the build.
+const failedServerUploadCalls = await runLifecycle({ ssr: true, deleteAfterUpload: false, failServerUpload: true })
+const failedServerUploadDump = JSON.stringify(failedServerUploadCalls.map((c) => c.args))
+assert.ok(
+  findCall(failedServerUploadCalls, 'upload', '/build/.output/public'),
+  `failed server upload: expected the public upload to still run. Got: ${failedServerUploadDump}`
 )
 
 console.log('ok sourcemaps-ssr.test.mjs')
