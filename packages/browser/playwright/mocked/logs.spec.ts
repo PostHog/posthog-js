@@ -1,4 +1,4 @@
-/* eslint-disable posthog-js/no-direct-function-check, no-console, @typescript-eslint/no-unused-vars */
+/* oxlint-disable posthog-js/no-direct-function-check, no-console, typescript/no-unused-vars */
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
 

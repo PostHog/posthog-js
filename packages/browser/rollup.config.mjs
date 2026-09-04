@@ -358,7 +358,7 @@ const entrypointTargets = entrypoints.map((file) => {
     )
 
     // we're allowed to console log in this file :)
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.log(`Building ${fileName} in ${format} format`)
 
     const outputExtensions = format === 'es' && fileName === 'module' ? ['js', 'mjs'] : ['js']

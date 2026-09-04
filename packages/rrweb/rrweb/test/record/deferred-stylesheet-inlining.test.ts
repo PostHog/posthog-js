@@ -146,7 +146,6 @@ describe('inlineDeferredStylesheets()', () => {
 
   it('slices a huge sheet across many idle callbacks and emits one atomic mutation', () => {
     const linkEl = makeLink(5000, 1); // 25 slices at 200 rules per slice
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const singlePass = stringifyStylesheet(linkEl.sheet!);
     const onDone = vi.fn();
 
@@ -248,7 +247,6 @@ describe('inlineDeferredStylesheets()', () => {
 
   it('flush() synchronously finishes a partially-advanced cursor task', () => {
     const linkEl = makeLink(5000, 1);
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const singlePass = stringifyStylesheet(linkEl.sheet!);
     const onDone = vi.fn();
 
@@ -373,7 +371,6 @@ describe('inlineDeferredStylesheets()', () => {
     const linkB = makeLink(50, 2);
     const onDone = vi.fn();
     mutationCb.mockImplementation(() => {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       inlining!.cancel();
     });
 
@@ -393,7 +390,6 @@ describe('inlineDeferredStylesheets()', () => {
     const linkB = makeLink(50, 2);
     const onDone = vi.fn();
     mutationCb.mockImplementationOnce(() => {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       inlining!.flush();
     });
 
@@ -442,7 +438,6 @@ describe('inlineDeferredStylesheets()', () => {
 
     inlining = inlineDeferredStylesheets([linkA, linkB], makeManager(), onDone);
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     expect(() => inlining!.flush()).not.toThrow();
 
     expect(mutationCb).toHaveBeenCalledTimes(2);
@@ -638,7 +633,6 @@ describe('record() teardown of deferred stylesheets', () => {
 
   it('stop() mid-deferral flushes the queue synchronously, partially-advanced cursor included', () => {
     const linkEl = makeUnregisteredLink(1000, 'stop-flush');
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const singlePass = stringifyStylesheet(linkEl.sheet!);
     stop = startRecording();
     expect(scheduled.size).toBe(1);
@@ -646,7 +640,6 @@ describe('record() teardown of deferred stylesheets', () => {
     fireIdle(deadlineForSlices(2)); // partway into the sheet's cursor
     expect(cssTextMutations(events)).toHaveLength(0);
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     stop!();
     stop = undefined;
 
@@ -678,7 +671,6 @@ describe('record() teardown of deferred stylesheets', () => {
     fireIdle(deadlineForSlices(2)); // partway into the sheet's cursor
     throwOnMutation = true;
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     expect(() => stop!()).not.toThrow();
     stop = undefined;
 
@@ -722,7 +714,6 @@ describe('record() teardown of deferred stylesheets', () => {
 
     // recording survives pagehide, and a clean stop still tears down fully
     throwOnMutation = false;
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     stop!();
     stop = undefined;
     expect(() => record.addCustomEvent('tag', {})).toThrow();
@@ -730,7 +721,6 @@ describe('record() teardown of deferred stylesheets', () => {
 
   it('pagehide flushes the queue synchronously while recording continues', () => {
     const linkEl = makeUnregisteredLink(1000, 'pagehide-flush');
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const singlePass = stringifyStylesheet(linkEl.sheet!);
     stop = startRecording();
 
@@ -753,7 +743,6 @@ describe('record() teardown of deferred stylesheets', () => {
     expect(cssTextMutations(events)).toHaveLength(0);
 
     // application code inserts a rule; the StyleSheetRule observer records it
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     linkEl.sheet!.insertRule('.late-insert { color: blue; }', 0);
 
     drainIdle();
@@ -764,7 +753,6 @@ describe('record() teardown of deferred stylesheets', () => {
     expect(getDeferredStylesheetStats().failedCount).toBe(1);
 
     // the teardown flush must not resurrect the invalidated sheet either
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     stop!();
     stop = undefined;
     expect(cssTextMutations(events)).toHaveLength(0);
@@ -777,7 +765,6 @@ describe('record() teardown of deferred stylesheets', () => {
     fireIdle(deadlineForSlices(2)); // partway into the sheet's cursor
     expect(cssTextMutations(events)).toHaveLength(0);
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const firstRule = linkEl.sheet!.cssRules[0] as CSSStyleRule;
     // in a browser rule.style inherits the patched prototype; jsdom's rule
     // styles come from a foreign class, so route through it explicitly
@@ -841,7 +828,6 @@ describe('record() teardown of deferred stylesheets', () => {
     document.head.appendChild(cssomStyle);
     cleanupNodes.push(cssomStyle);
     for (let i = 0; i < 200; i++) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       cssomStyle.sheet!.insertRule(`.cssom-${i} { color: red }`);
     }
     makeUnregisteredLink(20, 'cssom-companion');
@@ -889,7 +875,6 @@ describe('record() teardown of deferred stylesheets', () => {
       // the adopted stringification lands in the same synchronous freeze as the
       // snapshot, so both timers must cover it
       expect(cost?.stylesheetMs).toBeGreaterThanOrEqual(8);
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       expect(cost!.durationMs).toBeGreaterThanOrEqual(cost!.stylesheetMs);
       expect(cost?.deferredStylesheetCount).toBe(0);
     } finally {
@@ -1076,7 +1061,6 @@ describe('record() end-to-end delivery of deferred stylesheets', () => {
       new Set(deferredIdByMarker.values()),
     );
     for (const [marker, id] of deferredIdByMarker) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const mutation = mutations.find((m) => m.id === id)!;
       expect(mutation.cssText).toContain(`.${marker}-59`);
       for (const other of ['theme-a', 'theme-b', 'theme-c']) {
@@ -1126,7 +1110,6 @@ describe('record() end-to-end delivery of deferred stylesheets', () => {
     for (const link of secondLinks) {
       const href = String(link.attributes.href);
       const marker = href.slice(href.lastIndexOf('/') + 1).replace('.css', '');
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const mutation = mutations.find((m) => m.id === link.id)!;
       expect(mutation.cssText).toContain(`.${marker}-299`);
     }
@@ -1172,7 +1155,6 @@ describe('record() end-to-end delivery of deferred stylesheets', () => {
 
     // leave the new queue undrained and tear down: the stop() flush must
     // still see it and deliver both sheets under the new snapshot's ids
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     stop!();
     stop = undefined;
 
@@ -1199,13 +1181,10 @@ describe('record() end-to-end delivery of deferred stylesheets', () => {
       String(link.attributes.href ?? '').includes('past-default'),
     );
     expect(big).toBeDefined();
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const small = links.find((link) => link !== big)!;
 
     // the crossing sheet keeps rel/href and no _cssText in the snapshot
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     expect(big!.attributes._cssText).toBeUndefined();
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     expect(big!.attributes.rel).toBe('stylesheet');
     // the ordinary sheet is untouched by the default budget
     expect(String(small.attributes._cssText)).toContain('.under-default-99');
@@ -1216,7 +1195,6 @@ describe('record() end-to-end delivery of deferred stylesheets', () => {
 
     const mutations = cssTextAttributeMutations(events);
     expect(mutations).toHaveLength(1);
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     expect(mutations[0].id).toBe(big!.id);
     expect(mutations[0].cssText).toContain('.past-default-10049');
   });

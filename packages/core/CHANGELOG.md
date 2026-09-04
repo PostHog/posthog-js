@@ -1,5 +1,14 @@
 # @posthog/core
 
+## 1.50.5
+
+### Patch Changes
+
+- [#4782](https://github.com/PostHog/posthog-js/pull/4782) [`b64b113`](https://github.com/PostHog/posthog-js/commit/b64b1135ce377360075cfdbaf8e0a74b46330116) Thanks [@posthog](https://github.com/apps/posthog)! - Stop counting stack frames that have no filename (in-app browser bridge scripts and other code the runtime reports without a script URL) as in-app code.
+  (2026-09-04)
+- Updated dependencies [[`426e1fd`](https://github.com/PostHog/posthog-js/commit/426e1fd6c001c030e5753d0d25a0bdb9adc99448)]:
+  - @posthog/types@1.409.0
+
 ## 1.50.4
 
 ### Patch Changes

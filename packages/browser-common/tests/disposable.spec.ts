@@ -1,4 +1,4 @@
-/* eslint-disable compat/compat */
+/* oxlint-disable compat/compat */
 import { createDisposable } from '../src/disposable'
 
 describe('createDisposable', () => {

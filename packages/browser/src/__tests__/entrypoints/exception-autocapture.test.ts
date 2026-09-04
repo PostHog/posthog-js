@@ -4,6 +4,15 @@ import { assignableWindow, window } from '../../utils/globals'
 describe('exception-autocapture entrypoint', () => {
     const originalOnError = window?.onerror
     const originalOnUnhandledRejection = window?.onunhandledrejection
+    const errorWithThrowingMessage = () => {
+        const error = new Error('legacy error')
+        Object.defineProperty(error, 'message', {
+            get() {
+                throw new TypeError('property building failed')
+            },
+        })
+        return error
+    }
 
     afterEach(() => {
         if (window) {
@@ -47,6 +56,21 @@ describe('exception-autocapture entrypoint', () => {
 
         expect(() => window.onerror?.('message', 'source', 1, 2, new Error('legacy error'))).not.toThrow()
         expect(originalErrorHandler).toHaveBeenCalledTimes(1)
+    })
+
+    it('still calls the original error handler when legacy property building throws', () => {
+        const originalErrorHandler = vi.fn(() => true)
+        const error = errorWithThrowingMessage()
+        if (!window) {
+            throw new Error('window is required for this test')
+        }
+        window.onerror = originalErrorHandler
+
+        assignableWindow.extendPostHogWithExceptionAutocapture({ capture: vi.fn() })
+
+        expect(() => window.onerror?.('message', 'source', 1, 2, error)).not.toThrow()
+        expect(originalErrorHandler).toHaveBeenCalledTimes(1)
+        expect(originalErrorHandler.mock.calls[0][4]).toBe(error)
     })
 
     it('does not capture errors matching legacy exclusion rules', () => {

@@ -65,14 +65,14 @@ export async function resolveServerDistinctId(
             return undefined
         }
         if (isNumber(distinctId)) {
-            // eslint-disable-next-line no-console
+            // oxlint-disable-next-line no-console
             console.warn(
                 '[PostHog Next.js] getDistinctId returned a number, but it should be a string. It has been converted to a string.'
             )
             return String(distinctId)
         }
         if (typeof distinctId !== 'string') {
-            // eslint-disable-next-line no-console
+            // oxlint-disable-next-line no-console
             console.warn(
                 '[PostHog Next.js] getDistinctId returned a non-string value — falling back to client-provided identity'
             )
@@ -84,7 +84,7 @@ export async function resolveServerDistinctId(
         if (isNextControlFlowError(error)) {
             throw error
         }
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn('[PostHog Next.js] getDistinctId threw — falling back to client-provided identity', error)
         return undefined
     }

@@ -313,7 +313,7 @@ export const buildNetworkRequestOptions = (
                 return cleanedURL
             }
             // the deprecated mask fn can suppress the URL, leaving `name` undefined on purpose
-            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+            // oxlint-disable-next-line typescript/consistent-type-assertions
             return {
                 ...data,
                 name: cleanedURL?.url,

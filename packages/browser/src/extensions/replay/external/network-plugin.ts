@@ -286,7 +286,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
     const restorePatch = patch(
         win.XMLHttpRequest.prototype,
         'open',
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // oxlint-disable-next-line typescript/ban-ts-comment
         // @ts-ignore
         (originalOpen: typeof XMLHttpRequest.prototype.open) => {
             return function (
@@ -297,7 +297,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 password?: string | null
             ) {
                 // because this function is returned in its actual context `this` _is_ an XMLHttpRequest
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // oxlint-disable-next-line typescript/ban-ts-comment
                 // @ts-ignore
                 const xhr = this as XMLHttpRequest
 
@@ -401,14 +401,14 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
 
                     // This is very tricky code, and making it passive won't bring many performance benefits,
                     // so let's ignore the rule here.
-                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
                     xhr.addEventListener('readystatechange', readyStateListener)
                     // Also clean up on error, abort, and timeout to prevent memory leaks
-                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
                     xhr.addEventListener('error', cleanup)
-                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
                     xhr.addEventListener('abort', cleanup)
-                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
                     xhr.addEventListener('timeout', cleanup)
                 } catch (e) {
                     logger.error('Failed to instrument XHR for network capture', e)
@@ -460,7 +460,7 @@ function prepareRequest({
     // kudos to sentry javascript sdk for excellent background on why to use Date.now() here
     // https://github.com/getsentry/sentry-javascript/blob/e856e40b6e71a73252e788cd42b5260f81c9c88e/packages/utils/src/time.ts#L70
     // can't start observer if performance.now() is not available
-    // eslint-disable-next-line compat/compat
+    // oxlint-disable-next-line compat/compat
     const timeOrigin = Math.floor(Date.now() - performance.now())
     // clickhouse can't ingest timestamps that are floats
     // (in this case representing fractions of a millisecond we don't care about anyway)
@@ -588,7 +588,7 @@ export function _readBody(r: Request | Response, options: NetworkRecordOptions):
 
 function _tryReadBody(r: Request | Response): Promise<string> {
     // there are now already multiple places where we're using Promise...
-    // eslint-disable-next-line compat/compat
+    // oxlint-disable-next-line compat/compat
     return new Promise((resolve) => {
         const timeout = setTimeout(() => resolve(BODY_READ_TIMEOUT_MESSAGE), BODY_READ_TIMEOUT_MS)
         try {
@@ -620,7 +620,7 @@ function concatChunks(chunks: Uint8Array[], totalBytes: number): Uint8Array {
 // limit, so a very large body is never fully buffered. Like _tryReadBody it only ever reads a
 // clone (never the stream the page consumes) and is guaranteed to resolve, never reject.
 export function _tryReadBodyStreaming(r: Request | Response, limitBytes: number): Promise<string> {
-    // eslint-disable-next-line compat/compat
+    // oxlint-disable-next-line compat/compat
     return new Promise((resolve) => {
         let settled = false
         let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
@@ -759,7 +759,7 @@ function initFetchObserver(
     const recordRequestHeaders = shouldRecordHeaders('request', options.recordHeaders)
     const recordResponseHeaders = shouldRecordHeaders('response', options.recordHeaders)
 
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // oxlint-disable-next-line typescript/ban-ts-comment
     // @ts-ignore
     const restorePatch = patch(win, 'fetch', (originalFetch: typeof fetch) => {
         return async function (url: URL | RequestInfo, init?: RequestInit | undefined) {
@@ -817,14 +817,14 @@ function initFetchObserver(
                 res = isRequest(url) ? await originalFetch(req) : await originalFetch(url, init)
                 end = win.performance.now()
 
-                const responseHeaders: Headers = {}
-                res.headers.forEach((value: string, header: string | number) => {
-                    responseHeaders[header] = value
-                })
-                if (recordResponseHeaders) {
-                    networkRequest.responseHeaders = responseHeaders
-                }
                 try {
+                    const responseHeaders: Headers = {}
+                    res.headers.forEach((value: string, header: string | number) => {
+                        responseHeaders[header] = value
+                    })
+                    if (recordResponseHeaders) {
+                        networkRequest.responseHeaders = responseHeaders
+                    }
                     if (
                         shouldRecordBody({
                             type: 'response',
@@ -942,7 +942,7 @@ function initNetworkObserver(
 export const NETWORK_PLUGIN_NAME = 'rrweb/network@1'
 
 // TODO how should this be typed?
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// oxlint-disable-next-line typescript/ban-ts-comment
 // @ts-ignore
 export const getRecordNetworkPlugin: (options?: NetworkRecordOptions) => RecordPlugin = (options) => {
     return {

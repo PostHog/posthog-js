@@ -1,5 +1,51 @@
 # posthog-js
 
+## 1.427.2
+
+### Patch Changes
+
+- [#4787](https://github.com/PostHog/posthog-js/pull/4787) [`fd87caf`](https://github.com/PostHog/posthog-js/commit/fd87caf0da81f49c1d204cfb464081c6af140c84) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent failures in automatic and manual exception processing from escaping into customer code.
+  (2026-09-04)
+
+## 1.427.1
+
+### Patch Changes
+
+- [#4786](https://github.com/PostHog/posthog-js/pull/4786) [`a04c333`](https://github.com/PostHog/posthog-js/commit/a04c33378dede5060dcdf645e7d2d58952670061) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent automatic and manual exception capture from recursively recapturing stack overflows raised while sending an exception.
+  (2026-09-04)
+
+## 1.427.0
+
+### Minor Changes
+
+- [#4774](https://github.com/PostHog/posthog-js/pull/4774) [`426e1fd`](https://github.com/PostHog/posthog-js/commit/426e1fd6c001c030e5753d0d25a0bdb9adc99448) Thanks [@Fhatu12](https://github.com/Fhatu12)! - Add `reuseAnonymousId` support to browser identify calls.
+  (2026-09-04)
+
+### Patch Changes
+
+- [#4782](https://github.com/PostHog/posthog-js/pull/4782) [`b64b113`](https://github.com/PostHog/posthog-js/commit/b64b1135ce377360075cfdbaf8e0a74b46330116) Thanks [@posthog](https://github.com/apps/posthog)! - Stop counting stack frames that have no filename (in-app browser bridge scripts and other code the runtime reports without a script URL) as in-app code.
+  (2026-09-04)
+
+- [#4758](https://github.com/PostHog/posthog-js/pull/4758) [`dd74222`](https://github.com/PostHog/posthog-js/commit/dd742227d86a764d0017374ecc3709b6468dea17) Thanks [@marandaneto](https://github.com/marandaneto)! - Keep relaying session recording events when a cross-origin iframe redirects through the parent page's origin.
+  (2026-09-04)
+- Updated dependencies [[`b64b113`](https://github.com/PostHog/posthog-js/commit/b64b1135ce377360075cfdbaf8e0a74b46330116), [`426e1fd`](https://github.com/PostHog/posthog-js/commit/426e1fd6c001c030e5753d0d25a0bdb9adc99448)]:
+  - @posthog/core@1.50.5
+  - @posthog/types@1.409.0
+
+## 1.426.4
+
+### Patch Changes
+
+- [#4764](https://github.com/PostHog/posthog-js/pull/4764) [`fa2924d`](https://github.com/PostHog/posthog-js/commit/fa2924dae4d1fd2a6ee5c979edbcce1cbd5cb5a9) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve previously persisted feature flags as an offline fallback when bootstrap flags are provided.
+  (2026-09-04)
+
+## 1.426.3
+
+### Patch Changes
+
+- [#4761](https://github.com/PostHog/posthog-js/pull/4761) [`ebf7318`](https://github.com/PostHog/posthog-js/commit/ebf7318bef6775f3cd7aa4ce4c0813ce69a8a9ca) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent session replay network capture from replacing a downstream fetch wrapper's response with an instrumentation error when the response has no headers.
+  (2026-09-04)
+
 ## 1.426.2
 
 ### Patch Changes

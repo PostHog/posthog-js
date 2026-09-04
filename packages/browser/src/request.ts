@@ -481,7 +481,7 @@ const addSentAtToCaptureBody = (data: NonNullable<RequestWithOptions['data']>): 
     const batch = (isArray(data) ? data : [data]).map((event) => ({
         ...event,
         // This is the typed canonical timestamp override, not an arbitrary event property.
-        // eslint-disable-next-line posthog-js/no-direct-date-check
+        // oxlint-disable-next-line posthog-js/no-direct-date-check
         ...(event.timestamp instanceof Date && !isNaN(event.timestamp.getTime())
             ? { timestamp: event.timestamp.toISOString() }
             : {}),

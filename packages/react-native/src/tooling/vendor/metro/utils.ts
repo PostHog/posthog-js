@@ -24,7 +24,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// eslint-disable-next-line import/no-extraneous-dependencies
+// oxlint-disable-next-line import/no-extraneous-dependencies
 import type { MixedOutput, Module, ReadOnlyGraph } from 'metro'
 import type * as baseJSBundleType from 'metro/private/DeltaBundler/Serializers/baseJSBundle'
 import type * as sourceMapStringType from 'metro/private/DeltaBundler/Serializers/sourceMapString'
@@ -33,22 +33,22 @@ import type { Bundle, MetroSerializer } from '../../utils'
 
 let baseJSBundleModule: any
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // oxlint-disable-next-line typescript/no-require-imports
   baseJSBundleModule = require('metro/private/DeltaBundler/Serializers/baseJSBundle')
 } catch {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // oxlint-disable-next-line typescript/no-require-imports
   baseJSBundleModule = require('metro/src/DeltaBundler/Serializers/baseJSBundle')
 }
 
 const baseJSBundle: typeof baseJSBundleType =
   typeof baseJSBundleModule === 'function'
     ? baseJSBundleModule
-    : // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    : // oxlint-disable-next-line typescript/no-unsafe-member-access
       (baseJSBundleModule?.baseJSBundle ?? baseJSBundleModule?.default)
 
 let sourceMapString: typeof sourceMapStringType
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // oxlint-disable-next-line typescript/no-var-requires
   const sourceMapStringModule = require('metro/private/DeltaBundler/Serializers/sourceMapString')
   sourceMapString = (sourceMapStringModule as { sourceMapString: typeof sourceMapStringType }).sourceMapString
 } catch (e) {
@@ -70,7 +70,7 @@ try {
 const bundleToString: typeof bundleToStringType =
   typeof bundleToStringModule === 'function'
     ? bundleToStringModule
-    : // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    : // oxlint-disable-next-line typescript/no-unsafe-member-access
       (bundleToStringModule?.bundleToString ?? bundleToStringModule?.default)
 
 type NewSourceMapStringExport = {

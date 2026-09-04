@@ -161,16 +161,21 @@ export class ExceptionObserver {
     }
 
     captureException(errorProperties: ErrorTracking.ErrorProperties) {
-        const exceptionType = errorProperties?.$exception_list?.[0]?.type ?? 'Exception'
-        const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
+        try {
+            const exceptionType = errorProperties?.$exception_list?.[0]?.type ?? 'Exception'
+            const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
 
-        if (isRateLimited) {
-            logger.info('Skipping exception capture because of client rate limiting.', {
-                exception: exceptionType,
-            })
-            return
+            if (isRateLimited) {
+                logger.info('Skipping exception capture because of client rate limiting.', {
+                    exception: exceptionType,
+                })
+                return
+            }
+
+            this._instance.exceptions?.sendExceptionEvent(errorProperties)
+        } catch {
+            // Exception autocapture must never throw into customer code. Do not log here because
+            // console.error may be instrumented and would re-enter this method.
         }
-
-        this._instance.exceptions?.sendExceptionEvent(errorProperties)
     }
 }

@@ -34,8 +34,8 @@ catalog:
   tsdown: 0.22.14
   tslib: ^2.5.0
   typescript: 5.8.2
-  vite: ^6.2.0
-  vite-plugin-dts: ^4.5.4
+  vite: ^8.2.2
+  vite-plugin-dts: ~5.0.3
   vitest: ^1.6.1
 
 enableGlobalVirtualStore: true

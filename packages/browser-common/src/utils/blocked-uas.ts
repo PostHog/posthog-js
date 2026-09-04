@@ -32,7 +32,7 @@ export const isLikelyBot = function (navigator: Navigator | undefined, customBlo
         }
     }
     try {
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const uaData = navigator?.userAgentData as NavigatorUAData
         if (
             uaData?.brands &&
