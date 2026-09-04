@@ -88,7 +88,12 @@ export interface CaptureOptions {
     _noTruncate?: boolean
 
     /**
-     * If set, skips the batched queue
+     * If set, sends the event immediately instead of adding it to the batched queue.
+     *
+     * The batched queue drains with `sendBeacon` when the page hides, and an immediate send does
+     * not use that queue. The SDK therefore sends the event with `fetch`, which survives a
+     * navigation, or with `sendBeacon` when `fetch` is not available or the page already unloads.
+     * To always use the beacon, set `{ transport: 'sendBeacon' }`.
      */
     send_instantly?: boolean
 

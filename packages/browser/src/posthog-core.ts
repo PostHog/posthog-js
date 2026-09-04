@@ -93,7 +93,7 @@ import {
 import { isLikelyBot } from '@posthog/browser-common/utils/blocked-uas'
 import { getDeviceModel } from '@posthog/browser-common/utils/device-model-utils'
 import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
-import { document, location, navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
+import { document, fetch, location, navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { getPersonPropertiesHash } from '@posthog/browser-common/utils/property-utils'
@@ -472,6 +472,7 @@ export class PostHog implements PostHogInterface {
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
+    _isPageUnloading = false
     sessionRecording?: SessionRecording
     externalIntegrations?: ExternalIntegrations
     webPerformance = new DeprecatedWebPerformanceObserver()
@@ -1343,6 +1344,8 @@ export class PostHog implements PostHogInterface {
     }
 
     _handle_unload(): void {
+        this._isPageUnloading = true
+
         // Optional-call the method, not just the receiver: after a deploy a cached older
         // lazy-loaded surveys chunk can yield an instance whose prototype lacks handlePageUnload,
         // and `this.surveys?.handlePageUnload()` would still throw "handlePageUnload is not a function".
@@ -1870,6 +1873,8 @@ export class PostHog implements PostHogInterface {
                 : {}),
         }
 
+        // NB an options object without a `_batchKey` also skips the queue, so most calls that pass
+        // options are unbatched already and `send_instantly` changes nothing for them
         if (
             this.config.request_batching &&
             (!options || options?._batchKey) &&
@@ -1878,6 +1883,11 @@ export class PostHog implements PostHogInterface {
         ) {
             this._requestQueue.enqueue(requestOptions)
         } else {
+            // The queue drains with `sendBeacon` on pagehide, an unbatched send has no such safety
+            // net. `sendBeacon` gives no response, so requests that need one keep their transport.
+            if (!requestOptions.transport && !requestOptions.callback && (this._isPageUnloading || !fetch)) {
+                requestOptions.transport = 'sendBeacon'
+            }
             this._send_retriable_request(requestOptions)
         }
 
