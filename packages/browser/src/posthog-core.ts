@@ -1031,6 +1031,13 @@ export class PostHog implements PostHogInterface {
         addEventListener(window, 'onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this), {
             passive: false,
         })
+        // `pagehide` also fires when the browser freezes the page into the back-forward cache, and
+        // the same instance resumes on `pageshow`. Without this the page would stay marked as
+        // unloading for the rest of its life, and every later unbatched capture would take the
+        // beacon path on a fully active page.
+        addEventListener(window, 'pageshow', () => {
+            this._isPageUnloading = false
+        })
 
         // We want to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {

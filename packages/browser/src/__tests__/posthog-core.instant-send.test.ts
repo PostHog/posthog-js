@@ -50,6 +50,16 @@ describe('unbatched capture transport', () => {
         expect(capturedTransport()).toBe('sendBeacon')
     })
 
+    it('returns to the default transport after a back-forward cache restore', () => {
+        posthog._handle_unload()
+        window.dispatchEvent(new Event('pageshow'))
+        sendRequest.mockClear()
+
+        posthog.capture('conversion', {}, { send_instantly: true })
+
+        expect(capturedTransport()).toBeUndefined()
+    })
+
     it('keeps a caller-chosen transport', () => {
         globalsState.fetch = undefined
 
