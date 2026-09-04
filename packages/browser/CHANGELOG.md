@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.427.2
+
+### Patch Changes
+
+- [#4787](https://github.com/PostHog/posthog-js/pull/4787) [`fd87caf`](https://github.com/PostHog/posthog-js/commit/fd87caf0da81f49c1d204cfb464081c6af140c84) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent failures in automatic and manual exception processing from escaping into customer code.
+  (2026-09-04)
+
 ## 1.427.1
 
 ### Patch Changes
