@@ -447,19 +447,41 @@ describe('PostHogSpan', () => {
       span.setAttribute('payload', { inner: new Redacted('S'.repeat(50)) } as any)
       span.end()
 
-      expect((ended[0].attributes.payload as any).inner).toBeInstanceOf(Redacted)
+      // The string the encoder builds from the same `null`, so the wire is
+      // unchanged, and the secret is nowhere in what the span kept.
+      expect((ended[0].attributes.payload as any).inner).toBe('null')
+      expect(JSON.stringify(ended[0].attributes)).not.toContain('S')
     })
 
-    it('keeps a toJSON that resolves to nothing as the object that defines it', () => {
-      // Replacing it would spend a cap slot on an attribute encoding to nothing,
-      // and would drop an invalid Date the encoder still describes.
-      const ghost = { toJSON: () => undefined }
+    it('materializes a toJSON that resolves to nothing, so a second call cannot answer differently', () => {
+      // Keeping the object itself left the encoder to probe toJSON again. A
+      // serializer that answered `null` here could answer with a megabyte
+      // there, past the bound entirely.
+      let calls = 0
+      const stateful = {
+        toJSON: () => {
+          calls++
+          return calls === 1 ? null : 'x'.repeat(100)
+        },
+      }
       const span = createSpan({ maxAttributeValueLength: 4 })
 
-      span.setAttribute('ghost', ghost as any)
+      span.setAttribute('doc', stateful as any)
       span.end()
 
-      expect(ended[0].attributes.ghost).toBe(ghost)
+      expect(calls).toBe(1)
+      expect(ended[0].attributes.doc).toBe('null')
+    })
+
+    it('describes a toJSON resolving to undefined the way the encoder would', () => {
+      const span = createSpan({ maxAttributeValueLength: 4 })
+
+      span.setAttribute('ghost', { toJSON: () => undefined } as any)
+      span.end()
+
+      // Not trimmed to the bound: this is the SDK's own marker, like
+      // `[Circular]`, and `unde` reads as nothing at all.
+      expect(ended[0].attributes.ghost).toBe('undefined')
     })
 
     it('bounds event attributes too', () => {

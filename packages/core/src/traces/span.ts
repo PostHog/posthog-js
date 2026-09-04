@@ -648,7 +648,15 @@ function truncateValue(
       // Resolving to nothing is the value's answer. Walking its keys anyway
       // would build a plain object the encoder no longer treats as
       // self-describing, putting the internals of a redacted value on the wire.
-      return isNullish(resolved.value) ? value : truncateValue(resolved.value, maxLength, state, depth + 1)
+      // Stored as the string the encoder builds from that same nullish result
+      // rather than as the value itself: the encoder probes `toJSON` a second
+      // time, so one that answers `null` here is free to answer with a megabyte
+      // there, past the bound this walk exists to apply. Left unbounded like the
+      // other markers — nine characters at most, and trimming it to `unde` would
+      // only make it unreadable.
+      return isNullish(resolved.value)
+        ? String(resolved.value)
+        : truncateValue(resolved.value, maxLength, state, depth + 1)
     }
     if (isArray(value)) {
       // Only the items the encoder will emit are walked; it stops at the same
