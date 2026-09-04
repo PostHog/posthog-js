@@ -37,10 +37,13 @@ const UNICODE_SPACE_PATTERN = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g
 // before truncation, so an open-ended pattern is a reachable event-loop stall.
 const EMAIL_PATTERN = /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,24}/g
 const IPV4_PATTERN = /\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b/g
-// Full 8-group form, or any compressed form containing "::". Requiring "::" for
-// the compressed branch keeps clock/time strings like "12:30:45" from matching.
+// Four forms: full 8-group, `::`-terminated (`2001:db8::`), a middle `::`
+// (`2001:db8::8a2e:1`), and a leading `::` (`::1`). The compressed branches use a
+// `(?<![\w:])` boundary so a hex-looking C++ scope like `std::bad` — whose left
+// side is not a valid hex group — is not mistaken for an address, while a
+// genuinely address-shaped `dead::beef` still matches.
 const IPV6_PATTERN =
-  /\b(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}\b|\b[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4}){0,6}::(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4}){0,6})?\b|::(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4}){0,6})/g
+  /\b(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}\b|(?<![\w:])(?:[0-9A-Fa-f]{1,4}:){1,7}:(?![\w:])|(?<![\w:])(?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,5}(?![\w])|(?<![\w:])::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,6})(?![\w])/g
 // A separator (space, dot, or dash) is required between the 3-2-4 groups so bare
 // 9-digit IDs are never mistaken for an SSN.
 const US_SSN_PATTERN = /\b\d{3}[ .-]\d{2}[ .-]\d{4}\b/g
@@ -49,12 +52,13 @@ const US_SSN_PATTERN = /\b\d{3}[ .-]\d{2}[ .-]\d{4}\b/g
 // real card, so widening the separators cannot add false positives — it only
 // lets dot/slash-grouped cards reach the check instead of leaking past it.
 const CREDIT_CARD_CANDIDATE_PATTERN = /\b\d(?:[ ./-]?\d){12,18}\b/g
-// A permissive phone candidate; `redactPii` confirms it has 10–15 digits and at
-// least one grouping character (`+`, parentheses, space, dash, or dot) so bare
-// numeric IDs are left intact.
-const PHONE_CANDIDATE_PATTERN = /\+?\d[\d ().-]{7,16}\d/g
-// Strips every non-digit from a card/phone candidate to count its digits.
-const NON_DIGIT_PATTERN = /\D/g
+// Phone matching is structural rather than "any 10–15 digits", so dates
+// (`2024-01-15 12:30`) and dotted versions are not mistaken for numbers. Two
+// forms: a North-American 3-3-4 grouping that requires a real separator (space,
+// dot, dash, or slash, optional parens and `+1`), and an international number
+// that must start with `+` and a country code.
+const PHONE_NANP_PATTERN = /(?<![\w+])(?:\+?1[ ./-]?)?\(?\d{3}\)?[ ./-]\d{3}[ ./-]\d{4}(?![\w])/g
+const PHONE_INTL_PATTERN = /(?<!\w)\+\d{1,3}(?:[ ./()-]{0,2}\d){7,13}(?![\w])/g
 
 type JsonRecord = Record<string, unknown>
 
@@ -123,35 +127,20 @@ function passesLuhn(digits: string): boolean {
  * match. Returns a new string; leaves the input's identifiers untouched when
  * nothing matches.
  */
-// A candidate substring (already matched by a card/phone pattern, so it holds
-// only digits and its own separators) becomes `[redacted]` only when its digit
-// count is in range and `confirm` accepts it — Luhn for cards, a grouping char
-// for phones. This keeps bare numeric IDs and non-card digit runs intact.
-function redactConfirmedCandidate(
-  match: string,
-  minDigits: number,
-  maxDigits: number,
-  confirm: (match: string, digits: string) => boolean
-): string {
-  const digits = match.replace(NON_DIGIT_PATTERN, '')
-  return digits.length >= minDigits && digits.length <= maxDigits && confirm(match, digits) ? REDACTED_VALUE : match
-}
-
 export function redactPii(value: string): string {
   let result = value.replace(UNICODE_SPACE_PATTERN, ' ')
   result = result.replace(EMAIL_PATTERN, REDACTED_VALUE)
   result = result.replace(IPV4_PATTERN, REDACTED_VALUE)
   result = result.replace(IPV6_PATTERN, REDACTED_VALUE)
-  result = result.replace(CREDIT_CARD_CANDIDATE_PATTERN, (match) =>
-    redactConfirmedCandidate(match, 13, 19, (_, digits) => passesLuhn(digits))
-  )
+  // Card grouping (space/dot/dash/slash) is stripped so only the Luhn check on
+  // the digits decides — a non-card digit run of the same length is left intact.
+  result = result.replace(CREDIT_CARD_CANDIDATE_PATTERN, (match) => {
+    const digits = match.replace(/[ ./-]/g, '')
+    return digits.length >= 13 && digits.length <= 19 && passesLuhn(digits) ? REDACTED_VALUE : match
+  })
   result = result.replace(US_SSN_PATTERN, REDACTED_VALUE)
-  // The phone candidate only admits digits plus grouping chars, so a length
-  // gap means a grouping char is present — this keeps a bare digit run (an ID)
-  // from being redacted, without a second scan of the match.
-  result = result.replace(PHONE_CANDIDATE_PATTERN, (match) =>
-    redactConfirmedCandidate(match, 10, 15, (phone, digits) => digits.length !== phone.length)
-  )
+  result = result.replace(PHONE_NANP_PATTERN, REDACTED_VALUE)
+  result = result.replace(PHONE_INTL_PATTERN, REDACTED_VALUE)
   return result
 }
 

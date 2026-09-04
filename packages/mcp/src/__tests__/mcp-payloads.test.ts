@@ -67,92 +67,84 @@ describe('buildCapturedMcpParameters', () => {
 })
 
 describe('redactPii', () => {
-  it('redacts email addresses', () => {
-    expect(redactPii('Looking up orders for jane.doe@acme.co.uk before refunding.')).toBe(
-      'Looking up orders for [redacted] before refunding.'
-    )
+  const NBSP = String.fromCharCode(0x00a0)
+  const NNBSP = String.fromCharCode(0x202f)
+
+  it.each([
+    [
+      'an email address',
+      'Looking up orders for jane.doe@acme.co.uk before refunding.',
+      'Looking up orders for [redacted] before refunding.',
+    ],
+    ['an email with a maximal 64-char local part', `from ${'a'.repeat(64)}@example.com now`, 'from [redacted] now'],
+    [
+      'an IPv4 address',
+      'Blocking traffic from 203.0.113.42 after abuse.',
+      'Blocking traffic from [redacted] after abuse.',
+    ],
+    [
+      'an IPv6 address with a middle ::',
+      'Tracing request from 2001:db8::ff00:42:8329 across the mesh.',
+      'Tracing request from [redacted] across the mesh.',
+    ],
+    ['an IPv6 address ending in ::', 'Routing host 2001:db8:: for now.', 'Routing host [redacted] for now.'],
+    ['an IPv6 loopback ::1', 'Health check from ::1 passed.', 'Health check from [redacted] passed.'],
+    [
+      'a NANP phone with dashes',
+      'Reference ticket for number 415-555-0142 escalation.',
+      'Reference ticket for number [redacted] escalation.',
+    ],
+    ['a NANP phone with slashes', 'Call the customer on 415/555/0142 today.', 'Call the customer on [redacted] today.'],
+    [
+      'a NANP phone with parens and +1',
+      'Calling back on +1 (415) 555-0142 about the outage.',
+      'Calling back on [redacted] about the outage.',
+    ],
+    ['an international phone with a + country code', 'Ring +44 (0) 20 7946 0958 please.', 'Ring [redacted] please.'],
+    [
+      'a phone grouped with NBSP spaces',
+      `Calling the customer on 415${NNBSP}555${NNBSP}0132 today.`,
+      'Calling the customer on [redacted] today.',
+    ],
+    [
+      'a Luhn-valid card with spaces',
+      'Charging the saved card 4111 1111 1111 1111 for the renewal.',
+      'Charging the saved card [redacted] for the renewal.',
+    ],
+    ['a card grouped with dots', 'Charging card 4111.1111.1111.1111 today.', 'Charging card [redacted] today.'],
+    ['a card grouped with slashes', 'Charging card 4111/1111/1111/1111 today.', 'Charging card [redacted] today.'],
+    [
+      'a card grouped with NBSP spaces',
+      `Charging card 4111${NBSP}1111${NBSP}1111${NBSP}1111 now.`,
+      'Charging card [redacted] now.',
+    ],
+    ['an SSN with dashes', 'Verifying SSN 123-45-6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
+    ['an SSN with spaces', 'Verifying SSN 123 45 6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
+    ['an SSN with dots', 'Verifying SSN 123.45.6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
+  ])('redacts %s', (_label, input, expected) => {
+    expect(redactPii(input)).toBe(expected)
   })
 
-  it('redacts phone numbers with grouping characters', () => {
-    expect(redactPii('Calling the customer back on +1 (415) 555-0142 about the outage.')).toBe(
-      'Calling the customer back on [redacted] about the outage.'
-    )
-    expect(redactPii('Reference ticket for number 415-555-0142 escalation.')).toBe(
-      'Reference ticket for number [redacted] escalation.'
-    )
-  })
-
-  it('leaves bare numeric identifiers without grouping untouched', () => {
-    expect(redactPii('Fetching record 4155550142 from the ledger service.')).toBe(
-      'Fetching record 4155550142 from the ledger service.'
-    )
-  })
-
-  it('redacts IPv4 addresses', () => {
-    expect(redactPii('Blocking traffic from 203.0.113.42 after abuse reports.')).toBe(
-      'Blocking traffic from [redacted] after abuse reports.'
-    )
-  })
-
-  it('redacts IPv6 addresses', () => {
-    expect(redactPii('Tracing request from 2001:db8::ff00:42:8329 across the mesh.')).toBe(
-      'Tracing request from [redacted] across the mesh.'
-    )
-  })
-
-  it('redacts Luhn-valid credit-card numbers', () => {
-    expect(redactPii('Charging the saved card 4111 1111 1111 1111 for the renewal.')).toBe(
-      'Charging the saved card [redacted] for the renewal.'
-    )
-  })
-
-  it('leaves Luhn-invalid long digit runs untouched', () => {
-    expect(redactPii('Correlating with order 1234567890123456 in the warehouse.')).toBe(
-      'Correlating with order 1234567890123456 in the warehouse.'
-    )
-  })
-
-  it('redacts US social security numbers with dash, space, or dot separators', () => {
-    for (const ssn of ['123-45-6789', '123 45 6789', '123.45.6789']) {
-      expect(redactPii(`Verifying identity with SSN ${ssn} for the claim.`)).toBe(
-        'Verifying identity with SSN [redacted] for the claim.'
-      )
-    }
-  })
-
-  it('does not treat a bare 9-digit number as an SSN', () => {
-    expect(redactPii('Looking up record 123456789 in the ledger.')).toBe('Looking up record 123456789 in the ledger.')
-  })
-
-  it('redacts cards grouped with dots or slashes without leaking a trailing digit', () => {
-    for (const card of ['4111.1111.1111.1111', '4111/1111/1111/1111']) {
-      expect(redactPii(`Charging the saved card ${card} today.`)).toBe('Charging the saved card [redacted] today.')
-    }
-  })
-
-  it('redacts identifiers grouped with Unicode (NBSP) spaces copied from web pages', () => {
-    const NBSP = String.fromCharCode(0x00a0)
-    const NNBSP = String.fromCharCode(0x202f)
-    expect(redactPii(`Charging card 4111${NBSP}1111${NBSP}1111${NBSP}1111 now.`)).toBe('Charging card [redacted] now.')
-    expect(redactPii(`Calling the customer on 415${NNBSP}555${NNBSP}0132 today.`)).toBe(
-      'Calling the customer on [redacted] today.'
-    )
+  it.each([
+    ['a bare numeric identifier without grouping', 'Fetching record 4155550142 from the ledger service.'],
+    ['a bare 9-digit number that is not an SSN', 'Looking up record 123456789 in the ledger.'],
+    ['a Luhn-invalid long digit run', 'Correlating with order 1234567890123456 in the warehouse.'],
+    ['a date and time that resembles a phone number', 'Deploying at 2024-01-15 12:30 UTC after review.'],
+    ['a dotted version/build number', 'Upgrading to build 2024.11.05.1830 for the team.'],
+    ['a C++ scope expression that resembles IPv6', 'Calling std::bad and std::vector helpers for the team.'],
+    [
+      'ordinary prose with versions, dates, and code separators',
+      'Upgrading to v1.2.3 on 2024-01-15 by refactoring std::vector usage.',
+    ],
+    ['prose with no personal data', 'Searching the organization repositories to prioritize open performance issues.'],
+  ])('leaves %s untouched', (_label, input) => {
+    expect(redactPii(input)).toBe(input)
   })
 
   it('redacts multiple identifiers in one string', () => {
     expect(redactPii('Emailing bob@example.com and calling +1-202-555-0170 about the issue.')).toBe(
       'Emailing [redacted] and calling [redacted] about the issue.'
     )
-  })
-
-  it('does not touch ordinary prose, versions, dates, or code separators', () => {
-    const clean = 'Upgrading to v1.2.3 on 2024-01-15 by refactoring std::vector usage for the team.'
-    expect(redactPii(clean)).toBe(clean)
-  })
-
-  it('returns the input unchanged when there is no PII', () => {
-    const intent = 'Searching the organization repositories to prioritize open performance issues.'
-    expect(redactPii(intent)).toBe(intent)
   })
 
   it('handles a long pathological string quickly (email pattern is not quadratic)', () => {
@@ -163,10 +155,5 @@ describe('redactPii', () => {
     const start = Date.now()
     expect(redactPii(pathological)).toBe(pathological)
     expect(Date.now() - start).toBeLessThan(1000)
-  })
-
-  it('still redacts an email with a maximal 64-char local part', () => {
-    const local = 'a'.repeat(64)
-    expect(redactPii(`from ${local}@example.com now`)).toBe('from [redacted] now')
   })
 })
