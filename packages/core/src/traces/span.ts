@@ -492,11 +492,26 @@ function readStack(error: unknown): { stack?: string } {
  * caller supplied a usable `parent` header, the shared no-op otherwise.
  */
 export function inertSpan(options?: { parent?: unknown; tracestate?: unknown }): Span {
-  const traceparent = normalizeTraceparent(options?.parent)
+  const parent = options?.parent
+  // A handle parent reports its own context, read behind a guard because a
+  // foreign handle's accessor may throw. A no-op reports none and stays a no-op.
+  const inbound = typeof parent === 'string' || parent == null ? parent : readHandle(parent, 'traceparent')
+  const traceparent = normalizeTraceparent(inbound)
   if (!traceparent) {
     return NOOP_SPAN
   }
-  return new PassThroughSpan(traceparent, sanitizeTracestate(options?.tracestate))
+  const tracestate =
+    typeof parent === 'string' || parent == null ? options?.tracestate : readHandle(parent, 'tracestate')
+  return new PassThroughSpan(traceparent, sanitizeTracestate(tracestate))
+}
+
+function readHandle(parent: unknown, method: 'traceparent' | 'tracestate'): unknown {
+  try {
+    const fn = (parent as Span)[method]
+    return typeof fn === 'function' ? fn.call(parent) : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**

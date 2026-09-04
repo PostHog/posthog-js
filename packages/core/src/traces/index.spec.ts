@@ -1,6 +1,6 @@
 import { PostHogTraces } from './index'
 import { SyncSpanContextManager } from './context'
-import { NOOP_SPAN } from './span'
+import { NOOP_SPAN, inertSpan } from './span'
 import type {
   OtlpSpan,
   OtlpTracesPayload,
@@ -175,6 +175,16 @@ describe('PostHogTraces', () => {
 
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('24 hours'))
       expect(sentSpans()).toHaveLength(1)
+    })
+
+    it('warns when a start is in the future, which costs the span its duration', async () => {
+      const traces = createTraces()
+      traces.startSpan('ahead', { startTime: Date.now() + 60 * 60 * 1000 }).end()
+      await traces.flush()
+
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('in the future'))
+      const [span] = sentSpans()
+      expect(span.endTimeUnixNano).toBe(span.startTimeUnixNano)
     })
   })
 
@@ -498,6 +508,49 @@ describe('PostHogTraces', () => {
 
       expect(traces.startSpan('no-parent')).toBe(NOOP_SPAN)
       expect(traces.startSpan('bad-parent', { parent: 'not-a-traceparent' })).toBe(NOOP_SPAN)
+    })
+
+    it('keeps the inbound context when a pass-through handle is used as a parent', () => {
+      // The child is inert either way; what it must not do is drop the context
+      // and leave everything downstream of it on a fresh trace.
+      const traces = createTraces({}, createMockInstance({ optedOut: true }))
+      const parent = traces.startSpan('proxied', { parent: INBOUND_UNSAMPLED, tracestate: 'vendor=abc' })
+
+      const child = traces.startSpan('child', { parent })
+
+      expect(child.traceparent()).toBe(INBOUND_UNSAMPLED)
+      expect(child.tracestate()).toBe('vendor=abc')
+      expect(sentSpans()).toHaveLength(0)
+    })
+
+    it('records nothing for a child of a pass-through once tracing is back on', async () => {
+      // Spec: a child of an inert handle is inert, so this must propagate without
+      // enqueueing a span, even though this instance is recording.
+      const traces = createTraces()
+      const parent = inertSpan({ parent: INBOUND_UNSAMPLED })
+
+      const child = traces.startSpan('child', { parent })
+      child.end()
+      await traces.flush()
+
+      expect(child.traceparent()).toBe(INBOUND_UNSAMPLED)
+      expect(sentSpans()).toHaveLength(0)
+    })
+
+    it('yields a no-op for a child of a no-op', () => {
+      const traces = createTraces()
+      expect(traces.startSpan('child', { parent: NOOP_SPAN })).toBe(NOOP_SPAN)
+    })
+
+    it('survives a parent whose traceparent throws', () => {
+      const traces = createTraces()
+      const hostile = {
+        traceparent: () => {
+          throw new Error('nope')
+        },
+      }
+
+      expect(traces.startSpan('child', { parent: hostile as never })).toBe(NOOP_SPAN)
     })
   })
 
@@ -2085,6 +2138,49 @@ describe('PostHogTraces', () => {
       await traces.flush()
 
       expect(instance._sendTracesBatch).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('flush backoff', () => {
+    it('resumes the depth trigger after a non-retriable drop clears the backlog', async () => {
+      // A 503 burst raises the consecutive-failure count, which disables the
+      // depth trigger. Dropping the poison batch is progress, so the count has to
+      // clear with it or the queue stays on the slow timer while the endpoint is
+      // healthy.
+      mockInstance._sendTracesBatch
+        .mockResolvedValueOnce({ kind: 'retry-later', error: new Error('503') })
+        .mockResolvedValueOnce({ kind: 'fatal', error: new Error('400') })
+        .mockResolvedValue({ kind: 'ok' })
+
+      const traces = createTraces({ maxExportBatchSize: 1, flushIntervalMs: 10_000 })
+      traces.startSpan('poison').end()
+      await flushMicrotasks()
+      await traces.flush()
+      mockInstance._sendTracesBatch.mockClear()
+
+      // Depth trigger only fires again if the failure count was cleared.
+      traces.startSpan('after').end()
+      await flushMicrotasks()
+
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalled()
+    })
+
+    it('resumes the depth trigger after a too-large single-span drop', async () => {
+      mockInstance._sendTracesBatch
+        .mockResolvedValueOnce({ kind: 'retry-later', error: new Error('503') })
+        .mockResolvedValueOnce({ kind: 'too-large' })
+        .mockResolvedValue({ kind: 'ok' })
+
+      const traces = createTraces({ maxExportBatchSize: 1, flushIntervalMs: 10_000 })
+      traces.startSpan('huge').end()
+      await flushMicrotasks()
+      await traces.flush()
+      mockInstance._sendTracesBatch.mockClear()
+
+      traces.startSpan('after').end()
+      await flushMicrotasks()
+
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalled()
     })
   })
 

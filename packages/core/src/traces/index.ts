@@ -10,7 +10,6 @@ import type {
   TracesHost,
 } from './types'
 import {
-  NOOP_SPAN,
   PostHogSpan,
   applySpanLimits,
   describeError,
@@ -198,9 +197,11 @@ export class PostHogTraces {
     const explicitParent = options?.parent
     if (explicitParent && typeof explicitParent !== 'string' && !isOwnSpan(explicitParent)) {
       if (looksLikeSpan(explicitParent)) {
-        // A child of a no-op is itself a no-op, never an orphan with invented ids.
+        // Inert like its parent, never an orphan with invented ids — but a
+        // pass-through parent's inbound context carries to the child rather than
+        // the trace ending here.
         this._logger.debug('Span parent is not a span from this SDK; returning an inert span')
-        return NOOP_SPAN
+        return inertSpan(options)
       }
       // No `traceparent()` to read: `req.headers.traceparent` is `string[]` when the
       // header arrives twice, and a span from another tracer exposes `spanContext()`
@@ -837,6 +838,7 @@ export class PostHogTraces {
             remaining -= 1
             removed += 1
             this._recordDrop(1, 'the ingestion endpoint rejected it as too large')
+            this._consecutiveFlushFailures = 0
             this._headBatchFailures = 0
             continue
           }
@@ -874,6 +876,7 @@ export class PostHogTraces {
         this._queue.splice(0, size)
         remaining -= size
         removed += size
+        this._consecutiveFlushFailures = 0
         this._headBatchFailures = 0
         this._recordDrop(size, 'the ingestion endpoint rejected the batch')
       }
