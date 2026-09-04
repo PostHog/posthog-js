@@ -26,6 +26,7 @@ describe('PostHogSpan', () => {
         autoAttributeKeys: [],
         maxAttributes: 128,
         maxEvents: 128,
+        maxAttributesPerEvent: 128,
         maxAttributeValueLength: 8192,
         ...init,
       },
@@ -224,6 +225,73 @@ describe('PostHogSpan', () => {
 
       expect(ended[0].events.map((event) => event.name)).toEqual(['step-0', 'step-1'])
       expect(ended[0].droppedEventsCount).toBe(3)
+    })
+  })
+
+  describe('event attribute cap', () => {
+    it('keeps the first attributes and reports the rest as dropped', () => {
+      const span = createSpan({ maxAttributesPerEvent: 2 })
+      span.addEvent('query', { a: 1, b: 2, c: 3, d: 4 })
+      span.end()
+
+      expect(ended[0].events[0].attributes).toEqual({ a: 1, b: 2 })
+      expect(ended[0].events[0].droppedAttributesCount).toBe(2)
+    })
+
+    it('leaves the count off an event that lost nothing', () => {
+      const span = createSpan({ maxAttributesPerEvent: 2 })
+      span.addEvent('query', { a: 1, b: 2 })
+      span.end()
+
+      expect(ended[0].events[0].droppedAttributesCount).toBeUndefined()
+    })
+
+    it('bounds an exception event like any other', () => {
+      // The SDK's own `exception.*` attributes are width the caller sees too, so
+      // they spend the cap rather than being exempt from it.
+      const span = createSpan({ maxAttributesPerEvent: 1 })
+      span.recordException(new Error('boom'))
+      span.end()
+
+      expect(Object.keys(ended[0].events[0].attributes ?? {})).toEqual(['exception.type'])
+      expect(ended[0].events[0].droppedAttributesCount).toBe(2)
+    })
+
+    it('does not read a value past the cap', () => {
+      // The cap is spent before the value is bounded, so a wide bag does not pay
+      // for getters on entries that are about to be dropped.
+      const read: string[] = []
+      const watched: any = {}
+      for (const key of ['a', 'b', 'c']) {
+        Object.defineProperty(watched, key, {
+          enumerable: true,
+          get() {
+            read.push(key)
+            return key
+          },
+        })
+      }
+
+      const span = createSpan({ maxAttributesPerEvent: 2 })
+      span.addEvent('query', watched)
+      span.end()
+
+      expect(read).toEqual(['a', 'b'])
+      expect(ended[0].events[0].droppedAttributesCount).toBe(1)
+    })
+
+    it('counts the span attribute cap separately from an event cap', () => {
+      // maxAttributesPerSpan does not reach inside events, which is the gap this
+      // cap closes: a span at its own cap can still carry full-width events.
+      const span = createSpan({ maxAttributes: 1, maxAttributesPerEvent: 3 })
+      span.setAttributes({ kept: 1, dropped: 2 })
+      span.addEvent('query', { a: 1, b: 2, c: 3 })
+      span.end()
+
+      expect(ended[0].attributes).toEqual({ kept: 1 })
+      expect(ended[0].droppedAttributesCount).toBe(1)
+      expect(ended[0].events[0].attributes).toEqual({ a: 1, b: 2, c: 3 })
+      expect(ended[0].events[0].droppedAttributesCount).toBeUndefined()
     })
   })
 
@@ -900,6 +968,7 @@ describe('attribute store', () => {
         autoAttributeKeys: [],
         maxAttributes: 128,
         maxEvents: 128,
+        maxAttributesPerEvent: 128,
         maxAttributeValueLength: 8192,
       },
       (record) => ended.push(record)
@@ -926,6 +995,7 @@ describe('attribute store', () => {
         autoAttributeKeys: [],
         maxAttributes: 128,
         maxEvents: 128,
+        maxAttributesPerEvent: 128,
         maxAttributeValueLength: 8192,
       },
       (record) => ended.push(record)

@@ -246,6 +246,7 @@ export class PostHogTraces {
         autoAttributeKeys: Object.keys(autoAttributes),
         maxAttributes: this._config.maxAttributesPerSpan,
         maxEvents: this._config.maxEventsPerSpan,
+        maxAttributesPerEvent: this._config.maxAttributesPerEvent,
         maxAttributeValueLength: this._config.maxAttributeValueLength,
         startTime,
         backdated: startTime !== now,
@@ -654,6 +655,7 @@ export class PostHogTraces {
         autoKeys,
         this._config.maxAttributesPerSpan,
         this._config.maxEventsPerSpan,
+        this._config.maxAttributesPerEvent,
         this._config.maxAttributeValueLength,
         keysBeforeHook
       )

@@ -42,6 +42,7 @@ export interface SpanInit {
   autoAttributeKeys: string[]
   maxAttributes: number
   maxEvents: number
+  maxAttributesPerEvent: number
   maxAttributeValueLength: number
 }
 
@@ -65,6 +66,7 @@ export class PostHogSpan implements Span {
   private readonly _autoKeys: Set<string>
   private readonly _maxAttributes: number
   private readonly _maxEvents: number
+  private readonly _maxAttributesPerEvent: number
   private readonly _maxAttributeValueLength: number
   private _userAttributeCount = 0
   private _userEventCount = 0
@@ -87,6 +89,7 @@ export class PostHogSpan implements Span {
     this._autoKeys = new Set(init.autoAttributeKeys)
     this._maxAttributes = init.maxAttributes
     this._maxEvents = init.maxEvents
+    this._maxAttributesPerEvent = init.maxAttributesPerEvent
     this._maxAttributeValueLength = init.maxAttributeValueLength
     // Null-prototype: a `__proto__` key would otherwise swap this object's prototype
     // instead of becoming an entry, and `toString` and friends would read as
@@ -183,12 +186,15 @@ export class PostHogSpan implements Span {
         return this
       }
       this._userEventCount++
+      // Copied so a caller reusing one object across events can't mutate a recorded one.
+      const bounded =
+        attributes && boundAttributes(attributes, this._maxAttributesPerEvent, this._maxAttributeValueLength)
       this._events.push({
         name: sanitizeName(name, 'Span event name', this._maxAttributeValueLength, this._logger),
         timestamp: resolveSuppliedTime(timestamp, this._now(), 'event timestamp', this._logger),
-        // Copied so a caller reusing one object across events can't mutate a recorded one.
-        ...(attributes && {
-          attributes: truncateAttributes(assignUserAttributes({}, attributes), this._maxAttributeValueLength),
+        ...(bounded && {
+          attributes: bounded.attributes,
+          ...(bounded.dropped && { droppedAttributesCount: bounded.dropped }),
         }),
       })
     }
@@ -342,6 +348,7 @@ export function applySpanLimits(
   autoKeys: ReadonlySet<string>,
   maxAttributes: number,
   maxEvents: number,
+  maxAttributesPerEvent: number,
   maxAttributeValueLength: number,
   keysBeforeHook: readonly string[] = []
 ): void {
@@ -391,7 +398,13 @@ export function applySpanLimits(
     }
     keptEvents++
     if (event.attributes) {
-      event.attributes = truncateAttributes({ ...event.attributes }, maxAttributeValueLength)
+      // A hook can widen an event as freely as it can add one, and neither goes
+      // through `addEvent`.
+      const bounded = boundAttributes(event.attributes, maxAttributesPerEvent, maxAttributeValueLength)
+      event.attributes = bounded.attributes
+      if (bounded.dropped) {
+        event.droppedAttributesCount = nonNegativeCount(event.droppedAttributesCount) + bounded.dropped
+      }
     }
     events.push(event)
   }
@@ -695,6 +708,44 @@ function resolveToJson(value: object): { selfDescribed: boolean; value?: SpanAtt
     // Falls through to the plain walk.
   }
   return { selfDescribed: false }
+}
+
+/**
+ * A copy of a caller-supplied attribute bag holding at most `max` entries, each
+ * value bounded to `maxLength`, plus how many entries were refused.
+ *
+ * Keys past the cap are never read, so a wide object does not pay for the getters
+ * on values that are about to be dropped — the order `_writeAttribute` uses for
+ * the same reason.
+ */
+function boundAttributes(
+  source: SpanAttributes,
+  max: number,
+  maxLength: number
+): { attributes: SpanAttributes; dropped: number } {
+  let keys: string[]
+  try {
+    keys = Object.keys(source)
+  } catch {
+    // A hostile own-keys trap costs the bag, not the event carrying it.
+    return { attributes: {}, dropped: 0 }
+  }
+  const attributes: SpanAttributes = {}
+  const kept = Math.min(keys.length, max)
+  for (let index = 0; index < kept; index++) {
+    const key = keys[index]
+    let value: SpanAttributeValue
+    try {
+      value = truncateAttributeValue(source[key], maxLength)
+    } catch {
+      // A throwing getter costs its own key, as it does in `assignUserAttributes`.
+      value = UNSERIALIZABLE_VALUE
+    }
+    // defineProperty, not assignment: `attributes['__proto__'] = v` hits the
+    // prototype setter and the attribute vanishes.
+    Object.defineProperty(attributes, key, { value, enumerable: true, writable: true, configurable: true })
+  }
+  return { attributes, dropped: keys.length - kept }
 }
 
 /** `truncateAttributeValue` across an attribute bag, in place. */

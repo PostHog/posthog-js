@@ -327,6 +327,19 @@ export interface TracesConfig {
     maxEventsPerSpan?: number
 
     /**
+     * Maximum attributes on a single span event. On overflow the first
+     * `maxAttributesPerEvent` are kept and later ones are dropped, with the
+     * number dropped reported on the exported event.
+     *
+     * `maxAttributesPerSpan` counts a span's own attributes and does not reach
+     * inside its events, so this is what bounds an event's width — including the
+     * `exception.*` attributes the SDK records for you.
+     *
+     * @default 128
+     */
+    maxAttributesPerEvent?: number
+
+    /**
      * Maximum length of a string attribute value. Longer values are truncated,
      * and the bound reaches every string the value contains, including the ones
      * nested inside arrays and objects. It applies to span attributes, event
@@ -378,6 +391,8 @@ export interface OtlpSpanEvent {
     name: string
     timeUnixNano: string
     attributes?: OtlpSpanKeyValue[]
+    /** Attributes dropped by `maxAttributesPerEvent`. Omitted when none were. */
+    droppedAttributesCount?: number
 }
 
 export interface OtlpSpanStatus {
