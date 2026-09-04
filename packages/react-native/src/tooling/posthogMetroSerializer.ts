@@ -5,7 +5,7 @@
 import * as crypto from 'crypto'
 // eslint-disable-next-line import/no-extraneous-dependencies
 import type { MixedOutput, Module, ReadOnlyGraph } from 'metro'
-import type { Bundle, MetroSerializer, MetroSerializerOutput, SerializedBundle, VirtualJSOutput } from './utils'
+import type { Bundle, MetroSerializer, VirtualJSOutput } from './utils'
 import {
   createDebugIdSnippet,
   createVirtualJSModule,
@@ -78,6 +78,12 @@ export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer)
       return serializer(entryPoint, premodules, graph, options)
     }
 
+    // Async chunks are serialized with `modulesOnly`, which drops the premodules
+    // that carry the Chunk ID. There is nothing to inject into such a chunk.
+    if (options.modulesOnly) {
+      return serializer(entryPoint, premodules, graph, options)
+    }
+
     const debugIdModule = createDebugIdModule(DEBUG_ID_PLACE_HOLDER)
     const serializerOptions = options as PostHogSerializerOptions
     serializerOptions.posthogBundleCallback = createPostHogBundleCallback(debugIdModule)
@@ -86,12 +92,15 @@ export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer)
     // The default serializer invokes posthogBundleCallback after Metro assembles
     // the bundle and before it renders code/source maps, so both outputs contain
     // the same real Chunk ID.
-    const serializerResult = serializer(entryPoint, modifiedPremodules, graph, serializerOptions)
-    const { code: bundleCode, map: bundleMapString } = await extractSerializerResult(serializerResult)
+    const serializerResult = await serializer(entryPoint, modifiedPremodules, graph, serializerOptions)
+    const { code: bundleCode, map: bundleMapString } =
+      typeof serializerResult === 'string' ? { code: serializerResult, map: '{}' } : serializerResult
 
     const debugId = determineDebugIdFromBundleSource(bundleCode)
     if (!debugId) {
-      throw new Error('Chunk ID was not found in the bundle.')
+      // eslint-disable-next-line no-console
+      console.warn('Chunk ID was not found in the bundle. Skipping PostHog Chunk ID...')
+      return serializerResult
     }
 
     // Only print Chunk ID for command line builds => not hot reload from dev server
@@ -133,23 +142,6 @@ function createPostHogBundleCallback(
     bundle.pre = injectDebugId(bundle.pre, debugId)
     return bundle
   }
-}
-
-async function extractSerializerResult(serializerResult: MetroSerializerOutput): Promise<SerializedBundle> {
-  if (typeof serializerResult === 'string') {
-    return { code: serializerResult, map: '{}' }
-  }
-
-  if ('map' in serializerResult) {
-    return { code: serializerResult.code, map: serializerResult.map }
-  }
-
-  const awaitedResult = await serializerResult
-  if (typeof awaitedResult === 'string') {
-    return { code: awaitedResult, map: '{}' }
-  }
-
-  return { code: awaitedResult.code, map: awaitedResult.map }
 }
 
 function createDebugIdModule(debugId: string): Module<VirtualJSOutput> & { setSource: (code: string) => void } {

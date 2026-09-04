@@ -35,6 +35,35 @@ describe('PostHog Metro serializer', () => {
     expect(map.sourcesContent?.join('\n')).not.toContain('__POSTHOG_CHUNK_ID__')
   })
 
+  test('keeps an async chunk serialized when modulesOnly drops the chunk id module', async () => {
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const serializer = createPostHogMetroSerializer()
+
+    const result = await serializer(...mockSerializerArgs({ modulesOnly: true }))
+
+    expect(typeof result).not.toBe('string')
+    if (typeof result === 'string') {
+      throw new Error('Expected serialized bundle output')
+    }
+
+    expect(result.code).not.toContain('__POSTHOG_CHUNK_ID__')
+    expect(result.code).not.toContain('//# chunkId=')
+    expect(consoleWarnSpy).not.toHaveBeenCalled()
+    consoleWarnSpy.mockRestore()
+  })
+
+  test('returns the inner result when the bundle holds no chunk id', async () => {
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const innerSerializer: MetroSerializer = () => ({ code: 'module code', map: '{}' })
+    const serializer = createPostHogMetroSerializer(innerSerializer)
+
+    const result = await serializer(...mockSerializerArgs())
+
+    expect(result).toEqual({ code: 'module code', map: '{}' })
+    expect(consoleWarnSpy).toHaveBeenCalledTimes(1)
+    consoleWarnSpy.mockRestore()
+  })
+
   test('extracts the generated id when the runtime map uses a variable stack key', () => {
     const chunkId = '12345678-1234-4abc-8def-123456789abc'
     const snippet = createDebugIdSnippet(chunkId)
@@ -45,7 +74,7 @@ describe('PostHog Metro serializer', () => {
   })
 })
 
-function mockSerializerArgs(): Parameters<MetroSerializer> {
+function mockSerializerArgs(optionsOverrides: Record<string, unknown> = {}): Parameters<MetroSerializer> {
   let modulesCounter = 0
   const options: Record<string, unknown> = {
     asyncRequireModulePath: 'asyncRequire',
@@ -60,6 +89,7 @@ function mockSerializerArgs(): Parameters<MetroSerializer> {
     runModule: false,
     serverRoot: '/server/root',
     shouldAddToIgnoreList: (_module: Module<MixedOutput>) => false,
+    ...optionsOverrides,
   }
 
   return [
