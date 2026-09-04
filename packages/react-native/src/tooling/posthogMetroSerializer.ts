@@ -10,6 +10,7 @@ import {
   createDebugIdSnippet,
   createVirtualJSModule,
   determineDebugIdFromBundleSource,
+  isDevServerBuild,
   prependModule,
   stringToUUID,
 } from './utils'
@@ -67,7 +68,7 @@ export function unstableBeforeAssetSerializationDebugIdPlugin({
 export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer): MetroSerializer => {
   const serializer = customSerializer || createDefaultMetroSerializer()
   return async function (entryPoint, premodules, graph, options) {
-    if (graph.transformOptions.hot) {
+    if (isDevServerBuild(graph, options)) {
       return serializer(entryPoint, premodules, graph, options)
     }
 
@@ -98,13 +99,7 @@ export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer)
 
     const debugId = determineDebugIdFromBundleSource(bundleCode)
     if (!debugId) {
-      // A custom serializer cannot know about posthogBundleCallback, so the
-      // placeholder stays in its output. Serialize again without the Chunk ID
-      // module: a placeholder Chunk ID reaches error tracking as a real one.
-      // oxlint-disable-next-line no-console
-      console.warn('Chunk ID was not found in the bundle. Skipping PostHog Chunk ID...')
-      delete serializerOptions.posthogBundleCallback
-      return serializer(entryPoint, premodules, graph, options)
+      throw new Error('Chunk ID was not found in the bundle.')
     }
 
     // Only print Chunk ID for command line builds => not hot reload from dev server
