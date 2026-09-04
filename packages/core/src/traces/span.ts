@@ -1,8 +1,9 @@
 import type { Span, SpanAttributes, SpanAttributeValue, SpanKind, SpanStatusCode, SpanTimeInput } from '@posthog/types'
 import type { Logger } from '../types'
-import type { SpanEventRecord, SpanRecord } from './types'
+import type { SpanContextManager, SpanEventRecord, SpanRecord } from './types'
 import { formatTraceparent, normalizeTraceparent, sanitizeTracestate, TRACE_FLAGS_SAMPLED } from './traceparent'
-import { assignUserAttributes, clampEndTime, resolveSuppliedTime, sanitizeName } from './sanitize'
+import { clampEndTime, resolveSuppliedTime, sanitizeName } from './sanitize'
+import { assignUserAttributes } from '../utils/json-utils'
 import { isError } from '../utils'
 
 /**
@@ -273,6 +274,18 @@ export function inertSpan(options?: { parent?: unknown; tracestate?: unknown }):
     return NOOP_SPAN
   }
   return new PassThroughSpan(traceparent, sanitizeTracestate(options?.tracestate))
+}
+
+/**
+ * Runs `fn` with `span` active, which every scoped helper does the same way.
+ *
+ * The shared no-op is never activated, so `getActiveSpan()` inside the callback
+ * reads null — callbacks should use the handle they're given. A pass-through
+ * handle is activated, so `getActiveSpan()?.traceparent()` still propagates an
+ * inbound trace through a service with tracing off.
+ */
+export function runWithActiveSpan<T>(contextManager: SpanContextManager, span: Span, fn: (span: Span) => T): T {
+  return span === NOOP_SPAN ? fn(span) : contextManager.with(span, () => fn(span))
 }
 
 /**

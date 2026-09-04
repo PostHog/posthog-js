@@ -1,4 +1,4 @@
-import { assignUserAttributes } from '../traces/sanitize'
+import { assignUserAttributes } from './json-utils'
 
 /**
  * Shape the logs, metrics and traces resolved configs share for resource

@@ -6,7 +6,6 @@
 
 import type { Logger } from '../types'
 import type { SpanAttributes, SpanTimeInput } from '@posthog/types'
-import { UNSERIALIZABLE_VALUE } from '../utils/json-utils'
 
 const FALLBACK_SPAN_NAME = 'unknown'
 
@@ -107,39 +106,4 @@ export function resolveSuppliedTime(
     return derived
   }
   return supplied
-}
-
-/**
- * Copies caller-supplied attributes onto `target`, own enumerable keys only.
- *
- * Read key by key rather than spread: a getter over a disposed resource or a
- * revoked proxy throws on the read itself, before the encoder's guards see it.
- *
- * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
- */
-export function assignUserAttributes<T extends Record<string, any>>(
-  target: T,
-  source: Record<string, unknown> | undefined
-): T {
-  if (!source) {
-    return target
-  }
-  let keys: string[] = []
-  try {
-    keys = Object.keys(source)
-  } catch {
-    keys = []
-  }
-  for (const key of keys) {
-    let value: unknown
-    try {
-      value = source[key]
-    } catch {
-      value = UNSERIALIZABLE_VALUE
-    }
-    // defineProperty, not assignment: `attributes['__proto__'] = v` hits the
-    // prototype setter and the attribute vanishes.
-    Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
-  }
-  return target
 }
