@@ -30,9 +30,13 @@ const DEFAULT_MAX_SPAN_AGE_MS = 3_600_000
 /**
  * Coerces a caller-supplied positive-integer option. `0`, a negative, or `NaN`
  * reaching the export loop would stall it.
+ *
+ * A fraction takes the default rather than being floored: these are documented
+ * as positive integers, and silently reading `maxAttributesPerSpan: 1.5` as `1`
+ * caps a span an order of magnitude below what the caller wrote.
  */
 function positiveInteger(value: number | undefined, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 1 ? Math.floor(value) : fallback
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : fallback
 }
 
 const IDENTITY_KEYS = ['service.name', 'service.version', 'deployment.environment'] as const

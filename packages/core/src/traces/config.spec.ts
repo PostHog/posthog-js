@@ -6,6 +6,11 @@ describe('resolveTracesConfig', () => {
     ['zero', 0],
     ['negative', -1],
     ['not a number', NaN],
+    // Floored, these read as 1, 2 and 3 — caps an order of magnitude below what
+    // the caller wrote, applied silently.
+    ['a fraction', 1.5],
+    ['a large fraction', 200.5],
+    ['infinity', Infinity],
   ])('falls back to the default per-span caps when given %s', (_label, value) => {
     const resolved = resolveTracesConfig({
       maxAttributesPerSpan: value,
@@ -97,12 +102,21 @@ describe('resolveTracesConfig', () => {
     }
   )
 
-  it('floors a fractional batch size to an integer', () => {
-    expect(resolveTracesConfig({ maxExportBatchSize: 10.9 }).maxExportBatchSize).toBe(10)
+  it('takes the default for a fractional batch size rather than flooring it', () => {
+    // Every numeric knob resolves the same way, so a fraction is a value the
+    // caller did not mean rather than one to round down behind their back.
+    expect(resolveTracesConfig({ maxExportBatchSize: 10.9 }).maxExportBatchSize).toBe(512)
   })
 
-  it.each([0, -1, Number.NaN])('falls back to the default for an unusable flushIntervalMs (%p)', (value) => {
+  it.each([0, -1, 1.5, Number.NaN])('falls back to the default for an unusable flushIntervalMs (%p)', (value) => {
     expect(resolveTracesConfig({ flushIntervalMs: value }).flushIntervalMs).toBe(5000)
+  })
+
+  it.each([0.5, 10_000.5])('falls back to the defaults for fractional live-span bounds (%p)', (value) => {
+    expect(resolveTracesConfig({ maxLiveSpans: value, maxSpanAgeMs: value })).toMatchObject({
+      maxLiveSpans: 10_000,
+      maxSpanAgeMs: 3_600_000,
+    })
   })
 
   it('keeps the queue at least as large as the export batch', () => {
