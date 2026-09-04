@@ -83,6 +83,43 @@ describe('config', () => {
             )
         })
 
+        // disable_persistence removes the store and blocks writes whatever the configured mode is, so the
+        // disabled cause and its per-load lifetime win over the storage mode's own lifetime.
+        it.each(['memory', 'sessionStorage'] as const)(
+            "reports the disabled-persistence cause when disable_persistence is true with '%s'",
+            (persistence) => {
+                const posthog = new PostHog()._init('test-token', { persistence, disable_persistence: true })
+
+                posthog.identify('identified-id')
+
+                expect(warnSpy).toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining('persistence is disabled (disable_persistence is true)')
+                )
+                expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('on every page load'))
+                expect(warnSpy).not.toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining('for every new browser tab or window')
+                )
+            }
+        )
+
+        // Turning persistence back on is not enough while the configured mode is itself volatile, so the
+        // durable-storage remedy has to name both changes.
+        it.each(['memory', 'sessionStorage'] as const)(
+            "names both remedies when disable_persistence is true with '%s'",
+            (persistence) => {
+                const posthog = new PostHog()._init('test-token', { persistence, disable_persistence: true })
+
+                posthog.identify('identified-id')
+
+                expect(warnSpy).toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining("set disable_persistence to false and persistence to 'localStorage+cookie'")
+                )
+            }
+        )
+
         it('does not warn when disable_persistence is true but bootstrap.distinctID is provided', () => {
             const posthog = new PostHog()._init('test-token', {
                 disable_persistence: true,

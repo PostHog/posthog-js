@@ -569,7 +569,17 @@ export class PostHog implements PostHogInterface {
         let cause: string
         let lifetime: string
         let fix: string
-        if (volatileIdentityPersistence) {
+        // disable_persistence outranks the configured mode: it removes the store and blocks every write,
+        // so nothing is kept even under sessionStorage and re-enabling persistence is only half the fix
+        // while that mode is itself volatile.
+        if (this.config.disable_persistence) {
+            cause = 'persistence is disabled (disable_persistence is true)'
+            lifetime = 'on every page load'
+            const durableStorage = volatileIdentityPersistence
+                ? "set disable_persistence to false and persistence to 'localStorage+cookie'"
+                : 'set disable_persistence to false'
+            fix = `Either ${durableStorage}, keep persistence disabled and pass a stable ID through bootstrap.distinctID, or `
+        } else {
             cause = `persistence is set to '${this.config.persistence}'`
             // sessionStorage survives same-tab reloads and navigation, so it mints a fresh ID per
             // tab/window; memory is dropped on every load.
@@ -577,11 +587,6 @@ export class PostHog implements PostHogInterface {
                 this.config.persistence === 'memory' ? 'on every page load' : 'for every new browser tab or window'
             fix =
                 "Either set persistence to 'localStorage+cookie', keep this persistence and pass a stable ID through bootstrap.distinctID, or "
-        } else {
-            cause = 'persistence is disabled (disable_persistence is true)'
-            lifetime = 'on every page load'
-            fix =
-                'Either set disable_persistence to false, keep persistence disabled and pass a stable ID through bootstrap.distinctID, or '
         }
         fix += createsAnonymousProfiles
             ? "set person_profiles to 'identified_only' so anonymous visitors get no profile."
