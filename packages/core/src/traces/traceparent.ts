@@ -70,13 +70,14 @@ function matchTraceparent(value: unknown): TraceparentFields | undefined {
 }
 
 /**
- * The canonical form of an inbound `traceparent`, or `undefined` when it is
- * malformed. Version and flags are carried through as received, so a service
- * that forwards this value continues the caller's trace exactly as sent.
+ * The inbound `traceparent` as received, or `undefined` when it is malformed.
+ *
+ * Returned whole rather than rebuilt: a version above `00` may append fields
+ * this SDK does not read, and rebuilding would forward a header still labelled
+ * with that version but missing what the version defines.
  */
 export function normalizeTraceparent(value: unknown): string | undefined {
-  const fields = matchTraceparent(value)
-  return fields && `${fields.version}-${fields.traceId}-${fields.spanId}-${fields.flags}`
+  return matchTraceparent(value) && (value as string).trim()
 }
 
 /** The W3C sampled bit, set on a trace this SDK started. */
