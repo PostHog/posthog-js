@@ -46,6 +46,7 @@
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@posthog/types": "workspace:^",
     "@rslib/core": "catalog:",
     "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",

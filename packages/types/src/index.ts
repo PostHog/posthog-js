@@ -128,3 +128,22 @@ export type {
     OtlpMetricsPayload,
 } from './capture-metric'
 export { OTLP_AGGREGATION_TEMPORALITY_DELTA } from './capture-metric'
+
+// Distributed tracing types
+export type {
+    SpanKind,
+    SpanStatusCode,
+    SpanAttributeValue,
+    SpanAttributes,
+    SpanTimeInput,
+    StartSpanOptions,
+    Span,
+    SpanRecord,
+    BeforeSpanSendFn,
+    TracesConfig,
+    OtlpSpanKeyValue,
+    OtlpSpanEvent,
+    OtlpSpanStatus,
+    OtlpSpan,
+    OtlpTracesPayload,
+} from './traces'

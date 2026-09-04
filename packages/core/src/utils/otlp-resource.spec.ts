@@ -2,6 +2,8 @@ import { buildResourceAttributes } from '../logs/logs-utils'
 import type { ResolvedPostHogLogsConfig } from '../logs/types'
 import { buildMetricsResourceAttributes } from '../metrics/metrics-utils'
 import type { ResolvedPostHogMetricsConfig } from '../metrics/types'
+import { buildTracesResourceAttributes } from '../traces/otlp'
+import type { ResolvedTracesConfig } from '../traces/types'
 import { normalizeOsName, osResourceAttributes } from './otlp-resource'
 
 const shared = {
@@ -25,9 +27,10 @@ const conflicting = {
   },
 }
 
-const bothSignals = (partial: object): Record<string, unknown>[] => [
+const allThree = (partial: object): Record<string, unknown>[] => [
   buildResourceAttributes(partial as ResolvedPostHogLogsConfig, 'posthog-node', '1.0.0'),
   buildMetricsResourceAttributes(partial as ResolvedPostHogMetricsConfig, 'posthog-node', '1.0.0'),
+  buildTracesResourceAttributes(partial as ResolvedTracesConfig, 'posthog-node', '1.0.0'),
 ]
 
 describe('shared OTLP resource attributes', () => {
@@ -35,14 +38,16 @@ describe('shared OTLP resource attributes', () => {
     ['a fully populated config', shared],
     ['a config with conflicting user attributes', conflicting],
     ['an empty config', {}],
-  ])('produces the same attributes for logs and metrics given %s', (_label, config) => {
-    const [logs, metrics] = bothSignals(config)
+  ])('produces the same attributes for logs, metrics and traces given %s', (_label, config) => {
+    const [logs, metrics, traces] = allThree(config)
     expect(metrics).toEqual(logs)
+    expect(traces).toEqual(logs)
     expect(Object.keys(metrics)).toEqual(Object.keys(logs))
+    expect(Object.keys(traces)).toEqual(Object.keys(logs))
   })
 
   it('layers the identity keys over user resource attributes', () => {
-    for (const attributes of bothSignals(conflicting)) {
+    for (const attributes of allThree(conflicting)) {
       expect(attributes).toEqual({
         'service.name': 'checkout',
         'service.version': '2.1.0',
@@ -55,7 +60,7 @@ describe('shared OTLP resource attributes', () => {
   })
 
   it('keeps user resource attributes that do not collide', () => {
-    for (const attributes of bothSignals(shared)) {
+    for (const attributes of allThree(shared)) {
       expect(attributes).toEqual({
         'host.name': 'web-01',
         'service.name': 'checkout',
@@ -68,7 +73,7 @@ describe('shared OTLP resource attributes', () => {
   })
 
   it('falls back to unknown_service and omits unset optional keys', () => {
-    for (const attributes of bothSignals({})) {
+    for (const attributes of allThree({})) {
       expect(attributes).toEqual({
         'service.name': 'unknown_service',
         'telemetry.sdk.name': 'posthog-node',
@@ -86,6 +91,12 @@ describe('osResourceAttributes', () => {
     ['linux', 'Linux'],
     ['android', 'Android'],
     ['freebsd', 'FreeBSD'],
+    ['openbsd', 'OpenBSD'],
+    ['netbsd', 'NetBSD'],
+    ['sunos', 'SunOS'],
+    ['aix', 'AIX'],
+    ['haiku', 'Haiku'],
+    ['cygwin', 'Windows'],
     // detectOS spellings
     ['Mac OS X', 'macOS'],
     ['iOS', 'iOS'],
@@ -97,7 +108,7 @@ describe('osResourceAttributes', () => {
   })
 
   it('passes an unmapped name through rather than dropping it', () => {
-    expect(normalizeOsName('Haiku')).toBe('Haiku')
+    expect(normalizeOsName('Plan 9')).toBe('Plan 9')
     expect(normalizeOsName('constructor')).toBe('constructor')
   })
 

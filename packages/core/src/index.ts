@@ -87,6 +87,24 @@ export type {
   Metrics,
   MetricsConfig,
 } from './metrics/types'
+export { PostHogTraces } from './traces'
+export { SyncSpanContextManager } from './traces/context'
+export { inertSpan, runWithActiveSpan } from './traces/span'
+export { resolveTracesConfig } from './traces/config'
+export type { ResolvedTracesConfig, SpanContextManager, TraceSdkContext } from './traces/types'
+// The `beforeSpanSend` shapes come straight from @posthog/types: hooks see the
+// public record, not core's internal one, which also carries `traceState`.
+export type { SpanRecord, BeforeSpanSendFn } from '@posthog/types'
+export type {
+  Span,
+  SpanAttributes,
+  SpanAttributeValue,
+  SpanKind,
+  SpanStatusCode,
+  SpanTimeInput,
+  StartSpanOptions,
+  TracesConfig,
+} from './traces/types'
 export { uuidv7 } from './vendor/uuidv7'
 export * from './cookie'
 export * from './posthog-core'

@@ -1,6 +1,7 @@
 import { version } from './version'
 
 import {
+  allSettled,
   FeatureFlagValue,
   getEventUuid,
   isBlockedUA,
@@ -17,14 +18,19 @@ import {
   PostHogFlagsResponse,
   PostHogMetrics,
   PostHogPersistedProperty,
+  PostHogTraces,
+  inertSpan,
   Properties,
   resolveMetricsConfig,
+  resolveTracesConfig,
+  runWithActiveSpan,
   RetriableOptions,
   raceWithTimeout,
   safeSetTimeout,
+  SyncSpanContextManager,
   uuidv7,
 } from '@posthog/core'
-import type { Metrics } from '@posthog/core'
+import type { Metrics, Span, SpanContextManager, StartSpanOptions, TraceSdkContext } from '@posthog/core'
 import {
   AllFlagsOptions,
   EventMessage,
@@ -144,6 +150,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   public readonly options: PostHogOptions
   protected readonly context?: IPostHogContext
   private _metrics?: PostHogMetrics
+  private _traces?: PostHogTraces
+  private _spanContext?: SpanContextManager
 
   private readonly captureMode: CaptureMode
   private _v1Sender?: V1CaptureSender
@@ -281,8 +289,29 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.scheduleDebouncedFlush()
   }
 
+  /**
+   * Concurrent so a serverless handler waits for one round trip, not two. A
+   * failed span export leaves the spans queued rather than rejecting, since
+   * callers already treat `flush()` as safe to leave unwrapped.
+   */
+  private _flushEventsAndSpans(): Promise<void> {
+    const events = this.flushWithPendingPromises()
+    if (!this._traces) {
+      return events
+    }
+    // Settled, not `all`: `all` rejects the moment the event flush does, and a
+    // serverless host that treats this promise as the end of the invocation can
+    // freeze it with the span request still open. The events rejection is still
+    // the one the caller sees.
+    return allSettled([events, this._traces.flush().catch(() => {})]).then(([eventsResult]) => {
+      if (eventsResult.status === 'rejected') {
+        throw eventsResult.reason
+      }
+    })
+  }
+
   override async flush(): Promise<void> {
-    const flushPromise = this.flushWithPendingPromises()
+    const flushPromise = this._flushEventsAndSpans()
     const waitUntil = this.options.waitUntil
     // Only register when no debounce promise is already keeping runtime alive
     if (waitUntil && !this._waitUntilCycle) {
@@ -355,7 +384,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private async resolveWaitUntilFlush(): Promise<void> {
     const resolve = this._consumeWaitUntilCycle()
     try {
-      await this.flushWithPendingPromises()
+      await this._flushEventsAndSpans()
     } catch {
       // Flush errors are already logged by flush() internals
     } finally {
@@ -599,6 +628,161 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       this._metrics = new PostHogMetrics(this, resolveMetricsConfig(this.options.metrics), this._logger)
     }
     return this._metrics
+  }
+
+  /**
+   * Active-span tracking. Overridden by the Node entrypoint with an
+   * `AsyncLocalStorage`-backed manager; the edge build keeps this synchronous
+   * fallback, matching how `initializeContext` already differs between them.
+   */
+  protected initializeSpanContextManager(): SpanContextManager {
+    return new SyncSpanContextManager()
+  }
+
+  /**
+   * Runtime-detected OTLP resource attributes for every span. Overridden by the
+   * Node entrypoint with the host OS; the edge build contributes none, keeping
+   * `node:os` out of an edge bundle, which cannot resolve it.
+   */
+  protected hostResourceAttributes(): Record<string, string> {
+    return {}
+  }
+
+  /**
+   * Active-span tracking, built on first use. Lives on the client rather than
+   * on the traces pipeline because a client with tracing off still activates a
+   * pass-through span, so it needs the same store the pipeline would use.
+   */
+  private get _spanContextManager(): SpanContextManager {
+    if (!this._spanContext) {
+      this._spanContext = this.initializeSpanContextManager()
+    }
+    return this._spanContext
+  }
+
+  /**
+   * The traces pipeline, built on first use. Returns `undefined` when the
+   * `traces` client option is absent — tracing is off until configured.
+   */
+  private get _tracesPipeline(): PostHogTraces | undefined {
+    if (!this.options.traces) {
+      return undefined
+    }
+    if (!this._traces) {
+      this._traces = new PostHogTraces(
+        this,
+        resolveTracesConfig(this.options.traces, this.hostResourceAttributes(), this._logger),
+        this._logger,
+        () => this._tracingContext(),
+        this._spanContextManager,
+        // A handler that only traces still has to hold the invocation open.
+        () => this.scheduleDebouncedFlush()
+      )
+    }
+    return this._traces
+  }
+
+  /**
+   * PostHog context attached to every span, so traces join back to persons and
+   * sessions. A server process has no ambient identity, so these come from the
+   * current request context — the Express/NestJS middleware or `withContext`.
+   */
+  private _tracingContext(): TraceSdkContext {
+    const context = this.context?.get()
+    return { distinctId: context?.distinctId, sessionId: context?.sessionId }
+  }
+
+  /**
+   * Starts a span without making it active — for work that can't wrap a
+   * callback. Prefer `withSpan`, which ends the span for you.
+   *
+   * Always returns a handle, so calling code never has to branch: when the
+   * `traces` option is absent, the SDK is disabled, or the user has opted out,
+   * the handle is inert and nothing is exported. An inert handle given a
+   * `parent` header still returns it from `traceparent()`, so a service with
+   * tracing off passes a distributed trace through instead of severing it.
+   *
+   * {@label Traces}
+   *
+   * @experimental Subject to change in a minor release.
+   *
+   * @example
+   * ```ts
+   * const span = posthog.startSpan('checkout', { attributes: { plan: 'pro' } })
+   * span.setAttribute('cart.items', 3)
+   * span.end()
+   * ```
+   */
+  startSpan(name: string, options?: StartSpanOptions): Span {
+    return this._tracesPipeline?.startSpan(name, options) ?? inertSpan(options)
+  }
+
+  /**
+   * Runs a callback with a span active for its duration and ends the span for
+   * you — at return for a sync callback, at settle for an async one. Takes an
+   * optional `StartSpanOptions` between the name and the callback:
+   * `withSpan(name, fn)` or `withSpan(name, options, fn)`.
+   *
+   * Spans started inside the callback nest under it automatically. If the
+   * callback throws or rejects, the span records the exception and the original
+   * error is rethrown unchanged. A callback that ends the span itself gets the
+   * rethrow but not the recording, since the span is already exported by then.
+   *
+   * Spans nest across `await` only on the Node runtime, which tracks the active
+   * span with `AsyncLocalStorage`. The edge build restores the active span when
+   * the callback returns its promise, so spans started after an `await` there
+   * begin a new trace.
+   *
+   * {@label Traces}
+   *
+   * @experimental Subject to change in a minor release.
+   *
+   * @example
+   * ```ts
+   * await posthog.withSpan('POST /checkout', { parent: req.get('traceparent') }, async (span) => {
+   *   span.setAttribute('plan', user.plan)
+   *   return processOrder()
+   * })
+   * ```
+   */
+  withSpan<T>(name: string, fn: (span: Span) => T): T
+  withSpan<T>(name: string, options: StartSpanOptions, fn: (span: Span) => T): T
+  withSpan<T>(name: string, optionsOrFn: StartSpanOptions | ((span: Span) => T), maybeFn?: (span: Span) => T): T {
+    const options = typeof optionsOrFn === 'function' ? undefined : optionsOrFn
+    const fn = (typeof optionsOrFn === 'function' ? optionsOrFn : maybeFn) as (span: Span) => T
+
+    const pipeline = this._tracesPipeline
+    if (!pipeline) {
+      // Tracing off: still run the callback exactly once, with an inert handle.
+      // A handle carrying an inbound `parent` is activated, so `getActiveSpan()`
+      // inside the callback can propagate the trace onward.
+      return runWithActiveSpan(this._spanContextManager, inertSpan(options), fn)
+    }
+    return options ? pipeline.withSpan(name, options, fn) : pipeline.withSpan(name, fn)
+  }
+
+  /**
+   * The span currently active on this async execution path, or `null` outside
+   * any `withSpan` callback.
+   *
+   * On the edge build this returns `null` after an `await`, because the active
+   * span is tracked synchronously there.
+   *
+   * {@label Traces}
+   *
+   * @experimental Subject to change in a minor release.
+   *
+   * @example
+   * ```ts
+   * // Propagate the trace to another service
+   * const traceparent = posthog.getActiveSpan()?.traceparent()
+   * await fetch(url, { headers: traceparent ? { traceparent } : {} })
+   * ```
+   */
+  getActiveSpan(): Span | null {
+    // Read from the store directly rather than through the pipeline: the two
+    // share one manager, and with tracing off there is no pipeline to ask.
+    return this._spanContextManager.active() ?? null
   }
 
   /**
@@ -2616,6 +2800,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       // send finally settles, the stale window is discarded instead of being
       // merged back onto a re-armed timer after teardown.
       this._metrics.reset()
+    }
+    if (this._traces) {
+      // Same treatment as metrics: send what's queued, raced against the shared
+      // shutdown budget, then reset so a losing flush can't re-arm a timer.
+      await raceWithTimeout(
+        this._traces.flush().catch(() => {}),
+        Math.max(0, shutdownDeadlineMs - Date.now())
+      )
+      this._traces.reset()
     }
     try {
       return await super._shutdown(Math.max(0, shutdownDeadlineMs - Date.now()))
