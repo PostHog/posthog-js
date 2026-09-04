@@ -1,6 +1,8 @@
+import Config from '@posthog/browser-common/config'
+import { window } from '@posthog/browser-common/utils/globals'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHog } from '../../posthog-core'
 import { createPosthogInstance } from '../helpers/posthog-instance'
-import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { RemoteConfig } from '../../types'
 
@@ -11,6 +13,75 @@ describe('ExceptionObserver', () => {
         instance = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
             token: 'testtoken',
+        })
+    })
+
+    describe('captureException', () => {
+        const errorProperties = { $exception_list: [{ type: 'TypeError' }] } as any
+
+        it.each([
+            ['Chromium', new RangeError('Maximum call stack size exceeded')],
+            ['WebKit', new RangeError('Maximum call stack size exceeded.')],
+            ['Firefox', Object.assign(new Error('too much recursion'), { name: 'InternalError' })],
+        ])('swallows %s stack overflow errors', (_browser, stackOverflowError) => {
+            vi.spyOn(instance.exceptions, 'sendExceptionEvent').mockImplementation(() => {
+                throw stackOverflowError
+            })
+
+            expect(() => instance.exceptionObserver.captureException(errorProperties)).not.toThrow()
+        })
+
+        it.each([
+            new RangeError('Invalid array length'),
+            Object.assign(new Error('allocation size overflow'), { name: 'InternalError' }),
+            new TypeError('something else'),
+        ])('rethrows unrelated errors from exception capture', (error) => {
+            vi.spyOn(instance.exceptions, 'sendExceptionEvent').mockImplementation(() => {
+                throw error
+            })
+
+            expect(() => instance.exceptionObserver.captureException(errorProperties)).toThrow(error)
+        })
+
+        it('swallows a stack overflow raised before sending the exception', () => {
+            const stackOverflowError = new RangeError('Maximum call stack size exceeded')
+            vi.spyOn(instance.exceptionObserver['_rateLimiter'], 'consumeRateLimit').mockImplementation(() => {
+                throw stackOverflowError
+            })
+            const sendExceptionEvent = vi.spyOn(instance.exceptions, 'sendExceptionEvent')
+
+            expect(() => instance.exceptionObserver.captureException(errorProperties)).not.toThrow()
+            expect(sendExceptionEvent).not.toHaveBeenCalled()
+        })
+
+        it.each(['automatic', 'manual'])('does not re-enter autocapture after a %s capture overflows', (mode) => {
+            const stackOverflowError = new RangeError('Maximum call stack size exceeded')
+            const capture = vi.spyOn(instance, 'capture').mockImplementation(() => {
+                throw stackOverflowError
+            })
+            const consoleError = vi.fn(() => instance.exceptionObserver.captureException(errorProperties))
+            const originalConsoleError = window!.console.error
+            const originalConsoleLog = window!.console.log
+            const originalDebug = Config.DEBUG
+            window!.console.error = consoleError
+            window!.console.log = vi.fn()
+            Config.DEBUG = true
+
+            try {
+                if (mode === 'automatic') {
+                    instance.exceptionObserver.captureException(errorProperties)
+                } else {
+                    instance.captureException(new Error('original exception'))
+                }
+
+                expect(capture).toHaveBeenCalledTimes(1)
+                expect(consoleError).not.toHaveBeenCalled()
+            } finally {
+                capture.mockRestore()
+                Config.DEBUG = originalDebug
+                window!.console.error = originalConsoleError
+                window!.console.log = originalConsoleLog
+            }
         })
     })
 

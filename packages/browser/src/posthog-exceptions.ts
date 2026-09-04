@@ -5,6 +5,7 @@ import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfigRe
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { propertyComparisons } from '@posthog/browser-common/utils/property-utils'
 import { isString, isArray, isObject, ErrorTracking, isNullish } from '@posthog/core'
+import { isStackOverflowError } from './utils/stack-overflow'
 
 const logger = createLogger('[Error tracking]')
 
@@ -197,12 +198,16 @@ export class PostHogExceptions implements Extension {
 
                 return result
             } catch (error) {
-                logger.error('Failed to capture exception event. Dropping this exception.', error)
+                if (!isStackOverflowError(error)) {
+                    logger.error('Failed to capture exception event. Dropping this exception.', error)
+                }
                 this._exceptionStepsBuffer.clear()
                 return
             }
         } catch (error) {
-            logger.error('Failed to process exception event. Ignoring this exception.', error)
+            if (!isStackOverflowError(error)) {
+                logger.error('Failed to process exception event. Ignoring this exception.', error)
+            }
             return
         }
     }
