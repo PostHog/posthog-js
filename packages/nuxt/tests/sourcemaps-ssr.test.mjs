@@ -2,8 +2,9 @@
 // sourcemap upload when `ssr: false` because the `close` hook injected against
 // nitro's reported `serverDir` even when no server bundle was produced
 // (e.g. `nuxt generate`), causing the CLI to exit 1.
-// Covers both branches: ssr:false must skip the server inject (but still
-// upload outputDir) and ssr:true must still inject the server bundle.
+// The branch now follows the directory on disk, because a `ssr: false` SPA still
+// gets a Nitro server bundle: its chunks must be injected before they are uploaded,
+// and only injected directories may be uploaded.
 // Also covers PostHog/posthog-js#4275: public sourcemaps must be uploaded and
 // deleted before Nitro generates its public-asset manifest.
 //
@@ -32,6 +33,7 @@ const executableSource = source
   // Strip the specific TS annotations actually used in module.ts.
   .replace(/value\?: unknown/g, 'value')
   .replace(/\(directory: string, sourcemapsConfig: SourcemapsConfig\)/g, '(directory, sourcemapsConfig)')
+  .replace(/\(sourcemapsConfig: SourcemapsConfig\)/g, '(sourcemapsConfig)')
   .replace(/\(args: string\[\]\)/g, '(args)')
   .replace(/\): string \{/g, ') {')
   .replace(/\): boolean \{/g, ') {')
@@ -43,7 +45,7 @@ const executableSource = source
   // Turn the module's `export default` into a value the wrapper returns.
   .replace('export default defineNuxtModule(', 'return defineNuxtModule(')
 
-function loadModule({ failPublicUpload = false, nuxtVersion = '4.1.2' } = {}) {
+function loadModule({ failPublicUpload = false, nuxtVersion = '4.1.2', existingDirs = [] } = {}) {
   const spawnCalls = []
   const pluginCalls = []
   const serverPluginCalls = []
@@ -62,6 +64,7 @@ function loadModule({ failPublicUpload = false, nuxtVersion = '4.1.2' } = {}) {
       }
       return { code: 0 }
     },
+    existsSync: (path) => existingDirs.includes(path),
     fileURLToPath: (u) => u,
     dirname: (p) => p,
     console: { error: () => {} },
@@ -107,8 +110,17 @@ for (const { nuxtVersion, compatibilityVersion, expectedServerPlugin } of [
   assert.deepEqual(serverPluginCalls, [expectedServerPlugin])
 }
 
-async function runLifecycle({ ssr, deleteAfterUpload, failPublicUpload = false }) {
-  const { mod, spawnCalls } = loadModule({ failPublicUpload })
+async function runLifecycle({
+  ssr,
+  deleteAfterUpload,
+  failPublicUpload = false,
+  serverBundleOnDisk = true,
+  sourcemaps = {},
+}) {
+  const { mod, spawnCalls } = loadModule({
+    failPublicUpload,
+    existingDirs: serverBundleOnDisk ? ['/build/.output/server'] : [],
+  })
   const hooks = {}
   const nuxt = {
     options: {
@@ -135,13 +147,14 @@ async function runLifecycle({ ssr, deleteAfterUpload, failPublicUpload = false }
         personalApiKey: 'phx_test',
         projectId: '123',
         deleteAfterUpload,
+        ...sourcemaps,
       },
     },
     nuxt
   )
 
-  // With `ssr: false` (client-only / SPA mode) Nitro still reports output
-  // dirs, but no server bundle is produced and serverDir is never created on disk.
+  // Nitro reports the same output dirs for every mode. Whether a server bundle exists
+  // is decided by `serverBundleOnDisk`, the same way the module reads it from disk.
   for (const cb of hooks['nitro:init'] || []) {
     await cb({
       options: {
@@ -165,60 +178,89 @@ function findCall(calls, op, directory) {
   return calls.find((c) => c.args.includes(op) && c.args.includes('--directory') && c.args.includes(directory))
 }
 
-// Both branches share the same assertion skeleton: did the server inject happen
-// (or not), and was the outputDir upload always emitted? Table-drive it so the
-// shape stays obvious and a future `ssr: 'hybrid'` row is one line away.
+// A Nitro server bundle is injected and uploaded whenever it is on disk, in SSR mode
+// and in SPA (`ssr: false`) mode alike. `nuxt generate` writes no server bundle, so
+// nothing there is injected or uploaded.
 const cases = [
-  { ssr: false, expectInject: false },
-  { ssr: true, expectInject: true },
+  { name: 'spa with server bundle', ssr: false, serverBundleOnDisk: true, expectServer: true },
+  { name: 'ssr', ssr: true, serverBundleOnDisk: true, expectServer: true },
+  { name: 'static generate', ssr: false, serverBundleOnDisk: false, expectServer: false },
 ]
 
-for (const { ssr, expectInject } of cases) {
-  const calls = await runLifecycle({ ssr })
+for (const { name, ssr, serverBundleOnDisk, expectServer } of cases) {
+  const calls = await runLifecycle({ ssr, serverBundleOnDisk })
   const dump = JSON.stringify(calls.map((c) => c.args))
   const injectCall = findCall(calls, 'inject', '/build/.output/server')
+  const serverUploadCall = findCall(calls, 'upload', '/build/.output/server')
 
-  if (expectInject) {
-    assert.ok(injectCall, `ssr:${ssr}: expected server inject. Got: ${dump}`)
+  if (expectServer) {
+    assert.ok(injectCall, `${name}: expected server inject. Got: ${dump}`)
+    assert.ok(serverUploadCall, `${name}: expected server upload. Got: ${dump}`)
+    assert.ok(
+      calls.indexOf(injectCall) < calls.indexOf(serverUploadCall),
+      `${name}: expected the server chunks to be injected before they are uploaded. Got: ${dump}`
+    )
   } else {
-    assert.equal(injectCall, undefined, `ssr:${ssr}: expected no server inject. Got: ${dump}`)
+    assert.equal(injectCall, undefined, `${name}: expected no server inject. Got: ${dump}`)
+    assert.equal(serverUploadCall, undefined, `${name}: expected no server upload. Got: ${dump}`)
   }
 
   const publicUploadCall = findCall(calls, 'upload', '/build/.output/public')
-  const outputUploadCall = findCall(calls, 'upload', '/build/.output')
+  assert.ok(publicUploadCall, `${name}: expected early public sourcemap upload. Got: ${dump}`)
+  assert.ok(publicUploadCall.args.includes('--delete-after'), `${name}: expected public sourcemap deletion`)
+  assert.equal(
+    calls.filter((c) => c.args.includes('upload') && c.args.includes('/build/.output/public')).length,
+    1,
+    `${name}: expected the public directory to be uploaded once. Got: ${dump}`
+  )
+  assert.equal(
+    findCall(calls, 'upload', '/build/.output'),
+    undefined,
+    `${name}: expected no upload of the whole output directory, which holds uninjected chunks. Got: ${dump}`
+  )
+}
 
-  assert.ok(publicUploadCall, `ssr:${ssr}: expected early public sourcemap upload. Got: ${dump}`)
-  assert.ok(publicUploadCall.args.includes('--delete-after'), `ssr:${ssr}: expected public sourcemap deletion`)
-
-  // Upload of the outputDir must still happen so server and preset-specific sourcemaps reach PostHog.
-  assert.ok(outputUploadCall, `ssr:${ssr}: expected sourcemap upload against outputDir. Got: ${dump}`)
-  assert.ok(
-    calls.indexOf(publicUploadCall) < calls.indexOf(outputUploadCall),
-    `ssr:${ssr}: expected public sourcemaps to be deleted before the final output upload. Got: ${dump}`
+// Every command must carry the configured release, or the CLI derives a second release
+// from the checkout directory name.
+const releaseCalls = await runLifecycle({
+  ssr: true,
+  sourcemaps: { releaseName: 'my-app', releaseVersion: '1.2.3', build: 42 },
+})
+for (const call of releaseCalls) {
+  const dump = JSON.stringify(call.args)
+  assert.deepEqual(
+    [
+      call.args[call.args.indexOf('--release-name') + 1],
+      call.args[call.args.indexOf('--release-version') + 1],
+      call.args[call.args.indexOf('--build') + 1],
+    ],
+    ['my-app', '1.2.3', '42'],
+    `expected the configured release on every CLI call. Got: ${dump}`
   )
 }
 
 const retainedMapCalls = await runLifecycle({ ssr: true, deleteAfterUpload: false })
 const retainedMapDump = JSON.stringify(retainedMapCalls.map((c) => c.args))
-assert.equal(
-  findCall(retainedMapCalls, 'upload', '/build/.output/public'),
-  undefined,
-  `deleteAfterUpload:false: expected no early public upload. Got: ${retainedMapDump}`
-)
-const retainedMapOutputUpload = findCall(retainedMapCalls, 'upload', '/build/.output')
-assert.ok(retainedMapOutputUpload, `deleteAfterUpload:false: expected final output upload. Got: ${retainedMapDump}`)
+const retainedPublicUpload = findCall(retainedMapCalls, 'upload', '/build/.output/public')
+assert.ok(retainedPublicUpload, `deleteAfterUpload:false: expected a public upload. Got: ${retainedMapDump}`)
 assert.ok(
-  !retainedMapOutputUpload.args.includes('--delete-after'),
+  !retainedPublicUpload.args.includes('--delete-after'),
   `deleteAfterUpload:false: expected sourcemaps to be retained. Got: ${retainedMapDump}`
 )
 
 const failedPublicUploadCalls = await runLifecycle({ ssr: true, failPublicUpload: true })
 const failedPublicUploadDump = JSON.stringify(failedPublicUploadCalls.map((c) => c.args))
-const fallbackOutputUpload = findCall(failedPublicUploadCalls, 'upload', '/build/.output')
-assert.ok(fallbackOutputUpload, `failed public upload: expected final output upload. Got: ${failedPublicUploadDump}`)
+const publicUploads = failedPublicUploadCalls.filter(
+  (c) => c.args.includes('upload') && c.args.includes('/build/.output/public')
+)
+assert.equal(
+  publicUploads.length,
+  2,
+  `failed public upload: expected a retry in the close hook. Got: ${failedPublicUploadDump}`
+)
 assert.ok(
-  !fallbackOutputUpload.args.includes('--delete-after'),
-  `failed public upload: expected final upload to retain manifest-listed maps. Got: ${failedPublicUploadDump}`
+  !publicUploads[1].args.includes('--delete-after'),
+  `failed public upload: expected the retry to retain manifest-listed maps. Got: ${failedPublicUploadDump}`
 )
 
 console.log('ok sourcemaps-ssr.test.mjs')
