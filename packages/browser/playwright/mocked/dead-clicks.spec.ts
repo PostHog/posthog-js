@@ -259,7 +259,36 @@ test.describe('Dead clicks', () => {
         const selection = await page.evaluate(() => window.getSelection()?.toString())
         expect(selection?.trim().length).toBeGreaterThan(0)
 
-        await page.waitForTimeout(1000)
-        await page.expectCapturedEventsToBe([])
+        await page.waitForTimeout(3500)
+
+        const deadClicks = (await page.capturedEvents()).filter((event) => event.event === '$dead_click')
+        expect(deadClicks).toHaveLength(0)
+    })
+
+    test('does not capture a dead click when a click unselects text', async ({ page, context }) => {
+        await start(startOptions, page, context)
+
+        const text = page.locator('[data-cy-dead-click-text]')
+        await text.evaluate((element) => {
+            const range = document.createRange()
+            range.selectNodeContents(element)
+            const selection = window.getSelection()
+            selection?.removeAllRanges()
+            selection?.addRange(range)
+        })
+        await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).not.toBe('')
+
+        // Keep the selection that created the initial event, but move it outside the suppression
+        // window. The click's own selectionchange must be what suppresses the dead click.
+        await page.waitForTimeout(200)
+        await page.resetCapturedEvents()
+
+        await text.click({ delay: 30 })
+        await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe('')
+
+        await page.waitForTimeout(3500)
+
+        const deadClicks = (await page.capturedEvents()).filter((event) => event.event === '$dead_click')
+        expect(deadClicks).toHaveLength(0)
     })
 })
