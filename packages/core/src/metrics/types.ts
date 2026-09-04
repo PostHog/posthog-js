@@ -20,7 +20,7 @@ import type { BeforeSendMetricFn, MetricAttributeValue, OtlpMetricsPayload } fro
 /** Same tagged outcome shape as `SendLogsBatchOutcome` — one policy for both signals. */
 export type SendMetricsBatchOutcome =
   | { kind: 'ok' }
-  | { kind: 'retry-later'; error: unknown }
+  | { kind: 'retry-later'; error: unknown; retryAfterMs?: number }
   | { kind: 'too-large' }
   | { kind: 'fatal'; error: unknown }
 

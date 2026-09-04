@@ -3724,7 +3724,7 @@
           "name": "flushIntervalMs"
         },
         {
-          "description": "Max records per outbound POST. Keeps each request under the server's 2 MB cap. On a 413 response, the SDK halves this value, retries the same records, then ramps back up by 1 per healthy send. A 413 on a single-record batch drops the record (it's larger than the server can accept regardless of batch size). Default: 50 (RN) / 100 (browser).",
+          "description": "Max records per outbound POST. Keeps each request under the server's request body cap. On a 413 response, the SDK halves this value, retries the same records, then ramps back up by 1 per healthy send. A 413 on a single-record batch drops the record (it's larger than the server can accept regardless of batch size). Default: 50 (RN) / 100 (browser).",
           "type": "number",
           "name": "maxBatchRecordsPerPost"
         },
@@ -4444,21 +4444,21 @@
       "name": "SendLogsBatchOutcome",
       "properties": [],
       "path": "../core/src/posthog-core-stateless.ts",
-      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
     },
     {
       "id": "SendMetricsBatchOutcome",
       "name": "SendMetricsBatchOutcome",
       "properties": [],
       "path": "../core/src/metrics/types.ts",
-      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
     },
     {
       "id": "SendTracesBatchOutcome",
       "name": "SendTracesBatchOutcome",
       "properties": [],
       "path": "../core/src/traces/types.ts",
-      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
     },
     {
       "id": "SeverityLevel",

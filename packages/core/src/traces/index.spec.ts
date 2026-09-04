@@ -2501,6 +2501,410 @@ describe('PostHogTraces', () => {
     })
   })
 
+  describe('Retry-After', () => {
+    it('waits at least as long as the endpoint asked', async () => {
+      mockInstance._sendTracesBatch.mockResolvedValue({
+        kind: 'retry-later',
+        error: new Error('throttled'),
+        retryAfterMs: 90_000,
+      })
+      const traces = createTraces({ flushIntervalMs: 1000, maxExportBatchSize: 1 })
+      traces.startSpan('held').end()
+
+      // One attempt, then a wait longer than the 30s exponential cap would give.
+      while (mockInstance._sendTracesBatch.mock.calls.length < 1) {
+        await vi.advanceTimersByTimeAsync(1000)
+      }
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(31_000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps its own backoff when the endpoint asks for less', async () => {
+      mockInstance._sendTracesBatch.mockResolvedValue({
+        kind: 'retry-later',
+        error: new Error('down'),
+        retryAfterMs: 10,
+      })
+      const traces = createTraces({ flushIntervalMs: 5000, maxExportBatchSize: 1 })
+      traces.startSpan('held').end()
+
+      while (mockInstance._sendTracesBatch.mock.calls.length < 1) {
+        await vi.advanceTimersByTimeAsync(1000)
+      }
+      // A 10ms Retry-After must not turn the retry loop into a hot loop: the
+      // next attempt still waits out the queue's own backoff, not 10ms.
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('waits out Retry-After even when a span ends mid-flush', async () => {
+      // The span that ends while the send is in flight arms a timer at the plain
+      // interval; the 429 then asks for far longer. The earlier timer must not
+      // fire first, or the SDK sends inside the window it was told to skip.
+      mockInstance._sendTracesBatch.mockImplementation(() => {
+        traces.startSpan('arrived mid-flush').end()
+        return Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      })
+      const traces = createTraces({ flushIntervalMs: 1000 })
+      traces.startSpan('first').end()
+
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+    })
+
+    it('clears Retry-After on an outcome that is not a retry', async () => {
+      // Only a retriable outcome carries a wait. A stale one left set here would
+      // pin every later flush at the server's old window.
+      const outcomes: SendTracesBatchOutcome[] = [
+        { kind: 'retry-later', error: new Error('throttled'), retryAfterMs: 300_000 },
+        { kind: 'fatal', error: new Error('400') },
+      ]
+      mockInstance._sendTracesBatch.mockImplementation(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const traces = createTraces({ flushIntervalMs: 1000, maxExportBatchSize: 1 })
+      traces.startSpan('first').end()
+
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      // The wait elapses, the retry lands a 400, and that ends the wait.
+      await vi.advanceTimersByTimeAsync(300_000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
+
+      traces.startSpan('second').end()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(3)
+    })
+
+    it('stops honouring a stale Retry-After after a success', async () => {
+      let attempt = 0
+      mockInstance._sendTracesBatch.mockImplementation(() => {
+        attempt++
+        return Promise.resolve(
+          attempt === 1 ? { kind: 'retry-later', error: new Error('throttled'), retryAfterMs: 120_000 } : { kind: 'ok' }
+        )
+      })
+      const traces = createTraces({ flushIntervalMs: 1000, maxExportBatchSize: 1 })
+      traces.startSpan('first').end()
+      await vi.advanceTimersByTimeAsync(200_000)
+
+      traces.startSpan('second').end()
+      await traces.flush()
+      expect(sentSpans().map((s) => s.name)).toContain('second')
+
+      // The wait is gone, so a later failure falls back to the plain interval.
+      mockInstance._sendTracesBatch.mockResolvedValue({ kind: 'retry-later', error: new Error('down') })
+      traces.startSpan('third').end()
+      const before = mockInstance._sendTracesBatch.mock.calls.length
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(mockInstance._sendTracesBatch.mock.calls.length).toBeGreaterThan(before)
+    })
+
+    it('still drains on an explicit flush inside the window', async () => {
+      // An explicit flush is a lifecycle or teardown boundary with no later
+      // attempt — on a serverless host the retry timer is unref'd and dies with
+      // the isolate — so the window must not turn it into a no-op.
+      const outcomes: SendTracesBatchOutcome[] = [
+        { kind: 'retry-later', error: new Error('throttled'), retryAfterMs: 300_000 },
+      ]
+      mockInstance._sendTracesBatch.mockImplementation(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const traces = createTraces({ flushIntervalMs: 10_000 })
+      traces.startSpan('first').end()
+
+      await traces.flush()
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      // The endpoint has recovered, and the caller asked explicitly.
+      await traces.flush()
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
+      expect(sentSpans().map((s) => s.name)).toContain('first')
+    })
+
+    it('does not spend the head batch retry budget inside the window', async () => {
+      // The batch is dropped after MAX_RETRIES_PER_BATCH consecutive failures.
+      // At a host's flush cadence that budget would burn out long before the
+      // window the endpoint asked for, losing the spans with it.
+      mockInstance._sendTracesBatch.mockResolvedValue({
+        kind: 'retry-later',
+        error: new Error('throttled'),
+        retryAfterMs: 300_000,
+      })
+      const traces = createTraces({ flushIntervalMs: 10_000 })
+      traces.startSpan('first').end()
+
+      for (let i = 0; i < 12; i++) {
+        await traces.flush()
+        await vi.advanceTimersByTimeAsync(10_000)
+      }
+
+      expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Dropping'))
+      expect(mockInstance._sendTracesBatch.mock.calls.length).toBeGreaterThan(1)
+
+      // The budget is deferred, not disabled. Once the window elapses the batch
+      // must retire — a deadline that slid forward on each refusal would keep
+      // the window open forever and strand everything behind the head batch.
+      for (let i = 0; i < 12; i++) {
+        await vi.advanceTimersByTimeAsync(310_000)
+        await traces.flush()
+      }
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('failed 8 times in a row'))
+    })
+
+    it('charges the budget for a timer-path failure after the wait was served out', async () => {
+      // The exemption is narrow: an attempt made *early*, inside a window that
+      // has not elapsed. A retry the timer fired at the deadline has served the
+      // wait, so it must count — otherwise the budget never advances and a
+      // permanently refused head batch pins everything behind it.
+      mockInstance._sendTracesBatch.mockResolvedValue({
+        kind: 'retry-later',
+        error: new Error('429'),
+        retryAfterMs: 60_000,
+      })
+      const traces = createTraces({ flushIntervalMs: 1000 })
+      traces.startSpan('first').end()
+
+      for (let i = 0; i < 12; i++) {
+        await vi.advanceTimersByTimeAsync(61_000)
+      }
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('failed 8 times in a row'))
+    })
+
+    it('does not let a host out-pacing the window stall the retry budget', async () => {
+      // flush() more often than the window is long. If each refusal slid the
+      // deadline forward, the window would never elapse, the head batch would
+      // never retire, and every span behind it would be dropped at the cap.
+      mockInstance._sendTracesBatch.mockResolvedValue({
+        kind: 'retry-later',
+        error: new Error('429'),
+        retryAfterMs: 30_000,
+      })
+      const traces = createTraces({ flushIntervalMs: 10_000, maxQueueSize: 5, maxExportBatchSize: 2 })
+
+      for (let i = 0; i < 60; i++) {
+        traces.startSpan(`span-${i}`).end()
+        await traces.flush()
+        await vi.advanceTimersByTimeAsync(5_000)
+      }
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('failed 8 times in a row'))
+    })
+
+    it('still charges the retry budget for failures outside any window', async () => {
+      // The budget must keep working when the endpoint names no wait, or a
+      // permanently failing head batch pins the queue forever. It takes the
+      // eight backoff windows the timer would have waited — roughly three
+      // minutes at this interval — however often the caller drains in between.
+      mockInstance._sendTracesBatch.mockResolvedValue({ kind: 'retry-later', error: new Error('503') })
+      const traces = createTraces({ flushIntervalMs: 10_000 })
+      traces.startSpan('first').end()
+
+      for (let i = 0; i < 25; i++) {
+        await traces.flush()
+        await vi.advanceTimersByTimeAsync(10_000)
+      }
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Dropping'))
+    })
+
+    it('does not spend the retry budget on a caller draining faster than the backoff', async () => {
+      // A serverless host calls `flush()` per invocation. Charging every refusal
+      // retired the batch in eight calls and no elapsed time at all, so a blip
+      // the timer would have ridden out cost the spans instead of a request.
+      mockInstance._sendTracesBatch.mockResolvedValue({ kind: 'retry-later', error: new Error('503') })
+      const traces = createTraces({ flushIntervalMs: 10_000 })
+      traces.startSpan('first').end()
+
+      for (let i = 0; i < 20; i++) {
+        await traces.flush()
+      }
+
+      expect((traces as any)._queue).toHaveLength(1)
+      expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Dropping'))
+    })
+
+    it('charges once per window however many attempts share it', async () => {
+      mockInstance._sendTracesBatch.mockResolvedValue({ kind: 'retry-later', error: new Error('503') })
+      const traces = createTraces({ flushIntervalMs: 10_000 })
+      traces.startSpan('first').end()
+
+      await traces.flush()
+      expect((traces as any)._headBatchFailures).toBe(1)
+
+      await traces.flush()
+      await traces.flush()
+      expect((traces as any)._headBatchFailures).toBe(1)
+
+      await vi.advanceTimersByTimeAsync(30_000)
+      await traces.flush()
+      expect((traces as any)._headBatchFailures).toBe(2)
+    })
+
+    it('gives a fresh batch a fresh budget after an opt-out cleared the queue', async () => {
+      // The head batch leaves with the queue, so its budget must leave too:
+      // otherwise the next batch inherits a spent retry count and a charge
+      // deadline still in the future, and its first refusal goes uncharged.
+      mockInstance._sendTracesBatch.mockResolvedValue({ kind: 'retry-later', error: new Error('503') })
+      const traces = createTraces({ flushIntervalMs: 10_000, maxExportBatchSize: 1 })
+      traces.startSpan('before').end()
+      await traces.flush()
+      expect((traces as any)._headBatchFailures).toBe(1)
+
+      mockInstance.optedOut = true
+      await traces.flush()
+
+      // Asserted here rather than through a later refusal: the charge deadline
+      // the first failure installed is still in the future either way, so the
+      // next refusal is uncharged and the count reads 1 with or without the reset.
+      expect((traces as any)._headBatchFailures).toBe(0)
+      expect((traces as any)._headBatchChargeableAt).toBe(0)
+    })
+
+    it('gives a fresh batch a fresh window after the head is retired', async () => {
+      // The deadline belongs to the batch, not the queue: a new head must be
+      // chargeable straight away or it inherits the last one's served wait.
+      mockInstance._sendTracesBatch.mockResolvedValue({ kind: 'fatal', error: new Error('400') })
+      const traces = createTraces({ flushIntervalMs: 10_000, maxExportBatchSize: 1 })
+      traces.startSpan('first').end()
+      await traces.flush()
+
+      mockInstance._sendTracesBatch.mockResolvedValue({ kind: 'retry-later', error: new Error('503') })
+      traces.startSpan('second').end()
+      await traces.flush()
+
+      expect((traces as any)._headBatchFailures).toBe(1)
+    })
+
+    it('does not let a backward clock step hold the retry budget open', async () => {
+      // The deadline is wall clock. An NTP correction or a resumed VM would
+      // otherwise keep the window "open" for the size of the step — and with
+      // in-window refusals uncharged, the head batch would never retire.
+      mockInstance._sendTracesBatch.mockResolvedValue({
+        kind: 'retry-later',
+        error: new Error('429'),
+        retryAfterMs: 60_000,
+      })
+      const traces = createTraces({ flushIntervalMs: 1000 })
+      traces.startSpan('first').end()
+      await traces.flush()
+
+      // Step the clock back an hour and let simulated time run from there.
+      vi.setSystemTime(Date.now() - 3_600_000)
+
+      // Asserted on the queue, not the drop warning: `_recordDrop` paces that
+      // warning off the same clock and would suppress it here.
+      for (let i = 0; i < 12; i++) {
+        await traces.flush()
+        await vi.advanceTimersByTimeAsync(61_000)
+      }
+      expect((traces as any)._queue).toHaveLength(0)
+    })
+
+    it('keeps the Retry-After window when a batch is refused for size', async () => {
+      // `too-large` is a verdict on the body's size — the SDK's own or a 413 —
+      // so it says nothing about the endpoint's rate limit and must not end the
+      // wait.
+      let first = true
+      mockInstance._sendTracesBatch.mockImplementation(() => {
+        const outcome: SendTracesBatchOutcome = first
+          ? { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }
+          : { kind: 'too-large' }
+        first = false
+        return Promise.resolve(outcome)
+      })
+      const traces = createTraces({ flushIntervalMs: 1000, maxExportBatchSize: 1 })
+      traces.startSpan('first').end()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      // Batches of one the endpoint cannot accept: the spans are dropped.
+      traces.startSpan('second').end()
+      await traces.flush()
+      const sends = mockInstance._sendTracesBatch.mock.calls.length
+
+      traces.startSpan('third').end()
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(sends)
+    })
+
+    it('stops the drain when it retires a batch inside the window', async () => {
+      // Retiring the head batch clears the failure counters, so the drain would
+      // otherwise carry straight on to the next batch — inside the wait the very
+      // refusal that retired it had just installed. One extra send still lands at
+      // that instant: `flush()`'s outer loop is deliberately not window-aware.
+      const sentAt: number[] = []
+      mockInstance._sendTracesBatch.mockImplementation(() => {
+        sentAt.push(Date.now())
+        return Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 60_000 })
+      })
+      const traces = createTraces({ flushIntervalMs: 1000, maxExportBatchSize: 1 })
+      for (let i = 0; i < 4; i++) {
+        traces.startSpan(`span-${i}`).end()
+      }
+
+      // Every attempt lands after the previous window elapsed, so every refusal
+      // is charged and the eighth retires the head batch.
+      for (let i = 0; i < 12; i++) {
+        await vi.advanceTimersByTimeAsync(61_000)
+      }
+
+      const perInstant = new Map<number, number>()
+      for (const at of sentAt) {
+        perInstant.set(at, (perInstant.get(at) ?? 0) + 1)
+      }
+      expect(Math.max(...perInstant.values())).toBe(2)
+    })
+
+    it('does not install a Retry-After that lands after reset', async () => {
+      // The generation check must precede the window assignment, or a 429 that
+      // settles after teardown pins a wait on the fresh client.
+      let settle: ((outcome: SendTracesBatchOutcome) => void) | undefined
+      mockInstance._sendTracesBatch.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            settle = resolve
+          })
+      )
+      const traces = createTraces({ flushIntervalMs: 1000 })
+      traces.startSpan('before-reset').end()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      traces.reset()
+      traces.startSpan('after-reset').end()
+
+      settle?.({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      await vi.advanceTimersByTimeAsync(0)
+
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('drops a Retry-After wait on reset', async () => {
+      const outcomes: SendTracesBatchOutcome[] = [
+        { kind: 'retry-later', error: new Error('throttled'), retryAfterMs: 300_000 },
+      ]
+      mockInstance._sendTracesBatch.mockImplementation(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' }))
+      const traces = createTraces({ flushIntervalMs: 1000 })
+      traces.startSpan('first').end()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      traces.reset()
+      traces.startSpan('second').end()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockInstance._sendTracesBatch).toHaveBeenCalledTimes(2)
+    })
+  })
+
   describe('live span bounds', () => {
     it('returns an inert handle once maxLiveSpans spans are live', async () => {
       const traces = createTraces({ maxLiveSpans: 2 })

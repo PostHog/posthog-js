@@ -243,6 +243,262 @@ describe('PostHogMetrics', () => {
       expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(1)
     })
 
+    it('keeps flushing on the interval while captures keep arriving', async () => {
+      // Every capture arms the timer, and metrics have no size trigger to fall
+      // back on: re-arming a pending one would stop the window ever being sent.
+      const metrics = createMetrics({ flushIntervalMs: 10_000 })
+
+      for (let i = 0; i < 60; i++) {
+        metrics.count('orders_created', 1)
+        await vi.advanceTimersByTimeAsync(1000)
+      }
+
+      expect(mockInstance._sendMetricsBatch).toHaveBeenCalled()
+    })
+
+    it('waits out Retry-After even when a flush timer is already pending', async () => {
+      // The capture arms a timer at the flush interval; the failed flush then asks
+      // for far longer. The pending timer must not fire first.
+      const instance = createMockInstance({
+        _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> =>
+          Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+        ),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
+      metrics.count('orders_created', 1)
+      await metrics.flush()
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(11_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(300_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('clears Retry-After on an outcome that is not a retry', async () => {
+      // Only a retriable outcome carries a wait. A stale one left set here would
+      // pin every later flush at the server's old window forever.
+      const outcomes: SendMetricsBatchOutcome[] = [
+        { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 },
+        { kind: 'fatal', error: new Error('400') },
+      ]
+      const instance = createMockInstance({
+        _sendMetricsBatch: vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' })),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
+      metrics.count('orders_created', 1)
+      await metrics.flush()
+
+      // The wait elapses, the retry lands a 400, and that ends the wait.
+      await vi.advanceTimersByTimeAsync(300_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
+
+      metrics.count('orders_created', 1)
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(3)
+    })
+
+    it('keeps the Retry-After window when a batch is refused for size', async () => {
+      // `too-large` is a verdict on the body's size — the SDK's own or a 413 —
+      // so it says nothing about the endpoint's rate limit. Ending the wait on
+      // it lets the next refusal install a fresh window, pushing the retry out
+      // past the deadline the endpoint actually named — observed here as the
+      // flush landing at 300s rather than at 310s.
+      const outcomes: SendMetricsBatchOutcome[] = [
+        { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 },
+        { kind: 'too-large' },
+        { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 },
+      ]
+      const instance = createMockInstance({
+        _sendMetricsBatch: vi.fn(() => Promise.resolve(outcomes.shift() ?? { kind: 'ok' })),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 1000 }, instance)
+      metrics.count('orders_created', 1)
+      await metrics.flush()
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      await metrics.flush()
+      metrics.count('orders_created', 1)
+      await metrics.flush()
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(3)
+
+      await vi.advanceTimersByTimeAsync(295_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(4)
+    })
+
+    it('does not let a host out-pacing the window keep it open forever', async () => {
+      // Each refusal sliding the deadline would keep `_nextFlushDelay` pinned at
+      // the full window, so the flush cadence would never recover.
+      const instance = createMockInstance({
+        _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> =>
+          Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 30_000 })
+        ),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 60_000 }, instance)
+      metrics.count('orders_created', 1)
+      await metrics.flush()
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      // Sampled: whether a given moment falls inside a window is timing
+      // dependent, but it must fall outside one sometimes.
+      let sawWindowClosed = false
+      for (let i = 0; i < 12; i++) {
+        await vi.advanceTimersByTimeAsync(5000)
+        // Sampled before the flush: a flush that finds the window closed opens
+        // a fresh one, so sampling after it would always look open.
+        if ((metrics as any)._retryAfter.remainingMs() === 0) {
+          sawWindowClosed = true
+        }
+        metrics.count('orders_created', 1)
+        await metrics.flush()
+      }
+      expect(sawWindowClosed).toBe(true)
+    })
+
+    it('does not install a Retry-After that lands after reset', async () => {
+      let settle: ((outcome: SendMetricsBatchOutcome) => void) | undefined
+      const instance = createMockInstance({
+        _sendMetricsBatch: vi.fn(
+          (): Promise<SendMetricsBatchOutcome> =>
+            new Promise((resolve) => {
+              settle = resolve
+            })
+        ),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 1000 }, instance)
+      metrics.count('orders_created', 1)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      metrics.reset()
+
+      // Settle first: the capture that arms the next timer must not find a
+      // window belonging to the client that was just torn down.
+      settle?.({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+      await vi.advanceTimersByTimeAsync(0)
+
+      metrics.count('orders_created', 1)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('drops a Retry-After wait on reset', async () => {
+      const instance = createMockInstance({
+        _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> =>
+          Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+        ),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
+      metrics.count('orders_created', 1)
+      await metrics.flush()
+
+      metrics.reset()
+      metrics.count('orders_created', 1)
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not restart a served-out wait for a sample captured mid-retry', async () => {
+      // A deadline, not a duration. The retry's timer has already fired, so the
+      // capture below is the one that arms the next timer — and it sees the
+      // wait still set, because the send it belongs to has not settled. Holding
+      // a duration here re-arms for the whole window a second time and leaves
+      // the sample 300s behind on an endpoint that has already recovered.
+      let settleRetry: ((outcome: SendMetricsBatchOutcome) => void) | undefined
+      let call = 0
+      const instance = createMockInstance({
+        _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> => {
+          call++
+          if (call === 1) {
+            return Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 })
+          }
+          return new Promise<SendMetricsBatchOutcome>((resolve) => {
+            settleRetry = resolve
+          })
+        }),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
+      metrics.count('orders_created', 1)
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      // The wait elapses and the retry goes out, but hangs.
+      await vi.advanceTimersByTimeAsync(300_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
+
+      metrics.count('orders_created', 1)
+      settleRetry?.({ kind: 'ok' })
+      await vi.advanceTimersByTimeAsync(0)
+
+      // One interval, not another window.
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(3)
+    })
+
+    it('keeps its own interval when the endpoint asks for less', async () => {
+      const instance = createMockInstance({
+        _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> =>
+          Promise.resolve({ kind: 'retry-later', error: new Error('503'), retryAfterMs: 10 })
+        ),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
+      metrics.count('orders_created', 1)
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('sends on an explicit flush inside the window', async () => {
+      // Lifecycle drains (RN background, shutdown) must not become no-ops for
+      // the length of a window; metrics has no `force` escape hatch.
+      const outcomes: SendMetricsBatchOutcome[] = [
+        { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 },
+      ]
+      const instance = createMockInstance({
+        _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> =>
+          Promise.resolve(outcomes.shift() ?? { kind: 'ok' })
+        ),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
+      metrics.count('orders_created', 1)
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      metrics.count('orders_created', 1)
+      await metrics.flush()
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
+    })
+
+    it('ends the wait when a later failure names none', async () => {
+      const outcomes: SendMetricsBatchOutcome[] = [
+        { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 },
+        { kind: 'retry-later', error: new Error('503') },
+      ]
+      const instance = createMockInstance({
+        _sendMetricsBatch: vi.fn((): Promise<SendMetricsBatchOutcome> =>
+          Promise.resolve(outcomes.shift() ?? { kind: 'ok' })
+        ),
+      })
+      const metrics = createMetrics({ flushIntervalMs: 10_000 }, instance)
+      metrics.count('orders_created', 1)
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(300_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
+
+      // Back on the plain interval, not another 300s.
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(3)
+    })
+
     it('does not send when the window is empty', async () => {
       createMetrics({ flushIntervalMs: 5000 })
       await vi.advanceTimersByTimeAsync(15000)
@@ -518,5 +774,49 @@ describe('PostHogMetrics', () => {
       expect(disabledInstance._sendMetricsBatch).not.toHaveBeenCalled()
       expect(optedOutInstance._sendMetricsBatch).not.toHaveBeenCalled()
     })
+  })
+
+  it('does not hold a later capture at a window a successful flush already closed', async () => {
+    let sends = 0
+    mockInstance._sendMetricsBatch = vi.fn(async (): Promise<SendMetricsBatchOutcome> => {
+      sends += 1
+      return sends === 1 ? { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 } : { kind: 'ok' }
+    })
+    const metrics = createMetrics({ flushIntervalMs: 5000 })
+
+    metrics.count('a', 1)
+    await vi.advanceTimersByTimeAsync(5000)
+    await metrics.flush()
+    const closedAt = Date.now()
+
+    metrics.count('b', 1)
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(3)
+    expect(Date.now() - closedAt).toBeLessThanOrEqual(5000)
+  })
+
+  it('releases a series captured mid-flush once that flush closes the window', async () => {
+    const metrics = createMetrics({ flushIntervalMs: 10_000 })
+    let sends = 0
+    mockInstance._sendMetricsBatch = vi.fn(async (): Promise<SendMetricsBatchOutcome> => {
+      sends += 1
+      if (sends === 1) {
+        return { kind: 'retry-later', error: new Error('429'), retryAfterMs: 300_000 }
+      }
+      await Promise.resolve()
+      if (sends === 2) {
+        metrics.count('mid', 1)
+      }
+      return { kind: 'ok' }
+    })
+
+    metrics.count('a', 1)
+    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(10_000)
+    await metrics.flush()
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(mockInstance._sendMetricsBatch).toHaveBeenCalledTimes(3)
   })
 })

@@ -9,7 +9,9 @@ import type {
   OtlpNumberDataPoint,
 } from '@posthog/types'
 import type { Logger } from '../types'
-import { isArray, safeSetTimeout } from '../utils'
+import { isArray } from '../utils'
+import { FlushTimer } from '../utils/flush-timer'
+import { RetryAfterWindow } from '../utils/retry-after'
 import { toOtlpKeyValueList } from '../utils/otlp-any-value'
 import {
   DEFAULT_HISTOGRAM_BOUNDS,
@@ -62,7 +64,11 @@ interface SeriesState {
  */
 export class PostHogMetrics {
   private _series = new Map<string, SeriesState>()
-  private _flushTimer?: ReturnType<typeof safeSetTimeout>
+  private readonly _flushTimer = new FlushTimer(() =>
+    this.flush().catch((e) => {
+      this._logger.error('Metrics flush failed:', e)
+    })
+  )
   // Serializes flushes — a manual flush() during an in-flight timer flush
   // queues behind it instead of racing it for the same window.
   private _flushPromise: Promise<void> | null = null
@@ -73,6 +79,7 @@ export class PostHogMetrics {
   // types under one name produces charts that blend both series.
   private _typeByName = new Map<string, MetricType>()
   private _typeCollisionWarned = new Set<string>()
+  private _retryAfter = new RetryAfterWindow()
   // Bumped by reset(). A flush that was in flight when reset() ran (e.g. it
   // lost a shutdown race) sees a stale generation when its send settles and
   // discards its window instead of merging it back and re-arming the timer.
@@ -136,7 +143,8 @@ export class PostHogMetrics {
   /** Clears the flush timer, drops the current window, and invalidates in-flight flushes. */
   reset(): void {
     this._generation++
-    this._clearFlushTimer()
+    this._retryAfter.reset()
+    this._flushTimer.clear()
     this._series = new Map()
     this._flushPromise = null
     this._seriesCapWarned = false
@@ -284,26 +292,25 @@ export class PostHogMetrics {
     return result
   }
 
+  // Every capture calls this, so a pending timer is left alone — re-arming on
+  // each one would push the flush out for as long as metrics keep arriving.
   private _armFlushTimer(): void {
-    if (this._flushTimer) {
+    if (this._flushTimer.pending) {
       return
     }
-    this._flushTimer = safeSetTimeout(() => {
-      this._flushTimer = undefined
-      this.flush().catch((e) => {
-        this._logger.error('Metrics flush failed:', e)
-      })
-    }, this._config.flushIntervalMs)
+    this._flushTimer.arm(this._nextFlushDelay())
   }
 
-  private _clearFlushTimer(): void {
-    if (this._flushTimer) {
-      clearTimeout(this._flushTimer)
-      this._flushTimer = undefined
-    }
+  // A floor, not a replacement: the header never retries us sooner than the
+  // flush interval would have.
+  private _nextFlushDelay(): number {
+    return Math.max(this._config.flushIntervalMs, this._retryAfter.remainingMs())
   }
 
   private async _doFlush(): Promise<void> {
+    // A flush retires the pending timer, so a delay armed for a window this
+    // flush may close cannot outlive it.
+    this._flushTimer.clear()
     if (this._series.size === 0) {
       return
     }
@@ -323,6 +330,12 @@ export class PostHogMetrics {
       // reconfigured, so this window is dropped whatever the outcome was.
       return
     }
+    this._retryAfter.record(outcome)
+    // Outright, not through the ratchet: a timer a mid-flight capture armed is
+    // measured against a window this outcome may just have closed.
+    if (this._flushTimer.pending) {
+      this._flushTimer.arm(this._nextFlushDelay())
+    }
     switch (outcome.kind) {
       case 'ok':
         return
@@ -331,7 +344,7 @@ export class PostHogMetrics {
         // the next flush instead of being lost — and re-arm the timer, since
         // with no new captures nothing else would schedule that flush.
         this._mergeWindowBack(window)
-        this._armFlushTimer()
+        this._flushTimer.armNoEarlierThan(this._nextFlushDelay())
         return
       case 'too-large':
         this._logger.warn('Metrics batch exceeded the server size limit and was dropped')

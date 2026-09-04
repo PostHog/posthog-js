@@ -4,7 +4,7 @@ import type { BeforeSpanSendFn, TracesConfig } from '@posthog/types'
 import type { Logger } from '../types'
 
 // OpenTelemetry's BatchSpanProcessor defaults, which sit comfortably under the
-// server's 2 MB body cap.
+// server's request body cap.
 const DEFAULT_FLUSH_INTERVAL_MS = 5000
 const DEFAULT_MAX_EXPORT_BATCH_SIZE = 512
 const DEFAULT_MAX_QUEUE_SIZE = 2048
@@ -15,7 +15,9 @@ const DEFAULT_MAX_EVENTS_PER_SPAN = 128
 // multi-MB attribute make a span too large for the endpoint to accept — and an
 // oversized span is dropped whole. 8 KB holds a deep stack trace and any
 // realistic header, query string or payload excerpt, and keeps a span at the
-// attribute cap under 1 MB, comfortably inside the 2 MB body cap.
+// attribute cap under 1 MB. Events are bounded by count and by this length, not
+// by how many attributes each one carries, so a span is not bounded overall;
+// the body limit is enforced per batch, where it can be measured once.
 const DEFAULT_MAX_ATTRIBUTE_VALUE_LENGTH = 8192
 
 // Live-span bounds. A server can legitimately hold thousands of spans open at

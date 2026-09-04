@@ -23,13 +23,15 @@ import { parseTraceparent, sanitizeTracestate } from './traceparent'
 import { clampEndTime, resolveStartTime, resolveSuppliedTime, sanitizeName, toEpochMs } from './sanitize'
 import { assignUserAttributes } from '../utils/json-utils'
 import { buildOtlpSpan, buildOtlpTracesPayload, buildTracesResourceAttributes } from './otlp'
-import { isPromise, safeSetTimeout } from '../utils'
+import { isPromise } from '../utils'
+import { FlushTimer } from '../utils/flush-timer'
+import { RetryAfterWindow } from '../utils/retry-after'
 
 // Retriable failures on the same head batch before it is dropped, so a stuck
 // batch cannot pin the queue while fresher spans are refused at the cap. The
-// budget counts attempts, not elapsed time: on the timer path the backoff
-// spreads them over minutes, while a host that calls `flush()` per request
-// spends them as fast as the requests arrive.
+// budget counts backoff windows rather than attempts: a host that drains on
+// every request would otherwise retire a batch in milliseconds, spending on
+// its own call rate what the timer path spends over minutes.
 const MAX_RETRIES_PER_BATCH = 8
 
 const MAX_FLUSH_BACKOFF_EXPONENT = 6
@@ -148,7 +150,7 @@ interface ParentContext {
  */
 export class PostHogTraces {
   private _queue: SpanRecord[] = []
-  private _flushTimer?: ReturnType<typeof safeSetTimeout>
+  private readonly _flushTimer = new FlushTimer(() => this._flushInBackground())
   // Serializes flushes: a second caller joins the first instead of double-sending the head.
   private _flushPromise: Promise<number> | null = null
   // A trigger no-ops while a background drain is already pending.
@@ -159,12 +161,16 @@ export class PostHogTraces {
   private _lastDropWarningAt = 0
   private _dropReasons = new Set<string>()
   private _consecutiveFlushFailures = 0
+  private _retryAfter = new RetryAfterWindow()
   // Separate from the backoff counter: this one belongs to whatever batch is at
   // the head, and resets whenever that batch is removed or shrunk.
   private _headBatchFailures = 0
   // Read only while a budget is in flight, so the head cannot grow to sweep in
   // fresh spans and drop them on a budget they never spent.
   private _headBatchSize = 0
+  // When the head batch may next be charged, on `clockNow`'s basis: one failure
+  // per backoff window, whoever drove the attempt.
+  private _headBatchChargeableAt = 0
   // Bumped by reset(); a pass whose generation is stale abandons the queue.
   private _generation = 0
   // Live-span accounting: span id -> monotonic start. Ids and numbers only,
@@ -307,6 +313,13 @@ export class PostHogTraces {
    *
    * A pass reports spans removed — queue length can't stand in, since a send
    * concurrent with an arrival leaves it unchanged.
+   *
+   * An open `Retry-After` window does not stop this: an explicit flush, or one a
+   * host runs to keep a request alive, sends whatever is queued — a serverless
+   * isolate may not be around for the armed timer to fire. The window is honoured
+   * by not charging such an attempt against the head batch's retry budget, so the
+   * wait costs a request rather than the spans. The periodic flush does wait it
+   * out.
    */
   async flush(): Promise<void> {
     for (;;) {
@@ -326,7 +339,7 @@ export class PostHogTraces {
   }
 
   private _startFlush(): Promise<number> {
-    this._clearFlushTimer()
+    this._flushTimer.clear()
     // Deferred by a microtask so the slot below is installed before the pass
     // reads anything: `_flushInner` runs synchronously as far as its first
     // await, and a resource-attribute getter or `toJSON` that ends a span in
@@ -344,7 +357,7 @@ export class PostHogTraces {
         if (this._flushPromise === promise) {
           this._flushPromise = null
         }
-        this._armFlushTimerIfQueued()
+        this._armFlushTimerIfQueuedNoEarlierThan()
       })
     this._flushPromise = promise
     return promise
@@ -352,7 +365,7 @@ export class PostHogTraces {
 
   /** Clears the queue and timer. Used on shutdown and between tests. */
   reset(): void {
-    this._clearFlushTimer()
+    this._flushTimer.clear()
     if (this._queue.length) {
       // Critical, and said here rather than counted: this is the last chance to
       // say anything about these spans, the drop warning is gated behind `debug`
@@ -373,7 +386,14 @@ export class PostHogTraces {
     this._dropReasons.clear()
     this._lastDropWarningAt = 0
     this._consecutiveFlushFailures = 0
+    this._retryAfter.reset()
+    this._resetHeadBatchBudget()
+  }
+
+  /** Called wherever the head batch leaves or changes shape, so its budget goes with it. */
+  private _resetHeadBatchBudget(): void {
     this._headBatchFailures = 0
+    this._headBatchChargeableAt = 0
   }
 
   /**
@@ -515,10 +535,14 @@ export class PostHogTraces {
       this._logger.debug('Span queue notification failed', error)
     }
 
-    // Not while a flush is failing: the queue stays above the batch size for the
-    // whole outage, so every further span end would re-POST immediately and the
-    // retry backoff would never apply.
-    if (this._queue.length >= this._maxExportBatchSize && !this._consecutiveFlushFailures) {
+    // Not while a flush is failing or the endpoint has asked us to wait: the
+    // queue stays above the batch size for the whole outage, so every further
+    // span end would re-POST immediately and the retry backoff would never apply.
+    if (
+      this._queue.length >= this._maxExportBatchSize &&
+      !this._consecutiveFlushFailures &&
+      !this._retryAfter.isOpen()
+    ) {
       this._flushInBackground()
     } else {
       this._armFlushTimerIfQueued()
@@ -750,6 +774,9 @@ export class PostHogTraces {
     }
     const discarded = this._queue.length
     this._queue = []
+    // The head batch left with the queue, so its budget goes too — anything
+    // queued after consent returns is a different batch.
+    this._resetHeadBatchBudget()
     this._recordDrop(discarded, 'the user has opted out')
     this._warnAboutDrops()
     return discarded
@@ -803,9 +830,13 @@ export class PostHogTraces {
           this._queue.splice(0, size)
           remaining -= size
           removed += size
-          this._headBatchFailures = 0
+          this._resetHeadBatchBudget()
           continue
         }
+
+        // Read before the send, so the budget below charges this attempt against
+        // the window it was actually made under.
+        const chargeable = clockNow() >= this._headBatchChargeableAt
 
         const outcome = await this._instance._sendTracesBatch(
           buildOtlpTracesPayload(spans, resourceAttributes, scopeName, scopeVersion, this._logger)
@@ -816,9 +847,11 @@ export class PostHogTraces {
           return removed
         }
 
+        this._retryAfter.record(outcome)
+
         if (outcome.kind === 'ok') {
           this._consecutiveFlushFailures = 0
-          this._headBatchFailures = 0
+          this._resetHeadBatchBudget()
           this._queue.splice(0, size)
           remaining -= size
           removed += size
@@ -835,24 +868,30 @@ export class PostHogTraces {
             this._queue.splice(0, 1)
             remaining -= 1
             removed += 1
-            this._recordDrop(1, 'the ingestion endpoint rejected it as too large')
+            this._recordDrop(1, 'it is too large for the ingestion endpoint')
             this._consecutiveFlushFailures = 0
-            this._headBatchFailures = 0
+            this._resetHeadBatchBudget()
             continue
           }
           // Halve the batch the server rejected, not the configured maximum: when the
           // queue is shallower than the maximum, shrinking it resends an identical body.
           this._maxExportBatchSize = Math.max(1, Math.floor(size / 2))
           // A different batch from here on, so its budget starts fresh.
-          this._headBatchFailures = 0
+          this._resetHeadBatchBudget()
           this._logger.debug(`Batch too large; retrying the same spans in batches of ${this._maxExportBatchSize}`)
           continue
         }
 
         if (outcome.kind === 'retry-later') {
           this._consecutiveFlushFailures++
-          this._headBatchFailures++
+          // One charge per backoff window: a refusal arriving before the window
+          // the last charge bought has elapsed is the same refusal seen again,
+          // not new evidence against the batch.
           this._headBatchSize = size
+          if (chargeable) {
+            this._headBatchFailures++
+            this._headBatchChargeableAt = clockNow() + this._nextFlushDelay()
+          }
           if (this._headBatchFailures < MAX_RETRIES_PER_BATCH) {
             // Keep the spans queued; the flush timer picks them up again.
             this._logger.debug('Span export failed; retrying on the next flush', outcome.error)
@@ -864,8 +903,16 @@ export class PostHogTraces {
           remaining -= size
           removed += size
           this._consecutiveFlushFailures = 0
-          this._headBatchFailures = 0
+          this._resetHeadBatchBudget()
           this._recordDrop(size, `the ingestion endpoint failed ${MAX_RETRIES_PER_BATCH} times in a row`)
+          if (this._retryAfter.isOpen()) {
+            // Retiring the batch cleared the failure counters, so this drain
+            // would carry straight on to the next batch inside the endpoint's
+            // wait. Ending the pass here costs one send rather than the rest of
+            // the queue: `flush()` sees a non-zero count and loops, so the next
+            // batch still goes out, one pass later.
+            return removed
+          }
           continue
         }
 
@@ -875,7 +922,7 @@ export class PostHogTraces {
         remaining -= size
         removed += size
         this._consecutiveFlushFailures = 0
-        this._headBatchFailures = 0
+        this._resetHeadBatchBudget()
         this._recordDrop(size, 'the ingestion endpoint rejected the batch')
       }
 
@@ -906,18 +953,26 @@ export class PostHogTraces {
         this._backgroundFlush = undefined
         // A trigger that arrived while this drain was finishing found the guard
         // set and the queue empty, so neither path armed a timer.
-        this._armFlushTimerIfQueued()
+        this._armFlushTimerIfQueuedNoEarlierThan()
       })
   }
 
+  // Every span end can reach this, so a pending timer is left alone rather than
+  // pushing the flush out.
   private _armFlushTimerIfQueued(): void {
-    if (this._flushTimer || !this._queue.length) {
+    if (this._flushTimer.pending || !this._queue.length) {
       return
     }
-    this._flushTimer = safeSetTimeout(() => {
-      this._flushTimer = undefined
-      this._flushInBackground()
-    }, this._nextFlushDelay())
+    this._flushTimer.arm(this._nextFlushDelay())
+  }
+
+  // Both floors, so a timer a span end armed at the plain interval gives way to
+  // a longer one.
+  private _armFlushTimerIfQueuedNoEarlierThan(): void {
+    if (!this._queue.length) {
+      return
+    }
+    this._flushTimer.armNoEarlierThan(this._nextFlushDelay())
   }
 
   // Retry delay: base interval, doubling, capped at 30s — never below an interval
@@ -925,13 +980,9 @@ export class PostHogTraces {
   private _nextFlushDelay(): number {
     const exponent = Math.min(Math.max(0, this._consecutiveFlushFailures - 1), MAX_FLUSH_BACKOFF_EXPONENT)
     const delay = this._config.flushIntervalMs * 2 ** exponent
-    return Math.min(delay, Math.max(MAX_FLUSH_BACKOFF_MS, this._config.flushIntervalMs))
-  }
-
-  private _clearFlushTimer(): void {
-    if (this._flushTimer) {
-      clearTimeout(this._flushTimer)
-      this._flushTimer = undefined
-    }
+    const capped = Math.min(delay, Math.max(MAX_FLUSH_BACKOFF_MS, this._config.flushIntervalMs))
+    // A floor, not a replacement: the header never retries us sooner than our
+    // own backoff would have.
+    return Math.max(capped, this._retryAfter.remainingMs())
   }
 }

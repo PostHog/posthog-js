@@ -29,7 +29,7 @@ import type {
 /** Same tagged outcome shape as `SendLogsBatchOutcome` — one policy for all three signals. */
 export type SendTracesBatchOutcome =
   | { kind: 'ok' }
-  | { kind: 'retry-later'; error: unknown }
+  | { kind: 'retry-later'; error: unknown; retryAfterMs?: number }
   | { kind: 'too-large' }
   | { kind: 'fatal'; error: unknown }
 

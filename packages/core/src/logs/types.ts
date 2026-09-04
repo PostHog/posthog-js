@@ -128,8 +128,8 @@ export interface PostHogLogsConfig {
 
   /**
    * Max records per outbound POST. Keeps each request under the server's
-   * 2 MB cap. On a 413 response, the SDK halves this value, retries the
-   * same records, then ramps back up by 1 per healthy send. A 413 on a
+   * request body cap. On a 413 response, the SDK halves this value, retries
+   * the same records, then ramps back up by 1 per healthy send. A 413 on a
    * single-record batch drops the record (it's larger than the server can
    * accept regardless of batch size). Default: 50 (RN) / 100 (browser).
    */

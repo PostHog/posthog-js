@@ -41,6 +41,7 @@ import {
   getEventUuid,
   safeJsonStringify,
 } from './utils'
+import { parseRetryAfterMs } from './utils/retry-after'
 import { uuidv7 } from './vendor/uuidv7'
 import {
   ErrorPropertiesBuilder,
@@ -68,6 +69,20 @@ class PostHogFetchHttpError extends Error {
 
   get status(): number {
     return this.response.status
+  }
+
+  /**
+   * The response's `Retry-After` as milliseconds from now, when it sent a usable
+   * one, clamped to `MAX_RETRY_AFTER_MS`.
+   */
+  get retryAfterMs(): number | undefined {
+    try {
+      return parseRetryAfterMs(this.response.headers?.get('retry-after'))
+    } catch {
+      // `headers.get` is injected transport code; a throwing one must not turn a
+      // retriable failure into an unhandled rejection.
+      return undefined
+    }
   }
 
   get bodyReadTimedOut(): boolean {
@@ -206,6 +221,47 @@ function isRetryableFlagsFetchError(
   return code !== 'ECONNREFUSED'
 }
 
+/**
+ * Ceiling on what the SDK will put on the wire: a body over it is reported as
+ * too large without a request being made, and a batch of one that still exceeds
+ * it is dropped. The ingestion service applies its own
+ * `MAX_REQUEST_BODY_SIZE_BYTES` twice at the same value — once to the raw
+ * request body and again to the gzip output it decompresses — so measuring the
+ * uncompressed payload here matches the stricter of the two.
+ *
+ * Set to the largest limit any known deployment configures — 10 MiB, what the
+ * ingestion service runs with — rather than the 2 MB the service falls back to
+ * when nothing configures it. The ceiling only earns its place by refusing a
+ * body that no deployment would have accepted: at 2 MB it would instead refuse
+ * bodies the service takes today, dropping records with no `413` to show for
+ * them. Deployments configured lower, and proxies in front of them, are covered
+ * by the `413` path, which stays the primary mechanism.
+ */
+const OTLP_MAX_BODY_BYTES = 10 * 1024 * 1024
+
+/**
+ * A request body's size on the wire. `Buffer` where it exists, `TextEncoder`
+ * elsewhere.
+ *
+ * Total by construction: it runs on hosts that define only part of the web
+ * platform — `Blob` in particular is absent on some server runtimes — and a
+ * size that cannot be measured is reported as `0`, leaving the body to be sent
+ * rather than turning a missing global into a failed export.
+ */
+function byteLengthOf(body: string | Blob | Uint8Array): number {
+  try {
+    if (typeof body !== 'string') {
+      return body instanceof Uint8Array ? body.byteLength : body.size
+    }
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.byteLength(body, STRING_FORMAT)
+    }
+    return new TextEncoder().encode(body).length
+  } catch {
+    return 0
+  }
+}
+
 export function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHttpError & { status: 413 } {
   return typeof err === 'object' && err instanceof PostHogFetchHttpError && err.status === 413
 }
@@ -234,7 +290,7 @@ function isPostHogEventProperties(value: JsonType | undefined): value is PostHog
 export type SendLogsBatchOutcome =
   | { kind: 'ok' }
   | { kind: 'too-large' }
-  | { kind: 'retry-later'; error: unknown }
+  | { kind: 'retry-later'; error: unknown; retryAfterMs?: number }
   | { kind: 'fatal'; error: unknown }
 
 /**
@@ -245,7 +301,7 @@ export type SendLogsBatchOutcome =
 type SendOtlpBatchOutcome =
   | { kind: 'ok' }
   | { kind: 'too-large' }
-  | { kind: 'retry-later'; error: unknown }
+  | { kind: 'retry-later'; error: unknown; retryAfterMs?: number }
   | { kind: 'fatal'; error: unknown }
 
 export enum QuotaLimitedFeature {
@@ -1665,13 +1721,44 @@ export abstract class PostHogCoreStateless {
       return { kind: 'fatal', error: new Error('The client is disabled') }
     }
 
-    const serialized = JSON.stringify(payload)
+    // Serialised behind a guard: a payload too big to hold as one string throws
+    // `RangeError` here, which escapes the tagged-outcome contract and leaves the
+    // caller retrying a batch it can never send. Reported as too-large so it takes
+    // the same halve-and-isolate path as a batch that serialises but is oversized.
+    let serialized: string
+    try {
+      serialized = JSON.stringify(payload)
+    } catch (error) {
+      this.logMsgIfDebug(() =>
+        console.warn(`[PostHog] Could not serialize a ${path} batch; reporting it as too large`, error)
+      )
+      return { kind: 'too-large' }
+    }
+
+    // Measured on the uncompressed payload: the endpoint decompresses the body
+    // and applies its limit to what comes out, so one that gzips small is still
+    // refused on its decompressed size. A batch the endpoint cannot accept is
+    // reported without being sent — and before it is compressed — so the caller
+    // halves it, and ultimately isolates and drops the one oversized record,
+    // without spending a request or a gzip pass on each attempt.
+    const payloadBytes = byteLengthOf(serialized)
+    if (payloadBytes > OTLP_MAX_BODY_BYTES) {
+      this.logMsgIfDebug(() =>
+        console.warn(
+          `[PostHog] Not sending a ${path} batch of ${payloadBytes} bytes: the endpoint accepts at most ${OTLP_MAX_BODY_BYTES}`
+        )
+      )
+      return { kind: 'too-large' }
+    }
+
     const url =
       auth === 'bearer'
         ? `${this.host}/i/v1/${path}`
         : `${this.host}/i/v1/${path}?token=${encodeURIComponent(this.apiKey)}`
 
     const gzippedPayload = !this.disableCompression ? await this.compressPayload(serialized) : null
+    const body = gzippedPayload || serialized
+
     const fetchOptions: PostHogFetchOptions = {
       method: 'POST',
       headers: {
@@ -1680,7 +1767,7 @@ export abstract class PostHogCoreStateless {
         ...(auth === 'bearer' && { Authorization: `Bearer ${this.apiKey}` }),
         ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
       },
-      body: gzippedPayload || serialized,
+      body,
     }
 
     try {
@@ -1693,6 +1780,12 @@ export abstract class PostHogCoreStateless {
             if (isPostHogFetchContentTooLargeError(err)) {
               return false
             }
+            if (err instanceof PostHogFetchHttpError && err.retryAfterMs !== undefined) {
+              // The endpoint named a wait. This loop retries on a fixed short
+              // delay, so retrying here would spend every attempt inside the
+              // window; hand it to the queue's backoff instead.
+              return false
+            }
             return isPostHogFetchRetryableError(err)
           },
         }
@@ -1703,7 +1796,8 @@ export abstract class PostHogCoreStateless {
         return { kind: 'too-large' }
       }
       if (isPostHogFetchRetryableError(err)) {
-        return { kind: 'retry-later', error: err }
+        const retryAfterMs = err instanceof PostHogFetchHttpError ? err.retryAfterMs : undefined
+        return { kind: 'retry-later', error: err, ...(retryAfterMs !== undefined && { retryAfterMs }) }
       }
       return { kind: 'fatal', error: err }
     }
@@ -1751,25 +1845,7 @@ export abstract class PostHogCoreStateless {
     requestTimeout?: number
   ): Promise<T | void> {
     const body = options.body ? options.body : ''
-    let reqByteLength = -1
-    try {
-      if (body instanceof Blob) {
-        reqByteLength = body.size
-      } else if (body instanceof Uint8Array) {
-        reqByteLength = body.byteLength
-      } else {
-        reqByteLength = Buffer.byteLength(body, STRING_FORMAT)
-      }
-    } catch {
-      if (body instanceof Blob) {
-        reqByteLength = body.size
-      } else if (body instanceof Uint8Array) {
-        reqByteLength = body.byteLength
-      } else {
-        const encoded = new TextEncoder().encode(body)
-        reqByteLength = encoded.length
-      }
-    }
+    const reqByteLength = byteLengthOf(body)
 
     const retriableOptions = { ...this._retryOptions, ...retryOptions }
     let attempt = 0
