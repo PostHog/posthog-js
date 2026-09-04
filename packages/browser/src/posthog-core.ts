@@ -1884,8 +1884,15 @@ export class PostHog implements PostHogInterface {
             this._requestQueue.enqueue(requestOptions)
         } else {
             // The queue drains with `sendBeacon` on pagehide, an unbatched send has no such safety
-            // net. `sendBeacon` gives no response, so requests that need one keep their transport.
-            if (!requestOptions.transport && !requestOptions.callback && (this._isPageUnloading || !fetch)) {
+            // net. `sendBeacon` gives no response, so requests that need one keep their transport,
+            // and it cannot carry `request_headers`, so a project that sets them (e.g. for an
+            // authenticating proxy) keeps a transport that can.
+            if (
+                !requestOptions.transport &&
+                !requestOptions.callback &&
+                isEmptyObject(this.config.request_headers ?? {}) &&
+                (this._isPageUnloading || !fetch)
+            ) {
                 requestOptions.transport = 'sendBeacon'
             }
             this._send_retriable_request(requestOptions)

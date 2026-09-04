@@ -58,6 +58,34 @@ describe('unbatched capture transport', () => {
         expect(capturedTransport()).toBe('XHR')
     })
 
+    describe('with request_headers configured', () => {
+        beforeEach(async () => {
+            posthog = await createPosthogInstance(uuidv7(), {
+                request_batching: true,
+                before_send: (event) => event,
+                request_headers: { 'X-Proxy-Auth': 'proxy-value' },
+            })
+            sendRequest = vi.spyOn(posthog, '_send_request').mockImplementation(() => {})
+        })
+
+        it('keeps the default transport when fetch is not available', () => {
+            globalsState.fetch = undefined
+
+            posthog.capture('conversion', {}, { send_instantly: true })
+
+            expect(capturedTransport()).toBeUndefined()
+        })
+
+        it('keeps the default transport once the page is unloading', () => {
+            posthog._handle_unload()
+            sendRequest.mockClear()
+
+            posthog.capture('conversion', {}, { send_instantly: true })
+
+            expect(capturedTransport()).toBeUndefined()
+        })
+    })
+
     it('still batches a queued event', () => {
         globalsState.fetch = undefined
         const enqueue = vi.spyOn(posthog._requestQueue as any, 'enqueue').mockImplementation(() => {})
