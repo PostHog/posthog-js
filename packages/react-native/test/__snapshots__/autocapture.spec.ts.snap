@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`PostHog React Native autocapture should capture a valid event 1`] = `
+exports[`PostHog React Native > autocapture > should capture a valid event 1`] = `
 [
   "touch",
   [
@@ -89,7 +89,7 @@ exports[`PostHog React Native autocapture should capture a valid event 1`] = `
 ]
 `;
 
-exports[`PostHog React Native autocapture should capture a valid event via the target fiber fallback when _targetInst is absent 1`] = `
+exports[`PostHog React Native > autocapture > should capture a valid event via the target fiber fallback when _targetInst is absent 1`] = `
 [
   "touch",
   [

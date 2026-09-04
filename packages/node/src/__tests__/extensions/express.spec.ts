@@ -2,9 +2,9 @@ import type { IncomingHttpHeaders } from 'node:http'
 import { PostHog } from '@/entrypoints/index.node'
 import { setupExpressErrorHandler, setupExpressRequestContext } from '@/extensions/express'
 
-jest.mock('../../version', () => ({ version: '1.2.3' }))
+vi.mock('../../version', () => ({ version: '1.2.3' }))
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const waitForFlushTimer = async (posthog: PostHog): Promise<void> => {
   await posthog.shutdown()
@@ -41,13 +41,13 @@ const createMockResponse = (overrides?: { statusCode?: number }): any => ({
 })
 
 const createRequestContextMiddleware = (posthog: PostHog): any => {
-  const app = { use: jest.fn() }
+  const app = { use: vi.fn() }
   setupExpressRequestContext(posthog, app)
   return app.use.mock.calls[0][0]
 }
 
 const createErrorHandlerMiddleware = (posthog: PostHog): any => {
-  const app = { use: jest.fn() }
+  const app = { use: vi.fn() }
   setupExpressErrorHandler(posthog, app)
   return app.use.mock.calls[0][0]
 }
@@ -81,7 +81,7 @@ describe('Express extension', () => {
 
   describe('request context middleware', () => {
     it('should register middleware with setupExpressRequestContext', () => {
-      const app = { use: jest.fn() }
+      const app = { use: vi.fn() }
 
       setupExpressRequestContext(posthog, app)
 
@@ -197,7 +197,7 @@ describe('Express extension', () => {
 
   describe('error handler', () => {
     it('should keep setupExpressErrorHandler backwards compatible', () => {
-      const app = { use: jest.fn() }
+      const app = { use: vi.fn() }
 
       setupExpressErrorHandler(posthog, app)
 
@@ -219,7 +219,7 @@ describe('Express extension', () => {
         remoteAddress: '192.168.1.1',
       })
       const res = createMockResponse({ statusCode: 503 })
-      const next = jest.fn()
+      const next = vi.fn()
 
       handler(error, req, res, next)
       await waitForFlushTimer(posthog)

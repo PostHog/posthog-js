@@ -1107,8 +1107,8 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.",
-              "isOptional": true,
+              "description": "A non-empty string that uniquely identifies a user.",
+              "isOptional": false,
               "type": "string",
               "name": "new_distinct_id"
             },
@@ -3691,7 +3691,7 @@
         },
         {
           "description": "Identify a user with a distinct ID and optionally set person properties.",
-          "type": "(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties) => void",
+          "type": "(new_distinct_id: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties) => void",
           "name": "identify"
         },
         {

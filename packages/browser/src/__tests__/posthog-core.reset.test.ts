@@ -5,10 +5,10 @@ import { COOKIELESS_SENTINEL_VALUE, USER_STATE } from '../constants'
 
 describe('reset()', () => {
     let instance: PostHog
-    let beforeSendMock: jest.Mock
+    let beforeSendMock: vi.Mock
 
     beforeEach(async () => {
-        beforeSendMock = jest.fn().mockImplementation((e) => e)
+        beforeSendMock = vi.fn().mockImplementation((e) => e)
 
         instance = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
@@ -53,7 +53,7 @@ describe('reset()', () => {
             opt_out_capturing_by_default: true,
         })
         instance.opt_in_capturing({ captureEventName: false })
-        console.warn = jest.fn()
+        console.warn = vi.fn()
 
         instance.reset()
 
@@ -65,7 +65,7 @@ describe('reset()', () => {
     })
 
     it('resets the logs extension so buffered logs are dropped', () => {
-        const logsReset = jest.spyOn(instance.logs, 'reset')
+        const logsReset = vi.spyOn(instance.logs, 'reset')
 
         instance.reset()
 
@@ -119,29 +119,27 @@ describe('reset()', () => {
         expect(instance.featureFlags.hasLoadedFlags).toBe(false)
         expect(instance.featureFlags.getFlags()).toEqual([])
 
-        const mockCallback = jest.fn()
+        const mockCallback = vi.fn()
         instance.featureFlags.onFeatureFlags(mockCallback)
 
         expect(mockCallback).not.toHaveBeenCalled()
     })
 
     it('reloads feature flags for the new anonymous user', async () => {
-        const callFlags = jest.spyOn(instance.featureFlags, '_callFlagsEndpoint')
+        const callFlags = vi.spyOn(instance.featureFlags, '_callFlagsEndpoint')
 
         instance.reset()
-        await new Promise((resolve) => setTimeout(resolve, 10))
 
-        expect(callFlags).toHaveBeenCalledTimes(1)
+        await vi.waitFor(() => expect(callFlags).toHaveBeenCalledTimes(1))
     })
 
     it('does not reload twice in existing call sites which manually invoke reloadFeatureFlags', async () => {
-        const callFlags = jest.spyOn(instance.featureFlags, '_callFlagsEndpoint')
+        const callFlags = vi.spyOn(instance.featureFlags, '_callFlagsEndpoint')
 
         instance.reset()
         instance.reloadFeatureFlags()
-        await new Promise((resolve) => setTimeout(resolve, 10))
 
-        expect(callFlags).toHaveBeenCalledTimes(1)
+        await vi.waitFor(() => expect(callFlags).toHaveBeenCalledTimes(1))
     })
 
     describe('when calling reset(true)', () => {
@@ -207,7 +205,7 @@ describe('reset()', () => {
 
         it('applies bootstrapped feature flags and payloads', () => {
             // Keep the asynchronous flags reload from racing this synchronous bootstrap assertion on slower CI workers.
-            jest.spyOn(instance, 'reloadFeatureFlags').mockImplementation()
+            vi.spyOn(instance, 'reloadFeatureFlags').mockImplementation(() => {})
 
             instance.reset({
                 bootstrap: {
@@ -235,6 +233,7 @@ describe('reset()', () => {
                 'false-payload-flag',
                 'zero-payload-flag',
                 'empty-payload-flag',
+                'inactive-flag',
             ])
             expect(instance.featureFlags.getFlagVariants()).toEqual({
                 'active-flag': true,
@@ -242,6 +241,7 @@ describe('reset()', () => {
                 'false-payload-flag': true,
                 'zero-payload-flag': true,
                 'empty-payload-flag': true,
+                'inactive-flag': false,
             })
             expect(instance.featureFlags.getFeatureFlagPayload('active-flag')).toEqual({ key: 'value' })
             expect(instance.featureFlags.getFeatureFlagPayload('false-payload-flag')).toBe(false)
@@ -288,7 +288,7 @@ describe('reset()', () => {
 
         it('applies a bootstrapped session ID and rotates the window', () => {
             const initialIds = instance.sessionManager!.checkAndGetSessionAndWindowId()
-            const onSessionId = jest.fn()
+            const onSessionId = vi.fn()
             instance.onSessionId(onSessionId)
             onSessionId.mockClear()
             const sessionID = uuidv7()

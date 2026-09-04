@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.425.1",
+    "version": "1.426.2",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -26,11 +26,11 @@
         "prepublishOnly": "pnpm check-react",
         "check-react": "[ -d 'react/dist' ] || { echo '@posthog/react has not been built'; exit 1; }",
         "test": "pnpm test:unit && pnpm test:functional",
-        "test:unit": "jest src",
-        "test:unit:surveys": "jest '.*survey.*.test.'",
-        "test:unit:tours": "jest '.*tours.*.test.'",
-        "test:functional": "jest functional_tests",
-        "test-watch": "jest --watch src",
+        "test:unit": "vitest run src",
+        "test:unit:surveys": "vitest run survey",
+        "test:unit:tours": "vitest run tours",
+        "test:functional": "POSTHOG_FUNCTIONAL_TESTS=1 vitest run functional_tests",
+        "test-watch": "vitest src",
         "test:typecheck": "cd src/__tests__ && tsc --noEmit --project tsconfig.json",
         "typecheck": "tsc --noEmit --project tsconfig.json",
         "playwright": "pnpm exec playwright test --project webkit --project firefox --project chromium",
@@ -48,7 +48,7 @@
         "generate-references": "pnpm exec api-extractor run --config ./api-extractor.json --local && node scripts/generate-docs.js"
     },
     "main": "dist/main.js",
-    "module": "dist/module.js",
+    "module": "dist/module.mjs",
     "types": "dist/module.d.ts",
     "files": [
         "lib/*",
@@ -94,7 +94,6 @@
         "@babel/plugin-transform-react-jsx": "catalog:",
         "@babel/preset-env": "catalog:",
         "@babel/preset-typescript": "catalog:",
-        "@jest/globals": "^29.7.0",
         "@jridgewell/sourcemap-codec": "^1.5.5",
         "@playwright/test": "1.52.0",
         "@posthog-tooling/rollup-utils": "workspace:*",
@@ -115,12 +114,10 @@
         "@testing-library/preact": "catalog:",
         "@types/dompurify": "^3.2.0",
         "@types/dotenv": "^8.2.3",
-        "@types/jest": "catalog:",
         "@types/node": "^22.5.0",
         "@types/query-selector-shadow-dom": "^1.0.4",
         "@types/sinon": "^17.0.1",
         "@types/web": "^0.0.222",
-        "babel-jest": "^29.7.0",
         "browserslist": "^4.28.8",
         "compare-versions": "^6.1.1",
         "date-fns": "^3.6.0",
@@ -129,8 +126,6 @@
         "fast-check": "^2.17.0",
         "http-server": "14.1.1",
         "identity-obj-proxy": "^3.0.0",
-        "jest": "catalog:",
-        "jest-environment-jsdom": "catalog:",
         "jsdom": "16.7.0",
         "jsdom-global": "3.0.2",
         "lightningcss": "^1.33.0",
@@ -148,7 +143,8 @@
         "ts-node": "^10.9.2",
         "tslib": "catalog:",
         "typescript": "catalog:",
-        "yargs": "^17.7.2"
+        "yargs": "^17.7.2",
+        "vitest": "catalog:"
     },
     "browserslist": [
         "> 0.5%, last 2 versions, Firefox ESR, not dead"

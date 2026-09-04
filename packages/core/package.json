@@ -1,6 +1,6 @@
 {
   "name": "@posthog/core",
-  "version": "1.50.2",
+  "version": "1.50.4",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -43,7 +43,7 @@
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "build": "rslib build",
     "dev": "rslib build -w",
-    "test:unit": "jest",
+    "test:unit": "vitest run",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "exports": {
@@ -84,7 +84,7 @@
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
-    "@types/jest": "catalog:",
-    "jest": "catalog:"
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:"
   }
 }

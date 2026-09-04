@@ -18,7 +18,8 @@
         "experimentalDecorators": true,
         "lib": ["es2015", "dom"],
         "jsx": "react",
-        "allowJs": true
+        "allowJs": true,
+        "types": ["vitest/globals", "node"]
     },
     "include": ["src/**/*"],
     "exclude": ["node_modules"]

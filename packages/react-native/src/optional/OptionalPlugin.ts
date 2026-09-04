@@ -23,28 +23,46 @@ export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin &
   reset?: (distinctId: string, anonymousId: string) => Promise<void>
 }
 
-export let OptionalReactNativePlugin: PostHogReactNativePluginExtended | undefined = undefined
+export type OptionalPluginLoaders = {
+  loadPrimary: () => PostHogReactNativePluginExtended
+  loadPrimaryVersion: () => string | undefined
+  loadLegacy: () => PostHogReactNativePluginExtended
+}
+
+export const resolveOptionalPlugin = (
+  platformOS: string,
+  loaders?: OptionalPluginLoaders
+): { plugin: PostHogReactNativePluginExtended | undefined; version: string | undefined } => {
+  let plugin: PostHogReactNativePluginExtended | undefined
+  let version: string | undefined
+
+  if (platformOS !== 'web') {
+    try {
+      plugin = loaders ? loaders.loadPrimary() : require('@posthog/react-native-plugin')
+      try {
+        version = loaders ? loaders.loadPrimaryVersion() : require('@posthog/react-native-plugin/package.json')?.version
+      } catch {
+        // Strict resolvers can reject this unexported subpath on older plugin versions.
+        // Metro falls back to file-based resolution, so version logging only degrades to unknown where needed.
+      }
+    } catch {}
+
+    // The legacy fallback is session-replay only and has no macOS support, so it's skipped on macOS.
+    if (!plugin && platformOS !== 'macos') {
+      try {
+        plugin = loaders ? loaders.loadLegacy() : require('posthog-react-native-session-replay')
+      } catch {}
+    }
+  }
+
+  return { plugin, version }
+}
+
+const optionalPlugin = resolveOptionalPlugin(Platform.OS)
+
+export const OptionalReactNativePlugin = optionalPlugin.plugin
 
 // Resolved version of the loaded native plugin. It is logged next to the replay
 // config so a stale plugin, which silently ignores newer options such as sampleRate,
 // is visible in a debug log.
-export let OptionalReactNativePluginVersion: string | undefined = undefined
-
-if (Platform.OS !== 'web') {
-  try {
-    OptionalReactNativePlugin = require('@posthog/react-native-plugin')
-    try {
-      OptionalReactNativePluginVersion = require('@posthog/react-native-plugin/package.json')?.version
-    } catch {
-      // Strict resolvers such as Node and Jest can reject this unexported subpath on older plugin versions.
-      // Metro falls back to file-based resolution, so version logging only degrades to unknown where needed.
-    }
-  } catch (e) {}
-
-  // The legacy fallback is session-replay only and has no macOS support, so it's skipped on macOS.
-  if (!OptionalReactNativePlugin && Platform.OS !== 'macos') {
-    try {
-      OptionalReactNativePlugin = require('posthog-react-native-session-replay')
-    } catch (e) {}
-  }
-}
+export const OptionalReactNativePluginVersion = optionalPlugin.version
