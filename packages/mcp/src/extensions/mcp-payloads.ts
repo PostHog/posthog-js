@@ -25,17 +25,30 @@ const SENSITIVE_KEY_PATTERN =
 // over-redact ordinary prose. Patterns are ordered so an earlier pass never eats
 // digits a later pass needs (email before phone, IPs before phone, cards before
 // the generic phone pass). See `redactPii`.
-const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
+// Horizontal Unicode spaces (NBSP, narrow NBSP, ideographic space, ...) are what
+// appear when text is copied from web pages or PDFs. `redactPii` normalizes them
+// to an ASCII space first so the separator-based card/phone/SSN candidates match
+// them instead of leaking the identifier they group.
+const UNICODE_SPACE_PATTERN = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g
+// Quantifiers are bounded to RFC-ish limits (local-part <=64, domain <=255,
+// TLD <=24) rather than open-ended `+`. Unbounded `+` here is quadratic: on a
+// long run of local-part chars with no valid `.tld`, `replace` rescans from
+// every start position. `$mcp_intent` is attacker-influenceable free text seen
+// before truncation, so an open-ended pattern is a reachable event-loop stall.
+const EMAIL_PATTERN = /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,24}/g
 const IPV4_PATTERN = /\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b/g
 // Full 8-group form, or any compressed form containing "::". Requiring "::" for
 // the compressed branch keeps clock/time strings like "12:30:45" from matching.
 const IPV6_PATTERN =
   /\b(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}\b|\b[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4}){0,6}::(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4}){0,6})?\b|::(?:[A-Fa-f0-9]{1,4}(?::[A-Fa-f0-9]{1,4}){0,6})/g
-const US_SSN_PATTERN = /\b\d{3}-\d{2}-\d{4}\b/g
-// 13–19 digits, optionally grouped by single spaces or dashes. This only marks a
-// candidate; the Luhn check in `redactPii` is what confirms it is a real card and
-// keeps arbitrary long digit runs from being redacted.
-const CREDIT_CARD_CANDIDATE_PATTERN = /\b\d(?:[ -]?\d){12,18}\b/g
+// A separator (space, dot, or dash) is required between the 3-2-4 groups so bare
+// 9-digit IDs are never mistaken for an SSN.
+const US_SSN_PATTERN = /\b\d{3}[ .-]\d{2}[ .-]\d{4}\b/g
+// 13–19 digits, optionally grouped by a single space, dot, dash, or slash. This
+// only marks a candidate; the Luhn check in `redactPii` is what confirms it is a
+// real card, so widening the separators cannot add false positives — it only
+// lets dot/slash-grouped cards reach the check instead of leaking past it.
+const CREDIT_CARD_CANDIDATE_PATTERN = /\b\d(?:[ ./-]?\d){12,18}\b/g
 // A permissive phone candidate; `redactPii` confirms it has 10–15 digits and at
 // least one grouping character (`+`, parentheses, space, dash, or dot) so bare
 // numeric IDs are left intact.
@@ -103,15 +116,18 @@ function passesLuhn(digits: string): boolean {
  * Redacts structured personal identifiers (emails, IP addresses, credit-card
  * numbers, US SSNs, and phone numbers) from a free-text string. Intended for the
  * agent-narrated `$mcp_intent` value only — not for structured tool parameters or
- * responses, where the same shapes are often legitimate data. Returns a new
- * string; leaves the input untouched when nothing matches.
+ * responses, where the same shapes are often legitimate data. Horizontal Unicode
+ * spaces are first normalized to an ASCII space so copy-pasted identifiers still
+ * match. Returns a new string; leaves the input's identifiers untouched when
+ * nothing matches.
  */
 export function redactPii(value: string): string {
-  let result = value.replace(EMAIL_PATTERN, REDACTED_VALUE)
+  let result = value.replace(UNICODE_SPACE_PATTERN, ' ')
+  result = result.replace(EMAIL_PATTERN, REDACTED_VALUE)
   result = result.replace(IPV4_PATTERN, REDACTED_VALUE)
   result = result.replace(IPV6_PATTERN, REDACTED_VALUE)
   result = result.replace(CREDIT_CARD_CANDIDATE_PATTERN, (match) => {
-    const digits = match.replace(/[ -]/g, '')
+    const digits = match.replace(/[ ./-]/g, '')
     return digits.length >= 13 && digits.length <= 19 && passesLuhn(digits) ? REDACTED_VALUE : match
   })
   result = result.replace(US_SSN_PATTERN, REDACTED_VALUE)

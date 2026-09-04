@@ -112,9 +112,30 @@ describe('redactPii', () => {
     )
   })
 
-  it('redacts US social security numbers', () => {
-    expect(redactPii('Verifying identity with SSN 123-45-6789 for the claim.')).toBe(
-      'Verifying identity with SSN [redacted] for the claim.'
+  it('redacts US social security numbers with dash, space, or dot separators', () => {
+    for (const ssn of ['123-45-6789', '123 45 6789', '123.45.6789']) {
+      expect(redactPii(`Verifying identity with SSN ${ssn} for the claim.`)).toBe(
+        'Verifying identity with SSN [redacted] for the claim.'
+      )
+    }
+  })
+
+  it('does not treat a bare 9-digit number as an SSN', () => {
+    expect(redactPii('Looking up record 123456789 in the ledger.')).toBe('Looking up record 123456789 in the ledger.')
+  })
+
+  it('redacts cards grouped with dots or slashes without leaking a trailing digit', () => {
+    for (const card of ['4111.1111.1111.1111', '4111/1111/1111/1111']) {
+      expect(redactPii(`Charging the saved card ${card} today.`)).toBe('Charging the saved card [redacted] today.')
+    }
+  })
+
+  it('redacts identifiers grouped with Unicode (NBSP) spaces copied from web pages', () => {
+    const NBSP = String.fromCharCode(0x00a0)
+    const NNBSP = String.fromCharCode(0x202f)
+    expect(redactPii(`Charging card 4111${NBSP}1111${NBSP}1111${NBSP}1111 now.`)).toBe('Charging card [redacted] now.')
+    expect(redactPii(`Calling the customer on 415${NNBSP}555${NNBSP}0132 today.`)).toBe(
+      'Calling the customer on [redacted] today.'
     )
   })
 
@@ -132,5 +153,20 @@ describe('redactPii', () => {
   it('returns the input unchanged when there is no PII', () => {
     const intent = 'Searching the organization repositories to prioritize open performance issues.'
     expect(redactPii(intent)).toBe(intent)
+  })
+
+  it('handles a long pathological string quickly (email pattern is not quadratic)', () => {
+    // A 100k-char run with an `@` but no valid TLD is the worst case for an
+    // unbounded email pattern. With bounded quantifiers this stays linear; a
+    // regression to `+` would blow the default test timeout instead.
+    const pathological = `${'a'.repeat(50_000)}@${'a'.repeat(50_000)}`
+    const start = Date.now()
+    expect(redactPii(pathological)).toBe(pathological)
+    expect(Date.now() - start).toBeLessThan(1000)
+  })
+
+  it('still redacts an email with a maximal 64-char local part', () => {
+    const local = 'a'.repeat(64)
+    expect(redactPii(`from ${local}@example.com now`)).toBe('from [redacted] now')
   })
 })
