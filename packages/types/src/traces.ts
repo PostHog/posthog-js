@@ -120,6 +120,10 @@ export interface Span {
     /**
      * Record a timestamped event within the span, e.g. a cache miss or a retry.
      * Defaults to the current time.
+     *
+     * One event carries at most 128 attributes; further keys are dropped and
+     * counted on the exported event. Use `maxEventsPerSpan` to bound how many
+     * events a span carries.
      */
     addEvent(name: string, attributes?: SpanAttributes, timestamp?: SpanTimeInput): this
 
@@ -327,19 +331,6 @@ export interface TracesConfig {
     maxEventsPerSpan?: number
 
     /**
-     * Maximum attributes on a single span event. On overflow the first
-     * `maxAttributesPerEvent` are kept and later ones are dropped, with the
-     * number dropped reported on the exported event.
-     *
-     * `maxAttributesPerSpan` counts a span's own attributes and does not reach
-     * inside its events, so this is what bounds an event's width — including the
-     * `exception.*` attributes the SDK records for you.
-     *
-     * @default 128
-     */
-    maxAttributesPerEvent?: number
-
-    /**
      * Maximum length of a string attribute value. Longer values are truncated,
      * and the bound reaches every string the value contains, including the ones
      * nested inside arrays and objects. It applies to span attributes, event
@@ -391,7 +382,7 @@ export interface OtlpSpanEvent {
     name: string
     timeUnixNano: string
     attributes?: OtlpSpanKeyValue[]
-    /** Attributes dropped by `maxAttributesPerEvent`. Omitted when none were. */
+    /** Attributes dropped by the SDK's per-event attribute cap. Omitted when none were. */
     droppedAttributesCount?: number
 }
 

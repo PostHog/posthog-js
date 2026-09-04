@@ -11,29 +11,29 @@ describe('resolveTracesConfig', () => {
     ['a fraction', 1.5],
     ['a large fraction', 200.5],
     ['infinity', Infinity],
-  ])('falls back to the default caps when given %s', (_label, value) => {
+  ])('falls back to the default per-span caps when given %s', (_label, value) => {
     const resolved = resolveTracesConfig({
       maxAttributesPerSpan: value,
       maxEventsPerSpan: value,
-      maxAttributesPerEvent: value,
       maxAttributeValueLength: value,
     })
     expect(resolved.maxAttributesPerSpan).toBe(128)
     expect(resolved.maxEventsPerSpan).toBe(128)
-    expect(resolved.maxAttributesPerEvent).toBe(128)
     expect(resolved.maxAttributeValueLength).toBe(8192)
   })
 
-  it('honours explicit per-span and per-event caps', () => {
+  it('honours explicit per-span caps', () => {
     // Without this the resolver can ignore maxEventsPerSpan entirely and every
     // other test still passes, because they all assert the default.
-    expect(
-      resolveTracesConfig({ maxAttributesPerSpan: 5, maxEventsPerSpan: 7, maxAttributesPerEvent: 9 })
-    ).toMatchObject({
+    expect(resolveTracesConfig({ maxAttributesPerSpan: 5, maxEventsPerSpan: 7 })).toMatchObject({
       maxAttributesPerSpan: 5,
       maxEventsPerSpan: 7,
-      maxAttributesPerEvent: 9,
     })
+  })
+
+  it('keeps the per-event attribute cap fixed', () => {
+    // The cap is internal, so an untyped caller naming it gets the default.
+    expect(resolveTracesConfig({ maxAttributesPerEvent: 9 } as any).maxAttributesPerEvent).toBe(128)
   })
 
   it('applies the documented defaults', () => {
