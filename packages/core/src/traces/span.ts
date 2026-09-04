@@ -309,15 +309,6 @@ export function nonNegativeCount(value: unknown): number {
 }
 
 /**
- * Re-applies the per-span caps to a record a `beforeSpanSend` hook has already
- * seen. The hook writes to the plain record, not through the span's own guarded
- * writer, so an enriching hook would otherwise push a span past the cap it was
- * trimmed to and back into the 413 path the cap exists to avoid.
- *
- * Earliest-set entries win, matching the span-side rule; SDK-attached keys are
- * exempt. Counts add to whatever the span already dropped.
- */
-/**
  * The record's keys with the ones the span itself set first, in that order.
  *
  * `Object.keys` hoists integer-like keys to the front whatever the write order,
@@ -337,6 +328,15 @@ function orderedKeys(attributes: SpanAttributes, keysBeforeHook: readonly string
   return [...beforeHook, ...Object.keys(attributes).filter((key) => !seen.has(key))]
 }
 
+/**
+ * Re-applies the per-span caps to a record a `beforeSpanSend` hook has already
+ * seen. The hook writes to the plain record, not through the span's own guarded
+ * writer, so an enriching hook would otherwise push a span past the cap it was
+ * trimmed to and back into the 413 path the cap exists to avoid.
+ *
+ * Earliest-set entries win, matching the span-side rule; SDK-attached keys are
+ * exempt. Counts add to whatever the span already dropped.
+ */
 export function applySpanLimits(
   record: SpanRecord,
   autoKeys: ReadonlySet<string>,
@@ -514,18 +514,16 @@ function readHandle(parent: unknown, method: 'traceparent' | 'tracestate'): unkn
   }
 }
 
-/**
- * The same depth, node and item caps `encodeAnyValue` uses, but spent per
- * attribute rather than per bag: the encoder allocates one budget for a whole
- * attribute map, this walk allocates one per value. That makes the encoder's
- * budget the stricter of the two — whatever this walk hands back unbounded, the
- * encoder has already stopped short of — at the cost of a wide span paying for
- * a walk whose results the encoder then discards.
- */
+/** One walk's budget, allocated per attribute value. */
 interface TruncateState {
   /** Containers on the current path, so a back-reference stops the walk. */
   ancestors: WeakSet<object>
+  /** Nodes this walk may still visit. */
   remainingNodes: number
+}
+
+function truncateString(value: string, maxLength: number): string {
+  return value.length > maxLength ? value.slice(0, maxLength) : value
 }
 
 /**
@@ -541,10 +539,6 @@ interface TruncateState {
  * Returns the value it was given when nothing needed shortening, so the common
  * case allocates nothing.
  */
-function truncateString(value: string, maxLength: number): string {
-  return value.length > maxLength ? value.slice(0, maxLength) : value
-}
-
 export function truncateAttributeValue(value: SpanAttributeValue, maxLength: number): SpanAttributeValue {
   return truncateValue(value, maxLength, { ancestors: new WeakSet(), remainingNodes: MAX_JSON_SAFE_VALUE_NODES }, 0)
 }
