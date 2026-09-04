@@ -2320,9 +2320,9 @@ describe('Lazy SessionRecording', () => {
                             .$sdk_debug_replay_flush_hold_reason
 
                     it('names a fresh-start hold on captured events while the status still reads active', () => {
-                        jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
                         emitInactiveEvent(startingTimestamp + 100, 'unknown')
-                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
 
                         expect(posthog.capture).not.toHaveBeenCalledWith(
                             '$snapshot',
@@ -2340,19 +2340,19 @@ describe('Lazy SessionRecording', () => {
                         expect(holdReason()).toEqual('no_interaction_since_session_rotated')
 
                         emitActiveEvent(rotationTimestamp + 200)
-                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
 
                         expect(holdReason()).toBeUndefined()
                     })
 
                     it('logs the hold reason once per held epoch', () => {
                         assignableWindow.POSTHOG_DEBUG = true
-                        const logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+                        const logSpy = vi.spyOn(window!.console, 'log').mockImplementation(() => {})
 
                         const rotationTimestamp = rotateExternallyWhileUnknown()
                         emitInactiveEvent(rotationTimestamp + 100, 'unknown')
                         emitInactiveEvent(rotationTimestamp + 200, 'unknown')
-                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
 
                         // the logger prepends a prefix arg, so the message is the second call arg
                         const holdLogs = logSpy.mock.calls.filter(
@@ -2367,7 +2367,7 @@ describe('Lazy SessionRecording', () => {
 
                     it('logs a new held epoch after an explicit stop and restart in the same session', () => {
                         assignableWindow.POSTHOG_DEBUG = true
-                        const logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+                        const logSpy = vi.spyOn(window!.console, 'log').mockImplementation(() => {})
                         const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
 
                         lazyRecorder.stop()
@@ -2391,7 +2391,7 @@ describe('Lazy SessionRecording', () => {
                         // `...:no_interaction_since_session_rotated` key, so the second rotation's
                         // transient `no_interaction_since_recording_started` no longer collides.
                         assignableWindow.POSTHOG_DEBUG = true
-                        const logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+                        const logSpy = vi.spyOn(window!.console, 'log').mockImplementation(() => {})
 
                         const firstRotationTimestamp = rotateExternallyWhileUnknown()
                         emitInactiveEvent(firstRotationTimestamp + 100, 'unknown')
@@ -2399,7 +2399,7 @@ describe('Lazy SessionRecording', () => {
                         sessionIdGeneratorMock.mockImplementation(() => 'second-rotated-session-id')
                         const secondRotationTimestamp =
                             firstRotationTimestamp + sessionManager['_sessionTimeoutMs'] + 1000
-                        jest.useFakeTimers().setSystemTime(new Date(secondRotationTimestamp))
+                        vi.useFakeTimers().setSystemTime(new Date(secondRotationTimestamp))
                         logSpy.mockClear()
                         sessionManager.checkAndGetSessionAndWindowId(false, secondRotationTimestamp)
 
@@ -2417,7 +2417,7 @@ describe('Lazy SessionRecording', () => {
                     // recorder is torn down but not dropped), so the hold reason has to clear or a
                     // stopped recorder keeps blaming user inactivity on every later captured event
                     it('stops naming the hold once the recorder is stopped (opt-out)', () => {
-                        jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
                         emitInactiveEvent(startingTimestamp + 100, 'unknown')
                         expect(holdReason()).toEqual('no_interaction_since_recording_started')
 
@@ -2427,7 +2427,7 @@ describe('Lazy SessionRecording', () => {
                     })
 
                     it('stops naming the hold once the recorder is discarded', () => {
-                        jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
                         emitInactiveEvent(startingTimestamp + 100, 'unknown')
                         expect(holdReason()).toEqual('no_interaction_since_recording_started')
 
