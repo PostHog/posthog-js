@@ -3,6 +3,7 @@ import {
     ENABLED_FEATURE_FLAGS,
     PERSISTENCE_ACTIVE_FEATURE_FLAGS,
     PERSISTENCE_FEATURE_FLAG_DETAILS,
+    PERSISTENCE_FEATURE_FLAG_ERRORS,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
@@ -11,7 +12,7 @@ import {
 } from '../constants'
 import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { defaultConfig } from '../posthog-core'
-import { PostHogFeatureFlags } from '../posthog-featureflags'
+import { FeatureFlagError, PostHogFeatureFlags } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
@@ -113,6 +114,42 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                 $feature_flag_id: 2,
             })
         )
+
+        siblingPersistence.destroy()
+        await posthog.shutdown()
+    })
+
+    it('replaces bootstrap flags when a sibling tab persists a fresh snapshot', async () => {
+        const token = uuidv7()
+        const persistenceName = `cross-tab-bootstrap-${token}`
+        const posthog = await createPosthogInstance(token, {
+            advanced_disable_feature_flags: true,
+            persistence: 'localStorage',
+            persistence_name: persistenceName,
+            persistence_save_debounce_ms: 0,
+            bootstrap: {
+                featureFlags: { flag: 'bootstrap' },
+                featureFlagPayloads: { flag: { source: 'bootstrap' } },
+            },
+        })
+        const siblingPersistence = new PostHogPersistence(posthog.config)
+        const callback = vi.fn()
+        posthog.onFeatureFlags(callback)
+        callback.mockClear()
+        const storageKey = `ph_${persistenceName}`
+        const oldValue = window.localStorage.getItem(storageKey)
+
+        siblingPersistence.register({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['flag'],
+            [ENABLED_FEATURE_FLAGS]: { flag: 'fresh-sibling' },
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { flag: { source: 'fresh-sibling' } },
+        })
+        const newValue = window.localStorage.getItem(storageKey)
+        window.dispatchEvent(new StorageEvent('storage', { key: storageKey, oldValue, newValue }))
+
+        expect(posthog.getFeatureFlag('flag', { send_event: false })).toBe('fresh-sibling')
+        expect(posthog.getFeatureFlagPayload('flag')).toEqual({ source: 'fresh-sibling' })
+        expect(callback).toHaveBeenCalledWith(['flag'], { flag: 'fresh-sibling' }, { errorsLoading: undefined })
 
         siblingPersistence.destroy()
         await posthog.shutdown()
@@ -661,6 +698,74 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             expect(scopedError).toHaveBeenCalledWith('Feature flag request failed', requestError)
         })
         expect(clientError).not.toHaveBeenCalled()
+        featureFlags.dispose()
+    })
+
+    it('keeps persisted flags as an offline fallback when bootstrap flags are provided', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        posthog.persistence?.register({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['persisted-flag'],
+            [ENABLED_FEATURE_FLAGS]: { 'persisted-flag': true },
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { 'persisted-flag': { source: 'persistence' } },
+        })
+        const config = defaultConfig()
+        config.bootstrap = {
+            featureFlags: { 'bootstrap-flag': true },
+            featureFlagPayloads: { 'bootstrap-flag': { source: 'bootstrap' } },
+        }
+        const client = posthog._getBrowserClientAdapter()
+        const sendRequest = vi.spyOn(client, 'sendRequest').mockResolvedValueOnce({ statusCode: 0 })
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config))
+        featureFlags.setup(client)
+
+        expect(featureFlags.getFeatureFlag('bootstrap-flag', { send_event: false })).toBe(true)
+        expect(featureFlags.getFeatureFlag('persisted-flag', { send_event: false })).toBeUndefined()
+        expect(posthog.persistence?.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'persisted-flag': true })
+
+        featureFlags._callFlagsEndpoint()
+        await vi.waitFor(() => {
+            expect(featureFlags.getFeatureFlag('bootstrap-flag', { send_event: false })).toBeUndefined()
+        })
+        expect(featureFlags.getFeatureFlagResult('persisted-flag', { send_event: false })).toEqual({
+            key: 'persisted-flag',
+            enabled: true,
+            variant: undefined,
+            payload: { source: 'persistence' },
+        })
+        expect(posthog.persistence?.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'persisted-flag': true })
+
+        sendRequest.mockResolvedValueOnce({
+            statusCode: 200,
+            json: { featureFlags: { 'remote-flag': true } },
+        })
+        featureFlags._callFlagsEndpoint()
+        await vi.waitFor(() => {
+            expect(featureFlags.getFeatureFlag('remote-flag', { send_event: false })).toBe(true)
+        })
+
+        expect(featureFlags.getFeatureFlag('persisted-flag', { send_event: false })).toBeUndefined()
+        expect(posthog.persistence?.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'remote-flag': true })
+        featureFlags.dispose()
+    })
+
+    it('keeps bootstrap flags after a request failure when there is no older persisted fallback', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const config = defaultConfig()
+        config.bootstrap = { featureFlags: { 'bootstrap-flag': true } }
+        const client = posthog._getBrowserClientAdapter()
+        vi.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 0 })
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config))
+        featureFlags.setup(client)
+
+        expect(posthog.persistence?.get_property(ENABLED_FEATURE_FLAGS)).toEqual({ 'bootstrap-flag': true })
+        featureFlags._callFlagsEndpoint()
+        await vi.waitFor(() => {
+            expect(posthog.persistence?.get_property(PERSISTENCE_FEATURE_FLAG_ERRORS)).toEqual([
+                FeatureFlagError.apiError(0),
+            ])
+        })
+
+        expect(featureFlags.getFeatureFlag('bootstrap-flag', { send_event: false })).toBe(true)
         featureFlags.dispose()
     })
 
