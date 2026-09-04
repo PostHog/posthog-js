@@ -5,8 +5,8 @@ import { defineConfig, LibraryOptions, LibraryFormats, Plugin } from 'vite';
 import { build, Format } from 'esbuild';
 import { resolve } from 'path';
 import { umdWrapper } from 'esbuild-plugin-umd-wrapper';
-import * as fs from 'node:fs';
 import { visualizer } from 'rollup-plugin-visualizer';
+import { ensureSourcemap } from './vite.config.utils.ts';
 
 // don't empty out dir if --watch flag is passed
 const emptyOutDir = !process.argv.includes('--watch');
@@ -22,47 +22,49 @@ function minifyAndUMDPlugin({
     name: 'minify-plugin',
     async writeBundle(outputOptions, bundle) {
       for (const file of Object.values(bundle)) {
-        if (
-          file.type === 'asset' &&
-          (file.fileName.endsWith('.cjs.map') || file.fileName.endsWith('.css'))
-        ) {
-          const isCSS = file.fileName.endsWith('.css');
-          const inputFilePath = resolve(
-            outputOptions.dir!,
-            file.fileName,
-          ).replace(/\.map$/, '');
-          const baseFileName = file.fileName.replace(
-            /(\.cjs|\.css)(\.map)?$/,
-            '',
-          );
-          const outputFilePath = resolve(outputOptions.dir!, baseFileName);
-          // console.log(outputFilePath, 'minifying', file.fileName);
-          if (isCSS) {
-            await buildFile({
-              input: inputFilePath,
-              output: `${outputFilePath}.min.css`,
-              minify: true,
-              isCss: true,
-              outDir,
-            });
-          } else {
-            await buildFile({
-              name,
-              input: inputFilePath,
-              output: `${outputFilePath}.umd.cjs`,
-              minify: false,
-              isCss: false,
-              outDir,
-            });
-            await buildFile({
-              name,
-              input: inputFilePath,
-              output: `${outputFilePath}.umd.min.cjs`,
-              minify: true,
-              isCss: false,
-              outDir,
-            });
+        const isCSS = file.type === 'asset' && file.fileName.endsWith('.css');
+        const isCJS =
+          file.type === 'chunk' && file.isEntry && file.fileName.endsWith('.cjs');
+        const isJS =
+          file.type === 'chunk' &&
+          (file.fileName.endsWith('.js') || file.fileName.endsWith('.cjs'));
+        if (!isCSS && !isCJS) {
+          if (isJS) {
+            ensureSourcemap(outputOptions.dir!, file.fileName);
           }
+          continue;
+        }
+
+        const inputFilePath = resolve(outputOptions.dir!, file.fileName);
+        const baseFileName = file.fileName.replace(/(\.cjs|\.css)$/, '');
+        const outputFilePath = resolve(outputOptions.dir!, baseFileName);
+        // console.log(outputFilePath, 'minifying', file.fileName);
+        if (isCSS) {
+          await buildFile({
+            input: inputFilePath,
+            output: `${outputFilePath}.min.css`,
+            minify: true,
+            isCss: true,
+            outDir,
+          });
+        } else {
+          await buildFile({
+            name,
+            input: inputFilePath,
+            output: `${outputFilePath}.umd.cjs`,
+            minify: false,
+            isCss: false,
+            outDir,
+          });
+          await buildFile({
+            name,
+            input: inputFilePath,
+            output: `${outputFilePath}.umd.min.cjs`,
+            minify: true,
+            isCss: false,
+            outDir,
+          });
+          ensureSourcemap(outputOptions.dir!, file.fileName);
         }
       }
     },
@@ -106,9 +108,19 @@ async function buildFile({
 export default function (
   entry: LibraryOptions['entry'],
   name: LibraryOptions['name'],
-  options?: { outputDir?: string; fileName?: string; plugins?: Plugin[] },
+  options?: {
+    outputDir?: string;
+    fileName?: string;
+    plugins?: Plugin[];
+    external?: string[];
+  },
 ) {
-  const { fileName, outputDir: outDir = 'dist', plugins = [] } = options || {};
+  const {
+    fileName,
+    outputDir: outDir = 'dist',
+    plugins = [],
+    external = [],
+  } = options || {};
 
   let formats: LibraryFormats[] = ['es', 'cjs'];
 
@@ -125,7 +137,10 @@ export default function (
       ],
     },
     build: {
-      // See https://vitejs.dev/guide/build.html#library-mode
+      // Preserve Vite 6's browser support instead of adopting Vite 7/8's newer defaults.
+      target: ['chrome87', 'edge88', 'firefox78', 'safari14'],
+
+      // See https://vite.dev/guide/build.html#library-mode
       lib: {
         cssFileName: 'style',
         entry,
@@ -141,7 +156,8 @@ export default function (
 
       emptyOutDir,
 
-      rollupOptions: {
+      rolldownOptions: {
+        external,
         output: {
           exports: 'named',
         },
@@ -156,7 +172,7 @@ export default function (
     plugins: [
       dts({
         insertTypesEntry: true,
-        rollupTypes: true,
+        bundleTypes: true,
         afterBuild: (emittedFiles: Map<string, string>) => {
           // To pass publint (`npm x publint@latest`) and ensure the
           // package is supported by all consumers, we must export types that are
