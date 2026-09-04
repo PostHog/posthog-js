@@ -142,6 +142,29 @@ describe('identify()', () => {
         expect(instance.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
     })
 
+    it('omits the previous anonymous id and clears the flags handoff when reuseAnonymousId is enabled', () => {
+        instance.config.reuseAnonymousId = true
+        instance.persistence!.props['distinct_id'] = 'oldIdentity'
+
+        instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
+
+        const capturedEvent = beforeSendMock.mock.calls[0][0]
+        expect(capturedEvent).toEqual(
+            expect.objectContaining({
+                event: '$identify',
+                properties: expect.objectContaining({
+                    distinct_id: 'a-new-id',
+                }),
+                $set: { email: 'john@example.com' },
+                $set_once: expect.objectContaining({ howOftenAmISet: 'once!' }),
+            })
+        )
+        expect(capturedEvent.properties).not.toHaveProperty('$anon_distinct_id')
+        expect(instance.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith(undefined)
+        expect(instance.featureFlags.reloadFeatureFlags).toHaveBeenCalled()
+        expect(instance.persistence!.get_property(USER_STATE)).toEqual('identified')
+    })
+
     it('sets user state when identifying', () => {
         instance.persistence!.props['distinct_id'] = 'oldIdentity'
 
