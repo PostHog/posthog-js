@@ -1,4 +1,4 @@
-import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
+import { convertToURL, getQueryParam, getQueryParams, maskQueryParams } from './request-utils'
 import { isNull, isUndefined, stripLeadingDollar, stripUrlHash } from '@posthog/core'
 import type { Properties } from '@posthog/types'
 import Config from '../config'
@@ -109,10 +109,11 @@ export function getCampaignParams(
 function _getCampaignParamsFromUrl(url: string, customParams?: string[]): Record<string, string> {
     const campaign_keywords = CAMPAIGN_PARAMS.concat(customParams || [])
 
+    const queryParams = getQueryParams(url, campaign_keywords)
+
     const params: Record<string, any> = {}
     each(campaign_keywords, function (kwkey) {
-        const kw = getQueryParam(url, kwkey)
-        params[kwkey] = kw ? kw : null
+        params[kwkey] = queryParams[kwkey] || null
     })
 
     return params

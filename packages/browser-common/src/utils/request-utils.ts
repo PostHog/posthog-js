@@ -57,7 +57,9 @@ export const formDataToQuery = function (formdata: Record<string, any> | FormDat
     return tph_arr.join(arg_separator)
 }
 
-export const getQueryParam = function (url: string, param: string): string {
+// Splits the query string of a URL once, into still-encoded values keyed by raw name. The result
+// has a null prototype, so a param named e.g. `constructor` cannot pick up an inherited value.
+const parseQueryString = function (url: string): Record<string, string> {
     const withoutHash: string = url.split('#')[0] || ''
 
     // Split only on the first ? to sort problem out for those with multiple ?s
@@ -65,28 +67,48 @@ export const getQueryParam = function (url: string, param: string): string {
     const queryParams: string = withoutHash.split(/\?(.*)/)[1] || ''
     const cleanedQueryParams = queryParams.replace(/^\?+/g, '')
 
+    const parsed: Record<string, string> = Object.create(null)
     const queryParts = cleanedQueryParams.split('&')
-    let keyValuePair
 
     for (let i = 0; i < queryParts.length; i++) {
         const parts = queryParts[i]!.split('=')
-        if (parts[0] === param) {
-            keyValuePair = parts
-            break
+        // the first occurrence of a repeated param wins, whether or not it carries a value
+        if (isUndefined(parsed[parts[0]!])) {
+            parsed[parts[0]!] = parts.length > 1 ? parts[1]! : ''
         }
     }
 
-    if (!isArray(keyValuePair) || keyValuePair.length < 2) {
+    return parsed
+}
+
+const decodeQueryParam = function (value: string | undefined): string {
+    if (isUndefined(value)) {
         return ''
-    } else {
-        let result = keyValuePair[1]!
-        try {
-            result = decodeURIComponent(result)
-        } catch {
-            logger.error('Skipping decoding for malformed query param: ' + result)
-        }
-        return result.replace(/\+/g, ' ')
     }
+
+    let result = value
+    try {
+        result = decodeURIComponent(result)
+    } catch {
+        logger.error('Skipping decoding for malformed query param: ' + result)
+    }
+    return result.replace(/\+/g, ' ')
+}
+
+export const getQueryParam = function (url: string, param: string): string {
+    return decodeQueryParam(parseQueryString(url)[param])
+}
+
+// Reads several params from one URL, splitting the query string once rather than once per param.
+export const getQueryParams = function (url: string, params: string[]): Record<string, string> {
+    const parsed = parseQueryString(url)
+    const result: Record<string, string> = {}
+
+    each(params, function (param: string) {
+        result[param] = decodeQueryParam(parsed[param])
+    })
+
+    return result
 }
 
 // replace any query params in the url with the provided mask value. Tries to keep the URL as instant as possible,

@@ -171,6 +171,17 @@ export class ExceptionObserver {
             return
         }
 
-        this._instance.exceptions?.sendExceptionEvent(errorProperties)
+        try {
+            this._instance.exceptions?.sendExceptionEvent(errorProperties)
+        } catch (e) {
+            // This runs inside the host page's error handler. A stack overflow here means the page
+            // had already run out of stack, so letting the RangeError escape hands it straight back
+            // to the error handler that called us, and every lap captures the exception again.
+            if (e instanceof RangeError) {
+                logger.error('Skipping exception capture because the call stack is exhausted.', e)
+                return
+            }
+            throw e
+        }
     }
 }

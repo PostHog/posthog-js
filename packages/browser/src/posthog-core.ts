@@ -1701,10 +1701,25 @@ export class PostHog implements PostHogInterface {
 
         // codeql[js/insecure-randomness] Event UUIDs are identifiers for deduplication, not secrets.
         const uuid = getEventUuid(options?.uuid, uuidv7)
+        let eventProperties: Properties
+        try {
+            eventProperties = this.calculateEventProperties(event_name, properties || {}, timestamp, uuid)
+        } catch (e) {
+            // A host page that has almost exhausted the call stack tips over here, because property
+            // calculation is deep rather than because it recurses. If that RangeError escapes
+            // `capture`, exception autocapture recaptures it and calls `capture` again on the same
+            // exhausted stack, so the customer is billed for every duplicate. Drop the event instead.
+            if (e instanceof RangeError) {
+                logger.error('Failed to calculate event properties, dropping event', e)
+                return
+            }
+            throw e
+        }
+
         let data: CaptureResult = {
             uuid,
             event: event_name,
-            properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
+            properties: eventProperties,
         }
 
         // Route pageviews to $bot_pageview when bot detected and preview flag enabled

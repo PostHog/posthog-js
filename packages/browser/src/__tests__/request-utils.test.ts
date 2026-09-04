@@ -1,4 +1,9 @@
-import { getQueryParam, formDataToQuery, maskQueryParams } from '@posthog/browser-common/utils/request-utils'
+import {
+    getQueryParam,
+    getQueryParams,
+    formDataToQuery,
+    maskQueryParams,
+} from '@posthog/browser-common/utils/request-utils'
 import { isMatchingRegex } from '@posthog/browser-common/utils/regex-utils'
 
 describe('request utils', () => {
@@ -31,6 +36,7 @@ describe('request utils', () => {
             ['gets query param where there is no key in the URL', '?=something', 'name', ''],
             ['gets query param where there is no value in the URL', '?name=', 'name', ''],
             ['gets query param where there is no value or = in the URL', '?name', 'name', ''],
+            ['keeps the first occurrence of a param even when it has no value', '?name&name=x', 'name', ''],
             ['ignores params after the hash', '?name=something#hash?invalid=here', 'invalid', ''],
             ['ignores params after the hash even with no valid query params', '#hash?invalid=here', 'invalid', ''],
             ['decodes query param spaces', '?name=something%20encoded', 'name', 'something encoded'],
@@ -48,6 +54,31 @@ describe('request utils', () => {
             ['gets trailing param when we have duplicate question marks', '??test=123&name=john', 'name', 'john'],
         ])('%s', (_name, url, param, expected) => {
             expect(getQueryParam(`https://example.com${url}`, param)).toEqual(expected)
+            // getQueryParams reads the same value, but splits the query string only once
+            expect(getQueryParams(`https://example.com${url}`, [param])).toEqual({ [param]: expected })
+        })
+
+        it('does not read a param value from Object.prototype', () => {
+            expect(getQueryParam('https://example.com/?name=something', 'constructor')).toEqual('')
+        })
+    })
+
+    describe('getQueryParams', () => {
+        it('reads every requested param from one URL', () => {
+            expect(
+                getQueryParams('https://example.com/?utm_source=news&utm_medium=email#hash?utm_term=ignored', [
+                    'utm_source',
+                    'utm_medium',
+                    'utm_term',
+                ])
+            ).toEqual({ utm_source: 'news', utm_medium: 'email', utm_term: '' })
+        })
+
+        it('returns an entry for every requested param when the URL has no query string', () => {
+            expect(getQueryParams('https://example.com/', ['utm_source', 'gclid'])).toEqual({
+                utm_source: '',
+                gclid: '',
+            })
         })
     })
 

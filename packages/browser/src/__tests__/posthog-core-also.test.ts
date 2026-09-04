@@ -129,6 +129,29 @@ describe('posthog core', () => {
             ).not.toThrow()
         })
 
+        it('drops the event when property calculation overflows the stack', () => {
+            const posthog = posthogWith(defaultConfig, defaultOverrides)
+            const overflow = new RangeError('Maximum call stack size exceeded')
+            vi.spyOn(posthog, 'calculateEventProperties').mockImplementation(() => {
+                throw overflow
+            })
+
+            expect(posthog.capture(eventName, {}, {})).toBeUndefined()
+            expect(mockLogger.error).toHaveBeenCalledWith(
+                'Failed to calculate event properties, dropping event',
+                overflow
+            )
+        })
+
+        it('rethrows any other error from property calculation', () => {
+            const posthog = posthogWith(defaultConfig, defaultOverrides)
+            vi.spyOn(posthog, 'calculateEventProperties').mockImplementation(() => {
+                throw new TypeError('something else')
+            })
+
+            expect(() => posthog.capture(eventName, {}, {})).toThrow(TypeError)
+        })
+
         it('calls callbacks added via _addCaptureHook', () => {
             const hook = vi.fn()
             const posthog = posthogWith(defaultConfig, defaultOverrides)

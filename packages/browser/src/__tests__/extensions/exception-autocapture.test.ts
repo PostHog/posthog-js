@@ -14,6 +14,27 @@ describe('ExceptionObserver', () => {
         })
     })
 
+    describe('captureException', () => {
+        const errorProperties = { $exception_list: [{ type: 'TypeError' }] } as any
+
+        it('swallows a stack overflow so it cannot be recaptured', () => {
+            const overflow = new RangeError('Maximum call stack size exceeded')
+            vi.spyOn(instance.exceptions, 'sendExceptionEvent').mockImplementation(() => {
+                throw overflow
+            })
+
+            expect(() => instance.exceptionObserver.captureException(errorProperties)).not.toThrow()
+        })
+
+        it('rethrows any other error', () => {
+            vi.spyOn(instance.exceptions, 'sendExceptionEvent').mockImplementation(() => {
+                throw new TypeError('something else')
+            })
+
+            expect(() => instance.exceptionObserver.captureException(errorProperties)).toThrow(TypeError)
+        })
+    })
+
     describe('onRemoteConfig', () => {
         it('does not overwrite persistence when called with empty config', () => {
             // Set up existing persisted value
