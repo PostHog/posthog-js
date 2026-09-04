@@ -75,12 +75,9 @@ function withUsableIdentityKeys(attributes: TracesConfig['resourceAttributes']):
  * untyped caller passing the wrong shape would otherwise have every span dropped
  * by a hook that throws, leaving tracing silently off.
  *
- * Dropping one is reported rather than thrown on. `beforeSpanSend` is where
- * redaction lives, so a configuration that silently filters nothing ships the
- * values it was meant to remove — but a client constructor that throws takes the
- * application down with it, which is the worse of the two. `critical`, because
- * every other level is gated behind `debug: true`, and a redaction hook that is
- * quietly inert is exactly what an operator has to hear about without opting in.
+ * Reported at `critical` rather than thrown on: a constructor that throws takes
+ * the application down, but every other log level is gated behind `debug: true`,
+ * and an inert redaction hook ships the values it was meant to remove.
  */
 function resolveBeforeSpanSend(beforeSpanSend: TracesConfig['beforeSpanSend'], logger?: Logger): BeforeSpanSendFn[] {
   if (!beforeSpanSend) {
