@@ -51,7 +51,7 @@ describe('@posthog/browser core', () => {
     })
 
     it('supports configurable analytics count and interval thresholds', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
             const requests: SentRequest[] = []
             const posthog = await createPostHog({
@@ -65,11 +65,11 @@ describe('@posthog/browser core', () => {
 
             await posthog.capture('first')
             await posthog.capture('second')
-            await jest.advanceTimersByTimeAsync(99)
+            await vi.advanceTimersByTimeAsync(99)
             expect(requests).toHaveLength(0)
 
             await posthog.capture('third')
-            await jest.advanceTimersByTimeAsync(0)
+            await vi.advanceTimersByTimeAsync(0)
             expect(requests).toHaveLength(1)
             expect((requests[0]?.body?.batch as Array<{ event: string }>).map(({ event }) => event)).toEqual([
                 'first',
@@ -78,13 +78,13 @@ describe('@posthog/browser core', () => {
             ])
 
             await posthog.capture('interval')
-            await jest.advanceTimersByTimeAsync(99)
+            await vi.advanceTimersByTimeAsync(99)
             expect(requests).toHaveLength(1)
-            await jest.advanceTimersByTimeAsync(1)
+            await vi.advanceTimersByTimeAsync(1)
             expect(requests).toHaveLength(2)
             await posthog.shutdown(0)
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
@@ -426,7 +426,7 @@ describe('@posthog/browser core', () => {
 
     it('does not retry analytics after consent is revoked', async () => {
         const client: { current?: Awaited<ReturnType<typeof createPostHog>> } = {}
-        const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>().mockImplementation(async () => {
+        const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>().mockImplementation(async () => {
             client.current?.optOut()
             return new Response('{}', { status: 503 })
         })
@@ -444,10 +444,10 @@ describe('@posthog/browser core', () => {
     })
 
     it('settles capture and flush without retrying when consent is revoked during real backoff', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
-            const fetch = jest
-                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            const fetch = vi
+                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
             const posthog = await createPostHogWithAnalytics({
                 projectToken: 'ph_test',
@@ -464,29 +464,29 @@ describe('@posthog/browser core', () => {
             const flush = posthog.flush().then(() => {
                 flushSettled = true
             })
-            await jest.advanceTimersByTimeAsync(0)
+            await vi.advanceTimersByTimeAsync(0)
             expect(fetch).toHaveBeenCalledTimes(1)
-            expect(jest.getTimerCount()).toBe(1)
+            expect(vi.getTimerCount()).toBe(1)
             expect(captureSettled).toBe(true)
             expect(flushSettled).toBe(false)
 
             posthog.optOut()
-            await jest.runOnlyPendingTimersAsync()
+            await vi.runOnlyPendingTimersAsync()
             await Promise.all([capture, flush])
 
             expect(fetch).toHaveBeenCalledTimes(1)
             expect(captureSettled).toBe(true)
             expect(flushSettled).toBe(true)
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
     it('permanently cancels retry when consent is revoked and restored during backoff', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
-            const fetch = jest
-                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            const fetch = vi
+                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
             const posthog = await createPostHogWithAnalytics({
                 projectToken: 'ph_test',
@@ -496,27 +496,27 @@ describe('@posthog/browser core', () => {
             })
 
             await posthog.capture('revoked_and_restored')
-            await jest.advanceTimersByTimeAsync(0)
+            await vi.advanceTimersByTimeAsync(0)
             expect(fetch).toHaveBeenCalledTimes(1)
-            expect(jest.getTimerCount()).toBe(1)
+            expect(vi.getTimerCount()).toBe(1)
 
             posthog.optOut()
             posthog.optIn()
-            await jest.advanceTimersByTimeAsync(0)
+            await vi.advanceTimersByTimeAsync(0)
             await posthog.flush()
 
             expect(fetch).toHaveBeenCalledTimes(1)
-            expect(jest.getTimerCount()).toBe(0)
+            expect(vi.getTimerCount()).toBe(0)
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
     it('retains retry-exhausted events for a later explicit flush without hot-looping', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
-            const fetch = jest
-                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            const fetch = vi
+                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
             const posthog = await createPostHog({
                 projectToken: 'ph_test',
@@ -529,16 +529,16 @@ describe('@posthog/browser core', () => {
 
             await posthog.capture('retained', undefined, { uuid: 'retained-uuid' })
             const firstFlush = posthog.flush()
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
             await firstFlush
             expect(fetch).toHaveBeenCalledTimes(4)
-            expect(jest.getTimerCount()).toBe(0)
+            expect(vi.getTimerCount()).toBe(0)
 
-            await jest.advanceTimersByTimeAsync(60_000)
+            await vi.advanceTimersByTimeAsync(60_000)
             expect(fetch).toHaveBeenCalledTimes(4)
 
             const secondFlush = posthog.flush()
-            await jest.runAllTimersAsync()
+            await vi.runAllTimersAsync()
             await secondFlush
             expect(fetch).toHaveBeenCalledTimes(8)
             expect(
@@ -550,15 +550,15 @@ describe('@posthog/browser core', () => {
             posthog.optOut()
             await posthog.dispose()
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
     it('uses the bounded sender retry budget before disposal purges undelivered work', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
-            const fetch = jest
-                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            const fetch = vi
+                .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
             const posthog = await createPostHogWithAnalytics({
                 projectToken: 'ph_test',
@@ -568,9 +568,9 @@ describe('@posthog/browser core', () => {
             })
 
             const capture = posthog.capture('disposed_during_backoff')
-            await jest.advanceTimersByTimeAsync(0)
+            await vi.advanceTimersByTimeAsync(0)
             expect(fetch).toHaveBeenCalledTimes(1)
-            expect(jest.getTimerCount()).toBe(1)
+            expect(vi.getTimerCount()).toBe(1)
 
             let disposalSettled = false
             const disposal = Promise.resolve(posthog.dispose()).then(() => {
@@ -578,13 +578,13 @@ describe('@posthog/browser core', () => {
             })
             await Promise.resolve()
             expect(disposalSettled).toBe(false)
-            await jest.runOnlyPendingTimersAsync()
+            await vi.runOnlyPendingTimersAsync()
             await Promise.all([capture, disposal])
 
             expect(fetch).toHaveBeenCalledTimes(4)
             expect(disposalSettled).toBe(true)
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
@@ -613,9 +613,9 @@ describe('@posthog/browser core', () => {
     })
 
     it('bounds shutdown and aborts a stalled active request', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
-            const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>(() => new Promise(() => {}))
+            const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(() => new Promise(() => {}))
             const posthog = await createPostHog({
                 projectToken: 'ph_test',
                 capturePageview: false,
@@ -625,27 +625,27 @@ describe('@posthog/browser core', () => {
                 extensions: [immediateAnalytics()],
             })
             await posthog.capture('stalled')
-            await jest.advanceTimersByTimeAsync(0)
+            await vi.advanceTimersByTimeAsync(0)
             expect(fetch).toHaveBeenCalledTimes(1)
 
             let settled = false
             const shutdown = posthog.shutdown(5).then(() => {
                 settled = true
             })
-            await jest.advanceTimersByTimeAsync(5)
+            await vi.advanceTimersByTimeAsync(5)
             await shutdown
 
             expect(settled).toBe(true)
-            expect(jest.getTimerCount()).toBe(0)
+            expect(vi.getTimerCount()).toBe(0)
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
     it('cancels a pending remote-config wait during shutdown', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
-            const loader = jest.fn(() => new Promise<RemoteConfig>(() => {}))
+            const loader = vi.fn(() => new Promise<RemoteConfig>(() => {}))
             const posthog = await createPostHog({
                 projectToken: 'ph_test',
                 capturePageview: false,
@@ -657,18 +657,18 @@ describe('@posthog/browser core', () => {
             posthog.onRemoteConfig(() => {})
             await Promise.resolve()
             expect(loader).toHaveBeenCalledTimes(1)
-            expect(jest.getTimerCount()).toBe(1)
+            expect(vi.getTimerCount()).toBe(1)
 
             await posthog.shutdown()
 
-            expect(jest.getTimerCount()).toBe(0)
+            expect(vi.getTimerCount()).toBe(0)
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
     it('bounds shutdown when an extension cleanup never settles', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
             const posthog = await createPostHog({
                 projectToken: 'ph_test',
@@ -683,20 +683,20 @@ describe('@posthog/browser core', () => {
             const shutdown = posthog.shutdown(5).then(() => {
                 settled = true
             })
-            await jest.advanceTimersByTimeAsync(5)
+            await vi.advanceTimersByTimeAsync(5)
             await shutdown
 
             expect(settled).toBe(true)
             await posthog.capture('after_shutdown')
             expect(posthog.session.sessionId).toBe('')
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
     it('rate limits a runaway capture loop and emits one bypassed aggregate warning', async () => {
-        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
-        const now = jest.spyOn(Date, 'now').mockReturnValue(1_000)
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const now = vi.spyOn(Date, 'now').mockReturnValue(1_000)
         const posthog = await createPostHog({
             projectToken: 'ph_test',
             capturePageview: false,
@@ -835,7 +835,7 @@ describe('@posthog/browser core', () => {
     })
 
     it('contains throwing caller-property getters before session or persistence mutation', async () => {
-        jest.useFakeTimers().setSystemTime(new Date('2026-01-02T03:04:05.000Z'))
+        vi.useFakeTimers().setSystemTime(new Date('2026-01-02T03:04:05.000Z'))
         try {
             const requests: SentRequest[] = []
             const storage = new MemoryStorage()
@@ -855,7 +855,7 @@ describe('@posthog/browser core', () => {
                     throw new Error('property getter failed')
                 },
             })
-            jest.advanceTimersByTime(1_000)
+            vi.advanceTimersByTime(1_000)
 
             await expect(posthog.capture('hostile_properties', properties)).resolves.toBeUndefined()
 
@@ -864,7 +864,7 @@ describe('@posthog/browser core', () => {
             expect(events).toEqual([])
             expect(requests).toEqual([])
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
@@ -874,7 +874,7 @@ describe('@posthog/browser core', () => {
         ['an array', []],
         ['a thrown error', new Error('toJSON failed')],
     ])('rejects properties whose toJSON returns %s before session or persistence mutation', async (_name, result) => {
-        jest.useFakeTimers().setSystemTime(new Date('2026-01-02T03:04:05.000Z'))
+        vi.useFakeTimers().setSystemTime(new Date('2026-01-02T03:04:05.000Z'))
         try {
             const requests: SentRequest[] = []
             const storage = new MemoryStorage()
@@ -896,7 +896,7 @@ describe('@posthog/browser core', () => {
                     return result
                 },
             }
-            jest.advanceTimersByTime(1_000)
+            vi.advanceTimersByTime(1_000)
 
             await expect(posthog.capture('hostile_to_json', properties)).resolves.toBeUndefined()
 
@@ -905,7 +905,7 @@ describe('@posthog/browser core', () => {
             expect(events).toEqual([])
             expect(requests).toEqual([])
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
@@ -935,7 +935,7 @@ describe('@posthog/browser core', () => {
     })
 
     it('contains throwing capture-option getters before session or persistence mutation', async () => {
-        jest.useFakeTimers().setSystemTime(new Date('2026-01-02T03:04:05.000Z'))
+        vi.useFakeTimers().setSystemTime(new Date('2026-01-02T03:04:05.000Z'))
         try {
             const requests: SentRequest[] = []
             const storage = new MemoryStorage()
@@ -949,7 +949,7 @@ describe('@posthog/browser core', () => {
             posthog.onEvent(({ event }) => events.push(event))
             const session = { ...posthog.session }
             const persisted = new Map(storage.values)
-            jest.advanceTimersByTime(1_000)
+            vi.advanceTimersByTime(1_000)
 
             for (const option of ['set', 'setOnce', 'uuid', 'timestamp']) {
                 const options = Object.defineProperty({}, option, {
@@ -965,7 +965,7 @@ describe('@posthog/browser core', () => {
             expect(events).toEqual([])
             expect(requests).toEqual([])
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
@@ -1210,7 +1210,7 @@ describe('@posthog/browser core', () => {
 
     it('loads remote configuration once and publishes it', async () => {
         const remoteConfig = createRemoteConfig({ hasFeatureFlags: true })
-        const loader = jest.fn(async () => remoteConfig)
+        const loader = vi.fn(async () => remoteConfig)
         const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
@@ -1229,7 +1229,7 @@ describe('@posthog/browser core', () => {
 
     it('loads remote configuration when an extension-facing listener subscribes', async () => {
         const remoteConfig = createRemoteConfig({ hasFeatureFlags: true })
-        const loader = jest.fn(async () => remoteConfig)
+        const loader = vi.fn(async () => remoteConfig)
         const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
@@ -1255,8 +1255,8 @@ describe('@posthog/browser core', () => {
             remoteConfig,
         })
         const events: string[] = []
-        const closingRemoteConfigListener = jest.fn()
-        const lateRemoteConfigListener = jest.fn()
+        const closingRemoteConfigListener = vi.fn()
+        const lateRemoteConfigListener = vi.fn()
         posthog.kv.set('before_dispose', true)
         const disposal = posthog.dispose()
         posthog.onRemoteConfig(closingRemoteConfigListener)
@@ -1339,7 +1339,7 @@ describe('@posthog/browser core', () => {
 
     it('rotates an idle session when capture runs', async () => {
         const now = Date.now()
-        const clock = jest.spyOn(Date, 'now').mockReturnValue(now)
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
         const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,

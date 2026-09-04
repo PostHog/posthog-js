@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals'
+import { describe, expect, it } from 'vitest'
 import { Survey, SurveyQuestionType, SurveyType } from '@posthog/core'
 import { applySurveyTranslationForUser, detectUserLanguage } from '../src/surveys/survey-translations'
 import { PostHog } from '../src/posthog-rn'
@@ -33,8 +33,8 @@ const createMockPostHog = ({
 }): PostHog =>
   ({
     getSurveyDisplayLanguageOverride: () => overrideLanguage ?? null,
-    getPersistedProperty: jest.fn(() => storedPersonProperties),
-    getCommonEventProperties: jest.fn(() => ({ $locale: locale ?? null })),
+    getPersistedProperty: vi.fn(() => storedPersonProperties),
+    getCommonEventProperties: vi.fn(() => ({ $locale: locale ?? null })),
   }) as unknown as PostHog
 
 describe('react native survey translations', () => {

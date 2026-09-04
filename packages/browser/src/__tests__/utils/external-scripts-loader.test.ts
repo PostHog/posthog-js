@@ -5,7 +5,7 @@ import '../../entrypoints/external-scripts-loader'
 
 describe('external-scripts-loader', () => {
     afterEach(() => {
-        jest.useRealTimers()
+        vi.useRealTimers()
         document!.getElementsByTagName('html')![0].innerHTML = ''
     })
 
@@ -19,7 +19,7 @@ describe('external-scripts-loader', () => {
         } as PostHog
         mockPostHog.requestRouter = new RequestRouter(mockPostHog)
 
-        const callback = jest.fn()
+        const callback = vi.fn()
         beforeEach(() => {
             callback.mockClear()
             mockPostHog.config.api_host = 'https://us.posthog.com'
@@ -93,8 +93,8 @@ describe('external-scripts-loader', () => {
         it('does not add duplicate scripts when called before the document body exists', () => {
             const body = document!.body
             body.remove()
-            const firstCallback = jest.fn()
-            const secondCallback = jest.fn()
+            const firstCallback = vi.fn()
+            const secondCallback = vi.fn()
 
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', firstCallback)
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', secondCallback)
@@ -152,9 +152,9 @@ describe('external-scripts-loader', () => {
 
         it('coalesces concurrent callers across the fallback attempt', () => {
             mockPostHog.config.strict_script_versioning = 'fallback'
-            const firstCallback = jest.fn()
-            const secondCallback = jest.fn()
-            const lateCallback = jest.fn()
+            const firstCallback = vi.fn()
+            const secondCallback = vi.fn()
+            const lateCallback = vi.fn()
 
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', firstCallback)
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', secondCallback)
@@ -174,9 +174,9 @@ describe('external-scripts-loader', () => {
 
         it('shares the terminal fallback error with concurrent and later callers', () => {
             mockPostHog.config.strict_script_versioning = 'fallback'
-            const firstCallback = jest.fn()
-            const secondCallback = jest.fn()
-            const lateCallback = jest.fn()
+            const firstCallback = vi.fn()
+            const secondCallback = vi.fn()
+            const lateCallback = vi.fn()
 
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', firstCallback)
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', secondCallback)
@@ -214,8 +214,8 @@ describe('external-scripts-loader', () => {
         })
 
         it('keeps the legacy toolbar cache-busting path by default', () => {
-            jest.useFakeTimers()
-            jest.setSystemTime(1726067100000)
+            vi.useFakeTimers()
+            vi.setSystemTime(1726067100000)
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'toolbar', callback)
             expect(document!.getElementsByTagName('script')[0].src).toBe(
                 'https://us-assets.i.posthog.com/static/toolbar.js?v=1.0.0&t=1726067100000'
@@ -223,8 +223,8 @@ describe('external-scripts-loader', () => {
         })
 
         it('cache-busts the legacy toolbar path when falling back', () => {
-            jest.useFakeTimers()
-            jest.setSystemTime(1726067100000)
+            vi.useFakeTimers()
+            vi.setSystemTime(1726067100000)
             mockPostHog.config.strict_script_versioning = 'fallback'
 
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'toolbar', callback)
@@ -327,7 +327,7 @@ describe('external-scripts-loader', () => {
         } as PostHog
         posthog.requestRouter = new RequestRouter(posthog)
 
-        const callback = jest.fn()
+        const callback = vi.fn()
         beforeEach(() => {
             callback.mockClear()
         })

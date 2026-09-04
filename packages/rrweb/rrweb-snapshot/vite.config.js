@@ -5,6 +5,7 @@ import { copyFileSync } from 'node:fs';
 import { build as esbuild } from 'esbuild';
 import { umdWrapper } from 'esbuild-plugin-umd-wrapper';
 import { resolve } from 'path';
+import { ensureSourcemap } from '../vite.config.utils.ts';
 
 // Plugin to generate UMD bundles using esbuild after vite build
 function umdPlugin({ name, outDir }) {
@@ -12,62 +13,69 @@ function umdPlugin({ name, outDir }) {
     name: 'umd-plugin',
     async writeBundle(outputOptions, bundle) {
       for (const file of Object.values(bundle)) {
+        const isJS =
+          file.type === 'chunk' &&
+          (file.fileName.endsWith('.js') || file.fileName.endsWith('.cjs'));
         if (
-          file.type === 'asset' &&
-          file.fileName.endsWith('.cjs.map')
+          file.type !== 'chunk' ||
+          !file.isEntry ||
+          !file.fileName.endsWith('.cjs')
         ) {
-          const inputFilePath = resolve(
-            outputOptions.dir,
-            file.fileName,
-          ).replace(/\.map$/, '');
-          const baseFileName = file.fileName.replace(/(\.cjs)(\.map)?$/, '');
-          const outputFilePath = resolve(outputOptions.dir, baseFileName);
-
-          // Determine library name based on filename
-          let libraryName = name;
-          if (baseFileName.includes('record')) {
-            libraryName = 'rrwebSnapshotRecord';
-          } else if (baseFileName.includes('replay')) {
-            libraryName = 'rrwebSnapshotReplay';
+          if (isJS) {
+            ensureSourcemap(outputOptions.dir, file.fileName);
           }
-
-          await esbuild({
-            entryPoints: [inputFilePath],
-            outfile: `${outputFilePath}.umd.cjs`,
-            minify: false,
-            sourcemap: true,
-            format: 'umd',
-            target: 'es2017',
-            treeShaking: true,
-            bundle: true,
-            plugins: [
-              umdWrapper({
-                libraryName: libraryName,
-              }),
-            ],
-          });
-
-          await esbuild({
-            entryPoints: [inputFilePath],
-            outfile: `${outputFilePath}.umd.min.cjs`,
-            minify: true,
-            sourcemap: true,
-            format: 'umd',
-            target: 'es2017',
-            treeShaking: true,
-            bundle: true,
-            plugins: [
-              umdWrapper({
-                libraryName: libraryName,
-              }),
-            ],
-          });
-
-          console.log(`${outDir}/${baseFileName}.umd.cjs`);
-          console.log(`${outDir}/${baseFileName}.umd.cjs.map`);
-          console.log(`${outDir}/${baseFileName}.umd.min.cjs`);
-          console.log(`${outDir}/${baseFileName}.umd.min.cjs.map`);
+          continue;
         }
+
+        const inputFilePath = resolve(outputOptions.dir, file.fileName);
+        const baseFileName = file.fileName.replace(/\.cjs$/, '');
+        const outputFilePath = resolve(outputOptions.dir, baseFileName);
+
+        // Determine library name based on filename
+        let libraryName = name;
+        if (baseFileName.includes('record')) {
+          libraryName = 'rrwebSnapshotRecord';
+        } else if (baseFileName.includes('replay')) {
+          libraryName = 'rrwebSnapshotReplay';
+        }
+
+        await esbuild({
+          entryPoints: [inputFilePath],
+          outfile: `${outputFilePath}.umd.cjs`,
+          minify: false,
+          sourcemap: true,
+          format: 'umd',
+          target: 'es2017',
+          treeShaking: true,
+          bundle: true,
+          plugins: [
+            umdWrapper({
+              libraryName: libraryName,
+            }),
+          ],
+        });
+
+        await esbuild({
+          entryPoints: [inputFilePath],
+          outfile: `${outputFilePath}.umd.min.cjs`,
+          minify: true,
+          sourcemap: true,
+          format: 'umd',
+          target: 'es2017',
+          treeShaking: true,
+          bundle: true,
+          plugins: [
+            umdWrapper({
+              libraryName: libraryName,
+            }),
+          ],
+        });
+
+        console.log(`${outDir}/${baseFileName}.umd.cjs`);
+        console.log(`${outDir}/${baseFileName}.umd.cjs.map`);
+        console.log(`${outDir}/${baseFileName}.umd.min.cjs`);
+        console.log(`${outDir}/${baseFileName}.umd.min.cjs.map`);
+        ensureSourcemap(outputOptions.dir, file.fileName);
       }
     },
   };
@@ -75,6 +83,8 @@ function umdPlugin({ name, outDir }) {
 
 export default defineConfig({
   build: {
+    // Preserve Vite 6's browser support instead of adopting Vite 7/8's newer defaults.
+    target: ['chrome87', 'edge88', 'firefox78', 'safari14'],
     lib: {
       entry: {
         'rrweb-snapshot': path.resolve(__dirname, 'src/index.ts'),
@@ -90,7 +100,7 @@ export default defineConfig({
   plugins: [
     dts({
       insertTypesEntry: true,
-      rollupTypes: true,
+      bundleTypes: true,
       afterBuild: (emittedFiles) => {
         const files = Array.from(emittedFiles.keys());
         files.forEach((file) => {

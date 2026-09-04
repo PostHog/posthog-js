@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "8.10.0",
+  "version": "8.10.1",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -13,12 +13,12 @@
   "license": "MIT",
   "scripts": {
     "clean": "rimraf dist",
-    "test:unit": "jest && pnpm test:module-load",
+    "test:unit": "vitest run && pnpm test:module-load",
     "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs",
     "lint": "oxlint --report-unused-disable-directives-severity error src tests",
     "lint:fix": "oxlint --report-unused-disable-directives-severity error src tests --fix",
-    "build": "rollup -c",
-    "dev": "rollup -c --watch",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
     "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
@@ -37,13 +37,14 @@
     "@opentelemetry/sdk-trace-base": "^2.0.0",
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
-    "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",
-    "@types/jest": "catalog:",
-    "jest": "catalog:",
     "langchain": "^1.5.10",
     "node-fetch": "^3.3.2",
-    "posthog-node": "workspace:^"
+    "posthog-node": "workspace:^",
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
   },
   "keywords": [
     "posthog",

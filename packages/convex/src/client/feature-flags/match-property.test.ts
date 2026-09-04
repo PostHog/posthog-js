@@ -1,4 +1,4 @@
-import { describe, test, expect } from '@jest/globals'
+import { describe, test, expect } from 'vitest'
 import { InconclusiveMatchError, matchProperty } from './match-property.js'
 import type { FlagProperty } from './types.js'
 

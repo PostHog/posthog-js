@@ -135,11 +135,11 @@ export interface PostHog {
     /**
      * Identify a user with a distinct ID and optionally set person properties.
      *
-     * @param new_distinct_id - The new distinct ID for the user
+     * @param new_distinct_id - A non-empty distinct ID for the user
      * @param userPropertiesToSet - Properties to set on the user (using $set)
      * @param userPropertiesToSetOnce - Properties to set once on the user (using $set_once)
      */
-    identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void
+    identify(new_distinct_id: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void
 
     /**
      * Set HMAC-based identity verification.

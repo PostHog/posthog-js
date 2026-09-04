@@ -23,24 +23,22 @@ catalog:
   '@testing-library/jest-dom': ^6.9.1
   '@testing-library/preact': ^3.2.4
   '@testing-library/react': ^16.3.0
-  '@types/jest': ^29.5.14
   '@types/react': ^19.2.7
+  '@vitest/coverage-v8': ^1.6.1
   esbuild-plugin-umd-wrapper: ^3.0.0
-  jest: 29.7.0
-  jest-environment-jsdom: ^29.7.0
-  jest-environment-node: ^29.7.0
-  jest-expo: ^47.0.1
+  jsdom: ^26.1.0
   react: ^19.2.1
   react-dom: ^19.2.1
   react-test-renderer: ^19.2.1
   rollup: ^4.53.3
   rolldown: 1.2.1
   terser: 5.48.0
-  ts-jest: 29.4.11
+  tsdown: 0.22.14
   tslib: ^2.5.0
   typescript: 5.8.2
-  vite: ^6.2.0
-  vite-plugin-dts: ^4.5.4
+  vite: ^8.2.2
+  vite-plugin-dts: ~5.0.3
+  vitest: ^1.6.1
 
 enableGlobalVirtualStore: true
 
@@ -132,6 +130,5 @@ patchedDependencies:
   eslint-plugin-react@7.37.5: patches/eslint-plugin-react@7.37.5.patch
   tr46@0.0.3: patches/tr46@0.0.3.patch
   tr46@2.1.0: patches/tr46@2.1.0.patch
-  tr46@3.0.0: patches/tr46@3.0.0.patch
   whatwg-url@5.0.0: patches/whatwg-url@5.0.0.patch
   whatwg-url@8.7.0: patches/whatwg-url@8.7.0.patch

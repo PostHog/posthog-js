@@ -3,7 +3,7 @@ import { assignableWindow } from '../utils/globals'
 
 describe('RetryQueue', () => {
     const mockPosthog = {
-        _send_request: jest.fn(),
+        _send_request: vi.fn(),
     }
     let retryQueue: RetryQueue
     let now = Date.now()
@@ -11,16 +11,16 @@ describe('RetryQueue', () => {
     beforeEach(() => {
         retryQueue = new RetryQueue(mockPosthog as any)
 
-        jest.useFakeTimers()
-        jest.setSystemTime(now)
+        vi.useFakeTimers()
+        vi.setSystemTime(now)
         assignableWindow.POSTHOG_DEBUG = false
-        jest.spyOn(assignableWindow.console, 'warn').mockImplementation()
+        vi.spyOn(assignableWindow.console, 'warn').mockImplementation(() => {})
     })
 
     const fastForwardTimeAndRunTimer = (time = 3500) => {
         now += time
-        jest.setSystemTime(now)
-        jest.runOnlyPendingTimers()
+        vi.setSystemTime(now)
+        vi.runOnlyPendingTimers()
     }
 
     const enqueueRequests = () => {
@@ -171,7 +171,7 @@ describe('RetryQueue', () => {
         { retriesPerformedSoFar: 5, expectedQueueLength: 0, expectedLogRetries: 5 },
     ])('handles statusCode 0 requests after $retriesPerformedSoFar retries', (testCase) => {
         assignableWindow.POSTHOG_DEBUG = !!testCase.expectedLogRetries
-        const cb = jest.fn()
+        const cb = vi.fn()
         mockPosthog._send_request.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 0 })
         })
@@ -199,7 +199,7 @@ describe('RetryQueue', () => {
     })
 
     it('only calls the callback when successful', () => {
-        const cb = jest.fn()
+        const cb = vi.fn()
         mockPosthog._send_request.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 500 })
         })
@@ -222,7 +222,7 @@ describe('RetryQueue', () => {
     })
 
     it('only calls the callback when retries are exhausted', () => {
-        const cb = jest.fn()
+        const cb = vi.fn()
         mockPosthog._send_request.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 500 })
         })
@@ -240,7 +240,7 @@ describe('RetryQueue', () => {
     })
 
     it('increments the retry count each attempt', () => {
-        const cb = jest.fn()
+        const cb = vi.fn()
         mockPosthog._send_request.mockImplementation(({ callback }) => {
             callback?.({ statusCode: 500 })
         })
