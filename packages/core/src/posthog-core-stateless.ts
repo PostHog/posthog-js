@@ -222,18 +222,21 @@ function isRetryableFlagsFetchError(
 }
 
 /**
- * The ingestion service's request body limit — `MAX_REQUEST_BODY_SIZE_BYTES`,
- * which defaults to 2 MB and is applied to the body after the endpoint
- * decompresses it, not to the compressed bytes on the wire.
+ * Ceiling on what the SDK will put on the wire: a body over it is reported as
+ * too large without a request being made, and a batch of one that still exceeds
+ * it is dropped. The ingestion service applies its own
+ * `MAX_REQUEST_BODY_SIZE_BYTES` to the body after it decompresses it, not to
+ * the compressed bytes on the wire, so this is measured the same way.
  *
- * Applied as a ceiling on what the SDK will put on the wire: a body over it is
- * reported as too large without a request being made, and a batch of one that
- * still exceeds it is dropped. The cost is a deployment that raised
- * `MAX_REQUEST_BODY_SIZE_BYTES` above 2 MB, where such a batch would have been
- * accepted. A body under the limit is sent and may still be refused, by the
- * endpoint or by a proxy in front of it with a lower one.
+ * Set to the largest limit any known deployment configures — 10 MiB, what the
+ * ingestion service runs with — rather than the 2 MB the service falls back to
+ * when nothing configures it. The ceiling only earns its place by refusing a
+ * body that no deployment would have accepted: at 2 MB it would instead refuse
+ * bodies the service takes today, dropping records with no `413` to show for
+ * them. Deployments configured lower, and proxies in front of them, are covered
+ * by the `413` path, which stays the primary mechanism.
  */
-const OTLP_MAX_BODY_BYTES = 2 * 1024 * 1024
+const OTLP_MAX_BODY_BYTES = 10 * 1024 * 1024
 
 /**
  * A request body's size on the wire. `Buffer` where it exists, `TextEncoder`

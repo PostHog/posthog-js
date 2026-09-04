@@ -927,7 +927,7 @@ describe('PostHogLogs', () => {
       await logs.flush()
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Dropping a single log record after 413 with batch size 1')
+        expect.stringContaining('Dropping a single log record with batch size 1')
       )
     })
 
@@ -985,7 +985,7 @@ describe('PostHogLogs', () => {
       expect(sendSizes).toEqual([1])
       expect(readQueue(mockInstance)).toHaveLength(0)
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Dropping a single log record after 413 with batch size 1')
+        expect.stringContaining('Dropping a single log record with batch size 1')
       )
     })
 

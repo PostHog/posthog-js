@@ -2,7 +2,7 @@ import { assignUserAttributes } from '@posthog/core'
 import type { ResolvedTracesConfig, TracesConfig } from '@posthog/core'
 
 // OpenTelemetry's BatchSpanProcessor defaults, which sit comfortably under the
-// server's 2 MB body cap.
+// server's request body cap.
 const DEFAULT_FLUSH_INTERVAL_MS = 5000
 const DEFAULT_MAX_EXPORT_BATCH_SIZE = 512
 const DEFAULT_MAX_QUEUE_SIZE = 2048

@@ -332,13 +332,15 @@ export class PostHogLogs {
       }
 
       // ok | fatal | too-large-with-batch-of-1 → records are leaving the
-      // queue. 'fatal' and size-1 413s are dropped so we don't spin on the
-      // same record forever. Surface the size-1 413 explicitly so a single
+      // queue. 'fatal' and size-1 refusals are dropped so we don't spin on the
+      // same record forever. Surface the size-1 refusal explicitly so a single
       // oversized record (e.g. a giant body field) is visible in logs
       // instead of silently disappearing.
       if (outcome.kind === 'too-large') {
+        // Reached either from a 413 or from the size the SDK measured before
+        // sending, so the message names neither.
         this._logger.warn(
-          'Dropping a single log record after 413 with batch size 1 — the record is larger than the server cap and cannot be split further.'
+          'Dropping a single log record with batch size 1 — the record is larger than the server cap and cannot be split further.'
         )
       } else if (outcome.kind === 'ok' && this._maxBatchRecordsPerPost < this._config.maxBatchRecordsPerPost) {
         // Linear recovery: each healthy send pushes the cap back up by 1
