@@ -45,7 +45,6 @@ export {
 } from './logs/logs-utils'
 export { toOtlpAnyValue, toOtlpKeyValueList } from './utils/otlp-any-value'
 export { osResourceAttributes } from './utils/otlp-resource'
-export { assignUserAttributes } from './traces/sanitize'
 export { PostHogLogs } from './logs'
 export type {
   BeforeSendLogFn,
@@ -90,7 +89,8 @@ export type {
 } from './metrics/types'
 export { PostHogTraces } from './traces'
 export { SyncSpanContextManager } from './traces/context'
-export { NOOP_SPAN, inertSpan } from './traces/span'
+export { inertSpan, runWithActiveSpan } from './traces/span'
+export { resolveTracesConfig } from './traces/config'
 export type { ResolvedTracesConfig, SpanContextManager, TraceSdkContext } from './traces/types'
 // Same barrel convention as logs and metrics for the user-facing tracing types.
 export type {
