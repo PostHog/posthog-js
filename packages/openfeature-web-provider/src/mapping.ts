@@ -116,7 +116,7 @@ export function resolveStringDetails(
   const resolved = ensureResolved(result, flagKey)
   if (resolved.variant === undefined) {
     if (!resolved.enabled) {
-      // A boolean flag that evaluated off has no variant. Resolve to the caller's
+      // An off result has no variant. Resolve to the caller's
       // default (per the OpenFeature spec) rather than throwing — a throw would
       // set reason=ERROR and fire every registered error hook on an ordinary
       // off-result read.
