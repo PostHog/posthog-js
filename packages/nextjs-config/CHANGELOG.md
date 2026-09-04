@@ -1,5 +1,12 @@
 # @posthog/nextjs-config
 
+## 1.11.1
+
+### Patch Changes
+
+- [#4768](https://github.com/PostHog/posthog-js/pull/4768) [`09c6b93`](https://github.com/PostHog/posthog-js/commit/09c6b93a4a6d18beda445f56a874d84e5b8b397b) Thanks [@marandaneto](https://github.com/marandaneto)! - Delete webpack server source maps after upload without leaving them in Next.js deployment traces.
+  (2026-09-04)
+
 ## 1.11.0
 
 ### Minor Changes

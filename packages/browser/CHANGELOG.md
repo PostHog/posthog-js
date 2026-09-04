@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.426.3
+
+### Patch Changes
+
+- [#4761](https://github.com/PostHog/posthog-js/pull/4761) [`ebf7318`](https://github.com/PostHog/posthog-js/commit/ebf7318bef6775f3cd7aa4ce4c0813ce69a8a9ca) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent session replay network capture from replacing a downstream fetch wrapper's response with an instrumentation error when the response has no headers.
+  (2026-09-04)
+
 ## 1.426.2
 
 ### Patch Changes
