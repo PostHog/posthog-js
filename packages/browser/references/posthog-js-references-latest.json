@@ -3007,7 +3007,7 @@
           "name": "cross_subdomain_cookie"
         },
         {
-          "description": "Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js#persistence) for details.",
+          "description": "Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js#persistence) for details.\n\n`'memory'` only lasts for one page load, and `'sessionStorage'` only lasts for one browser tab.\nNeither keeps the distinct ID, so PostHog mints a new one when the store is empty. With\n`person_profiles: 'always'`, each new ID becomes a separate anonymous person, which inflates\nperson counts and feature flag estimates. To keep these modes, either pass a stable ID through\n`bootstrap.distinctID`, or use the `person_profiles: 'identified_only'` default so that\nanonymous visitors get no profile.",
           "type": "\"localStorage\" | \"cookie\" | \"memory\" | \"localStorage+cookie\" | \"sessionStorage\"",
           "name": "persistence"
         },
