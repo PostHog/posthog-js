@@ -140,7 +140,10 @@ describe('real-core reset rotation', () => {
         expect(recordCalls).toBe(2)
     })
 
-    it('ships the pre-reset tail under the pre-reset distinct_id', async () => {
+    it.each([
+        ['recording is running', false],
+        ['a deferred stop is in flight', true],
+    ])('ships the pre-reset tail under the pre-reset distinct_id when %s', async (_, stopBeforeReset) => {
         captured = []
         installFakeRRweb()
 
@@ -167,6 +170,12 @@ describe('real-core reset rotation', () => {
         _emit(mouse())
         _emit(mutation())
 
+        if (stopBeforeReset) {
+            posthog.stopSessionRecording()
+            expect(
+                (posthog.sessionRecording as any)['_lazyLoadedSessionRecording']['_isStoppingAfterCompression']
+            ).toBe(true)
+        }
         posthog.reset()
         posthog.identify('user-after-logout')
 

@@ -1539,7 +1539,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     flushBeforeIdentityReset(): void {
-        if (!this.isStarted) {
+        // a deferred stop has already torn rrweb down but still holds the tail for a later flush
+        if (!this.isStarted && !this._isStoppingAfterCompression) {
             return
         }
         this._drainCompressionQueueSync()
@@ -1719,11 +1720,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _processQueuedCompressionEventSync(queuedEvent: QueuedCompressionEvent) {
         try {
-            const { event: eventToSend, size } = queuedEvent.compressionEnabled
-                ? compressEventSync(queuedEvent.event)
-                : { event: queuedEvent.event, size: estimateSize(queuedEvent.event) }
-
-            this._captureQueuedCompressionEvent(queuedEvent, eventToSend, size)
+            let eventToSend: eventWithTime | compressedEventWithTime = queuedEvent.event
+            let size = estimateSize(queuedEvent.event)
+            if (queuedEvent.compressionEnabled) {
+                try {
+                    ;({ event: eventToSend, size } = compressEventSync(queuedEvent.event))
+                } catch (e) {
+                    logger.error('could not process queued compression event - will use uncompressed event', e)
+                }
+            }
+            try {
+                this._captureQueuedCompressionEvent(queuedEvent, eventToSend, size)
+            } catch (e) {
+                // the async path swallows this too, a throw here would abort the rotation restart
+                logger.error('could not capture queued compression event', e)
+            }
         } finally {
             this._finishQueuedCompressionEvent(queuedEvent)
         }
