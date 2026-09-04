@@ -4,7 +4,7 @@
 
 import { PostHog } from './posthog-core'
 // only importing types here, so won't affect the bundle
-// eslint-disable-next-line posthog-js/no-external-replay-imports
+// oxlint-disable-next-line posthog-js/no-external-replay-imports
 import type { SAMPLED } from './extensions/replay/external/triggerMatching'
 import {
     Compression,

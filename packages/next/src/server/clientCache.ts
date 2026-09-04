@@ -38,7 +38,7 @@ export async function getOrCreatePostHogClient<TClient, TOptions extends Cacheab
         const waitUntil = options?.waitUntil ?? (await autoDetectedWaitUntil)
         // TOptions may declare `waitUntil` narrower than the cacheable base type, so the
         // compiler cannot prove the injected base-typed waitUntil assignable to Partial<TOptions>
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+        // oxlint-disable-next-line typescript/consistent-type-assertions
         const mergedOptions = {
             ...(waitUntil ? { waitUntil } : {}),
             ...options,

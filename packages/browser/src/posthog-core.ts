@@ -302,6 +302,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_conversations: false,
     disable_product_tours: false,
     disableDeviceModel: false,
+    reuseAnonymousId: false,
     disable_external_dependency_loading: false,
     strict_script_versioning: 'fallback',
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
@@ -529,12 +530,16 @@ export class PostHog implements PostHogInterface {
     }
 
     // memory, sessionStorage, and disable_persistence all drop durable identity: the distinct ID lives in
-    // memory for a single page, so each load mints a fresh one that identify() then merges onto the person,
-    // eventually pushing it past the distinct-ID display limit and hiding its events from person pages and the
-    // session tab. Warn once, when person processing is first requested, unless a stable ID is supplied.
+    // memory for a single page, so each load mints a fresh one that identify() then merges onto the person
+    // unless anonymous IDs are reused, eventually pushing it past the distinct-ID display limit and hiding
+    // its events from person pages and the session tab. Warn once, when person processing is first requested,
+    // unless a stable ID is supplied.
     // Cookieless mode registers a stable sentinel instead of a new uuid, so it is excluded.
     private _warnIfVolatileIdentityWithoutStableId(): void {
         if (this._hasWarnedAboutVolatileIdentity) {
+            return
+        }
+        if (this.config.reuseAnonymousId) {
             return
         }
         // The Segment integration owns identity and supplies its stable user/anonymous ID before events load.
@@ -564,16 +569,16 @@ export class PostHog implements PostHogInterface {
             lifetime =
                 this.config.persistence === 'memory' ? 'on every page load' : 'for every new browser tab or window'
             fix =
-                "Either set persistence to 'localStorage+cookie', or keep this persistence and pass a stable ID through bootstrap.distinctID."
+                "Either set persistence to 'localStorage+cookie', keep this persistence and pass a stable ID through bootstrap.distinctID, or enable reuseAnonymousId."
         } else {
             cause = 'persistence is disabled (disable_persistence is true)'
             lifetime = 'on every page load'
             fix =
-                'Either set disable_persistence to false, or keep persistence disabled and pass a stable ID through bootstrap.distinctID.'
+                'Either set disable_persistence to false, keep persistence disabled and pass a stable ID through bootstrap.distinctID, or enable reuseAnonymousId.'
         }
         this._hasWarnedAboutVolatileIdentity = true
         // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn(
             '[PostHog.js]',
             `${cause} but no bootstrap.distinctID was provided. ` +
@@ -794,13 +799,13 @@ export class PostHog implements PostHogInterface {
             if (normalizedToken !== this.config?.token) {
                 // A second init() with a different project token often means that someone is trying to send
                 // events to a second project without giving that instance a name.
-                // eslint-disable-next-line no-console
+                // oxlint-disable-next-line no-console
                 console.warn(
                     '[PostHog.js]',
                     `You have already initialized PostHog with a different project token! Re-initializing is a no-op, so events will keep going to the project this instance was initialized with. To capture into a second project, load PostHog once, then initialize a named instance after the SDK has loaded, e.g. posthog.init('${normalizedToken}', { ... }, 'project2')`
                 )
             } else {
-                // eslint-disable-next-line no-console
+                // oxlint-disable-next-line no-console
                 console.warn('[PostHog.js]', 'You have already initialized PostHog! Re-initializing is a no-op')
             }
             return this
@@ -944,7 +949,7 @@ export class PostHog implements PostHogInterface {
         this._hasStableInitialDistinctId = !!initialDistinctId && !isEmptyString(initialDistinctId)
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
-        // eslint-disable-next-line posthog-js/no-direct-undefined-check
+        // oxlint-disable-next-line posthog-js/no-direct-undefined-check
         if (config.bootstrap?.distinctID !== undefined) {
             const bootstrapDistinctId = config.bootstrap.distinctID
             const existingDistinctId = this.get_distinct_id()
@@ -1104,7 +1109,7 @@ export class PostHog implements PostHogInterface {
 
     private _initExtensions(startInCookielessMode: boolean): void {
         // we don't support IE11 anymore, so performance.now is safe
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const initStartTime = performance.now()
         const ext = { ...PostHog.__defaultExtensionClasses, ...this.config.__extensionClasses }
         const initTasks: Array<() => void> = []
@@ -1222,7 +1227,7 @@ export class PostHog implements PostHogInterface {
 
         // All tasks complete - record timing for both sync and deferred modes
         // we don't support IE11 anymore, so performance.now is safe
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const taskInitTiming = Math.round(performance.now() - initStartTime)
         this.register_for_session({
             [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: this.config.__preview_deferred_init_extensions
@@ -2975,7 +2980,7 @@ export class PostHog implements PostHogInterface {
     canRenderSurveyAsync(surveyId: string, forceReload = false): Promise<SurveyRenderReason> {
         return (
             this.surveys?.canRenderSurveyAsync(surveyId, forceReload) ??
-            // eslint-disable-next-line compat/compat
+            // oxlint-disable-next-line compat/compat
             Promise.resolve({ visible: false, disabledReason: SURVEYS_NOT_AVAILABLE })
         )
     }
@@ -3107,6 +3112,10 @@ export class PostHog implements PostHogInterface {
             // send an $identify event any time the distinct_id is changing and the old ID is an anonymous ID
             // - logic on the server will determine whether or not to do anything with it.
             if (identityDidChange && isKnownAnonymous) {
+                const identifyProperties = this.config.reuseAnonymousId
+                    ? { distinct_id: new_distinct_id }
+                    : { distinct_id: new_distinct_id, $anon_distinct_id: previous_distinct_id }
+
                 this.persistence.set_property(USER_STATE, USER_STATE_IDENTIFIED)
 
                 // Update current user properties
@@ -3121,14 +3130,10 @@ export class PostHog implements PostHogInterface {
                     this.persistence._publishSuppressedCookieSnapshot()
                 }
 
-                this.capture(
-                    EVENT_IDENTIFY,
-                    {
-                        distinct_id: new_distinct_id,
-                        $anon_distinct_id: previous_distinct_id,
-                    },
-                    { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} }
-                )
+                this.capture(EVENT_IDENTIFY, identifyProperties, {
+                    $set: userPropertiesToSet || {},
+                    $set_once: userPropertiesToSetOnce || {},
+                })
 
                 this._cachedPersonProperties = getPersonPropertiesHash(
                     new_distinct_id,
@@ -3136,9 +3141,11 @@ export class PostHog implements PostHogInterface {
                     userPropertiesToSetOnce
                 )
 
-                // let the reload feature flag request know to send this previous distinct id
-                // for flag consistency
-                this.featureFlags?.setAnonymousDistinctId(previous_distinct_id)
+                // Forward the previous distinct id for default flag consistency, or clear
+                // any stale handoff when reuseAnonymousId opts out of anonymous merging.
+                this.featureFlags?.setAnonymousDistinctId(
+                    this.config.reuseAnonymousId ? undefined : previous_distinct_id
+                )
             } else if (shouldTransitionToIdentified) {
                 this.persistence.set_property(USER_STATE, USER_STATE_IDENTIFIED)
 
@@ -3596,7 +3603,7 @@ export class PostHog implements PostHogInterface {
 
         if (!isConsentTransition && wasCapturing && !this.is_capturing()) {
             // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
-            // eslint-disable-next-line no-console
+            // oxlint-disable-next-line no-console
             console.warn('[PostHog.js]', RESET_CONSENT_WARN)
         }
 
@@ -3650,7 +3657,7 @@ export class PostHog implements PostHogInterface {
 
             if (bootstrap) {
                 // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
-                // eslint-disable-next-line posthog-js/no-direct-undefined-check
+                // oxlint-disable-next-line posthog-js/no-direct-undefined-check
                 if (bootstrap.distinctID !== undefined && !this._inCookielessMode()) {
                     this.persistence?.set_property(
                         USER_STATE,

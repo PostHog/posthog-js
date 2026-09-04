@@ -31,7 +31,7 @@ const NULL_VALUES_ALLOWED_OPERATORS = ['is_not', 'is_set']
 
 // This value is intentionally larger than Number.MAX_SAFE_INTEGER. Changing its rounding changes
 // existing rollout and variant assignments.
-// eslint-disable-next-line no-loss-of-precision
+// oxlint-disable-next-line no-loss-of-precision
 const LONG_SCALE = 0xfffffffffffffff
 
 export class InconclusiveMatchError extends Error {

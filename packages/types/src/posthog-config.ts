@@ -2202,6 +2202,15 @@ export interface PostHogConfig {
      */
     person_profiles?: 'always' | 'never' | 'identified_only'
 
+    /**
+     * When true, `identify()` omits `$anon_distinct_id` from the `$identify` event
+     * and the follow-up feature flag request, so PostHog does not merge the
+     * previous anonymous identity into the identified person.
+     *
+     * @default false
+     */
+    reuseAnonymousId?: boolean
+
     /** @deprecated - use `person_profiles` instead  */
     process_person?: 'always' | 'never' | 'identified_only'
 

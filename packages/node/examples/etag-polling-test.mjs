@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-env node */
 /* global globalThis */
 /**
  * ETag Polling Test Script

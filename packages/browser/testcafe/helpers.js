@@ -108,7 +108,7 @@ export const capturesMap = ClientFunction(() => {
 })
 
 // test code, doesn't need to be IE11 compatible
-// eslint-disable-next-line compat/compat
+// oxlint-disable-next-line compat/compat
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 // NOTE: This is limited by the real production ingestion lag, which you can see in grafana is usually
@@ -225,12 +225,12 @@ export async function queryAPI(testSessionId) {
 }
 
 export function log(...args) {
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.log(new Date().toISOString(), ...args)
 }
 
 export function error(...args) {
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.error(new Date().toISOString(), ...args)
 }
 

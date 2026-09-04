@@ -117,7 +117,7 @@ export class PostHogMetrics implements Extension {
         payload: OtlpMetricsPayload,
         transport?: 'XHR' | 'fetch' | 'sendBeacon'
     ): Promise<SendMetricsBatchOutcome> {
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve) => {
             let settled = false
             const settle = (outcome: SendMetricsBatchOutcome): void => {

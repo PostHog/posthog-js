@@ -14,11 +14,8 @@ import {
   type IRRDocument,
   type CSSStyleDeclaration,
 } from '@posthog/rrdom';
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-var-requires
 const nwsapi = require('nwsapi');
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-var-requires
 const cssom = require('cssom');
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-var-requires
 const cssstyle = require('cssstyle');
 
 export class RRWindow {
@@ -36,7 +33,6 @@ export class RRDocument extends BaseRRDocument implements IRRDocument {
   private _nwsapi: NWSAPI | undefined;
   get nwsapi(): NWSAPI {
     if (!this._nwsapi) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
       this._nwsapi = nwsapi({
         document: this as unknown as Document,
         DOMException: null as unknown as new (
@@ -53,31 +49,26 @@ export class RRDocument extends BaseRRDocument implements IRRDocument {
     return this._nwsapi;
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   get documentElement(): RRElement | null {
     return super.documentElement as RRElement | null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   get body(): RRElement | null {
     return super.body as RRElement | null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   get head() {
     return super.head as RRElement | null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   get implementation(): RRDocument {
     return this;
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   get firstElementChild(): RRElement | null {
     return this.documentElement;
@@ -114,11 +105,8 @@ export class RRDocument extends BaseRRDocument implements IRRDocument {
   }
 
   createDocument(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _namespace: string | null,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _qualifiedName: string | null,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _doctype?: DocumentType | null,
   ) {
     return new RRDocument();
@@ -199,7 +187,6 @@ export class RRElement extends BaseRRElement {
   private _style: CSSStyleDeclarationType;
   constructor(tagName: string) {
     super(tagName);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     this._style = new cssstyle.CSSStyleDeclaration();
     const style = this._style;
     Object.defineProperty(this.attributes, 'style', {
@@ -212,7 +199,6 @@ export class RRElement extends BaseRRElement {
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   get style() {
     return this._style as unknown as CSSStyleDeclaration;
@@ -344,7 +330,6 @@ export class RRStyleElement extends RRElement {
       for (const child of this.childNodes)
         if (child.RRNodeType === RRNodeType.Text)
           result += (child as RRText).textContent;
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
       this._sheet = cssom.parse(result);
     }
     return this._sheet;

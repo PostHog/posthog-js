@@ -34,10 +34,16 @@ describe('createFrame', () => {
     expect(frame).toMatchObject({ filename: '<anonymous>', function: '?', lineno: 1, colno: 394 })
   })
 
-  it('falls back to in_app when the parser could not determine a filename', () => {
+  it('does not mark frames without a filename as in_app', () => {
     // Regex capture groups that do not participate arrive here as undefined despite the type
     const frame = createFrame(platform, undefined as unknown as string, 'doThing')
-    expect(frame.in_app).toBe(true)
+    expect(frame.in_app).toBe(false)
+  })
+
+  it('does not mark frames with an empty filename as in_app', () => {
+    const frame = createFrame(platform, '', 'sendDataToNative', 1, 10198)
+    expect(frame.in_app).toBe(false)
+    expect(frame).toMatchObject({ function: 'sendDataToNative', lineno: 1, colno: 10198 })
   })
 })
 
@@ -48,6 +54,19 @@ describe('createDefaultStackParser in_app classification', () => {
     const frames = parse("SyntaxError: Failed to execute 'appendChild' on 'Node': boom\n    at <anonymous>:1:394")
     expect(frames).toEqual([
       { platform: 'web:javascript', filename: '<anonymous>', function: '?', in_app: false, lineno: 1, colno: 394 },
+    ])
+  })
+
+  it('demotes the native bridge frames an Android in-app browser injects', () => {
+    // The bridge script has no URL, so every frame arrives as `at <fn> (:1:<col>)`.
+    const frames = parse(
+      'Error: Error invoking postMessage: Java object is gone\n' +
+        '    at sendDataToNative (:1:10198)\n' +
+        '    at sendJsBlockingTimeMessage (:1:14668)'
+    )
+    expect(frames.map((f) => [f.function, f.in_app])).toEqual([
+      ['sendJsBlockingTimeMessage', false],
+      ['sendDataToNative', false],
     ])
   })
 

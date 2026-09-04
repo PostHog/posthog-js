@@ -866,7 +866,7 @@ class PostHogBrowserClient implements PostHog {
                 const listener = (): void => this._startInitialPageview()
                 this._pageviewListener = [document, listener]
                 try {
-                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
                     document.addEventListener('visibilitychange', listener)
                 } catch {
                     this._removePageviewListener()
@@ -934,7 +934,7 @@ class PostHogBrowserClient implements PostHog {
         let localListening = false
         if (observeNativeStorage) {
             try {
-                // eslint-disable-next-line posthog-js/no-add-event-listener
+                // oxlint-disable-next-line posthog-js/no-add-event-listener
                 globalThis.addEventListener('storage', storageListener)
                 storageListening = true
             } catch {
@@ -942,7 +942,7 @@ class PostHogBrowserClient implements PostHog {
             }
         }
         try {
-            // eslint-disable-next-line posthog-js/no-add-event-listener
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
             globalThis.addEventListener(CONSENT_CHANGE_EVENT, localListener)
             localListening = true
         } catch {

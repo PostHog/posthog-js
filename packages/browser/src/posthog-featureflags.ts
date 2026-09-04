@@ -896,7 +896,7 @@ export class PostHogFeatureFlags implements Extension {
         this.reloadFeatureFlags()
     }
 
-    setAnonymousDistinctId(anon_distinct_id: string): void {
+    setAnonymousDistinctId(anon_distinct_id: string | undefined): void {
         this.$anon_distinct_id = anon_distinct_id
     }
 
