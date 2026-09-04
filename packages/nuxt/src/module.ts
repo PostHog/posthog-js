@@ -176,11 +176,13 @@ export default defineNuxtModule<ModuleOptions>({
         // Inject public sourcemaps
         // This cannot be done in the close hook. https://github.com/PostHog/posthog/issues/30957#issuecomment-2824545454
         await cliRunner(getInjectArgs(publicDir, sourcemapsConfig))
-        if (sourcemapsConfig.deleteAfterUpload ?? true) {
-          // Delete public sourcemaps before Nitro generates its asset manifest.
-          await cliRunner(getUploadArgs(publicDir, sourcemapsConfig))
-          publicSourcemapsUploaded = true
-        }
+        // Upload here in both deletion modes: this hook runs before Nitro writes the server
+        // bundle, so a preset that nests the server directory inside the public one
+        // (`cloudflare-pages`) never sends the server chunks through this upload as well.
+        // With `deleteAfterUpload` the upload also has to run before Nitro generates its
+        // asset manifest.
+        await cliRunner(getUploadArgs(publicDir, sourcemapsConfig))
+        publicSourcemapsUploaded = true
       } catch (error) {
         console.error('Failed to process public sourcemaps:', error)
       }
@@ -190,8 +192,8 @@ export default defineNuxtModule<ModuleOptions>({
       // We don't want to run this process during prepare and friends
       if (!isBuildProcess || !serverDir || !publicDir) return
       // Each directory is handled on its own: a failing server command must not skip the
-      // public upload, which is the only client sourcemap upload of the build when
-      // `deleteAfterUpload` is false or when the early upload failed.
+      // public upload, which is the only client sourcemap upload of the build when the
+      // early upload failed.
       try {
         // Nitro reports a serverDir for every build but only writes one when it builds a
         // server bundle. `ssr: false` still builds one, so read the directory on disk

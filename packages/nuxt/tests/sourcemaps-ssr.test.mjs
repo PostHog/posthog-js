@@ -50,6 +50,8 @@ function loadModule({
   failServerUpload = false,
   nuxtVersion = '4.1.2',
   existingDirs = [],
+  publicDir = '/build/.output/public',
+  serverDir = '/build/.output/server',
 } = {}) {
   const spawnCalls = []
   const pluginCalls = []
@@ -64,10 +66,10 @@ function loadModule({
     resolveBinaryPath: () => '/fake/posthog-cli',
     spawnLocal: async (bin, args) => {
       spawnCalls.push({ bin, args: [...args] })
-      if (failPublicUpload && args.includes('upload') && args.includes('/build/.output/public')) {
+      if (failPublicUpload && args.includes('upload') && args.includes(publicDir)) {
         throw new Error('public upload failed')
       }
-      if (failServerUpload && args.includes('upload') && args.includes('/build/.output/server')) {
+      if (failServerUpload && args.includes('upload') && args.includes(serverDir)) {
         throw new Error('server upload failed')
       }
       return { code: 0 }
@@ -124,12 +126,17 @@ async function runLifecycle({
   failPublicUpload = false,
   failServerUpload = false,
   serverBundleOnDisk = true,
+  outputDir = '/build/.output',
+  publicDir = '/build/.output/public',
+  serverDir = '/build/.output/server',
   sourcemaps = {},
 }) {
   const { mod, spawnCalls } = loadModule({
     failPublicUpload,
     failServerUpload,
-    existingDirs: serverBundleOnDisk ? ['/build/.output/server'] : [],
+    publicDir,
+    serverDir,
+    existingDirs: serverBundleOnDisk ? [serverDir] : [],
   })
   const hooks = {}
   const nuxt = {
@@ -169,9 +176,9 @@ async function runLifecycle({
     await cb({
       options: {
         output: {
-          dir: '/build/.output',
-          publicDir: '/build/.output/public',
-          serverDir: '/build/.output/server',
+          dir: outputDir,
+          publicDir,
+          serverDir,
         },
       },
     })
@@ -203,18 +210,6 @@ for (const { name, ssr, serverBundleOnDisk, expectServer } of cases) {
   const injectCall = findCall(calls, 'inject', '/build/.output/server')
   const serverUploadCall = findCall(calls, 'upload', '/build/.output/server')
 
-  if (expectServer) {
-    assert.ok(injectCall, `${name}: expected server inject. Got: ${dump}`)
-    assert.ok(serverUploadCall, `${name}: expected server upload. Got: ${dump}`)
-    assert.ok(
-      calls.indexOf(injectCall) < calls.indexOf(serverUploadCall),
-      `${name}: expected the server chunks to be injected before they are uploaded. Got: ${dump}`
-    )
-  } else {
-    assert.equal(injectCall, undefined, `${name}: expected no server inject. Got: ${dump}`)
-    assert.equal(serverUploadCall, undefined, `${name}: expected no server upload. Got: ${dump}`)
-  }
-
   const publicUploadCall = findCall(calls, 'upload', '/build/.output/public')
   assert.ok(publicUploadCall, `${name}: expected early public sourcemap upload. Got: ${dump}`)
   assert.ok(publicUploadCall.args.includes('--delete-after'), `${name}: expected public sourcemap deletion`)
@@ -228,6 +223,22 @@ for (const { name, ssr, serverBundleOnDisk, expectServer } of cases) {
     undefined,
     `${name}: expected no upload of the whole output directory, which holds uninjected chunks. Got: ${dump}`
   )
+
+  if (expectServer) {
+    assert.ok(injectCall, `${name}: expected server inject. Got: ${dump}`)
+    assert.ok(serverUploadCall, `${name}: expected server upload. Got: ${dump}`)
+    assert.ok(
+      calls.indexOf(injectCall) < calls.indexOf(serverUploadCall),
+      `${name}: expected the server chunks to be injected before they are uploaded. Got: ${dump}`
+    )
+    assert.ok(
+      calls.indexOf(publicUploadCall) < calls.indexOf(injectCall),
+      `${name}: expected the public upload before any server command. Got: ${dump}`
+    )
+  } else {
+    assert.equal(injectCall, undefined, `${name}: expected no server inject. Got: ${dump}`)
+    assert.equal(serverUploadCall, undefined, `${name}: expected no server upload. Got: ${dump}`)
+  }
 }
 
 // Every command must carry the configured release, or the CLI derives a second release
@@ -257,6 +268,34 @@ assert.ok(
   !retainedPublicUpload.args.includes('--delete-after'),
   `deleteAfterUpload:false: expected sourcemaps to be retained. Got: ${retainedMapDump}`
 )
+assert.equal(
+  retainedMapCalls.filter((c) => c.args.includes('upload') && c.args.includes('/build/.output/public')).length,
+  1,
+  `deleteAfterUpload:false: expected the public directory to be uploaded once. Got: ${retainedMapDump}`
+)
+
+// A preset can nest the server directory inside the public one (`cloudflare-pages` writes
+// `dist/_worker.js` under `dist/`). The public upload runs in the early hook, before Nitro
+// writes the server bundle, so the server chunks go through the server commands only.
+const nestedCalls = await runLifecycle({
+  ssr: false,
+  deleteAfterUpload: false,
+  outputDir: '/build/dist',
+  publicDir: '/build/dist',
+  serverDir: '/build/dist/_worker.js',
+})
+const nestedDump = JSON.stringify(nestedCalls.map((c) => c.args))
+const nestedPublicUploads = nestedCalls.filter((c) => c.args.includes('upload') && c.args.includes('/build/dist'))
+assert.equal(
+  nestedPublicUploads.length,
+  1,
+  `nested output: expected the public directory to be uploaded once. Got: ${nestedDump}`
+)
+const nestedServerInject = findCall(nestedCalls, 'inject', '/build/dist/_worker.js')
+assert.ok(
+  nestedCalls.indexOf(nestedPublicUploads[0]) < nestedCalls.indexOf(nestedServerInject),
+  `nested output: expected the public upload to run before the server bundle is injected. Got: ${nestedDump}`
+)
 
 const failedPublicUploadCalls = await runLifecycle({ ssr: true, failPublicUpload: true })
 const failedPublicUploadDump = JSON.stringify(failedPublicUploadCalls.map((c) => c.args))
@@ -273,14 +312,19 @@ assert.ok(
   `failed public upload: expected the retry to retain manifest-listed maps. Got: ${failedPublicUploadDump}`
 )
 
-// A failing server command must not take the public upload down with it. With
-// `deleteAfterUpload: false` the early hook uploads nothing, so the close hook holds the
-// only client sourcemap upload of the build.
-const failedServerUploadCalls = await runLifecycle({ ssr: true, deleteAfterUpload: false, failServerUpload: true })
+// A failing server command must not take the public upload down with it. When the early
+// upload failed too, the close hook holds the only client sourcemap upload of the build.
+const failedServerUploadCalls = await runLifecycle({
+  ssr: true,
+  deleteAfterUpload: false,
+  failPublicUpload: true,
+  failServerUpload: true,
+})
 const failedServerUploadDump = JSON.stringify(failedServerUploadCalls.map((c) => c.args))
-assert.ok(
-  findCall(failedServerUploadCalls, 'upload', '/build/.output/public'),
-  `failed server upload: expected the public upload to still run. Got: ${failedServerUploadDump}`
+assert.equal(
+  failedServerUploadCalls.filter((c) => c.args.includes('upload') && c.args.includes('/build/.output/public')).length,
+  2,
+  `failed server upload: expected the public upload retry to still run. Got: ${failedServerUploadDump}`
 )
 
 console.log('ok sourcemaps-ssr.test.mjs')
