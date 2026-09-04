@@ -37,6 +37,43 @@ async function waitForServer(url) {
   throw new Error('Nuxt server did not start')
 }
 
+async function waitForPackages(packages) {
+  const pending = new Map(packages)
+
+  for (let attempt = 1; attempt <= 30; attempt++) {
+    for (const [name, version] of pending) {
+      let publishedVersion
+      try {
+        publishedVersion = execFileSync('pnpm', ['view', `${name}@${version}`, 'version'], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim()
+      } catch {
+        // Keep polling while npm propagates the package.
+      }
+
+      if (publishedVersion === version) {
+        console.log(`${name}@${version} is available on npm.`)
+        pending.delete(name)
+      }
+    }
+
+    if (pending.size === 0) {
+      return
+    }
+    if (attempt === 30) {
+      throw new Error(
+        `${[...pending].map(([name, version]) => `${name}@${version}`).join(', ')} did not become available on npm within 15 minutes`
+      )
+    }
+
+    console.log(
+      `${[...pending].map(([name, version]) => `${name}@${version}`).join(', ')} not available on npm yet (attempt ${attempt}/30). Retrying in 30 seconds...`
+    )
+    await new Promise((resolve) => setTimeout(resolve, 30_000))
+  }
+}
+
 function withTimeout(promise, milliseconds, message) {
   let timer
   return Promise.race([
@@ -49,6 +86,7 @@ function withTimeout(promise, milliseconds, message) {
 
 try {
   const packageManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
+  const packagesToWaitFor = new Map()
   packageManifest.dependencies = Object.fromEntries(
     Object.entries(packageManifest.dependencies).map(([name, version]) => {
       if (version !== 'catalog:' && !version.startsWith('workspace:')) {
@@ -59,6 +97,7 @@ try {
         readFileSync(join(packageRoot, 'node_modules', ...name.split('/'), 'package.json'), 'utf8')
       )
       const range = version === 'workspace:^' ? '^' : version === 'workspace:~' ? '~' : ''
+      packagesToWaitFor.set(name, dependencyManifest.version)
       return [name, `${range}${dependencyManifest.version}`]
     })
   )
@@ -121,6 +160,7 @@ try {
     `setInterval(() => {}, 60_000)\nexport default () => { process.once('SIGUSR2', () => { Promise.reject(new Error('background shutdown test')) }) }\n`
   )
 
+  await waitForPackages(packagesToWaitFor)
   execFileSync('pnpm', ['install', '--ignore-scripts', '--no-frozen-lockfile'], { cwd: fixtureDir, stdio: 'inherit' })
   execFileSync('pnpm', ['exec', 'nuxt', 'build'], { cwd: fixtureDir, stdio: 'inherit' })
 
