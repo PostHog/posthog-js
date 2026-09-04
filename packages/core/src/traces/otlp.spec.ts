@@ -167,6 +167,7 @@ describe('OTLP span encoding', () => {
       beforeSpanSend: [],
       maxAttributesPerSpan: 128,
       maxEventsPerSpan: 128,
+      maxAttributesPerEvent: 128,
       maxAttributeValueLength: 8192,
       maxLiveSpans: 10000,
       maxSpanAgeMs: 3600000,

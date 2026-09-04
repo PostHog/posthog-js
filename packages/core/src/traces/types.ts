@@ -73,7 +73,7 @@ export interface SpanEventRecord {
  * field `beforeSpanSend` cannot see, and so cannot corrupt.
  */
 export interface SpanRecord extends HookSpanRecord {
-  /** The hook-visible event plus the count no hook may rewrite. */
+  /** The hook-visible event plus the SDK's own per-event drop count. */
   events: SpanEventRecord[]
   traceState?: string
   /** The W3C trace-flags byte this span propagates, e.g. `01` sampled. */

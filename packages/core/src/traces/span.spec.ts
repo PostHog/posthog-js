@@ -280,6 +280,34 @@ describe('PostHogSpan', () => {
       expect(ended[0].events[0].droppedAttributesCount).toBe(1)
     })
 
+    it('does not let a nullish value spend a slot', () => {
+      // The encoder drops these, so a caller who blanked a value rather than
+      // omitting the key must not cost the event a real attribute. Same rule the
+      // span half of the cap already follows.
+      const span = createSpan({ maxAttributesPerEvent: 2 })
+      span.addEvent('query', { blanked: undefined, cleared: null, real: 1, second: 2 })
+      span.end()
+
+      expect(ended[0].events[0].attributes).toEqual({ real: 1, second: 2 })
+      expect(ended[0].events[0].droppedAttributesCount).toBeUndefined()
+    })
+
+    it('survives an attribute bag whose own keys cannot be read', () => {
+      const hostile = new Proxy(
+        {},
+        {
+          ownKeys() {
+            throw new Error('ownKeys exploded')
+          },
+        }
+      )
+      const span = createSpan()
+      expect(() => span.addEvent('query', hostile)).not.toThrow()
+      expect(() => span.end()).not.toThrow()
+
+      expect(ended[0].events[0].attributes).toEqual({})
+    })
+
     it('counts the span attribute cap separately from an event cap', () => {
       // maxAttributesPerSpan does not reach inside events, which is the gap this
       // cap closes: a span at its own cap can still carry full-width events.

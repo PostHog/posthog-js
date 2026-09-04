@@ -23,6 +23,7 @@ describe('live spans', () => {
     beforeSpanSend: [],
     maxAttributesPerSpan: 128,
     maxEventsPerSpan: 128,
+    maxAttributesPerEvent: 128,
     maxAttributeValueLength: 8192,
   }
 

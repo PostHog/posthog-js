@@ -712,11 +712,10 @@ function resolveToJson(value: object): { selfDescribed: boolean; value?: SpanAtt
 
 /**
  * A copy of a caller-supplied attribute bag holding at most `max` entries, each
- * value bounded to `maxLength`, plus how many entries were refused.
+ * value bounded to `maxLength`, plus how many entries the cap refused.
  *
- * Keys past the cap are never read, so a wide object does not pay for the getters
- * on values that are about to be dropped — the order `_writeAttribute` uses for
- * the same reason.
+ * Once the cap is spent the remaining keys are counted without being read, so a
+ * wide object does not pay for the getters on values it is about to drop.
  */
 function boundAttributes(
   source: SpanAttributes,
@@ -731,9 +730,13 @@ function boundAttributes(
     return { attributes: {}, dropped: 0 }
   }
   const attributes: SpanAttributes = {}
-  const kept = Math.min(keys.length, max)
-  for (let index = 0; index < kept; index++) {
-    const key = keys[index]
+  let kept = 0
+  let dropped = 0
+  for (const key of keys) {
+    if (kept >= max) {
+      dropped++
+      continue
+    }
     let value: SpanAttributeValue
     try {
       value = truncateAttributeValue(source[key], maxLength)
@@ -741,11 +744,18 @@ function boundAttributes(
       // A throwing getter costs its own key, as it does in `assignUserAttributes`.
       value = UNSERIALIZABLE_VALUE
     }
+    // Nullish spends no slot, matching `_writeAttribute` and the span half of
+    // `applySpanLimits`: the encoder drops these, so a caller who blanked a value
+    // rather than omitting the key must not lose a real attribute to it.
+    if (isNullish(value)) {
+      continue
+    }
+    kept++
     // defineProperty, not assignment: `attributes['__proto__'] = v` hits the
     // prototype setter and the attribute vanishes.
     Object.defineProperty(attributes, key, { value, enumerable: true, writable: true, configurable: true })
   }
-  return { attributes, dropped: keys.length - kept }
+  return { attributes, dropped }
 }
 
 /** `truncateAttributeValue` across an attribute bag, in place. */

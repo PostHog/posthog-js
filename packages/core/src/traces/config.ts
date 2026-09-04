@@ -11,6 +11,7 @@ const DEFAULT_MAX_QUEUE_SIZE = 2048
 // OpenTelemetry's per-span defaults.
 const DEFAULT_MAX_ATTRIBUTES_PER_SPAN = 128
 const DEFAULT_MAX_EVENTS_PER_SPAN = 128
+// OpenTelemetry's per-event default, which is the same number.
 const DEFAULT_MAX_ATTRIBUTES_PER_EVENT = 128
 // OpenTelemetry leaves the value length unlimited, which is what lets one
 // multi-MB attribute make a span too large for the endpoint to accept — and an
