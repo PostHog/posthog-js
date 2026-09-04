@@ -106,7 +106,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
     it('tracks selection changes dispatched by document', () => {
         expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBeUndefined()
 
-        jest.setSystemTime(1050)
+        vi.setSystemTime(1050)
         document.dispatchEvent(new Event('selectionchange'))
 
         expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBe(1050)
@@ -115,7 +115,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
     it('stops tracking document selection changes after stop', () => {
         lazyLoadedDeadClicksAutocapture.stop()
 
-        jest.setSystemTime(1050)
+        vi.setSystemTime(1050)
         document.dispatchEvent(new Event('selectionchange'))
 
         expect(lazyLoadedDeadClicksAutocapture['_lastSelectionChanged']).toBeUndefined()
@@ -350,11 +350,11 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 timestamp: 900,
             })
 
-            jest.setSystemTime(999)
+            vi.setSystemTime(999)
             document.dispatchEvent(new Event('selectionchange'))
 
             // A later selection change must not overwrite the click-correlated one.
-            jest.setSystemTime(1200)
+            vi.setSystemTime(1200)
             document.dispatchEvent(new Event('selectionchange'))
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
@@ -364,17 +364,17 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('selection change just before a click suppresses it without bypassing repeated-click deduplication', () => {
-            jest.setSystemTime(900)
+            vi.setSystemTime(900)
             document.dispatchEvent(new Event('selectionchange'))
 
-            jest.setSystemTime(950)
+            vi.setSystemTime(950)
             triggerMouseEvent(document.body, 'click')
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
             expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].selectionChangedDelayMs).toBe(50)
 
             // The selection window has elapsed, but this is still a repeat click on the same node.
-            jest.setSystemTime(1051)
+            vi.setSystemTime(1051)
             triggerMouseEvent(document.body, 'click')
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
@@ -386,16 +386,16 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('a stale pre-click selection change does not suppress or time out the click', () => {
-            jest.setSystemTime(500)
+            vi.setSystemTime(500)
             document.dispatchEvent(new Event('selectionchange'))
 
-            jest.setSystemTime(1000)
+            vi.setSystemTime(1000)
             triggerMouseEvent(document.body, 'click')
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
             expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].selectionChangedDelayMs).toBeUndefined()
 
-            jest.setSystemTime(4000)
+            vi.setSystemTime(4000)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(fakeInstance.capture).toHaveBeenCalledWith(
