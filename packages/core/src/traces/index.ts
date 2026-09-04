@@ -23,7 +23,8 @@ import { parseTraceparent, sanitizeTracestate } from './traceparent'
 import { clampEndTime, resolveStartTime, resolveSuppliedTime, sanitizeName, toEpochMs } from './sanitize'
 import { assignUserAttributes } from '../utils/json-utils'
 import { buildOtlpSpan, buildOtlpTracesPayload, buildTracesResourceAttributes } from './otlp'
-import { isPromise, safeSetTimeout } from '../utils'
+import { isPromise } from '../utils'
+import { FlushTimer } from '../utils/flush-timer'
 import { RetryAfterWindow } from '../utils/retry-after'
 
 // Retriable failures on the same head batch before it is dropped, so a stuck
@@ -149,7 +150,7 @@ interface ParentContext {
  */
 export class PostHogTraces {
   private _queue: SpanRecord[] = []
-  private _flushTimer?: ReturnType<typeof safeSetTimeout>
+  private readonly _flushTimer = new FlushTimer(() => this._flushInBackground())
   // Serializes flushes: a second caller joins the first instead of double-sending the head.
   private _flushPromise: Promise<number> | null = null
   // A trigger no-ops while a background drain is already pending.
@@ -161,7 +162,6 @@ export class PostHogTraces {
   private _dropReasons = new Set<string>()
   private _consecutiveFlushFailures = 0
   private _retryAfter = new RetryAfterWindow()
-  private _flushTimerFiresAt = 0
   // Separate from the backoff counter: this one belongs to whatever batch is at
   // the head, and resets whenever that batch is removed or shrunk.
   private _headBatchFailures = 0
@@ -339,7 +339,7 @@ export class PostHogTraces {
   }
 
   private _startFlush(): Promise<number> {
-    this._clearFlushTimer()
+    this._flushTimer.clear()
     // Deferred by a microtask so the slot below is installed before the pass
     // reads anything: `_flushInner` runs synchronously as far as its first
     // await, and a resource-attribute getter or `toJSON` that ends a span in
@@ -365,7 +365,7 @@ export class PostHogTraces {
 
   /** Clears the queue and timer. Used on shutdown and between tests. */
   reset(): void {
-    this._clearFlushTimer()
+    this._flushTimer.clear()
     if (this._queue.length) {
       // Critical, and said here rather than counted: this is the last chance to
       // say anything about these spans, the drop warning is gated behind `debug`
@@ -956,10 +956,10 @@ export class PostHogTraces {
   // Every span end can reach this, so a pending timer is left alone rather than
   // pushing the flush out.
   private _armFlushTimerIfQueued(): void {
-    if (this._flushTimer || !this._queue.length) {
+    if (this._flushTimer.pending || !this._queue.length) {
       return
     }
-    this._setFlushTimer(this._nextFlushDelay())
+    this._flushTimer.arm(this._nextFlushDelay())
   }
 
   // Both floors, so a timer a span end armed at the plain interval gives way to
@@ -968,20 +968,7 @@ export class PostHogTraces {
     if (!this._queue.length) {
       return
     }
-    const delayMs = this._nextFlushDelay()
-    if (this._flushTimer && Date.now() + delayMs <= this._flushTimerFiresAt) {
-      return
-    }
-    this._clearFlushTimer()
-    this._setFlushTimer(delayMs)
-  }
-
-  private _setFlushTimer(delayMs: number): void {
-    this._flushTimerFiresAt = Date.now() + delayMs
-    this._flushTimer = safeSetTimeout(() => {
-      this._flushTimer = undefined
-      this._flushInBackground()
-    }, delayMs)
+    this._flushTimer.armNoEarlierThan(this._nextFlushDelay())
   }
 
   // Retry delay: base interval, doubling, capped at 30s — never below an interval
@@ -993,12 +980,5 @@ export class PostHogTraces {
     // A floor, not a replacement: the header never retries us sooner than our
     // own backoff would have.
     return Math.max(capped, this._retryAfter.remainingMs())
-  }
-
-  private _clearFlushTimer(): void {
-    if (this._flushTimer) {
-      clearTimeout(this._flushTimer)
-      this._flushTimer = undefined
-    }
   }
 }

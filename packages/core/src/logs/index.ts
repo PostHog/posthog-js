@@ -1,7 +1,8 @@
 import type { LogAttributeValue } from '@posthog/types'
 import { buildOtlpLogRecord, buildOtlpLogsPayload, buildResourceAttributes } from './logs-utils'
 import { Logger, PostHogPersistedProperty } from '../types'
-import { isArray, raceWithTimeout, safeSetTimeout } from '../utils'
+import { isArray, raceWithTimeout } from '../utils'
+import { FlushTimer } from '../utils/flush-timer'
 import { RetryAfterWindow } from '../utils/retry-after'
 import type { BufferedLogEntry, CaptureLogOptions, LogSdkContext, LogsHost, ResolvedPostHogLogsConfig } from './types'
 
@@ -18,7 +19,7 @@ export class PostHogLogs {
   // one record after each successful send so a one-off oversized payload
   // (e.g. a giant stack trace) doesn't permanently degrade throughput.
   private _maxBatchRecordsPerPost: number
-  private _flushTimer?: ReturnType<typeof safeSetTimeout>
+  private readonly _flushTimer = new FlushTimer(() => this._flushInBackground())
   // Serializes concurrent flushes — the second caller awaits the first rather
   // than racing it and double-sending the same head-of-queue records.
   private _flushPromise: Promise<void> | null = null
@@ -30,7 +31,6 @@ export class PostHogLogs {
   private _queueGeneration = 0
   // Every path that can start a send checks this, not just the retry timer.
   private _retryAfter = new RetryAfterWindow()
-  private _flushTimerFiresAt = 0
   // Consecutive failed flushes; drives exponential backoff on the retry timer.
   // A successful flush resets it to 0.
   private _consecutiveFlushFailures = 0
@@ -87,7 +87,7 @@ export class PostHogLogs {
    * and clears it separately (the browser empties its in-memory store).
    */
   reset(): void {
-    this._clearFlushTimer()
+    this._flushTimer.clear()
     // `_flushPromise` is deliberately left alone: clearing it would let a second flush
     // run alongside the in-flight one. Retiring that flush is `clearQueue`'s job,
     // because the queue it holds belongs to the host, not to this state.
@@ -264,7 +264,7 @@ export class PostHogLogs {
   }
 
   private async _flushInner(): Promise<void> {
-    this._clearFlushTimer()
+    this._flushTimer.clear()
 
     let queue = this._instance.getPersistedProperty<BufferedLogEntry[]>(PostHogPersistedProperty.LogsQueue) ?? []
     if (queue.length === 0) {
@@ -320,9 +320,8 @@ export class PostHogLogs {
 
       // Outright, not through the ratchet: a timer a mid-flight capture armed
       // is measured against a window this outcome may just have closed.
-      if (this._flushTimer) {
-        this._clearFlushTimer()
-        this._setFlushTimer(Math.max(this._flushIntervalMs, this._retryAfter.remainingMs()))
+      if (this._flushTimer.pending) {
+        this._flushTimer.arm(Math.max(this._flushIntervalMs, this._retryAfter.remainingMs()))
       }
 
       if (outcome.kind === 'retry-later') {
@@ -408,32 +407,16 @@ export class PostHogLogs {
   // Arms the flush timer if none is pending. One-shot: the callback clears the
   // handle so the next enqueue (or a flush that left records) schedules again.
   private _armFlushTimer(): void {
-    if (this._flushTimer) {
+    if (this._flushTimer.pending) {
       return
     }
     // Floored by any open window: `flush()` leaves no timer behind, so a
     // capture after one arrives here.
-    this._setFlushTimer(Math.max(this._flushIntervalMs, this._retryAfter.remainingMs()))
+    this._flushTimer.arm(Math.max(this._flushIntervalMs, this._retryAfter.remainingMs()))
   }
 
   // Both floors, so a timer already armed at the plain interval gives way to a
   // longer one.
-  private _armFlushTimerNoEarlierThan(delayMs: number): void {
-    if (this._flushTimer && Date.now() + delayMs <= this._flushTimerFiresAt) {
-      return
-    }
-    this._clearFlushTimer()
-    this._setFlushTimer(delayMs)
-  }
-
-  private _setFlushTimer(delayMs: number): void {
-    this._flushTimerFiresAt = Date.now() + delayMs
-    this._flushTimer = safeSetTimeout(() => {
-      this._flushTimer = undefined
-      this._flushInBackground()
-    }, delayMs)
-  }
-
   // Retry delay after a flush that left records: the first retry is at the base
   // interval, then exponential backoff (capped) so a sustained outage isn't
   // retried every interval.
@@ -460,7 +443,7 @@ export class PostHogLogs {
    * fetchRetryDelay)`, which can exceed the caller's shutdown SLA.
    */
   async shutdown(timeoutMs?: number): Promise<void> {
-    this._clearFlushTimer()
+    this._flushTimer.clear()
     const flushPromise = this.flush().catch(() => {
       // Best-effort: a logs-flush failure during shutdown is not actionable
       // and must not prevent the rest of shutdown from running. Errors are
@@ -510,15 +493,8 @@ export class PostHogLogs {
         // sit undelivered on a quiet page; re-arm so the timer retries them, backing
         // off on consecutive failures.
         if (!this._instance.isDisabled && this._hasQueuedRecords()) {
-          this._armFlushTimerNoEarlierThan(this._nextFlushDelay())
+          this._flushTimer.armNoEarlierThan(this._nextFlushDelay())
         }
       })
-  }
-
-  private _clearFlushTimer(): void {
-    if (this._flushTimer) {
-      clearTimeout(this._flushTimer)
-      this._flushTimer = undefined
-    }
   }
 }
