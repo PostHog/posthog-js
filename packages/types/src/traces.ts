@@ -317,12 +317,10 @@ export interface TracesConfig {
      * and later ones are dropped, with the number dropped reported on the
      * exported span.
      *
-     * Once the cap is spent, up to four more exception events recorded by the
-     * SDK — through `recordException` or a scoped helper whose callback threw —
-     * are still accepted, so a span that fills its events and then throws still
-     * carries the exception rather than only an `error` status. Below the cap
-     * such an event is ordinary and spends an ordinary slot, and an event you
-     * add yourself never draws on the reserve whatever you name it.
+     * The cap is absolute: an `exception` event the SDK records on your behalf
+     * spends an ordinary slot like any other, so a span that fills its events
+     * and then throws keeps its `error` status but not the exception detail.
+     * Raise the cap on spans that record many events and can also fail.
      *
      * @default 128
      */

@@ -1087,9 +1087,10 @@ describe('PostHogTraces', () => {
       expect(sentSpans()[0].attributes).toBeUndefined()
     })
 
-    it('keeps the exception event when the hook pushes past the event cap', async () => {
-      // The re-apply used to slice to the first `maxEvents`, and an exception
-      // event is the last thing on a span that threw — exactly what a slice cuts.
+    it('keeps the error status when the event cap costs the exception event', async () => {
+      // The status is set independently of the event, so a span whose exception
+      // event did not fit still exports as failed and still counts the loss.
+      // That pair is what makes the case findable once traces is live.
       const traces = createTraces({
         maxEventsPerSpan: 1,
         beforeSpanSend: [
@@ -1106,8 +1107,8 @@ describe('PostHogTraces', () => {
       await traces.flush()
 
       const [sent] = sentSpans()
-      expect(sent.events!.map((event) => event.name)).toEqual(['step', 'exception'])
-      expect(sent.droppedEventsCount).toBe(1)
+      expect(sent.events!.map((event) => event.name)).toEqual(['step'])
+      expect(sent.droppedEventsCount).toBe(2)
       expect(sent.status).toEqual({ code: 2, message: 'boom' })
     })
 
@@ -1317,38 +1318,15 @@ describe('PostHogTraces', () => {
       expect(sentSpans()[0].name).toBe('renamed')
     })
 
-    it('keeps the exception reserve through a hook that edits events in place', async () => {
-      // The re-apply after the hook has to reach the same verdict as the span
-      // writer, and it reads a mark the hook never sees.
-      const traces = createTraces({
-        maxEventsPerSpan: 1,
-        beforeSpanSend: [
-          (span) => {
-            for (const event of span.events) {
-              event.attributes = { ...event.attributes, scrubbed: true }
-            }
-            return span
-          },
-        ],
-      })
-      const span = traces.startSpan('checkout')
-      span.addEvent('step-0')
-      span.recordException(new Error('boom'))
-      span.end()
-      await traces.flush()
-
-      expect(sentSpans()[0].events!.map((event) => event.name)).toEqual(['step-0', 'exception'])
-    })
-
-    it('does not give the reserve to an exception-named event a hook appended', async () => {
-      // The hook writes plain records carrying no mark, so an event it invents
-      // cannot claim slots the SDK reserved for what it recorded itself.
+    it('applies the event cap to what a hook leaves behind', async () => {
+      // A hook can append events or rewrite them, neither of which goes through
+      // `addEvent`, so the cap has to be re-applied to whatever it returns.
       const traces = createTraces({
         maxEventsPerSpan: 1,
         beforeSpanSend: [
           (span) => {
             span.events.push({ name: 'exception', timestamp: Date.now() })
-            span.events.push({ name: 'exception', timestamp: Date.now() })
+            span.events.push({ name: 'appended', timestamp: Date.now() })
             return span
           },
         ],
@@ -1359,50 +1337,6 @@ describe('PostHogTraces', () => {
       await traces.flush()
 
       expect(sentSpans()[0].events!.map((event) => event.name)).toEqual(['step-0'])
-    })
-
-    it('drops a recorded exception when a hook rebuilds its events from scratch', async () => {
-      // The documented residual of keying on a mark rather than the name: a hook
-      // that constructs fresh event objects field by field drops it, and the
-      // event falls back to an ordinary slot. Fail-safe — the reserve is never
-      // handed to an event the SDK did not record — but worth pinning so the
-      // behaviour is deliberate rather than discovered.
-      const traces = createTraces({
-        maxEventsPerSpan: 1,
-        beforeSpanSend: [
-          (span) => {
-            span.events = span.events.map((event) => ({ name: event.name, timestamp: event.timestamp }))
-            return span
-          },
-        ],
-      })
-      const span = traces.startSpan('checkout')
-      span.addEvent('step-0')
-      span.recordException(new Error('boom'))
-      span.end()
-      await traces.flush()
-
-      expect(sentSpans()[0].events!.map((event) => event.name)).toEqual(['step-0'])
-    })
-
-    it('keeps the reserve through a hook that spreads its events', async () => {
-      // A spread carries the mark, so the common "copy and edit" shape is safe.
-      const traces = createTraces({
-        maxEventsPerSpan: 1,
-        beforeSpanSend: [
-          (span) => {
-            span.events = span.events.map((event) => ({ ...event }))
-            return span
-          },
-        ],
-      })
-      const span = traces.startSpan('checkout')
-      span.addEvent('step-0')
-      span.recordException(new Error('boom'))
-      span.end()
-      await traces.flush()
-
-      expect(sentSpans()[0].events!.map((event) => event.name)).toEqual(['step-0', 'exception'])
     })
 
     it('exports the span when the hook status message refuses to stringify', async () => {

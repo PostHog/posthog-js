@@ -172,30 +172,28 @@ describe('PostHogSpan', () => {
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('OK'))
   })
 
-  describe('exception events past the event cap', () => {
+  describe('event cap', () => {
     const fillEvents = (span: PostHogSpan, count: number): void => {
       for (let i = 0; i < count; i++) {
         span.addEvent(`step-${i}`)
       }
     }
 
-    it('records an exception on a span that has filled its events', () => {
-      // Without its own budget the exception event arrives last, hits the cap and
-      // is dropped, leaving a span marked `error` with no record of why.
+    it('drops an exception event on a span that has filled its events', () => {
+      // The cap is absolute, so an exception arriving last is dropped like any
+      // other event. The span keeps its `error` status and `droppedEventsCount`
+      // reports the loss, which is what makes the case findable in production.
       const span = createSpan({ maxEvents: 2 })
-      fillEvents(span, 3)
+      fillEvents(span, 2)
       span.recordException(new Error('boom'))
       span.end()
 
-      expect(ended[0].events.map((event) => event.name)).toEqual(['step-0', 'step-1', 'exception'])
-      expect(ended[0].events[2].attributes?.['exception.message']).toBe('boom')
+      expect(ended[0].events.map((event) => event.name)).toEqual(['step-0', 'step-1'])
       expect(ended[0].status).toEqual({ code: 'error', message: 'boom' })
       expect(ended[0].droppedEventsCount).toBe(1)
     })
 
-    it('spends an ordinary slot on an exception while the cap has room', () => {
-      // The reserve is a fallback past the cap, not a smaller budget exceptions
-      // are confined to: with room to spare, exceptions are ordinary events.
+    it('records an exception like any other event while the cap has room', () => {
       const span = createSpan({ maxEvents: 128 })
       for (let i = 0; i < 20; i++) {
         span.recordException(new Error(`boom-${i}`))
@@ -206,30 +204,9 @@ describe('PostHogSpan', () => {
       expect(ended[0].droppedEventsCount).toBeUndefined()
     })
 
-    it('bounds the reserve so recordException cannot grow a span without limit', () => {
-      const span = createSpan({ maxEvents: 1 })
-      for (let i = 0; i < 7; i++) {
-        span.recordException(new Error(`boom-${i}`))
-      }
-      span.end()
-
-      // One ordinary slot, then the reserve of four.
-      expect(ended[0].events).toHaveLength(5)
-      expect(ended[0].droppedEventsCount).toBe(2)
-    })
-
-    it('does not let the reserve rescue ordinary events', () => {
-      const span = createSpan({ maxEvents: 2 })
-      fillEvents(span, 5)
-      span.end()
-
-      expect(ended[0].events.map((event) => event.name)).toEqual(['step-0', 'step-1'])
-      expect(ended[0].droppedEventsCount).toBe(3)
-    })
-
-    it('does not give the reserve to a caller who names their own event exception', () => {
-      // The reserve is for what the SDK records on your behalf. Keying it on the
-      // name handed it to anyone who happened to use that name.
+    it('does not let an exception-named event bypass the cap', () => {
+      // The cap counts events, not names: nothing about the name `exception`
+      // buys a slot, whoever wrote it.
       const span = createSpan({ maxEvents: 2 })
       for (let i = 0; i < 7; i++) {
         span.addEvent('exception', { mine: i })
@@ -240,18 +217,13 @@ describe('PostHogSpan', () => {
       expect(ended[0].droppedEventsCount).toBe(5)
     })
 
-    it('gives the reserve to a recorded exception alongside a caller using the same name', () => {
-      // Both land on a full span; only the one the SDK recorded draws on it.
-      const span = createSpan({ maxEvents: 1 })
-      span.addEvent('step-0')
-      span.addEvent('exception', { mine: true })
-      span.recordException(new Error('boom'))
+    it('drops ordinary events past the cap', () => {
+      const span = createSpan({ maxEvents: 2 })
+      fillEvents(span, 5)
       span.end()
 
-      expect(ended[0].events).toHaveLength(2)
-      expect(ended[0].events[0].name).toBe('step-0')
-      expect(ended[0].events[1].attributes?.['exception.type']).toBe('Error')
-      expect(ended[0].droppedEventsCount).toBe(1)
+      expect(ended[0].events.map((event) => event.name)).toEqual(['step-0', 'step-1'])
+      expect(ended[0].droppedEventsCount).toBe(3)
     })
   })
 
@@ -656,20 +628,14 @@ describe('PostHogSpan', () => {
       expect(Object.getOwnPropertyDescriptor(payload, '__proto__')?.value).toEqual({ body: 'abcd' })
     })
 
-    it('keeps the reserve when the value bound cuts the event name', () => {
-      // The reserve keys on what the SDK recorded, not on the name, so a bound
-      // short enough to trim `exception` no longer decides whether the event
-      // survives. The name is bounded like any other, and the event is kept.
-      const span = createSpan({ maxAttributeValueLength: 8, maxEvents: 2 })
+    it('bounds an event name the SDK records like any other', () => {
+      const span = createSpan({ maxAttributeValueLength: 8, maxEvents: 4 })
 
-      span.addEvent('a')
-      span.addEvent('b')
       span.recordException(new Error('boom'))
       span.end()
 
-      expect(ended[0].events).toHaveLength(3)
-      expect(ended[0].events[2].name).toBe('exceptio')
-      expect(ended[0].events[2].attributes?.['exception.type']).toBe('Error')
+      expect(ended[0].events[0].name).toBe('exceptio')
+      expect(ended[0].events[0].attributes?.['exception.type']).toBe('Error')
     })
 
     it('bounds a span name and an event name, like a status message', () => {
