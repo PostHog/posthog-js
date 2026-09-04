@@ -23,9 +23,12 @@ const DEEP_BACKDATE_WARNING_MS = 24 * 60 * 60 * 1000
  * replaced rather than dropped, so a mis-instrumented call site loses its name,
  * not its span. `label` names what is being sanitized in the warning.
  */
-export function sanitizeName(name: unknown, label: string, logger?: Logger): string {
+export function sanitizeName(name: unknown, label: string, maxLength: number, logger?: Logger): string {
   if (typeof name === 'string' && name.trim()) {
-    return name
+    // Bounded like a status message and an attribute value: a name built from a
+    // URL or a payload is caller-controlled too, and one large enough takes the
+    // span past the ingestion body limit, which drops it whole.
+    return name.length > maxLength ? name.slice(0, maxLength) : name
   }
   logger?.debug(`${label} must be a non-empty string; using "${FALLBACK_SPAN_NAME}"`)
   return FALLBACK_SPAN_NAME

@@ -6,6 +6,7 @@ import type {
   OtlpTracesPayload,
   ResolvedTracesConfig,
   SendTracesBatchOutcome,
+  SpanRecord,
   TraceSdkContext,
 } from './types'
 import type { Logger } from '../types'
@@ -18,6 +19,10 @@ const resolveForTest = (partial?: Partial<ResolvedTracesConfig>): ResolvedTraces
   flushIntervalMs: 5000,
   maxExportBatchSize: 512,
   maxQueueSize: 2048,
+  beforeSpanSend: [],
+  maxAttributesPerSpan: 128,
+  maxEventsPerSpan: 128,
+  maxAttributeValueLength: 8192,
   maxLiveSpans: 10000,
   maxSpanAgeMs: 3600000,
   ...partial,
@@ -376,6 +381,7 @@ describe('PostHogTraces', () => {
         attributes: [
           { key: 'exception.type', value: { stringValue: 'TypeError' } },
           { key: 'exception.message', value: { stringValue: 'boom' } },
+          { key: 'exception.stacktrace', value: { stringValue: expect.stringContaining('TypeError: boom') } },
         ],
       })
     })
@@ -654,6 +660,1048 @@ describe('PostHogTraces', () => {
       await traces.flush()
 
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('the user has opted out'))
+    })
+  })
+
+  describe('reset', () => {
+    it('says so when it discards queued spans', async () => {
+      // Terminal loss: there is no next flush to retry on, and the export
+      // failure the caller already saw promises one.
+      const instance = createMockInstance({
+        _sendTracesBatch: vi.fn(() => Promise.resolve({ kind: 'retry-later' as const, error: new Error('down') })),
+      })
+      const traces = createTraces({}, instance)
+      traces.startSpan('a').end()
+      traces.startSpan('b').end()
+      await traces.flush()
+
+      traces.reset()
+
+      expect(logger.critical).toHaveBeenCalledWith(expect.stringContaining('Discarding 2 span(s)'))
+    })
+
+    it('stays quiet when nothing was queued', () => {
+      const traces = createTraces()
+
+      traces.reset()
+
+      expect(logger.critical).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('flush reentrancy', () => {
+    it('does not re-send the head batch when a span ends during the flush prefix', async () => {
+      // `_flushInner` runs synchronously as far as its first await, and it reads
+      // the resource attributes in that window. A getter there that ends a span
+      // used to re-enter the flush with no pass yet recorded, and the same head
+      // batch went out again on every pass — thousands of times, unbounded.
+      const resourceAttributes: Record<string, unknown> = {}
+      Object.defineProperty(resourceAttributes, 'tenant', {
+        enumerable: true,
+        // Reads `traces` only when a flush runs, which is after it is assigned.
+        get: () => {
+          traces.startSpan('late').end()
+          return 'acme'
+        },
+      })
+      const instance = createMockInstance()
+      const traces = createTraces({ maxExportBatchSize: 2, resourceAttributes }, instance)
+
+      traces.startSpan('a').end()
+      traces.startSpan('b').end()
+      await traces.flush()
+      await traces.flush()
+
+      expect(sentPayloads(instance)).toHaveLength(2)
+      expect(sentSpans(instance).map((s) => s.name)).toEqual(['a', 'b', 'late'])
+    })
+  })
+
+  describe('beforeSpanSend', () => {
+    const endOneSpan = (beforeSpanSend: any): PostHogTraces => {
+      const traces = createTraces({ beforeSpanSend: [beforeSpanSend].flat() })
+      traces.startSpan('checkout', { attributes: { userId: 42 } }).end()
+      return traces
+    }
+
+    it('drops a span when the hook returns null', async () => {
+      await endOneSpan(() => null).flush()
+      expect(sentSpans()).toHaveLength(0)
+    })
+
+    it('drops the span when the hook throws', async () => {
+      await endOneSpan(() => {
+        throw new Error('scrubber broke')
+      }).flush()
+
+      expect(sentSpans()).toHaveLength(0)
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('beforeSpanSend failed'), expect.anything())
+    })
+
+    it('counts a span the hook dropped', async () => {
+      await endOneSpan(() => null).flush()
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('beforeSpanSend dropped it'))
+    })
+
+    it('counts a span dropped because the hook threw', async () => {
+      // A permanently broken scrubber otherwise drops every span with the drop
+      // counter reading zero.
+      await endOneSpan(() => {
+        throw new Error('scrubber broke')
+      }).flush()
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('beforeSpanSend failed'))
+    })
+
+    it('hands the hook plain values, not the OTLP encoding', () => {
+      const seen: unknown[] = []
+      endOneSpan((span: SpanRecord) => {
+        seen.push(span.attributes.userId)
+        return span
+      })
+
+      expect(seen).toEqual([42])
+    })
+
+    it('keeps the original ids when a hook rewrites them', async () => {
+      const traces = createTraces({
+        beforeSpanSend: [
+          (span: any) => {
+            span.traceId = '0'.repeat(32)
+            span.spanId = '1'.repeat(16)
+            return span
+          },
+        ],
+      })
+      const started = traces.startSpan('checkout')
+      const originalTraceId = started.traceparent()!.split('-')[1]
+      started.end()
+      await traces.flush()
+
+      const [span] = sentSpans()
+      expect(span.traceId).toBe(originalTraceId)
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('identity field'))
+    })
+
+    it('exports a span whose record the hook froze', async () => {
+      // A defensive hook may freeze what it returns. Assigning to a frozen
+      // property throws even when the value is the one already there, so the
+      // post-hook pass works on a copy — otherwise every span the hook saw is
+      // dropped by the fail-closed branch, with only a debug line to say so.
+      const traces = createTraces({
+        beforeSpanSend: [(span: SpanRecord) => Object.freeze({ ...span, attributes: { route: '/checkout' } })],
+      })
+      const span = traces.startSpan('checkout')
+
+      expect(() => span.end()).not.toThrow()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['route'])
+    })
+
+    it('exports a span whose attributes the hook froze', async () => {
+      const traces = createTraces({
+        maxAttributesPerSpan: 1,
+        beforeSpanSend: [
+          (span: SpanRecord) => ({ ...span, attributes: Object.freeze({ route: '/checkout', extra: 1 }) as never }),
+        ],
+      })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['route'])
+      expect(sent.droppedAttributesCount).toBe(1)
+    })
+
+    it('rejects a timestamp the server could not decode', async () => {
+      const instance = createMockInstance()
+      const traces = createTraces(
+        { beforeSpanSend: [(span: SpanRecord) => ({ ...span, startTime: span.startTime * 1e6 })] },
+        instance
+      )
+      traces.startSpan('poison').end()
+      await traces.flush()
+
+      const [span] = sentSpans(instance)
+      expect(span.startTimeUnixNano.length).toBeLessThanOrEqual(19)
+    })
+
+    it('keeps tracestate a rebuilding hook would have dropped', async () => {
+      const instance = createMockInstance()
+      const traces = createTraces(
+        { beforeSpanSend: [(span: SpanRecord) => ({ ...span, traceState: undefined }) as SpanRecord] },
+        instance
+      )
+      traces.startSpan('child', { parent: `00-${TRACE_ID}-${REMOTE_SPAN_ID}-01`, tracestate: 'vendor=abc' }).end()
+      await traces.flush()
+
+      expect(sentSpans(instance)[0].traceState).toBe('vendor=abc')
+    })
+
+    it('keeps the trace flags and parent remoteness a rebuilding hook would have dropped', async () => {
+      const instance = createMockInstance()
+      const traces = createTraces({ beforeSpanSend: [(span: SpanRecord) => ({ ...span }) as SpanRecord] }, instance)
+      traces.startSpan('child', { parent: `00-${TRACE_ID}-${REMOTE_SPAN_ID}-00` }).end()
+      await traces.flush()
+
+      // Sampled-out inbound flag, plus both remoteness bits for a header parent.
+      expect(sentSpans(instance)[0].flags).toBe(0x300)
+    })
+
+    it('keeps them when the hook builds its record from the fields it can see', async () => {
+      // Spreading carries the propagation fields through even though no public
+      // type declares them; naming the public fields is what drops them.
+      const instance = createMockInstance()
+      const traces = createTraces(
+        {
+          beforeSpanSend: [
+            (span: SpanRecord) =>
+              ({
+                traceId: span.traceId,
+                spanId: span.spanId,
+                parentSpanId: span.parentSpanId,
+                name: span.name,
+                kind: span.kind,
+                status: span.status,
+                attributes: span.attributes,
+                events: span.events,
+                startTime: span.startTime,
+                endTime: span.endTime,
+              }) as SpanRecord,
+          ],
+        },
+        instance
+      )
+      traces.startSpan('child', { parent: `00-${TRACE_ID}-${REMOTE_SPAN_ID}-00` }).end()
+      await traces.flush()
+
+      expect(sentSpans(instance)[0].flags).toBe(0x300)
+    })
+
+    it('keeps them when the rebuilding hook also freezes what it returns', async () => {
+      // Restoring these onto the returned record would throw here, and a throwing
+      // hook drops the span.
+      const instance = createMockInstance()
+      const traces = createTraces(
+        { beforeSpanSend: [(span: SpanRecord) => Object.freeze({ ...span }) as SpanRecord] },
+        instance
+      )
+      traces.startSpan('child', { parent: `00-${TRACE_ID}-${REMOTE_SPAN_ID}-00` }).end()
+      await traces.flush()
+
+      expect(sentSpans(instance).map((s) => s.flags)).toEqual([0x300])
+    })
+
+    it('does not resurrect a prototype-named attribute the hook removed', async () => {
+      // `key in attributes` walks the prototype chain, so a deleted `constructor`
+      // read back as the inherited function and shipped as [Function].
+      const instance = createMockInstance()
+      const traces = createTraces(
+        {
+          beforeSpanSend: [
+            (span: SpanRecord) => {
+              delete (span.attributes as Record<string, unknown>).constructor
+              return span
+            },
+          ],
+        },
+        instance
+      )
+      const span = traces.startSpan('ghost')
+      span.setAttribute('constructor', 'user-value')
+      span.setAttribute('safe', 'ok')
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans(instance)[0].attributes.map((a) => a.key)).toEqual(['safe'])
+    })
+
+    it('does not let prototype-named ghosts evict what the hook kept', async () => {
+      // Worse than resurrection: at the cap the ghosts won the slots and the
+      // attribute the hook deliberately kept was the one dropped.
+      const instance = createMockInstance()
+      const traces = createTraces(
+        {
+          maxAttributesPerSpan: 2,
+          beforeSpanSend: [(span: SpanRecord) => ({ ...span, attributes: { onlyThis: 'yes' } }) as SpanRecord],
+        },
+        instance
+      )
+      const span = traces.startSpan('ghosts')
+      span.setAttribute('toString', 1)
+      span.setAttribute('valueOf', 2)
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans(instance)[0].attributes.map((a) => a.key)).toEqual(['onlyThis'])
+    })
+
+    it('keeps the earliest-set attributes when the hook adds an integer-like key', async () => {
+      // Object.keys hoists integer-like keys whatever the write order, so a key
+      // the hook added last outranked one the caller set before it ran.
+      const instance = createMockInstance()
+      const traces = createTraces(
+        {
+          maxAttributesPerSpan: 3,
+          beforeSpanSend: [
+            (span: SpanRecord) => {
+              span.attributes['0'] = 'added-last'
+              return span
+            },
+          ],
+        },
+        instance
+      )
+      const span = traces.startSpan('ordered')
+      span.setAttribute('alpha', 1)
+      span.setAttribute('beta', 2)
+      span.setAttribute('gamma', 3)
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans(instance)[0].attributes.map((a) => a.key)).toEqual(['alpha', 'beta', 'gamma'])
+    })
+
+    it('ignores a forged identity from a frozen hook rather than dropping the span', async () => {
+      // Writing the id back onto a frozen return throws, and a throwing hook
+      // drops the span, so forging plus freezing used to lose every span.
+      const instance = createMockInstance()
+      const traces = createTraces(
+        { beforeSpanSend: [(span: SpanRecord) => Object.freeze({ ...span, traceId: '0'.repeat(32) }) as SpanRecord] },
+        instance
+      )
+      traces.startSpan('forged').end()
+      await traces.flush()
+
+      expect(sentSpans(instance)).toHaveLength(1)
+      expect(sentSpans(instance)[0].traceId).not.toBe('0'.repeat(32))
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('keeping the original ids'))
+    })
+
+    it('exports a child span whose record a frozen hook rebuilt without the parent id', async () => {
+      // The shape that loses children but keeps roots: a rebuilt record has no
+      // parentSpanId to match, so restoring it wrote to a frozen object.
+      const instance = createMockInstance()
+      const traces = createTraces(
+        {
+          beforeSpanSend: [
+            (span: SpanRecord) =>
+              Object.freeze({
+                traceId: span.traceId,
+                spanId: span.spanId,
+                name: span.name,
+                kind: span.kind,
+                attributes: span.attributes,
+                events: span.events,
+                startTime: span.startTime,
+                endTime: span.endTime,
+              }) as SpanRecord,
+          ],
+        },
+        instance
+      )
+      const root = traces.startSpan('root')
+      traces.startSpan('child', { parent: root }).end()
+      root.end()
+      await traces.flush()
+
+      expect(
+        sentSpans(instance)
+          .map((s) => s.name)
+          .sort()
+      ).toEqual(['child', 'root'])
+    })
+
+    it('runs hooks left to right and stops at the first null', async () => {
+      const order: string[] = []
+      await endOneSpan([
+        (span: SpanRecord) => {
+          order.push('first')
+          return span
+        },
+        () => {
+          order.push('second')
+          return null
+        },
+        (span: SpanRecord) => {
+          order.push('third')
+          return span
+        },
+      ]).flush()
+
+      expect(order).toEqual(['first', 'second'])
+      expect(sentSpans()).toHaveLength(0)
+    })
+
+    it('exports the edits a hook made', async () => {
+      await endOneSpan((span: SpanRecord) => {
+        delete span.attributes.userId
+        span.name = 'redacted'
+        return span
+      }).flush()
+
+      const [span] = sentSpans()
+      expect(span.name).toBe('redacted')
+      expect(span.attributes?.find((attribute) => attribute.key === 'userId')).toBeUndefined()
+    })
+  })
+
+  describe('beforeSpanSend validity', () => {
+    it('sanitises an event the hook pushed without a timestamp', async () => {
+      const traces = createTraces({
+        beforeSpanSend: [
+          (span) => {
+            span.events.push({ name: 'audited' } as never)
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      const [event] = sentSpans()[0].events!
+      expect(event.name).toBe('audited')
+      expect(event.timeUnixNano).toMatch(/^\d+$/)
+    })
+
+    it('clamps an out-of-range timestamp on a hook-supplied event', async () => {
+      const traces = createTraces({
+        beforeSpanSend: [
+          (span) => {
+            span.events.push({ name: 'audited', timestamp: -1 } as never)
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      expect(sentSpans()[0].events![0].timeUnixNano).toMatch(/^\d+$/)
+    })
+
+    it('bounds a status message the hook rewrote', async () => {
+      const traces = createTraces({
+        maxAttributeValueLength: 4,
+        beforeSpanSend: [
+          (span) => {
+            span.status = { code: 'error', message: 'abcdefgh' }
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      expect(sentSpans()[0].status).toEqual({ code: 2, message: 'abcd' })
+    })
+
+    it('keeps the original status when the hook writes an unknown code', async () => {
+      // An unknown code maps to nothing and encodes as an empty status object,
+      // which silently loses an error the span really had.
+      const traces = createTraces({
+        beforeSpanSend: [(span) => ({ ...span, status: { code: 'ERROR' as never, message: 'boom' } })],
+      })
+      const span = traces.startSpan('checkout')
+      span.setStatus('error', 'boom')
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans()[0].status).toEqual({ code: 2, message: 'boom' })
+    })
+
+    it('ignores a dropped count the hook invented', async () => {
+      const traces = createTraces({
+        beforeSpanSend: [(span) => ({ ...span, droppedAttributesCount: 'lots' as never })],
+      })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      expect(sentSpans()[0].droppedAttributesCount).toBeUndefined()
+    })
+
+    it('lets a hook scrub the auto-context keys', async () => {
+      // The exemption is from the count cap only. A hook is the documented
+      // scrubbing point, so it has to be able to remove the join keys as well.
+      context = { distinctId: 'user-1', sessionId: 'session-1' }
+      const traces = createTraces({
+        beforeSpanSend: [
+          (span) => {
+            delete span.attributes.posthogDistinctId
+            delete span.attributes.sessionId
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      expect(sentSpans()[0].attributes).toBeUndefined()
+    })
+
+    it('keeps the error status when the event cap costs the exception event', async () => {
+      // The status is set independently of the event, so a span whose exception
+      // event did not fit still exports as failed and still counts the loss.
+      // That pair is what makes the case findable once traces is live.
+      const traces = createTraces({
+        maxEventsPerSpan: 1,
+        beforeSpanSend: [
+          (span) => {
+            span.events.push({ name: 'audited', timestamp: Date.now() })
+            return span
+          },
+        ],
+      })
+      const span = traces.startSpan('checkout')
+      span.addEvent('step')
+      span.recordException(new Error('boom'))
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.events!.map((event) => event.name)).toEqual(['step'])
+      expect(sent.droppedEventsCount).toBe(2)
+      expect(sent.status).toEqual({ code: 2, message: 'boom' })
+    })
+
+    it('keeps the original status when the hook mutates the code in place', async () => {
+      // The hook is documented as editing the record in place, so snapshotting a
+      // reference to `status` would restore the mutation onto itself.
+      const traces = createTraces({
+        beforeSpanSend: [
+          (span) => {
+            ;(span.status as { code: string }).code = 'ERROR'
+            return span
+          },
+        ],
+      })
+      const span = traces.startSpan('checkout')
+      span.setStatus('error', 'boom')
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans()[0].status).toEqual({ code: 2, message: 'boom' })
+    })
+
+    it('exports a span whose record is a class instance with prototype getters', async () => {
+      // A spread copies own properties only, so `events` behind a prototype
+      // getter arrived undefined and the fail-closed branch ate every span.
+      class Wrapped {
+        constructor(private readonly _inner: SpanRecord) {}
+        get traceId(): string {
+          return this._inner.traceId
+        }
+        get spanId(): string {
+          return this._inner.spanId
+        }
+        get name(): string {
+          return this._inner.name
+        }
+        get kind(): SpanRecord['kind'] {
+          return this._inner.kind
+        }
+        get attributes(): SpanRecord['attributes'] {
+          return this._inner.attributes
+        }
+        get events(): SpanRecord['events'] {
+          return this._inner.events
+        }
+        get startTime(): number {
+          return this._inner.startTime
+        }
+        get endTime(): number {
+          return this._inner.endTime
+        }
+      }
+      const traces = createTraces({
+        beforeSpanSend: [(span: SpanRecord) => new Wrapped(span) as unknown as SpanRecord],
+      })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      expect(sentSpans().map((span) => span.name)).toEqual(['checkout'])
+    })
+
+    it('survives a hook that leaves a hole in the events array', async () => {
+      const traces = createTraces({
+        beforeSpanSend: [
+          (span) => {
+            span.events.length = 2
+            return span
+          },
+        ],
+      })
+      const span = traces.startSpan('checkout')
+      span.addEvent('step')
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans()[0].events!.map((event) => event.name)).toEqual(['step'])
+    })
+
+    it('keeps the span-side dropped count when the hook overwrites the counter', async () => {
+      const traces = createTraces({
+        maxEventsPerSpan: 1,
+        beforeSpanSend: [
+          (span) => {
+            ;(span as unknown as { droppedEventsCount: unknown }).droppedEventsCount = 'lots'
+            span.events.push({ name: 'audited', timestamp: Date.now() })
+            return span
+          },
+        ],
+      })
+      const span = traces.startSpan('checkout')
+      span.addEvent('step-0')
+      span.addEvent('step-1')
+      span.end()
+      await traces.flush()
+
+      // One dropped at the span, one by the post-hook re-apply.
+      expect(sentSpans()[0].droppedEventsCount).toBe(2)
+    })
+
+    it('drops only the event the hook made unreadable', async () => {
+      const traces = createTraces({
+        beforeSpanSend: [
+          (span) => {
+            span.events = [span.events[0], null as never, span.events[1]]
+            return span
+          },
+        ],
+      })
+      const span = traces.startSpan('checkout')
+      span.addEvent('step-0')
+      span.addEvent('step-1')
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans()[0].events!.map((event) => event.name)).toEqual(['step-0', 'step-1'])
+    })
+
+    it.each([
+      ['attributes replaced with null', (span: SpanRecord) => ({ ...span, attributes: null as never })],
+      ['attributes replaced with an array', (span: SpanRecord) => ({ ...span, attributes: ['a'] as never })],
+      ['events replaced with null', (span: SpanRecord) => ({ ...span, events: null as never })],
+      ['an async hook returning a promise', (span: SpanRecord) => Promise.resolve(span) as never],
+      // Carrying both collections was the whole shape check, so these reached
+      // the wire as a span named `unknown` at a fallback time with no join keys.
+      ['only the two collections', () => ({ attributes: {}, events: [] }) as never],
+      ['no name', (span: SpanRecord) => ({ ...span, name: undefined as never })],
+      ['no kind', (span: SpanRecord) => ({ ...span, kind: undefined as never })],
+      ['no start time', (span: SpanRecord) => ({ ...span, startTime: undefined as never })],
+      ['no end time', (span: SpanRecord) => ({ ...span, endTime: undefined as never })],
+    ])('drops the span when the hook returns %s', async (_label, beforeSpanSend) => {
+      // Repairing these would export a nameless span carrying no join keys.
+      const traces = createTraces({ beforeSpanSend: [beforeSpanSend] })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      expect(sentSpans()).toHaveLength(0)
+    })
+
+    it('counts an incomplete hook result as a drop rather than losing it silently', async () => {
+      const traces = createTraces({ beforeSpanSend: [() => ({ attributes: {}, events: [] }) as never] })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('beforeSpanSend returned an unusable record'))
+    })
+
+    it('still exports a span whose required fields the hook left in place', async () => {
+      // The shape check reads presence, so an ordinary scrub is untouched by it.
+      const traces = createTraces({
+        beforeSpanSend: [
+          (span) => {
+            delete span.attributes.secret
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout', { attributes: { secret: 'shh', keep: 1 } }).end()
+      await traces.flush()
+
+      expect(sentSpans()).toHaveLength(1)
+      expect(sentSpans()[0].name).toBe('checkout')
+      expect(sentSpans()[0].attributes!.map((a) => a.key)).toContain('keep')
+      expect(sentSpans()[0].attributes!.map((a) => a.key)).not.toContain('secret')
+    })
+
+    it('gives a later hook the real identity after an earlier one froze a forged record', async () => {
+      // The export reads the snapshot either way, but a hook that samples or
+      // routes on an id must not see one an earlier hook invented.
+      const seen: { traceId: string; spanId: string }[] = []
+      const traces = createTraces({
+        beforeSpanSend: [
+          (span) => Object.freeze({ ...span, traceId: '0'.repeat(32), spanId: 'f'.repeat(16) }),
+          (span) => {
+            seen.push({ traceId: span.traceId, spanId: span.spanId })
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      expect(sentSpans()).toHaveLength(1)
+      expect(seen[0].traceId).toBe(sentSpans()[0].traceId)
+      expect(seen[0].spanId).toBe(sentSpans()[0].spanId)
+      expect(seen[0].traceId).not.toBe('0'.repeat(32))
+    })
+
+    it('leaves the rest of a frozen forged record readable to the next hook', async () => {
+      // The corrected view is built from the record's own descriptors, so a hook
+      // reading anything but identity sees exactly what the previous one returned.
+      let seen: SpanRecord | undefined
+      const traces = createTraces({
+        beforeSpanSend: [
+          (span) => Object.freeze({ ...span, name: 'renamed', traceId: '0'.repeat(32) }),
+          (span) => {
+            seen = span
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout', { attributes: { keep: 1 } }).end()
+      await traces.flush()
+
+      expect(seen!.name).toBe('renamed')
+      expect(seen!.attributes.keep).toBe(1)
+      expect(Object.keys(seen!)).toContain('name')
+      expect(sentSpans()[0].name).toBe('renamed')
+    })
+
+    it('applies the event cap to what a hook leaves behind', async () => {
+      // A hook can append events or rewrite them, neither of which goes through
+      // `addEvent`, so the cap has to be re-applied to whatever it returns.
+      const traces = createTraces({
+        maxEventsPerSpan: 1,
+        beforeSpanSend: [
+          (span) => {
+            span.events.push({ name: 'exception', timestamp: Date.now() })
+            span.events.push({ name: 'appended', timestamp: Date.now() })
+            return span
+          },
+        ],
+      })
+      const span = traces.startSpan('checkout')
+      span.addEvent('step-0')
+      span.end()
+      await traces.flush()
+
+      expect(sentSpans()[0].events!.map((event) => event.name)).toEqual(['step-0'])
+    })
+
+    it('exports the span when the hook status message refuses to stringify', async () => {
+      // The encoder downstream only marks the field, so coercing here must not
+      // be the thing that costs the span.
+      const traces = createTraces({
+        maxAttributeValueLength: 4,
+        beforeSpanSend: [
+          (span) => {
+            span.status = {
+              code: 'error',
+              message: {
+                toString() {
+                  throw new Error('nope')
+                },
+              } as never,
+            }
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      expect(sentSpans()).toHaveLength(1)
+      expect(sentSpans()[0].status?.code).toBe(2)
+    })
+
+    it('bounds a non-string status message the hook wrote', async () => {
+      const traces = createTraces({
+        maxAttributeValueLength: 4,
+        beforeSpanSend: [
+          (span) => {
+            span.status = { code: 'error', message: { toString: () => 'abcdefgh' } as never }
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      expect(sentSpans()[0].status).toEqual({ code: 2, message: 'abcd' })
+    })
+
+    it('does not spend cap budget on a value the hook blanked', async () => {
+      const traces = createTraces({
+        maxAttributesPerSpan: 2,
+        beforeSpanSend: [
+          (span) => {
+            span.attributes.secret = null
+            span.attributes.scrubbed = true
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout', { attributes: { secret: 'sk-live', route: '/checkout' } }).end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['route', 'scrubbed'])
+      expect(sent.droppedAttributesCount).toBeUndefined()
+    })
+  })
+
+  describe('span limits', () => {
+    it('keeps the earliest attributes and counts the rest', async () => {
+      const traces = createTraces({ maxAttributesPerSpan: 3 })
+      const span = traces.startSpan('checkout')
+      for (let i = 0; i < 5; i++) {
+        span.setAttribute(`key-${i}`, i)
+      }
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['key-0', 'key-1', 'key-2'])
+      expect(sent.droppedAttributesCount).toBe(2)
+    })
+
+    it('re-applies the attribute cap to what beforeSpanSend added', async () => {
+      const traces = createTraces({
+        maxAttributesPerSpan: 2,
+        beforeSpanSend: [
+          (span) => {
+            for (let i = 0; i < 5; i++) {
+              span.attributes[`added-${i}`] = i
+            }
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout', { attributes: { kept: true } }).end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['kept', 'added-0'])
+      expect(sent.droppedAttributesCount).toBe(4)
+    })
+
+    it('re-applies the event cap to what beforeSpanSend added', async () => {
+      const traces = createTraces({
+        maxEventsPerSpan: 1,
+        beforeSpanSend: [
+          (span) => {
+            span.events.push({ name: 'added', timestamp: span.startTime })
+            return span
+          },
+        ],
+      })
+      const span = traces.startSpan('checkout')
+      span.addEvent('original')
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.events!.map((event) => event.name)).toEqual(['original'])
+      expect(sent.droppedEventsCount).toBe(1)
+    })
+
+    it('keeps the auto-context keys when beforeSpanSend pushes past the cap', async () => {
+      context = { distinctId: 'alice', sessionId: 'session-1' }
+      const traces = createTraces({
+        maxAttributesPerSpan: 1,
+        beforeSpanSend: [
+          (span) => {
+            span.attributes.late = true
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout', { attributes: { early: true } }).end()
+      await traces.flush()
+
+      const keys = sentSpans()[0].attributes!.map((attribute) => attribute.key)
+      expect(keys).toEqual(expect.arrayContaining(['posthogDistinctId', 'sessionId', 'early']))
+      expect(keys).not.toContain('late')
+    })
+
+    it('re-applies the value bound to what beforeSpanSend wrote', async () => {
+      const traces = createTraces({
+        maxAttributeValueLength: 8,
+        beforeSpanSend: [
+          (span) => {
+            span.attributes.enriched = 'y'.repeat(5000)
+            span.events.push({ name: 'added', timestamp: span.startTime, attributes: { blob: 'z'.repeat(5000) } })
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.find((attribute) => attribute.key === 'enriched')!.value).toEqual({
+        stringValue: 'yyyyyyyy',
+      })
+      expect(sent.events!.at(-1)!.attributes!.find((attribute) => attribute.key === 'blob')!.value).toEqual({
+        stringValue: 'zzzzzzzz',
+      })
+    })
+
+    it('does not invent a dropped count when beforeSpanSend only removes', async () => {
+      const traces = createTraces({
+        maxAttributesPerSpan: 5,
+        beforeSpanSend: [
+          (span) => {
+            delete span.attributes.secret
+            return span
+          },
+        ],
+      })
+      traces.startSpan('checkout', { attributes: { secret: 'x', kept: true } }).end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['kept'])
+      expect(sent.droppedAttributesCount).toBeUndefined()
+    })
+
+    it('never evicts the auto-context keys', async () => {
+      context = { distinctId: 'alice', sessionId: 'session-1' }
+      const traces = createTraces({ maxAttributesPerSpan: 1 })
+      const span = traces.startSpan('checkout')
+      for (let i = 0; i < 5; i++) {
+        span.setAttribute(`key-${i}`, i)
+      }
+      span.end()
+      await traces.flush()
+
+      const keys = sentSpans()[0].attributes!.map((attribute) => attribute.key)
+      expect(keys).toEqual(expect.arrayContaining(['posthogDistinctId', 'sessionId', 'key-0']))
+      expect(keys).not.toContain('key-1')
+    })
+
+    it('caps events and counts the rest', async () => {
+      const traces = createTraces({ maxEventsPerSpan: 2 })
+      const span = traces.startSpan('checkout')
+      for (let i = 0; i < 4; i++) {
+        span.addEvent(`event-${i}`)
+      }
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.events!.map((event) => event.name)).toEqual(['event-0', 'event-1'])
+      expect(sent.droppedEventsCount).toBe(2)
+    })
+
+    it('lets a caller overwrite an attribute it already set while at the cap', async () => {
+      const traces = createTraces({ maxAttributesPerSpan: 1 })
+      const span = traces.startSpan('checkout')
+      span.setAttribute('plan', 'free')
+      span.setAttribute('plan', 'pro')
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes).toEqual([{ key: 'plan', value: { stringValue: 'pro' } }])
+      expect(sent.droppedAttributesCount).toBeUndefined()
+    })
+
+    it('omits the counters when nothing was dropped', async () => {
+      const traces = createTraces()
+      traces.startSpan('checkout', { attributes: { plan: 'pro' } }).end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent).not.toHaveProperty('droppedAttributesCount')
+      expect(sent).not.toHaveProperty('droppedEventsCount')
+    })
+
+    it('counts a parsed __proto__ key against the cap instead of smuggling it through', async () => {
+      // JSON.parse produces an own `__proto__` key; a plain object store would
+      // swap its prototype and leak every nested key past the cap.
+      const traces = createTraces({ maxAttributesPerSpan: 2 })
+      const parsed = JSON.parse('{"__proto__": {"leaked": 1}, "orderId": "abc"}')
+      traces.startSpan('checkout', { attributes: parsed }).end()
+      await traces.flush()
+
+      const keys = sentSpans()[0].attributes!.map((attribute) => attribute.key)
+      expect(keys).not.toContain('leaked')
+      expect(keys).toContain('orderId')
+    })
+
+    it('does not let reserved property names bypass the cap', async () => {
+      const traces = createTraces({ maxAttributesPerSpan: 1 })
+      const span = traces.startSpan('checkout')
+      span.setAttribute('kept', 1)
+      span.setAttribute('toString', 'nope')
+      span.setAttribute('constructor', 'nope')
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['kept'])
+      expect(sent.droppedAttributesCount).toBe(2)
+    })
+
+    it('does not spend cap budget on values that are dropped at encode time', async () => {
+      const traces = createTraces({ maxAttributesPerSpan: 2 })
+      const span = traces.startSpan('checkout')
+      span.setAttribute('skipped-a', undefined)
+      span.setAttribute('skipped-b', null)
+      span.setAttribute('orderId', 'abc-123')
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['orderId'])
+      expect(sent.droppedAttributesCount).toBeUndefined()
+    })
+
+    it('still caps a key first seen with an optional value', async () => {
+      const traces = createTraces({ maxAttributesPerSpan: 2 })
+      const span = traces.startSpan('checkout')
+      for (let i = 0; i < 5; i++) {
+        span.setAttribute(`field-${i}`, undefined)
+      }
+      for (let i = 0; i < 5; i++) {
+        span.setAttribute(`field-${i}`, i)
+      }
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes).toHaveLength(2)
+      expect(sent.droppedAttributesCount).toBe(3)
+    })
+
+    it('clears a key that is set back to null', async () => {
+      const traces = createTraces({ maxAttributesPerSpan: 2 })
+      const span = traces.startSpan('checkout')
+      span.setAttribute('orderId', 'abc-123')
+      span.setAttribute('orderId', null)
+      span.setAttribute('a', 1)
+      span.setAttribute('b', 2)
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['a', 'b'])
+      expect(sent.droppedAttributesCount).toBeUndefined()
+    })
+
+    it('caps attributes supplied at start', async () => {
+      const traces = createTraces({ maxAttributesPerSpan: 2 })
+      traces.startSpan('checkout', { attributes: { a: 1, b: 2, c: 3 } }).end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['a', 'b'])
+      expect(sent.droppedAttributesCount).toBe(1)
     })
   })
 
@@ -1043,6 +2091,54 @@ describe('PostHogTraces', () => {
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('2 span(s)'))
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('the user has opted out'))
     })
+
+    it('stops draining a backlog when optOut() lands while a batch is in flight', async () => {
+      const instance = createMockInstance()
+      instance._sendTracesBatch = vi.fn(() =>
+        Promise.resolve({ kind: 'retry-later' as const, error: new Error('down') })
+      )
+      const traces = createTraces({ maxExportBatchSize: 2 }, instance)
+      context = { distinctId: 'alice', sessionId: 'session-1' }
+      for (let i = 0; i < 6; i++) {
+        traces.startSpan(`span-${i}`).end()
+        await flushMicrotasks()
+      }
+      expect(instance._sendTracesBatch).toHaveBeenCalledTimes(1)
+
+      instance._sendTracesBatch.mockImplementation(() =>
+        Promise.resolve().then(() => {
+          instance.optedOut = true
+          return { kind: 'ok' as const }
+        })
+      )
+      await traces.flush()
+
+      expect(instance._sendTracesBatch).toHaveBeenCalledTimes(2)
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('4 span(s)'))
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('the user has opted out'))
+    })
+
+    it('stops draining a backlog when the client is disabled while a batch is in flight', async () => {
+      const instance = createMockInstance()
+      instance._sendTracesBatch = vi.fn(() =>
+        Promise.resolve({ kind: 'retry-later' as const, error: new Error('down') })
+      )
+      const traces = createTraces({ maxExportBatchSize: 2 }, instance)
+      for (let i = 0; i < 6; i++) {
+        traces.startSpan(`span-${i}`).end()
+        await flushMicrotasks()
+      }
+
+      instance._sendTracesBatch.mockImplementation(() =>
+        Promise.resolve().then(() => {
+          instance.isDisabled = true
+          return { kind: 'ok' as const }
+        })
+      )
+      await traces.flush()
+
+      expect(instance._sendTracesBatch).toHaveBeenCalledTimes(2)
+    })
   })
 
   describe('flush backoff', () => {
@@ -1185,6 +2281,20 @@ describe('PostHogTraces', () => {
       await traces.flush()
 
       expect(sentSpans().map((span) => span.name)).toEqual(['checkout'])
+    })
+
+    it('bounds a long resource attribute value', async () => {
+      // Resource attributes are caller-supplied like span attributes, and they
+      // ride on every batch rather than on one span.
+      const traces = createTraces({
+        maxAttributeValueLength: 4,
+        resourceAttributes: { 'host.name': 'abcdefgh' } as never,
+      })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      const resource = sentPayloads()[0].resourceSpans[0].resource!.attributes
+      expect(resource.find((attribute) => attribute.key === 'host.name')?.value).toEqual({ stringValue: 'abcd' })
     })
 
     it('does not throw on a Date-like object with no Date slot', () => {

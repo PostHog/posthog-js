@@ -24,6 +24,8 @@ export type {
   SpanStatusCode,
   SpanTimeInput,
   StartSpanOptions,
+  SpanRecord,
+  BeforeSpanSendFn,
   TracesConfig,
 } from '@posthog/core'
 

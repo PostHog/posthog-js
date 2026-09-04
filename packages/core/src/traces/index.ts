@@ -1,17 +1,26 @@
-import type { Span, SpanAttributes, StartSpanOptions } from '@posthog/types'
+import type { Span, SpanAttributes, SpanRecord as HookSpanRecord, StartSpanOptions } from '@posthog/types'
 import type { Logger } from '../types'
 import type {
   OtlpSpan,
   ResolvedTracesConfig,
   SpanContextManager,
+  SpanEventRecord,
   SpanRecord,
   TraceSdkContext,
   TracesHost,
 } from './types'
-import { PostHogSpan, describeError, inertSpan, monotonicNow, runWithActiveSpan } from './span'
+import {
+  PostHogSpan,
+  applySpanLimits,
+  describeError,
+  inertSpan,
+  monotonicNow,
+  runWithActiveSpan,
+  truncateAttributes,
+} from './span'
 import { newSpanId, newTraceId } from './ids'
 import { parseTraceparent, sanitizeTracestate } from './traceparent'
-import { resolveStartTime, sanitizeName } from './sanitize'
+import { clampEndTime, resolveStartTime, resolveSuppliedTime, sanitizeName, toEpochMs } from './sanitize'
 import { assignUserAttributes } from '../utils/json-utils'
 import { buildOtlpSpan, buildOtlpTracesPayload, buildTracesResourceAttributes } from './otlp'
 import { isPromise, safeSetTimeout } from '../utils'
@@ -47,6 +56,79 @@ function looksLikeSpan(value: unknown): boolean {
     return typeof (value as Span).traceparent === 'function'
   } catch {
     return false
+  }
+}
+
+/**
+ * The rebuilt record with every field named, optional ones included. A field
+ * added to either half of `SpanRecord` is a compile error at the rebuild until
+ * it says whether a hook may set that field or the span keeps its own value.
+ */
+type RebuiltSpanRecord = { [K in keyof Required<SpanRecord>]: SpanRecord[K] }
+
+interface SpanIdentity {
+  traceId: string
+  spanId: string
+  parentSpanId?: string
+  traceState?: string
+}
+
+/**
+ * Whether a `beforeSpanSend` return value still carries every field the public
+ * `SpanRecord` declares as required. An array is rejected for `attributes`: it
+ * would encode as `{ "0": ... }` rather than fail.
+ *
+ * Presence, not usability: a field that is there but holds the wrong type is a
+ * hook editing a real record badly, and the sanitising below is what answers
+ * that. A field that is absent means the hook returned something that was never
+ * a span record, and the fallbacks would dress it up as one.
+ */
+function isSpanRecordShape(record: SpanRecord): boolean {
+  return (
+    !!record.attributes &&
+    typeof record.attributes === 'object' &&
+    !Array.isArray(record.attributes) &&
+    Array.isArray(record.events) &&
+    record.name !== undefined &&
+    record.kind !== undefined &&
+    record.startTime !== undefined &&
+    record.endTime !== undefined
+  )
+}
+
+/** Writes `value` onto `record` only when it isn't already there. */
+function restoreField<K extends keyof SpanIdentity>(record: SpanIdentity, field: K, value: SpanIdentity[K]): void {
+  if (record[field] !== value) {
+    record[field] = value
+  }
+}
+
+/**
+ * A stand-in for a record whose identity could not be written back, carrying the
+ * original ids and everything else the hook returned.
+ *
+ * Built from the descriptors rather than spread so a class instance keeps its
+ * prototype — `instanceof` and a field exposed as a prototype getter both still
+ * answer — and so `Object.keys` reads what it read before. Only the four
+ * identity descriptors are replaced, which is what makes the copy writable where
+ * the original was frozen.
+ */
+function withRestoredIdentity(hooked: HookSpanRecord, original: SpanIdentity): HookSpanRecord {
+  try {
+    const descriptors = Object.getOwnPropertyDescriptors(hooked) as Record<string, PropertyDescriptor>
+    for (const field of ['traceId', 'spanId', 'parentSpanId', 'traceState'] as const) {
+      descriptors[field] = {
+        value: original[field],
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      }
+    }
+    return Object.create(Object.getPrototypeOf(hooked) as object | null, descriptors) as HookSpanRecord
+  } catch {
+    // A hostile descriptor read. The export still uses the snapshot, so this
+    // costs the next hook a correct id rather than the span.
+    return hooked
   }
 }
 
@@ -147,6 +229,8 @@ export class PostHogTraces {
     // so a backdated `startTime` neither ages a span early nor exempts it.
     this._liveSpans.set(spanId, clockNow())
 
+    const autoAttributes = this._autoContextAttributes()
+
     return new PostHogSpan(
       {
         traceId: parent?.traceId ?? newTraceId(),
@@ -155,14 +239,18 @@ export class PostHogTraces {
         traceState: parent?.traceState,
         traceFlags: parent?.traceFlags,
         parentIsRemote: parent?.isRemote,
-        name: sanitizeName(name, 'Span name', this._logger),
+        name: sanitizeName(name, 'Span name', this._config.maxAttributeValueLength, this._logger),
         kind: options?.kind ?? 'internal',
         // Auto-context first so user-supplied attributes win on collision.
-        attributes: assignUserAttributes(this._autoContextAttributes(), options?.attributes),
+        attributes: assignUserAttributes({ ...autoAttributes }, options?.attributes),
+        autoAttributeKeys: Object.keys(autoAttributes),
+        maxAttributes: this._config.maxAttributesPerSpan,
+        maxEvents: this._config.maxEventsPerSpan,
+        maxAttributeValueLength: this._config.maxAttributeValueLength,
         startTime,
         backdated: startTime !== now,
       },
-      (record) => this._onSpanEnd(record),
+      (record, autoKeys) => this._onSpanEnd(record, autoKeys),
       this._logger
     )
   }
@@ -239,14 +327,25 @@ export class PostHogTraces {
 
   private _startFlush(): Promise<number> {
     this._clearFlushTimer()
-    const promise = this._flushInner().finally(() => {
-      // Only clear the slot this call installed: a `reset()` mid-flight may
-      // already have installed a newer one.
-      if (this._flushPromise === promise) {
-        this._flushPromise = null
-      }
-      this._armFlushTimerIfQueued()
-    })
+    // Deferred by a microtask so the slot below is installed before the pass
+    // reads anything: `_flushInner` runs synchronously as far as its first
+    // await, and a resource-attribute getter or `toJSON` that ends a span in
+    // that window would otherwise re-enter here, find no pass in flight, and
+    // send the same head batch again — without bound.
+    // Sampled before the microtask, not inside `_flushInner`: a `reset()` landing
+    // in the window would otherwise be invisible to this pass, which would then
+    // drain the post-reset queue alongside the pass `reset()` started.
+    const startedAtGeneration = this._generation
+    const promise = Promise.resolve()
+      .then(() => (startedAtGeneration === this._generation ? this._flushInner() : 0))
+      .finally(() => {
+        // Only clear the slot this call installed: a `reset()` mid-flight may
+        // already have installed a newer one.
+        if (this._flushPromise === promise) {
+          this._flushPromise = null
+        }
+        this._armFlushTimerIfQueued()
+      })
     this._flushPromise = promise
     return promise
   }
@@ -254,6 +353,16 @@ export class PostHogTraces {
   /** Clears the queue and timer. Used on shutdown and between tests. */
   reset(): void {
     this._clearFlushTimer()
+    if (this._queue.length) {
+      // Critical, and said here rather than counted: this is the last chance to
+      // say anything about these spans, the drop warning is gated behind `debug`
+      // on some hosts, and the only other line the caller sees is the export
+      // failure promising a retry on a flush that will never come.
+      this._logger.critical(
+        `Discarding ${this._queue.length} span(s) that were still queued when tracing was shut down. ` +
+          'Raise the shutdown timeout or flush earlier if they matter.'
+      )
+    }
     this._queue = []
     this._liveSpans.clear()
     this._flushPromise = null
@@ -339,8 +448,12 @@ export class PostHogTraces {
     if (!(span instanceof PostHogSpan)) {
       return
     }
-    const { type, message } = describeError(error)
-    span.addEvent('exception', { 'exception.type': type, 'exception.message': message })
+    const { type, message, stack } = describeError(error)
+    span.addEvent('exception', {
+      'exception.type': type,
+      'exception.message': message,
+      ...(stack && { 'exception.stacktrace': stack }),
+    })
     if (!span.statusIsExplicitlyOk) {
       span.setStatus('error', message)
     }
@@ -367,9 +480,9 @@ export class PostHogTraces {
     }
   }
 
-  private _onSpanEnd(record: SpanRecord): void {
-    // Deleted before any other gate, so an opted-out span still returns its slot.
-    if (!this._liveSpans.delete(record.spanId)) {
+  private _onSpanEnd(incoming: SpanRecord, autoKeys: ReadonlySet<string>): void {
+    // Deleted before any other gate, so a span dropped later still returns its slot.
+    if (!this._liveSpans.delete(incoming.spanId)) {
       // Evicted for age while live: never exported, and already counted as a drop.
       return
     }
@@ -377,6 +490,11 @@ export class PostHogTraces {
     // Re-checked at end: opting out mid-trace must stop the span exporting.
     if (this._instance.isDisabled || this._instance.optedOut) {
       this._recordDrop(1, 'the user has opted out')
+      return
+    }
+
+    const record = this._runBeforeSpanSend(incoming, autoKeys)
+    if (!record) {
       return
     }
 
@@ -405,6 +523,183 @@ export class PostHogTraces {
     } else {
       this._armFlushTimerIfQueued()
     }
+  }
+
+  /**
+   * Runs the `beforeSpanSend` chain, returning the span to enqueue or `null` to
+   * drop it.
+   *
+   * A throwing hook drops the span: the hook is the documented scrubbing point,
+   * so a broken scrubber must not let the unscrubbed record through. Identity
+   * fields are restored afterwards, since rewriting them orphans shipped children.
+   */
+  private _runBeforeSpanSend(record: SpanRecord, autoKeys: ReadonlySet<string>): SpanRecord | null {
+    if (!this._config.beforeSpanSend.length) {
+      return record
+    }
+
+    // Snapshotted before any hook runs: a hook that mutates in place would
+    // otherwise leave nothing to restore from.
+    const identity = {
+      traceId: record.traceId,
+      spanId: record.spanId,
+      parentSpanId: record.parentSpanId,
+      traceState: record.traceState,
+    }
+    const originalTimes = { startTime: record.startTime, endTime: record.endTime }
+    // Snapshotted with the rest: the hook mutates the record in place, so reading
+    // these back afterwards reads whatever the hook left there.
+    const originalDropped = {
+      attributes: record.droppedAttributesCount,
+      events: record.droppedEventsCount,
+    }
+    // Read here rather than restored onto the hook's return value: writing them
+    // back would throw on a frozen record, and neither is on the record a hook
+    // is handed, so a rebuilding hook always arrives without them.
+    // The order the span itself wrote them in, so the caps below can keep the
+    // earliest-set entries even when a hook adds an integer-like key.
+    const keysBeforeHook = Object.keys(record.attributes)
+    const originalPropagation = {
+      traceFlags: record.traceFlags,
+      parentIsRemote: record.parentIsRemote,
+    }
+    // Copied, not referenced: the hook is documented as mutating the record in
+    // place, and a reference would restore the mutation onto itself.
+    const originalStatus = record.status && { ...record.status }
+    let hooked: HookSpanRecord = record
+    let current = record
+    try {
+      for (const hook of this._config.beforeSpanSend) {
+        const result = hook(hooked)
+        if (!result) {
+          this._recordDrop(1, 'beforeSpanSend dropped it')
+          return null
+        }
+        hooked = this._keepSpanIdentity(result, identity)
+      }
+
+      // Rebuilt field by field before anything below writes to it. The hook's
+      // return value may be frozen, where every write here would throw, or a
+      // class instance whose fields are prototype getters a spread would miss.
+      // Naming them also bounds what can reach the wire.
+      const rebuilt: RebuiltSpanRecord = {
+        // All four from the snapshot, never from the hook's return value. A hook
+        // that forges an id has it ignored, which is the documented behaviour,
+        // and one that also freezes what it returns keeps its span: writing the
+        // id back onto a frozen object throws, and a throw here drops the span.
+        traceId: identity.traceId,
+        spanId: identity.spanId,
+        parentSpanId: identity.parentSpanId,
+        traceState: identity.traceState,
+        name: hooked.name,
+        kind: hooked.kind,
+        status: hooked.status,
+        attributes: hooked.attributes,
+        events: hooked.events,
+        startTime: hooked.startTime,
+        endTime: hooked.endTime,
+        // Taken from the span for the same reason as the dropped counts: no
+        // public type declares them, so a rebuilding hook returns without them
+        // and a `?? fallback` here would export a sampled-out trace as sampled.
+        traceFlags: originalPropagation.traceFlags,
+        parentIsRemote: originalPropagation.parentIsRemote,
+        // Taken from the span, not from the hook's return value: these are SDK
+        // bookkeeping that no public type declares, so a hook overwriting them
+        // must not erase what the span actually dropped.
+        droppedAttributesCount: originalDropped.attributes,
+        droppedEventsCount: originalDropped.events,
+      }
+      current = rebuilt
+      // A value missing a required field is not a span record — an `async` hook
+      // returns a Promise, truthy and `undefined` for every field. Filling the
+      // gaps in would export a span named `unknown` at a fallback time carrying
+      // no person or session, joinable to nothing and silent about it.
+      if (!isSpanRecordShape(current)) {
+        this._logger.debug('beforeSpanSend did not return a span record; dropping the span')
+        this._recordDrop(1, 'beforeSpanSend returned an unusable record')
+        return null
+      }
+
+      // Re-applied to whatever the hook returned: one undecodable timestamp 400s
+      // the whole request, taking unrelated spans with it.
+      current.name = sanitizeName(current.name, 'Span name', this._config.maxAttributeValueLength, this._logger)
+      // A status the hook rewrote never went through `setStatus`. An unknown code
+      // encodes as an empty status object, which loses an error the span really had.
+      if (current.status && current.status.code !== 'ok' && current.status.code !== 'error') {
+        this._logger.debug('beforeSpanSend set an unknown span status; keeping the original')
+        current.status = originalStatus
+      }
+      current.startTime = toEpochMs(current.startTime) ?? originalTimes.startTime
+      current.endTime = clampEndTime(toEpochMs(current.endTime) ?? originalTimes.endTime, current.startTime)
+      // Events a hook pushed never went through `addEvent`, so they carry no
+      // sanitised name or timestamp; an unvalidated one encodes as `NaN000NaN`
+      // and the ingestion service refuses the whole batch.
+      const sanitizedEvents: SpanEventRecord[] = []
+      for (const event of current.events) {
+        try {
+          sanitizedEvents.push({
+            ...event,
+            name: sanitizeName(event.name, 'Span event name', this._config.maxAttributeValueLength, this._logger),
+            timestamp: resolveSuppliedTime(event.timestamp, current.startTime, 'event timestamp', this._logger),
+          })
+        } catch {
+          // A hook can leave a `null` in the array or a throwing accessor on an
+          // event. That costs the event; the rest of the span still ships.
+          this._logger.debug('beforeSpanSend left an unreadable span event; dropping it')
+        }
+      }
+      current.events = sanitizedEvents
+      applySpanLimits(
+        current,
+        autoKeys,
+        this._config.maxAttributesPerSpan,
+        this._config.maxEventsPerSpan,
+        this._config.maxAttributeValueLength,
+        keysBeforeHook
+      )
+      return current
+    } catch (error) {
+      // Covers the hook and everything done to its return value: a frozen or
+      // hostile record must not throw out of `end()` into application code.
+      this._logger.debug('beforeSpanSend failed; dropping the span rather than exporting it unscrubbed', error)
+      this._recordDrop(1, 'beforeSpanSend failed')
+      return null
+    }
+  }
+
+  /**
+   * Restores the fields a hook must not change. Runs per hook so a later hook in
+   * the chain cannot sample on an id an earlier one forged.
+   */
+  private _keepSpanIdentity(hooked: HookSpanRecord, original: SpanIdentity): HookSpanRecord {
+    if (
+      hooked.traceId !== original.traceId ||
+      hooked.spanId !== original.spanId ||
+      hooked.parentSpanId !== original.parentSpanId
+    ) {
+      this._logger.debug('beforeSpanSend changed a span identity field; keeping the original ids')
+    }
+    // Only the fields that actually differ are written back. Assigning a value
+    // to a frozen property throws even when it is the value already there, and
+    // a hook that freezes the record it returns would otherwise drop every span.
+    // Best-effort, for the next hook in the chain only: the record this builds
+    // is not what gets exported. A frozen return refuses every write, and the
+    // span must survive that.
+    try {
+      restoreField(hooked, 'traceId', original.traceId)
+      restoreField(hooked, 'spanId', original.spanId)
+      restoreField(hooked, 'parentSpanId', original.parentSpanId)
+      // A hook that rebuilds the record instead of spreading it would otherwise
+      // drop tracestate, which is not part of the record the hook is handed.
+      restoreField(hooked, 'traceState', original.traceState)
+    } catch {
+      // Frozen, so the writes above were refused and this record still carries
+      // whatever identity the hook forged. The export reads the snapshot either
+      // way, but the next hook in the chain reads this — and would sample or
+      // route on a forged id, which identity immutability exists to prevent.
+      return withRestoredIdentity(hooked, original)
+    }
+    return hooked
   }
 
   private _recordDrop(count: number, reason: string): void {
@@ -446,27 +741,38 @@ export class PostHogTraces {
     return encoded
   }
 
+  /**
+   * Discards the queue when consent has been withdrawn, returning how many spans
+   * it dropped. Spans carry `posthogDistinctId` and `sessionId`, so anything still
+   * queued when the user opts out must not be exported.
+   */
+  private _discardQueueIfConsentWithdrawn(): number {
+    if (!this._instance.isDisabled && !this._instance.optedOut) {
+      return 0
+    }
+    const discarded = this._queue.length
+    this._queue = []
+    this._recordDrop(discarded, 'the user has opted out')
+    this._warnAboutDrops()
+    return discarded
+  }
+
   /** Returns how many spans it removed from the queue, sent or dropped. */
   private async _flushInner(): Promise<number> {
     if (!this._queue.length) {
       return 0
     }
 
-    // Consent can flip between a span being queued and this pass running. Spans
-    // carry `posthogDistinctId` and `sessionId`, so anything still queued when
-    // the user opts out must be discarded rather than exported.
-    if (this._instance.isDisabled || this._instance.optedOut) {
-      const discarded = this._queue.length
-      this._queue = []
-      this._recordDrop(discarded, 'the user has opted out')
-      this._warnAboutDrops()
-      return discarded
+    const discardedBeforeDrain = this._discardQueueIfConsentWithdrawn()
+    if (discardedBeforeDrain) {
+      return discardedBeforeDrain
     }
 
-    const resourceAttributes = buildTracesResourceAttributes(
-      this._config,
-      this._instance.getLibraryId(),
-      this._instance.getLibraryVersion()
+    // Bounded like span attributes: resource attributes are caller-supplied too,
+    // and they ride on every batch rather than on one span.
+    const resourceAttributes = truncateAttributes(
+      buildTracesResourceAttributes(this._config, this._instance.getLibraryId(), this._instance.getLibraryVersion()),
+      this._config.maxAttributeValueLength
     )
     const scopeName = this._instance.getLibraryId()
     const scopeVersion = this._instance.getLibraryVersion()
@@ -478,6 +784,13 @@ export class PostHogTraces {
 
     try {
       while (remaining > 0 && this._queue.length > 0) {
+        // Re-checked per batch: a send suspends, so the user can opt out while one
+        // batch is in flight and the batches behind it would still export.
+        const discardedMidDrain = this._discardQueueIfConsentWithdrawn()
+        if (discardedMidDrain) {
+          return removed + discardedMidDrain
+        }
+
         // Floor at one, or a non-positive batch size loops forever on an empty batch.
         const cap =
           this._headBatchFailures > 0

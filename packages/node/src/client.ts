@@ -1,6 +1,7 @@
 import { version } from './version'
 
 import {
+  allSettled,
   FeatureFlagValue,
   getEventUuid,
   isBlockedUA,
@@ -298,7 +299,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (!this._traces) {
       return events
     }
-    return Promise.all([events, this._traces.flush().catch(() => {})]).then(() => undefined)
+    // Settled, not `all`: `all` rejects the moment the event flush does, and a
+    // serverless host that treats this promise as the end of the invocation can
+    // freeze it with the span request still open. The events rejection is still
+    // the one the caller sees.
+    return allSettled([events, this._traces.flush().catch(() => {})]).then(([eventsResult]) => {
+      if (eventsResult.status === 'rejected') {
+        throw eventsResult.reason
+      }
+    })
   }
 
   override async flush(): Promise<void> {
@@ -662,7 +671,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     if (!this._traces) {
       this._traces = new PostHogTraces(
         this,
-        resolveTracesConfig(this.options.traces, this.hostResourceAttributes()),
+        resolveTracesConfig(this.options.traces, this.hostResourceAttributes(), this._logger),
         this._logger,
         () => this._tracingContext(),
         this._spanContextManager,
