@@ -45,6 +45,21 @@ describe('OTLP bodies over the endpoint limit', () => {
     })
   })
 
+  it.each([
+    ['traces', (payload: any) => posthog._sendTracesBatch(payload)],
+    ['logs', (payload: any) => posthog._sendLogsBatch(payload)],
+    ['metrics', (payload: any) => posthog._sendMetricsBatch(payload)],
+  ])('reports a %s batch it cannot serialize as too-large rather than throwing', async (_signal, send) => {
+    // A payload past the runtime's max string length throws out of
+    // `JSON.stringify`. Unguarded that escapes the tagged-outcome contract, and
+    // the caller retries a batch it can never send instead of halving it away.
+    const unserializable: any = spansOf(8)
+    unserializable.resourceSpans[0].scopeSpans[0].spans[0].self = unserializable
+
+    await expect(send(unserializable)).resolves.toEqual({ kind: 'too-large' })
+    expect(mocks.fetch).not.toHaveBeenCalled()
+  })
+
   it('sends a batch inside the limit', async () => {
     await expect(posthog._sendTracesBatch(spansOf(1024))).resolves.toEqual({ kind: 'ok' })
     expect(mocks.fetch).toHaveBeenCalledTimes(1)

@@ -1720,7 +1720,19 @@ export abstract class PostHogCoreStateless {
       return { kind: 'fatal', error: new Error('The client is disabled') }
     }
 
-    const serialized = JSON.stringify(payload)
+    // Serialised behind a guard: a payload too big to hold as one string throws
+    // `RangeError` here, which escapes the tagged-outcome contract and leaves the
+    // caller retrying a batch it can never send. Reported as too-large so it takes
+    // the same halve-and-isolate path as a batch that serialises but is oversized.
+    let serialized: string
+    try {
+      serialized = JSON.stringify(payload)
+    } catch (error) {
+      this.logMsgIfDebug(() =>
+        console.warn(`[PostHog] Could not serialize a ${path} batch; reporting it as too large`, error)
+      )
+      return { kind: 'too-large' }
+    }
 
     // Measured on the uncompressed payload: the endpoint decompresses the body
     // and applies its limit to what comes out, so one that gzips small is still
