@@ -301,8 +301,6 @@ export class PostHogMetrics {
     this._flushTimer.arm(this._nextFlushDelay())
   }
 
-  // A floor, so a timer already armed at the flush interval gives way to a
-  // longer one.
   // A floor, not a replacement: the header never retries us sooner than the
   // flush interval would have.
   private _nextFlushDelay(): number {

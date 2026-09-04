@@ -415,8 +415,6 @@ export class PostHogLogs {
     this._flushTimer.arm(Math.max(this._flushIntervalMs, this._retryAfter.remainingMs()))
   }
 
-  // Both floors, so a timer already armed at the plain interval gives way to a
-  // longer one.
   // Retry delay after a flush that left records: the first retry is at the base
   // interval, then exponential backoff (capped) so a sustained outage isn't
   // retried every interval.

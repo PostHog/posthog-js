@@ -2748,6 +2748,26 @@ describe('PostHogTraces', () => {
       expect((traces as any)._headBatchFailures).toBe(2)
     })
 
+    it('gives a fresh batch a fresh budget after an opt-out cleared the queue', async () => {
+      // The head batch leaves with the queue, so its budget must leave too:
+      // otherwise the next batch inherits a spent retry count and a charge
+      // deadline still in the future, and its first refusal goes uncharged.
+      mockInstance._sendTracesBatch.mockResolvedValue({ kind: 'retry-later', error: new Error('503') })
+      const traces = createTraces({ flushIntervalMs: 10_000, maxExportBatchSize: 1 })
+      traces.startSpan('before').end()
+      await traces.flush()
+      expect((traces as any)._headBatchFailures).toBe(1)
+
+      mockInstance.optedOut = true
+      await traces.flush()
+
+      // Asserted here rather than through a later refusal: the charge deadline
+      // the first failure installed is still in the future either way, so the
+      // next refusal is uncharged and the count reads 1 with or without the reset.
+      expect((traces as any)._headBatchFailures).toBe(0)
+      expect((traces as any)._headBatchChargeableAt).toBe(0)
+    })
+
     it('gives a fresh batch a fresh window after the head is retired', async () => {
       // The deadline belongs to the batch, not the queue: a new head must be
       // chargeable straight away or it inherits the last one's served wait.

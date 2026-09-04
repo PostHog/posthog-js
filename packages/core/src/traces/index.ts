@@ -776,6 +776,9 @@ export class PostHogTraces {
     }
     const discarded = this._queue.length
     this._queue = []
+    // The head batch left with the queue, so its budget goes too — anything
+    // queued after consent returns is a different batch.
+    this._resetHeadBatchBudget()
     this._recordDrop(discarded, 'the user has opted out')
     this._warnAboutDrops()
     return discarded
@@ -905,8 +908,11 @@ export class PostHogTraces {
           this._resetHeadBatchBudget()
           this._recordDrop(size, `the ingestion endpoint failed ${MAX_RETRIES_PER_BATCH} times in a row`)
           if (this._retryAfter.isOpen()) {
-            // Retiring the batch cleared the failure counters, so carrying on
-            // would send the next one straight away, inside the endpoint's wait.
+            // Retiring the batch cleared the failure counters, so this drain
+            // would carry straight on to the next batch inside the endpoint's
+            // wait. Ending the pass here costs one send rather than the rest of
+            // the queue: `flush()` sees a non-zero count and loops, so the next
+            // batch still goes out, one pass later.
             return removed
           }
           continue
