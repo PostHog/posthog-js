@@ -2,11 +2,9 @@
 
 // Loads the side-effecting polyfill module in a fresh module registry so we can control
 // whether Array.prototype.findLast exists at import time.
-function loadPolyfill(): void {
-    jest.isolateModules(() => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        require('@posthog/browser-common/utils/array-find-last-polyfill')
-    })
+async function loadPolyfill(): Promise<void> {
+    vi.resetModules()
+    await import('@posthog/browser-common/utils/array-find-last-polyfill')
 }
 
 describe('Array.prototype.findLast polyfill', () => {
@@ -27,11 +25,11 @@ describe('Array.prototype.findLast polyfill', () => {
     })
 
     describe('when Array.prototype.findLast is missing (old browser)', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             // simulate Chrome <97 / iOS Safari <15.4
 
             delete (Array.prototype as any).findLast
-            loadPolyfill()
+            await loadPolyfill()
         })
 
         it('installs a working findLast()', () => {
@@ -93,7 +91,7 @@ describe('Array.prototype.findLast polyfill', () => {
     })
 
     describe('when Array.prototype.findLast already exists (modern browser)', () => {
-        it('does not replace the native implementation', () => {
+        it('does not replace the native implementation', async () => {
             const sentinel = function findLast(): string {
                 return 'native'
             }
@@ -104,7 +102,7 @@ describe('Array.prototype.findLast polyfill', () => {
                 configurable: true,
             })
 
-            loadPolyfill()
+            await loadPolyfill()
 
             expect(Array.prototype.findLast).toBe(sentinel)
         })
