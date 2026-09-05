@@ -8,17 +8,38 @@ import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
 const logger = createLogger('[ExceptionAutocapture]')
 const errorPropertiesBuilder = buildErrorPropertiesBuilder()
 
+// Exception autocapture must never throw into customer code. Do not log in the catch because
+// console.error may be instrumented and would re-enter exception autocapture.
+const safely = <T>(fn: () => T, fallback: T): T => {
+    try {
+        return fn()
+    } catch {
+        return fallback
+    }
+}
+
 const safelyBuildAndCapture = (
     captureFn: (props: ErrorTracking.ErrorProperties) => void,
     buildProperties: () => ErrorTracking.ErrorProperties
-): void => {
-    try {
-        captureFn(buildProperties())
-    } catch {
-        // Exception autocapture must never throw into customer code. Do not log here because
-        // console.error may be instrumented and would re-enter exception autocapture.
-    }
-}
+): void => safely(() => captureFn(buildProperties()), undefined)
+
+// Firefox throws on every read, write and call that touches an object from another compartment or
+// from a destroyed document, such as a handler left behind by a removed or cross-origin iframe.
+// The handler is probed inside the guard and called outside it, so an unreachable handler is
+// skipped while errors from a reachable one still reach the page.
+const isReachableFunction = (handler: unknown): handler is (...args: any[]) => any =>
+    safely(() => isFunction(handler) && isFunction(handler.call), false)
+
+const markInstrumented = (owner: any, key: string): void =>
+    safely(() => {
+        owner[key].__POSTHOG_INSTRUMENTED__ = true
+    }, undefined)
+
+const restore = (owner: any, key: string, original: unknown): void =>
+    safely(() => {
+        delete owner[key]?.__POSTHOG_INSTRUMENTED__
+        owner[key] = original
+    }, undefined)
 
 // `window.onerror` exposes the location positionally, so preserve it when there is no Error object.
 const resolveOnErrorInput = ([event, source, lineno, colno, error]: ErrorEventArgs): unknown => {
@@ -40,7 +61,7 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
     if (!win) {
         logger.info('window not available, cannot wrap onerror')
     }
-    const originalOnError = win.onerror
+    const originalOnError = safely(() => win.onerror, undefined)
 
     win.onerror = function (...args: ErrorEventArgs): boolean {
         safelyBuildAndCapture(captureFn, () =>
@@ -48,14 +69,14 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
                 mechanism: { handled: false },
             })
         )
-        return isFunction(originalOnError) ? (originalOnError(...args) ?? false) : false
+        if (!isReachableFunction(originalOnError)) {
+            return false
+        }
+        return originalOnError(...args) ?? false
     }
-    win.onerror.__POSTHOG_INSTRUMENTED__ = true
+    markInstrumented(win, 'onerror')
 
-    return () => {
-        delete win.onerror?.__POSTHOG_INSTRUMENTED__
-        win.onerror = originalOnError
-    }
+    return () => restore(win, 'onerror', originalOnError)
 }
 
 const wrapUnhandledRejection = (
@@ -67,7 +88,7 @@ const wrapUnhandledRejection = (
         logger.info('window not available, cannot wrap onUnhandledRejection')
     }
 
-    const originalOnUnhandledRejection = win.onunhandledrejection
+    const originalOnUnhandledRejection = safely(() => win.onunhandledrejection, undefined)
 
     win.onunhandledrejection = function (ev: PromiseRejectionEvent): boolean {
         safelyBuildAndCapture(captureFn, () =>
@@ -75,16 +96,14 @@ const wrapUnhandledRejection = (
                 mechanism: { handled: false },
             })
         )
-        return isFunction(originalOnUnhandledRejection)
-            ? (originalOnUnhandledRejection(ev) ?? false)
-            : defaultReturnValue
+        if (!isReachableFunction(originalOnUnhandledRejection)) {
+            return defaultReturnValue
+        }
+        return originalOnUnhandledRejection(ev) ?? false
     }
-    win.onunhandledrejection.__POSTHOG_INSTRUMENTED__ = true
+    markInstrumented(win, 'onunhandledrejection')
 
-    return () => {
-        delete win.onunhandledrejection?.__POSTHOG_INSTRUMENTED__
-        win.onunhandledrejection = originalOnUnhandledRejection
-    }
+    return () => restore(win, 'onunhandledrejection', originalOnUnhandledRejection)
 }
 
 const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
@@ -93,7 +112,7 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
         logger.info('console not available, cannot wrap console.error')
     }
 
-    const originalConsoleError = con.error
+    const originalConsoleError = safely(() => con.error, undefined)
 
     con.error = function (...args: any[]): void {
         safelyBuildAndCapture(captureFn, () => {
@@ -110,16 +129,13 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
                 skipFirstLines: 2,
             })
         })
-        if (isFunction(originalConsoleError)) {
+        if (isReachableFunction(originalConsoleError)) {
             originalConsoleError(...args)
         }
     }
-    con.error.__POSTHOG_INSTRUMENTED__ = true
+    markInstrumented(con, 'error')
 
-    return () => {
-        delete con.error?.__POSTHOG_INSTRUMENTED__
-        con.error = originalConsoleError
-    }
+    return () => restore(con, 'error', originalConsoleError)
 }
 
 const posthogErrorWrappingFunctions = {
