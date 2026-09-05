@@ -118,7 +118,7 @@ describe('non-unique distinct_id warning', () => {
 
         expect(warnSpy).toHaveBeenCalledWith(
             '[PostHog.js]',
-            expect.stringContaining(`The ID "${id}" that you passed to posthog.identify()`)
+            expect.stringContaining(`The identify() ID "${id}" looks like a name or a username`)
         )
         // the warning must not block the call
         expect(posthog.get_distinct_id()).toEqual(id)
@@ -163,7 +163,7 @@ describe('suppressed person processing warning', () => {
         expect(warnSpy).not.toHaveBeenCalled()
 
         captureEvents(posthog, 1)
-        expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('it created no person profile'))
+        expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('created no person profile'))
 
         warnSpy.mockClear()
         captureEvents(posthog, 60)

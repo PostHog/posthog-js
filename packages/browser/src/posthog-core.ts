@@ -625,12 +625,10 @@ export class PostHog implements PostHogInterface {
         // oxlint-disable-next-line no-console
         console.warn(
             '[PostHog.js]',
-            `PostHog captured ${SUPPRESSED_PERSON_PROCESSING_WARN_AFTER_EVENTS} events, but it created no person profile. ` +
-                "person_profiles is set to 'identified_only', so PostHog only creates a person profile after you call " +
-                'identify(), set a group, or call alias(). Until then your persons table stays empty, although the ' +
-                'events are captured correctly. Call posthog.identify() when a user logs in, or set person_profiles ' +
-                "to 'always' to also profile anonymous users. If you do not want person profiles, set person_profiles " +
-                "to 'never' to remove this warning."
+            `PostHog captured ${SUPPRESSED_PERSON_PROCESSING_WARN_AFTER_EVENTS} events but created no person profile, ` +
+                "because person_profiles is 'identified_only'. Your persons table stays empty until you call " +
+                "identify(), set a group, or call alias(). Set person_profiles to 'always' to also profile anonymous " +
+                "users, or to 'never' to remove this warning."
         )
     }
 
@@ -645,9 +643,9 @@ export class PostHog implements PostHogInterface {
         // oxlint-disable-next-line no-console
         console.warn(
             '[PostHog.js]',
-            `The ID "${id}" that you passed to posthog.identify() looks like a name or a username, not a unique ID. ` +
-                'If two users share an ID, PostHog merges them into one person, and you cannot separate them again. ' +
-                'Use an ID that is unique to each user, for example a database ID, a UUID, or an email address.'
+            `The identify() ID "${id}" looks like a name or a username. If two users share an ID, PostHog merges ` +
+                'them into one person. Use an ID that is unique to each user, such as a database ID, a UUID, or an ' +
+                'email address.'
         )
     }
 
