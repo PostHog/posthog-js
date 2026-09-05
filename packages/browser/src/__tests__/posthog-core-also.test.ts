@@ -1143,7 +1143,10 @@ describe('posthog core', () => {
             expect(posthog.get_property('$device_id')).toBe('abcd')
             expect(posthog.persistence.get_property(USER_STATE)).toBe('anonymous')
 
+            // 'efgh' is short and letters-only, so identify() warns that it may not be unique
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
             posthog.identify('efgh')
+            warnSpy.mockRestore()
 
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$identify',

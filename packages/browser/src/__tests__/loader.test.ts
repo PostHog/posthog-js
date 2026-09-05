@@ -58,7 +58,7 @@ describe(`Module-based loader in Node env`, () => {
     })
 
     it(`supports identify()`, () => {
-        expect(() => posthog.identify(`Pat`)).not.toThrow()
+        expect(() => posthog.identify(`pat-1234`)).not.toThrow()
     })
 
     it(`supports capture()`, () => {
