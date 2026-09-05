@@ -1352,6 +1352,10 @@ export class PostHog implements PostHogInterface {
         // queue, so the drain must not depend on `request_batching`.
         void this.metrics?.flush('sendBeacon')
 
+        // Send any pending initial $pageview before the $pageleave, so ordering and
+        // `$pageview_id` continuity hold and we don't leave a pageleave without a pageview.
+        this._flushInitialPageviewOnUnload()
+
         if (!this.config.request_batching) {
             if (this._shouldCapturePageleave()) {
                 this.capture(EVENT_PAGELEAVE, null, { transport: 'sendBeacon' })
@@ -4826,17 +4830,43 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        // Extra check here to guarantee we only ever trigger a single `$pageview` event
-        if (!this._initialPageviewCaptured) {
-            this._initialPageviewCaptured = true
-            this.capture(EVENT_PAGEVIEW, { title: document.title }, { send_instantly: true })
+        this._sendInitialPageview()
+    }
 
-            // After we've captured the initial pageview, we can remove the listener
-            if (this._visibilityStateListener) {
-                document.removeEventListener(DOM_EVENT_VISIBILITYCHANGE, this._visibilityStateListener)
-                this._visibilityStateListener = null
-            }
+    _sendInitialPageview(transport?: CaptureOptions['transport']): void {
+        // Extra check here to guarantee we only ever trigger a single `$pageview` event
+        if (this._initialPageviewCaptured) {
+            return
         }
+
+        this._initialPageviewCaptured = true
+        this.capture(EVENT_PAGEVIEW, { title: document?.title }, { send_instantly: true, transport })
+
+        // After we've captured the initial pageview, we can remove the listener
+        if (this._visibilityStateListener) {
+            document?.removeEventListener(DOM_EVENT_VISIBILITYCHANGE, this._visibilityStateListener)
+            this._visibilityStateListener = null
+        }
+    }
+
+    _flushInitialPageviewOnUnload(): void {
+        // The initial $pageview rides the immediate fetch path, so a fast client-side or auth
+        // redirect can cancel it. A page that loads while hidden defers its $pageview until
+        // `visibilitychange`, which never fires if the page closes first. In both cases the
+        // $pageleave still rides `sendBeacon` on unload, so Web Analytics records a pageleave
+        // with no matching pageview. Flush the pending pageview over `sendBeacon` so it
+        // survives the same unload. The `prerendering` guard keeps discarded prerenders from
+        // minting a phantom pageview, matching the visibility gate in `_captureInitialPageview`.
+        if (
+            !this.config.capture_pageview ||
+            this._initialPageviewCaptured ||
+            (document as { prerendering?: boolean })?.prerendering ||
+            !(this.consent.isOptedIn() || this._inCookielessMode())
+        ) {
+            return
+        }
+
+        this._sendInitialPageview('sendBeacon')
     }
 
     /**
