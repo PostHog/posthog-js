@@ -70,6 +70,10 @@ interface RepeatedCycle {
   length: number
 }
 
+function isSameCycle(a: RepeatedCycle, b: RepeatedCycle | undefined): boolean {
+  return !!b && a.start === b.start && a.length === b.length
+}
+
 // Removes the cycle that ends at the last frame when the frames before it are the same cycle, and
 // reports where the copy that was kept sits. This runs after every frame is added, so a recursion
 // never grows past one copy of its cycle.
@@ -170,7 +174,10 @@ export function createStackParser(platform: Platform, ...parsers: StackLineParse
     const lines = stack.split('\n')
 
     const endLine = Math.min(lines.length, skipFirstLines + STACKTRACE_LINE_LIMIT)
-    let repeatedCycle: RepeatedCycle | undefined
+    // A stack can hold more than one repeated section, such as a recursion under a test runner that
+    // calls itself once per nested block. Keep every section, because each of them can be left with
+    // a partial copy, and one section must not take the place of another.
+    const repeatedCycles: RepeatedCycle[] = []
 
     for (let i = skipFirstLines; i < endLine; i++) {
       const line = lines[i] as string
@@ -194,7 +201,12 @@ export function createStackParser(platform: Platform, ...parsers: StackLineParse
         const frame = parser(cleanedLine, platform)
         if (frame) {
           frames.push(frame)
-          repeatedCycle = collapseRepeatedCycle(frames) ?? repeatedCycle
+          const cycle = collapseRepeatedCycle(frames)
+          // The same section collapses again on every further copy the stack holds, so only record
+          // a section the frames before it did not already report.
+          if (cycle && !isSameCycle(cycle, repeatedCycles[repeatedCycles.length - 1])) {
+            repeatedCycles.push(cycle)
+          }
           break
         }
       }
@@ -204,12 +216,14 @@ export function createStackParser(platform: Platform, ...parsers: StackLineParse
       }
     }
 
-    if (repeatedCycle) {
-      trimPartialCycle(frames, repeatedCycle)
+    // Trimming a section moves the frames after it, so work from the section furthest from the
+    // innermost frame and the positions recorded for the sections under it still hold.
+    for (const cycle of [...repeatedCycles].sort((a, b) => b.start - a.start)) {
+      trimPartialCycle(frames, cycle)
+    }
 
-      if (repeatedCycle.start === 0 && frames.length === repeatedCycle.length) {
-        canonicalizeCycleRotation(frames)
-      }
+    if (repeatedCycles.some((cycle) => cycle.start === 0 && frames.length === cycle.length)) {
+      canonicalizeCycleRotation(frames)
     }
 
     return reverseAndStripFrames(frames)

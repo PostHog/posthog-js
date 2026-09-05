@@ -69,6 +69,25 @@ describe('createDefaultStackParser repeated cycle collapsing', () => {
     expect(recursionOnly(1)).toEqual(recursionOnly(0))
   })
 
+  it('gives the same frames when the stack holds a second repeated section', () => {
+    // Stacks repeat outside the recursion too, such as a test runner that calls itself once per
+    // nested block. The frames of that section have to keep the recursion's own partial copy.
+    const withOuterRepeat = (dropInnermost: number): (string | undefined)[] =>
+      names(
+        [
+          OVERFLOW,
+          ...recursion(['a', 'b'], 30).slice(dropInnermost),
+          frame('handleClick', 90),
+          frame('walk', 91),
+          frame('walk', 91),
+          frame('main', 92),
+        ].join('\n')
+      )
+
+    expect(withOuterRepeat(0)).toEqual(['main', 'walk', 'handleClick', 'b', 'a'])
+    expect(withOuterRepeat(1)).toEqual(withOuterRepeat(0))
+  })
+
   it('ignores the column of the call that ran out of stack', () => {
     // Runtimes report the position of the failed call for the innermost frame, so that frame has a
     // column of its own even though it is the same call site as the frames under it.
