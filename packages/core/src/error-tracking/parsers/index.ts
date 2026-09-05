@@ -132,16 +132,31 @@ function trimPartialCycle(frames: StackFrame[], cycle: RepeatedCycle): void {
 // nothing says which function of it ran out of stack first. Any rotation of the copy holds the same
 // calls, so always keep the same one, and the fingerprint stays equal from one throw to the next.
 function canonicalizeCycleRotation(frames: StackFrame[]): void {
-  const key = (frame: StackFrame): string => `${frame.function}|${frame.filename}|${frame.lineno}`
+  const keys = frames.map((frame) => `${frame.function}|${frame.filename}|${frame.lineno}`)
   let first = 0
 
-  for (let i = 1; i < frames.length; i++) {
-    if (key(frames[i] as StackFrame) < key(frames[first] as StackFrame)) {
+  for (let i = 1; i < keys.length; i++) {
+    if (isSmallerRotation(keys, i, first)) {
       first = i
     }
   }
 
   frames.push(...frames.splice(0, first))
+}
+
+// One copy of a cycle can hold the same call site more than once, so the smallest single frame does
+// not name one rotation. Read both rotations from their first frame on, and the whole copy decides.
+function isSmallerRotation(keys: string[], candidate: number, best: number): boolean {
+  for (let offset = 0; offset < keys.length; offset++) {
+    const left = keys[(candidate + offset) % keys.length] as string
+    const right = keys[(best + offset) % keys.length] as string
+
+    if (left !== right) {
+      return left < right
+    }
+  }
+
+  return false
 }
 
 export function reverseAndStripFrames(stack: ReadonlyArray<StackFrame>): StackFrame[] {

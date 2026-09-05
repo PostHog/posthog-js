@@ -88,6 +88,25 @@ describe('createDefaultStackParser repeated cycle collapsing', () => {
     expect(withOuterRepeat(1)).toEqual(withOuterRepeat(0))
   })
 
+  it('gives the same frames when a cycle that repeats a call site is all that is left', () => {
+    // One copy of a cycle can hold the same call site twice, and the innermost frame carries a
+    // column of its own, so a single frame does not say which rotation of the copy this throw is.
+    const cycle = [frame('a', 1, 10), frame('b', 2), frame('a', 1, 20), frame('c', 4)]
+    const lines: string[] = []
+
+    for (let i = 0; i < 30; i++) {
+      lines.push(...cycle)
+    }
+
+    const fromCut = (dropInnermost: number): (string | undefined)[] =>
+      names([OVERFLOW, ...lines.slice(dropInnermost)].join('\n'))
+
+    expect(fromCut(0)).toEqual(['c', 'a', 'b', 'a'])
+    expect(fromCut(1)).toEqual(fromCut(0))
+    expect(fromCut(2)).toEqual(fromCut(0))
+    expect(fromCut(3)).toEqual(fromCut(0))
+  })
+
   it('ignores the column of the call that ran out of stack', () => {
     // Runtimes report the position of the failed call for the innermost frame, so that frame has a
     // column of its own even though it is the same call site as the frames under it.
