@@ -120,6 +120,17 @@ describe('error wrapping functions', () => {
             delete win.onerror
         })
 
+        it('restores the original handler when the instrumentation marker cannot be deleted', () => {
+            const original = vi.fn().mockReturnValue(true)
+            win.onerror = original
+            unwrap = wrapOnError(captureFn)
+            // a frozen wrapper makes deleting the marker throw, as an unreachable one does
+            Object.freeze(win.onerror)
+
+            expect(() => unwrap()).not.toThrow()
+            expect(win.onerror).toBe(original)
+        })
+
         it('collects source/lineno/colno from the positional args when there is no Error object', () => {
             win.onerror = null
             unwrap = wrapOnError(captureFn)

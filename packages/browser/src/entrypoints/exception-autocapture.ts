@@ -35,11 +35,16 @@ const markInstrumented = (owner: any, key: string): void =>
         owner[key].__POSTHOG_INSTRUMENTED__ = true
     }, undefined)
 
-const restore = (owner: any, key: string, original: unknown): void =>
+// The marker lives on the wrapper, so deleting it can throw on a frozen or unreachable handler.
+// It is guarded on its own so that failure cannot skip the restore, which is the functional half.
+const restore = (owner: any, key: string, original: unknown): void => {
     safely(() => {
         delete owner[key]?.__POSTHOG_INSTRUMENTED__
+    }, undefined)
+    safely(() => {
         owner[key] = original
     }, undefined)
+}
 
 // `window.onerror` exposes the location positionally, so preserve it when there is no Error object.
 const resolveOnErrorInput = ([event, source, lineno, colno, error]: ErrorEventArgs): unknown => {
