@@ -113,6 +113,16 @@ function collapseRepeatedCycle(frames: StackFrame[]): RepeatedCycle | undefined 
 // called stays next to it.
 function trimPartialCycle(frames: StackFrame[], cycle: RepeatedCycle): void {
   const copyEnd = cycle.start + cycle.length
+  const partialLength = partialCycleLength(frames, cycle)
+
+  if (partialLength) {
+    frames.splice(copyEnd + partialLength === frames.length ? copyEnd : cycle.start, partialLength)
+  }
+}
+
+// How much of the cycle is left over next to the copy that was kept.
+function partialCycleLength(frames: StackFrame[], cycle: RepeatedCycle): number {
+  const copyEnd = cycle.start + cycle.length
   let partialEnd = copyEnd
 
   while (
@@ -122,10 +132,21 @@ function trimPartialCycle(frames: StackFrame[], cycle: RepeatedCycle): void {
     partialEnd++
   }
 
-  const partialLength = partialEnd - copyEnd
-  if (partialLength) {
-    frames.splice(partialEnd === frames.length ? copyEnd : cycle.start, partialLength)
+  return partialEnd - copyEnd
+}
+
+// The leftover copies are dropped once the whole stack is read, so the frame limit counts the
+// frames that survive that. A leftover copy otherwise holds a slot while the loop runs, the parser
+// stops before the outermost frames, and how many of them are read moves with where the stack was
+// cut.
+function survivingFrameCount(frames: StackFrame[], cycles: RepeatedCycle[]): number {
+  let count = frames.length
+
+  for (const cycle of cycles) {
+    count -= partialCycleLength(frames, cycle)
   }
+
+  return count
 }
 
 // When the runtime cut every frame outside the cycle, the trace is one copy of the cycle and
@@ -226,7 +247,7 @@ export function createStackParser(platform: Platform, ...parsers: StackLineParse
         }
       }
 
-      if (frames.length >= STACKTRACE_FRAME_LIMIT) {
+      if (survivingFrameCount(frames, repeatedCycles) >= STACKTRACE_FRAME_LIMIT) {
         break
       }
     }

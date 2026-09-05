@@ -107,6 +107,22 @@ describe('createDefaultStackParser repeated cycle collapsing', () => {
     expect(fromCut(3)).toEqual(fromCut(0))
   })
 
+  it('reads the outer frames a leftover copy would have pushed past the frame limit', () => {
+    // The leftover copy is dropped once the whole stack is read, so it must not hold a slot of the
+    // frame limit while the parser is still reading the frames outside the recursion.
+    const callers: string[] = []
+
+    for (let i = 0; i < 48; i++) {
+      callers.push(frame(`c${i}`, i + 10))
+    }
+
+    const withCallers = (dropInnermost: number): (string | undefined)[] =>
+      names([OVERFLOW, ...recursion(['a', 'b'], 30).slice(dropInnermost), ...callers].join('\n'))
+
+    expect(withCallers(0)).toHaveLength(50)
+    expect(withCallers(1)).toEqual(withCallers(0))
+  })
+
   it('ignores the column of the call that ran out of stack', () => {
     // Runtimes report the position of the failed call for the innermost frame, so that frame has a
     // column of its own even though it is the same call site as the frames under it.
