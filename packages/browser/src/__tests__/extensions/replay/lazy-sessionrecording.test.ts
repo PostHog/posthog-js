@@ -17,6 +17,7 @@ import {
     SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
+import { resetSessionStorageSupported } from '../../../storage'
 import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
 import {
     FULL_SNAPSHOT_EVENT_TYPE,
@@ -61,6 +62,7 @@ import {
     RECORDING_BUFFER_TIMEOUT,
     RECORDING_MAX_EVENT_SIZE,
     RECORDING_REMOTE_CONFIG_TTL_MS,
+    PENDING_BUFFER_STORAGE_SUFFIX,
 } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
 
 // Type and source defined here designate a non-user-generated recording event
@@ -6825,6 +6827,142 @@ describe('Lazy SessionRecording', () => {
 
             expect(posthog.capture).toHaveBeenCalled()
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(0)
+        })
+    })
+
+    describe('parking a held buffer across a page unload', () => {
+        const parkedBufferKey = 'ph_test-token' + PENDING_BUFFER_STORAGE_SUFFIX
+        const parkedBuffer = () => JSON.parse(window!.sessionStorage.getItem(parkedBufferKey) || 'null')
+
+        // the shared harness leaves recorders from earlier tests listening on the window, so drive
+        // the handler directly rather than dispatching a real unload event
+        const unload = () => sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
+
+        beforeEach(() => {
+            // a frozen clock keeps the session from ageing out between the emit and the flush
+            jest.useFakeTimers().setSystemTime(new Date())
+            // the shared harness uses memory persistence, which opts out of every browser store
+            config.persistence = 'localStorage'
+            window!.sessionStorage.clear()
+            resetSessionStorageSupported()
+        })
+
+        afterEach(() => {
+            window!.sessionStorage.clear()
+        })
+
+        const startBelowMinimumDuration = (): number => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
+            return sessionStartTimestamp
+        }
+
+        it('parks the buffer the minimum-duration gate is holding, instead of losing it with the page', () => {
+            startBelowMinimumDuration()
+
+            unload()
+
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+            expect(parkedBuffer().data).toHaveLength(1)
+            expect(parkedBuffer().sessionId).toBe(sessionId)
+        })
+
+        it('parks a sampled-in buffer the minimum-duration gate is holding', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500, sampleRate: '1.00' },
+                })
+            )
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
+
+            // guard against a vacuous pass: a sampled-in session reports SAMPLED, not ACTIVE, and the
+            // minimum-duration gate must park it the same way
+            expect(sessionRecording.status).toBe('sampled')
+
+            unload()
+
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+            expect(parkedBuffer().data).toHaveLength(1)
+            expect(parkedBuffer().sessionId).toBe(sessionId)
+        })
+
+        it('parks markers that would otherwise open a recording with nothing to play', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            releaseInteractionHold()
+            _emit(createCustomSnapshot({ timestamp: Date.now() }, {}, 'sessionIdle'))
+
+            unload()
+
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+            expect(parkedBuffer().data).toHaveLength(1)
+        })
+
+        it('ships the parked buffer from the next page in the tab', () => {
+            const sessionStartTimestamp = startBelowMinimumDuration()
+            unload()
+            sessionRecording.stopRecording()
+            ;(posthog.capture as Mock).mockClear()
+
+            // the next page load in the same tab, so the same session and the same window
+            sessionRecording = new SessionRecording(posthog)
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+            expect(parkedBuffer()).toBeNull()
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 2000 }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            const shipped = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+            expect(shipped).toHaveLength(1)
+            const timestamps = (shipped[0][1].$snapshot_data as any[]).map((e) => e.timestamp)
+            expect(timestamps).toContain(sessionStartTimestamp + 100)
+            expect(timestamps).toContain(sessionStartTimestamp + 2000)
+        })
+
+        it('does not restore a buffer parked by another session', () => {
+            startBelowMinimumDuration()
+            unload()
+            sessionRecording.stopRecording()
+
+            window!.sessionStorage.setItem(
+                parkedBufferKey,
+                JSON.stringify({ ...parkedBuffer(), sessionId: 'some-other-session' })
+            )
+
+            sessionRecording = new SessionRecording(posthog)
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(0)
+        })
+
+        it('does not park a buffer a flush holds while the page stays open', () => {
+            startBelowMinimumDuration()
+
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(parkedBuffer()).toBeNull()
+        })
+
+        it('does not park while recording is paused', () => {
+            startBelowMinimumDuration()
+            sessionRecording['_lazyLoadedSessionRecording']['_pauseRecording']()
+
+            unload()
+
+            expect(parkedBuffer()).toBeNull()
         })
     })
 
