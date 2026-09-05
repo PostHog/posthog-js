@@ -2426,6 +2426,29 @@ describe('Lazy SessionRecording', () => {
                         expect(holdReason()).toBeUndefined()
                     })
 
+                    it('stops naming the hold immediately while queued compression drains', async () => {
+                        const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                        expect(holdReason()).toEqual('no_interaction_since_recording_started')
+
+                        lazyRecorder['_queuedCompressionEvents'] = 1
+                        let resolveDrain: () => void = () => {}
+                        const compressionQueue = new Promise<void>((resolve) => {
+                            resolveDrain = resolve
+                        })
+                        lazyRecorder['_compressionQueue'] = compressionQueue
+
+                        lazyRecorder.stop()
+
+                        expect(lazyRecorder['_isStoppingAfterCompression']).toBe(true)
+                        const reasonImmediatelyAfterStop = holdReason()
+                        resolveDrain()
+                        await compressionQueue
+                        await Promise.resolve()
+                        await Promise.resolve()
+
+                        expect(reasonImmediatelyAfterStop).toBeUndefined()
+                    })
+
                     it('stops naming the hold once the recorder is discarded', () => {
                         vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
                         emitInactiveEvent(startingTimestamp + 100, 'unknown')
@@ -8906,7 +8929,7 @@ describe('Lazy SessionRecording', () => {
             timestamp: Date.now(),
         })
 
-        function startWithStopEmittingRecorder(): void {
+        function startWithStopEmittingRecorder(stopEvents = [deferredCssMutation]): void {
             loadScriptMock.mockImplementation((_ph, _path, callback) => {
                 addRRwebToWindow()
                 const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as vi.Mock
@@ -8914,7 +8937,11 @@ describe('Lazy SessionRecording', () => {
                     _emit = emit
                     // mirror the real recorder: stopping rrweb synchronously flushes the
                     // still-deferred stylesheet mutations through the emit path
-                    return () => emit(deferredCssMutation)
+                    return () => {
+                        for (const event of stopEvents) {
+                            emit(event)
+                        }
+                    }
                 })
                 // the mutation throttler resolves the mutated node through the mirror
                 recordMock.mirror = { getNode: () => null }
@@ -8955,6 +8982,32 @@ describe('Lazy SessionRecording', () => {
             // discard means nothing from this epoch is billable, so the mutation rrweb emits as it
             // stops must not schedule a flush that outlives teardown's timer clear
             vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT * 2)
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
+        })
+
+        it('does not upload when stop-time mutations exceed the size cap during discard', () => {
+            const largeDeferredCssMutation = createIncrementalSnapshot({
+                data: {
+                    source: 0,
+                    texts: [],
+                    attributes: [
+                        {
+                            id: 42,
+                            attributes: { _cssText: `/*${'x'.repeat(RECORDING_MAX_EVENT_SIZE * 0.6)}*/` },
+                        },
+                    ],
+                    removes: [],
+                    adds: [],
+                },
+                timestamp: Date.now(),
+            })
+            startWithStopEmittingRecorder([largeDeferredCssMutation, largeDeferredCssMutation])
+            releaseInteractionHold()
+            ;(posthog.capture as Mock).mockClear()
+
+            sessionRecording['_lazyLoadedSessionRecording'].discard()
+
             expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
         })

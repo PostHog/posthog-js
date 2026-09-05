@@ -1494,6 +1494,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         this._isStoppingAfterCompression = true
+        // The internal hold still suppresses the final flush, but it is no longer an actionable
+        // diagnostic once stop() has returned to the caller.
+        this._flushHoldReason = undefined
         const generation = this._compressionQueueGeneration
         this._clearFlushBufferTimer()
         // Stop rrweb synchronously so it cannot keep producing events while we wait
@@ -1545,11 +1548,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         logger.info('stopped')
     }
 
-    // Clear the reported hold once the epoch's buffer is gone. Must run AFTER the
-    // flush-then-clear above: clearing the hold first would let the suppressed flush ship the
-    // held buffer. Without this a stopped or discarded recorder keeps reporting a stale
-    // $sdk_debug_replay_flush_hold_reason on later captured events, because the
-    // sdkDebugProperties getter still runs after stop() (the recorder is torn down, not dropped).
+    // Release the internal hold once the epoch's buffer is gone. Must run AFTER the
+    // flush-then-clear above: releasing it first would let the suppressed flush ship the held
+    // buffer. The async stop path clears the externally reported reason immediately while keeping
+    // this internal protection until compression drains. Without this cleanup a stopped or
+    // discarded recorder keeps reporting a stale $sdk_debug_replay_flush_hold_reason on later
+    // captured events, because the sdkDebugProperties getter still runs after stop() (the recorder
+    // is torn down, not dropped).
     // During a rotation restart, preserveLogDedup keeps _lastLoggedFlushHold: start() sets a
     // transient fresh-start hold that _restartForSessionIdChange immediately overwrites with the
     // real rotation reason. Explicit stops clear the key so a later held epoch logs again.
@@ -1585,9 +1590,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._heldEpochShipsOnUnload = false
     }
 
-    // the only writer of the hold, so the reported reason cannot drift from the hold itself.
+    // Keep the hold and its reported reason synchronized during normal recording transitions.
+    // Terminal paths can temporarily keep only the internal hold to prevent teardown-time flushes.
     // Nothing else announces a held epoch - no flush is scheduled while held, so the log has to
-    // happen here rather than on a flush that may never run
+    // happen here rather than on a flush that may never run.
     private _setFlushHold(reason: FlushHoldReason | undefined, { preserveLogDedup = false } = {}) {
         this._holdFlushUntilInteraction = !isUndefined(reason)
         this._flushHoldReason = reason
@@ -1635,6 +1641,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     discard({ discardProducerEvents = false }: { discardProducerEvents?: boolean } = {}) {
+        // Reuse the internal hold as a synchronous discard guard. rrweb teardown can emit enough
+        // data to hit the size cap, but discard must never flush it.
+        this._holdFlushUntilInteraction = true
         if (discardProducerEvents) {
             // rrweb teardown can synchronously emit deferred stylesheet mutations.
             // Clear first so those emissions cannot flush existing data, then clear them below too.
