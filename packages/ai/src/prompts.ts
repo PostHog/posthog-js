@@ -5,6 +5,7 @@ import type {
   CachedPrompt,
   GetPromptOptions,
   PromptApiResponse,
+  PromptBatchItem,
   PromptCodeFallbackResult,
   PromptRemoteResult,
   PromptResult,
@@ -183,6 +184,47 @@ export class Prompts {
 
       throw error
     }
+  }
+
+  /**
+   * Fetch multiple prompts concurrently by name or descriptor object.
+   *
+   * Reuses the existing client-side cache and fallback behavior for each prompt.
+   *
+   * @param items - Array of prompt names or descriptor objects with per-prompt options
+   * @param options - Default options applied to prompt items that do not specify their own options
+   * @returns Object mapping each prompt name to its corresponding PromptResult
+   *
+   * @example
+   * ```ts
+   * const prompts = await client.prompts.getMany(['welcome', 'summary', 'followup'])
+   * console.log(prompts.welcome.prompt)
+   *
+   * // Or with per-prompt options
+   * const prompts = await client.prompts.getMany([
+   *   'welcome',
+   *   { name: 'summary', version: 2 },
+   *   { name: 'followup', fallback: 'You are a helpful assistant.' },
+   * ])
+   * ```
+   */
+  async getMany(
+    items: PromptBatchItem[],
+    options?: GetPromptOptions
+  ): Promise<Record<string, PromptResult>> {
+    const results: Record<string, PromptResult> = {}
+
+    await Promise.all(
+      items.map(async (item) => {
+        const name = typeof item === 'string' ? item : item.name
+        const itemOptions = typeof item === 'string' ? options : { ...options, ...item }
+
+        const result = await this.get(name, itemOptions)
+        results[name] = result
+      })
+    )
+
+    return results
   }
 
   /**

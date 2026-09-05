@@ -1134,4 +1134,112 @@ describe('Prompts', () => {
       expect(mockFetch).toHaveBeenCalledTimes(3)
     })
   })
+
+  describe('getMany()', () => {
+    it('should fetch multiple prompts concurrently by name array', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, name: 'welcome', prompt: 'Welcome prompt' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, name: 'summary', prompt: 'Summary prompt' }),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      const results = await prompts.getMany(['welcome', 'summary'])
+
+      expect(results.welcome.prompt).toBe('Welcome prompt')
+      expect(results.summary.prompt).toBe('Summary prompt')
+      expect(results.welcome.source).toBe('api')
+      expect(results.summary.source).toBe('api')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('should support mixed string names and descriptor objects with versions and fallbacks', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, name: 'welcome', prompt: 'Welcome prompt' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, name: 'summary', version: 2, prompt: 'Summary v2' }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          json: () => Promise.resolve({ detail: 'Not found' }),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      const results = await prompts.getMany([
+        'welcome',
+        { name: 'summary', version: 2 },
+        { name: 'missing', fallback: 'Fallback for missing' },
+      ])
+
+      expect(results.welcome.prompt).toBe('Welcome prompt')
+      expect(results.summary.prompt).toBe('Summary v2')
+      expect(results.missing.prompt).toBe('Fallback for missing')
+      expect(results.missing.source).toBe('code_fallback')
+    })
+
+    it('should utilize cached prompts across getMany calls', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, name: 'welcome', prompt: 'Welcome prompt' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, name: 'summary', prompt: 'Summary prompt' }),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      // First batch
+      const first = await prompts.getMany(['welcome', 'summary'])
+      expect(first.welcome.source).toBe('api')
+      expect(first.summary.source).toBe('api')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      // Second batch should hit cache
+      const second = await prompts.getMany(['welcome', 'summary'])
+      expect(second.welcome.source).toBe('cache')
+      expect(second.summary.source).toBe('cache')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('should throw if any prompt in the batch fails without a fallback', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, name: 'welcome', prompt: 'Welcome prompt' }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          json: () => Promise.resolve({ detail: 'Server error' }),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      await expect(prompts.getMany(['welcome', 'broken'])).rejects.toThrow('Failed to fetch prompt')
+    })
+  })
 })
