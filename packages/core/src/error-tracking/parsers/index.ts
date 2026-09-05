@@ -52,18 +52,24 @@ const MAX_REPEATED_CYCLE_LENGTH = 10
 const STACKTRACE_LINE_LIMIT = 1000
 
 // A minified bundle puts many functions on one line and gives them the same short names, so the
-// column is what tells two of them apart. Frames therefore have to match on it. The one exception
-// is the innermost frame, for which the runtime reports the position of the call that ran out of
-// stack rather than the call site the copies of the cycle under it share. A frame with no function
-// name does not say which code it holds, so it has to match on the column even there.
-function isSameFrame(a: StackFrame, b: StackFrame, isInnermost: boolean = false): boolean {
+// column is what tells two of them apart. Frames therefore have to match on it, unless the caller
+// says otherwise for the innermost frame, whose column is the position of the call that ran out of
+// stack rather than the call site the copies of the cycle under it share.
+function isSameFrame(a: StackFrame, b: StackFrame, ignoreColumn: boolean = false): boolean {
   return (
     a.filename === b.filename &&
     a.function === b.function &&
     a.module === b.module &&
     a.lineno === b.lineno &&
-    ((isInnermost && a.function !== UNKNOWN_FUNCTION) || a.colno === b.colno)
+    (ignoreColumn || a.colno === b.colno)
   )
+}
+
+// While the stack is still being read nothing has confirmed a cycle, so the innermost frame may
+// only be matched without its column when the runtime named it. A frame with no name holds nothing
+// else that says which code it is, so its column has to count until the copies confirm the cycle.
+function movesOwnColumn(frame: StackFrame, index: number): boolean {
+  return index === 0 && frame.function !== UNKNOWN_FUNCTION
 }
 
 interface RepeatedCycle {
@@ -87,13 +93,9 @@ function collapseRepeatedCycle(frames: StackFrame[]): RepeatedCycle | undefined 
 
     let isCycle = true
     for (let offset = 0; offset < length; offset++) {
-      if (
-        !isSameFrame(
-          frames[start + offset] as StackFrame,
-          frames[start + length + offset] as StackFrame,
-          start + offset === 0
-        )
-      ) {
+      const inner = frames[start + offset] as StackFrame
+
+      if (!isSameFrame(inner, frames[start + length + offset] as StackFrame, movesOwnColumn(inner, start + offset))) {
         isCycle = false
         break
       }
@@ -127,6 +129,30 @@ function trimPartialCycle(frames: StackFrame[], cycle: RepeatedCycle): void {
   }
 }
 
+// Drops the copy of the cycle left over at the innermost end. The copies that confirmed the cycle
+// say which code those frames hold, so the innermost one is matched without the column it carries
+// of its own, which is what a recursion the runtime reports with no function name needs. Reports how
+// many frames went, because every position recorded for the stack moves with them.
+function trimInnermostPartialCycle(frames: StackFrame[], cycle: RepeatedCycle): number {
+  let partialStart = cycle.start
+
+  while (
+    partialStart > 0 &&
+    isSameFrame(
+      frames[partialStart - 1] as StackFrame,
+      frames[partialStart - 1 + cycle.length] as StackFrame,
+      partialStart - 1 === 0
+    )
+  ) {
+    partialStart--
+  }
+
+  const partialLength = cycle.start - partialStart
+  frames.splice(partialStart, partialLength)
+
+  return partialLength
+}
+
 // How much of the cycle is left over next to the copy that was kept.
 function partialCycleLength(frames: StackFrame[], cycle: RepeatedCycle): number {
   const copyEnd = cycle.start + cycle.length
@@ -137,7 +163,7 @@ function partialCycleLength(frames: StackFrame[], cycle: RepeatedCycle): number 
     isSameFrame(
       frames[partialEnd] as StackFrame,
       frames[partialEnd - cycle.length] as StackFrame,
-      partialEnd - cycle.length === 0
+      movesOwnColumn(frames[partialEnd - cycle.length] as StackFrame, partialEnd - cycle.length)
     )
   ) {
     partialEnd++
@@ -265,7 +291,20 @@ export function createStackParser(platform: Platform, ...parsers: StackLineParse
 
     // Trimming a section moves the frames after it, so work from the section furthest from the
     // innermost frame and the positions recorded for the sections under it still hold.
-    for (const cycle of [...repeatedCycles].sort((a, b) => b.start - a.start)) {
+    const sections = [...repeatedCycles].sort((a, b) => b.start - a.start)
+    const innermostSection = sections[sections.length - 1]
+
+    // The innermost end goes first. Trimming a section rotates the copy it keeps, and the leftover
+    // only reads as part of the cycle while that copy still sits where the stack put it.
+    if (innermostSection) {
+      const trimmed = trimInnermostPartialCycle(frames, innermostSection)
+
+      for (const cycle of sections) {
+        cycle.start -= trimmed
+      }
+    }
+
+    for (const cycle of sections) {
       trimPartialCycle(frames, cycle)
     }
 

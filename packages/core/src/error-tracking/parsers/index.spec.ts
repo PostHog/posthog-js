@@ -162,6 +162,29 @@ describe('createDefaultStackParser repeated cycle collapsing', () => {
     ])
   })
 
+  it('ignores that column for a recursion the runtime reports with no function name', () => {
+    // The parser has nothing but the position to tell two frames of a bundle apart when the runtime
+    // reports no name for them, so it holds on to that position while it reads the stack. The copies
+    // it collapses then say which code the innermost frame holds, and its own position can go.
+    const anonymous = (column: number): string => `    at https://posthog.com/app.js:1:${column}`
+
+    const withThrowColumn = (column: number): string[] => {
+      const lines = [anonymous(column)]
+
+      for (let i = 1; i < 40; i++) {
+        lines.push(anonymous(10))
+      }
+
+      return parse([OVERFLOW, ...lines, frame('handleClick', 90), frame('main', 91)].join('\n')).map(
+        (f) => `${f.function}:${f.colno}`
+      )
+    }
+
+    expect(withThrowColumn(4)).toEqual(['main:10', 'handleClick:10', '?:10'])
+    expect(withThrowColumn(5)).toEqual(withThrowColumn(4))
+    expect(withThrowColumn(10)).toEqual(withThrowColumn(4))
+  })
+
   it('ignores the column of the call that ran out of stack', () => {
     // Runtimes report the position of the failed call for the innermost frame, so that frame has a
     // column of its own even though it is the same call site as the frames under it.
