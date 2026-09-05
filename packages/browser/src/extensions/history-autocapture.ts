@@ -118,7 +118,7 @@ export class HistoryAutocapture implements Extension {
         const capturePageview = this._instance.config.capture_pageview
 
         if (capturePageview === 'history_change') {
-            return { path: true }
+            return { path: true, search: true, hash: true }
         }
 
         return isObject(capturePageview) ? capturePageview : {}

@@ -3070,7 +3070,7 @@
           "releaseTag": "deprecated"
         },
         {
-          "description": "Determines whether PostHog should capture pageview events automatically.\nCan be:\n- `true`: Capture the initial pageview\n- `false`: Don't capture any pageviews\n- `'history_change'`: Capture the initial pageview and pageviews when the pathname changes\n- An object: Capture the initial pageview and pageviews when any selected URL component changes",
+          "description": "Determines whether PostHog should capture pageview events automatically.\nCan be:\n- `true`: Capture the initial pageview\n- `false`: Don't capture any pageviews\n- `'history_change'`: Capture the initial pageview and pageviews when the path, query string, or hash changes.\n  `disable_capture_url_hashes` still suppresses hash-only changes.\n- An object: Capture the initial pageview and pageviews when any selected URL component changes",
           "type": "boolean | \"history_change\" | CapturePageviewOptions",
           "name": "capture_pageview"
         },
