@@ -112,6 +112,10 @@ export default function ErrorTrackingScreen() {
                     Record breadcrumb-style steps with addExceptionStep. Buffered steps attach to every captured
                     $exception as $exception_steps — including the manual captures above and the native crash below.
                 </ThemedText>
+                <ThemedText>
+                    This example also sets errorTracking.exceptionSteps.automatic, so switching tabs, tapping a button
+                    and backgrounding the app each leave their own step. Those steps carry a $type.
+                </ThemedText>
                 {EXCEPTION_STEPS.map(({ label, message, properties }) => (
                     <Button
                         key={label}

@@ -11,6 +11,14 @@ import {
 } from '@posthog/core'
 import { Properties } from '@posthog/types'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
+import {
+  AutomaticExceptionStep,
+  AutomaticExceptionStepsOptions,
+  ResolvedAutomaticExceptionStepsOptions,
+  buildAutomaticExceptionStep,
+  buildIdentityExceptionStep,
+  resolveAutomaticExceptionStepsOptions,
+} from './automatic-steps'
 import { getRemoteConfigBool } from '../utils'
 import { OptionalReactNativePlugin } from '../optional/OptionalPlugin'
 
@@ -45,6 +53,16 @@ export interface ExceptionStepsOptions {
    * @default 32768
    */
   maxBytes?: number
+  /**
+   * Records steps for app signals the SDK already observes, so an exception carries a timeline even
+   * where nobody called `addExceptionStep`. Every signal is off by default, because each step adds
+   * bytes to every captured exception.
+   *
+   * Pass `true` to enable every signal, or an object to enable single signals.
+   *
+   * @default false
+   */
+  automatic?: boolean | AutomaticExceptionStepsOptions
 }
 
 export interface ErrorTrackingOptions {
@@ -67,6 +85,7 @@ export class ErrorTracking {
   private logger: Logger
   private options: ResolvedErrorTrackingOptions
   private _exceptionStepsConfig: CoreErrorTracking.ResolvedExceptionStepsConfig
+  private _automaticStepsConfig: ResolvedAutomaticExceptionStepsOptions
   private _exceptionStepsBuffer: CoreErrorTracking.ExceptionStepsBuffer
   private _nativeForwardingEnabled: boolean = false
 
@@ -89,6 +108,7 @@ export class ErrorTracking {
     this._exceptionStepsConfig = CoreErrorTracking.resolveExceptionStepsConfig(
       exceptionSteps ? { enabled: exceptionSteps.enabled, max_bytes: exceptionSteps.maxBytes } : undefined
     )
+    this._automaticStepsConfig = resolveAutomaticExceptionStepsOptions(exceptionSteps?.automatic)
     this._exceptionStepsBuffer = new CoreErrorTracking.ExceptionStepsBuffer(this._exceptionStepsConfig)
     this.autocapture(this.options.autocapture)
   }
@@ -133,6 +153,76 @@ export class ErrorTracking {
     } catch (error) {
       this.logger.error('Failed to add exception step. Ignoring breadcrumb.', error)
     }
+  }
+
+  /**
+   * True when the caller enabled at least one automatic signal. The capture path checks this first,
+   * so an app that never enabled the feature pays one boolean read per event.
+   */
+  get automaticExceptionStepsEnabled(): boolean {
+    const config = this._automaticStepsConfig
+    return config.navigation || config.taps || config.lifecycle || config.identity
+  }
+
+  /**
+   * Records the automatic step that an enqueued event maps to, and ignores every event that maps to
+   * no step. The SDK sets `$type` here, so the timeline can tell an automatic step from a manual one.
+   *
+   * This runs on the capture path. It never throws, and it never captures an event of its own.
+   */
+  onEnqueuedEvent(event: unknown, properties: unknown): void {
+    if (!this._exceptionStepsConfig.enabled || !this.automaticExceptionStepsEnabled) {
+      return
+    }
+
+    try {
+      const step = buildAutomaticExceptionStep(this._automaticStepsConfig, event, properties)
+      if (step) {
+        this.recordAutomaticStep(step)
+      }
+    } catch (error) {
+      this.logger.error('Failed to add automatic exception step. Ignoring breadcrumb.', error)
+    }
+  }
+
+  /**
+   * Records the step marking an identity change. `reset()` calls this before it clears the identity,
+   * so the step lands on the boundary rather than after it.
+   *
+   * The buffer itself survives `reset()`, because steps scope to the app session rather than to the
+   * user session, and clearing would drop exactly the steps that explain a failure in a login or
+   * logout flow. This step is what keeps the previous user's activity from reading as the next
+   * user's: it marks where one identity ended instead of deleting the history.
+   *
+   * Like every automatic signal it is opt-in, and it never captures an event of its own.
+   */
+  onIdentityReset(): void {
+    if (!this._exceptionStepsConfig.enabled) {
+      return
+    }
+
+    try {
+      const step = buildIdentityExceptionStep(this._automaticStepsConfig)
+      if (step) {
+        this.recordAutomaticStep(step)
+      }
+    } catch (error) {
+      this.logger.error('Failed to add identity exception step. Ignoring breadcrumb.', error)
+    }
+  }
+
+  /**
+   * Buffers an SDK-recorded step and mirrors it to native. The SDK sets `$type` here, so the timeline
+   * can tell an automatic step from a manual one.
+   */
+  private recordAutomaticStep(step: AutomaticExceptionStep): void {
+    const stepProperties = { [CoreErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]: step.type }
+    this._exceptionStepsBuffer.add({
+      ...stepProperties,
+      [CoreErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE]: step.message,
+      [CoreErrorTracking.EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP]: new Date().toISOString(),
+    })
+    this.forwardExceptionStepToNative(step.message, stepProperties)
   }
 
   /**
@@ -194,7 +284,9 @@ export class ErrorTracking {
   }
 
   /**
-   * Clears the buffer. Called on SDK close, not on capture or identity changes.
+   * Clears the buffer. The host calls this on SDK close only. A capture keeps the buffer, so every
+   * exception in one app session carries the same steps, and `reset()` keeps it too, because steps
+   * scope to the app session rather than to the user session.
    */
   clearExceptionSteps(): void {
     this._exceptionStepsBuffer.clear()

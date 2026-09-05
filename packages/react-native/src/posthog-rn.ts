@@ -757,6 +757,16 @@ export class PostHog extends PostHogCore {
    * @public
    */
   reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
+    // NOTE: reset() deliberately keeps the exception-step buffer. Steps scope to the app session, not
+    // to the user session, because error tracking explains what the app did rather than what one user
+    // did. Clearing here would drop exactly the steps that explain a failure in a login or logout
+    // flow. Every other SDK keeps them too. See the ExceptionSteps docs before changing this.
+    //
+    // Instead of clearing, mark the boundary: the `identity` automatic signal records a step here, so
+    // a reader can see where one user's activity ended rather than reading it as the next user's.
+    // Recorded before super.reset() so the step sits on the boundary rather than after it.
+    this._errorTracking.onIdentityReset()
+
     // When propertiesToKeep is not explicitly provided, automatically preserve app lifecycle
     // properties and device_id to prevent duplicate "Application Installed" events and
     // to maintain stable feature flag bucketing across identity changes.
@@ -2807,6 +2817,16 @@ export class PostHog extends PostHogCore {
       this._maybeActivateEventTrigger(processed?.['event'])
     } catch (e) {
       this._logger.error(`Session replay event trigger check failed: ${e}.`)
+    }
+    // Only a surviving event leaves an automatic step. An event that `before_send` dropped must not
+    // reappear inside an exception payload, because a caller drops events to keep data out of PostHog.
+    // The guard also covers an event enqueued by the base constructor, before `_errorTracking` exists.
+    try {
+      if (processed) {
+        this._errorTracking?.onEnqueuedEvent(processed['event'], processed['properties'])
+      }
+    } catch (e) {
+      this._logger.error(`Automatic exception step failed: ${e}.`)
     }
     return processed
   }
