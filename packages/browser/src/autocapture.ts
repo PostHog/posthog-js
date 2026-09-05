@@ -459,9 +459,15 @@ export class Autocapture implements Extension {
         const persistedServerDisabled = this._client?.kv.get<boolean>(AUTOCAPTURE_DISABLED_SERVER_SIDE)
         const memoryDisabled = this._isDisabledServerSide
 
+        const config = this._refreshConfig()
+        // Cached enablement may be stale. Wait for the initial config outcome unless
+        // remote requests are disabled; failures still use the last known server value.
+        if (!config.remoteRequestsDisabled && !this._hasReceivedConfigResponse) {
+            return false
+        }
+
         // The /flags-disabled bypass only applies while no config outcome has arrived;
         // once a response (or failure) has been seen, an unknown opt-out stays off.
-        const config = this._refreshConfig()
         const clientConfigOnly = config.remoteRequestsDisabled && !this._hasReceivedConfigResponse
         if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !clientConfigOnly) {
             // We only enable if we know that the server has not disabled it
