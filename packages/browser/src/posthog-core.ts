@@ -643,7 +643,7 @@ export class PostHog implements PostHogInterface {
         // oxlint-disable-next-line no-console
         console.warn(
             '[PostHog.js]',
-            `The identify() ID "${id}" looks like a name or a username. If two users share an ID, PostHog merges ` +
+            'The ID passed to identify() looks like a name or a username. If two users share an ID, PostHog merges ' +
                 'them into one person. Use an ID that is unique to each user, such as a database ID, a UUID, or an ' +
                 'email address.'
         )

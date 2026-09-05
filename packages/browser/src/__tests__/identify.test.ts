@@ -118,8 +118,11 @@ describe('non-unique distinct_id warning', () => {
 
         expect(warnSpy).toHaveBeenCalledWith(
             '[PostHog.js]',
-            expect.stringContaining(`The identify() ID "${id}" looks like a name or a username`)
+            expect.stringContaining('The ID passed to identify() looks like a name or a username')
         )
+        // the ID is a name or a username by construction, and console output reaches session
+        // replays and other console-capturing tools, so it must stay out of the message
+        expect(warnSpy).not.toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining(id))
         // the warning must not block the call
         expect(posthog.get_distinct_id()).toEqual(id)
     })
