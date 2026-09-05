@@ -2916,6 +2916,42 @@ describe('Lazy SessionRecording', () => {
                 expect(['active', 'sampled', 'buffering']).toContain(sessionRecording.status)
             })
 
+            it('completes the rotation restart when capturing a queued compression event throws', () => {
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+
+                emitActiveEvent(startingTimestamp + 100)
+                lazyRecorder['_pendingCompressionEvents'].push({
+                    event: createIncrementalSnapshot({ timestamp: startingTimestamp + 200 }),
+                    compressionEnabled: false,
+                    targetSessionId: lazyRecorder['_sessionId'],
+                    targetWindowId: lazyRecorder['_windowId'],
+                    generation: lazyRecorder['_compressionQueueGeneration'],
+                    processed: false,
+                    counted: true,
+                })
+                lazyRecorder['_queuedCompressionEvents'] = 1
+                lazyRecorder['_compressionQueue'] = Promise.resolve()
+                const captureSpy = vi
+                    .spyOn(lazyRecorder as any, '_captureQueuedCompressionEvent')
+                    .mockImplementationOnce(() => {
+                        throw new Error('capture failed')
+                    })
+
+                sessionIdGeneratorMock.mockImplementation(() => 'rotated-session-id')
+                const rotationTimestamp = startingTimestamp + 100 + sessionManager['_sessionTimeoutMs'] + 1000
+                vi.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                emitActiveEvent(rotationTimestamp)
+
+                expect(captureSpy).toHaveBeenCalledTimes(1)
+                expect(recordMock).toHaveBeenCalledTimes(2)
+                expect(lazyRecorder['isStarted']).toEqual(true)
+                expect(lazyRecorder['_sessionId']).toEqual('rotated-session-id')
+                expect(lazyRecorder['_isRestartingForSessionIdChange']).toEqual(false)
+                expect(lazyRecorder['_queuedCompressionEvents']).toEqual(0)
+                expect(lazyRecorder['_pendingCompressionEvents']).toEqual([])
+            })
+
             // The rotation must not leave behind stale stop-in-progress state. If start()
             // only invalidated the generation, _isStoppingAfterCompression would stay true
             // (the bailed-out drain never resets it) and _queuedCompressionEvents would stay
@@ -3205,6 +3241,59 @@ describe('Lazy SessionRecording', () => {
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_isRestartingForSessionIdChange']).toBe(false)
                 const refreshedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG) as any
                 expect(refreshedConfig.cache_timestamp).toBeGreaterThan(Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS)
+            })
+
+            describe('with rrweb-faithful custom events and snapshots', () => {
+                let recordMock: Mock
+                beforeEach(() => {
+                    recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                    // real rrweb delivers addCustomEvent back through emit
+                    assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = vi.fn(
+                        (tag: string, payload: any) => {
+                            _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
+                        }
+                    )
+                    // real rrweb emits Meta + FullSnapshot synchronously when record() starts
+                    recordMock.mockImplementation(({ emit }: any) => {
+                        _emit = emit
+                        emit(createMetaSnapshot({ timestamp: Date.now() }))
+                        emit(createFullSnapshot({ timestamp: Date.now() }))
+                        return () => {}
+                    })
+                })
+
+                it('attributes the restart snapshot and $session_id_change to the new session on reset while active', () => {
+                    const firstSessionId = sessionId
+                    releaseInteractionHold()
+                    _emit(createFullSnapshot({ timestamp: 1000 }))
+                    _emit(createIncrementalSnapshot({ data: { source: IncrementalSource.MouseInteraction } }))
+
+                    const preservedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+                    posthog.persistence?.clear()
+                    posthog.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: preservedConfig })
+                    sessionManager.resetSessionId()
+                    sessionId = 'rotated-session-id'
+                    ;(posthog.capture as Mock).mockClear()
+
+                    // identify() after reset() runs the session check while recording is active
+                    sessionManager.checkAndGetSessionAndWindowId()
+
+                    releaseInteractionHold()
+                    sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                    const snapshotCalls = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+                    const attributionFor = (predicate: (e: any) => boolean): string[] =>
+                        snapshotCalls.flatMap(([, props]) =>
+                            props.$snapshot_data.filter(predicate).map(() => props.$session_id)
+                        )
+
+                    expect(recordMock.mock.calls.length).toBe(2)
+                    expect(attributionFor((e) => e.data?.tag === '$session_id_change')).toEqual(['rotated-session-id'])
+                    expect(attributionFor((e) => e.type === FULL_SNAPSHOT_EVENT_TYPE && e.timestamp !== 1000)).toEqual([
+                        'rotated-session-id',
+                    ])
+                    expect(firstSessionId).not.toBe('rotated-session-id')
+                })
             })
         })
 

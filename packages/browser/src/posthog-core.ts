@@ -3591,6 +3591,9 @@ export class PostHog implements PostHogInterface {
         // checkout (~5 min later).
         const recordingRemoteConfig = this.get_property(SESSION_RECORDING_REMOTE_CONFIG)
 
+        // must run while the pre-reset distinct_id and consent state still apply
+        this.sessionRecording?.flushBeforeIdentityReset()
+
         // Consent is user state, so reset() clears it along with the rest. But when capturing is
         // opted out by default that flips capturing back off, and nothing else surfaces it: events
         // are dropped with no error. Warn instead of failing silently.
