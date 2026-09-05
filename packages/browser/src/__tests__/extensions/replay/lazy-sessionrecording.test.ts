@@ -2702,61 +2702,74 @@ describe('Lazy SessionRecording', () => {
                 }
             })
 
-            it('attributes the backdated sessionIdle marker to the session that went idle, not a rotation-born session', () => {
-                // A suspended tab emits nothing while backgrounded, so idle is only detected on
-                // wake — by which time an app-level capture may already have rotated the session.
-                // The sessionIdle marker is restamped to lastActivity + threshold (up to hours in
-                // the past); if it follows the rotation into the new session, it drags the new
-                // recording's start back by the whole idle gap and the player reports the prefix
-                // as unplayable ("the initial snapshot of the screen arrived late").
-                _addCustomEvent.mockImplementation((tag: string, payload: any) => {
-                    _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
-                })
-                try {
-                    const lazy = sessionRecording['_lazyLoadedSessionRecording']!
-                    vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
-                    emitActiveEvent(startingTimestamp + 100)
-                    _emit(createFullSnapshot({ timestamp: startingTimestamp + 110 }))
-                    vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
-                    ;(posthog.capture as Mock).mockClear()
-
-                    // the tab sleeps well past the session timeout; on wake an app-level capture
-                    // rotates the session before any rrweb event reaches the recorder
-                    const rotatedSessionId = 'wake-rotated-session-id'
-                    sessionIdGeneratorMock.mockImplementation(() => rotatedSessionId)
-                    const wakeTimestamp = startingTimestamp + 97 * 60 * 1000
-                    vi.setSystemTime(new Date(wakeTimestamp))
-                    sessionManager.checkAndGetSessionAndWindowId(false, wakeTimestamp)
-                    expect(lazy['_sessionId']).toEqual(rotatedSessionId)
-
-                    // the idle marker ships with the session that actually went idle
-                    expect(posthog.capture).toHaveBeenCalledWith(
-                        '$snapshot',
-                        expect.objectContaining({
-                            $session_id: sessionId,
-                            $snapshot_data: expect.arrayContaining([
-                                expect.objectContaining({ data: expect.objectContaining({ tag: 'sessionIdle' }) }),
-                            ]),
-                        }),
-                        expect.any(Object)
-                    )
-
-                    // nothing attributed to the rotation-born session predates the rotation
-                    const newEpochEvents = [
-                        ...(posthog.capture as Mock).mock.calls
-                            .filter(([name, props]) => name === '$snapshot' && props.$session_id === rotatedSessionId)
-                            .flatMap(([, props]) => props.$snapshot_data),
-                        ...lazy['_buffer'].data,
-                    ]
-                    expect(lazy['_buffer'].sessionId).toEqual(rotatedSessionId)
-                    expect(newEpochEvents.length).toBeGreaterThan(0)
-                    newEpochEvents.forEach((e) => {
-                        expect(e.timestamp).toBeGreaterThanOrEqual(wakeTimestamp)
+            it.each([
+                ['idle is detected on wake', false],
+                ['idle was detected before the tab slept', true],
+            ])(
+                'attributes the backdated sessionIdle marker to the session that went idle, not a rotation-born session, when %s',
+                (_, idleBeforeWake) => {
+                    const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                    _addCustomEvent.mockImplementation((tag: string, payload: any) => {
+                        _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
                     })
-                } finally {
-                    _addCustomEvent.mockReset()
+                    // rrweb takes Meta and FullSnapshot synchronously inside record()
+                    recordMock.mockImplementation(({ emit }) => {
+                        _emit = emit
+                        emit(createMetaSnapshot({ timestamp: Date.now() }))
+                        emit(createFullSnapshot({ timestamp: Date.now() }))
+                        return () => {}
+                    })
+                    try {
+                        const lazy = sessionRecording['_lazyLoadedSessionRecording']!
+                        vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        emitActiveEvent(startingTimestamp + 100)
+                        _emit(createFullSnapshot({ timestamp: startingTimestamp + 110 }))
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        if (idleBeforeWake) {
+                            const idleTimestamp = startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000
+                            vi.setSystemTime(new Date(idleTimestamp))
+                            emitInactiveEvent(idleTimestamp, true)
+                        }
+
+                        const rotatedSessionId = 'wake-rotated-session-id'
+                        sessionIdGeneratorMock.mockImplementation(() => rotatedSessionId)
+                        const wakeTimestamp = startingTimestamp + 97 * 60 * 1000
+                        vi.setSystemTime(new Date(wakeTimestamp))
+                        sessionManager.checkAndGetSessionAndWindowId(false, wakeTimestamp)
+                        expect(lazy['_sessionId']).toEqual(rotatedSessionId)
+
+                        expect(posthog.capture).toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.objectContaining({
+                                $session_id: sessionId,
+                                $snapshot_data: expect.arrayContaining([
+                                    expect.objectContaining({ data: expect.objectContaining({ tag: 'sessionIdle' }) }),
+                                ]),
+                            }),
+                            expect.any(Object)
+                        )
+
+                        const newEpochEvents: any[] = [
+                            ...(posthog.capture as Mock).mock.calls
+                                .filter(
+                                    ([name, props]) => name === '$snapshot' && props.$session_id === rotatedSessionId
+                                )
+                                .flatMap(([, props]) => props.$snapshot_data),
+                            ...lazy['_buffer'].data,
+                        ]
+                        expect(lazy['_buffer'].sessionId).toEqual(rotatedSessionId)
+                        expect(newEpochEvents.map((e) => e.type)).toEqual(
+                            expect.arrayContaining([META_EVENT_TYPE, FULL_SNAPSHOT_EVENT_TYPE])
+                        )
+                        newEpochEvents.forEach((e) => {
+                            expect(e.data?.tag).not.toEqual('sessionIdle')
+                            expect(e.timestamp).toBeGreaterThanOrEqual(wakeTimestamp)
+                        })
+                    } finally {
+                        _addCustomEvent.mockReset()
+                    }
                 }
-            })
+            )
 
             it('drops a held buffer at the size cap and recovers with a fresh full snapshot on release', () => {
                 vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))

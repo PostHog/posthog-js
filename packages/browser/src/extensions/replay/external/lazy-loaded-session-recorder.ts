@@ -1542,6 +1542,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _restartForSessionIdChange(holdNextEpoch: boolean) {
         this._isRestartingForSessionIdChange = true
+        // the new epoch's idle clock starts now, before teardown or the restart snapshot can emit
+        this._lastActivityTimestamp = Date.now()
         try {
             this.stop()
             // cost metrics are per-session; reset them only after the old recorder has
