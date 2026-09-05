@@ -4,7 +4,7 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { ErrorProperties, Event, McpEvent } from '../types'
-import { sanitizeCapturedValue } from './mcp-payloads'
+import { redactPii, sanitizeCapturedValue } from './mcp-payloads'
 
 type SanitizedRecord = Record<string, unknown>
 
@@ -32,11 +32,14 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
     result.parameters = sanitizeParameters(result.parameters)
   }
 
-  // The intent comes straight from an agent-narrated `context` string, so it
-  // can contain a secret the LLM read aloud. Redact it like any other captured
-  // value rather than shipping it raw as `$mcp_intent`.
+  // The intent comes straight from an agent-narrated `context` string, so it can
+  // contain a secret the LLM read aloud or personal data it narrated about the
+  // user. Redact it like any other captured value, then strip structured PII
+  // (emails, phone numbers, IPs, cards, SSNs) rather than shipping it raw as
+  // `$mcp_intent`. PII redaction is scoped to the intent only — structured tool
+  // parameters and responses often hold the same shapes as legitimate data.
   if (result.userIntent != null) {
-    result.userIntent = sanitizeCapturedValue(result.userIntent) as string
+    result.userIntent = redactPii(sanitizeCapturedValue(result.userIntent) as string)
   }
 
   if (result.llmModel != null) {

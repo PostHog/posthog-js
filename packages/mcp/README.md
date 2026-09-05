@@ -150,6 +150,14 @@ instrument(server, posthog, {
 
 `intentFallback` is the third option: supply the intent yourself when the agent did not send one.
 
+Whatever the agent narrates, the SDK redacts structured personal identifiers — email addresses, phone
+numbers, IPv4/IPv6 addresses, Luhn-valid card numbers, and US SSNs — from `$mcp_intent` before it is
+sent. This is always on and needs no configuration. It is best-effort for those well-defined shapes,
+not for free-form personal data such as names or postal addresses, which a regex cannot catch without
+over-redacting ordinary prose. It also applies only to `$mcp_intent`: structured tool `arguments` and
+results are left as-is, because the same shapes are often legitimate data there. If you need a stronger
+guarantee, `context: false` and the `beforeSend` hook above remain the ways to drop the field entirely.
+
 ### What `$mcp_llm_model` records, and when it stays empty
 
 `captureModel` is **off** by default. Turn it on and the SDK adds a required `llm_model` parameter to
