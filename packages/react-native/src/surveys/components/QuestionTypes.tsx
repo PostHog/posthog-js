@@ -15,6 +15,7 @@ import {
 import {
   defaultRatingLabelOpacity,
   getContrastingTextColor,
+  getMaxFontSizeMultiplier,
   getDisplayOrderChoices,
   SurveyAppearanceTheme,
 } from '../surveys-utils'
@@ -121,6 +122,7 @@ export function OpenTextQuestion({
       />
       <View style={styles.textInputContainer}>
         <TextInput
+          maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'input')}
           style={[
             styles.textInput,
             {
@@ -144,6 +146,7 @@ export function OpenTextQuestion({
         />
         {requirementsHint && (
           <Text
+            maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'validationHint')}
             style={[
               styles.validationHint,
               { color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor) },
@@ -266,6 +269,7 @@ export function RatingQuestion({
         </View>
         <View style={styles.ratingText}>
           <Text
+            maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'ratingLabel')}
             style={{
               color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
               opacity: defaultRatingLabelOpacity,
@@ -274,6 +278,7 @@ export function RatingQuestion({
             {question.lowerBoundLabel}
           </Text>
           <Text
+            maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'ratingLabel')}
             style={{
               color: appearance.textColor ?? getContrastingTextColor(appearance.backgroundColor),
               opacity: defaultRatingLabelOpacity,
@@ -315,7 +320,9 @@ export function RatingButton({
       ]}
       onPress={() => setActiveNumber(num)}
     >
-      <Text style={{ color: textColor }}>{num}</Text>
+      <Text maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'ratingNumber')} style={{ color: textColor }}>
+        {num}
+      </Text>
     </TouchableOpacity>
   )
 }
@@ -392,7 +399,10 @@ export function MultipleChoiceQuestion({
               }}
             >
               <View style={styles.choiceText}>
-                <Text style={{ flexGrow: 1, color: choiceTextColor }}>
+                <Text
+                  maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'choice')}
+                  style={{ flexGrow: 1, color: choiceTextColor }}
+                >
                   {choice}
                   {isOpenChoice ? ':' : ''}
                 </Text>
@@ -400,6 +410,7 @@ export function MultipleChoiceQuestion({
               </View>
               {isOpenChoice && (
                 <TextInput
+                  maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'input')}
                   style={styles.openEndedInput}
                   onChangeText={(userValue) => {
                     setOpenEndedInput(userValue)
