@@ -346,6 +346,24 @@ describe('OpenTextQuestion', () => {
         expect(onSubmit).not.toHaveBeenCalled()
     })
 
+    it.each([
+        ['the placeholder is cleared in the survey config', ''],
+        ['the survey config has no placeholder', undefined],
+    ])('shows no placeholder text when %s', (_label, placeholder) => {
+        const { container } = render(
+            <OpenTextQuestion
+                {...baseProps}
+                appearance={{ ...mockAppearance, placeholder }}
+                question={openTextQuestion}
+            />
+        )
+
+        const textarea = container.querySelector('textarea')
+        if (!textarea) throw new Error('Textarea not found')
+
+        expect(textarea.placeholder).toBe('')
+    })
+
     it('autofocuses the input by default', async () => {
         const { container } = render(<OpenTextQuestion {...baseProps} question={openTextQuestion} />)
 
