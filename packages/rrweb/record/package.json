@@ -7,10 +7,11 @@
     "scripts": {
         "dev": "vite build --watch",
         "build": "pnpm turbo run prepublish",
+        "build:declarations": "rolldown -c rolldown.dts.config.mts",
         "test": "vitest run",
         "test:watch": "vitest watch",
         "check-types": "tsc -noEmit",
-        "prepublish": "tsc -noEmit && vite build",
+        "prepublish": "tsc -noEmit && vite build && pnpm build:declarations",
         "lint": "oxlint src"
     },
     "repository": {
@@ -41,6 +42,8 @@
     ],
     "devDependencies": {
         "puppeteer": "^23.11.1",
+        "rolldown": "catalog:",
+        "rolldown-plugin-dts": "catalog:",
         "vite": "catalog:",
         "vite-plugin-dts": "catalog:",
         "vitest": "^1.4.0",

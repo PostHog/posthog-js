@@ -69,6 +69,12 @@ catalogs:
     react-test-renderer:
       specifier: ^19.2.1
       version: 19.2.7
+    rolldown:
+      specifier: 1.2.4
+      version: 1.2.4
+    rolldown-plugin-dts:
+      specifier: 0.27.14
+      version: 0.27.14
     rollup:
       specifier: ^4.53.3
       version: 4.53.3
@@ -1325,6 +1331,12 @@ importers:
       puppeteer:
         specifier: ^23.11.1
         version: 23.11.1(typescript@5.8.2)
+      rolldown:
+        specifier: 'catalog:'
+        version: 1.2.4
+      rolldown-plugin-dts:
+        specifier: 'catalog:'
+        version: 0.27.14(@volar/typescript@2.4.28)(rolldown@1.2.4)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
