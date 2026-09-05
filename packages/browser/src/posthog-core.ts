@@ -95,6 +95,7 @@ import { getDeviceModel } from '@posthog/browser-common/utils/device-model-utils
 import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
 import { document, location, navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
+import { originalConsoleMethod } from './utils/console-original'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { getPersonPropertiesHash } from '@posthog/browser-common/utils/property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
@@ -600,8 +601,15 @@ export class PostHog implements PostHogInterface {
                   'the distinct-ID limit and its events stop appearing on person pages and the session tab.')
         this._hasWarnedAboutVolatileIdentity = true
         // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
+        // It goes through the unpatched method for the same reason logger._log does: the Logs console
+        // recorder and session replay both patch the global console, and under person_profiles: 'always'
+        // this fires at init, so a captured copy would be billed to the customer once per page load.
         // oxlint-disable-next-line no-console
-        console.warn('[PostHog.js]', `${cause} but no bootstrap.distinctID was provided. ${consequence} ${fix}`)
+        originalConsoleMethod(console.warn).call(
+            console,
+            '[PostHog.js]',
+            `${cause} but no bootstrap.distinctID was provided. ${consequence} ${fix}`
+        )
     }
 
     // person_profiles: 'always' creates a person for anonymous visitors with no identify() call. The warning's

@@ -418,6 +418,26 @@ describe('config', () => {
             posthog.identify('identified-id')
             expect(bootstrapWarnings()).toHaveLength(1)
         })
+
+        // The Logs console recorder and session replay both patch the global console. Under
+        // person_profiles: 'always' this warning fires at init, so a captured copy would be billed back to
+        // the customer as one log record per page load. It has to reach the real method, like logger._log.
+        it('writes through the unpatched console method when the console has been patched', () => {
+            const unpatchedWarn = vi.fn()
+            const patchedWarn = vi.fn()
+            ;(patchedWarn as any).__rrweb_original__ = unpatchedWarn
+            const spiedWarn = console.warn
+            console.warn = patchedWarn
+
+            try {
+                new PostHog()._init('test-token', { persistence: 'memory', person_profiles: 'always' })
+            } finally {
+                console.warn = spiedWarn
+            }
+
+            expect(unpatchedWarn).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
+            expect(patchedWarn).not.toHaveBeenCalled()
+        })
     })
 
     describe('compatibilityDate', () => {
