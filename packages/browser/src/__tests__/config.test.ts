@@ -83,6 +83,43 @@ describe('config', () => {
             )
         })
 
+        // disable_persistence removes the store and blocks writes whatever the configured mode is, so the
+        // disabled cause and its per-load lifetime win over the storage mode's own lifetime.
+        it.each(['memory', 'sessionStorage'] as const)(
+            "reports the disabled-persistence cause when disable_persistence is true with '%s'",
+            (persistence) => {
+                const posthog = new PostHog()._init('test-token', { persistence, disable_persistence: true })
+
+                posthog.identify('identified-id')
+
+                expect(warnSpy).toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining('persistence is disabled (disable_persistence is true)')
+                )
+                expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('on every page load'))
+                expect(warnSpy).not.toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining('for every new browser tab or window')
+                )
+            }
+        )
+
+        // Turning persistence back on is not enough while the configured mode is itself volatile, so the
+        // durable-storage remedy has to name both changes.
+        it.each(['memory', 'sessionStorage'] as const)(
+            "names both remedies when disable_persistence is true with '%s'",
+            (persistence) => {
+                const posthog = new PostHog()._init('test-token', { persistence, disable_persistence: true })
+
+                posthog.identify('identified-id')
+
+                expect(warnSpy).toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining("set disable_persistence to false and persistence to 'localStorage+cookie'")
+                )
+            }
+        )
+
         it('does not warn when disable_persistence is true but bootstrap.distinctID is provided', () => {
             const posthog = new PostHog()._init('test-token', {
                 disable_persistence: true,
@@ -318,6 +355,88 @@ describe('config', () => {
             posthog.setPersonProperties({ plan: 'paid' })
 
             expect(bootstrapWarnings()).toHaveLength(1)
+        })
+
+        // person_profiles: 'always' gives every anonymous visitor a person, so no identify() call is needed
+        // and the deferred person-processing path never runs. Each page load then creates a new person.
+        it.each(['memory', 'sessionStorage'] as const)(
+            "warns at init when person_profiles is 'always' and persistence is '%s'",
+            (persistence) => {
+                new PostHog()._init('test-token', { persistence, person_profiles: 'always' })
+
+                expect(bootstrapWarnings()).toHaveLength(1)
+                expect(warnSpy).toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining('separate anonymous person')
+                )
+                expect(warnSpy).toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining("set person_profiles to 'identified_only'")
+                )
+            }
+        )
+
+        // reuseAnonymousId only stops identify() from merging IDs. A fresh anonymous person is still created
+        // on each load, so it must not suppress this warning.
+        it("warns at init under person_profiles: 'always' even when reuseAnonymousId is enabled", () => {
+            new PostHog()._init('test-token', {
+                persistence: 'memory',
+                person_profiles: 'always',
+                reuseAnonymousId: true,
+            })
+
+            expect(bootstrapWarnings()).toHaveLength(1)
+        })
+
+        it("does not warn at init under person_profiles: 'always' when bootstrap.distinctID is set", () => {
+            new PostHog()._init('test-token', {
+                persistence: 'memory',
+                person_profiles: 'always',
+                bootstrap: { distinctID: 'stable-id' },
+            })
+
+            expect(bootstrapWarnings()).toHaveLength(0)
+        })
+
+        it("does not warn at init under person_profiles: 'always' with durable persistence", () => {
+            new PostHog()._init('test-token', {
+                persistence: 'localStorage+cookie',
+                person_profiles: 'always',
+            })
+
+            expect(bootstrapWarnings()).toHaveLength(0)
+        })
+
+        it("warns once when set_config switches person_profiles to 'always' under volatile persistence", () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { persistence: 'memory', person_profiles: 'identified_only' })
+            warnSpy.mockClear()
+
+            posthog.set_config({ person_profiles: 'always' })
+            expect(bootstrapWarnings()).toHaveLength(1)
+
+            posthog.identify('identified-id')
+            expect(bootstrapWarnings()).toHaveLength(1)
+        })
+
+        // The Logs console recorder and session replay both patch the global console. Under
+        // person_profiles: 'always' this warning fires at init, so a captured copy would be billed back to
+        // the customer as one log record per page load. It has to reach the real method, like logger._log.
+        it('writes through the unpatched console method when the console has been patched', () => {
+            const unpatchedWarn = vi.fn()
+            const patchedWarn = vi.fn()
+            ;(patchedWarn as any).__rrweb_original__ = unpatchedWarn
+            const spiedWarn = console.warn
+            console.warn = patchedWarn
+
+            try {
+                new PostHog()._init('test-token', { persistence: 'memory', person_profiles: 'always' })
+            } finally {
+                console.warn = spiedWarn
+            }
+
+            expect(unpatchedWarn).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('bootstrap.distinctID'))
+            expect(patchedWarn).not.toHaveBeenCalled()
         })
     })
 

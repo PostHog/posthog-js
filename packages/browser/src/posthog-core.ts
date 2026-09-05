@@ -95,6 +95,7 @@ import { getDeviceModel } from '@posthog/browser-common/utils/device-model-utils
 import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
 import { document, location, navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
+import { originalConsoleMethod } from './utils/console-original'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { getPersonPropertiesHash } from '@posthog/browser-common/utils/property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
@@ -504,6 +505,9 @@ export class PostHog implements PostHogInterface {
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
     private _hasStableInitialDistinctId = false
     private _hasWarnedAboutVolatileIdentity = false
+    // _init() calls set_config() before it resolves the initial distinct ID, so the anonymous-person
+    // check must not run from that call.
+    private _hasResolvedInitialDistinctId = false
 
     private _removeExtension<T extends Extension>(extension: T | undefined): void {
         if (!extension) {
@@ -530,16 +534,20 @@ export class PostHog implements PostHogInterface {
     }
 
     // memory, sessionStorage, and disable_persistence all drop durable identity: the distinct ID lives in
-    // memory for a single page, so each load mints a fresh one that identify() then merges onto the person
-    // unless anonymous IDs are reused, eventually pushing it past the distinct-ID display limit and hiding
-    // its events from person pages and the session tab. Warn once, when person processing is first requested,
-    // unless a stable ID is supplied.
+    // memory for a single page, so each load mints a fresh one. Under person_profiles: 'always' each of those
+    // IDs becomes its own anonymous person. Otherwise identify() merges them onto one person unless anonymous
+    // IDs are reused, eventually pushing it past the distinct-ID display limit and hiding its events from
+    // person pages and the session tab. Warn once, at init when anonymous profiles are created and otherwise
+    // when person processing is first requested, unless a stable ID is supplied.
     // Cookieless mode registers a stable sentinel instead of a new uuid, so it is excluded.
     private _warnIfVolatileIdentityWithoutStableId(): void {
         if (this._hasWarnedAboutVolatileIdentity) {
             return
         }
-        if (this.config.reuseAnonymousId) {
+        // reuseAnonymousId only stops identify() from merging IDs. It does not stop a fresh anonymous person
+        // per page load, so it is no escape once profiles are created for anonymous visitors.
+        const createsAnonymousProfiles = this.config.person_profiles === 'always'
+        if (this.config.reuseAnonymousId && !createsAnonymousProfiles) {
             return
         }
         // The Segment integration owns identity and supplies its stable user/anonymous ID before events load.
@@ -562,30 +570,55 @@ export class PostHog implements PostHogInterface {
         let cause: string
         let lifetime: string
         let fix: string
-        if (volatileIdentityPersistence) {
+        // disable_persistence outranks the configured mode: it removes the store and blocks every write,
+        // so nothing is kept even under sessionStorage and re-enabling persistence is only half the fix
+        // while that mode is itself volatile.
+        if (this.config.disable_persistence) {
+            cause = 'persistence is disabled (disable_persistence is true)'
+            lifetime = 'on every page load'
+            const durableStorage = volatileIdentityPersistence
+                ? "set disable_persistence to false and persistence to 'localStorage+cookie'"
+                : 'set disable_persistence to false'
+            fix = `Either ${durableStorage}, keep persistence disabled and pass a stable ID through bootstrap.distinctID, or `
+        } else {
             cause = `persistence is set to '${this.config.persistence}'`
             // sessionStorage survives same-tab reloads and navigation, so it mints a fresh ID per
             // tab/window; memory is dropped on every load.
             lifetime =
                 this.config.persistence === 'memory' ? 'on every page load' : 'for every new browser tab or window'
             fix =
-                "Either set persistence to 'localStorage+cookie', keep this persistence and pass a stable ID through bootstrap.distinctID, or enable reuseAnonymousId."
-        } else {
-            cause = 'persistence is disabled (disable_persistence is true)'
-            lifetime = 'on every page load'
-            fix =
-                'Either set disable_persistence to false, keep persistence disabled and pass a stable ID through bootstrap.distinctID, or enable reuseAnonymousId.'
+                "Either set persistence to 'localStorage+cookie', keep this persistence and pass a stable ID through bootstrap.distinctID, or "
         }
+        fix += createsAnonymousProfiles
+            ? "set person_profiles to 'identified_only' so anonymous visitors get no profile."
+            : 'enable reuseAnonymousId.'
+        const consequence =
+            `PostHog will mint a new distinct ID ${lifetime}` +
+            (createsAnonymousProfiles
+                ? ". person_profiles is set to 'always', so each new ID becomes a separate anonymous person, " +
+                  'which inflates person counts and feature flag estimates.'
+                : ', so calling identify() merges a new ID onto the person each time. A person can then pass ' +
+                  'the distinct-ID limit and its events stop appearing on person pages and the session tab.')
         this._hasWarnedAboutVolatileIdentity = true
         // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
+        // It goes through the unpatched method for the same reason logger._log does: the Logs console
+        // recorder and session replay both patch the global console, and under person_profiles: 'always'
+        // this fires at init, so a captured copy would be billed to the customer once per page load.
         // oxlint-disable-next-line no-console
-        console.warn(
+        originalConsoleMethod(console.warn).call(
+            console,
             '[PostHog.js]',
-            `${cause} but no bootstrap.distinctID was provided. ` +
-                `PostHog will mint a new distinct ID ${lifetime}, so calling identify() merges a new ` +
-                'ID onto the person each time. A person can then pass the distinct-ID limit and its events stop ' +
-                `appearing on person pages and the session tab. ${fix}`
+            `${cause} but no bootstrap.distinctID was provided. ${consequence} ${fix}`
         )
+    }
+
+    // person_profiles: 'always' creates a person for anonymous visitors with no identify() call. The warning's
+    // only other call site is _requirePersonProcessing(), which nothing on that path reaches, so it would never
+    // fire for the configuration that mints the most persons. Warn at init and on set_config instead.
+    private _warnIfVolatileIdentityCreatesAnonymousPersons(): void {
+        if (this._hasResolvedInitialDistinctId && this.config.person_profiles === 'always') {
+            this._warnIfVolatileIdentityWithoutStableId()
+        }
     }
 
     /**
@@ -947,6 +980,7 @@ export class PostHog implements PostHogInterface {
 
         const initialDistinctId = config.bootstrap?.distinctID
         this._hasStableInitialDistinctId = !!initialDistinctId && !isEmptyString(initialDistinctId)
+        this._hasResolvedInitialDistinctId = true
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // oxlint-disable-next-line posthog-js/no-direct-undefined-check
@@ -1048,6 +1082,8 @@ export class PostHog implements PostHogInterface {
                 'The `ip` config option has NO EFFECT AT ALL and has been deprecated. Use a custom transformation or "Discard IP data" project setting instead. See https://posthog.com/tutorials/web-redact-properties#hiding-customer-ip-address for more information.'
             )
         }
+
+        this._warnIfVolatileIdentityCreatesAnonymousPersons()
 
         // Not awaited — the first event may miss $device_model, which is fine for a stable per-device dimension.
         if (!this.config.disableDeviceModel) {
@@ -4024,6 +4060,7 @@ export class PostHog implements PostHogInterface {
             this.surveys?.loadIfEnabled()
             this._sync_opt_out_with_persistence()
             this.externalIntegrations?.startIfEnabledOrStop()
+            this._warnIfVolatileIdentityCreatesAnonymousPersons()
 
             if (!oldConfig.segment && this.config.segment && this.persistence) {
                 setupSegmentIntegration(this, __NOOP, false)

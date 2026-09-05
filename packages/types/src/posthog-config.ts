@@ -1279,6 +1279,13 @@ export interface PostHogConfig {
     /**
      * Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js#persistence) for details.
      *
+     * `'memory'` only lasts for one page load, and `'sessionStorage'` only lasts for one browser tab.
+     * Neither keeps the distinct ID, so PostHog mints a new one when the store is empty. With
+     * `person_profiles: 'always'`, each new ID becomes a separate anonymous person, which inflates
+     * person counts and feature flag estimates. To keep these modes, either pass a stable ID through
+     * `bootstrap.distinctID`, or use the `person_profiles: 'identified_only'` default so that
+     * anonymous visitors get no profile.
+     *
      * @default 'localStorage+cookie'
      */
     persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie' | 'sessionStorage'
