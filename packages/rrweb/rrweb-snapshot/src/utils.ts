@@ -23,6 +23,14 @@ import {
   recordStylesheetCost,
 } from './snapshot-cost';
 
+/**
+ * Sentinel that replaces the text content of every `<script>` node during
+ * serialization (see snapshot.ts). It keeps real script source out of the
+ * snapshot and marks the node as a script for rebuild. `rebuild.ts` reads this
+ * value back and must not render it, so the two sides share this one constant.
+ */
+export const SCRIPT_PLACEHOLDER = 'SCRIPT_PLACEHOLDER';
+
 export function isElement(n: Node): n is Element {
   return n.nodeType === n.ELEMENT_NODE;
 }

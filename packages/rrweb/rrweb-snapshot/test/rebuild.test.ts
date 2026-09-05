@@ -106,6 +106,33 @@ describe('rebuild', function () {
     });
   });
 
+  describe('script placeholder', function () {
+    it('rebuilds a <script> as an empty <noscript> so the placeholder never renders', function () {
+      const node = buildNodeWithSN(
+        {
+          id: 1,
+          tagName: 'script',
+          type: NodeType.Element,
+          attributes: {},
+          childNodes: [
+            {
+              id: 2,
+              type: NodeType.Text,
+              textContent: 'SCRIPT_PLACEHOLDER',
+            },
+          ],
+        },
+        { doc: document, mirror, hackCss: false, cache },
+      ) as HTMLElement;
+
+      // The script is rebuilt as <noscript> so it cannot execute, and its
+      // placeholder text is dropped so nothing renders in any context (including
+      // shadow roots, which the document-scoped replay style cannot reach).
+      expect(node.tagName).toBe('NOSCRIPT');
+      expect(node.textContent).toBe('');
+    });
+  });
+
   describe('re-add of an existing node id', function () {
     it('detaches the old node when the meta changed, so it does not duplicate', function () {
       const parent = buildNodeWithSN(

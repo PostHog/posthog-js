@@ -277,7 +277,7 @@ exports[`integration tests > [html file]: background-clip-text.html 1`] = `
   </head>
   <body>
     <p class=\\"text\\">The background is clipped to the foreground text.</p>
-    <noscript>SCRIPT_PLACEHOLDER</noscript>
+    <noscript></noscript>
   </body></html>"
 `;
 
@@ -291,12 +291,12 @@ exports[`integration tests > [html file]: base64-images.html 1`] = `
     <!-- Small 1x1 red pixel PNG (base64: 68 bytes, image: 1x1) -->
     <img id=\\"small-image\\" src=\\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==\\" alt=\\"Small red pixel\\" width=\\"100\\" height=\\"100\\" />    <!-- Medium 16x16 gradient PNG (base64: ~200 bytes) -->
     <img id=\\"medium-image\\" src=\\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAABJSURBVDiNY2AYBaNgFIwCoAAggBhIBP8h+D8DA8N/SjCIjYxBbGQM4oPEkDEMYmNikBgyRjaAZAAQwNRA/0YBqQAggBgYhg4AANm8Awz/4Ll3AAAAAElFTkSuQmCC\\" alt=\\"Medium gradient\\" width=\\"100\\" height=\\"100\\" />    <!-- Script to create a large base64 image dynamically -->
-    <noscript>SCRIPT_PLACEHOLDER</noscript><img id=\\"large-image\\" src=\\"data:image/png;base64,CANVAS_GENERATED_IMAGE\\" alt=\\"Large test image\\" width=\\"200\\" height=\\"200\\" />    <!-- Create an extremely large image that should be skipped from recompression -->
-    <noscript>SCRIPT_PLACEHOLDER</noscript><img id=\\"huge-image\\" src=\\"data:image/png;base64,CANVAS_GENERATED_IMAGE\\" alt=\\"Huge test image\\" width=\\"300\\" height=\\"300\\" />    <!-- Small static SVG <image> with a data: href (under any reasonable cap) -->
+    <noscript></noscript><img id=\\"large-image\\" src=\\"data:image/png;base64,CANVAS_GENERATED_IMAGE\\" alt=\\"Large test image\\" width=\\"200\\" height=\\"200\\" />    <!-- Create an extremely large image that should be skipped from recompression -->
+    <noscript></noscript><img id=\\"huge-image\\" src=\\"data:image/png;base64,CANVAS_GENERATED_IMAGE\\" alt=\\"Huge test image\\" width=\\"300\\" height=\\"300\\" />    <!-- Small static SVG <image> with a data: href (under any reasonable cap) -->
     <svg id=\\"svg-with-small-image\\" xmlns=\\"http://www.w3.org/2000/svg\\" width=\\"100\\" height=\\"100\\">
       <image id=\\"svg-small-image\\" href=\\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==\\" width=\\"100\\" height=\\"100\\"/>
     </svg>    <!-- Scripts to create large SVG <image> data URIs for both href and xlink:href -->
-    <noscript>SCRIPT_PLACEHOLDER</noscript><svg xmlns=\\"http://www.w3.org/2000/svg\\" id=\\"svg-with-large-href-image\\" width=\\"200\\" height=\\"200\\"><image id=\\"svg-large-href-image\\" width=\\"200\\" height=\\"200\\" href=\\"data:image/png;base64,CANVAS_GENERATED_IMAGE\\"/></svg><svg xmlns=\\"http://www.w3.org/2000/svg\\" id=\\"svg-with-large-xlink-image\\" width=\\"200\\" height=\\"200\\"><image id=\\"svg-large-xlink-image\\" width=\\"200\\" height=\\"200\\" xmlns:xlink=\\"http://www.w3.org/1999/xlink\\" xlink:href=\\"data:image/png;base64,CANVAS_GENERATED_IMAGE\\"/></svg>
+    <noscript></noscript><svg xmlns=\\"http://www.w3.org/2000/svg\\" id=\\"svg-with-large-href-image\\" width=\\"200\\" height=\\"200\\"><image id=\\"svg-large-href-image\\" width=\\"200\\" height=\\"200\\" href=\\"data:image/png;base64,CANVAS_GENERATED_IMAGE\\"/></svg><svg xmlns=\\"http://www.w3.org/2000/svg\\" id=\\"svg-with-large-xlink-image\\" width=\\"200\\" height=\\"200\\"><image id=\\"svg-large-xlink-image\\" width=\\"200\\" height=\\"200\\" xmlns:xlink=\\"http://www.w3.org/1999/xlink\\" xlink:href=\\"data:image/png;base64,CANVAS_GENERATED_IMAGE\\"/></svg>
   </body></html>"
 `;
 
@@ -364,7 +364,7 @@ exports[`integration tests > [html file]: dynamic-stylesheet.html 1`] = `
     <meta http-equiv=\\"X-UA-Compatible\\" content=\\"ie=edge\\" />
     <title>dynamic stylesheet</title>
     <style>body { margin: 0px; }p { background: lightpink; }</style>
-    <noscript>SCRIPT_PLACEHOLDER</noscript>
+    <noscript></noscript>
   </head>
   <body>
     <p>p tag</p>
@@ -403,7 +403,7 @@ exports[`integration tests > [html file]: form-fields.html 1`] = `
       </label>
     </form>
   
-  <noscript>SCRIPT_PLACEHOLDER</noscript></body></html>"
+  <noscript></noscript></body></html>"
 `;
 
 exports[`integration tests > [html file]: hover.html 1`] = `
@@ -495,7 +495,7 @@ exports[`integration tests > [html file]: picture-blob.html 1`] = `
 "<html xmlns=\\"http://www.w3.org/1999/xhtml\\"><head></head><body>
     <img src=\\"blob:http://localhost:xxxx/...\\" alt=\\"This is a robot\\" />
   
-  <noscript>SCRIPT_PLACEHOLDER</noscript></body></html>"
+  <noscript></noscript></body></html>"
 `;
 
 exports[`integration tests > [html file]: picture-blob-in-frame.html 1`] = `
@@ -543,7 +543,7 @@ exports[`integration tests > [html file]: shadow-dom.html 1`] = `
       <section role=\\"tabpanel\\" tabindex=\\"0\\" aria-hidden=\\"false\\">content panel 2</section>
       <section role=\\"tabpanel\\" tabindex=\\"0\\" aria-hidden=\\"true\\">content panel 3</section>
     </fancy-tabs>
-    <noscript>SCRIPT_PLACEHOLDER</noscript>
+    <noscript></noscript>
   </body></html>"
 `;
 
@@ -623,7 +623,7 @@ exports[`integration tests > [html file]: with-script.html 1`] = `
   <title>with script</title>
 </head><body>
   <noscript src=\\"http://localhost:3030/js/a.js\\"></noscript>
-  <noscript>SCRIPT_PLACEHOLDER</noscript></body></html>"
+  <noscript></noscript></body></html>"
 `;
 
 exports[`integration tests > [html file]: with-style-sheet.html 1`] = `
