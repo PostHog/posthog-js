@@ -20,10 +20,15 @@ const repetitions = Number(process.env.REPLAY_BENCH_RUNS || 3)
 const cpuRate = Number(process.env.REPLAY_BENCH_CPU || 1)
 const shapes = (process.env.REPLAY_BENCH_SHAPES || 'table,css').split(',')
 const profiling = process.env.REPLAY_BENCH_PROFILE === '1'
+const mutationWorkloads = process.env.REPLAY_BENCH_MUTATIONS === '1'
+const churnSteps = Number(process.env.REPLAY_BENCH_CHURN_STEPS || 5)
+const compression = process.env.REPLAY_BENCH_COMPRESSION || 'both'
+assert(Number.isInteger(churnSteps) && churnSteps > 0 && churnSteps <= 20)
+assert(['on', 'off', 'both'].includes(compression))
 assert(sizes.every((n) => Number.isInteger(n) && n > 0))
 assert(Number.isInteger(repetitions) && repetitions > 0)
 assert(Number.isFinite(cpuRate) && cpuRate >= 1)
-assert(shapes.every((shape) => ['table', 'css'].includes(shape)))
+assert(shapes.every((shape) => ['table', 'css', 'shadow'].includes(shape)))
 
 const assets = new Map()
 for (const name of ['array.js', 'posthog-recorder.js']) {
@@ -79,8 +84,11 @@ try {
         for (const targetNodes of sizes)
             for (let run = 0; run < repetitions; run++) {
                 // Alternate arm order to avoid always giving the same arm a warm browser process.
-                for (const compress of run % 2 ? [true, false] : [false, true]) {
+                for (const compress of (run % 2 ? [true, false] : [false, true]).filter(
+                    (value) => compression === 'both' || value === (compression === 'on')
+                )) {
                     const context = await browser.newContext()
+                    const heapTimers = []
                     const page = await context.newPage()
                     const client = await context.newCDPSession(page)
                     await client.send('Emulation.setCPUThrottlingRate', { rate: cpuRate })
@@ -138,17 +146,44 @@ try {
                             ({ targetNodes, shape, compress, origin }) => {
                                 const fixture = document.getElementById('fixture')
                                 const rowCount = Math.ceil(targetNodes / 21)
+                                const lightRows = shape === 'shadow' ? Math.floor(rowCount / 2) : rowCount
                                 const cell = '<span class="cell" data-label="metric"><b>12</b><i>label</i></span>'
                                 const markup = Array.from(
-                                    { length: rowCount },
+                                    { length: lightRows },
                                     (_, i) => `<div data-row="${i}">${cell.repeat(4)}</div>`
                                 ).join('')
                                 let generation = 0
-                                window.buildFixture = () => {
+                                window.buildFixture = (nested = false) => {
                                     generation++
-                                    fixture.innerHTML =
-                                        markup.replaceAll('>12<', `>${generation}<`) +
+                                    window.fixtureGeneration = generation
+                                    if (nested) {
+                                        fixture.replaceChildren()
+                                        for (let i = 0; i < lightRows; i++) {
+                                            const row = document.createElement('div')
+                                            row.dataset.row = String(i)
+                                            fixture.append(row)
+                                            // Both parent insertion and its connected child insertion are observed.
+                                            row.innerHTML = cell.repeat(4).replaceAll('>12<', `>${generation}<`)
+                                        }
+                                    } else {
+                                        fixture.innerHTML = markup.replaceAll('>12<', `>${generation}<`)
+                                    }
+                                    const sentinels =
                                         '<input type="password" value="BENCH_PRIVATE_INPUT"><span class="ph-mask">BENCH_PRIVATE_TEXT</span><div class="ph-no-capture">BENCH_BLOCKED_TEXT</div>'
+                                    fixture.insertAdjacentHTML('beforeend', sentinels)
+                                    if (shape === 'shadow') {
+                                        const host = document.createElement('div')
+                                        host.id = 'benchmark-shadow'
+                                        fixture.append(host)
+                                        const shadow = host.attachShadow({ mode: 'open' })
+                                        shadow.innerHTML =
+                                            Array.from(
+                                                { length: rowCount - lightRows },
+                                                (_, i) => `<div data-row="${i + lightRows}">${cell.repeat(4)}</div>`
+                                            )
+                                                .join('')
+                                                .replaceAll('>12<', `>${generation}<`) + sentinels
+                                    }
                                 }
                                 window.buildFixture()
                                 if (shape === 'css') {
@@ -186,20 +221,110 @@ try {
                                 window.posthog.sessionRecording?.status === 'disabled' &&
                                 window.posthog.featureFlags.hasLoadedFlags
                         )
+                        await page.exposeBinding('requestBenchmarkInput', async () => {
+                            const timestamp = Date.now() / 1000
+                            await Promise.all([
+                                client.send('Input.dispatchMouseEvent', {
+                                    type: 'mousePressed',
+                                    x: 20,
+                                    y: 18,
+                                    button: 'left',
+                                    buttons: 1,
+                                    clickCount: 1,
+                                    timestamp,
+                                }),
+                                client.send('Input.dispatchMouseEvent', {
+                                    type: 'mouseReleased',
+                                    x: 20,
+                                    y: 18,
+                                    button: 'left',
+                                    buttons: 0,
+                                    clickCount: 1,
+                                    timestamp,
+                                }),
+                            ])
+                        })
                         const metrics = []
                         const checkpoints = []
-                        for (const phase of ['off-rebuild', 'start', 'snapshot', 'rebuild', 'move', 'remove']) {
+                        const phases = mutationWorkloads
+                            ? [
+                                  'off-rebuild',
+                                  'off-nested',
+                                  'off-churn',
+                                  'off-move',
+                                  'off-remove',
+                                  'start',
+                                  'snapshot',
+                                  'rebuild',
+                                  'nested',
+                                  'churn',
+                                  'move',
+                                  'remove',
+                              ]
+                            : ['off-rebuild', 'start', 'snapshot', 'rebuild', 'move', 'remove']
+                        for (const phase of phases) {
+                            const off = phase.startsWith('off-')
+                            if (mutationWorkloads && (off || phase === 'start')) {
+                                await page.evaluate(() => {
+                                    document.body.insertBefore(
+                                        document.getElementById('fixture'),
+                                        document.getElementById('destination')
+                                    )
+                                    window.buildFixture()
+                                })
+                                await page.waitForTimeout(100)
+                            }
                             const startIndex = wireEvents.length
                             const bytesBefore = requestBytes
                             const before = await client.send('Performance.getMetrics')
+                            const heapSamples = []
+                            let heapTimer, heapPending, heapError
                             if (profiling) {
                                 await client.send('Profiler.enable')
                                 await client.send('Profiler.start')
+                                // Diagnostic runs only: these samples perturb timing and can miss transient peaks.
+                                heapTimer = setInterval(() => {
+                                    if (heapPending) return
+                                    heapPending = client
+                                        .send('Runtime.getHeapUsage')
+                                        .then((sample) => heapSamples.push(sample.usedSize))
+                                        .catch((error) => {
+                                            heapError = error
+                                        })
+                                        .finally(() => {
+                                            heapPending = undefined
+                                        })
+                                }, 100)
+                                heapTimers.push(heapTimer)
                             }
                             const timing = await page.evaluate(
-                                ({ phase, markerTag }) =>
-                                    new Promise((resolve) => {
+                                ({ phase, markerTag, mutationWorkloads, churnSteps, off }) =>
+                                    new Promise((resolve, reject) => {
+                                        const deadline = setTimeout(
+                                            () => reject(new Error(`${phase}: workload timed out`)),
+                                            120000
+                                        )
                                         const record = window.__PosthogExtensions__.rrweb.record
+                                        const definitions = []
+                                        const checkpoint = (marker) => {
+                                            definitions.push({
+                                                phase: marker,
+                                                generation: window.fixtureGeneration,
+                                                parent: document.getElementById('fixture').parentElement.id,
+                                                empty: !document.getElementById('fixture').childNodes.length,
+                                            })
+                                            if (!off) record.addCustomEvent(markerTag, marker)
+                                        }
+                                        const inputDelays = []
+                                        const onInput = (event) => {
+                                            if (!event.isTrusted) return
+                                            inputDelays.push(performance.now() - event.timeStamp)
+                                            checkpoint(`${phase}-input`)
+                                        }
+                                        if (mutationWorkloads) {
+                                            // oxlint-disable-next-line posthog-js/no-add-event-listener -- isolated benchmark page, not SDK runtime
+                                            document.getElementById('activity').addEventListener('click', onInput)
+                                        }
                                         const longTasks = []
                                         const observer = new PerformanceObserver((list) => {
                                             for (const e of list.getEntries())
@@ -218,52 +343,85 @@ try {
                                         }
                                         raf = requestAnimationFrame(tick)
                                         // CDP evaluate work can be invisible to Long Tasks API. Use a page task.
-                                        setTimeout(() => {
-                                            const start = performance.now()
-                                            actionStart = start
-                                            const epochStart = performance.timeOrigin + start
-                                            switch (phase) {
-                                                case 'off-rebuild':
-                                                case 'rebuild':
-                                                    window.buildFixture()
-                                                    break
-                                                case 'start':
-                                                    window.posthog.startSessionRecording()
-                                                    document.getElementById('activity').click()
-                                                    break
-                                                case 'snapshot':
-                                                    record.takeFullSnapshot()
-                                                    break
-                                                case 'move':
-                                                    document
-                                                        .getElementById('destination')
-                                                        .append(document.getElementById('fixture'))
-                                                    break
-                                                case 'remove':
-                                                    document.getElementById('fixture').replaceChildren()
-                                                    break
-                                            }
-                                            const actionMs = performance.now() - start
-                                            // Observer delivery happens before this timer. The marker passes through
-                                            // the real SDK compression queue, buffer, request encoder and transport.
-                                            setTimeout(() => {
-                                                if (phase !== 'off-rebuild') record.addCustomEvent(markerTag, phase)
+                                        setTimeout(async () => {
+                                            try {
+                                                const start = performance.now()
+                                                actionStart = start
+                                                const epochStart = performance.timeOrigin + start
+                                                const input = mutationWorkloads
+                                                    ? window.requestBenchmarkInput()
+                                                    : Promise.resolve()
+                                                const operation = phase.replace(/^off-/, '')
+                                                let actionMs = 0
+                                                for (
+                                                    let step = 0;
+                                                    step < (operation === 'churn' ? churnSteps : 1);
+                                                    step++
+                                                ) {
+                                                    const actionStart = performance.now()
+                                                    switch (operation) {
+                                                        case 'rebuild':
+                                                        case 'churn':
+                                                            window.buildFixture()
+                                                            break
+                                                        case 'nested':
+                                                            window.buildFixture(true)
+                                                            break
+                                                        case 'start':
+                                                            window.posthog.startSessionRecording()
+                                                            document.getElementById('activity').click()
+                                                            break
+                                                        case 'snapshot':
+                                                            record.takeFullSnapshot()
+                                                            break
+                                                        case 'move':
+                                                            document
+                                                                .getElementById('destination')
+                                                                .append(document.getElementById('fixture'))
+                                                            break
+                                                        case 'remove':
+                                                            document.getElementById('fixture').replaceChildren()
+                                                            break
+                                                    }
+                                                    actionMs += performance.now() - actionStart
+                                                    // Mutation observers run before each checkpoint and before the next burst.
+                                                    await new Promise((r) => setTimeout(r, 0))
+                                                    if (operation === 'churn') {
+                                                        checkpoint(`${phase}-${step}`)
+                                                        await new Promise((r) => setTimeout(r, 16))
+                                                    }
+                                                }
+                                                await input
+                                                const workloadMs = performance.now() - start
+                                                // Observer delivery happens before this timer. The marker passes through
+                                                // the real SDK compression queue, buffer, request encoder and transport.
+                                                await new Promise((r) => setTimeout(r, 0))
+                                                checkpoint(phase)
                                                 window.finishMeasurement = () => {
                                                     observer.disconnect()
                                                     cancelAnimationFrame(raf)
+                                                    document
+                                                        .getElementById('activity')
+                                                        .removeEventListener('click', onInput)
                                                     return {
+                                                        definitions,
+                                                        inputDelays,
                                                         maxFrameGapMs,
                                                         longTasks: longTasks.filter((t) => t.start >= start - 1),
                                                         debug: window.posthog.sessionRecording.sdkDebugProperties,
                                                     }
                                                 }
-                                                resolve({ epochStart, actionMs })
-                                            }, 0)
+                                                clearTimeout(deadline)
+                                                resolve({ epochStart, actionMs, workloadMs })
+                                            } catch (error) {
+                                                clearTimeout(deadline)
+                                                reject(error)
+                                            }
                                         }, 50)
                                     }),
-                                { phase, markerTag }
+                                { phase, markerTag, mutationWorkloads, churnSteps, off }
                             )
-                            if (phase !== 'off-rebuild') {
+                            if (!off) {
                                 const deadline = Date.now() + 30000
                                 while (!receivedMarkers.has(phase) && !decodeError && Date.now() < deadline)
                                     await new Promise((r) => setTimeout(r, 25))
@@ -276,7 +434,16 @@ try {
                             // Allow trailing PerformanceObserver entries to arrive, outside the action.
                             await page.waitForTimeout(100)
                             const observation = await page.evaluate(() => window.finishMeasurement())
+                            if (mutationWorkloads)
+                                assert.equal(
+                                    observation.inputDelays.length,
+                                    1,
+                                    `${phase}: trusted input was not handled`
+                                )
                             const after = await client.send('Performance.getMetrics')
+                            clearInterval(heapTimer)
+                            await heapPending
+                            if (heapError) throw heapError
                             if (profiling) {
                                 const { profile } = await client.send('Profiler.stop')
                                 await writeFile(
@@ -297,12 +464,19 @@ try {
                             metrics.push({
                                 phase,
                                 ...timing,
-                                wireMs: phase === 'off-rebuild' ? null : receivedMarkers.get(phase) - timing.epochStart,
+                                wireMs: off ? null : receivedMarkers.get(phase) - timing.epochStart,
+                                totalBlockingMs: observation.longTasks.reduce(
+                                    (sum, task) => sum + Math.max(0, task.duration - 50),
+                                    0
+                                ),
+                                inputDelayMs: observation.inputDelays[0] ?? null,
                                 maxTaskMs: Math.max(0, ...observation.longTasks.map((t) => t.duration)),
                                 longTaskCount: observation.longTasks.length,
                                 maxFrameGapMs: observation.maxFrameGapMs,
                                 taskCpuMs: 1000 * (metric(after, 'TaskDuration') - metric(before, 'TaskDuration')),
                                 heapDeltaBytes: metric(after, 'JSHeapUsedSize') - metric(before, 'JSHeapUsedSize'),
+                                sampledMaxJSHeapUsedBytes: heapSamples.length ? Math.max(...heapSamples) : null,
+                                heapSampleCount: heapSamples.length,
                                 wireBytes: requestBytes - bytesBefore,
                                 fullSnapshots: fullSnapshots.map((e) => countSnapshotNodes(e.data.node)),
                                 unexpectedFullSnapshots: Math.max(
@@ -319,62 +493,137 @@ try {
                                 removes: mutations.reduce((sum, e) => sum + e.data.removes.length, 0),
                                 debug: observation.debug,
                             })
-                            if (phase !== 'off-rebuild') checkpoints.push({ phase, end: wireEvents.length })
+                            await writeFile(
+                                path.join(output, `${label}.json`),
+                                JSON.stringify(
+                                    {
+                                        label,
+                                        shape,
+                                        targetNodes,
+                                        run,
+                                        compress,
+                                        metrics,
+                                        validation: 'pending',
+                                    },
+                                    null,
+                                    2
+                                )
+                            )
+                            if (mutationWorkloads) {
+                                assert.equal(
+                                    metrics.at(-1).oversizedMutationsDropped,
+                                    0,
+                                    `${label}/${phase}: oversized mutation drops invalidate timing`
+                                )
+                                assert.equal(
+                                    metrics.at(-1).throttledAttributesDropped,
+                                    0,
+                                    `${label}/${phase}: attribute drops invalidate timing`
+                                )
+                                assert.equal(
+                                    metrics.at(-1).unexpectedFullSnapshots,
+                                    0,
+                                    `${label}/${phase}: recovery snapshots invalidate timing`
+                                )
+                            }
+                            if (!off)
+                                for (const definition of observation.definitions) {
+                                    const end =
+                                        wireEvents.findIndex(
+                                            (event) =>
+                                                event.type === 5 &&
+                                                event.data.tag === markerTag &&
+                                                event.data.payload === definition.phase
+                                        ) + 1
+                                    assert(end > 0, `${label}/${definition.phase}: missing checkpoint marker`)
+                                    checkpoints.push({ ...definition, end })
+                                }
                         }
+                        // Preserve diagnostics even if a correctness checkpoint fails.
+                        const result = { label, shape, targetNodes, run, compress, metrics, validation: 'pending' }
+                        await writeFile(path.join(output, `${label}.json`), JSON.stringify(result, null, 2))
                         // Correctness validation is deliberately outside all measurement windows.
                         await page.evaluate(() => window.posthog.stopSessionRecording())
-                        await page.addScriptTag({ content: replayer })
-                        for (const { phase, end } of checkpoints) {
-                            // Check intermediate states too: an empty final tree can hide lost adds.
-                            const generation = ['start', 'snapshot'].includes(phase) ? 2 : 3
-                            const replayed = await page.evaluate(
-                                ({ events, generation, shape }) => {
-                                    const player = new window.rrweb.Replayer(events, { UNSAFE_replayCanvas: false })
-                                    player.pause(events.at(-1).timestamp - events[0].timestamp + 1)
-                                    const doc = player.iframe.contentDocument
-                                    const fixture = doc.querySelector('#fixture')
-                                    const rows = [...doc.querySelectorAll('#fixture [data-row]')]
-                                    const cssRules = doc.getElementById('benchmark-css')?.sheet.cssRules
-                                    const result = {
-                                        fixtureCount: doc.querySelectorAll('#fixture').length,
-                                        parent: fixture?.parentElement.id,
-                                        rows: rows.length,
-                                        orderedContent: rows.every(
-                                            (row, i) =>
-                                                row.getAttribute('data-row') === String(i) &&
-                                                row.textContent === `${generation}label`.repeat(4) &&
-                                                row.querySelectorAll('.cell[data-label="metric"]').length === 4
-                                        ),
-                                        stylesheet:
-                                            shape !== 'css' ||
-                                            (cssRules?.length === 10000 &&
-                                                cssRules[0].selectorText === '.rule9999' &&
-                                                cssRules[9999].selectorText === '.rule0'),
-                                        adoptedStyle:
-                                            shape !== 'css' ||
-                                            rows.length === 0 ||
-                                            doc.defaultView.getComputedStyle(rows[0].querySelector('.cell'))
-                                                .paddingLeft === '1px',
-                                    }
-                                    player.destroy()
-                                    return result
-                                },
-                                { events: wireEvents.slice(0, end), generation, shape }
-                            )
-                            assert.deepEqual(
-                                replayed,
-                                {
-                                    fixtureCount: 1,
-                                    parent: ['move', 'remove'].includes(phase) ? 'destination' : '',
-                                    rows: phase === 'remove' ? 0 : Math.ceil(targetNodes / 21),
-                                    orderedContent: true,
-                                    stylesheet: true,
-                                    adoptedStyle: true,
-                                },
-                                `${label}/${phase}: replay did not reconstruct the fixture`
-                            )
+                        for (const { phase, end, generation, parent, empty } of checkpoints) {
+                            // Every churn generation and trusted input gets a replay checkpoint, not just the final DOM.
+                            // A fresh context prevents destroyed replay DOMs accumulating across large prefixes.
+                            const validationContext = await browser.newContext()
+                            try {
+                                await validationContext.route('**/*', (route) => route.abort())
+                                const validationPage = await validationContext.newPage()
+                                await validationPage.addScriptTag({ content: replayer })
+                                // Playwright's tagged object serialization can exceed CDP's 100 MB message cap.
+                                // Upload bounded JSON strings instead; decoding remains outside timing windows.
+                                const eventJson = JSON.stringify(wireEvents.slice(0, end))
+                                await validationPage.evaluate(() => {
+                                    window.replayInput = ''
+                                })
+                                for (let offset = 0; offset < eventJson.length; offset += 1024 * 1024) {
+                                    await validationPage.evaluate(
+                                        (chunk) => {
+                                            window.replayInput += chunk
+                                        },
+                                        eventJson.slice(offset, offset + 1024 * 1024)
+                                    )
+                                }
+                                const replayed = await validationPage.evaluate(
+                                    ({ generation, shape }) => {
+                                        const events = JSON.parse(window.replayInput)
+                                        delete window.replayInput
+                                        const player = new window.rrweb.Replayer(events, { UNSAFE_replayCanvas: false })
+                                        player.pause(events.at(-1).timestamp - events[0].timestamp + 1)
+                                        const doc = player.iframe.contentDocument
+                                        const fixture = doc.querySelector('#fixture')
+                                        const rows = [
+                                            ...doc.querySelectorAll('#fixture [data-row]'),
+                                            ...(fixture
+                                                ?.querySelector('#benchmark-shadow')
+                                                ?.shadowRoot?.querySelectorAll('[data-row]') || []),
+                                        ]
+                                        const cssRules = doc.getElementById('benchmark-css')?.sheet.cssRules
+                                        const result = {
+                                            fixtureCount: doc.querySelectorAll('#fixture').length,
+                                            parent: fixture?.parentElement.id,
+                                            rows: rows.length,
+                                            orderedContent: rows.every(
+                                                (row, i) =>
+                                                    row.getAttribute('data-row') === String(i) &&
+                                                    row.textContent === `${generation}label`.repeat(4) &&
+                                                    row.querySelectorAll('.cell[data-label="metric"]').length === 4
+                                            ),
+                                            stylesheet:
+                                                shape !== 'css' ||
+                                                (cssRules?.length === 10000 &&
+                                                    cssRules[0].selectorText === '.rule9999' &&
+                                                    cssRules[9999].selectorText === '.rule0'),
+                                            adoptedStyle:
+                                                shape !== 'css' ||
+                                                rows.length === 0 ||
+                                                doc.defaultView.getComputedStyle(rows[0].querySelector('.cell'))
+                                                    .paddingLeft === '1px',
+                                        }
+                                        player.destroy()
+                                        return result
+                                    },
+                                    { generation, shape }
+                                )
+                                assert.deepEqual(
+                                    replayed,
+                                    {
+                                        fixtureCount: 1,
+                                        parent,
+                                        rows: empty ? 0 : Math.ceil(targetNodes / 21),
+                                        orderedContent: true,
+                                        stylesheet: true,
+                                        adoptedStyle: true,
+                                    },
+                                    `${label}/${phase}: replay did not reconstruct the fixture`
+                                )
+                            } finally {
+                                if (browser.isConnected()) await validationContext.close()
+                            }
                         }
-                        const result = { label, shape, targetNodes, run, compress, metrics }
+                        result.validation = 'passed'
                         results.push(result)
                         await writeFile(path.join(output, `${label}.json`), JSON.stringify(result, null, 2))
                         // oxlint-disable-next-line no-console
@@ -388,7 +637,8 @@ try {
                                 .join(' | ')
                         )
                     } finally {
-                        await context.close()
+                        heapTimers.forEach(clearInterval)
+                        if (browser.isConnected()) await context.close()
                     }
                 }
             }
@@ -408,6 +658,12 @@ try {
                 cpu: os.cpus()[0]?.model,
                 cpuRate,
                 profiling,
+                benchmarkSha256: createHash('sha256')
+                    .update(await readFile(fileURLToPath(import.meta.url)))
+                    .digest('hex'),
+                mutationWorkloads,
+                churnSteps,
+                compression,
                 results,
             },
             null,

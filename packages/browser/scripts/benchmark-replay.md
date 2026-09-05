@@ -5,6 +5,9 @@ mocked replay requests. Uses the installed Playwright Chromium (no external site
 or new dependencies). Timing numbers are evidence, not machine-independent CI
 thresholds; correctness assertions fail the command.
 
+For nested mutations, sustained churn, trusted input probes, shadow DOM and source-map
+attribution, see [the mutation investigation](benchmark-replay-mutations.md).
+
 ## Run
 
 From the repository root, using the Node/pnpm versions in the current manifests:
@@ -101,8 +104,9 @@ baseline artifact's provenance; keep its source revision with that build.
 
 This is the first baseline slice, not the entire #4217 acceptance matrix. It does
 not prove exact interaction timing, all mirror-reference dependencies, worker/CSP
-fallback, deep DOM/iframes/shadow roots/canvas, periodic rotation, sustained churn,
-peak memory, unload delivery or non-Chromium behavior. Keep those covered by their
+fallback, deep DOM/iframes/canvas, all shadow-root lifecycles, periodic rotation,
+peak memory, unload delivery or non-Chromium behavior. The optional mutation mode
+adds bounded churn and basic shadow-root/input checkpoints, not complete coverage. Keep those covered by their
 existing correctness suites and expand this harness when optimizing those paths.
 Do not infer general or statistically significant improvements from three desktop
 samples, and do not treat a passing final DOM check as complete replay equivalence.
