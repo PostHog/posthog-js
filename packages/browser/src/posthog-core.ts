@@ -514,6 +514,8 @@ export class PostHog implements PostHogInterface {
     private _hasStableInitialDistinctId = false
     private _hasWarnedAboutVolatileIdentity = false
     private _suppressedPersonProcessingEventCount = 0
+    private _personProcessingWarningSettled = false
+    private _hasWarnedAboutNonUniqueIdentifyId = false
 
     private _removeExtension<T extends Extension>(extension: T | undefined): void {
         if (!extension) {
@@ -604,7 +606,14 @@ export class PostHog implements PostHogInterface {
     // why. Warn once, after enough events to show that this is the steady state of the project and
     // not just the first events of a page load.
     private _warnIfPersonProcessingStaysSuppressed(eventName: string): void {
+        if (this._personProcessingWarningSettled) {
+            return
+        }
+        // Once the project creates a person profile it has answered the question this warning asks.
+        // Stop counting, so anonymous events captured after a reset() at logout cannot add to the
+        // events captured before the login and warn a project that identifies correctly.
         if (this._hasPersonProcessing()) {
+            this._personProcessingWarningSettled = true
             return
         }
         // person_profiles: 'never' is a deliberate choice, so an empty persons table is the expected result.
@@ -617,10 +626,10 @@ export class PostHog implements PostHogInterface {
             return
         }
         this._suppressedPersonProcessingEventCount += 1
-        // the count only equals the threshold once, so the warning is printed once per page load
-        if (this._suppressedPersonProcessingEventCount !== SUPPRESSED_PERSON_PROCESSING_WARN_AFTER_EVENTS) {
+        if (this._suppressedPersonProcessingEventCount < SUPPRESSED_PERSON_PROCESSING_WARN_AFTER_EVENTS) {
             return
         }
+        this._personProcessingWarningSettled = true
         // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
         // oxlint-disable-next-line no-console
         console.warn(
@@ -634,18 +643,21 @@ export class PostHog implements PostHogInterface {
 
     // The distinct ID must be unique to one user. A short human-readable ID such as a username or a
     // first name is easy to repeat, and PostHog then merges the two users into one person. This
-    // corrupts the person silently, so warn but never block the call.
+    // corrupts the person silently, so warn but never block the call. The ID itself stays out of the
+    // message: it is a personal identifier by construction, and console capture copies it into
+    // session replays and into third-party log stores.
     private _warnIfIdentifyIdLooksNonUnique(id: string): void {
-        if (!NON_UNIQUE_IDENTIFY_ID_PATTERN.test(id)) {
+        if (this._hasWarnedAboutNonUniqueIdentifyId || !NON_UNIQUE_IDENTIFY_ID_PATTERN.test(id)) {
             return
         }
+        this._hasWarnedAboutNonUniqueIdentifyId = true
         // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
         // oxlint-disable-next-line no-console
         console.warn(
             '[PostHog.js]',
-            'The ID passed to identify() looks like a name or a username. If two users share an ID, PostHog merges ' +
-                'them into one person. Use an ID that is unique to each user, such as a database ID, a UUID, or an ' +
-                'email address.'
+            'The ID passed to identify() looks like a name or a username. If two users share an ID, PostHog ' +
+                'merges them into one person, and only a manual person split can separate them again. ' +
+                'Use an ID that is unique to each user, such as a database ID, a UUID, or an email address.'
         )
     }
 
@@ -3135,11 +3147,11 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        this._warnIfIdentifyIdLooksNonUnique(new_distinct_id)
-
         if (!this._requirePersonProcessing('posthog.identify')) {
             return
         }
+
+        this._warnIfIdentifyIdLooksNonUnique(new_distinct_id)
 
         this._healCookielessSentinelDistinctId()
 

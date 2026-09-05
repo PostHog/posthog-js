@@ -127,6 +127,27 @@ describe('non-unique distinct_id warning', () => {
         expect(posthog.get_distinct_id()).toEqual(id)
     })
 
+    it('warns once, however many times the app identifies', async () => {
+        const posthog = await createPosthogInstance(uuidv7(), { before_send: () => null })
+
+        posthog.identify('john')
+        posthog.identify('john')
+        posthog.identify('jane')
+
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not warn when person_profiles is never, because identify() is ignored', async () => {
+        const posthog = await createPosthogInstance(uuidv7(), {
+            before_send: () => null,
+            person_profiles: 'never',
+        })
+
+        posthog.identify('john')
+
+        expect(warnSpy).not.toHaveBeenCalled()
+    })
+
     it.each([
         ['a UUID', '018f1f0a-0d5f-7000-8000-000000000000'],
         ['a database ID', '12345'],
@@ -188,6 +209,17 @@ describe('suppressed person processing warning', () => {
             person_profiles: personProfiles,
         })
 
+        captureEvents(posthog, 100)
+
+        expect(warnSpy).not.toHaveBeenCalled()
+    })
+
+    it('stops counting once the user is identified, so a reset() at logout cannot warn', async () => {
+        const posthog = await createPosthogInstance(uuidv7(), { before_send: () => null })
+
+        captureEvents(posthog, 49)
+        posthog.identify('018f1f0a-0d5f-7000-8000-000000000000')
+        posthog.reset()
         captureEvents(posthog, 100)
 
         expect(warnSpy).not.toHaveBeenCalled()
