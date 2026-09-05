@@ -2329,6 +2329,11 @@
           "description": "Server-controlled gate for minimal `$feature_flag_called` events, from the top-level `minimal_flag_called_events` field of the flag-definitions payload. Absent (e.g. cached data written by an older SDK version) means full events.",
           "type": "boolean",
           "name": "minimalFlagCalledEvents"
+        },
+        {
+          "description": "Top-level definitions matching version; absent in older caches means legacy matching.",
+          "type": "number",
+          "name": "propertyMatchingVersion"
         }
       ],
       "path": "src/extensions/feature-flags/cache.ts"

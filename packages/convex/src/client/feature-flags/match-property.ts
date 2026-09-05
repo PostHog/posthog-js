@@ -16,10 +16,12 @@ export class RequiresServerEvaluation extends Error {
 export function matchProperty(
   property: FlagProperty,
   propertyValues: Record<string, any>,
-  warnFunction?: (msg: string) => void
+  warnFunction?: (msg: string) => void,
+  propertyMatchingVersion?: number
 ): boolean {
   return matchFeatureFlagProperty(property, propertyValues, {
     warnFunction,
+    propertyMatchingVersion,
     semverParsingPolicy: 'legacy-permissive',
   })
 }
@@ -28,7 +30,8 @@ export function matchCohort(
   property: FlagProperty,
   propertyValues: Record<string, any>,
   cohortProperties: Record<string, PropertyGroup>,
-  debugMode: boolean = false
+  debugMode: boolean = false,
+  propertyMatchingVersion?: number
 ): boolean {
   const cohortId = String(property.value)
   if (!(cohortId in cohortProperties)) {
@@ -36,14 +39,21 @@ export function matchCohort(
       `cohort ${cohortId} not found in local cohorts - likely a static cohort that requires server evaluation`
     )
   }
-  return matchPropertyGroup(cohortProperties[cohortId], propertyValues, cohortProperties, debugMode)
+  return matchPropertyGroup(
+    cohortProperties[cohortId],
+    propertyValues,
+    cohortProperties,
+    debugMode,
+    propertyMatchingVersion
+  )
 }
 
 export function matchPropertyGroup(
   propertyGroup: PropertyGroup,
   propertyValues: Record<string, any>,
   cohortProperties: Record<string, PropertyGroup>,
-  debugMode: boolean = false
+  debugMode: boolean = false,
+  propertyMatchingVersion?: number
 ): boolean {
   if (!propertyGroup) return true
 
@@ -57,7 +67,7 @@ export function matchPropertyGroup(
   if ('values' in properties[0]) {
     for (const prop of properties as PropertyGroup[]) {
       try {
-        const matches = matchPropertyGroup(prop, propertyValues, cohortProperties, debugMode)
+        const matches = matchPropertyGroup(prop, propertyValues, cohortProperties, debugMode, propertyMatchingVersion)
         if (propertyGroupType === 'AND') {
           if (!matches) return false
         } else {
@@ -83,7 +93,7 @@ export function matchPropertyGroup(
       try {
         let matches: boolean
         if (prop.type === 'cohort') {
-          matches = matchCohort(prop, propertyValues, cohortProperties, debugMode)
+          matches = matchCohort(prop, propertyValues, cohortProperties, debugMode, propertyMatchingVersion)
         } else if (prop.type === 'flag') {
           if (debugMode) {
             console.warn(
@@ -98,7 +108,7 @@ export function matchPropertyGroup(
           errorMatchingLocally = true
           continue
         } else {
-          matches = matchProperty(prop, propertyValues)
+          matches = matchProperty(prop, propertyValues, undefined, propertyMatchingVersion)
         }
 
         const negation = prop.negation || false
