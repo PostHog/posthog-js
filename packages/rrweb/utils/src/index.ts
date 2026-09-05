@@ -149,10 +149,19 @@ export function getUntaintedPrototype<T extends keyof BasePrototypeCache>(
   }
 }
 
-const untaintedAccessorCache: Record<
+// Group by prototype so every node access can reuse the property key instead
+// of allocating `${key}.${String(accessor)}` on the serialization hot path.
+// Null prototypes keep names like `constructor` from appearing to be cached.
+type AccessorCache = Record<
   string,
   (this: PrototypeOwner, ...args: unknown[]) => unknown
-> = {};
+>;
+const untaintedAccessorCache: Record<keyof BasePrototypeCache, AccessorCache> = {
+  Node: Object.create(null),
+  ShadowRoot: Object.create(null),
+  MutationObserver: Object.create(null),
+  Element: Object.create(null),
+};
 
 export function getUntaintedAccessor<
   K extends keyof BasePrototypeCache,
@@ -162,11 +171,9 @@ export function getUntaintedAccessor<
   instance: BasePrototypeCache[K],
   accessor: T,
 ): BasePrototypeCache[K][T] {
-  const cacheKey = `${key}.${String(accessor)}`;
-  if (untaintedAccessorCache[cacheKey])
-    return untaintedAccessorCache[cacheKey].call(
-      instance,
-    ) as BasePrototypeCache[K][T];
+  const cache: AccessorCache = untaintedAccessorCache[key];
+  const cached = cache[accessor as string];
+  if (cached) return cached.call(instance) as BasePrototypeCache[K][T];
 
   const untaintedPrototype = getUntaintedPrototype(key);
   const untaintedAccessor = Object.getOwnPropertyDescriptor(
@@ -176,7 +183,7 @@ export function getUntaintedAccessor<
 
   if (!untaintedAccessor) return instance[accessor];
 
-  untaintedAccessorCache[cacheKey] = untaintedAccessor;
+  cache[accessor as string] = untaintedAccessor;
 
   return untaintedAccessor.call(instance) as BasePrototypeCache[K][T];
 }

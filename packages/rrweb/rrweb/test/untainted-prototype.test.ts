@@ -40,6 +40,95 @@ async function freshGetUntaintedPrototype() {
   return module.getUntaintedPrototype;
 }
 
+describe('untainted accessor cache', () => {
+  let utils: typeof import('@posthog/rrweb-utils');
+
+  beforeEach(async () => {
+    setUserAgent(CHROME_UA);
+    vi.resetModules();
+    utils = await import('@posthog/rrweb-utils');
+  });
+
+  afterEach(() => {
+    document.querySelectorAll('iframe').forEach((iframe) => iframe.remove());
+    vi.restoreAllMocks();
+  });
+
+  it('does not stringify cache keys on every DOM access', () => {
+    const parent = document.createElement('div');
+    const child = document.createElement('span');
+    parent.append(child);
+    // Warm the native getter cache before measuring per-node work.
+    utils.childNodes(parent);
+    utils.parentNode(child);
+    const stringify = vi.spyOn(globalThis, 'String');
+    for (let i = 0; i < 100; i++) {
+      expect(utils.childNodes(parent)[0]).toBe(child);
+      expect(utils.parentNode(child)).toBe(parent);
+    }
+    expect(
+      stringify.mock.calls.filter(
+        ([key]) => key === 'childNodes' || key === 'parentNode',
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('caches getters, not DOM values or their receiver', () => {
+    const a = document.createElement('div');
+    const b = document.createElement('div');
+    const child = document.createTextNode('first');
+    a.append(child);
+    expect(utils.parentNode(child)).toBe(a);
+    expect(utils.textContent(a)).toBe('first');
+    expect(utils.childNodes(a).length).toBe(1);
+    b.append(child);
+    child.textContent = 'second';
+    expect(utils.parentNode(child)).toBe(b);
+    expect(utils.textContent(a)).toBe('');
+    expect(utils.textContent(b)).toBe('second');
+    expect(utils.childNodes(a).length).toBe(0);
+    expect(utils.childNodes(b)[0]).toBe(child);
+  });
+
+  it('still bypasses a patched getter after the native accessor is cached', () => {
+    const parent = document.createElement('div');
+    const child = document.createElement('span');
+    parent.append(child);
+    expect(utils.childNodes(parent)[0]).toBe(child);
+    const patched = vi.spyOn(parent, 'childNodes', 'get').mockImplementation(() => {
+      throw new Error('patched childNodes must not run');
+    });
+    expect(utils.childNodes(parent)[0]).toBe(child);
+    expect(patched).not.toHaveBeenCalled();
+  });
+
+  it('keeps Node, Element and ShadowRoot accessor caches separate', () => {
+    const host = document.createElement('div');
+    const shadow = host.attachShadow({ mode: 'open' });
+    const child = document.createElement('span');
+    shadow.append(child);
+    for (let i = 0; i < 2; i++) {
+      expect(utils.shadowRoot(host)).toBe(shadow);
+      expect(utils.host(shadow)).toBe(host);
+      expect(utils.parentNode(child)).toBe(shadow);
+      expect(utils.parentElement(child)).toBeNull();
+      expect(utils.childNodes(host).length).toBe(0);
+      expect(utils.childNodes(shadow)[0]).toBe(child);
+    }
+  });
+
+  it('retains the instance fallback for properties without a getter', () => {
+    const element = document.createElement('div');
+    // Object.prototype properties must not look like cached DOM accessors.
+    expect(utils.getUntaintedAccessor('Node', element, 'toString')).toBe(
+      element.toString,
+    );
+    expect(utils.getUntaintedAccessor('Node', element, 'constructor')).toBe(
+      element.constructor,
+    );
+  });
+});
+
 describe('getUntaintedPrototype iframe fallback', () => {
   afterEach(() => {
     document

@@ -18,6 +18,7 @@
         "build:runtime": "BUNDLER=rolldown rolldown -c rollup.config.mjs && BUILD_ROLLUP_RUNTIME=1 rollup -c",
         "build:types": "BUILD_TYPES_ONLY=1 rollup -c",
         "bundle-size:array": "node scripts/compare-array-bundle-size.mjs",
+        "benchmark:replay": "node scripts/benchmark-replay.mjs",
         "postbuild": "node scripts/strip-lib-package-json.js && node scripts/check-mangled-property-consistency.js && node scripts/check-sourcemap-ignore-list.js",
         "prepack": "node scripts/strip-sourcemap-sources-content.js",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
