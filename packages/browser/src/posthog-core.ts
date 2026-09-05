@@ -184,6 +184,15 @@ const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
+// How many events PostHog captures with person processing suppressed before it warns. A page load
+// sends a handful of events, so this threshold is only reached when the project keeps capturing and
+// never identifies.
+const SUPPRESSED_PERSON_PROCESSING_WARN_AFTER_EVENTS = 50
+// An ID that is only short lowercase or uppercase letters, with no separator and no digit, looks
+// like a name or a username rather than a unique ID. Two users can share such an ID, and PostHog
+// then merges them into one person.
+const NON_UNIQUE_IDENTIFY_ID_PATTERN = /^[a-zA-Z]{1,12}$/
+
 const FBCLID_PATTERN = /^[A-Za-z0-9_-]{1,400}$/
 const FBC_PATTERN = /^fb\.[0-9]+\.[0-9]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/
 
@@ -504,6 +513,7 @@ export class PostHog implements PostHogInterface {
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
     private _hasStableInitialDistinctId = false
     private _hasWarnedAboutVolatileIdentity = false
+    private _suppressedPersonProcessingEventCount = 0
 
     private _removeExtension<T extends Extension>(extension: T | undefined): void {
         if (!extension) {
@@ -585,6 +595,59 @@ export class PostHog implements PostHogInterface {
                 `PostHog will mint a new distinct ID ${lifetime}, so calling identify() merges a new ` +
                 'ID onto the person each time. A person can then pass the distinct-ID limit and its events stop ' +
                 `appearing on person pages and the session tab. ${fix}`
+        )
+    }
+
+    // With the default person_profiles: 'identified_only', PostHog creates no person profile until
+    // identify(), a group, or an alias enables person processing. A project that never does one of
+    // these captures healthy events next to an empty persons table, and the SDK says nothing about
+    // why. Warn once, after enough events to show that this is the steady state of the project and
+    // not just the first events of a page load.
+    private _warnIfPersonProcessingStaysSuppressed(eventName: string): void {
+        if (this._hasPersonProcessing()) {
+            return
+        }
+        // person_profiles: 'never' is a deliberate choice, so an empty persons table is the expected result.
+        if (this.config.person_profiles !== PERSON_PROFILES_IDENTIFIED_ONLY) {
+            return
+        }
+        // Session recording sends snapshots on a timer, so they would reach the threshold while the
+        // user does nothing that a person profile would describe.
+        if (eventName === '$snapshot') {
+            return
+        }
+        this._suppressedPersonProcessingEventCount += 1
+        // the count only equals the threshold once, so the warning is printed once per page load
+        if (this._suppressedPersonProcessingEventCount !== SUPPRESSED_PERSON_PROCESSING_WARN_AFTER_EVENTS) {
+            return
+        }
+        // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
+        // oxlint-disable-next-line no-console
+        console.warn(
+            '[PostHog.js]',
+            `PostHog captured ${SUPPRESSED_PERSON_PROCESSING_WARN_AFTER_EVENTS} events, but it created no person profile. ` +
+                "person_profiles is set to 'identified_only', so PostHog only creates a person profile after you call " +
+                'identify(), set a group, or call alias(). Until then your persons table stays empty, although the ' +
+                'events are captured correctly. Call posthog.identify() when a user logs in, or set person_profiles ' +
+                "to 'always' to also profile anonymous users. If you do not want person profiles, set person_profiles " +
+                "to 'never' to remove this warning."
+        )
+    }
+
+    // The distinct ID must be unique to one user. A short human-readable ID such as a username or a
+    // first name is easy to repeat, and PostHog then merges the two users into one person. This
+    // corrupts the person silently, so warn but never block the call.
+    private _warnIfIdentifyIdLooksNonUnique(id: string): void {
+        if (!NON_UNIQUE_IDENTIFY_ID_PATTERN.test(id)) {
+            return
+        }
+        // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
+        // oxlint-disable-next-line no-console
+        console.warn(
+            '[PostHog.js]',
+            `The ID "${id}" that you passed to posthog.identify() looks like a name or a username, not a unique ID. ` +
+                'If two users share an ID, PostHog merges them into one person, and you cannot separate them again. ' +
+                'Use an ID that is unique to each user, for example a database ID, a UUID, or an email address.'
         )
     }
 
@@ -1669,6 +1732,8 @@ export class PostHog implements PostHogInterface {
             logger.critical('This capture call is ignored due to client rate limiting.')
             return
         }
+
+        this._warnIfPersonProcessingStaysSuppressed(event_name)
 
         if (properties?.$current_url && !isString(properties?.$current_url)) {
             logger.error(
@@ -3071,6 +3136,8 @@ export class PostHog implements PostHogInterface {
         if (!this._validateIdentifyId(new_distinct_id)) {
             return
         }
+
+        this._warnIfIdentifyIdLooksNonUnique(new_distinct_id)
 
         if (!this._requirePersonProcessing('posthog.identify')) {
             return

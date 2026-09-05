@@ -188,6 +188,8 @@ describe('posthog core', () => {
                 vi.setSystemTime(Date.now())
 
                 console.error = vi.fn()
+                // 150 anonymous events also trigger the suppressed person-processing warning
+                console.warn = vi.fn()
                 const { posthog, beforeSendMock } = setup()
                 for (let i = 0; i < 100; i++) {
                     posthog.capture(eventName, eventProperties)

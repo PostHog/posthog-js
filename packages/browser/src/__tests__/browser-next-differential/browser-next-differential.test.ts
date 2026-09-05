@@ -79,6 +79,13 @@ describe('legacy browser and browser-next differential harness', () => {
     })
 
     it('rotates a continuously active session and records provisional D7 window behavior', async () => {
-        await assertScenario(maxLengthSessionScenario)
+        // the scenario captures 74 anonymous events, which is the exact case the suppressed
+        // person-processing warning covers, so allow that console.warn here instead of failing on it.
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        try {
+            await assertScenario(maxLengthSessionScenario)
+        } finally {
+            warnSpy.mockRestore()
+        }
     })
 })

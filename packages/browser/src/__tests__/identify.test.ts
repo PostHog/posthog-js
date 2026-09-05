@@ -1,6 +1,7 @@
 import { mockLogger } from './helpers/mock-logger'
 
 import { createPosthogInstance } from './helpers/posthog-instance'
+import { PostHog } from '../posthog-core'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { isUndefined } from '@posthog/core'
 
@@ -96,5 +97,104 @@ describe('identify', () => {
         expect(identifyCall[0].properties.$is_identified).toEqual(true)
         const eventAfterIdentify = beforeSendMock.mock.calls[2]
         expect(eventAfterIdentify[0].properties.$is_identified).toEqual(true)
+    })
+})
+
+describe('non-unique distinct_id warning', () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+        warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+        warnSpy.mockRestore()
+    })
+
+    it.each([['john'], ['admin'], ['TestUser']])('warns for the human-readable ID %s', async (id) => {
+        const posthog = await createPosthogInstance(uuidv7(), { before_send: () => null })
+
+        posthog.identify(id)
+
+        expect(warnSpy).toHaveBeenCalledWith(
+            '[PostHog.js]',
+            expect.stringContaining(`The ID "${id}" that you passed to posthog.identify()`)
+        )
+        // the warning must not block the call
+        expect(posthog.get_distinct_id()).toEqual(id)
+    })
+
+    it.each([
+        ['a UUID', '018f1f0a-0d5f-7000-8000-000000000000'],
+        ['a database ID', '12345'],
+        ['an email address', 'jane@example.com'],
+        ['a prefixed ID', 'user_1a2b'],
+        ['a long opaque token', 'aBcDeFgHiJkLmNoPqR'],
+    ])('does not warn for %s', async (_label, id) => {
+        const posthog = await createPosthogInstance(uuidv7(), { before_send: () => null })
+
+        posthog.identify(id)
+
+        expect(warnSpy).not.toHaveBeenCalled()
+    })
+})
+
+describe('suppressed person processing warning', () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+        warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+        warnSpy.mockRestore()
+    })
+
+    const captureEvents = (posthog: PostHog, count: number, eventName = 'custom event') => {
+        for (let i = 0; i < count; i++) {
+            posthog.capture(eventName)
+        }
+    }
+
+    it('warns once after enough events without person processing', async () => {
+        const posthog = await createPosthogInstance(uuidv7(), { before_send: () => null })
+
+        captureEvents(posthog, 49)
+        expect(warnSpy).not.toHaveBeenCalled()
+
+        captureEvents(posthog, 1)
+        expect(warnSpy).toHaveBeenCalledWith('[PostHog.js]', expect.stringContaining('it created no person profile'))
+
+        warnSpy.mockClear()
+        captureEvents(posthog, 60)
+        expect(warnSpy).not.toHaveBeenCalled()
+    })
+
+    it('does not warn once the user is identified', async () => {
+        const posthog = await createPosthogInstance(uuidv7(), { before_send: () => null })
+
+        posthog.identify('018f1f0a-0d5f-7000-8000-000000000000')
+        captureEvents(posthog, 100)
+
+        expect(warnSpy).not.toHaveBeenCalled()
+    })
+
+    it.each([['never'], ['always']] as const)('does not warn when person_profiles is %s', async (personProfiles) => {
+        const posthog = await createPosthogInstance(uuidv7(), {
+            before_send: () => null,
+            person_profiles: personProfiles,
+        })
+
+        captureEvents(posthog, 100)
+
+        expect(warnSpy).not.toHaveBeenCalled()
+    })
+
+    it('does not count session recording snapshots', async () => {
+        const posthog = await createPosthogInstance(uuidv7(), { before_send: () => null })
+
+        captureEvents(posthog, 100, '$snapshot')
+
+        expect(warnSpy).not.toHaveBeenCalled()
     })
 })
