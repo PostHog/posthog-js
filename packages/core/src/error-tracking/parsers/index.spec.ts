@@ -123,6 +123,25 @@ describe('createDefaultStackParser repeated cycle collapsing', () => {
     expect(withCallers(1)).toEqual(withCallers(0))
   })
 
+  it('gives the same frames when the recursion path calls one function twice in a row', () => {
+    // A minified bundle holds one line number per function, so two calls to `b` from different call
+    // sites compare equal and that pair collapses before the whole path has repeated. The kept copy
+    // then holds `b` once, which is the same trade as any other cycle, and every cut agrees on it.
+    const cycle = [frame('a', 1), frame('b', 2, 10), frame('b', 2, 20)]
+    const lines: string[] = []
+
+    for (let i = 0; i < 30; i++) {
+      lines.push(...cycle)
+    }
+
+    const fromCut = (dropInnermost: number): (string | undefined)[] =>
+      names([OVERFLOW, ...lines.slice(dropInnermost), frame('handleClick', 90), frame('main', 91)].join('\n'))
+
+    expect(fromCut(0)).toEqual(['main', 'handleClick', 'b', 'a'])
+    expect(fromCut(1)).toEqual(fromCut(0))
+    expect(fromCut(2)).toEqual(fromCut(0))
+  })
+
   it('ignores the column of the call that ran out of stack', () => {
     // Runtimes report the position of the failed call for the innermost frame, so that frame has a
     // column of its own even though it is the same call site as the frames under it.
