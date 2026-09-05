@@ -359,6 +359,12 @@ export default class MutationBuffer {
       }
       return nextId;
     };
+    // Reuse configuration and callbacks within this emission, not DOM values.
+    // serializeNodeWithId does not mutate the options; needsMask stays unset so
+    // each node still checks its own masking context.
+    let serializationOptions:
+      | Parameters<typeof serializeNodeWithId>[1]
+      | undefined;
     const pushAdd = (n: Node) => {
       const parent = dom.parentNode(n);
       if (!parent || !inDom(n) || (parent as Element).tagName === 'TEXTAREA') {
@@ -371,7 +377,7 @@ export default class MutationBuffer {
       if (parentId === -1 || nextId === -1) {
         return addList.addNode(n);
       }
-      const sn = serializeNodeWithId(n, {
+      serializationOptions ??= {
         doc: this.doc,
         mirror: this.mirror,
         blockClass: this.blockClass,
@@ -428,7 +434,8 @@ export default class MutationBuffer {
         onStylesheetLoad: (link, childSn) => {
           this.stylesheetManager.attachLinkElement(link, childSn);
         },
-      });
+      };
+      const sn = serializeNodeWithId(n, serializationOptions);
       if (sn) {
         adds.push({
           parentId,
