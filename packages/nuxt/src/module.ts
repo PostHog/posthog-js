@@ -5,6 +5,7 @@ import type {} from 'nuxt/app'
 import { resolveBinaryPath, spawnLocal } from '@posthog/plugin-utils'
 import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'
+import { existsSync } from 'node:fs'
 
 const filename = fileURLToPath(import.meta.url)
 const resolvedDirname = dirname(filename)
@@ -113,14 +114,12 @@ export default defineNuxtModule<ModuleOptions>({
     }
 
     const sourcemapsConfig = options.sourcemaps
-    let outputDir: string | undefined
     let publicDir: string | undefined
     let serverDir: string | undefined
 
     nuxt.hook('nitro:init', (nitro) => {
       publicDir = nitro.options.output?.publicDir
       serverDir = nitro.options.output?.serverDir
-      outputDir = nitro.options.output?.dir
     })
 
     nuxt.hook('nitro:config', (nitroConfig) => {
@@ -141,7 +140,7 @@ export default defineNuxtModule<ModuleOptions>({
     })
 
     let isBuildProcess = false
-    let publicSourcemapsDeleted = false
+    let publicSourcemapsUploaded = false
 
     const posthogCliRunner = () => {
       const cliBinaryPath =
@@ -177,11 +176,13 @@ export default defineNuxtModule<ModuleOptions>({
         // Inject public sourcemaps
         // This cannot be done in the close hook. https://github.com/PostHog/posthog/issues/30957#issuecomment-2824545454
         await cliRunner(getInjectArgs(publicDir, sourcemapsConfig))
-        if (sourcemapsConfig.deleteAfterUpload ?? true) {
-          // Delete public sourcemaps before Nitro generates its asset manifest.
-          await cliRunner(getUploadArgs(publicDir, sourcemapsConfig))
-          publicSourcemapsDeleted = true
-        }
+        // Upload here in both deletion modes: this hook runs before Nitro writes the server
+        // bundle, so a preset that nests the server directory inside the public one
+        // (`cloudflare-pages`) never sends the server chunks through this upload as well.
+        // With `deleteAfterUpload` the upload also has to run before Nitro generates its
+        // asset manifest.
+        await cliRunner(getUploadArgs(publicDir, sourcemapsConfig))
+        publicSourcemapsUploaded = true
       } catch (error) {
         console.error('Failed to process public sourcemaps:', error)
       }
@@ -189,30 +190,36 @@ export default defineNuxtModule<ModuleOptions>({
 
     nuxt.hook('close', async () => {
       // We don't want to run this process during prepare and friends
-      if (!isBuildProcess || !serverDir || !outputDir) return
+      if (!isBuildProcess || !serverDir || !publicDir) return
+      // Each directory is handled on its own: a failing server command must not skip the
+      // public upload, which is the only client sourcemap upload of the build when the
+      // early upload failed.
       try {
-        // Inject server sourcemaps only when an SSR server bundle is produced.
-        // With `ssr: false` (client-only / SPA mode) Nitro still reports
-        // serverDir, but no server output is written, so the inject would fail (#3005).
-        if (nuxt.options.ssr !== false) {
+        // Nitro reports a serverDir for every build but only writes one when it builds a
+        // server bundle. `ssr: false` still builds one, so read the directory on disk
+        // instead of `nuxt.options.ssr` (#3005). Only injected directories are uploaded:
+        // the CLI fails an upload of chunks that carry no chunk id.
+        if (existsSync(serverDir)) {
           await cliRunner(getInjectArgs(serverDir, sourcemapsConfig))
+          await cliRunner(getUploadArgs(serverDir, sourcemapsConfig))
         }
-        // Upload all assets (public + any server output that exists). If the early public upload failed,
-        // keep its sourcemaps so Nitro's manifest does not point to files deleted after it was generated.
-        const outputSourcemapsConfig =
-          (sourcemapsConfig.deleteAfterUpload ?? true) && !publicSourcemapsDeleted
-            ? { ...sourcemapsConfig, deleteAfterUpload: false }
-            : sourcemapsConfig
-        await cliRunner(getUploadArgs(outputDir, outputSourcemapsConfig))
       } catch (error) {
-        console.error('Failed to process or upload sourcemaps:', error)
+        console.error(`Failed to process or upload server sourcemaps (${serverDir}):`, error)
+      }
+      if (!publicSourcemapsUploaded) {
+        try {
+          // Keep the public sourcemaps on disk here: Nitro's asset manifest already lists them.
+          await cliRunner(getUploadArgs(publicDir, { ...sourcemapsConfig, deleteAfterUpload: false }))
+        } catch (error) {
+          console.error(`Failed to upload public sourcemaps (${publicDir}):`, error)
+        }
       }
     })
   },
 })
 
-function getInjectArgs(directory: string, sourcemapsConfig: SourcemapsConfig) {
-  const processOptions: string[] = ['sourcemap', 'inject', '--ignore', '**/node_modules/**', '--directory', directory]
+function getReleaseArgs(sourcemapsConfig: SourcemapsConfig) {
+  const processOptions: string[] = []
 
   const releaseName = sourcemapsConfig.releaseName ?? sourcemapsConfig.project
   if (releaseName) {
@@ -231,8 +238,30 @@ function getInjectArgs(directory: string, sourcemapsConfig: SourcemapsConfig) {
   return processOptions
 }
 
+function getInjectArgs(directory: string, sourcemapsConfig: SourcemapsConfig) {
+  return [
+    'sourcemap',
+    'inject',
+    '--ignore',
+    '**/node_modules/**',
+    '--directory',
+    directory,
+    ...getReleaseArgs(sourcemapsConfig),
+  ]
+}
+
 function getUploadArgs(directory: string, sourcemapsConfig: SourcemapsConfig) {
-  const processOptions: string[] = ['sourcemap', 'upload', '--ignore', '**/node_modules/**', '--directory', directory]
+  // Without the release flags the CLI derives a release from the checkout directory, so each
+  // upload creates a second release next to the configured one.
+  const processOptions: string[] = [
+    'sourcemap',
+    'upload',
+    '--ignore',
+    '**/node_modules/**',
+    '--directory',
+    directory,
+    ...getReleaseArgs(sourcemapsConfig),
+  ]
 
   if (sourcemapsConfig.deleteAfterUpload ?? true) {
     processOptions.push('--delete-after')
