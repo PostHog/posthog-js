@@ -916,6 +916,65 @@ describe('request', () => {
                 )
             })
 
+            it.each(['name', 'message', 'stack'] as const)(
+                'sends the full batch when an additional Error has an unreadable %s',
+                (detail) => {
+                    const error = Object.assign(new Error('additional'), { code: 'E_TEST' })
+                    error.stack = 'safe stack'
+                    const expected: Record<string, unknown> = {
+                        name: error.name,
+                        message: error.message,
+                        stack: error.stack,
+                        code: error.code,
+                    }
+                    delete expected[detail]
+                    Object.defineProperty(error, detail, {
+                        enumerable: false,
+                        get() {
+                            throw new Error(`unreadable ${detail}`)
+                        },
+                    })
+
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: [
+                                { event: '$exception', properties: { error, kept: true } },
+                                { event: 'sibling event', properties: { kept: true } },
+                            ],
+                        })
+                    )
+
+                    expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+                    expect(JSON.parse(mockedXHR.send.mock.calls[0][0])).toEqual([
+                        { event: '$exception', properties: { error: expected, kept: true } },
+                        { event: 'sibling event', properties: { kept: true } },
+                    ])
+                    expect(mockCallback).not.toHaveBeenCalled()
+                }
+            )
+
+            it('sends sibling events when a circular Error uses the existing safe fallback', () => {
+                const error = new Error('circular error')
+                Object.assign(error, { self: error })
+
+                request(
+                    createRequest({
+                        method: 'POST',
+                        data: [{ event: '$exception', properties: { error } }, { event: 'sibling event' }],
+                    })
+                )
+
+                expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+                expect(JSON.parse(mockedXHR.send.mock.calls[0][0])).toEqual([
+                    {
+                        event: '$exception',
+                        properties: { error: { name: error.name, message: error.message, stack: error.stack } },
+                    },
+                    { event: 'sibling event' },
+                ])
+            })
+
             it('converts bigint properties to string without throwing', () => {
                 request(
                     createRequest({
