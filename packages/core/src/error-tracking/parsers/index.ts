@@ -52,9 +52,8 @@ const MAX_REPEATED_CYCLE_LENGTH = 10
 const STACKTRACE_LINE_LIMIT = 1000
 
 // A minified bundle puts many functions on one line and gives them the same short names, so the
-// column is what tells two of them apart. Frames therefore have to match on it, unless the caller
-// says otherwise for the innermost frame, whose column is the position of the call that ran out of
-// stack rather than the call site the copies of the cycle under it share.
+// column is what tells two of them apart. Only after exact copies confirm a cycle may trimming
+// ignore the innermost frame's column, which can be the position of the call that ran out of stack.
 function isSameFrame(a: StackFrame, b: StackFrame, ignoreColumn: boolean = false): boolean {
   return (
     a.filename === b.filename &&
@@ -63,13 +62,6 @@ function isSameFrame(a: StackFrame, b: StackFrame, ignoreColumn: boolean = false
     a.lineno === b.lineno &&
     (ignoreColumn || a.colno === b.colno)
   )
-}
-
-// While the stack is still being read nothing has confirmed a cycle, so the innermost frame may
-// only be matched without its column when the runtime named it. A frame with no name holds nothing
-// else that says which code it is, so its column has to count until the copies confirm the cycle.
-function movesOwnColumn(frame: StackFrame, index: number): boolean {
-  return index === 0 && frame.function !== UNKNOWN_FUNCTION
 }
 
 interface RepeatedCycle {
@@ -95,7 +87,7 @@ function collapseRepeatedCycle(frames: StackFrame[]): RepeatedCycle | undefined 
     for (let offset = 0; offset < length; offset++) {
       const inner = frames[start + offset] as StackFrame
 
-      if (!isSameFrame(inner, frames[start + length + offset] as StackFrame, movesOwnColumn(inner, start + offset))) {
+      if (!isSameFrame(inner, frames[start + length + offset] as StackFrame)) {
         isCycle = false
         break
       }
@@ -129,11 +121,9 @@ function trimPartialCycle(frames: StackFrame[], cycle: RepeatedCycle): void {
   }
 }
 
-// Drops the copy of the cycle left over at the innermost end. The copies that confirmed the cycle
-// say which code those frames hold, so the innermost one is matched without the column it carries
-// of its own, which is what a recursion the runtime reports with no function name needs. Reports how
-// many frames went, because every position recorded for the stack moves with them.
-function trimInnermostPartialCycle(frames: StackFrame[], cycle: RepeatedCycle): number {
+// Counts the copy left over at the innermost end. Only the exact copies that confirmed the cycle
+// allow the innermost frame to match without its own column, even when the runtime gave it no name.
+function innermostPartialCycleLength(frames: StackFrame[], cycle: RepeatedCycle): number {
   let partialStart = cycle.start
 
   while (
@@ -147,10 +137,7 @@ function trimInnermostPartialCycle(frames: StackFrame[], cycle: RepeatedCycle): 
     partialStart--
   }
 
-  const partialLength = cycle.start - partialStart
-  frames.splice(partialStart, partialLength)
-
-  return partialLength
+  return cycle.start - partialStart
 }
 
 // How much of the cycle is left over next to the copy that was kept.
@@ -160,11 +147,7 @@ function partialCycleLength(frames: StackFrame[], cycle: RepeatedCycle): number 
 
   while (
     partialEnd < frames.length &&
-    isSameFrame(
-      frames[partialEnd] as StackFrame,
-      frames[partialEnd - cycle.length] as StackFrame,
-      movesOwnColumn(frames[partialEnd - cycle.length] as StackFrame, partialEnd - cycle.length)
-    )
+    isSameFrame(frames[partialEnd] as StackFrame, frames[partialEnd - cycle.length] as StackFrame)
   ) {
     partialEnd++
   }
@@ -177,7 +160,8 @@ function partialCycleLength(frames: StackFrame[], cycle: RepeatedCycle): number 
 // stops before the outermost frames, and how many of them are read moves with where the stack was
 // cut.
 function survivingFrameCount(frames: StackFrame[], cycles: RepeatedCycle[]): number {
-  let count = frames.length
+  const innermostCycle = cycles[0]
+  let count = frames.length - (innermostCycle ? innermostPartialCycleLength(frames, innermostCycle) : 0)
 
   for (const cycle of cycles) {
     count -= partialCycleLength(frames, cycle)
@@ -190,7 +174,9 @@ function survivingFrameCount(frames: StackFrame[], cycles: RepeatedCycle[]): num
 // nothing says which function of it ran out of stack first. Any rotation of the copy holds the same
 // calls, so always keep the same one, and the fingerprint stays equal from one throw to the next.
 function canonicalizeCycleRotation(frames: StackFrame[]): void {
-  const keys = frames.map((frame) => `${frame.function}|${frame.filename}|${frame.lineno}`)
+  const keys = frames.map(
+    (frame) => `${frame.function}|${frame.filename}|${frame.lineno}|${frame.colno}|${frame.module}`
+  )
   let first = 0
 
   for (let i = 1; i < keys.length; i++) {
@@ -297,7 +283,8 @@ export function createStackParser(platform: Platform, ...parsers: StackLineParse
     // The innermost end goes first. Trimming a section rotates the copy it keeps, and the leftover
     // only reads as part of the cycle while that copy still sits where the stack put it.
     if (innermostSection) {
-      const trimmed = trimInnermostPartialCycle(frames, innermostSection)
+      const trimmed = innermostPartialCycleLength(frames, innermostSection)
+      frames.splice(innermostSection.start - trimmed, trimmed)
 
       for (const cycle of sections) {
         cycle.start -= trimmed

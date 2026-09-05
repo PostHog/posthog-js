@@ -121,6 +121,9 @@ describe('createDefaultStackParser repeated cycle collapsing', () => {
 
     expect(withCallers(0)).toHaveLength(50)
     expect(withCallers(1)).toEqual(withCallers(0))
+
+    const withThrowColumn = [OVERFLOW, frame('a', 1, 4), ...recursion(['a', 'b'], 30).slice(1), ...callers].join('\n')
+    expect(names(withThrowColumn)).toEqual(withCallers(0))
   })
 
   it('gives the same frames when the recursion path calls one function twice in a row', () => {
@@ -198,6 +201,29 @@ describe('createDefaultStackParser repeated cycle collapsing', () => {
   it('keeps frames that repeat without a complete second cycle', () => {
     const stack = ['Error: boom', frame('a', 1), frame('b', 2), frame('a', 1), frame('main', 91)].join('\n')
     expect(names(stack)).toEqual(['main', 'a', 'b', 'a'])
+  })
+
+  it('keeps distinct innermost minified call sites for an ordinary error', () => {
+    const stack = ['Error: boom', frame('t', 1, 100), frame('t', 1, 200), frame('main', 91)].join('\n')
+
+    expect(parse(stack).map((f) => `${f.function}:${f.colno}`)).toEqual(['main:10', 't:200', 't:100'])
+  })
+
+  it('canonicalizes recursion-only cycles whose rotations differ only by columns', () => {
+    const cycle = [frame('a', 1, 10), frame('b', 1, 20), frame('a', 1, 30), frame('b', 1, 40)]
+    const lines: string[] = []
+
+    for (let i = 0; i < 30; i++) {
+      lines.push(...cycle)
+    }
+
+    const fromCut = (dropInnermost: number): string[] =>
+      parse([OVERFLOW, ...lines.slice(dropInnermost)].join('\n')).map((f) => `${f.function}:${f.colno}`)
+
+    expect(fromCut(0)).toEqual(['b:40', 'a:30', 'b:20', 'a:10'])
+    expect(fromCut(1)).toEqual(fromCut(0))
+    expect(fromCut(2)).toEqual(fromCut(0))
+    expect(fromCut(3)).toEqual(fromCut(0))
   })
 
   it('keeps calls to one function from different call sites', () => {
