@@ -1004,6 +1004,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     return getPayloadsFromFlags(details.flags)
   }
 
+  /**
+   * Returns the current evaluation result for a feature flag. `enabled: false` is a conclusive
+   * off result; `undefined` means no evaluation is available for the key.
+   */
   getFeatureFlagResult(key: string, options?: FeatureFlagResultOptions): FeatureFlagResult | undefined {
     return this._getFeatureFlagResult(key, options)
   }
@@ -1116,6 +1120,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
   }
 
+  /**
+   * Returns the current feature flag value. For backwards compatibility, a missing key can resolve
+   * to `false` once a non-empty flag response has been stored. Use `getFeatureFlagResult()` when
+   * code must distinguish a conclusive off result from an unavailable key.
+   */
   getFeatureFlag(key: string, options?: FeatureFlagResultOptions): FeatureFlagValue | undefined {
     const result = this._getFeatureFlagResult(key, {
       missingFlagBehavior: 'getFeatureFlag',
@@ -1188,6 +1197,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
   }
 
+  /**
+   * Returns whether the current feature flag value is enabled. When no evaluation is available,
+   * `defaultValue` is returned if provided; without one, the legacy missing-key behavior of
+   * `getFeatureFlag()` applies.
+   */
   isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
   isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
   isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {

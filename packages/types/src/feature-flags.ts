@@ -64,7 +64,7 @@ export type EarlyAccessFeatureCallback = (earlyAccessFeatures: EarlyAccessFeatur
 export type FeatureFlagResult = {
     /** The key of the feature flag */
     readonly key: string
-    /** Whether the feature flag is enabled (truthy value) */
+    /** Whether the returned feature flag evaluation is enabled. `false` is a conclusive off result. */
     readonly enabled: boolean
     /** The variant key if this is a multivariate flag, undefined for boolean flags */
     readonly variant: string | undefined

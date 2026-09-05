@@ -80,7 +80,7 @@ export function splitContext(context?: EvaluationContext): SplitContext {
 /**
  * Map PostHog's enabled state to an OpenFeature reason. PostHog's JS
  * `FeatureFlagResult` carries no free-text reason (unlike the Python client), so
- * an enabled flag means a targeting condition matched and a disabled one falls
+ * an enabled flag means a targeting condition matched and an off result falls
  * back to the default rollout.
  */
 function reasonFor(result: PostHogFlagResult): ResolutionReason {
@@ -88,9 +88,9 @@ function reasonFor(result: PostHogFlagResult): ResolutionReason {
 }
 
 /**
- * A `undefined` result means the flag does not exist (or was archived) —
- * `getFeatureFlagResult` returns a populated result with `enabled: false` for a
- * flag that exists but did not match. Surface the former as the OpenFeature
+ * An `undefined` result means no evaluation is available, for example because the
+ * key was not returned or flags have not loaded. A populated result with `enabled: false`
+ * is a conclusive off evaluation. Surface unavailable results as the OpenFeature
  * `FLAG_NOT_FOUND` error so callers get their default value.
  */
 function ensureResolved(result: PostHogFlagResult | undefined, flagKey: string): PostHogFlagResult {
@@ -116,10 +116,10 @@ export function resolveStringDetails(
   const resolved = ensureResolved(result, flagKey)
   if (resolved.variant === undefined) {
     if (!resolved.enabled) {
-      // A disabled or unmatched flag has no variant. Resolve to the caller's
+      // An off result has no variant. Resolve to the caller's
       // default (per the OpenFeature spec) rather than throwing — a throw would
       // set reason=ERROR and fire every registered error hook on an ordinary
-      // disabled-flag read.
+      // off-result read.
       return { value: defaultValue, reason: StandardResolutionReasons.DEFAULT }
     }
     // An enabled boolean flag has no string variant: a genuine type mismatch.

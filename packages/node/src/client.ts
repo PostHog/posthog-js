@@ -1188,7 +1188,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param distinctId - The user's distinct ID
    * @param options - Evaluation options (includes sendFeatureFlagEvents, defaults to true)
    * @param matchValue - Optional match value for payload lookup (used by getFeatureFlagPayload)
-   * @returns Promise that resolves to the flag result or undefined
+   * @returns Promise that resolves to the flag result, or undefined when no evaluation is available
    */
   private async _getFeatureFlagResult(
     key: string,
@@ -1415,6 +1415,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Get the value of a feature flag for a specific user.
    *
+   * A boolean `false` is a conclusive off evaluation. `undefined` means no result is available,
+   * for example because the key was not returned or local-only evaluation was inconclusive.
+   * Local evaluation resolves cached inactive definitions to `false`; remote evaluation omits
+   * globally inactive flags, so the result depends on which evaluation path is available.
+   *
    * @example
    * ```ts
    * // Basic feature flag check
@@ -1424,7 +1429,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * } else if (flagValue === 'variant-b') {
    *   // Show variant B
    * } else {
-   *   // Flag is disabled or not found
+   *   // Flag evaluated off, or no value was returned
    * }
    * ```
    *
@@ -1456,7 +1461,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param key - The feature flag key
    * @param distinctId - The user's distinct ID
    * @param options - Optional configuration for flag evaluation
-   * @returns Promise that resolves to the flag value or undefined
+   * @returns Promise that resolves to the flag value, or undefined when no evaluation is available
    */
   async getFeatureFlag(
     key: string,
@@ -1576,6 +1581,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   /**
    * Get the result of evaluating a feature flag, including its value and payload.
    * This is more efficient than calling getFeatureFlag and getFeatureFlagPayload separately when you need both.
+   * A result with `enabled: false` is a conclusive off evaluation; `undefined` means no evaluation
+   * is available. Local evaluation resolves cached inactive definitions to `enabled: false`, while
+   * remote evaluation omits globally inactive flags.
    *
    * @example
    * ```ts
@@ -1691,7 +1699,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   // Feature is enabled
    *   console.log('New feature is active')
    * } else {
-   *   // Feature is disabled
+   *   // Flag evaluated off, or no value was returned
    *   console.log('New feature is not active')
    * }
    * ```
@@ -1714,7 +1722,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param key - The feature flag key
    * @param distinctId - The user's distinct ID
    * @param options - Optional configuration for flag evaluation
-   * @returns Promise that resolves to true if enabled, false if disabled, undefined if not found
+   * @returns Promise that resolves to true if the flag evaluates on, false if it conclusively evaluates off, or undefined when no evaluation is available
    */
   async isFeatureEnabled(
     key: string,
@@ -1944,7 +1952,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * cached definitions, no network call is made and the snapshot's `$feature_flag_called`
    * events are tagged `locally_evaluated: true`. A requested key missing from local
    * definitions is included in a `/flags` fallback unless `onlyEvaluateLocally` is true.
-   * Locally resolved values remain authoritative when remote results are merged.
+   * Locally resolved values remain authoritative when remote results are merged. In particular,
+   * a cached inactive definition is a conclusive `false` result locally, while remote evaluation
+   * omits globally inactive flags and therefore leaves those keys absent.
    *
    * **Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying
    * `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation

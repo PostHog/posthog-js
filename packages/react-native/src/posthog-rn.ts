@@ -1055,8 +1055,13 @@ export class PostHog extends PostHogCore {
   /**
    * Checks if a feature flag is enabled for the current user.
    *
-   * Defaults to undefined if not loaded yet or if there was a problem loading,
-   * unless `defaultValue` is provided.
+   * A `false` return value means the SDK resolved the current value as off. If no evaluation is
+   * available, this method returns `defaultValue` when provided. Without a default, it returns
+   * `undefined` before flags load; for backwards compatibility, a missing key can resolve to
+   * `false` after a non-empty response is stored.
+   *
+   * Globally inactive flags are omitted from remote responses, so they follow this missing-key
+   * behavior rather than carrying an explicit off evaluation.
    *
    * {@label Feature flags}
    *
@@ -1076,7 +1081,7 @@ export class PostHog extends PostHogCore {
    *
    * @param key The feature flag key
    * @param options Optional per-call settings
-   * @returns True if enabled, false if disabled; when the flag has no value, defaultValue if given, otherwise undefined
+   * @returns True if the flag evaluates on, false if it evaluates off, or the missing-value fallback described above
    */
   isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
   isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
@@ -1087,8 +1092,13 @@ export class PostHog extends PostHogCore {
   /**
    * Gets the value of a feature flag for the current user.
    *
-   * Defaults to undefined if not loaded yet or if there was a problem loading.
-   * Multivariant feature flags are returned as a string.
+   * Returns `true` or `false` for an evaluated boolean flag and a string for a multivariate flag.
+   * Returns `undefined` before flags load or when loading fails. For backwards compatibility, a
+   * missing key can resolve to `false` after a non-empty response is stored; use
+   * `getFeatureFlagResult()` to distinguish an unavailable key from a conclusive off result.
+   *
+   * Globally inactive flags are omitted from remote responses, so they follow this missing-key
+   * behavior rather than carrying an explicit off evaluation.
    *
    * {@label Feature flags}
    *
@@ -1102,7 +1112,7 @@ export class PostHog extends PostHogCore {
    *
    * @param key The feature flag key
    * @param options Optional per-call settings
-   * @returns The feature flag value or undefined if not loaded
+   * @returns The current feature flag value, or undefined if flags are unavailable
    */
   getFeatureFlag(key: string, options?: FeatureFlagResultOptions): boolean | string | undefined {
     return super.getFeatureFlag(key, options)

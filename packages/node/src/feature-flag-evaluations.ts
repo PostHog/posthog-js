@@ -121,7 +121,8 @@ export class FeatureFlagEvaluations {
    *
    * Flags that were not returned from the underlying evaluation resolve to
    * `options.defaultValue` (`false` unless overridden). A flag that has a value —
-   * including `false` and variant strings — always wins over `options.defaultValue`.
+   * including a conclusive `false` result and variant strings — always wins over
+   * `options.defaultValue`. Use `getFlag()` to distinguish an absent result from `false`.
    */
   isEnabled(key: string, options: { defaultValue?: boolean } = {}): boolean {
     const flag = this._flags[key]
@@ -133,9 +134,11 @@ export class FeatureFlagEvaluations {
    * Get the evaluated value of a feature flag. Fires a `$feature_flag_called` event
    * on the first access per (distinctId, flag, value) tuple.
    *
-   * Returns the variant string for multivariate flags, `true` for enabled flags
-   * without a variant, `false` for disabled flags, and `undefined` for flags that
-   * were not returned by the evaluation.
+   * Returns the variant string for multivariate flags, `true` for boolean flags that
+   * evaluate on, `false` for boolean flags that conclusively evaluate off, and `undefined`
+   * for flags that were not returned by the evaluation. Cached inactive definitions are
+   * conclusive `false` results during local evaluation, while remote evaluation omits
+   * globally inactive flags.
    */
   getFlag(key: string): FeatureFlagValue | undefined {
     const flag = this._flags[key]
