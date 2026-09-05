@@ -14,6 +14,8 @@ export type FeatureFlagSemverParsingPolicy = 'strict' | 'legacy-permissive'
 export type MatchFeatureFlagPropertyOptions = {
   warnFunction?: (message: string) => void
   semverParsingPolicy?: FeatureFlagSemverParsingPolicy
+  /** Only version 2 enables explicit equality; absent/other versions use service legacy matching. */
+  propertyMatchingVersion?: number
 }
 
 export type FeatureFlagVariant = {
@@ -381,9 +383,18 @@ export function matchFeatureFlagProperty(
   }
 
   const computeExactMatch = (target: unknown, actual: unknown): boolean => {
-    if (isTruthyOrFalsyPropertyValue(target)) {
+    if (
+      (options.propertyMatchingVersion !== 2 && isTruthyOrFalsyPropertyValue(target)) ||
+      (Array.isArray(target) && target.length === 0)
+    ) {
       assertJsonRepresentable(actual)
       return isTruthyPropertyValue(target) === isTruthyPropertyValue(actual)
+    }
+    // Neither integer nor integral-float spelling can equal a boolean-like filter. This
+    // mismatch is conclusive without weakening the numeric ambiguity fallback below.
+    if (options.propertyMatchingVersion === 2 && typeof actual === 'number' && isTruthyOrFalsyPropertyValue(target)) {
+      assertJsonRepresentable(actual)
+      return false
     }
     if (Array.isArray(target)) {
       const actualString = exactMatchString(actual).toLowerCase()

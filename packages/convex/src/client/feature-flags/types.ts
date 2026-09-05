@@ -51,6 +51,8 @@ export type PostHogFeatureFlag = {
 }
 
 export type FlagDefinitions = {
+  /** Top-level definitions matching version; absent in older stored data means legacy matching. */
+  propertyMatchingVersion?: number
   flags: PostHogFeatureFlag[]
   groupTypeMapping: Record<string, string>
   cohorts: Record<string, PropertyGroup>
