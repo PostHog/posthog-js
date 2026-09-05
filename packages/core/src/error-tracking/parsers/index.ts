@@ -51,17 +51,18 @@ const MAX_REPEATED_CYCLE_LENGTH = 10
 // How many lines to read, now that a recursion no longer stops the parser at the frame limit.
 const STACKTRACE_LINE_LIMIT = 1000
 
-// For the innermost frame the runtime reports the position of the call that ran out of stack, so
-// the innermost copy of a cycle carries a column of its own. Compare frames without the column, so
-// that copy still counts as part of the cycle. A frame with no function name does not say which
-// code it holds, so those frames have to match on the column as well.
-function isSameFrame(a: StackFrame, b: StackFrame): boolean {
+// A minified bundle puts many functions on one line and gives them the same short names, so the
+// column is what tells two of them apart. Frames therefore have to match on it. The one exception
+// is the innermost frame, for which the runtime reports the position of the call that ran out of
+// stack rather than the call site the copies of the cycle under it share. A frame with no function
+// name does not say which code it holds, so it has to match on the column even there.
+function isSameFrame(a: StackFrame, b: StackFrame, isInnermost: boolean = false): boolean {
   return (
     a.filename === b.filename &&
     a.function === b.function &&
     a.module === b.module &&
     a.lineno === b.lineno &&
-    (a.function !== UNKNOWN_FUNCTION || a.colno === b.colno)
+    ((isInnermost && a.function !== UNKNOWN_FUNCTION) || a.colno === b.colno)
   )
 }
 
@@ -86,7 +87,13 @@ function collapseRepeatedCycle(frames: StackFrame[]): RepeatedCycle | undefined 
 
     let isCycle = true
     for (let offset = 0; offset < length; offset++) {
-      if (!isSameFrame(frames[start + offset] as StackFrame, frames[start + length + offset] as StackFrame)) {
+      if (
+        !isSameFrame(
+          frames[start + offset] as StackFrame,
+          frames[start + length + offset] as StackFrame,
+          start + offset === 0
+        )
+      ) {
         isCycle = false
         break
       }
@@ -127,7 +134,11 @@ function partialCycleLength(frames: StackFrame[], cycle: RepeatedCycle): number 
 
   while (
     partialEnd < frames.length &&
-    isSameFrame(frames[partialEnd] as StackFrame, frames[partialEnd - cycle.length] as StackFrame)
+    isSameFrame(
+      frames[partialEnd] as StackFrame,
+      frames[partialEnd - cycle.length] as StackFrame,
+      partialEnd - cycle.length === 0
+    )
   ) {
     partialEnd++
   }

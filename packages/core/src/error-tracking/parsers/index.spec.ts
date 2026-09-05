@@ -124,9 +124,8 @@ describe('createDefaultStackParser repeated cycle collapsing', () => {
   })
 
   it('gives the same frames when the recursion path calls one function twice in a row', () => {
-    // A minified bundle holds one line number per function, so two calls to `b` from different call
-    // sites compare equal and that pair collapses before the whole path has repeated. The kept copy
-    // then holds `b` once, which is the same trade as any other cycle, and every cut agrees on it.
+    // A minified bundle holds one line number per function, so the two calls to `b` are told apart
+    // by their column alone. The kept copy holds both of them, and every cut agrees on it.
     const cycle = [frame('a', 1), frame('b', 2, 10), frame('b', 2, 20)]
     const lines: string[] = []
 
@@ -137,9 +136,30 @@ describe('createDefaultStackParser repeated cycle collapsing', () => {
     const fromCut = (dropInnermost: number): (string | undefined)[] =>
       names([OVERFLOW, ...lines.slice(dropInnermost), frame('handleClick', 90), frame('main', 91)].join('\n'))
 
-    expect(fromCut(0)).toEqual(['main', 'handleClick', 'b', 'a'])
+    expect(fromCut(0)).toEqual(['main', 'handleClick', 'b', 'b', 'a'])
     expect(fromCut(1)).toEqual(fromCut(0))
     expect(fromCut(2)).toEqual(fromCut(0))
+  })
+
+  it('keeps minified frames that share a name and a line but not a column', () => {
+    // A minified bundle puts every function on one line and hands out the same short names, so the
+    // column is all that tells two of them apart. Nothing repeats here, so no frame may be dropped.
+    const stack = [
+      'Error: boom',
+      frame('i', 1, 310),
+      frame('t', 1, 4821),
+      frame('t', 1, 9137),
+      frame('r', 1, 2210),
+      frame('onClick', 1, 640),
+    ].join('\n')
+
+    expect(parse(stack).map((f) => `${f.function}:${f.colno}`)).toEqual([
+      'onClick:640',
+      'r:2210',
+      't:9137',
+      't:4821',
+      'i:310',
+    ])
   })
 
   it('ignores the column of the call that ran out of stack', () => {
