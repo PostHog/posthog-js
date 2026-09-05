@@ -111,6 +111,7 @@ patchedDependencies:
   eslint-plugin-react@7.37.5: b367a4a3f95e35aef47acadf20bcf8757dea0877587992391c2a41c087288d97
   tr46@0.0.3: a8433f5b3cdbf65b86b8bd292f02633a33a80cb71acdf292c5fe496154156ce7
   tr46@2.1.0: 71c6a4831c1dccaf8fcdcf26beff5ff2f3c6a408a791c032d168df3b8d8a8210
+  web-vitals@6.2.1: 7fd720b0392952f05ca10ef78d5ae4184e76d3e98f69fd00ba3d1a6c105a0be7
   whatwg-url@5.0.0: 8f494cbd66a0eee9e67af9b50fc38f85a71a8d172596f131aca5519e5a9c2a87
   whatwg-url@8.7.0: 8a478ca6677e99526f8e70e28b1f5dc84495cc398d30e8015bd9cea51b90f360
 
@@ -295,10 +296,10 @@ importers:
         version: 19.2.7
       web-vitals:
         specifier: ^6.2.1
-        version: 6.2.1
+        version: 6.2.1(patch_hash=7fd720b0392952f05ca10ef78d5ae4184e76d3e98f69fd00ba3d1a6c105a0be7)
       web-vitals-soft-navs:
         specifier: npm:web-vitals@6.2.1
-        version: web-vitals@6.2.1
+        version: web-vitals@6.2.1(patch_hash=7fd720b0392952f05ca10ef78d5ae4184e76d3e98f69fd00ba3d1a6c105a0be7)
     devDependencies:
       '@babel/core':
         specifier: 'catalog:'
@@ -39168,7 +39169,7 @@ snapshots:
 
   web-streams-polyfill@3.3.3: {}
 
-  web-vitals@6.2.1: {}
+  web-vitals@6.2.1(patch_hash=7fd720b0392952f05ca10ef78d5ae4184e76d3e98f69fd00ba3d1a6c105a0be7): {}
 
   webidl-conversions@3.0.1: {}
 

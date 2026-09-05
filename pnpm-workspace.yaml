@@ -130,5 +130,6 @@ patchedDependencies:
   eslint-plugin-react@7.37.5: patches/eslint-plugin-react@7.37.5.patch
   tr46@0.0.3: patches/tr46@0.0.3.patch
   tr46@2.1.0: patches/tr46@2.1.0.patch
+  web-vitals@6.2.1: patches/web-vitals@6.2.1.patch
   whatwg-url@5.0.0: patches/whatwg-url@5.0.0.patch
   whatwg-url@8.7.0: patches/whatwg-url@8.7.0.patch
