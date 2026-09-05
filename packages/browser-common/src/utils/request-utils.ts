@@ -8,9 +8,34 @@ const localDomains = ['localhost', '127.0.0.1']
 
 export const jsonStringify = (data: any, space?: string | number): string => {
     try {
-        // Fast path: convert BigInts to strings, since plain JSON.stringify throws on them.
-        // See https://github.com/PostHog/posthog-js/issues/1440.
-        return JSON.stringify(data, (_, value) => (typeof value === 'bigint' ? value.toString() : value), space)
+        let errors: WeakMap<Error, Record<string, unknown>> | undefined
+        return JSON.stringify(
+            data,
+            (_, value) => {
+                // Native JSON.stringify invokes toJSON before this replacer, so custom serializers win.
+                if (value instanceof Error) {
+                    errors ??= new WeakMap()
+                    if (!errors.has(value)) {
+                        const copy: Record<string, unknown> = { ...value }
+                        for (const detail of ['name', 'message', 'stack'] as const) {
+                            try {
+                                copy[detail] = value[detail]
+                            } catch {
+                                // Non-enumerable Error details may be getters. An unreadable
+                                // detail must not discard an otherwise serializable request.
+                            }
+                        }
+                        errors.set(value, copy)
+                    }
+                    // Reuse copies so circular Errors reach the existing fallback instead of
+                    // creating a fresh object on every visit and overflowing the stack.
+                    return errors.get(value)
+                }
+                // Plain JSON.stringify throws on BigInts. See issue #1440.
+                return typeof value === 'bigint' ? value.toString() : value
+            },
+            space
+        )
     } catch {
         // A self-referential value — most commonly a DOM node that retains a React fiber pointing back
         // at the element — makes JSON.stringify throw "Converting circular structure to JSON". With
