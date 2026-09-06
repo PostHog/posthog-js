@@ -291,6 +291,32 @@ describe('PostHogExceptions', () => {
                 )
             })
 
+            it('does not capture Safari extension messaging failures with only masked frames', () => {
+                // WebKit reports a failed extension message as `NoResponse`. Only the extension is
+                // involved, and Safari masks its single frame.
+                const exception = {
+                    type: 'NoResponse',
+                    value: 'No response from target',
+                    stacktrace: {
+                        frames: [
+                            {
+                                filename: 'webkit-masked-url://hidden/',
+                                function: 'global code',
+                                platform: 'javascript:web',
+                                in_app: true,
+                            },
+                        ],
+                        type: 'raw',
+                    },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toBeCalledWith(
+                    '$exception',
+                    { $exception_list: [exception] },
+                    expect.anything()
+                )
+            })
+
             it('captures ambiguous masked-only application exceptions', () => {
                 // Safari also masks blob, eval'd, and injected application code, so the masked URL
                 // is not sufficient evidence that the exception came from a browser extension.
