@@ -234,6 +234,24 @@ export function textContent(n: Node): string | null {
   return getUntaintedAccessor('Node', n, 'textContent');
 }
 
+let isConnectedGetter: PropertyDescriptor['get'] | null | undefined;
+
+export function isConnected(n: Node): boolean | undefined {
+  if (isConnectedGetter === undefined) {
+    const getter = Object.getOwnPropertyDescriptor(
+      getUntaintedPrototype('Node'),
+      'isConnected',
+    )?.get;
+    // The prototype may have been cached before this optional getter was
+    // patched. Validate the function at first use, then cache only that function.
+    // Non-native or unavailable implementations retain the old containment path.
+    isConnectedGetter = getter?.toString().includes('[native code]')
+      ? getter
+      : null;
+  }
+  return isConnectedGetter?.call(n);
+}
+
 export function contains(n: Node, other: Node): boolean {
   return getUntaintedMethod('Node', n, 'contains')(other);
 }
@@ -386,6 +404,7 @@ export default {
   parentNode,
   parentElement,
   textContent,
+  isConnected,
   contains,
   getRootNode,
   host,
