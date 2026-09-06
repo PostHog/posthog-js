@@ -16,4 +16,4 @@ jobs:
   check:
     uses: PostHog/.github/.github/workflows/changeset-hygiene.yml@5ba5d24966f2c416ca792654638e4ce6f19f545b
     with:
-      script-ref: 836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1
+      script-ref: 1cce55f2e8766f0a4006ca39700fb0c2a903b832
