@@ -27,7 +27,7 @@ REPLAY_BENCH_ORDERING=1 REPLAY_BENCH_PROFILE=1 \
 Ordering mode enables the mutation benchmark's input probes and drop/recovery checks, but selects these operations:
 
 - Reverse the row siblings, preserving their values and IDs.
-- Move the fixture between two parents repeatedly within one observer batch. `REPLAY_BENCH_MOVE_ROUNDS` defaults to 5 (range 1–20): five round trips plus a final move, **11 moves in total**. This is a deliberate stress case, not a claim about the frequency of this pattern on customer pages.
+- Move the fixture between two parents repeatedly within one observer batch. `REPLAY_BENCH_MOVE_ROUNDS` defaults to 5 (range 0–20; zero selects a single move): five round trips plus a final move, **11 moves in total**. This is a deliberate stress case, not a claim about the frequency of this pattern on customer pages.
 - Detach the entire fixture as one subtree, then restore it without rebuilding its contents.
 - Remove its children individually through one `replaceChildren()` operation.
 
