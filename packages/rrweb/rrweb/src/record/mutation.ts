@@ -338,6 +338,29 @@ export default class MutationBuffer {
     }
   };
 
+  // Queued nodes can become blocked before emission. Check the current tree,
+  // including each shadow host: closest()/parentElement do not cross that boundary.
+  private isBlockedAtEmission(node: Node | null): boolean {
+    const blockClass = this.blockClass;
+    // Match stateful patterns from zero without writing to the configured
+    // regexp, whose lastIndex may be non-writable. Keep all flags, including y.
+    const stateful =
+      typeof blockClass !== 'string' && (blockClass.global || blockClass.sticky)
+        ? new RegExp(blockClass)
+        : null;
+    while (node) {
+      if (stateful) stateful.lastIndex = 0;
+      if (isBlocked(node, stateful || blockClass, this.blockSelector, true))
+        return true;
+      const root = 'getRootNode' in node ? dom.getRootNode(node) : null;
+      node =
+        root?.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+          ? dom.host(root as ShadowRoot)
+          : null;
+    }
+    return false;
+  }
+
   private processBufferedMutations = () => {
     // delay any modification of the mirror until this function
     // so that the mirror for takeFullSnapshot doesn't get mutated while it's event is being processed
@@ -364,6 +387,9 @@ export default class MutationBuffer {
       if (!parent || !inDom(n) || (parent as Element).tagName === 'TEXTAREA') {
         return;
       }
+      // A blocked node itself still needs a placeholder, but its descendants
+      // must not be serialized from stale added/moved entries.
+      if (this.isBlockedAtEmission(parent)) return;
       const parentId = isShadowRoot(parent)
         ? this.mirror.getId(getShadowHost(n))
         : this.mirror.getId(parent);
@@ -533,6 +559,7 @@ export default class MutationBuffer {
 
     const payload = {
       texts: this.texts
+        .filter((text) => !this.isBlockedAtEmission(text.node))
         .map((text) => {
           const n = text.node;
           const parent = dom.parentNode(n);
@@ -550,6 +577,7 @@ export default class MutationBuffer {
         // text mutation's id was not in the mirror map means the target node has been removed
         .filter((text) => this.mirror.has(text.id)),
       attributes: this.attributes
+        .filter((attribute) => !this.isBlockedAtEmission(attribute.node))
         .map((attribute) => {
           const { attributes } = attribute;
           if (
