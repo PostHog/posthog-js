@@ -948,6 +948,9 @@ export default class MutationBuffer {
     // if this node is blocked `serializeNode` will turn it into a placeholder element
     // but we have to remove it's children otherwise they will be added as placeholders too
     if (!isBlocked(n, this.blockClass, this.blockSelector, false)) {
+      // Text nodes cannot have children or a shadow root. Keep the blocking
+      // check above: skipping it can change stateful RegExp behavior.
+      if (n.nodeType === n.TEXT_NODE) return;
       // Avoid a callback per node on repeated subtree walks. Like forEach,
       // capture the initial length but read each child from the live list.
       const children = dom.childNodes(n);
@@ -980,6 +983,7 @@ function deepDelete(addsSet: Set<Node>, n: Node) {
   while (stack.length) {
     const next = stack.pop()!;
     addsSet.delete(next);
+    if (next.nodeType === next.TEXT_NODE) continue;
     const children = dom.childNodes(next);
     for (let i = 0, length = children.length; i < length; i++) {
       const childN = children[i];
