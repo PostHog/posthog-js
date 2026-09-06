@@ -342,27 +342,23 @@ export default class MutationBuffer {
   // including each shadow host: closest()/parentElement do not cross that boundary.
   private isBlockedAtEmission(node: Node | null): boolean {
     const blockClass = this.blockClass;
+    // Match stateful patterns from zero without writing to the configured
+    // regexp, whose lastIndex may be non-writable. Keep all flags, including y.
     const stateful =
       typeof blockClass !== 'string' && (blockClass.global || blockClass.sticky)
-        ? blockClass
+        ? new RegExp(blockClass)
         : null;
-    const lastIndex = stateful?.lastIndex;
-    try {
-      while (node) {
-        // Additional privacy checks must neither depend on nor advance a
-        // stateful regexp left over from preprocessing/serialization.
-        if (stateful) stateful.lastIndex = 0;
-        if (isBlocked(node, blockClass, this.blockSelector, true)) return true;
-        const root = 'getRootNode' in node ? dom.getRootNode(node) : null;
-        node =
-          root?.nodeType === Node.DOCUMENT_FRAGMENT_NODE
-            ? dom.host(root as ShadowRoot)
-            : null;
-      }
-      return false;
-    } finally {
-      if (stateful) stateful.lastIndex = lastIndex!;
+    while (node) {
+      if (stateful) stateful.lastIndex = 0;
+      if (isBlocked(node, stateful || blockClass, this.blockSelector, true))
+        return true;
+      const root = 'getRootNode' in node ? dom.getRootNode(node) : null;
+      node =
+        root?.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+          ? dom.host(root as ShadowRoot)
+          : null;
     }
+    return false;
   }
 
   private processBufferedMutations = () => {

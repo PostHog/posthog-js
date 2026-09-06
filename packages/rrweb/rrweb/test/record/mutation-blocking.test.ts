@@ -76,6 +76,39 @@ describe('mutation emission blocking', () => {
     expect(createProbe(blockClass).isBlockedAtEmission(root)).toBe(true);
   });
 
+  it.each([
+    /ph-no-capture/g,
+    /ph-no-capture/gi,
+    /ph-no-capture/y,
+    /ph-no-capture/iy,
+  ])(
+    'supports frozen stateful blockClass %s without changing its flags',
+    (blockClass) => {
+      blockClass.lastIndex = 4;
+      Object.freeze(blockClass);
+      const root = document.createElement('div');
+      const host = document.createElement('div');
+      const span = document.createElement('span');
+      host.attachShadow({ mode: 'open' }).append(span);
+      root.append(host);
+      document.body.append(root);
+      const buffer = createProbe(blockClass);
+      root.className = 'ph-no-capture';
+      for (let i = 0; i < 3; i++) {
+        expect(buffer.isBlockedAtEmission(span)).toBe(true);
+        expect(blockClass.lastIndex).toBe(4);
+      }
+      root.className = 'PH-NO-CAPTURE';
+      expect(buffer.isBlockedAtEmission(span)).toBe(blockClass.ignoreCase);
+      root.className = 'prefix-ph-no-capture';
+      expect(buffer.isBlockedAtEmission(span)).toBe(!blockClass.sticky);
+      root.className = 'public';
+      expect(buffer.isBlockedAtEmission(span)).toBe(false);
+      expect(blockClass.lastIndex).toBe(4);
+      expect(Object.isFrozen(blockClass)).toBe(true);
+    },
+  );
+
   it.each([/ph-no-capture/g, /ph-no-capture/y])(
     'does not depend on or advance stateful blockClass %s',
     (blockClass) => {
