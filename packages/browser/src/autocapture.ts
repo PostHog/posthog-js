@@ -160,7 +160,7 @@ export function autocapturePropertiesForElement(
         elementsChainAsString: boolean
         disableCaptureUrlHashes: boolean
     }
-): { props: Properties; explicitNoCapture?: boolean } {
+): { props: Properties; explicitNoCapture?: boolean; target?: Element } {
     if (!isElementNode(target)) {
         return { props: {} }
     }
@@ -192,6 +192,20 @@ export function autocapturePropertiesForElement(
         seen.add(curEl.parentNode)
         targetElementList.push(curEl.parentNode)
         curEl = curEl.parentNode
+    }
+
+    // Keep the original path for privacy and selector checks, but attribute icon clicks
+    // to their enclosing control rather than an SVG implementation detail.
+    const controlIndex =
+        e.type === 'click' && target.namespaceURI === 'http://www.w3.org/2000/svg'
+            ? targetElementList.findIndex((el) => isTag(el, 'button') || isTag(el, 'a'))
+            : -1
+    if (controlIndex > 0) {
+        maskAllText =
+            maskAllText ||
+            targetElementList
+                .slice(0, controlIndex + 1)
+                .some((el) => !shouldCaptureElement(el) || isSensitiveElement(el))
     }
 
     const elementsJson: Properties[] = []
@@ -243,6 +257,11 @@ export function autocapturePropertiesForElement(
         return { props: {}, explicitNoCapture }
     }
 
+    if (controlIndex > 0) {
+        target = targetElementList[controlIndex]
+        elementsJson.splice(0, controlIndex)
+    }
+
     if (!maskAllText) {
         // if the element is a button or anchor tag get the span text from any
         // children and include it as/with the text property on the parent element
@@ -274,7 +293,7 @@ export function autocapturePropertiesForElement(
         autocaptureAugmentProperties
     )
 
-    return { props }
+    return { props, target }
 }
 
 export class Autocapture implements Extension {
@@ -298,6 +317,97 @@ export class Autocapture implements Extension {
     private _domEventHandler?: EventListener
     private _copiedTextHandler?: EventListener
     private _disposed = false
+    private _pointerDown?: {
+        target: Element
+        id: number
+        x: number
+        y: number
+        released: boolean
+        distinctId: string | undefined
+    }
+    private _pointerExpiry?: ReturnType<typeof setTimeout>
+
+    private _clearPointer(): void {
+        this._pointerDown = undefined
+        clearTimeout(this._pointerExpiry)
+        this._pointerExpiry = undefined
+    }
+
+    private _trackPointer(e: PointerEvent): void {
+        if (!this.isEnabled || e.type === 'pointercancel') {
+            this._clearPointer()
+            return
+        }
+        if (e.type === 'pointerdown') {
+            this._clearPointer()
+            const target = getEventTarget(e)
+            if (e.isPrimary && e.button === 0 && !e.ctrlKey && target && isElementNode(target)) {
+                this._pointerDown = {
+                    target,
+                    id: e.pointerId,
+                    x: e.clientX,
+                    y: e.clientY,
+                    released: false,
+                    distinctId: this._client?.distinctId,
+                }
+            }
+            return
+        }
+        const down = this._pointerDown
+        if (!down) return
+        if (e.pointerId !== down.id || Math.abs(e.clientX - down.x) > 5 || Math.abs(e.clientY - down.y) > 5) {
+            this._clearPointer()
+        } else if (e.type === 'pointerup') {
+            down.released = true
+            // The matching click follows pointerup. Never retain an origin for a later gesture.
+            this._pointerExpiry = setTimeout(() => this._clearPointer(), 0)
+        }
+    }
+
+    private _recoverClickTarget(e: PointerEvent): Element | null | undefined {
+        const down = this._pointerDown
+        this._clearPointer()
+        const target = getEventTarget(e)
+        if (
+            down?.released &&
+            down.target.isConnected &&
+            down.distinctId === this._client?.distinctId &&
+            e.pointerId === down.id &&
+            (e.detail > 0 || e.pointerType === 'touch' || e.pointerType === 'pen') &&
+            e.button === 0 &&
+            Math.abs(e.clientX - down.x) <= 5 &&
+            Math.abs(e.clientY - down.y) <= 5 &&
+            target &&
+            (isTag(target, 'html') || isTag(target, 'body'))
+        ) {
+            // The origin's normal checks stop at body. Recovery must also respect
+            // opt-outs on the actual root hit by the click, including html.
+            const ignorelist = this._refreshConfig().css_selector_ignorelist ?? [
+                '.ph-no-autocapture',
+                '[data-ph-no-autocapture]',
+            ]
+            const excludedRoot = [target, document?.documentElement, document?.body].some((root) => {
+                if (!root) return false
+                const classes = getClassNames(root)
+                return (
+                    includes(classes, 'ph-no-capture') ||
+                    includes(classes, 'ph-sensitive') ||
+                    !shouldCaptureElement(root) ||
+                    isSensitiveElement(root) ||
+                    ignorelist.some((selector) => {
+                        try {
+                            return root.matches(selector)
+                        } catch {
+                            return false
+                        }
+                    })
+                )
+            })
+            if (excludedRoot) return null
+            return down.target
+        }
+        return undefined
+    }
 
     constructor(private readonly _configSource: AutocaptureConfigSource) {
         this._configSource.refresh(this._config)
@@ -355,15 +465,29 @@ export class Autocapture implements Extension {
         const handler = (this._domEventHandler = (e: Event) => {
             e = e || window?.event
             try {
-                this._captureEvent(e)
+                if (e.type === 'blur') {
+                    this._clearPointer()
+                    return
+                }
+                if (e.type.indexOf('pointer') === 0) {
+                    this._trackPointer(e as PointerEvent)
+                    return
+                }
+                const target = e.type === 'click' ? this._recoverClickTarget(e as PointerEvent) : undefined
+                if (isNull(target)) return
+                this._captureEvent(e, '$autocapture', target)
             } catch (error) {
                 logger.error('Failed to capture event', error)
             }
         })
 
+        addEventListener(window, 'blur', handler)
         addEventListener(document, 'submit', handler, { capture: true })
         addEventListener(document, 'change', handler, { capture: true })
         addEventListener(document, 'click', handler, { capture: true })
+        each(['pointerdown', 'pointermove', 'pointerup', 'pointercancel'], (type) => {
+            addEventListener(document!, type, handler, { capture: true })
+        })
 
         if (this._refreshConfig().capture_copied_text) {
             const copiedTextHandler = (this._copiedTextHandler = (e: Event) => {
@@ -382,7 +506,12 @@ export class Autocapture implements Extension {
     }
 
     private _removeDomEventHandlers(): void {
+        this._clearPointer()
         if (this._domEventHandler) {
+            window?.removeEventListener('blur', this._domEventHandler)
+            each(['pointerdown', 'pointermove', 'pointerup', 'pointercancel'], (type) => {
+                document?.removeEventListener(type, this._domEventHandler!, true)
+            })
             document?.removeEventListener('submit', this._domEventHandler, true)
             document?.removeEventListener('change', this._domEventHandler, true)
             document?.removeEventListener('click', this._domEventHandler, true)
@@ -398,6 +527,9 @@ export class Autocapture implements Extension {
     }
 
     public startIfEnabled(): void {
+        if (!this.isEnabled) {
+            this._clearPointer()
+        }
         if (!this._disposed && this._client && this.isEnabled && !this._initialized) {
             this._addDomEventHandlers()
             this._initialized = true
@@ -437,13 +569,16 @@ export class Autocapture implements Extension {
         this._elementSelectors = selectors
     }
 
-    public getElementSelectors(element: Element | null): string[] | null {
+    public getElementSelectors(element: Element | null, additionalElement?: Element): string[] | null {
         const elementSelectors: string[] = []
 
         this._elementSelectors?.forEach((selector) => {
             const matchedElements = document?.querySelectorAll(selector)
             matchedElements?.forEach((matchedElement: Element) => {
-                if (element === matchedElement) {
+                if (
+                    (element === matchedElement || additionalElement === matchedElement) &&
+                    !includes(elementSelectors, selector)
+                ) {
                     elementSelectors.push(selector)
                 }
             })
@@ -473,13 +608,14 @@ export class Autocapture implements Extension {
         return !disabledClient && !disabledServer
     }
 
-    private _captureEvent(e: Event, eventName: EventName = '$autocapture'): boolean | void {
+    private _captureEvent(e: Event, eventName: EventName = '$autocapture', targetOverride?: Element): boolean | void {
         if (!this.isEnabled) {
+            this._clearPointer()
             return
         }
 
         /*** Don't mess with this code without running IE8 tests on it ***/
-        let target = getEventTarget(e)
+        let target = targetOverride || getEventTarget(e)
         if (isTextNode(target)) {
             // defeat Safari bug (see: http://www.quirksmode.org/js/events_properties.html)
             target = (target.parentNode || null) as Element | null
@@ -492,7 +628,7 @@ export class Autocapture implements Extension {
                 this.rageclicks?.isRageClick(e.clientX, e.clientY, e.timeStamp || new Date().getTime())
             ) {
                 if (shouldCaptureRageclick(target, config.rageclick)) {
-                    this._captureEvent(e, '$rageclick')
+                    this._captureEvent(e, '$rageclick', targetOverride)
                 }
             }
         }
@@ -514,7 +650,11 @@ export class Autocapture implements Extension {
                 { config: { get_current_url: config.getCurrentUrl } }
             )
         ) {
-            const { props, explicitNoCapture } = autocapturePropertiesForElement(target, {
+            const {
+                props,
+                explicitNoCapture,
+                target: attributedTarget,
+            } = autocapturePropertiesForElement(target, {
                 e,
                 maskAllElementAttributes: config.maskAllElementAttributes,
                 maskAllText: config.maskAllText,
@@ -527,7 +667,7 @@ export class Autocapture implements Extension {
                 return false
             }
 
-            const elementSelectors = this.getElementSelectors(target)
+            const elementSelectors = this.getElementSelectors(target, attributedTarget)
             if (elementSelectors && elementSelectors.length > 0) {
                 props['$element_selectors'] = elementSelectors
             }
