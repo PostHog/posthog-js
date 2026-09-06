@@ -11,6 +11,8 @@ For repeated moves, flat sibling lists and mirror cleanup counters, see
 [the ordering investigation](benchmark-replay-ordering.md).
 For repeated preprocessing, deep trees, mixed moves and diagnostic visit counters,
 see [the preprocessing investigation](benchmark-replay-preprocessing.md).
+For wrapper-free profiles, layout attribution and the text-leaf candidate, see
+[the remaining-hotspots investigation](benchmark-replay-hotspots.md).
 
 ## Run
 
