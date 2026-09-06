@@ -160,7 +160,7 @@ export function autocapturePropertiesForElement(
         elementsChainAsString: boolean
         disableCaptureUrlHashes: boolean
     }
-): { props: Properties; explicitNoCapture?: boolean } {
+): { props: Properties; explicitNoCapture?: boolean; target?: Element } {
     if (!isElementNode(target)) {
         return { props: {} }
     }
@@ -201,7 +201,13 @@ export function autocapturePropertiesForElement(
             ? targetElementList.findIndex((el) => isTag(el, 'button') || isTag(el, 'a'))
             : -1
     if (controlIndex > 0) {
-        maskAllText = maskAllText || !shouldCaptureElement(target) || isSensitiveElement(target)
+        const control = targetElementList[controlIndex]
+        maskAllText =
+            maskAllText ||
+            !shouldCaptureElement(target) ||
+            isSensitiveElement(target) ||
+            !shouldCaptureElement(control) ||
+            isSensitiveElement(control)
     }
 
     const elementsJson: Properties[] = []
@@ -289,7 +295,7 @@ export function autocapturePropertiesForElement(
         autocaptureAugmentProperties
     )
 
-    return { props }
+    return { props, target }
 }
 
 export class Autocapture implements Extension {
@@ -565,13 +571,16 @@ export class Autocapture implements Extension {
         this._elementSelectors = selectors
     }
 
-    public getElementSelectors(element: Element | null): string[] | null {
+    public getElementSelectors(element: Element | null, additionalElement?: Element): string[] | null {
         const elementSelectors: string[] = []
 
         this._elementSelectors?.forEach((selector) => {
             const matchedElements = document?.querySelectorAll(selector)
             matchedElements?.forEach((matchedElement: Element) => {
-                if (element === matchedElement) {
+                if (
+                    (element === matchedElement || additionalElement === matchedElement) &&
+                    !includes(elementSelectors, selector)
+                ) {
                     elementSelectors.push(selector)
                 }
             })
@@ -643,7 +652,11 @@ export class Autocapture implements Extension {
                 { config: { get_current_url: config.getCurrentUrl } }
             )
         ) {
-            const { props, explicitNoCapture } = autocapturePropertiesForElement(target, {
+            const {
+                props,
+                explicitNoCapture,
+                target: attributedTarget,
+            } = autocapturePropertiesForElement(target, {
                 e,
                 maskAllElementAttributes: config.maskAllElementAttributes,
                 maskAllText: config.maskAllText,
@@ -656,7 +669,7 @@ export class Autocapture implements Extension {
                 return false
             }
 
-            const elementSelectors = this.getElementSelectors(target)
+            const elementSelectors = this.getElementSelectors(target, attributedTarget)
             if (elementSelectors && elementSelectors.length > 0) {
                 props['$element_selectors'] = elementSelectors
             }

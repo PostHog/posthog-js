@@ -223,6 +223,37 @@ describe('Autocapture click targets', () => {
             expect(capture.mock.calls[0][1]).not.toHaveProperty('$el_text')
         })
 
+        describe.each(['button', 'a'])('enclosing %s', (tag) => {
+            beforeEach(() => {
+                if (tag === 'a') document.body.innerHTML = document.body.innerHTML.replace(/button/g, 'a')
+            })
+
+            it.each([
+                ['contenteditable', 'true'],
+                ['name', 'password'],
+                ['id', 'credit-card'],
+            ])('does not expose nested text when the control has sensitive %s', (attribute, value) => {
+                document.querySelector(tag)!.setAttribute(attribute, value)
+                clickIcon()
+                expect(capture).toHaveBeenCalledTimes(1)
+                const props = capture.mock.calls[0][1]
+                expect(props).not.toHaveProperty('$el_text')
+                expect(props.$elements_chain).not.toContain('Toggle Theme')
+                expect(props.$elements.every((element: Record<string, unknown>) => !element.$el_text)).toBe(true)
+            })
+
+            it('matches watched control selectors while retaining SVG selectors without duplicates', () => {
+                extension.setElementSelectors(new Set([tag, 'path', `${tag}, path`, '.unrelated']))
+                clickIcon()
+                expect(capture).toHaveBeenCalledTimes(1)
+                const selectors = capture.mock.calls[0][1].$element_selectors
+                expect(selectors).toContain(tag)
+                expect(selectors).toContain('path')
+                expect(selectors.filter((selector: string) => selector === `${tag}, path`)).toHaveLength(1)
+                expect(selectors).toHaveLength(3)
+            })
+        })
+
         it('respects global text and attribute masking', () => {
             config.maskAllText = true
             config.maskAllElementAttributes = true
