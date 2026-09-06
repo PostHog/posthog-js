@@ -201,13 +201,11 @@ export function autocapturePropertiesForElement(
             ? targetElementList.findIndex((el) => isTag(el, 'button') || isTag(el, 'a'))
             : -1
     if (controlIndex > 0) {
-        const control = targetElementList[controlIndex]
         maskAllText =
             maskAllText ||
-            !shouldCaptureElement(target) ||
-            isSensitiveElement(target) ||
-            !shouldCaptureElement(control) ||
-            isSensitiveElement(control)
+            targetElementList
+                .slice(0, controlIndex + 1)
+                .some((el) => !shouldCaptureElement(el) || isSensitiveElement(el))
     }
 
     const elementsJson: Properties[] = []

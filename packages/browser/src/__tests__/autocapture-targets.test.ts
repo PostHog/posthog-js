@@ -242,6 +242,26 @@ describe('Autocapture click targets', () => {
                 expect(props.$elements.every((element: Record<string, unknown>) => !element.$el_text)).toBe(true)
             })
 
+            it.each([
+                ['span', 'contenteditable', 'true'],
+                ['span', 'id', 'password'],
+                ['svg', 'contenteditable', 'true'],
+                ['g', 'contenteditable', 'true'],
+            ])(
+                'masks control text through an intermediate %s with sensitive %s',
+                (intermediateTag, attribute, value) => {
+                    document.querySelector(tag)!.innerHTML =
+                        '<span><span><svg><g><path /></g></svg>Private draft</span></span>'
+                    document.querySelector(intermediateTag)!.setAttribute(attribute, value)
+                    clickIcon()
+                    expect(capture).toHaveBeenCalledTimes(1)
+                    const props = capture.mock.calls[0][1]
+                    expect(props).not.toHaveProperty('$el_text')
+                    expect(props.$elements_chain).not.toContain('Private draft')
+                    expect(props.$elements.every((element: Record<string, unknown>) => !element.$el_text)).toBe(true)
+                }
+            )
+
             it('matches watched control selectors while retaining SVG selectors without duplicates', () => {
                 extension.setElementSelectors(new Set([tag, 'path', `${tag}, path`, '.unrelated']))
                 clickIcon()
