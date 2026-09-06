@@ -68,6 +68,48 @@ describe(`event-utils`, () => {
         })
     })
 
+    describe('webview app properties', () => {
+        const androidUA =
+            'Mozilla/5.0 (Linux; Android 13; Pixel 7; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120.0.6099.230 Mobile Safari/537.36'
+
+        const iosUA =
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'
+
+        it.each([
+            [androidUA + ' LinkedInApp/2.295.106', 'LinkedIn', '2.295.106', undefined, 'Chrome', 120],
+            [androidUA + ' [LinkedInApp]', 'LinkedIn', undefined, undefined, 'Chrome', 120],
+            [androidUA + ' [FBAN/FB4A;FBAV/440.0.0;]', 'Facebook', '440.0.0', undefined, 'Chrome', 120],
+            [iosUA + ' [FBIOS;FBAV/440.0.0;]', 'Facebook', '440.0.0', undefined, 'Facebook Mobile', null],
+            [androidUA + ' GSA/315.0.1', 'Google', '315.0.1', false, 'Chrome', 120],
+            [androidUA + ' GSA/315.0.1', 'Google', '315.0.1', true, 'Google Search App', 315],
+            [androidUA + ' musical_ly_2022803040 app_version/28.3.4', 'TikTok', '28.3.4', undefined, 'Chrome', 120],
+            [androidUA + ' musical_ly_2022803040', 'TikTok', undefined, undefined, 'Chrome', 120],
+            [androidUA + ' WA4A/2.26.30.97', 'WhatsApp', '2.26.30.97', undefined, 'Chrome', 120],
+            [androidUA + ' [FBAN/Orca-Android;FBAV/440.0.0;]', 'Messenger', '440.0.0', undefined, 'Chrome', 120],
+        ])(
+            'adds app properties for %s without changing browser attribution',
+            (ua, app, version, gsa, browser, browserVersion) => {
+                vi.spyOn(globals, 'userAgent', 'get').mockReturnValue(ua)
+                const properties = getEventProperties(false, undefined, gsa)
+                expect(properties['$webview_app']).toBe(app)
+                if (version) {
+                    expect(properties['$webview_app_version']).toBe(version)
+                } else {
+                    expect(properties).not.toHaveProperty('$webview_app_version')
+                }
+                expect(properties['$browser']).toBe(browser)
+                expect(properties['$browser_version']).toBe(browserVersion)
+            }
+        )
+
+        it.each([androidUA, androidUA.replace('; wv', ''), ''])('omits unknown app properties for %s', (ua) => {
+            vi.spyOn(globals, 'userAgent', 'get').mockReturnValue(ua)
+            const properties = getEventProperties()
+            expect(properties).not.toHaveProperty('$webview_app')
+            expect(properties).not.toHaveProperty('$webview_app_version')
+        })
+    })
+
     describe('tablet detection via supplementary signals', () => {
         const androidTabletDesktopUA =
             'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
