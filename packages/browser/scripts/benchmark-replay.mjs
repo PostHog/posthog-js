@@ -20,7 +20,10 @@ const repetitions = Number(process.env.REPLAY_BENCH_RUNS || 3)
 const cpuRate = Number(process.env.REPLAY_BENCH_CPU || 1)
 const shapes = (process.env.REPLAY_BENCH_SHAPES || 'table,css').split(',')
 const profiling = process.env.REPLAY_BENCH_PROFILE === '1'
-const mutationWorkloads = process.env.REPLAY_BENCH_MUTATIONS === '1'
+const orderingWorkloads = process.env.REPLAY_BENCH_ORDERING === '1'
+const mutationWorkloads = orderingWorkloads || process.env.REPLAY_BENCH_MUTATIONS === '1'
+const moveRounds = Number(process.env.REPLAY_BENCH_MOVE_ROUNDS || 5)
+assert(Number.isInteger(moveRounds) && moveRounds > 0 && moveRounds <= 20)
 const churnSteps = Number(process.env.REPLAY_BENCH_CHURN_STEPS || 5)
 const compression = process.env.REPLAY_BENCH_COMPRESSION || 'both'
 assert(Number.isInteger(churnSteps) && churnSteps > 0 && churnSteps <= 20)
@@ -28,7 +31,7 @@ assert(['on', 'off', 'both'].includes(compression))
 assert(sizes.every((n) => Number.isInteger(n) && n > 0))
 assert(Number.isInteger(repetitions) && repetitions > 0)
 assert(Number.isFinite(cpuRate) && cpuRate >= 1)
-assert(shapes.every((shape) => ['table', 'css', 'shadow'].includes(shape)))
+assert(shapes.every((shape) => ['table', 'css', 'shadow', 'flat'].includes(shape)))
 
 const assets = new Map()
 for (const name of ['array.js', 'posthog-recorder.js']) {
@@ -145,17 +148,19 @@ try {
                         await page.evaluate(
                             ({ targetNodes, shape, compress, origin }) => {
                                 const fixture = document.getElementById('fixture')
-                                const rowCount = Math.ceil(targetNodes / 21)
+                                window.benchmarkFixture = fixture
+                                const rowCount = Math.ceil(targetNodes / (shape === 'flat' ? 2 : 21))
                                 const lightRows = shape === 'shadow' ? Math.floor(rowCount / 2) : rowCount
                                 const cell = '<span class="cell" data-label="metric"><b>12</b><i>label</i></span>'
                                 const markup = Array.from(
                                     { length: lightRows },
-                                    (_, i) => `<div data-row="${i}">${cell.repeat(4)}</div>`
+                                    (_, i) => `<div data-row="${i}">${shape === 'flat' ? '12' : cell.repeat(4)}</div>`
                                 ).join('')
                                 let generation = 0
                                 window.buildFixture = (nested = false) => {
                                     generation++
                                     window.fixtureGeneration = generation
+                                    window.fixtureReversed = false
                                     if (nested) {
                                         fixture.replaceChildren()
                                         for (let i = 0; i < lightRows; i++) {
@@ -163,7 +168,10 @@ try {
                                             row.dataset.row = String(i)
                                             fixture.append(row)
                                             // Both parent insertion and its connected child insertion are observed.
-                                            row.innerHTML = cell.repeat(4).replaceAll('>12<', `>${generation}<`)
+                                            row.innerHTML =
+                                                shape === 'flat'
+                                                    ? String(generation)
+                                                    : cell.repeat(4).replaceAll('>12<', `>${generation}<`)
                                         }
                                     } else {
                                         fixture.innerHTML = markup.replaceAll('>12<', `>${generation}<`)
@@ -244,36 +252,84 @@ try {
                                 }),
                             ])
                         })
+                        if (orderingWorkloads && profiling)
+                            await page.evaluate(() => {
+                                const mirror = window.__PosthogExtensions__.rrweb.record.mirror
+                                let seen,
+                                    depth = 0
+                                window.resetMirrorStats = () => {
+                                    seen = new WeakSet()
+                                    window.mirrorStats = { removeVisits: 0, distinctRemovedNodes: 0, removeRoots: 0 }
+                                }
+                                window.resetMirrorStats()
+                                for (const method of ['getId', 'getMeta', 'getNode', 'has', 'hasNode', 'add']) {
+                                    const original = mirror[method]
+                                    mirror[method] = function (...args) {
+                                        window.mirrorStats[method] = (window.mirrorStats[method] || 0) + 1
+                                        return original.apply(this, args)
+                                    }
+                                }
+                                const remove = mirror.removeNodeFromMap
+                                mirror.removeNodeFromMap = function (node) {
+                                    const stats = window.mirrorStats
+                                    stats.removeVisits++
+                                    if (!depth) stats.removeRoots++
+                                    if (!seen.has(node)) {
+                                        seen.add(node)
+                                        stats.distinctRemovedNodes++
+                                    }
+                                    depth++
+                                    try {
+                                        return remove.call(this, node)
+                                    } finally {
+                                        depth--
+                                    }
+                                }
+                            })
                         const metrics = []
                         const checkpoints = []
-                        const phases = mutationWorkloads
+                        const phases = orderingWorkloads
                             ? [
-                                  'off-rebuild',
-                                  'off-nested',
-                                  'off-churn',
-                                  'off-move',
                                   'off-remove',
+                                  'off-subtree-remove',
+                                  'off-repeat-move',
+                                  'off-reorder',
                                   'start',
-                                  'snapshot',
-                                  'rebuild',
-                                  'nested',
-                                  'churn',
-                                  'move',
+                                  'reorder',
+                                  'repeat-move',
+                                  'subtree-remove',
+                                  'restore',
                                   'remove',
                               ]
-                            : ['off-rebuild', 'start', 'snapshot', 'rebuild', 'move', 'remove']
+                            : mutationWorkloads
+                              ? [
+                                    'off-rebuild',
+                                    'off-nested',
+                                    'off-churn',
+                                    'off-move',
+                                    'off-remove',
+                                    'start',
+                                    'snapshot',
+                                    'rebuild',
+                                    'nested',
+                                    'churn',
+                                    'move',
+                                    'remove',
+                                ]
+                              : ['off-rebuild', 'start', 'snapshot', 'rebuild', 'move', 'remove']
                         for (const phase of phases) {
                             const off = phase.startsWith('off-')
                             if (mutationWorkloads && (off || phase === 'start')) {
                                 await page.evaluate(() => {
                                     document.body.insertBefore(
-                                        document.getElementById('fixture'),
+                                        document.getElementById('fixture') || window.benchmarkFixture,
                                         document.getElementById('destination')
                                     )
                                     window.buildFixture()
                                 })
                                 await page.waitForTimeout(100)
                             }
+                            if (orderingWorkloads && profiling) await page.evaluate(() => window.resetMirrorStats())
                             const startIndex = wireEvents.length
                             const bytesBefore = requestBytes
                             const before = await client.send('Performance.getMetrics')
@@ -298,7 +354,7 @@ try {
                                 heapTimers.push(heapTimer)
                             }
                             const timing = await page.evaluate(
-                                ({ phase, markerTag, mutationWorkloads, churnSteps, off }) =>
+                                ({ phase, markerTag, mutationWorkloads, churnSteps, moveRounds, off }) =>
                                     new Promise((resolve, reject) => {
                                         const deadline = setTimeout(
                                             () => reject(new Error(`${phase}: workload timed out`)),
@@ -307,11 +363,14 @@ try {
                                         const record = window.__PosthogExtensions__.rrweb.record
                                         const definitions = []
                                         const checkpoint = (marker) => {
+                                            const fixture = document.getElementById('fixture')
                                             definitions.push({
                                                 phase: marker,
                                                 generation: window.fixtureGeneration,
-                                                parent: document.getElementById('fixture').parentElement.id,
-                                                empty: !document.getElementById('fixture').childNodes.length,
+                                                reversed: window.fixtureReversed,
+                                                present: !!fixture,
+                                                parent: fixture?.parentElement.id ?? null,
+                                                empty: !fixture?.childNodes.length,
                                             })
                                             if (!off) record.addCustomEvent(markerTag, marker)
                                         }
@@ -374,6 +433,43 @@ try {
                                                         case 'snapshot':
                                                             record.takeFullSnapshot()
                                                             break
+                                                        case 'reorder': {
+                                                            const fixture = window.benchmarkFixture
+                                                            for (const parent of [
+                                                                fixture,
+                                                                fixture.querySelector('#benchmark-shadow')?.shadowRoot,
+                                                            ]) {
+                                                                if (parent)
+                                                                    [...parent.querySelectorAll('[data-row]')]
+                                                                        .reverse()
+                                                                        .forEach((row) => parent.append(row))
+                                                            }
+                                                            window.fixtureReversed = !window.fixtureReversed
+                                                            break
+                                                        }
+                                                        case 'repeat-move':
+                                                            for (let round = 0; round < moveRounds; round++) {
+                                                                document
+                                                                    .getElementById('destination')
+                                                                    .append(window.benchmarkFixture)
+                                                                document.body.insertBefore(
+                                                                    window.benchmarkFixture,
+                                                                    document.getElementById('destination')
+                                                                )
+                                                            }
+                                                            document
+                                                                .getElementById('destination')
+                                                                .append(window.benchmarkFixture)
+                                                            break
+                                                        case 'subtree-remove':
+                                                            window.benchmarkFixture.remove()
+                                                            break
+                                                        case 'restore':
+                                                            document.body.insertBefore(
+                                                                window.benchmarkFixture,
+                                                                document.getElementById('destination')
+                                                            )
+                                                            break
                                                         case 'move':
                                                             document
                                                                 .getElementById('destination')
@@ -406,6 +502,7 @@ try {
                                                     return {
                                                         definitions,
                                                         inputDelays,
+                                                        mirrorStats: window.mirrorStats || null,
                                                         maxFrameGapMs,
                                                         longTasks: longTasks.filter((t) => t.start >= start - 1),
                                                         debug: window.posthog.sessionRecording.sdkDebugProperties,
@@ -419,7 +516,7 @@ try {
                                             }
                                         }, 50)
                                     }),
-                                { phase, markerTag, mutationWorkloads, churnSteps, off }
+                                { phase, markerTag, mutationWorkloads, churnSteps, moveRounds, off }
                             )
                             if (!off) {
                                 const deadline = Date.now() + 30000
@@ -470,6 +567,7 @@ try {
                                     0
                                 ),
                                 inputDelayMs: observation.inputDelays[0] ?? null,
+                                mirrorStats: observation.mirrorStats,
                                 maxTaskMs: Math.max(0, ...observation.longTasks.map((t) => t.duration)),
                                 longTaskCount: observation.longTasks.length,
                                 maxFrameGapMs: observation.maxFrameGapMs,
@@ -544,7 +642,7 @@ try {
                         await writeFile(path.join(output, `${label}.json`), JSON.stringify(result, null, 2))
                         // Correctness validation is deliberately outside all measurement windows.
                         await page.evaluate(() => window.posthog.stopSessionRecording())
-                        for (const { phase, end, generation, parent, empty } of checkpoints) {
+                        for (const { phase, end, generation, parent, empty, present, reversed } of checkpoints) {
                             // Every churn generation and trusted input gets a replay checkpoint, not just the final DOM.
                             // A fresh context prevents destroyed replay DOMs accumulating across large prefixes.
                             const validationContext = await browser.newContext()
@@ -567,7 +665,7 @@ try {
                                     )
                                 }
                                 const replayed = await validationPage.evaluate(
-                                    ({ generation, shape }) => {
+                                    ({ generation, shape, reversed }) => {
                                         const events = JSON.parse(window.replayInput)
                                         delete window.replayInput
                                         const player = new window.rrweb.Replayer(events, { UNSAFE_replayCanvas: false })
@@ -583,14 +681,26 @@ try {
                                         const cssRules = doc.getElementById('benchmark-css')?.sheet.cssRules
                                         const result = {
                                             fixtureCount: doc.querySelectorAll('#fixture').length,
-                                            parent: fixture?.parentElement.id,
+                                            parent: fixture?.parentElement.id ?? null,
                                             rows: rows.length,
-                                            orderedContent: rows.every(
-                                                (row, i) =>
-                                                    row.getAttribute('data-row') === String(i) &&
-                                                    row.textContent === `${generation}label`.repeat(4) &&
-                                                    row.querySelectorAll('.cell[data-label="metric"]').length === 4
-                                            ),
+                                            orderedContent: rows.every((row, i) => {
+                                                const lightCount =
+                                                    shape === 'shadow' ? Math.floor(rows.length / 2) : rows.length
+                                                const expectedIndex = !reversed
+                                                    ? i
+                                                    : i < lightCount
+                                                      ? lightCount - 1 - i
+                                                      : rows.length - 1 - (i - lightCount)
+                                                return (
+                                                    row.getAttribute('data-row') === String(expectedIndex) &&
+                                                    row.textContent ===
+                                                        (shape === 'flat'
+                                                            ? String(generation)
+                                                            : `${generation}label`.repeat(4)) &&
+                                                    row.querySelectorAll('.cell[data-label="metric"]').length ===
+                                                        (shape === 'flat' ? 0 : 4)
+                                                )
+                                            }),
                                             stylesheet:
                                                 shape !== 'css' ||
                                                 (cssRules?.length === 10000 &&
@@ -605,14 +715,14 @@ try {
                                         player.destroy()
                                         return result
                                     },
-                                    { generation, shape }
+                                    { generation, shape, reversed }
                                 )
                                 assert.deepEqual(
                                     replayed,
                                     {
-                                        fixtureCount: 1,
+                                        fixtureCount: present ? 1 : 0,
                                         parent,
-                                        rows: empty ? 0 : Math.ceil(targetNodes / 21),
+                                        rows: empty ? 0 : Math.ceil(targetNodes / (shape === 'flat' ? 2 : 21)),
                                         orderedContent: true,
                                         stylesheet: true,
                                         adoptedStyle: true,
@@ -662,6 +772,8 @@ try {
                     .update(await readFile(fileURLToPath(import.meta.url)))
                     .digest('hex'),
                 mutationWorkloads,
+                orderingWorkloads,
+                moveRounds,
                 churnSteps,
                 compression,
                 results,

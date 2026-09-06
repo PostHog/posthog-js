@@ -172,7 +172,9 @@ export default class MutationBuffer {
   private attributeMap = new WeakMap<Node, attributeCursor>();
   private generatedAttributes = new WeakMap<Node, Set<string>>();
   private removes: removedNodeMutation[] = [];
-  private mapRemoves: Node[] = [];
+  // Repeated moves can queue the same root before any mirror cleanup runs.
+  // Keep first-seen order without traversing an identical root again at emit.
+  private mapRemoves = new Set<Node>();
 
   private movedMap: Record<string, true> = {};
 
@@ -311,8 +313,10 @@ export default class MutationBuffer {
   }
 
   public destroy() {
-    while (this.mapRemoves.length) {
-      this.mirror.removeNodeFromMap(this.mapRemoves.shift()!);
+    for (const node of this.mapRemoves) {
+      // Consume before traversal, as shift() did, including when it throws.
+      this.mapRemoves.delete(node);
+      this.mirror.removeNodeFromMap(node);
     }
   }
 
@@ -452,8 +456,9 @@ export default class MutationBuffer {
     // `mirror.getNode` and matches it against the iframe behind the removed
     // id. Reorder this and iframe moves will look like remove+add to that
     // path, tearing down observers on a still-live iframe.
-    while (this.mapRemoves.length) {
-      this.mirror.removeNodeFromMap(this.mapRemoves.shift()!);
+    for (const node of this.mapRemoves) {
+      this.mapRemoves.delete(node);
+      this.mirror.removeNodeFromMap(node);
     }
 
     for (const n of this.movedSet) {
@@ -892,7 +897,7 @@ export default class MutationBuffer {
             });
             processRemoves(n, this.removesSubTreeCache);
           }
-          this.mapRemoves.push(n);
+          this.mapRemoves.add(n);
         });
         break;
       }
