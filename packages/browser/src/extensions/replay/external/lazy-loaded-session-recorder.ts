@@ -2167,16 +2167,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             const snapshotHostname = this._currentMaskedHostname()
             const snapshotEvents = splitBuffer(validatedBuffer)
             snapshotEvents.forEach((snapshotBuffer) => {
-                this._flushedSizeTracker?.trackSize(snapshotBuffer.sessionId, snapshotBuffer.size)
-                this._captureSnapshot({
-                    $snapshot_bytes: snapshotBuffer.size,
-                    $snapshot_data: snapshotBuffer.data,
-                    $session_id: snapshotBuffer.sessionId,
-                    $window_id: snapshotBuffer.windowId,
-                    $lib: Config.LIB_NAME,
-                    $lib_version: Config.LIB_VERSION,
-                    $snapshot_host: snapshotHostname,
-                })
+                try {
+                    this._flushedSizeTracker?.trackSize(snapshotBuffer.sessionId, snapshotBuffer.size)
+                    this._captureSnapshot({
+                        $snapshot_bytes: snapshotBuffer.size,
+                        $snapshot_data: snapshotBuffer.data,
+                        $session_id: snapshotBuffer.sessionId,
+                        $window_id: snapshotBuffer.windowId,
+                        $lib: Config.LIB_NAME,
+                        $lib_version: Config.LIB_VERSION,
+                        $snapshot_host: snapshotHostname,
+                    })
+                } catch (e) {
+                    // one chunk that cannot be captured must not drop the chunks after it
+                    logger.error('could not capture snapshot chunk - skipping it', e)
+                }
             })
 
             // Notify strategy that initial flush is complete (performance optimization)
