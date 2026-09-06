@@ -599,5 +599,9 @@ export function shadowHostInDom(n: Node): boolean {
 export function inDom(n: Node): boolean {
   const doc = n.ownerDocument;
   if (!doc) return false;
-  return dom.contains(doc, n) || shadowHostInDom(n);
+  if (dom.contains(doc, n)) return true;
+  // The common light-DOM path above stays unchanged. Read live connectivity
+  // rather than walking shadow hosts (or retrying containment for detached nodes).
+  const connected = dom.isConnected(n);
+  return typeof connected === 'boolean' ? connected : shadowHostInDom(n);
 }
