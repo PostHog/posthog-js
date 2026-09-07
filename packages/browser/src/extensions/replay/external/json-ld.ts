@@ -363,6 +363,7 @@ function isJsonLdScript(node: Node): node is HTMLScriptElement {
 }
 
 type JsonLdPrivacyOptions = {
+    attributeFilter?: string[]
     blockClass?: string | RegExp
     blockSelector?: string | null
     isRecordedElement?: (element: Element) => boolean
@@ -414,7 +415,12 @@ function isWithinPrivacyBoundary(element: Element, options: JsonLdPrivacyOptions
 }
 
 function createCapturedDomIdMatcher(doc: Document, options: JsonLdPrivacyOptions): IsCapturedDomId {
-    if (options.maskAllElementAttributes || options.maskAttributeFn) {
+    const attributeFilter = options.attributeFilter
+    if (
+        options.maskAllElementAttributes ||
+        options.maskAttributeFn ||
+        (attributeFilter?.length && !attributeFilter.includes('id'))
+    ) {
         return NO_CAPTURED_DOM_IDS
     }
 

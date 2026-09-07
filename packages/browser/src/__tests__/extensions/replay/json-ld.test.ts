@@ -77,7 +77,7 @@ describe('JSON-LD replay capture', () => {
         capture.stop()
     })
 
-    it.each(['maskAllElementAttributes', 'maskAttributeFn'] as const)(
+    it.each(['maskAllElementAttributes', 'maskAttributeFn', 'attributeFilter'] as const)(
         'drops @id when %s can hide the matching DOM id',
         (maskingOption) => {
             document.body.innerHTML = '<div id="product-id"></div>'
@@ -92,7 +92,9 @@ describe('JSON-LD replay capture', () => {
             const masking =
                 maskingOption === 'maskAllElementAttributes'
                     ? { maskAllElementAttributes: true }
-                    : { maskAttributeFn: () => 'masked' }
+                    : maskingOption === 'maskAttributeFn'
+                      ? { maskAttributeFn: () => 'masked' }
+                      : { attributeFilter: ['class'] }
             const capture = startJsonLdCapture(document, MutationObserver, { ...masking, emit })
 
             capture.scan()
@@ -104,6 +106,28 @@ describe('JSON-LD replay capture', () => {
             capture.stop()
         }
     )
+
+    it.each([[], ['id', 'class']])('keeps @id when attributeFilter %j still records id', (attributeFilter) => {
+        document.body.innerHTML = '<div id="product-id"></div>'
+        document.body.append(
+            jsonLdScript({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                '@id': '#product-id',
+            })
+        )
+        const emit = vi.fn(() => true)
+        const capture = startJsonLdCapture(document, MutationObserver, { attributeFilter, emit })
+
+        capture.scan()
+
+        expect(emit).toHaveBeenCalledWith({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            '@id': 'product-id',
+        })
+        capture.stop()
+    })
 
     it('emits initial, added, and changed JSON-LD without duplicates', async () => {
         const emit = vi.fn(() => true)

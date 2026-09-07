@@ -271,7 +271,7 @@ describe('Lazy SessionRecording', () => {
         })
         assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = _addCustomEvent
         assignableWindow.__PosthogExtensions__.rrweb.record.mirror = {
-            getId: (node) => (node && document.contains(node) ? 1 : -1),
+            getId: (node) => (!node || !document.contains(node) ? -1 : node.nodeName === 'LINK' ? -2 : 1),
             getNode: () => null,
         }
 
@@ -3877,6 +3877,41 @@ describe('Lazy SessionRecording', () => {
             } finally {
                 target.remove()
                 document.querySelectorAll('script[type="application/ld+json"]').forEach((element) => element.remove())
+            }
+        })
+
+        it.each([
+            ['rrweb ignored the target element', 'link', undefined],
+            ['attributeFilter omits id', 'div', ['class']],
+        ])('drops a JSON-LD @id when %s', async (_reason, tagName, attributeFilter) => {
+            const target = document.createElement(tagName)
+            target.id = 'product-123'
+            document.body.appendChild(target)
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            script.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                '@id': '#product-123',
+                name: 'Camera',
+            })
+            document.body.appendChild(script)
+            posthog.config.session_recording.captureJsonLd = true
+            posthog.config.session_recording.attributeFilter = attributeFilter
+
+            try {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                _emit(createMetaSnapshot())
+                await Promise.resolve()
+
+                expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    name: 'Camera',
+                })
+            } finally {
+                target.remove()
+                script.remove()
             }
         })
 
