@@ -261,7 +261,8 @@ describe('Model capture — integration with an instrumented server', () => {
       expect(reports).toHaveLength(1)
       expect(reports[0].properties.$mcp_llm_model).toBe('claude-opus-4-8')
       expect(reports[0].properties.$mcp_llm_model_source).toBe('self_reported')
-      expect((reports[0].properties.$mcp_parameters as any)?.llm_model).toBeUndefined()
+      expect(reports[0].properties.$mcp_parameters).toMatchObject({ request: { params: { arguments: {} } } })
+      expect(reports[0].properties.$mcp_parameters).not.toHaveProperty('request.params.arguments.llm_model')
     } finally {
       await capture.stop()
     }
@@ -294,7 +295,8 @@ describe('Model capture — integration with an instrumented server', () => {
       expect(reports[0].properties.$mcp_llm_model_source).toBe('self_reported')
       // The context argument is still the report; only llm_model is ours to take.
       expect(reports[0].properties.$mcp_intent).toBe('Need a SQL query tool')
-      expect((reports[0].properties.$mcp_parameters as any)?.llm_model).toBeUndefined()
+      expect(reports[0].properties.$mcp_parameters).toMatchObject({ request: { params: { arguments: {} } } })
+      expect(reports[0].properties.$mcp_parameters).not.toHaveProperty('request.params.arguments.llm_model')
     } finally {
       await capture.stop()
     }
@@ -328,7 +330,10 @@ describe('Model capture — integration with an instrumented server', () => {
       expect(toolCalls[0].properties.$mcp_llm_model).toBe('claude-opus-4-8')
       expect(toolCalls[0].properties.$mcp_llm_model_source).toBe('self_reported')
       // Stripped from the captured parameters too — it is analytics metadata, not an argument.
-      expect((toolCalls[0].properties.$mcp_parameters as any)?.llm_model).toBeUndefined()
+      expect(toolCalls[0].properties.$mcp_parameters).toMatchObject({
+        request: { params: { arguments: { text: 'buy milk' } } },
+      })
+      expect(toolCalls[0].properties.$mcp_parameters).not.toHaveProperty('request.params.arguments.llm_model')
     } finally {
       await capture.stop()
     }
@@ -357,7 +362,10 @@ describe('Model capture — integration with an instrumented server', () => {
       expect(toolCalls).toHaveLength(1)
       expect(toolCalls[0].properties.$mcp_llm_model).toBe('gpt-5.6-sol')
       expect(toolCalls[0].properties.$mcp_llm_model_source).toBe('client_metadata')
-      expect((toolCalls[0].properties.$mcp_parameters as any)?.llm_model).toBeUndefined()
+      expect(toolCalls[0].properties.$mcp_parameters).toMatchObject({
+        request: { params: { arguments: { text: 'buy milk' } } },
+      })
+      expect(toolCalls[0].properties.$mcp_parameters).not.toHaveProperty('request.params.arguments.llm_model')
     } finally {
       await capture.stop()
     }
