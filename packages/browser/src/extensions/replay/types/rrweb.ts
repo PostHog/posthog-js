@@ -125,7 +125,6 @@ export type rrwebRecord = {
     takeFullSnapshot: () => void
     mirror: {
         getId(n: Node | undefined | null): number
-        getIds(): number[]
         getNode(id: number): Node | null
     }
 }

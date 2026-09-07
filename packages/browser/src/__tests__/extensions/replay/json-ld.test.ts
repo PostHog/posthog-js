@@ -21,7 +21,7 @@ describe('JSON-LD replay capture', () => {
 
     addJsonLdContractTests(jsonLdContract, sanitizeJsonLd)
 
-    it('keeps @id only when replay captures the matching DOM id', () => {
+    it('keeps @id only when the fragment resolves to a recorded element', () => {
         document.body.innerHTML = `
             <div id="product-id"></div>
             <div class="ph-mask"><div id="masked-text-id"></div></div>
@@ -53,10 +53,7 @@ describe('JSON-LD replay capture', () => {
         const emit = vi.fn(() => true)
         const capture = startJsonLdCapture(document, MutationObserver, {
             blockClass: 'ph-no-capture',
-            getCapturedDomNodes: () =>
-                [...document.querySelectorAll('*'), ...shadowRoot.querySelectorAll('*')].filter(
-                    (element) => element.id !== 'mirror-missing-id'
-                ),
+            isRecordedElement: (element) => element.id !== 'mirror-missing-id',
             maskTextClass: 'ph-mask',
             emit,
         })
@@ -72,8 +69,8 @@ describe('JSON-LD replay capture', () => {
                 { '@type': 'Offer' },
                 { '@type': 'Offer' },
                 { '@type': 'Offer' },
-                { '@type': 'Offer', '@id': 'shadow-id' },
-                { '@type': 'Offer', '@id': 'duplicate-id' },
+                { '@type': 'Offer' },
+                { '@type': 'Offer' },
                 { '@type': 'Offer' },
             ],
         })

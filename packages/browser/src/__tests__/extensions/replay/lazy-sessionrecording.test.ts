@@ -270,11 +270,9 @@ describe('Lazy SessionRecording', () => {
             _emit(createFullSnapshot())
         })
         assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = _addCustomEvent
-        const capturedNodes = (): Element[] => Array.from(document.querySelectorAll('*'))
         assignableWindow.__PosthogExtensions__.rrweb.record.mirror = {
-            getId: (node) => capturedNodes().indexOf(node as Element),
-            getIds: () => capturedNodes().map((_, index) => index),
-            getNode: (id) => capturedNodes()[id] ?? null,
+            getId: (node) => (node && document.contains(node) ? 1 : -1),
+            getNode: () => null,
         }
 
         assignableWindow.__PosthogExtensions__.rrwebPlugins = {
