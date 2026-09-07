@@ -182,11 +182,20 @@ export interface BootstrapConfig {
     featureFlagPayloads?: Record<string, JsonType>
 
     /**
-     * Optionally provide a sessionID, this is so that you can provide an existing sessionID here to continue a user's session across a domain or device. It MUST be:
+     * Session ID of a session that already started, so that this page continues it instead of
+     * starting a new one. Use it when one visit spans two origins that you control, for example a
+     * page and an iframe served from your second domain. Read `posthog.get_session_id()` on the
+     * first origin and pass the value to the second one.
+     *
+     * The value MUST be:
      * - unique to this user
      * - a valid UUID v7
      * - the timestamp part must be <= the timestamp of the first event in the session
      * - the timestamp of the last event in the session must be < the timestamp part + 24 hours
+     *
+     * The SDK applies the value once, while it loads. If the value breaks one of the rules above,
+     * the SDK writes the reason to the console and starts a new session instead. Each frame keeps
+     * its own idle clock after load, so a long visit can still split into two sessions.
      */
     sessionID?: string
 }
@@ -749,6 +758,11 @@ export interface SessionRecordingOptions {
     inlineStylesheetBudgetRules?: number
 
     /**
+     * Record iframes that come from a different origin.
+     * Set it to `true` in the parent page and in the iframe. The iframe then sends its recording
+     * to the parent, and both frames share one recording. If only one side sets it, the iframe
+     * records a second session of its own.
+     *
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default false

@@ -67,6 +67,16 @@ describe('Session ID manager', () => {
     afterAll(() => vi.useRealTimers())
 
     describe('new session id manager', () => {
+        // Bootstrap rejections are reported with logger.critical, which writes to the
+        // console whatever the debug setting is, so the test setup would fail on them.
+        let consoleError: vi.SpyInstance
+        beforeEach(() => {
+            consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+        })
+        afterEach(() => {
+            consoleError.mockRestore()
+        })
+
         it('generates an initial session id and window id, and saves them', () => {
             expect(sessionIdMgr(persistence).checkAndGetSessionAndWindowId(undefined, timestamp)).toMatchObject({
                 windowId: 'newUUID',
@@ -155,24 +165,68 @@ describe('Session ID manager', () => {
             })
         })
 
-        it('does not defer a bootstrapped session that is already past the maximum length', () => {
+        it('rejects a bootstrapped session that is already past the maximum length', () => {
             const sessionIdManager = sessionIdMgr(persistence)
             sessionIdManager.resetSessionId()
             ;(uuid7ToTimestampMs as vi.Mock).mockReturnValue(now - 25 * 60 * 60 * 1000)
-            sessionIdManager.setBootstrapSessionId('expired-bootstrap-session-id', true)
+
+            expect(sessionIdManager.setBootstrapSessionId('expired-bootstrap-session-id', true)).toBe(false)
             ;(uuidv7 as vi.Mock).mockReturnValueOnce('fresh-session-id').mockReturnValueOnce('fresh-window-id')
 
             expect(sessionIdManager.checkAndGetSessionAndWindowId(false, now)).toMatchObject({
                 sessionId: 'fresh-session-id',
                 windowId: 'fresh-window-id',
                 sessionStartTimestamp: now,
-                changeReason: {
-                    noSessionId: true,
-                    activityTimeout: false,
-                    sessionPastMaximumLength: true,
-                },
             })
         })
+
+        it('drops a deferred bootstrapped session that ages out before the next session starts', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager.resetSessionId()
+
+            expect(sessionIdManager.setBootstrapSessionId('bootstrap-session-id', true)).toBe(true)
+            ;(uuidv7 as vi.Mock).mockReturnValueOnce('fresh-session-id').mockReturnValueOnce('fresh-window-id')
+            const laterThanTheMaximumLength = timestamp + 25 * 60 * 60 * 1000
+
+            expect(sessionIdManager.checkAndGetSessionAndWindowId(false, laterThanTheMaximumLength)).toMatchObject({
+                sessionId: 'fresh-session-id',
+                windowId: 'fresh-window-id',
+            })
+            expect(consoleError).toHaveBeenCalledWith(
+                '[PostHog.js] [SessionId]',
+                expect.stringContaining('aged out before the next session started')
+            )
+        })
+
+        it.each([
+            [
+                'it is not a valid UUID v7',
+                () =>
+                    (uuid7ToTimestampMs as vi.Mock).mockImplementation(() => {
+                        throw new Error('Not a UUIDv7')
+                    }),
+            ],
+            [
+                'its timestamp is in the future',
+                () => (uuid7ToTimestampMs as vi.Mock).mockReturnValue(now + 23 * 60 * 60 * 1000),
+            ],
+            [
+                'past the 24 hour maximum length',
+                () => (uuid7ToTimestampMs as vi.Mock).mockReturnValue(now - 25 * 60 * 60 * 1000),
+            ],
+        ])(
+            'reports that a bootstrap sessionID was rejected because %s, even when debug is off',
+            (expectedReason, arrange) => {
+                arrange()
+
+                sessionIdMgr(persistence).setBootstrapSessionId('rejected-bootstrap-session-id')
+
+                expect(consoleError).toHaveBeenCalledWith(
+                    '[PostHog.js] [SessionId]',
+                    expect.stringContaining(expectedReason)
+                )
+            }
+        )
 
         it('accepts a bootstrapped session within the clock-skew tolerance', () => {
             const sessionIdManager = sessionIdMgr(persistence)

@@ -20,18 +20,27 @@ export const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
 const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
 const BOOTSTRAP_SESSION_CLOCK_SKEW_TOLERANCE_MILLISECONDS = 60 * 1000 // 1 minute
 
+// Critical, not debug gated: a rejected id is replaced by a fresh one, so one
+// visit becomes two sessions, which is invisible until someone counts sessions.
+const rejectBootstrapSessionId = (reason: string): undefined => {
+    logger.critical(`Ignoring bootstrap sessionID because ${reason}. This page starts a new session instead.`)
+    return undefined
+}
+
 const parseBootstrapSessionId = (sessionID: string, timestamp = new Date().getTime()): number | undefined => {
+    let sessionStartTimestamp: number
     try {
-        const sessionStartTimestamp = uuid7ToTimestampMs(sessionID)
-        if (sessionStartTimestamp > timestamp + BOOTSTRAP_SESSION_CLOCK_SKEW_TOLERANCE_MILLISECONDS) {
-            logger.error('Bootstrap sessionID cannot be in the future')
-            return undefined
-        }
-        return sessionStartTimestamp
-    } catch (e) {
-        logger.error('Invalid sessionID in bootstrap', e)
-        return undefined
+        sessionStartTimestamp = uuid7ToTimestampMs(sessionID)
+    } catch {
+        return rejectBootstrapSessionId('it is not a valid UUID v7')
     }
+    if (sessionStartTimestamp > timestamp + BOOTSTRAP_SESSION_CLOCK_SKEW_TOLERANCE_MILLISECONDS) {
+        return rejectBootstrapSessionId('its timestamp is in the future')
+    }
+    if (timestamp - sessionStartTimestamp > SESSION_LENGTH_LIMIT_MILLISECONDS) {
+        return rejectBootstrapSessionId('the session it names is already past the 24 hour maximum length')
+    }
+    return sessionStartTimestamp
 }
 
 // Must stay well under MIN_SESSION_IDLE_TIMEOUT_SECONDS so idle detection on
@@ -466,6 +475,9 @@ export class SessionIdManager {
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             crossTabAdoption = false
             const usePendingBootstrapSession = pendingBootstrapSession && !pendingBootstrapSessionPastMaximumLength
+            if (pendingBootstrapSession && !usePendingBootstrapSession) {
+                rejectBootstrapSessionId('the session it names aged out before the next session started')
+            }
             sessionId = usePendingBootstrapSession ? pendingBootstrapSession.sessionId : this._sessionIdGenerator()
             windowId = this._windowIdGenerator()
             logger.info('new session ID assigned', {

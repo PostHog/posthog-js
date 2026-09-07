@@ -265,15 +265,22 @@ describe('reset()', () => {
         })
 
         it('logs an invalid bootstrap session ID but still resets', () => {
+            const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
             const initialDistinctId = instance.get_distinct_id()
 
             expect(() => instance.reset({ bootstrap: { sessionID: 'invalid-session-id' } })).not.toThrow()
 
+            expect(consoleError).toHaveBeenCalledWith(
+                '[PostHog.js] [SessionId]',
+                expect.stringContaining('it is not a valid UUID v7')
+            )
             expect(instance.get_distinct_id()).not.toEqual(initialDistinctId)
             expect(instance.config.bootstrap).toEqual({})
+            consoleError.mockRestore()
         })
 
         it('logs a future bootstrap session ID but still resets', () => {
+            const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
             const initialDistinctId = instance.get_distinct_id()
             const futureTimestampHex = (Date.now() + 23 * 60 * 60 * 1000).toString(16).padStart(12, '0')
             const futureSessionID = `${futureTimestampHex.slice(0, 8)}-${futureTimestampHex.slice(
@@ -282,8 +289,13 @@ describe('reset()', () => {
 
             expect(() => instance.reset({ bootstrap: { sessionID: futureSessionID } })).not.toThrow()
 
+            expect(consoleError).toHaveBeenCalledWith(
+                '[PostHog.js] [SessionId]',
+                expect.stringContaining('its timestamp is in the future')
+            )
             expect(instance.get_distinct_id()).not.toEqual(initialDistinctId)
             expect(instance.config.bootstrap).toEqual({})
+            consoleError.mockRestore()
         })
 
         it('applies a bootstrapped session ID and rotates the window', () => {
