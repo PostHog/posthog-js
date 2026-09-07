@@ -27,9 +27,9 @@ import { applyMcpLibIdentity } from './lib-identity'
 import { log } from './logger'
 import {
   addModelParameterToTool,
-  getModelArgument,
   getModelDescription,
   isCaptureModelEnabled,
+  resolveModel,
   setEventModel,
 } from './model-parameters'
 import { McpEventSink } from './sink'
@@ -48,8 +48,8 @@ export interface PostHogMCPOptions extends PostHogOptions {
    */
   missingCapabilityToolName?: string
   /**
-   * Inject a required `llm_model` argument into advertised tools and capture
-   * the agent's self-reported value. Off by default.
+   * Capture the calling model from recognized client metadata, with an injected
+   * `llm_model` argument as fallback. Off by default.
    */
   captureModel?: MCPAnalyticsOptions['captureModel']
 }
@@ -118,10 +118,7 @@ export class PostHogMCP extends PostHog {
     event.isError = data.isError
     event.errorType = data.errorType
     applyIntent(event, data.intent, data.intentSource)
-    setEventModel(event, data.llmModel)
-    if (event.llmModel && data.llmModelSource) {
-      event.llmModelSource = data.llmModelSource
-    }
+    setEventModel(event, data.llmModel, data.llmModelSource)
     if (data.isError) {
       event.error = captureException(data.error ?? `Tool ${data.toolName} returned an error`)
     }
@@ -234,7 +231,7 @@ export class PostHogMCP extends PostHog {
    * @example
    * ```ts
    * const { intent, intentSource, llmModel, llmModelSource, args, isMissingCapability } =
-   *   posthog.prepareToolCall(name, rawArgs)
+   *   posthog.prepareToolCall(name, rawArgs, { requestMeta: request.params?._meta })
    * if (isMissingCapability) {
    *   posthog.captureMissingCapability({ context: intent, llmModel, llmModelSource, ...identity })
    *   return getMoreToolsResult()
@@ -255,13 +252,15 @@ export class PostHogMCP extends PostHog {
       (options.originalTool
         ? analyticsOwnsParameter(options.originalTool.inputSchema, 'llm_model')
         : this.#modelParameterOwnership.get(name) === true)
-    const llmModel = ownsModel ? getModelArgument({ params: { arguments: args } }) : undefined
+    const resolvedModel = isCaptureModelEnabled(this.#captureModel)
+      ? resolveModel({ params: { arguments: args, _meta: options.requestMeta } }, ownsModel)
+      : undefined
     const strippedArgs = stripContext(args)
     return {
       intent,
       intentSource: intent ? 'context_parameter' : undefined,
-      llmModel,
-      llmModelSource: llmModel ? 'self_reported' : undefined,
+      llmModel: resolvedModel?.model,
+      llmModelSource: resolvedModel?.source,
       args: ownsModel
         ? (stripOwnedAnalyticsArguments(strippedArgs, {
             context: false,
@@ -283,10 +282,7 @@ export class PostHogMCP extends PostHog {
     event.resourceName = this.#missingCapabilityToolName
     event.parameters = data.parameters
     applyIntent(event, data.context, 'context_parameter')
-    setEventModel(event, data.llmModel)
-    if (event.llmModel && data.llmModelSource) {
-      event.llmModelSource = data.llmModelSource
-    }
+    setEventModel(event, data.llmModel, data.llmModelSource)
     this.#emit(event)
   }
 

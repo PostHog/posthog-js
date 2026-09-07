@@ -368,6 +368,35 @@ describe('PostHogMCP', () => {
       }
     })
 
+    it('captures a Codex metadata model without taking an application-owned llm_model argument', async () => {
+      const client = newClient({ captureModel: true })
+      const ownedTool = {
+        name: 'route-model',
+        inputSchema: {
+          type: 'object',
+          properties: { llm_model: { type: 'string', description: 'Application routing model' } },
+          required: ['llm_model'],
+        },
+      }
+      try {
+        client.prepareToolList([ownedTool])
+        const call = client.prepareToolCall(
+          'route-model',
+          { llm_model: 'application-owned-value' },
+          {
+            originalTool: ownedTool,
+            requestMeta: { 'x-codex-turn-metadata': { model: 'gpt-5.6-sol' } },
+          }
+        )
+
+        expect(call.args).toEqual({ llm_model: 'application-owned-value' })
+        expect(call.llmModel).toBe('gpt-5.6-sol')
+        expect(call.llmModelSource).toBe('client_metadata')
+      } finally {
+        await client.shutdown()
+      }
+    })
+
     it('skips model injection for duplicate names when any descriptor owns llm_model', async () => {
       const client = newClient({ captureModel: true })
       const duplicateTools = [
