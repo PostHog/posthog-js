@@ -4665,5 +4665,13 @@
       "path": "src/types.ts"
     }
   ],
-  "categories": ["Initialization", "Identification", "Capture", "Error tracking", "Privacy", "Feature flags", "Context"]
+  "categories": [
+    "Initialization",
+    "Identification",
+    "Capture",
+    "Error tracking",
+    "Privacy",
+    "Feature flags",
+    "Context"
+  ]
 }
