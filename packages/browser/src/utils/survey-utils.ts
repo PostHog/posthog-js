@@ -7,6 +7,8 @@ export { doesSurveyActivateByEvent, getSurveyInteractionProperty, isSurveyIterat
 
 export const SURVEY_LOGGER = createLogger('[Surveys]')
 
+export const SURVEY_OPTED_OUT = 'Capturing is opted out, so a survey response cannot be captured'
+
 export function isSurveyRunning(survey: Survey): boolean {
     return !!(survey.start_date && !survey.end_date)
 }

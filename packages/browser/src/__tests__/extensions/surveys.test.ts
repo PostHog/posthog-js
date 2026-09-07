@@ -102,6 +102,7 @@ describe('survey display logic', () => {
             getSurveys: vi.fn().mockImplementation((callback) => callback(mockSurveys)),
         },
         get_session_replay_url: vi.fn(),
+        is_capturing: vi.fn(() => true),
         capture: vi.fn().mockImplementation((eventName) => eventName),
         config: {
             disable_surveys_automatic_display: false,
@@ -163,6 +164,7 @@ describe('usePopupVisibility', () => {
     const mockPostHog = createMockPostHog({
         getActiveMatchingSurveys: vi.fn().mockImplementation((callback) => callback([mockSurvey])),
         get_session_replay_url: vi.fn(),
+        is_capturing: vi.fn(() => true),
         capture: vi.fn().mockImplementation((eventName) => eventName),
     })
 
@@ -322,6 +324,7 @@ describe('usePopupVisibility close animation path', () => {
     const mockPostHog = createMockPostHog({
         getActiveMatchingSurveys: vi.fn().mockImplementation((callback) => callback([mockSurvey])),
         get_session_replay_url: vi.fn(),
+        is_capturing: vi.fn(() => true),
         capture: vi.fn().mockImplementation((eventName) => eventName),
     })
     const removeSurvey = vi.fn()
@@ -516,6 +519,7 @@ describe('SurveyManager', () => {
         mockPostHog = createMockPostHog({
             getActiveMatchingSurveys: vi.fn(),
             get_session_replay_url: vi.fn(),
+            is_capturing: vi.fn(() => true),
             capture: vi.fn(),
             featureFlags: {
                 hasLoadedFlags: true,
@@ -863,6 +867,27 @@ describe('SurveyManager', () => {
                 schedule: SurveySchedule.Always,
             })
             expect(result.eligible).toBe(true)
+        })
+    })
+
+    describe('reports when capturing is opted out', () => {
+        it('is not eligible, and names the reason', () => {
+            mockPostHog.is_capturing = vi.fn(() => false)
+            const result = surveyManager.checkSurveyEligibility(mockSurveys[0])
+            expect(result.eligible).toBe(false)
+            expect(result.reason).toBe('Capturing is opted out, so a survey response cannot be captured')
+        })
+
+        it('stays eligible while capturing is on', () => {
+            mockPostHog.is_capturing = vi.fn(() => true)
+            expect(surveyManager.checkSurveyEligibility(mockSurveys[0]).eligible).toBe(true)
+        })
+
+        it('keeps the survey out of the display loop', () => {
+            mockPostHog.is_capturing = vi.fn(() => false)
+            const callback = vi.fn()
+            surveyManager.getActiveMatchingSurveys(callback)
+            expect(callback).toHaveBeenCalledWith([])
         })
     })
 
@@ -1440,6 +1465,7 @@ describe('SurveyManager', () => {
                 },
                 getActiveMatchingSurveys: vi.fn(),
                 get_session_replay_url: vi.fn(),
+                is_capturing: vi.fn(() => true),
                 capture: vi.fn(),
                 featureFlags: { isFeatureEnabled: vi.fn().mockReturnValue(true) },
             })
@@ -1505,6 +1531,7 @@ describe('SurveyManager', () => {
                 },
                 getActiveMatchingSurveys: vi.fn(),
                 get_session_replay_url: vi.fn(),
+                is_capturing: vi.fn(() => true),
                 capture: vi.fn(),
                 featureFlags: { isFeatureEnabled: vi.fn().mockReturnValue(true) },
             })
@@ -1575,6 +1602,7 @@ describe('SurveyManager', () => {
             mockPostHog = createMockPostHog({
                 getActiveMatchingSurveys: vi.fn(),
                 get_session_replay_url: vi.fn(),
+                is_capturing: vi.fn(() => true),
                 capture: vi.fn(),
                 featureFlags: {
                     isFeatureEnabled: vi.fn().mockReturnValue(true),
@@ -1961,6 +1989,7 @@ describe('SurveyManager', () => {
             mockPostHog = createMockPostHog({
                 getActiveMatchingSurveys: vi.fn(),
                 get_session_replay_url: vi.fn(),
+                is_capturing: vi.fn(() => true),
                 capture: vi.fn(),
                 featureFlags: {
                     isFeatureEnabled: vi.fn().mockReturnValue(true),
@@ -2279,6 +2308,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
         posthog = createMockPostHog({
             capture: vi.fn(),
             get_session_replay_url: vi.fn(),
+            is_capturing: vi.fn(() => true),
         })
 
         mockRemoveSurveyFromFocus = vi.fn()

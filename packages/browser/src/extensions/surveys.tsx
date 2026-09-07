@@ -27,6 +27,7 @@ import {
     isSurveyIterationBased,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
+    SURVEY_OPTED_OUT,
 } from '../utils/survey-utils'
 import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
 import { Properties } from '../types'
@@ -833,6 +834,15 @@ export class SurveyManager {
         if (!IN_APP_SURVEY_TYPES.includes(survey.type)) {
             eligibility.eligible = false
             eligibility.reason = `Surveys of type ${survey.type} are never eligible to be shown in the app`
+            return eligibility
+        }
+
+        // A survey that cannot record a response must not reach a person: they type an answer, see
+        // the confirmation, and `capture()` drops the `survey sent` event. `is_capturing()` is the
+        // same gate `capture()` uses, so cookieless `on_reject` stays eligible.
+        if (!this._posthog.is_capturing()) {
+            eligibility.eligible = false
+            eligibility.reason = SURVEY_OPTED_OUT
             return eligibility
         }
 
