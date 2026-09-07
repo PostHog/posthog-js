@@ -74,7 +74,6 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
         aggregateRating: ['AggregateRating'],
         brand: ['Brand'],
     },
-    Person: {},
     Place: {
         aggregateRating: ['AggregateRating'],
     },
@@ -118,9 +117,7 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
     },
 }
 
-const EMPTY_ENTITY_RULES: JsonLdEntityRules = {}
 const INHERITED_RULE_GROUPS: readonly JsonLdRuleGroup[] = [
-    [ACTION_TYPES, EMPTY_ENTITY_RULES],
     [
         '3DModel AboutPage Answer Article AudioObject Blog BlogPosting Book Clip CollectionPage Comment ContactPage Course CreativeWorkSeason CreativeWorkSeries DataCatalog DataDownload DataFeed Dataset DiscussionForumPosting Episode FAQPage Game HowTo HowToDirection HowToSection HowToStep HowToTip ImageObject LearningResource MediaObject Message MobileApplication Movie MusicPlaylist MusicRecording NewsArticle Photograph PodcastEpisode PodcastSeries ProfilePage QAPage Question Quiz Recipe Review ScholarlyArticle SearchResultsPage SiteNavigationElement SocialMediaPosting SoftwareApplication TVEpisode TVSeries TechArticle VacationRental VideoGame VideoObject WebApplication WebPage WebPageElement WebSite'.split(
             ' '
@@ -134,12 +131,7 @@ const INHERITED_RULE_GROUPS: readonly JsonLdRuleGroup[] = [
     [ORGANIZATION_TYPES, ENTITY_RULES.Organization],
     [PLACE_TYPES, ENTITY_RULES.Place],
     ['Car IndividualProduct ProductGroup ProductModel'.split(' '), ENTITY_RULES.Product],
-    ['AggregateRating EmployerAggregateRating Rating'.split(' '), EMPTY_ENTITY_RULES],
 ]
-const TYPES_WITHOUT_PROPERTIES =
-    'AlignmentObject BedDetails Certification ContactPoint CreditCard DefinedRegion EducationalOccupationalCredential EntryPoint GeoCoordinates GeoShape InteractionCounter JobPosting LocationFeatureSpecification MathSolver MemberProgram MemberProgramTier MerchantReturnPolicy MerchantReturnPolicySeasonalOverride MonetaryAmount NutritionInformation OccupationalExperienceRequirements OfferShippingDetails OpeningHoursSpecification PeopleAudience PostalAddress PriceSpecification PropertyValue QuantitativeValue ServicePeriod ShippingConditions ShippingDeliveryTime ShippingRateSettings ShippingService SpeakableSpecification Thing UnitPriceSpecification'.split(
-        ' '
-    )
 
 export const JSON_LD_EVENT_TAG = '$json_ld'
 
@@ -184,7 +176,7 @@ function getEntityRules(type: string): JsonLdEntityRules | undefined {
             return rules
         }
     }
-    return TYPES_WITHOUT_PROPERTIES.includes(type) ? EMPTY_ENTITY_RULES : undefined
+    return undefined
 }
 
 function getEntityTypes(value: unknown): string[] {
