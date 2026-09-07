@@ -1,6 +1,8 @@
 /// <reference lib="dom" />
 
 import { TextDecoder } from 'util'
+import { runInNewContext } from 'node:vm'
+import { createPosthogInstance } from './helpers/posthog-instance'
 import * as fflate from 'fflate'
 import { extendURLParams, request } from '../request'
 import { Compression, RequestWithOptions } from '../types'
@@ -104,6 +106,55 @@ describe('request', () => {
         beforeEach(() => {
             transport = 'XHR'
         })
+        it.each(['same-realm', 'cross-realm'])(
+            'preserves %s Error properties in an ordinary capture request',
+            async (realm) => {
+                const instance = await createPosthogInstance(uuidv7(), {
+                    api_transport: 'XHR',
+                    disable_compression: true,
+                    capture_pageview: false,
+                    before_send: (event) => event,
+                    properties_string_max_length: 20,
+                })
+                mockedXHR.send.mockClear()
+                const cause =
+                    realm === 'cross-realm'
+                        ? (runInNewContext('new TypeError("a long root cause message to truncate")') as Error)
+                        : new TypeError('a long root cause message to truncate')
+                const error = Object.assign(
+                    new AggregateError([cause, 'other reason'], 'aggregate', { cause: 'root reason' }),
+                    { code: 'E_TEST' }
+                )
+                const expectedCause = {
+                    name: cause.name,
+                    message: cause.message.slice(0, 20),
+                    stack: cause.stack?.slice(0, 20),
+                }
+
+                instance.capture('ordinary event', { nested: [{ error }] })
+
+                expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+                const {
+                    batch: [body],
+                } = JSON.parse((mockedXHR.send.mock.calls[0] as unknown[])[0] as string)
+                expect(body.event).toBe('ordinary event')
+                expect(body.properties.nested).toEqual([
+                    {
+                        error: {
+                            name: error.name,
+                            message: error.message,
+                            stack: error.stack?.slice(0, 20),
+                            code: 'E_TEST',
+                            cause: 'root reason',
+                            errors: [expectedCause, 'other reason'],
+                        },
+                    },
+                ])
+                expect(cause.message).toBe('a long root cause message to truncate')
+                expect(Object.keys(error)).toEqual(['code'])
+            }
+        )
+
         it('performs the request with default params', () => {
             request(
                 createRequest({

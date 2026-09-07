@@ -3,4 +3,4 @@
 'posthog-js': patch
 ---
 
-Serialize Error names, messages, stacks, and custom enumerable properties in exception additional properties while preserving custom toJSON serialization.
+Preserve Error details, causes, aggregate errors, and custom enumerable properties in event properties, including cross-realm Errors. Apply string truncation to ordinary capture properties and retain custom toJSON serialization for exception additional properties.

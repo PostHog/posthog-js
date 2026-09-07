@@ -1,6 +1,6 @@
-import { isArray, isFile, isUndefined, safeJsonStringify } from '@posthog/core'
+import { isArray, isError, isFile, isUndefined, safeJsonStringify } from '@posthog/core'
 
-import { each } from './general-utils'
+import { each, errorToProperties } from './general-utils'
 import { document, isBrowserOnline, location } from './globals'
 import { logger } from './logger'
 
@@ -13,19 +13,10 @@ export const jsonStringify = (data: any, space?: string | number): string => {
             data,
             (_, value) => {
                 // Native JSON.stringify invokes toJSON before this replacer, so custom serializers win.
-                if (value instanceof Error) {
+                if (isError(value)) {
                     errors ??= new WeakMap()
                     if (!errors.has(value)) {
-                        const copy: Record<string, unknown> = { ...value }
-                        for (const detail of ['name', 'message', 'stack'] as const) {
-                            try {
-                                copy[detail] = value[detail]
-                            } catch {
-                                // Non-enumerable Error details may be getters. An unreadable
-                                // detail must not discard an otherwise serializable request.
-                            }
-                        }
-                        errors.set(value, copy)
+                        errors.set(value, errorToProperties(value))
                     }
                     // Reuse copies so circular Errors reach the existing fallback instead of
                     // creating a fresh object on every visit and overflowing the stack.

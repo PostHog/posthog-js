@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm'
 import {
     _getHashParam,
     formDataToQuery,
@@ -29,7 +30,42 @@ describe('request utils', () => {
             expect(Object.keys(error)).toEqual(['code', 'count'])
         })
 
-        it.each(['name', 'message', 'stack'] as const)(
+        it('serializes cross-realm Error details', () => {
+            const error = runInNewContext('new TypeError("iframe error")')
+            expect(error).not.toBeInstanceOf(Error)
+
+            expect(JSON.parse(jsonStringify({ error }))).toEqual({
+                error: { name: error.name, message: error.message, stack: error.stack },
+            })
+        })
+
+        it('serializes non-enumerable causes and aggregate errors recursively', () => {
+            const cause = new TypeError('root cause')
+            const error = new Error('outer', { cause })
+            const aggregate = new AggregateError([error, 'non-error reason'], 'aggregate', { cause: 'reason' })
+            expect(Object.getOwnPropertyDescriptor(error, 'cause')?.enumerable).toBe(false)
+            expect(Object.getOwnPropertyDescriptor(aggregate, 'errors')?.enumerable).toBe(false)
+
+            expect(JSON.parse(jsonStringify({ aggregate }))).toEqual({
+                aggregate: {
+                    name: aggregate.name,
+                    message: aggregate.message,
+                    stack: aggregate.stack,
+                    cause: 'reason',
+                    errors: [
+                        {
+                            name: error.name,
+                            message: error.message,
+                            stack: error.stack,
+                            cause: { name: cause.name, message: cause.message, stack: cause.stack },
+                        },
+                        'non-error reason',
+                    ],
+                },
+            })
+        })
+
+        it.each(['name', 'message', 'stack', 'cause', 'errors'] as const)(
             'omits an unreadable non-enumerable Error %s without discarding sibling properties',
             (detail) => {
                 const error = Object.assign(new Error('additional'), { code: 'E_TEST' })
