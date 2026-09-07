@@ -2271,6 +2271,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 })
             })
 
+            // A cancelled beforeunload or a later pagehide flush can ship a previously parked buffer.
+            if (!isUndefined(this._lastParkedBufferSize)) {
+                sessionStore._remove(this._pendingBufferStorageKey)
+                this._lastParkedBufferSize = undefined
+            }
+
             // Notify strategy that initial flush is complete (performance optimization)
             this._strategy?.onFlushComplete()
         }

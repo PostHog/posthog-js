@@ -6915,6 +6915,54 @@ describe('Lazy SessionRecording', () => {
             expect(timestamps).toContain(sessionStartTimestamp + 2000)
         })
 
+        it.each(['_flushBuffer', '_onPageHide'] as const)(
+            'does not restore snapshots already shipped by %s after parking',
+            (flushMethod) => {
+                const sessionStartTimestamp = startBelowMinimumDuration()
+                unload()
+                expect(parkedBuffer().data).toHaveLength(1)
+
+                // beforeunload can be cancelled, or pagehide can flush later events past the gate.
+                _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 2000 }))
+                sessionRecording['_lazyLoadedSessionRecording'][flushMethod]()
+
+                const firstPageSnapshots = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+                expect(firstPageSnapshots).toHaveLength(1)
+                expect(
+                    firstPageSnapshots[0][1].$snapshot_data.map((event: eventWithTime) => event.timestamp)
+                ).toContain(sessionStartTimestamp + 100)
+
+                unload()
+                sessionRecording.stopRecording()
+                ;(posthog.capture as Mock).mockClear()
+                sessionRecording = new SessionRecording(posthog)
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: { minimumDurationMilliseconds: 1500 },
+                    })
+                )
+                _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 3000 }))
+                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                const nextPageSnapshots = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+                expect(nextPageSnapshots).toHaveLength(1)
+                expect(
+                    nextPageSnapshots[0][1].$snapshot_data.map((event: eventWithTime) => event.timestamp)
+                ).not.toContain(sessionStartTimestamp + 100)
+            }
+        )
+
+        it('keeps the parked buffer while a later flush is still held', () => {
+            startBelowMinimumDuration()
+            unload()
+            const parked = parkedBuffer()
+
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(parkedBuffer()).toEqual(parked)
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+        })
+
         it('does not restore a buffer parked by another session', () => {
             startBelowMinimumDuration()
             unload()
