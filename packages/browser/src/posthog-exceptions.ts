@@ -14,16 +14,6 @@ const logger = createLogger('[Error tracking]')
 // exception came from an extension (see _isExtensionException).
 const MASKED_URL_PREFIX = 'webkit-masked-url:'
 
-// Safari's masked URL is ambiguous, so require a signature that identifies an extension failure
-// before filtering a stack made entirely of masked frames. A signature matches the exception type
-// exactly, or any part of the exception value. These name WebKit extension-messaging failures and
-// extension-private API paths, so no page or SDK code reports them.
-const MASKED_EXTENSION_EXCEPTION_SIGNATURES = [
-    'isolatedAPI.contexts.topHostname',
-    'NoResponse',
-    'No response from target',
-]
-
 // Browser extensions serve their content scripts from these schemes. `safari-extension:` and
 // `safari-web-extension:` are synthesised by the stack parser (see extractSafariExtensionDetails)
 // rather than being real URLs, but they mark the frame just as definitively.
@@ -320,10 +310,11 @@ export class PostHogExceptions implements Extension {
             ({ filename }) => !!filename && filename.startsWith(MASKED_URL_PREFIX)
         )
         if (onlyMaskedExtensionFrames) {
-            const hasKnownExtensionSignature = exceptionList.some(({ type, value }) =>
-                MASKED_EXTENSION_EXCEPTION_SIGNATURES.some(
-                    (signature) => type === signature || (isString(value) && value.includes(signature))
-                )
+            const hasKnownExtensionSignature = exceptionList.some(
+                ({ type, value }) =>
+                    type === 'NoResponse' ||
+                    (isString(value) &&
+                        (value.includes('isolatedAPI.contexts.topHostname') || value === 'No response from target'))
             )
             return (
                 hasKnownExtensionSignature &&

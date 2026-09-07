@@ -291,12 +291,14 @@ describe('PostHogExceptions', () => {
                 )
             })
 
-            it('does not capture Safari extension messaging failures with only masked frames', () => {
-                // WebKit reports a failed extension message as `NoResponse`. Only the extension is
-                // involved, and Safari masks its single frame.
+            it.each([
+                ['NoResponse', 'No response from target'],
+                ['NoResponse', ''],
+                ['Error', 'No response from target'],
+            ])('does not capture masked Safari extension messaging failures: %s / %s', (type, value) => {
                 const exception = {
-                    type: 'NoResponse',
-                    value: 'No response from target',
+                    type,
+                    value,
                     stacktrace: {
                         frames: [
                             {
@@ -315,6 +317,23 @@ describe('PostHogExceptions', () => {
                     { $exception_list: [exception] },
                     expect.anything()
                 )
+            })
+
+            it.each([
+                ['ReferenceError', "Can't find variable: handleNoResponse"],
+                ['Error', 'No response from target server after 30 seconds'],
+            ])('captures masked application errors that only mention a messaging signature: %s / %s', (type, value) => {
+                const error = new Error(value)
+                error.name = type
+                error.stack = 'applicationEval@webkit-masked-url://hidden/:1:1'
+                const properties = exceptions.buildProperties(error)
+                expect(properties.$exception_list[0]).toMatchObject({
+                    type,
+                    value,
+                    stacktrace: { frames: [{ filename: 'webkit-masked-url://hidden/' }] },
+                })
+                exceptions.sendExceptionEvent(properties)
+                expect(captureMock).toBeCalledWith('$exception', properties, expect.anything())
             })
 
             it('captures ambiguous masked-only application exceptions', () => {
@@ -368,10 +387,13 @@ describe('PostHogExceptions', () => {
                 )
             })
 
-            it('captures exceptions where a masked frame sits alongside the page own code', () => {
+            it.each([
+                ['TypeError', 'first-party error'],
+                ['NoResponse', 'No response from target'],
+            ])('captures mixed masked and page frames: %s / %s', (type, value) => {
                 const exception = {
-                    type: 'TypeError',
-                    value: 'first-party error',
+                    type,
+                    value,
                     stacktrace: {
                         frames: [
                             { filename: 'webkit-masked-url://hidden/', platform: 'javascript:web', in_app: false },
@@ -390,7 +412,11 @@ describe('PostHogExceptions', () => {
                     config: { errorTracking: { captureExtensionExceptions: true } } as RemoteConfig,
                 })
                 const frame = { filename: 'webkit-masked-url://hidden/', platform: 'javascript:web', in_app: false }
-                const exception = { stacktrace: { frames: [frame], type: 'raw' } }
+                const exception = {
+                    type: 'NoResponse',
+                    value: 'No response from target',
+                    stacktrace: { frames: [frame], type: 'raw' },
+                }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
                 expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
             })
