@@ -579,7 +579,11 @@ function initInputObserver({
     );
   }
   return callbackWrapper(() => {
-    handlers.forEach((h) => h());
+    // the hook resetters below restore shared DOM prototype accessors through a
+    // bare `Object.defineProperty`, which throws if the page made one of them
+    // non-configurable after we hooked it. Run them all: a leaked hook keeps
+    // intercepting every `value`/`checked` write for the life of the page.
+    callAllSafely(handlers);
   });
 }
 

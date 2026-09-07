@@ -7,7 +7,7 @@ import { Mirror } from '@posthog/rrweb-snapshot';
 import { initObservers, mutationBuffers } from '../../src/record/observer';
 import type { observerParam } from '../../src/types';
 
-const createOptions = (): observerParam =>
+const createOptions = (doc: Document = document): observerParam =>
   ({
     mutationCb: vi.fn(),
     mousemoveCb: vi.fn(),
@@ -41,7 +41,7 @@ const createOptions = (): observerParam =>
     collectFonts: false,
     slimDOMOptions: {},
     dataURLOptions: {},
-    doc: document,
+    doc,
     mirror: new Mirror(),
     iframeManager: { addIframe: vi.fn() },
     stylesheetManager: {
@@ -103,6 +103,51 @@ describe('initObservers teardown', () => {
     // the failure still surfaces, but not at the cost of the listeners
     expect(() => cleanup()).toThrow('shadow teardown failed');
     expect(pluginCleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores the remaining input hooks when one of them cannot be restored', () => {
+    // a separate realm: the test makes one of its prototype accessors
+    // non-configurable, which cannot be undone
+    const frame = document.createElement('iframe');
+    document.body.appendChild(frame);
+    const frameDoc = frame.contentDocument!;
+    const frameWin = frame.contentWindow!;
+
+    const descriptorOf = (proto: object, key: string) =>
+      Object.getOwnPropertyDescriptor(proto, key);
+    const optionSelected = descriptorOf(
+      frameWin.HTMLOptionElement.prototype,
+      'selected',
+    );
+    const textAreaValue = descriptorOf(
+      frameWin.HTMLTextAreaElement.prototype,
+      'value',
+    );
+
+    const options = createOptions(frameDoc);
+    options.recordDOM = false;
+    const cleanup = initObservers(options);
+
+    // the input observer hooks the shared accessors, then the page pins one of
+    // them so restoring it throws
+    expect(
+      descriptorOf(frameWin.HTMLOptionElement.prototype, 'selected')?.set,
+    ).not.toBe(optionSelected?.set);
+    Object.defineProperty(frameWin.HTMLSelectElement.prototype, 'value', {
+      configurable: false,
+    });
+
+    cleanup();
+
+    // the hooks queued after the pinned one are still restored
+    expect(
+      descriptorOf(frameWin.HTMLTextAreaElement.prototype, 'value')?.set,
+    ).toBe(textAreaValue?.set);
+    expect(
+      descriptorOf(frameWin.HTMLOptionElement.prototype, 'selected')?.set,
+    ).toBe(optionSelected?.set);
+
+    frame.remove();
   });
 
   it('unpins the buffer and releases the handlers when destroy throws', () => {
