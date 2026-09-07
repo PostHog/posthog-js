@@ -507,14 +507,9 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
   ): void {
     const latency = run.endTime ? (run.endTime - run.startTime) / 1000 : 0
     warnIfPostHogAiGateway(run.baseUrl)
-    // The served tier comes from the response; a requested tier can be refused. langchain
-    // surfaces it in generationInfo on streamed generations only.
+    // The served tier comes from the response; a requested tier can be refused.
     let modelParams = run.modelParams
-    const servedTier =
-      output instanceof Error
-        ? undefined
-        : (output.generations?.[0]?.[0]?.generationInfo?.service_tier ??
-          (output.llmOutput as Record<string, any> | undefined)?.service_tier)
+    const servedTier = output instanceof Error ? undefined : this._extractServedServiceTier(output)
     if (servedTier != null) {
       modelParams = { ...modelParams, service_tier: servedTier }
     }
@@ -713,6 +708,19 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
 
     // Sanitize the message content to redact base64 images
     return sanitizeLangChain(messageDict, this.client) as Record<string, any>
+  }
+
+  private _extractServedServiceTier(output: LLMResult): string | undefined {
+    if (!output.generations || !Array.isArray(output.generations)) {
+      return undefined
+    }
+    // langchain surfaces the tier in generationInfo on the final streamed chunk;
+    // llmOutput is where its Python counterpart puts it, kept as a fallback.
+    const lastGeneration = output.generations[output.generations.length - 1]
+    const gen = Array.isArray(lastGeneration) ? lastGeneration[0] : undefined
+    const servedTier =
+      gen?.generationInfo?.service_tier ?? (output.llmOutput as Record<string, any> | undefined)?.service_tier
+    return servedTier != null ? String(servedTier) : undefined
   }
 
   private _extractStopReason(output: LLMResult): string | undefined {
