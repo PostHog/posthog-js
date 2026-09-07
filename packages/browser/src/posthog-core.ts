@@ -93,7 +93,7 @@ import {
 import { isLikelyBot } from '@posthog/browser-common/utils/blocked-uas'
 import { getDeviceModel } from '@posthog/browser-common/utils/device-model-utils'
 import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
-import { document, fetch, location, navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
+import { document, location, navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { getPersonPropertiesHash } from '@posthog/browser-common/utils/property-utils'
@@ -1890,15 +1890,13 @@ export class PostHog implements PostHogInterface {
         ) {
             this._requestQueue.enqueue(requestOptions)
         } else {
-            // The queue drains with `sendBeacon` on pagehide, an unbatched send has no such safety
-            // net. `sendBeacon` gives no response, so requests that need one keep their transport,
-            // and it cannot carry `request_headers`, so a project that sets them (e.g. for an
-            // authenticating proxy) keeps a transport that can.
+            // Keep response-capable transports on active pages so failures can be retried.
+            // During unload, prefer sendBeacon unless a response or custom headers are required.
             if (
                 !requestOptions.transport &&
                 !requestOptions.callback &&
                 isEmptyObject(this.config.request_headers ?? {}) &&
-                (this._isPageUnloading || !fetch)
+                this._isPageUnloading
             ) {
                 requestOptions.transport = 'sendBeacon'
             }

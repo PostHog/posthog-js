@@ -3,4 +3,4 @@
 '@posthog/types': patch
 ---
 
-Send unbatched events, such as `{ send_instantly: true }` captures, with `sendBeacon` when `fetch` is not available or the page unloads, so a navigation cannot cancel them.
+Prefer `sendBeacon` for unbatched events, such as `{ send_instantly: true }` captures, during page unload. Preserve response-capable transports on active pages so failed requests can be retried, including when `fetch` is unavailable.

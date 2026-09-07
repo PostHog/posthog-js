@@ -91,12 +91,13 @@ export interface CaptureOptions {
      * If set, sends the event immediately instead of adding it to the batched queue.
      *
      * The batched queue drains with `sendBeacon` when the page hides, and an immediate send does
-     * not use that queue. The SDK therefore sends the event with `fetch`, which keeps a small
-     * request alive across a navigation, or with `sendBeacon` when `fetch` is not available or the
-     * page already unloads. This is best effort, not a guarantee: a request too large for `fetch`
-     * keepalive can still be cancelled by the navigation, and a project that sets `request_headers`
-     * keeps its normal transport, because a beacon cannot carry them. To always use the beacon, set
-     * `{ transport: 'sendBeacon' }`.
+     * not use that queue. On an active page, the SDK keeps its normal transport so failed requests
+     * can be retried. By default this is `fetch`, which keeps small requests alive across a navigation,
+     * or XHR when `fetch` is unavailable. During unload, the SDK prefers `sendBeacon`, unless an
+     * explicit transport, a required response, or `request_headers` prevent it. This is best effort,
+     * not a guarantee: XHR and requests too large for `fetch` keepalive can be cancelled by navigation.
+     * To always use a beacon, set `{ transport: 'sendBeacon' }`, but note that accepted beacons cannot
+     * report server failures to the SDK for retries.
      */
     send_instantly?: boolean
 

@@ -33,35 +33,42 @@ describe('unbatched capture transport', () => {
         expect(capturedTransport()).toBeUndefined()
     })
 
-    it('uses sendBeacon when fetch is not available', () => {
+    it('keeps the default transport on an active page when fetch is not available', () => {
         globalsState.fetch = undefined
-
-        posthog.capture('conversion', {}, { send_instantly: true })
-
-        expect(capturedTransport()).toBe('sendBeacon')
-    })
-
-    it('uses sendBeacon once the page is unloading', () => {
-        posthog._handle_unload()
-        sendRequest.mockClear()
-
-        posthog.capture('conversion', {}, { send_instantly: true })
-
-        expect(capturedTransport()).toBe('sendBeacon')
-    })
-
-    it('returns to the default transport after a back-forward cache restore', () => {
-        posthog._handle_unload()
-        window.dispatchEvent(new Event('pageshow'))
-        sendRequest.mockClear()
 
         posthog.capture('conversion', {}, { send_instantly: true })
 
         expect(capturedTransport()).toBeUndefined()
     })
 
-    it('keeps a caller-chosen transport', () => {
+    it.each([true, false])('uses sendBeacon once the page is unloading (fetch available: %s)', (fetchAvailable) => {
+        globalsState.fetch = fetchAvailable ? vi.fn() : undefined
+        posthog._handle_unload()
+        sendRequest.mockClear()
+
+        posthog.capture('conversion', {}, { send_instantly: true })
+
+        expect(capturedTransport()).toBe('sendBeacon')
+    })
+
+    it.each([true, false])(
+        'returns to the default transport after a bfcache restore (fetch available: %s)',
+        (fetchAvailable) => {
+            globalsState.fetch = fetchAvailable ? vi.fn() : undefined
+            posthog._handle_unload()
+            window.dispatchEvent(new Event('pageshow'))
+            sendRequest.mockClear()
+
+            posthog.capture('conversion', {}, { send_instantly: true })
+
+            expect(capturedTransport()).toBeUndefined()
+        }
+    )
+
+    it('keeps a caller-chosen transport during unload', () => {
         globalsState.fetch = undefined
+        posthog._handle_unload()
+        sendRequest.mockClear()
 
         posthog.capture('conversion', {}, { send_instantly: true, transport: 'XHR' })
 
