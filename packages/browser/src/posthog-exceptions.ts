@@ -14,6 +14,11 @@ const logger = createLogger('[Error tracking]')
 // exception came from an extension (see _isExtensionException).
 const MASKED_URL_PREFIX = 'webkit-masked-url:'
 
+const MASKED_EXTENSION_EXCEPTION_VALUE = [
+    { value: 'isolatedAPI.contexts.topHostname', exact: false },
+    { value: 'No response from target', exact: true },
+]
+
 // Browser extensions serve their content scripts from these schemes. `safari-extension:` and
 // `safari-web-extension:` are synthesised by the stack parser (see extractSafariExtensionDetails)
 // rather than being real URLs, but they mark the frame just as definitively.
@@ -314,7 +319,9 @@ export class PostHogExceptions implements Extension {
                 ({ type, value }) =>
                     type === 'NoResponse' ||
                     (isString(value) &&
-                        (value.includes('isolatedAPI.contexts.topHostname') || value === 'No response from target'))
+                        MASKED_EXTENSION_EXCEPTION_VALUE.some(({ value: signature, exact }) =>
+                            exact ? value === signature : value.includes(signature)
+                        ))
             )
             return (
                 hasKnownExtensionSignature &&
