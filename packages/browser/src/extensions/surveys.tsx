@@ -879,11 +879,11 @@ export class SurveyManager {
     }
 
     /**
-     * Eligibility for a survey the SDK renders and captures the response for itself: everything
-     * `checkSurveyEligibility` checks, plus PostHog's capture state. Without the capture check a
-     * person types an answer, sees the confirmation, and `capture()` drops the `survey sent`
-     * event. `is_capturing()` is the same gate `capture()` uses, so cookieless `on_reject` stays
-     * eligible.
+     * PostHog's capture state, as an eligibility result. This is a prerequisite for any survey the
+     * SDK renders itself, not one of the survey's display conditions: without it a person types an
+     * answer, sees the confirmation, and `capture()` drops the `survey sent` event. So
+     * `displaySurvey`'s `ignoreConditions` must not bypass it. `is_capturing()` is the same gate
+     * `capture()` uses, so cookieless `on_reject` stays eligible.
      *
      * Deliberately kept out of `checkSurveyEligibility`: that also backs the public
      * `getActiveMatchingSurveys`, which custom integrations use to discover API surveys they
@@ -891,9 +891,21 @@ export class SurveyManager {
      * capture state says nothing about whether such a response can be recorded, so discovery
      * stays capture-independent.
      */
-    public checkSurveyDisplayEligibility(survey: Survey): { eligible: boolean; reason?: string } {
+    public checkSurveyCaptureEligibility(): { eligible: boolean; reason?: string } {
         if (!this._posthog.is_capturing()) {
             return { eligible: false, reason: SURVEY_OPTED_OUT }
+        }
+        return { eligible: true }
+    }
+
+    /**
+     * Eligibility for a survey the SDK renders and captures the response for itself: everything
+     * `checkSurveyEligibility` checks, plus PostHog's capture state.
+     */
+    public checkSurveyDisplayEligibility(survey: Survey): { eligible: boolean; reason?: string } {
+        const captureEligibility = this.checkSurveyCaptureEligibility()
+        if (!captureEligibility.eligible) {
+            return captureEligibility
         }
         return this.checkSurveyEligibility(survey)
     }

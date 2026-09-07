@@ -477,11 +477,6 @@ export class PostHogSurveys implements Extension {
         return survey
     }
 
-    /**
-     * Eligibility for the SDK to display a survey itself, so it includes PostHog's capture state:
-     * the SDK captures the response. Discovery through `getActiveMatchingSurveys` deliberately
-     * stays capture-independent for custom integrations.
-     */
     private _checkSurveyEligibility(surveyId: string | Survey): { eligible: boolean; reason?: string } {
         if (isNullish(this._surveyManager)) {
             return { eligible: false, reason: SURVEY_NOT_LOADED }
@@ -490,7 +485,7 @@ export class PostHogSurveys implements Extension {
         if (!survey) {
             return { eligible: false, reason: 'Survey not found' }
         }
-        return this._surveyManager.checkSurveyDisplayEligibility(survey)
+        return this._surveyManager.checkSurveyEligibility(survey)
     }
 
     private _checkSurveyRenderability(surveyId: string | Survey): { eligible: boolean; reason?: string } {
@@ -601,6 +596,15 @@ export class PostHogSurveys implements Extension {
         }
         if (options.displayType !== DisplaySurveyType.Popover && options.initialResponses) {
             logger.warn('initialResponses is only supported for popover surveys. prefill will not be applied.')
+        }
+        // Capturing is a prerequisite, not a display condition: `ignoreConditions` forces a survey
+        // past its targeting and display rules, but the SDK still captures the response, and
+        // `capture()` drops the `survey sent` event while capturing is opted out. Checked outside
+        // that branch so a forced display cannot show a survey whose answer would be thrown away.
+        const captureEligibility = this._surveyManager.checkSurveyCaptureEligibility()
+        if (!captureEligibility.eligible) {
+            logger.warn('Survey is not eligible to be displayed: ', captureEligibility.reason)
+            return
         }
         if (options.ignoreConditions === false) {
             // Explicit display goes through eligibility only, not renderability: the event/action

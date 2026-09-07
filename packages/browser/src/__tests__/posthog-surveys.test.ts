@@ -16,7 +16,7 @@ import { BrowserSurveys } from '../browser-surveys'
 import { Survey, SurveySchedule, SurveyType } from '../posthog-surveys-types'
 import { FlagsResponse } from '../types'
 import { assignableWindow } from '../utils/globals'
-import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
+import { DEFAULT_DISPLAY_SURVEY_OPTIONS, SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { createMockPostHog } from './helpers/posthog-instance'
 import { createSurveysClient } from './helpers/surveys-client'
 
@@ -191,6 +191,44 @@ describe('posthog-surveys', () => {
                 const result = surveys.canRenderSurvey(survey.id)
                 expect(result.visible).toBeTruthy()
                 expect(result.disabledReason).toBeUndefined()
+            })
+        })
+
+        describe('displaySurvey', () => {
+            let surveyManager: SurveyManager
+
+            beforeEach(() => {
+                mockPostHog.get_property.mockReturnValue([survey])
+                surveyManager = new SurveyManager(mockPostHog as PostHog)
+                surveys['_surveyManager'] = surveyManager
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+            })
+
+            // Regression guard: `ignoreConditions` bypasses the survey's display conditions, not the
+            // capture prerequisite. Forcing a survey on while capturing is opted out would show a
+            // confirmation for an answer `capture()` throws away.
+            it('does not display an opted-out survey, even with ignoreConditions', () => {
+                mockPostHog.is_capturing = vi.fn(() => false)
+                const handlePopoverSurvey = vi.spyOn(surveyManager, 'handlePopoverSurvey')
+
+                surveys.displaySurvey(survey.id, { ...DEFAULT_DISPLAY_SURVEY_OPTIONS, ignoreConditions: true })
+
+                expect(handlePopoverSurvey).not.toHaveBeenCalled()
+                expect(mockLogger.warn).toHaveBeenCalledWith(
+                    'Survey is not eligible to be displayed: ',
+                    'Capturing is opted out, so a survey response cannot be captured'
+                )
+            })
+
+            it('displays a survey with ignoreConditions while capturing is on', () => {
+                mockPostHog.is_capturing = vi.fn(() => true)
+                const handlePopoverSurvey = vi.spyOn(surveyManager, 'handlePopoverSurvey').mockImplementation(() => {})
+
+                surveys.displaySurvey(survey.id, { ...DEFAULT_DISPLAY_SURVEY_OPTIONS, ignoreConditions: true })
+
+                expect(handlePopoverSurvey).toHaveBeenCalled()
             })
         })
 
