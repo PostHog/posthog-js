@@ -14,17 +14,32 @@ const UNDICI_GLOBAL_DISPATCHER = Symbol.for('undici.globalDispatcher.1')
 
 const agentsByConnectTimeout = new Map<number, Agent>()
 
-/**
- * A proxy dispatcher (`setGlobalDispatcher`, or Node's `NODE_USE_ENV_PROXY`) must keep routing
- * PostHog requests, so only replace the plain default agent Node installs itself. That agent comes
- * from the copy of undici inside Node, so it is not an instance of the class imported here and the
- * class name is the only marker available.
- */
-function globalDispatcherIsDefault(): boolean {
-  const current = (globalThis as Record<symbol, unknown>)[UNDICI_GLOBAL_DISPATCHER] as
+function readGlobalDispatcher(): { constructor?: { name?: string } } | undefined {
+  return (globalThis as Record<symbol, unknown>)[UNDICI_GLOBAL_DISPATCHER] as
     | { constructor?: { name?: string } }
     | undefined
-  return current == null || current.constructor?.name === 'Agent'
+}
+
+// Importing undici installs a plain agent under this key when nothing holds it yet, so in a fresh
+// process this is that agent rather than anything the application chose.
+const dispatcherAtLoad = readGlobalDispatcher()
+
+/**
+ * A dispatcher the application installed (`setGlobalDispatcher`, or Node's `NODE_USE_ENV_PROXY`)
+ * must keep routing PostHog requests: it can carry a proxy, a connector, TLS settings or
+ * interceptors that the agent here would drop. A default agent is either the one this module saw
+ * when it loaded, or one Node installed later from the copy of undici inside it, which is never an
+ * instance of the class imported here. The class name is the last check because both of those
+ * report `Agent`, and it is all that separates a configured agent installed before this module
+ * loaded from undici's own import-time default.
+ */
+function globalDispatcherIsDefault(): boolean {
+  const current = readGlobalDispatcher()
+  if (current == null) {
+    return true
+  }
+  const isDefaultInstance = current === dispatcherAtLoad || !(current instanceof Agent)
+  return isDefaultInstance && current.constructor?.name === 'Agent'
 }
 
 /**

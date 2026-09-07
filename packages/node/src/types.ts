@@ -205,7 +205,8 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * PostHog ingestion hosts publish many A and AAAA records, so Node races the addresses and
    * cancels each attempt after 250 ms by default. That budget is shorter than a handshake between
    * distant regions, which makes every request fail at connect. Raise this when the SDK runs far
-   * from the ingestion region. Ignored when you inject your own `fetch`, and on edge runtimes.
+   * from the ingestion region. Ignored when you inject your own `fetch`, when your application
+   * installs its own undici dispatcher, and on edge runtimes.
    *
    * @default 2000
    */

@@ -1,5 +1,6 @@
 import http from 'node:http'
 import net from 'node:net'
+import { Agent, setGlobalDispatcher } from 'undici'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DEFAULT_CONNECT_TIMEOUT, fetchWithConnectTimeout, resolveDispatcher } from '../dispatcher.node'
@@ -72,5 +73,19 @@ describe('node dispatcher', () => {
     globals[UNDICI_GLOBAL_DISPATCHER] = new ProxyAgent()
 
     expect(resolveDispatcher()).toBeUndefined()
+  })
+
+  it('leaves an agent the application installed in charge of the request', async () => {
+    const spy = vi.spyOn(net, 'connect')
+    setGlobalDispatcher(new Agent({ connect: { autoSelectFamilyAttemptTimeout: 1234 } }))
+
+    expect(resolveDispatcher()).toBeUndefined()
+
+    await withServer(async (url) => {
+      const response = await fetchWithConnectTimeout(url, { method: 'GET', headers: {} })
+
+      expect(response.status).toBe(200)
+      expect(connectOptions(spy).autoSelectFamilyAttemptTimeout).toBe(1234)
+    })
   })
 })
