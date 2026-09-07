@@ -47,11 +47,14 @@ const IPV6_PATTERN =
 // A separator (space, dot, or dash) is required between the 3-2-4 groups so bare
 // 9-digit IDs are never mistaken for an SSN.
 const US_SSN_PATTERN = /\b\d{3}[ .-]\d{2}[ .-]\d{4}\b/g
-// 13–19 digits, optionally grouped by a single space, dot, dash, or slash. This
-// only marks a candidate; the Luhn check in `redactPii` is what confirms it is a
-// real card, so widening the separators cannot add false positives — it only
-// lets dot/slash-grouped cards reach the check instead of leaking past it.
-const CREDIT_CARD_CANDIDATE_PATTERN = /\b\d(?:[ ./-]?\d){12,18}\b/g
+// A run of >=13 digits optionally grouped by a single space, dot, dash, or
+// slash. This only marks the numeric region; `redactCardInMatch` then looks for
+// the actual card as a run of whole separator-delimited groups that passes Luhn,
+// so an adjacent field such as an expiry (`4111 1111 1111 1111 12/30`) is not
+// absorbed into a failing check that would leak the card.
+const CREDIT_CARD_CANDIDATE_PATTERN = /\b\d(?:[ ./-]?\d){12,}\b/g
+// Matches each separator-delimited digit group inside a card candidate.
+const DIGIT_GROUP_PATTERN = /\d+/g
 // Phone matching is structural rather than "any 10–15 digits", so dates
 // (`2024-01-15 12:30`) and dotted versions are not mistaken for numbers. Two
 // forms: a North-American 3-3-4 grouping, and an international number that must
@@ -120,6 +123,32 @@ function passesLuhn(digits: string): boolean {
   return sum % 10 === 0
 }
 
+// Within a card candidate, finds the actual card — the longest, earliest run of
+// whole separator-delimited digit groups whose joined digits are 13–19 long and
+// pass Luhn — and redacts only that span, leaving any adjacent field (an expiry,
+// a following ID) in place. Checking group-aligned runs rather than arbitrary
+// digit windows keeps the false-positive rate at Luhn's own ~1-in-10, instead of
+// letting a chance-valid sub-window of an ordinary long ID trigger redaction.
+function redactCardInMatch(match: string): string {
+  const groups: { digits: string; start: number; end: number }[] = []
+  for (let m = DIGIT_GROUP_PATTERN.exec(match); m !== null; m = DIGIT_GROUP_PATTERN.exec(match)) {
+    groups.push({ digits: m[0], start: m.index, end: m.index + m[0].length })
+  }
+  for (let first = 0; first < groups.length; first++) {
+    let digits = ''
+    for (let last = first; last < groups.length; last++) {
+      digits += groups[last].digits
+      if (digits.length > 19) {
+        break
+      }
+      if (digits.length >= 13 && passesLuhn(digits)) {
+        return match.slice(0, groups[first].start) + REDACTED_VALUE + match.slice(groups[last].end)
+      }
+    }
+  }
+  return match
+}
+
 /**
  * Redacts structured personal identifiers (emails, IP addresses, credit-card
  * numbers, US SSNs, and phone numbers) from a free-text string. Intended for the
@@ -134,12 +163,7 @@ export function redactPii(value: string): string {
   result = result.replace(EMAIL_PATTERN, REDACTED_VALUE)
   result = result.replace(IPV4_PATTERN, REDACTED_VALUE)
   result = result.replace(IPV6_PATTERN, REDACTED_VALUE)
-  // Card grouping (space/dot/dash/slash) is stripped so only the Luhn check on
-  // the digits decides — a non-card digit run of the same length is left intact.
-  result = result.replace(CREDIT_CARD_CANDIDATE_PATTERN, (match) => {
-    const digits = match.replace(/[ ./-]/g, '')
-    return digits.length >= 13 && digits.length <= 19 && passesLuhn(digits) ? REDACTED_VALUE : match
-  })
+  result = result.replace(CREDIT_CARD_CANDIDATE_PATTERN, redactCardInMatch)
   result = result.replace(US_SSN_PATTERN, REDACTED_VALUE)
   result = result.replace(PHONE_NANP_PATTERN, REDACTED_VALUE)
   result = result.replace(PHONE_INTL_PATTERN, REDACTED_VALUE)

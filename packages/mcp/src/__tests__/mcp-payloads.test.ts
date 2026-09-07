@@ -123,6 +123,11 @@ describe('redactPii', () => {
       `Charging card 4111${NBSP}1111${NBSP}1111${NBSP}1111 now.`,
       'Charging card [redacted] now.',
     ],
+    [
+      'a card without absorbing an adjacent expiry field',
+      'Charging card 4111 1111 1111 1111 12/30 for renewal.',
+      'Charging card [redacted] 12/30 for renewal.',
+    ],
     ['an SSN with dashes', 'Verifying SSN 123-45-6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
     ['an SSN with spaces', 'Verifying SSN 123 45 6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
     ['an SSN with dots', 'Verifying SSN 123.45.6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
