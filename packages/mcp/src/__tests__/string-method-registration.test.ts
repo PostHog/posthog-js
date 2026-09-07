@@ -189,6 +189,7 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
     const reads = eventCapture.findCapturesByEvent('$mcp_resource_read')
     expect(reads).toHaveLength(1)
     expect(reads[0].properties.$mcp_resource_name).toBe('file:///guide.md')
+    expect(reads[0].properties.$mcp_response).toBeUndefined()
   })
 
   it('forwards the three-argument custom-method form instead of breaking the host server', async () => {

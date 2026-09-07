@@ -455,7 +455,6 @@ export async function captureResourceRequest(params: TraceRequestParams): Promis
   }
 
   if (preparedEvent) {
-    preparedEvent.event.response = result
     preparedEvent.event.isError = false
     preparedEvent.event.duration = Date.now() - startTime.getTime()
     try {
