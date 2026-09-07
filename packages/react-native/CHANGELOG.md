@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.67.3
+
+### Patch Changes
+
+- [#4799](https://github.com/PostHog/posthog-js/pull/4799) [`3161e0d`](https://github.com/PostHog/posthog-js/commit/3161e0d92f6da33217ea552fb635c08edee3f4dc) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve Expo static exports and their per-asset Chunk IDs when wrapping Expo's Metro serializer.
+  (2026-09-07)
+
 ## 4.67.2
 
 ### Patch Changes
