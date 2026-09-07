@@ -69,6 +69,7 @@ export interface CompatibleTextToolResult {
 export interface MCPRequestParamsLike {
   arguments?: JsonRecord
   name?: string
+  uri?: string
   [key: string]: unknown
 }
 

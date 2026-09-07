@@ -34,7 +34,7 @@ interface V2Schemas {
 type V2Handler = (request: unknown, ctx: unknown) => unknown
 
 /** Spec methods v2 accepts in the two-argument form; everything else needs schemas. */
-const SPEC_METHODS = new Set(['initialize', 'ping', 'tools/list', 'tools/call'])
+const SPEC_METHODS = new Set(['initialize', 'ping', 'resources/list', 'resources/read', 'tools/list', 'tools/call'])
 
 class V2ServerDouble {
   _requestHandlers = new Map<string, (request: MCPRequestLike, extra?: CompatibleRequestHandlerExtra) => Promise<any>>()
@@ -166,6 +166,29 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
     const listings = eventCapture.findCapturesByEvent('$mcp_tools_list')
     expect(listings).toHaveLength(1)
     expect(listings[0].properties.$mcp_listed_tool_names).toEqual(expect.arrayContaining(['get_trends']))
+  })
+
+  it('wraps resource handlers registered after instrument()', async () => {
+    const server = makeServer()
+    instrument(server, fakePostHog())
+
+    server.setRequestHandler('resources/list', (async () => ({
+      resources: [{ name: 'Guide', uri: 'file:///guide.md' }],
+    })) as any)
+    server.setRequestHandler('resources/read', (async (request: MCPRequestLike) => ({
+      contents: [{ uri: request.params?.uri, text: '# Guide' }],
+    })) as any)
+
+    const listResult = await dispatch(server, { method: 'resources/list', params: {} })
+    const readResult = await dispatch(server, { method: 'resources/read', params: { uri: 'file:///guide.md' } })
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(listResult).toEqual({ resources: [{ name: 'Guide', uri: 'file:///guide.md' }] })
+    expect(readResult).toEqual({ contents: [{ uri: 'file:///guide.md', text: '# Guide' }] })
+    expect(eventCapture.findCapturesByEvent('$mcp_resources_list')).toHaveLength(1)
+    const reads = eventCapture.findCapturesByEvent('$mcp_resource_read')
+    expect(reads).toHaveLength(1)
+    expect(reads[0].properties.$mcp_resource_name).toBe('file:///guide.md')
   })
 
   it('forwards the three-argument custom-method form instead of breaking the host server', async () => {

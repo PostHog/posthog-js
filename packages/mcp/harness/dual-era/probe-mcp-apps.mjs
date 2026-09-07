@@ -172,8 +172,15 @@ function assertAppFlow(label, { tools, call, resources, read, recorder, protocol
   const resourceEvents = recorder.events.filter((candidate) =>
     ['$mcp_resources_list', '$mcp_resource_read'].includes(candidate.event)
   )
-  console.log(
-    `  ${DIM}observed resource analytics events: ${resourceEvents.length} (tracking is a follow-up; this probe gates compatibility)${RESET}`
+  const listEvent = resourceEvents.find((candidate) => candidate.event === '$mcp_resources_list')
+  const readEvent = resourceEvents.find((candidate) => candidate.event === '$mcp_resource_read')
+  check(
+    `${label} · resource discovery and reads are captured`,
+    resourceEvents.length === 2 &&
+      listEvent?.properties?.$mcp_protocol_version === protocolVersion &&
+      readEvent?.properties?.$mcp_resource_name === APP_URI &&
+      readEvent?.properties?.$mcp_protocol_version === protocolVersion,
+    JSON.stringify(resourceEvents)
   )
 }
 

@@ -396,6 +396,77 @@ function publishFailedToolEvent(
   }
 }
 
+interface TraceRequestParams {
+  server: MCPServerLike
+  originalHandler: MCPRequestHandler
+  request: MCPRequestLike
+  extra: CompatibleRequestHandlerExtra | undefined
+  eventType: typeof MCPAnalyticsEventType.mcpResourcesList | typeof MCPAnalyticsEventType.mcpResourcesRead
+  logger: LoggerFn
+}
+
+/** Captures a non-tool MCP request without changing its result or error semantics. */
+export async function captureResourceRequest(params: TraceRequestParams): Promise<unknown> {
+  const { server, originalHandler, request, extra, eventType, logger } = params
+  const data = getServerTrackingData(server)
+  if (!data) {
+    logger(
+      'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using resources.'
+    )
+    return await originalHandler(request, extra)
+  }
+
+  const startTime = new Date()
+  let preparedEvent: PreparedToolEvent | null = null
+  try {
+    const sessionId = getSessionId(server, extra)
+    const sessionInfo = getSessionInfo(server, data, sessionId)
+    const event: McpEvent = {
+      sessionId,
+      eventType,
+      parameters: buildCapturedMcpParameters(request),
+      resourceName: eventType === MCPAnalyticsEventType.mcpResourcesRead ? request.params?.uri : undefined,
+      timestamp: startTime,
+    }
+    stampClientIdentity(event, request, extra, server)
+    stampTransportIdentity(event, extra)
+    const identity = await handleIdentify(server, data, sessionId, request, sessionInfo, extra)
+    await applyResolvedMetadata(event, data, request, extra)
+    preparedEvent = { event, requestAttribution: withIdentity(sessionInfo, identity) }
+  } catch (error) {
+    logger(`Warning: PostHog MCP analytics could not prepare ${request.method} analytics - ${error}`)
+  }
+
+  let result: unknown
+  try {
+    result = await originalHandler(request, extra)
+  } catch (error) {
+    if (preparedEvent) {
+      preparedEvent.event.isError = true
+      preparedEvent.event.error = captureException(error)
+      preparedEvent.event.duration = Date.now() - startTime.getTime()
+      try {
+        captureEvent(server, preparedEvent.event, logger, preparedEvent.requestAttribution)
+      } catch (captureError) {
+        logger(`Warning: PostHog MCP analytics failed to publish ${request.method} analytics - ${captureError}`)
+      }
+    }
+    throw error
+  }
+
+  if (preparedEvent) {
+    preparedEvent.event.response = result
+    preparedEvent.event.isError = false
+    preparedEvent.event.duration = Date.now() - startTime.getTime()
+    try {
+      captureEvent(server, preparedEvent.event, logger, preparedEvent.requestAttribution)
+    } catch (error) {
+      logger(`Warning: PostHog MCP analytics failed to publish ${request.method} analytics - ${error}`)
+    }
+  }
+  return result
+}
+
 // --- tools/list -----------------------------------------------------------
 
 /**

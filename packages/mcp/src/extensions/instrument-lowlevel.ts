@@ -11,6 +11,7 @@ import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
   handleListToolsRequest,
+  captureResourceRequest,
   patchRequestHandlers,
   registerFallbackRequestHandler,
   captureToolCall,
@@ -42,6 +43,24 @@ export function instrumentLowLevelServer(server: MCPServerLike, logger: LoggerFn
       'tools/list': (server, originalHandler, request, extra) =>
         handleListToolsRequest(server, originalHandler, request, extra, logger),
       'tools/call': traceToolCall,
+      'resources/list': (server, originalHandler, request, extra) =>
+        captureResourceRequest({
+          server,
+          originalHandler,
+          request,
+          extra,
+          eventType: MCPAnalyticsEventType.mcpResourcesList,
+          logger,
+        }),
+      'resources/read': (server, originalHandler, request, extra) =>
+        captureResourceRequest({
+          server,
+          originalHandler,
+          request,
+          extra,
+          eventType: MCPAnalyticsEventType.mcpResourcesRead,
+          logger,
+        }),
     }
     patchRequestHandlers(server, handlers)
 
