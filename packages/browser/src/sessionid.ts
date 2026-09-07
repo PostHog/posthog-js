@@ -154,8 +154,11 @@ export class SessionIdManager {
             sessionStore._set(this._primary_window_exists_storage_key, true)
         }
 
-        if (this._config.bootstrap?.sessionID) {
-            this.setBootstrapSessionId(this._config.bootstrap.sessionID)
+        // Supplied but empty is a failed handover, not an absent one, so it goes through
+        // the same rejection path as reset() rather than being dropped without a word.
+        const bootstrapSessionId = this._config.bootstrap?.sessionID
+        if (!isUndefined(bootstrapSessionId)) {
+            this.setBootstrapSessionId(bootstrapSessionId)
         }
 
         this._listenToReloadWindow()

@@ -161,6 +161,28 @@ describe('Session ID manager', () => {
             })
         })
 
+        it('reports an empty bootstrap sessionID during initialization', () => {
+            ;(uuid7ToTimestampMs as vi.Mock).mockImplementation(() => {
+                throw new Error('Not a valid UUID')
+            })
+            const sessionIdManager = new SessionIdManager(
+                createMockPostHog({
+                    config: { ...config, bootstrap: { sessionID: '' } },
+                    persistence: persistence as PostHogPersistence,
+                    register: vi.fn(),
+                })
+            )
+
+            expect(consoleError).toHaveBeenCalledWith(
+                '[PostHog.js] [SessionId]',
+                expect.stringContaining('it is not a valid UUID v7')
+            )
+            expect(sessionIdManager.checkAndGetSessionAndWindowId(false, now)).toMatchObject({
+                sessionId: 'newUUID',
+                sessionStartTimestamp: now,
+            })
+        })
+
         it('defers a reset bootstrap session until the next session check', () => {
             const sessionIdManager = sessionIdMgr(persistence)
             sessionIdManager.checkAndGetSessionAndWindowId(false, now)
