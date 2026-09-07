@@ -121,7 +121,7 @@ const customEvent = (tag: string, payload: unknown): eventWithTime =>
 
 type LiveRecorder = { emit: (event: eventWithTime) => void; active: boolean }
 
-function createHarness() {
+function createHarness(sessionIdleTimeoutSeconds = 30 * 60) {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
 
@@ -138,6 +138,7 @@ function createHarness() {
         disable_session_recording: false,
         enable_recording_console_log: false,
         autocapture: false,
+        session_idle_timeout_seconds: sessionIdleTimeoutSeconds,
         session_recording: { maskAllInputs: false, compress_events: false },
         persistence: 'memory',
     })
@@ -415,5 +416,83 @@ describe('lazy session recording rotation invariants', () => {
                 `minimal failure: ${minimalFailure?.message ?? 'did not reproduce'}`,
             ].join('\n')
         )
+    })
+})
+
+describe('suspended tab session timestamps (#4825)', () => {
+    it.each(
+        ['unknown', 'active', 'idle'].flatMap((initialState) =>
+            ['mutation', 'interaction', 'session check', 'idle timer', 'unload'].map((wake) => ({ initialState, wake }))
+        )
+    )('$initialState before suspension, $wake first on wake', ({ initialState, wake }) => {
+        const h = createHarness(600)
+        try {
+            const startedAt = Date.now()
+            const originalSessionId = h.lazy._sessionId
+            if (initialState !== 'unknown') {
+                h.emitEvent(incrementalEvent({ source: IncrementalSource.MouseInteraction }))
+                vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+            }
+            if (initialState === 'idle') {
+                vi.setSystemTime(startedAt + RECORDING_IDLE_THRESHOLD_MS + 1)
+                h.emitEvent(incrementalEvent({ source: 0, adds: [], attributes: [], removes: [], texts: [] }))
+            }
+
+            // Jump the wall clock without executing timers, as with a frozen tab.
+            const wakeAt = startedAt + 3 * 24 * 60 * 60 * 1000
+            vi.setSystemTime(wakeAt)
+            switch (wake) {
+                case 'mutation':
+                    h.emitEvent(incrementalEvent({ source: 0, adds: [], attributes: [], removes: [], texts: [] }))
+                    break
+                case 'interaction':
+                    h.emitEvent(incrementalEvent({ source: IncrementalSource.MouseInteraction }))
+                    break
+                case 'session check':
+                    h.sessionManager.checkAndGetSessionAndWindowId(true)
+                    break
+                case 'idle timer':
+                    vi.advanceTimersByTime(600 * 1000 * 1.1)
+                    break
+                case 'unload':
+                    h.lazy._onBeforeUnload()
+                    break
+            }
+            vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+            const shipped = h.capture.mock.calls.filter(([name]) => name === '$snapshot')
+            for (const [, props] of shipped) {
+                const mint = h.mint.get(props.$session_id)!
+                for (const event of props.$snapshot_data) {
+                    expect(
+                        event.timestamp,
+                        `${props.$session_id} ${event.data?.tag ?? event.type} before mint`
+                    ).toBeGreaterThanOrEqual(mint)
+                    expect(
+                        event.timestamp,
+                        `${props.$session_id} ${event.data?.tag ?? event.type} beyond cap`
+                    ).toBeLessThanOrEqual(mint + 24 * 60 * 60 * 1000)
+                }
+            }
+            if (wake === 'interaction' && initialState !== 'unknown') {
+                const ending = shipped
+                    .filter(([, props]) => props.$session_id === originalSessionId)
+                    .flatMap(([, props]) => props.$snapshot_data)
+                    .find((event) => event.data?.tag === '$session_ending')
+                expect(ending?.timestamp).toBe(startedAt)
+            }
+            if (['mutation', 'interaction', 'session check'].includes(wake)) {
+                expect(h.lazy._sessionId).not.toBe(originalSessionId)
+            }
+            if (wake === 'interaction') {
+                expect(shipped.some(([, props]) => props.$session_id === h.lazy._sessionId)).toBe(true)
+            } else if (wake !== 'unload') {
+                expect(shipped.filter(([, props]) => props.$session_id !== originalSessionId)).toHaveLength(0)
+            }
+        } finally {
+            h.sessionRecording.stopRecording()
+            vi.useRealTimers()
+            vi.clearAllMocks()
+        }
     })
 })

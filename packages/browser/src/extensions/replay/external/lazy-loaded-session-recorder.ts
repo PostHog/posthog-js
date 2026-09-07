@@ -2560,6 +2560,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
+        // Check before updating activity: rotation synchronously emits $session_ending,
+        // which must use the old session's last activity, not the waking interaction.
+        // Read-only checks still enforce the 24-hour cap in every idle state.
+        const { windowId, sessionId } = this._sessionManager.checkAndGetSessionAndWindowId(
+            !isUserInteraction,
+            event.timestamp
+        )
+
         let returningFromIdle = false
         if (isUserInteraction) {
             this._lastActivityTimestamp = event.timestamp
@@ -2578,19 +2586,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 }
             }
         }
-
-        // The session check runs in every idle state (it only reads in-memory persistence
-        // props, so it is cheap). While 'unknown' the recorder still captures, so it must keep
-        // checking or its events are stamped with a stale session id. While confirmed idle,
-        // the readOnly check below still enforces the 24-hour session cap
-        // (sessionPastMaximumLength rotates even on readOnly calls) and hears cross-tab
-        // rotations. Bailing here is how idle tabs used to accrete multi-day recordings that
-        // blew straight through SESSION_LENGTH_LIMIT under one session id.
-        // We only want to extend the session if it is an interactive event.
-        const { windowId, sessionId } = this._sessionManager.checkAndGetSessionAndWindowId(
-            !isUserInteraction,
-            event.timestamp
-        )
 
         const sessionIdChanged = this._sessionId !== sessionId
         const windowIdChanged = this._windowId !== windowId
