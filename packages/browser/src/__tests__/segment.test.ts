@@ -236,7 +236,7 @@ describe(`Segment integration`, () => {
             customer_metadata: customerMetadata,
             token: 'sdk-token',
         })
-        vi.spyOn(posthog, 'calculateEventProperties').mockReturnValue(calculatedProperties)
+        vi.spyOn(posthog, 'calculateEventProperties').mockReturnValueOnce(calculatedProperties)
         const context = {
             event: {
                 event: 'Order Completed',
