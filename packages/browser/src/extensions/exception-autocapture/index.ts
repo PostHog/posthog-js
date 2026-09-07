@@ -8,7 +8,6 @@ import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { isUndefined, BucketedRateLimiter, isObject, resolveExceptionRateLimiterConfig } from '@posthog/core'
 import { ErrorTracking } from '@posthog/core'
 import { ExceptionAutoCaptureConfig } from '../../types'
-import { isStackOverflowError } from '../../utils/stack-overflow'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
@@ -174,12 +173,9 @@ export class ExceptionObserver {
             }
 
             this._instance.exceptions?.sendExceptionEvent(errorProperties)
-        } catch (error) {
-            if (!isStackOverflowError(error)) {
-                throw error
-            }
-            // Do not log here: console.error may be instrumented by exception autocapture and
-            // would re-enter this method while the call stack is still exhausted.
+        } catch {
+            // Exception autocapture must never throw into customer code. Do not log here because
+            // console.error may be instrumented and would re-enter this method.
         }
     }
 }

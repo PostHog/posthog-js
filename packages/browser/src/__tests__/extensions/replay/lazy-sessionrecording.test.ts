@@ -61,6 +61,7 @@ import {
     RECORDING_BUFFER_TIMEOUT,
     RECORDING_MAX_EVENT_SIZE,
     RECORDING_REMOTE_CONFIG_TTL_MS,
+    SEVEN_MEGABYTES,
 } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
 
 // Type and source defined here designate a non-user-generated recording event
@@ -8980,6 +8981,50 @@ describe('Lazy SessionRecording', () => {
                 // recording survives the telemetry failure
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(2)
             })
+        })
+    })
+
+    describe('when capturing one snapshot chunk throws', () => {
+        let logSpy: vi.SpyInstance
+        let warnSpy: vi.SpyInstance
+
+        beforeEach(() => {
+            assignableWindow.POSTHOG_DEBUG = true
+            logSpy = vi.spyOn(window!.console, 'log').mockImplementation(() => {})
+            warnSpy = vi.spyOn(window!.console, 'warn').mockImplementation(() => {})
+        })
+
+        afterEach(() => {
+            logSpy.mockRestore()
+            warnSpy.mockRestore()
+            assignableWindow.POSTHOG_DEBUG = undefined
+        })
+
+        it('warns and ships the chunks after it', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            releaseInteractionHold()
+
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 'first' } }))
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 'second' } }))
+
+            const lazy = sessionRecording['_lazyLoadedSessionRecording']
+            // over the split limit, so the flush ships one chunk per buffered event
+            lazy['_buffer'].size = SEVEN_MEGABYTES
+
+            let snapshotCaptures = 0
+            ;(posthog.capture as Mock).mockImplementation((eventName: string) => {
+                if (eventName === '$snapshot' && ++snapshotCaptures === 1) {
+                    throw new RangeError('invalid field value')
+                }
+            })
+
+            expect(() => lazy['_flushBuffer']()).not.toThrow()
+            expect(snapshotCaptures).toEqual(2)
+            expect(warnSpy).toHaveBeenCalledWith(
+                expect.any(String),
+                'could not capture snapshot chunk - skipping it',
+                expect.any(RangeError)
+            )
         })
     })
 })
