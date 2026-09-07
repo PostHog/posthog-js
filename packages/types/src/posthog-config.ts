@@ -769,8 +769,10 @@ export interface SessionRecordingOptions {
     /**
      * Record iframes that come from a different origin.
      * Set it to `true` in the parent page and in the iframe. The iframe then sends its recording
-     * to the parent, and both frames share one recording. If only one side sets it, the iframe
-     * records a second session of its own.
+     * to the parent, and both frames share one recording. Both sides need it. With it set in the
+     * parent alone, the iframe records a separate session of its own. With it set in the iframe
+     * alone, the iframe stops recording locally and sends to a parent that is not listening, so
+     * its replay is lost.
      *
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
