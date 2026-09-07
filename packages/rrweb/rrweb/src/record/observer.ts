@@ -1604,21 +1604,31 @@ export function initObservers(
   const handlers: listenerHandler[] = [];
 
   const cleanup = callbackWrapper(() => {
-    // Clean up this observer's mutation buffer
-    if (mutationBuffer) {
-      mutationBuffer.destroy();
-      mutationBuffer.reset();
-      // Remove only this buffer from the global array
-      const index = mutationBuffers.indexOf(mutationBuffer);
-      if (index !== -1) {
-        mutationBuffers.splice(index, 1);
+    try {
+      // Clean up this observer's mutation buffer
+      if (mutationBuffer) {
+        try {
+          mutationBuffer.destroy();
+          mutationBuffer.reset();
+        } finally {
+          // Remove only this buffer from the global array. In a finally: a throw
+          // above would otherwise leave it pinned there, holding this document
+          // and its canvas manager alive.
+          const index = mutationBuffers.indexOf(mutationBuffer);
+          if (index !== -1) {
+            mutationBuffers.splice(index, 1);
+          }
+        }
       }
+      // Disconnect the shadow observers owned by this document (e.g. an iframe being
+      // torn down) without touching the rest of the page's shadow observation.
+      o.shadowDomManager.resetForDoc(o.doc);
+      mutationObserver?.disconnect();
+    } finally {
+      // Releasing this document's listeners and patched APIs is the whole point
+      // of teardown, so it runs even when a step above throws.
+      callAllSafely(handlers);
     }
-    // Disconnect the shadow observers owned by this document (e.g. an iframe being
-    // torn down) without touching the rest of the page's shadow observation.
-    o.shadowDomManager.resetForDoc(o.doc);
-    mutationObserver?.disconnect();
-    callAllSafely(handlers);
   });
 
   try {
