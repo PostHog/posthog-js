@@ -1061,7 +1061,12 @@ export class PostHogFeatureFlags implements Extension {
      *
      * By default, this method may return cached values from localStorage if the `/flags` endpoint
      * hasn't responded yet. This reduces flicker but means you might briefly see stale values
-     * (e.g., a flag that was disabled on the server).
+     * (e.g., a flag that was made globally inactive on the server).
+     *
+     * An evaluated boolean flag returns `true` or `false`; `undefined` means no current evaluation
+     * is available for the key. Globally inactive flags are omitted from the remote `/flags`
+     * response, so after that response loads they are unavailable rather than represented by
+     * a `false` result.
      *
      * ### Usage:
      *
@@ -1075,8 +1080,8 @@ export class PostHogFeatureFlags implements Extension {
      * @param {boolean} [options.send_event=true] If false, won't send a $feature_flag_called event to PostHog.
      * @param {boolean} [options.fresh=false] If true, only returns values loaded from the server, not cached localStorage values.
      *                  Use this when you need to ensure the flag value reflects the current server state,
-     *                  such as after disabling a flag. Returns undefined until the /flags endpoint responds.
-     * @returns {boolean | string | undefined} The flag value, or undefined if not found or not yet loaded.
+     *                  such as after making a flag globally inactive. Returns undefined until the /flags endpoint responds.
+     * @returns {boolean | string | undefined} The flag value, or undefined if no current evaluation is available.
      */
     getFeatureFlag(key: string, options: FeatureFlagOptions = {}): boolean | string | undefined {
         if (options.fresh && !this._flagsLoadedFromRemote) {
@@ -1127,7 +1132,11 @@ export class PostHogFeatureFlags implements Extension {
      *
      * By default, this method may return cached values from localStorage if the `/flags` endpoint
      * hasn't responded yet. This reduces flicker but means you might briefly see stale values
-     * (e.g., a flag that was disabled on the server).
+     * (e.g., a flag that was made globally inactive on the server).
+     *
+     * A result with `enabled: false` is a conclusive off evaluation. `undefined` means no current
+     * evaluation is available for the key. This includes globally inactive flags, which are omitted
+     * from the remote `/flags` response.
      *
      * ### Usage:
      *
@@ -1346,7 +1355,12 @@ export class PostHogFeatureFlags implements Extension {
      *
      * By default, this method may return cached values from localStorage if the `/flags` endpoint
      * hasn't responded yet. This reduces flicker but means you might briefly see stale values
-     * (e.g., a flag that was disabled on the server).
+     * (e.g., a flag that was made globally inactive on the server).
+     *
+     * A `false` result means the flag value evaluated off; it does not mean the SDK observed the
+     * flag's global active setting. When no current evaluation is available, this method returns
+     * `options.defaultValue` if provided, otherwise `undefined`. Globally inactive flags are omitted
+     * from the remote `/flags` response and therefore have no value.
      *
      * ### Usage:
      *

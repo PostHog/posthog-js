@@ -446,6 +446,54 @@ describe('sanitizeEvent - exception values', () => {
   })
 })
 
+describe('sanitizeEvent - intent PII redaction', () => {
+  it('redacts structured PII from the agent-narrated intent', () => {
+    const event = makeEvent({
+      userIntent: 'Looking up orders for jane.doe@acme.com and calling +1 (415) 555-0142 about a refund.',
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.userIntent).toBe('Looking up orders for [redacted] and calling [redacted] about a refund.')
+  })
+
+  it('composes PII redaction with PostHog token redaction on the intent', () => {
+    const event = makeEvent({
+      userIntent: 'Rotating token phc_123456789012345678901234567890 for user carol@example.org.',
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.userIntent).toBe('Rotating token [redacted] for user [redacted].')
+  })
+
+  it('does not redact the same PII shapes from structured parameters or responses', () => {
+    const event = makeEvent({
+      userIntent: 'Enriching the profile for dave@example.com from the CRM.',
+      parameters: { email: 'dave@example.com', ip: '203.0.113.42' },
+      response: { content: [{ type: 'text', text: 'Matched dave@example.com at 203.0.113.42.' }] },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.userIntent).toBe('Enriching the profile for [redacted] from the CRM.')
+    // Structured tool data keeps the same shapes: they are often legitimate here.
+    expect(result.parameters).toEqual({ email: 'dave@example.com', ip: '203.0.113.42' })
+    expect((result.response as { content: { text: string }[] }).content[0].text).toBe(
+      'Matched dave@example.com at 203.0.113.42.'
+    )
+  })
+
+  it('does not mutate the original intent string', () => {
+    const original = 'Paging on-call about ticket from user@example.com right now.'
+    const event = makeEvent({ userIntent: original })
+
+    sanitizeEvent(event)
+
+    expect(event.userIntent).toBe(original)
+  })
+})
+
 describe('sanitizeEvent - integration', () => {
   it('should sanitize both parameters and response in a full event', () => {
     const largeBase64 = makeLargeBase64()
