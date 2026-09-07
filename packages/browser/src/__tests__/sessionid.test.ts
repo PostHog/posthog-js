@@ -198,6 +198,26 @@ describe('Session ID manager', () => {
             )
         })
 
+        it('reports a deferred bootstrapped session that starts after the first event of the new session', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager.resetSessionId()
+
+            expect(sessionIdManager.setBootstrapSessionId('bootstrap-session-id', true)).toBe(true)
+            ;(uuidv7 as vi.Mock).mockReturnValueOnce('fresh-session-id').mockReturnValueOnce('fresh-window-id')
+            const backdatedBeyondTheClockSkewTolerance = timestamp - 5 * 60 * 1000
+
+            expect(
+                sessionIdManager.checkAndGetSessionAndWindowId(false, backdatedBeyondTheClockSkewTolerance)
+            ).toMatchObject({
+                sessionId: 'fresh-session-id',
+                windowId: 'fresh-window-id',
+            })
+            expect(consoleError).toHaveBeenCalledWith(
+                '[PostHog.js] [SessionId]',
+                expect.stringContaining('its timestamp is in the future')
+            )
+        })
+
         it.each([
             [
                 'it is not a valid UUID v7',

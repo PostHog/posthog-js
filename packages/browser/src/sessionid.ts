@@ -27,6 +27,22 @@ const rejectBootstrapSessionId = (reason: string): undefined => {
     return undefined
 }
 
+// The deferred path re-checks the id when the next session starts, so it has to name
+// its own reason: the session can age out in between, and the check timestamp can also
+// land before the id was supplied (a backdated capture timestamp, or a clock step back).
+const deferredBootstrapSessionRejectionReason = (
+    sessionStartTimestamp: number,
+    timestamp: number
+): string | undefined => {
+    if (sessionStartTimestamp > timestamp + BOOTSTRAP_SESSION_CLOCK_SKEW_TOLERANCE_MILLISECONDS) {
+        return 'its timestamp is in the future'
+    }
+    if (timestamp - sessionStartTimestamp > SESSION_LENGTH_LIMIT_MILLISECONDS) {
+        return 'the session it names aged out before the next session started'
+    }
+    return undefined
+}
+
 const parseBootstrapSessionId = (sessionID: string, timestamp = new Date().getTime()): number | undefined => {
     let sessionStartTimestamp: number
     try {
@@ -438,13 +454,11 @@ export class SessionIdManager {
         let windowId = this._getWindowId()
 
         const pendingBootstrapSession = this._pendingBootstrapSession
-        const pendingBootstrapSessionPastMaximumLength =
-            !!pendingBootstrapSession &&
-            (pendingBootstrapSession.sessionStartTimestamp >
-                timestamp + BOOTSTRAP_SESSION_CLOCK_SKEW_TOLERANCE_MILLISECONDS ||
-                timestamp - pendingBootstrapSession.sessionStartTimestamp > SESSION_LENGTH_LIMIT_MILLISECONDS)
+        const pendingBootstrapRejectionReason = pendingBootstrapSession
+            ? deferredBootstrapSessionRejectionReason(pendingBootstrapSession.sessionStartTimestamp, timestamp)
+            : undefined
         const sessionPastMaximumLength = pendingBootstrapSession
-            ? pendingBootstrapSessionPastMaximumLength
+            ? !isUndefined(pendingBootstrapRejectionReason)
             : isPositiveNumber(startTimestamp) &&
               Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS
 
@@ -474,9 +488,9 @@ export class SessionIdManager {
         }
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             crossTabAdoption = false
-            const usePendingBootstrapSession = pendingBootstrapSession && !pendingBootstrapSessionPastMaximumLength
-            if (pendingBootstrapSession && !usePendingBootstrapSession) {
-                rejectBootstrapSessionId('the session it names aged out before the next session started')
+            const usePendingBootstrapSession = pendingBootstrapSession && !pendingBootstrapRejectionReason
+            if (pendingBootstrapRejectionReason) {
+                rejectBootstrapSessionId(pendingBootstrapRejectionReason)
             }
             sessionId = usePendingBootstrapSession ? pendingBootstrapSession.sessionId : this._sessionIdGenerator()
             windowId = this._windowIdGenerator()
