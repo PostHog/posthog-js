@@ -2180,7 +2180,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     })
                 } catch (e) {
                     // one chunk that cannot be captured must not drop the chunks after it
-                    logger.error('could not capture snapshot chunk - skipping it', e)
+                    logger.warn('could not capture snapshot chunk - skipping it', e)
                 }
             })
 

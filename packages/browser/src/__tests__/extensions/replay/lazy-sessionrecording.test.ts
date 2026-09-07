@@ -8896,7 +8896,22 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('when capturing one snapshot chunk throws', () => {
-        it('ships the chunks after it', () => {
+        let logSpy: vi.SpyInstance
+        let warnSpy: vi.SpyInstance
+
+        beforeEach(() => {
+            assignableWindow.POSTHOG_DEBUG = true
+            logSpy = vi.spyOn(window!.console, 'log').mockImplementation(() => {})
+            warnSpy = vi.spyOn(window!.console, 'warn').mockImplementation(() => {})
+        })
+
+        afterEach(() => {
+            logSpy.mockRestore()
+            warnSpy.mockRestore()
+            assignableWindow.POSTHOG_DEBUG = undefined
+        })
+
+        it('warns and ships the chunks after it', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             releaseInteractionHold()
 
@@ -8916,6 +8931,11 @@ describe('Lazy SessionRecording', () => {
 
             expect(() => lazy['_flushBuffer']()).not.toThrow()
             expect(snapshotCaptures).toEqual(2)
+            expect(warnSpy).toHaveBeenCalledWith(
+                expect.any(String),
+                'could not capture snapshot chunk - skipping it',
+                expect.any(RangeError)
+            )
         })
     })
 })
