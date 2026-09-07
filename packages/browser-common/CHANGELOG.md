@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.8.2
+
+### Patch Changes
+
+- [#4803](https://github.com/PostHog/posthog-js/pull/4803) [`87b34af`](https://github.com/PostHog/posthog-js/commit/87b34af44e46427eba97eaf63aafb82255896a42) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve Error details, causes, aggregate errors, and custom enumerable properties in event properties, including cross-realm Errors. Apply string truncation to ordinary capture properties and retain custom toJSON serialization for exception additional properties.
+  (2026-09-07)
+
 ## 0.8.1
 
 ### Patch Changes
