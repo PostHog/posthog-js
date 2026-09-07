@@ -12,6 +12,10 @@ export const DEFAULT_CONNECT_TIMEOUT = 2000
 // Node holds the connect budget in a signed 32-bit integer.
 const MAX_CONNECT_TIMEOUT = 2147483647
 
+// undici gives one whole connect operation 10 seconds when `connect.timeout` is absent, however
+// long each address is allowed, so that is the floor for the operation as a whole.
+const MIN_CONNECT_OPERATION_TIMEOUT = 10000
+
 // Both the npm `undici` package and the copy inside Node read the global dispatcher from this key.
 const UNDICI_GLOBAL_DISPATCHER = Symbol.for('undici.globalDispatcher.1')
 
@@ -56,6 +60,16 @@ function isUsableConnectTimeout(connectTimeout: number | undefined): connectTime
 }
 
 /**
+ * The connect options for a sanitized budget. `timeout` bounds the connect operation as a whole,
+ * which races the per-address budget: leaving it out would cut a longer budget off at undici's own
+ * 10 seconds, and setting it to the per-address budget would leave the default too little room to
+ * work through the addresses of a dual-stack host.
+ */
+export function buildConnectOptions(timeout: number): { autoSelectFamilyAttemptTimeout: number; timeout: number } {
+  return { autoSelectFamilyAttemptTimeout: timeout, timeout: Math.max(timeout, MIN_CONNECT_OPERATION_TIMEOUT) }
+}
+
+/**
  * The dispatcher PostHog requests use, or `undefined` when the request must stay on the global
  * dispatcher. Agents are cached per connect timeout so every client shares one connection pool.
  */
@@ -67,7 +81,7 @@ export function resolveDispatcher(connectTimeout?: number): Agent | undefined {
   const timeout = isUsableConnectTimeout(connectTimeout) ? connectTimeout : DEFAULT_CONNECT_TIMEOUT
   let agent = agentsByConnectTimeout.get(timeout)
   if (!agent) {
-    agent = new Agent({ connect: { autoSelectFamilyAttemptTimeout: timeout } })
+    agent = new Agent({ connect: buildConnectOptions(timeout) })
     agentsByConnectTimeout.set(timeout, agent)
   }
   return agent

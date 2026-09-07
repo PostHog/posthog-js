@@ -3,7 +3,12 @@ import net from 'node:net'
 import { Agent, setGlobalDispatcher } from 'undici'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { DEFAULT_CONNECT_TIMEOUT, fetchWithConnectTimeout, resolveDispatcher } from '../dispatcher.node'
+import {
+  buildConnectOptions,
+  DEFAULT_CONNECT_TIMEOUT,
+  fetchWithConnectTimeout,
+  resolveDispatcher,
+} from '../dispatcher.node'
 
 const UNDICI_GLOBAL_DISPATCHER = Symbol.for('undici.globalDispatcher.1')
 
@@ -77,6 +82,14 @@ describe('node dispatcher', () => {
       expect(response.status).toBe(200)
       expect(connectOptions(spy).autoSelectFamilyAttemptTimeout).toBe(DEFAULT_CONNECT_TIMEOUT)
     })
+  })
+
+  it('leaves the connect operation room to work through the addresses of a host', () => {
+    expect(buildConnectOptions(DEFAULT_CONNECT_TIMEOUT)).toEqual({
+      autoSelectFamilyAttemptTimeout: DEFAULT_CONNECT_TIMEOUT,
+      timeout: 10000,
+    })
+    expect(buildConnectOptions(15000)).toEqual({ autoSelectFamilyAttemptTimeout: 15000, timeout: 15000 })
   })
 
   it('reuses one agent per connect timeout', () => {

@@ -211,6 +211,9 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * Must be a whole number of milliseconds that Node can use: a fraction, `Infinity`, or anything
    * above 2147483647 falls back to the default rather than failing every request.
    *
+   * `requestTimeout` still bounds the whole request, connect included, so raise that as well for a
+   * connect budget above it to have any effect.
+   *
    * @default 2000
    */
   connectTimeout?: number
