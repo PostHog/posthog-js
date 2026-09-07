@@ -2905,8 +2905,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             !this._jsonLdCapture
         ) {
             this._jsonLdCapture = startJsonLdCapture(document, window.MutationObserver, {
+                attributeFilter: sessionRecordingOptions.attributeFilter,
                 blockClass: sessionRecordingOptions.blockClass,
                 blockSelector: sessionRecordingOptions.blockSelector,
+                isRecordedElement: (element) => rrwebRecord.mirror.getId(element) > 0,
+                maskAllElementAttributes: sessionRecordingOptions.maskAllElementAttributes,
+                maskAttributeFn: sessionRecordingOptions.maskAttributeFn,
                 maskTextClass: sessionRecordingOptions.maskTextClass,
                 maskTextSelector: sessionRecordingOptions.maskTextSelector,
                 getCaptureState: () =>
