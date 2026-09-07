@@ -2,6 +2,8 @@ import type { Client, Disposable, Extension } from '@posthog/browser-common'
 import { addEventListener, each, extend } from '@posthog/browser-common/utils/general-utils'
 import {
     autocaptureCompatibleElements,
+    DEFAULT_AUTOCAPTURE_IGNORE_LIST,
+    elementMatchesCSSSelector,
     getClassNames,
     getDirectAndNestedSpanText,
     getElementsChainString,
@@ -382,10 +384,7 @@ export class Autocapture implements Extension {
         ) {
             // The origin's normal checks stop at body. Recovery must also respect
             // opt-outs on the actual root hit by the click, including html.
-            const ignorelist = this._refreshConfig().css_selector_ignorelist ?? [
-                '.ph-no-autocapture',
-                '[data-ph-no-autocapture]',
-            ]
+            const ignorelist = this._refreshConfig().css_selector_ignorelist ?? DEFAULT_AUTOCAPTURE_IGNORE_LIST
             const excludedRoot = [target, document?.documentElement, document?.body].some((root) => {
                 if (!root) return false
                 const classes = getClassNames(root)
@@ -394,13 +393,7 @@ export class Autocapture implements Extension {
                     includes(classes, 'ph-sensitive') ||
                     !shouldCaptureElement(root) ||
                     isSensitiveElement(root) ||
-                    ignorelist.some((selector) => {
-                        try {
-                            return root.matches(selector)
-                        } catch {
-                            return false
-                        }
-                    })
+                    ignorelist.some((selector) => elementMatchesCSSSelector(root, selector))
                 )
             })
             if (excludedRoot) return null

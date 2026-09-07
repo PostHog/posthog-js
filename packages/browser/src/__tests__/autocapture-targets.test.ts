@@ -163,6 +163,38 @@ describe('Autocapture click targets', () => {
         })
     })
 
+    const selectorMatchers = [
+        'matches',
+        'matchesSelector',
+        'msMatchesSelector',
+        'mozMatchesSelector',
+        'webkitMatchesSelector',
+        'oMatchesSelector',
+    ]
+    it.each(selectorMatchers.slice(1))('respects root exclusions when only %s is available', (matcher) => {
+        const target = root()
+        const nativeMatches = target.matches
+        for (const name of selectorMatchers) {
+            Object.defineProperty(target, name, {
+                configurable: true,
+                value: name === matcher ? nativeMatches : undefined,
+            })
+        }
+        try {
+            config.css_selector_ignorelist = ['html']
+            dropdownClick()
+            expect(capture).not.toHaveBeenCalled()
+
+            config.css_selector_ignorelist = []
+            dropdownClick()
+            expect(capture).toHaveBeenCalledTimes(1)
+        } finally {
+            for (const name of selectorMatchers) {
+                delete (target as any)[name]
+            }
+        }
+    })
+
     it('ignores invalid selectors without bypassing valid root exclusions', () => {
         config.css_selector_ignorelist = ['[']
         dropdownClick()
