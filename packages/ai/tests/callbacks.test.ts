@@ -2110,12 +2110,10 @@ describe('LangChainCallbackHandler LangGraph interrupts', () => {
 
 describe('served service tier', () => {
   let handler: LangChainCallbackHandler
-  let mockPostHogClient: PostHog
 
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockPostHogClient = new (PostHog as any)()
     handler = new LangChainCallbackHandler({ client: mockPostHogClient })
+    vi.clearAllMocks()
   })
 
   const startRun = (runId: string): void => {
