@@ -8,6 +8,18 @@ import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
 const logger = createLogger('[ExceptionAutocapture]')
 const errorPropertiesBuilder = buildErrorPropertiesBuilder()
 
+const safelyBuildAndCapture = (
+    captureFn: (props: ErrorTracking.ErrorProperties) => void,
+    buildProperties: () => ErrorTracking.ErrorProperties
+): void => {
+    try {
+        captureFn(buildProperties())
+    } catch {
+        // Exception autocapture must never throw into customer code. Do not log here because
+        // console.error may be instrumented and would re-enter exception autocapture.
+    }
+}
+
 // `window.onerror` exposes the location positionally, so preserve it when there is no Error object.
 const resolveOnErrorInput = ([event, source, lineno, colno, error]: ErrorEventArgs): unknown => {
     if (error != null) {
@@ -31,10 +43,11 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
     const originalOnError = win.onerror
 
     win.onerror = function (...args: ErrorEventArgs): boolean {
-        const errorProperties = errorPropertiesBuilder.buildFromUnknown(resolveOnErrorInput(args), {
-            mechanism: { handled: false },
-        })
-        captureFn(errorProperties)
+        safelyBuildAndCapture(captureFn, () =>
+            errorPropertiesBuilder.buildFromUnknown(resolveOnErrorInput(args), {
+                mechanism: { handled: false },
+            })
+        )
         return isFunction(originalOnError) ? (originalOnError(...args) ?? false) : false
     }
     win.onerror.__POSTHOG_INSTRUMENTED__ = true
@@ -57,10 +70,11 @@ const wrapUnhandledRejection = (
     const originalOnUnhandledRejection = win.onunhandledrejection
 
     win.onunhandledrejection = function (ev: PromiseRejectionEvent): boolean {
-        const errorProperties = errorPropertiesBuilder.buildFromUnknown(ev, {
-            mechanism: { handled: false },
-        })
-        captureFn(errorProperties)
+        safelyBuildAndCapture(captureFn, () =>
+            errorPropertiesBuilder.buildFromUnknown(ev, {
+                mechanism: { handled: false },
+            })
+        )
         return isFunction(originalOnUnhandledRejection)
             ? (originalOnUnhandledRejection(ev) ?? false)
             : defaultReturnValue
@@ -82,19 +96,20 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
     const originalConsoleError = con.error
 
     con.error = function (...args: any[]): void {
-        let event
-        if (args.length == 1) {
-            event = args[0]
-        } else {
-            event = args.join(' ')
-        }
-        const error = args.find((arg) => arg instanceof Error)
-        const errorProperties = errorPropertiesBuilder.buildFromUnknown(error || event, {
-            mechanism: { handled: false },
-            syntheticException: new Error('PostHog syntheticException'),
-            skipFirstLines: 2,
+        safelyBuildAndCapture(captureFn, () => {
+            let event
+            if (args.length == 1) {
+                event = args[0]
+            } else {
+                event = args.join(' ')
+            }
+            const error = args.find((arg) => arg instanceof Error)
+            return errorPropertiesBuilder.buildFromUnknown(error || event, {
+                mechanism: { handled: false },
+                syntheticException: new Error('PostHog syntheticException'),
+                skipFirstLines: 2,
+            })
         })
-        captureFn(errorProperties)
         if (isFunction(originalConsoleError)) {
             originalConsoleError(...args)
         }
