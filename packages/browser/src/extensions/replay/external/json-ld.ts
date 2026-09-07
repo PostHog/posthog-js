@@ -9,6 +9,7 @@ type IsCapturedDomId = (id: string) => boolean
 const MAX_JSON_LD_LENGTH = 100_000
 const MAX_JSON_LD_OUTPUT_LENGTH = 20_000
 const MAX_JSON_LD_TYPE_LENGTH = 100
+const SCHEMA_TERM_PATTERN = /^[A-Za-z0-9]*[A-Za-z][A-Za-z0-9]*$/
 const MAX_JSON_LD_TYPES = 20
 const MAX_JSON_LD_NODES = 2_048
 const SCHEMA_CONTEXT = 'https://schema.org'
@@ -195,7 +196,7 @@ function getEntityTypes(value: unknown): string[] {
             continue
         }
         const type = value.replace(/^https?:\/\/schema\.org\//, '')
-        if (!type || type.length > MAX_JSON_LD_TYPE_LENGTH || seen.has(type)) {
+        if (type.length > MAX_JSON_LD_TYPE_LENGTH || !SCHEMA_TERM_PATTERN.test(type) || seen.has(type)) {
             continue
         }
         seen.add(type)

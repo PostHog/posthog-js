@@ -4,6 +4,7 @@ type JsonLdContract = {
     schemaVersion: number
     limits: {
         maxTypeLength: number
+        typePattern: string
         maxTypes: number
         maxNodes: number
         maxSourceLength: number
@@ -13,6 +14,7 @@ type JsonLdContract = {
         name: string
         types: string[]
     }>
+    rejectedTypes: string[]
     cases: Array<{
         name: string
         capturedDomIds: string[]
@@ -56,6 +58,19 @@ export function addJsonLdContractTests(contractValue: unknown, sanitizeJsonLd: S
             const input = { '@context': 'https://schema.org', '@type': type }
             expect(sanitizeJsonLd(JSON.stringify(input))?.[0]).toEqual(input)
         }
+    })
+
+    it.each(contract.rejectedTypes)('drops a type that is not shaped like a schema term: %j', (type) => {
+        const input = { '@context': 'https://schema.org', '@type': type }
+        expect(sanitizeJsonLd(JSON.stringify(input))).toBeNull()
+    })
+
+    it('publishes a type pattern that matches its own type sets', () => {
+        const pattern = new RegExp(contract.limits.typePattern)
+        for (const { types } of contract.typeSets) {
+            expect(types.filter((type) => !pattern.test(type))).toEqual([])
+        }
+        expect(contract.rejectedTypes.filter((type) => pattern.test(type))).toEqual([])
     })
 
     it.each(contract.rawSourceCases)('matches the browser-only source contract: $name', ({ source, expected }) => {
@@ -105,8 +120,6 @@ export function addJsonLdContractTests(contractValue: unknown, sanitizeJsonLd: S
             root('T'.repeat(maxTypeLength))
         )
         expect(sanitizeJsonLd(JSON.stringify(root('T'.repeat(maxTypeLength + 1))))).toBeNull()
-        expect(sanitizeJsonLd(JSON.stringify(root('😀'.repeat(50))))?.[0]).toEqual(root('😀'.repeat(50)))
-        expect(sanitizeJsonLd(JSON.stringify(root('😀'.repeat(51))))).toBeNull()
 
         const types = Array.from({ length: maxTypes }, (_, index) => `Type${index}`)
         expect(sanitizeJsonLd(JSON.stringify({ ...root('Type0'), '@type': types }))?.[0]).toEqual({

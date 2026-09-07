@@ -709,7 +709,7 @@ export interface SessionRecordingOptions {
     /**
      * Captures sanitized Schema.org JSON-LD as session replay custom events.
      * JSON-LD inside a text mask or blocked element is never captured.
-     * The recorder keeps properties on its universal safe list at every depth. This list includes valid `@type` values.
+     * The recorder keeps properties on its universal safe list at every depth. This list includes `@type` values shaped like a Schema.org term, which means letters and digits only.
      * It drops property branches that are not on the allowlist.
      * It keeps an `@id` as a fragment only when replay also captures a DOM element with the same `id` value.
      * It also keeps the containing entity tree, even when it redacts all other fields.
