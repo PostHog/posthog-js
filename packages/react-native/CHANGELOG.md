@@ -1,5 +1,19 @@
 # posthog-react-native
 
+## 4.67.1
+
+### Patch Changes
+
+- [#4785](https://github.com/PostHog/posthog-js/pull/4785) [`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829) Thanks [@marandaneto](https://github.com/marandaneto)! - Clarify feature flag return-value terminology across SDK APIs. A `false` value is a conclusive off evaluation, while `undefined` means no evaluation is available. Remote evaluation omits globally inactive flags, whereas backend local evaluation can resolve cached inactive definitions to `false`.
+  (2026-09-07)
+
+- [#4778](https://github.com/PostHog/posthog-js/pull/4778) [`1d26ccf`](https://github.com/PostHog/posthog-js/commit/1d26ccf7900d695feaead6a74cf14c2f8dea72a3) Thanks [@posthog](https://github.com/apps/posthog)! - fix(react-native): keep Metro async chunks serialized when the chunk ID is absent
+  (2026-09-07)
+- Updated dependencies [[`f8013ed`](https://github.com/PostHog/posthog-js/commit/f8013ed497fdf37765358df23152b328c339e586), [`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829), [`5e74132`](https://github.com/PostHog/posthog-js/commit/5e74132a76a32d5df9c6706dddf1597c748061d2)]:
+  - @posthog/react-native-plugin@2.5.2
+  - @posthog/core@1.50.6
+  - @posthog/types@1.409.1
+
 ## 4.67.0
 
 ### Minor Changes

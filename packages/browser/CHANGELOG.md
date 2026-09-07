@@ -1,5 +1,37 @@
 # posthog-js
 
+## 1.427.3
+
+### Patch Changes
+
+- [#4815](https://github.com/PostHog/posthog-js/pull/4815) [`c207020`](https://github.com/PostHog/posthog-js/commit/c20702023ed05de61799e4d186b7dd1d040ce251) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent queued session recording mutations from capturing content beneath DOM or shadow ancestors that have become blocked.
+  (2026-09-07)
+
+- [#4785](https://github.com/PostHog/posthog-js/pull/4785) [`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829) Thanks [@marandaneto](https://github.com/marandaneto)! - Clarify feature flag return-value terminology across SDK APIs. A `false` value is a conclusive off evaluation, while `undefined` means no evaluation is available. Remote evaluation omits globally inactive flags, whereas backend local evaluation can resolve cached inactive definitions to `false`.
+  (2026-09-07)
+
+- [#4797](https://github.com/PostHog/posthog-js/pull/4797) [`fd4ece8`](https://github.com/PostHog/posthog-js/commit/fd4ece8db1aa313f09724a747e4d450ecdc77da2) Thanks [@posthog](https://github.com/apps/posthog)! - Prevent exception autocapture from throwing when the handler it wraps belongs to another compartment or a destroyed document.
+  (2026-09-07)
+
+- [#4754](https://github.com/PostHog/posthog-js/pull/4754) [`d73455e`](https://github.com/PostHog/posthog-js/commit/d73455e470822483abbf0e0a20bb3c8fa1bc6e2e) Thanks [@posthog](https://github.com/apps/posthog)! - Session replay now reports why a recording holds its buffer. An epoch that starts without user interaction keeps its snapshots and uploads nothing, while `$recording_status` still reads `active`. Captured events now carry `$sdk_debug_replay_flush_hold_reason` (`no_interaction_since_recording_started` or `no_interaction_since_session_rotated`), and the SDK logs the reason once per held epoch in debug mode. Discarding a recording (for example when the server turns replay off) also no longer uploads the stylesheet mutations the recorder emits as it stops.
+  (2026-09-07)
+
+- [#4788](https://github.com/PostHog/posthog-js/pull/4788) [`95b159a`](https://github.com/PostHog/posthog-js/commit/95b159a6491c29de87ca0aaf5ea40c787cf0518d) Thanks [@fasyy612](https://github.com/fasyy612)! - fix(replay): reset the idle clock on a session-id rotation so the new session's first snapshot is not dropped as idle and its recording does not start hours early
+  (2026-09-07)
+
+- [#4770](https://github.com/PostHog/posthog-js/pull/4770) [`24f1937`](https://github.com/PostHog/posthog-js/commit/24f193719a7d87a2b66591c3ab903031bbea62a6) Thanks [@fasyy612](https://github.com/fasyy612)! - fix(replay): drain the compression queue synchronously on a session-id rotation so the old session's unflushed tail ships under the old session id instead of being discarded
+  (2026-09-07)
+
+- [#4666](https://github.com/PostHog/posthog-js/pull/4666) [`5e74132`](https://github.com/PostHog/posthog-js/commit/5e74132a76a32d5df9c6706dddf1597c748061d2) Thanks [@robbie-c](https://github.com/robbie-c)! - Preserve universally safe JSON-LD properties and allowlisted tree structure when replay redacts other fields. Keep only DOM-backed ID fragments. Keep only `@type` values shaped like a Schema.org term, and limit types and payloads. Publish a reusable sanitization contract fixture.
+  (2026-09-07)
+
+- [#4814](https://github.com/PostHog/posthog-js/pull/4814) [`21dcebd`](https://github.com/PostHog/posthog-js/commit/21dcebd3361a2fe24b022601b8131ae85a3f077d) Thanks [@posthog](https://github.com/apps/posthog)! - Prevent invalid clock values from breaking UUID generation and continue capturing replay chunks after a chunk fails.
+  (2026-09-07)
+- Updated dependencies [[`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829), [`5e74132`](https://github.com/PostHog/posthog-js/commit/5e74132a76a32d5df9c6706dddf1597c748061d2), [`21dcebd`](https://github.com/PostHog/posthog-js/commit/21dcebd3361a2fe24b022601b8131ae85a3f077d)]:
+  - @posthog/core@1.50.6
+  - @posthog/types@1.409.1
+  - @posthog/browser-common@0.7.3
+
 ## 1.427.2
 
 ### Patch Changes

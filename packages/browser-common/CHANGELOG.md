@@ -1,5 +1,15 @@
 # @posthog/browser-common
 
+## 0.7.3
+
+### Patch Changes
+
+- [#4814](https://github.com/PostHog/posthog-js/pull/4814) [`21dcebd`](https://github.com/PostHog/posthog-js/commit/21dcebd3361a2fe24b022601b8131ae85a3f077d) Thanks [@posthog](https://github.com/apps/posthog)! - Prevent invalid clock values from breaking UUID generation and continue capturing replay chunks after a chunk fails.
+  (2026-09-07)
+- Updated dependencies [[`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829), [`5e74132`](https://github.com/PostHog/posthog-js/commit/5e74132a76a32d5df9c6706dddf1597c748061d2)]:
+  - @posthog/core@1.50.6
+  - @posthog/types@1.409.1
+
 ## 0.7.2
 
 ### Patch Changes
