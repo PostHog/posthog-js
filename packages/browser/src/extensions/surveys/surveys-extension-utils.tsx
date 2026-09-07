@@ -17,6 +17,7 @@ import {
     getSurveySeenKey,
     getSurveyAbandonedKey,
     getSurveyStorageKey,
+    isCapturingEnabled,
     SURVEY_LOGGER as logger,
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
@@ -435,7 +436,7 @@ export const sendSurveyEvent = ({
         logger.error('[survey sent] event not captured, PostHog instance not found.')
         return
     }
-    if (!posthog.is_capturing()) {
+    if (!isCapturingEnabled(posthog)) {
         // The eligibility check keeps a survey off screen here, but an inline `renderSurvey` call,
         // or an opt-out during the survey, still reaches this point. `critical` is the only level
         // a production console shows.

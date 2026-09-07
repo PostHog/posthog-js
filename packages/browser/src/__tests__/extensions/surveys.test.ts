@@ -908,6 +908,35 @@ describe('SurveyManager', () => {
             mockPostHog.is_capturing = vi.fn(() => false)
             expect(surveyManager.checkSurveyEligibility(mockSurveys[0]).eligible).toBe(true)
         })
+
+        // The surveys bundle is loaded from the CDN and can run against an older cached core.
+        // `is_capturing` was only added in posthog-js 1.260.0, so simulate an older core that lacks
+        // it and assert we read its own consent gate instead of throwing on every display poll.
+        describe('on a core without is_capturing (version skew)', () => {
+            beforeEach(() => {
+                // @ts-expect-error deliberately removing the method to emulate an older core
+                mockPostHog.is_capturing = undefined
+            })
+
+            it('is not eligible to display when that core says the person opted out', () => {
+                mockPostHog.has_opted_out_capturing = vi.fn(() => true)
+                const result = surveyManager.checkSurveyDisplayEligibility(mockSurveys[0])
+                expect(result.eligible).toBe(false)
+                expect(result.reason).toBe('Capturing is opted out, so a survey response cannot be captured')
+            })
+
+            it('still displays the survey when that core says the person opted in', () => {
+                mockPostHog.has_opted_out_capturing = vi.fn(() => false)
+                const handlePopoverSurveyMock = vi
+                    .spyOn(surveyManager as any, 'handlePopoverSurvey')
+                    .mockImplementation(() => {})
+
+                expect(() => surveyManager.callSurveysAndEvaluateDisplayLogic()).not.toThrow()
+
+                expect(surveyManager.checkSurveyDisplayEligibility(mockSurveys[0]).eligible).toBe(true)
+                expect(handlePopoverSurveyMock).toHaveBeenCalled()
+            })
+        })
     })
 
     describe('respects the event trigger condition (issue #2501)', () => {

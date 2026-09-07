@@ -695,6 +695,52 @@ describe('sendSurveyEvent', () => {
         critical.mockRestore()
     })
 
+    // The surveys bundle is loaded from the CDN and can run against an older cached core.
+    // `is_capturing` was only added in posthog-js 1.260.0, so a submission must not throw there.
+    it('reads the consent gate of a core without is_capturing', () => {
+        const critical = vi.spyOn(SURVEY_LOGGER, 'critical').mockImplementation(() => {})
+        const mockCapture = vi.fn()
+        const mockPostHog = {
+            capture: mockCapture,
+            reloadFeatureFlags: vi.fn(),
+            has_opted_out_capturing: () => true,
+        } as unknown as PostHog
+
+        expect(() =>
+            sendSurveyEvent({
+                responses: { $survey_response_q1: 'Great!' },
+                survey: baseSurvey,
+                surveySubmissionId: 'submission-123',
+                isSurveyCompleted: true,
+                posthog: mockPostHog,
+            })
+        ).not.toThrow()
+
+        expect(critical).toHaveBeenCalledTimes(1)
+        expect(mockCapture).toHaveBeenCalled()
+        critical.mockRestore()
+    })
+
+    it('stays silent on a core without is_capturing while the person is opted in', () => {
+        const critical = vi.spyOn(SURVEY_LOGGER, 'critical').mockImplementation(() => {})
+        const mockPostHog = {
+            capture: vi.fn(),
+            reloadFeatureFlags: vi.fn(),
+            has_opted_out_capturing: () => false,
+        } as unknown as PostHog
+
+        sendSurveyEvent({
+            responses: { $survey_response_q1: 'Great!' },
+            survey: baseSurvey,
+            surveySubmissionId: 'submission-123',
+            isSurveyCompleted: true,
+            posthog: mockPostHog,
+        })
+
+        expect(critical).not.toHaveBeenCalled()
+        critical.mockRestore()
+    })
+
     it('includes custom properties in captured event', () => {
         const mockCapture = vi.fn()
         const mockPostHog = {

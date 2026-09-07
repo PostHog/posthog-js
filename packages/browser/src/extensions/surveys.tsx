@@ -24,6 +24,7 @@ import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
     IN_APP_SURVEY_TYPES,
+    isCapturingEnabled,
     isSurveyIterationBased,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
@@ -405,7 +406,7 @@ export class SurveyManager {
         // flips to false, or the person opts out of capturing), and we must not show a survey that
         // is no longer eligible by the time the delay elapses.
         const renderIfStillEligible = () => {
-            if (!this._posthog.is_capturing() || !this._shouldDisplaySurvey(survey)) {
+            if (!isCapturingEnabled(this._posthog) || !this._shouldDisplaySurvey(survey)) {
                 logger.info(`Survey ${survey.id} no longer eligible when its display delay elapsed; not displaying`)
                 return this._removeSurveyFromFocus(survey)
             }
@@ -892,7 +893,7 @@ export class SurveyManager {
      * stays capture-independent.
      */
     public checkSurveyCaptureEligibility(): { eligible: boolean; reason?: string } {
-        if (!this._posthog.is_capturing()) {
+        if (!isCapturingEnabled(this._posthog)) {
             return { eligible: false, reason: SURVEY_OPTED_OUT }
         }
         return { eligible: true }
@@ -991,7 +992,7 @@ export class SurveyManager {
             // Discovery above stays capture-independent for custom integrations; a survey the SDK
             // shows itself must be able to record the response, so the gate lives here instead —
             // see `checkSurveyDisplayEligibility`.
-            const canCaptureResponse = this._posthog.is_capturing()
+            const canCaptureResponse = isCapturingEnabled(this._posthog)
             const inAppSurveysWithDisplayLogic = surveys.filter(
                 (survey) =>
                     canCaptureResponse && (survey.type === SurveyType.Popover || survey.type === SurveyType.Widget)
