@@ -490,9 +490,6 @@ export class SessionIdManager {
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             crossTabAdoption = false
             const usePendingBootstrapSession = pendingBootstrapSession && !pendingBootstrapRejectionReason
-            if (pendingBootstrapRejectionReason) {
-                rejectBootstrapSessionId(pendingBootstrapRejectionReason)
-            }
             sessionId = usePendingBootstrapSession ? pendingBootstrapSession.sessionId : this._sessionIdGenerator()
             windowId = this._windowIdGenerator()
             logger.info('new session ID assigned', {
@@ -542,6 +539,15 @@ export class SessionIdManager {
         const changeReason = { noSessionId, activityTimeout, sessionPastMaximumLength, crossTabAdoption }
         if (valuesChanged) {
             this._sessionIdChangedHandlers.forEach((handler) => handler(sessionId, windowId, changeReason))
+        }
+
+        // Reported only once the new session is written and handlers have run. `critical`
+        // writes through the global console, which console-error capture may have patched
+        // into a synchronous `capture()`, and that re-enters this method. Reporting from
+        // inside the branch above left the pending bootstrap in place, so the nested call
+        // took the same branch and rotated the session again on the way out.
+        if (pendingBootstrapRejectionReason) {
+            rejectBootstrapSessionId(pendingBootstrapRejectionReason)
         }
 
         return {

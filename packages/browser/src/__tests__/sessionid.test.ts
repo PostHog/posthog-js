@@ -220,6 +220,37 @@ describe('Session ID manager', () => {
             )
         })
 
+        it('does not rotate the session again when the rejection is captured by a patched console', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager.resetSessionId()
+
+            expect(sessionIdManager.setBootstrapSessionId('bootstrap-session-id', true)).toBe(true)
+            ;(uuidv7 as vi.Mock).mockReturnValueOnce('fresh-session-id').mockReturnValueOnce('fresh-window-id')
+            const laterThanTheMaximumLength = timestamp + 25 * 60 * 60 * 1000
+
+            // console error capture turns the report into a synchronous capture, which
+            // checks the session again from inside this call
+            let nestedSessionId: string | undefined
+            let reentered = false
+            consoleError.mockImplementation(() => {
+                if (reentered) {
+                    return
+                }
+                reentered = true
+                nestedSessionId = sessionIdManager.checkAndGetSessionAndWindowId(
+                    false,
+                    laterThanTheMaximumLength
+                ).sessionId
+            })
+
+            expect(sessionIdManager.checkAndGetSessionAndWindowId(false, laterThanTheMaximumLength)).toMatchObject({
+                sessionId: 'fresh-session-id',
+                windowId: 'fresh-window-id',
+            })
+            expect(nestedSessionId).toEqual('fresh-session-id')
+            expect(consoleError).toHaveBeenCalledTimes(1)
+        })
+
         it('reports a deferred bootstrapped session that starts after the first event of the new session', () => {
             const sessionIdManager = sessionIdMgr(persistence)
             sessionIdManager.resetSessionId()
