@@ -128,6 +128,11 @@ describe('redactPii', () => {
       'Charging card 4111 1111 1111 1111 12/30 for renewal.',
       'Charging card [redacted] 12/30 for renewal.',
     ],
+    [
+      'every card when two appear in one span',
+      'Moving funds 4111 1111 1111 1111 5555 5555 5555 4444 now.',
+      'Moving funds [redacted] [redacted] now.',
+    ],
     ['an SSN with dashes', 'Verifying SSN 123-45-6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
     ['an SSN with spaces', 'Verifying SSN 123 45 6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],
     ['an SSN with dots', 'Verifying SSN 123.45.6789 for the claim.', 'Verifying SSN [redacted] for the claim.'],

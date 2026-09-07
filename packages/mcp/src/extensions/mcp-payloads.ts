@@ -123,30 +123,43 @@ function passesLuhn(digits: string): boolean {
   return sum % 10 === 0
 }
 
-// Within a card candidate, finds the actual card — the longest, earliest run of
-// whole separator-delimited digit groups whose joined digits are 13–19 long and
-// pass Luhn — and redacts only that span, leaving any adjacent field (an expiry,
-// a following ID) in place. Checking group-aligned runs rather than arbitrary
-// digit windows keeps the false-positive rate at Luhn's own ~1-in-10, instead of
-// letting a chance-valid sub-window of an ordinary long ID trigger redaction.
+// A card candidate can span more than one card plus adjacent fields (e.g. an
+// expiry, or a second card). This redacts every card in it: scanning
+// left-to-right over the whole separator-delimited digit groups, at each start it
+// takes the longest run whose joined digits are 13–19 long and pass Luhn, redacts
+// just that span, and resumes after it; a group that begins no valid run is kept
+// and skipped. Checking group-aligned runs rather than arbitrary digit windows
+// keeps the false-positive rate at Luhn's own ~1-in-10, instead of letting a
+// chance-valid sub-window of an ordinary long ID trigger redaction.
 function redactCardInMatch(match: string): string {
   const groups: { digits: string; start: number; end: number }[] = []
   for (let m = DIGIT_GROUP_PATTERN.exec(match); m !== null; m = DIGIT_GROUP_PATTERN.exec(match)) {
     groups.push({ digits: m[0], start: m.index, end: m.index + m[0].length })
   }
-  for (let first = 0; first < groups.length; first++) {
+  let output = ''
+  let cursor = 0
+  let first = 0
+  while (first < groups.length) {
     let digits = ''
+    let matchedLast = -1
     for (let last = first; last < groups.length; last++) {
       digits += groups[last].digits
       if (digits.length > 19) {
         break
       }
       if (digits.length >= 13 && passesLuhn(digits)) {
-        return match.slice(0, groups[first].start) + REDACTED_VALUE + match.slice(groups[last].end)
+        matchedLast = last
       }
     }
+    if (matchedLast >= 0) {
+      output += match.slice(cursor, groups[first].start) + REDACTED_VALUE
+      cursor = groups[matchedLast].end
+      first = matchedLast + 1
+    } else {
+      first++
+    }
   }
-  return match
+  return output + match.slice(cursor)
 }
 
 /**
