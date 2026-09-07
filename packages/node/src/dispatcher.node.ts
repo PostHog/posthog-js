@@ -9,6 +9,9 @@ import type { PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
  */
 export const DEFAULT_CONNECT_TIMEOUT = 2000
 
+// Node holds the connect budget in a signed 32-bit integer.
+const MAX_CONNECT_TIMEOUT = 2147483647
+
 // Both the npm `undici` package and the copy inside Node read the global dispatcher from this key.
 const UNDICI_GLOBAL_DISPATCHER = Symbol.for('undici.globalDispatcher.1')
 
@@ -43,6 +46,16 @@ function globalDispatcherIsDefault(): boolean {
 }
 
 /**
+ * Node rejects a budget it cannot hold in a signed 32-bit integer when the connection is made, not
+ * when the agent is built, so a fraction, `Infinity`, a boxed number or too large a value would
+ * fail every request instead of the one option. Those fall back to the default, as zero and
+ * negative values already do.
+ */
+function isUsableConnectTimeout(connectTimeout: number | undefined): connectTimeout is number {
+  return isPositiveNumber(connectTimeout) && Number.isInteger(connectTimeout) && connectTimeout <= MAX_CONNECT_TIMEOUT
+}
+
+/**
  * The dispatcher PostHog requests use, or `undefined` when the request must stay on the global
  * dispatcher. Agents are cached per connect timeout so every client shares one connection pool.
  */
@@ -51,7 +64,7 @@ export function resolveDispatcher(connectTimeout?: number): Agent | undefined {
     return undefined
   }
 
-  const timeout = isPositiveNumber(connectTimeout) ? connectTimeout : DEFAULT_CONNECT_TIMEOUT
+  const timeout = isUsableConnectTimeout(connectTimeout) ? connectTimeout : DEFAULT_CONNECT_TIMEOUT
   let agent = agentsByConnectTimeout.get(timeout)
   if (!agent) {
     agent = new Agent({ connect: { autoSelectFamilyAttemptTimeout: timeout } })

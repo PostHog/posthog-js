@@ -61,6 +61,22 @@ describe('node dispatcher', () => {
   it('falls back to the default budget for a timeout that is not usable', () => {
     expect(resolveDispatcher(0)).toBe(resolveDispatcher())
     expect(resolveDispatcher(-1)).toBe(resolveDispatcher())
+    expect(resolveDispatcher(NaN)).toBe(resolveDispatcher())
+    expect(resolveDispatcher(0.1)).toBe(resolveDispatcher())
+    expect(resolveDispatcher(Infinity)).toBe(resolveDispatcher())
+    expect(resolveDispatcher(2147483648)).toBe(resolveDispatcher())
+    expect(resolveDispatcher(Object(2000) as number)).toBe(resolveDispatcher())
+  })
+
+  it('still sends the request when the configured timeout is not usable', async () => {
+    const spy = vi.spyOn(net, 'connect')
+
+    await withServer(async (url) => {
+      const response = await fetchWithConnectTimeout(url, { method: 'GET', headers: {} }, 0.1)
+
+      expect(response.status).toBe(200)
+      expect(connectOptions(spy).autoSelectFamilyAttemptTimeout).toBe(DEFAULT_CONNECT_TIMEOUT)
+    })
   })
 
   it('reuses one agent per connect timeout', () => {

@@ -208,6 +208,9 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * from the ingestion region. Ignored when you inject your own `fetch`, when your application
    * installs its own undici dispatcher, and on edge runtimes.
    *
+   * Must be a whole number of milliseconds that Node can use: a fraction, `Infinity`, or anything
+   * above 2147483647 falls back to the default rather than failing every request.
+   *
    * @default 2000
    */
   connectTimeout?: number
