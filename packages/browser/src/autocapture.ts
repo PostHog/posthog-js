@@ -321,6 +321,7 @@ export class Autocapture implements Extension {
     private _disposed = false
     private _pointerDown?: {
         target: Element
+        excluded: boolean
         id: number
         x: number
         y: number
@@ -335,6 +336,31 @@ export class Autocapture implements Extension {
         this._pointerExpiry = undefined
     }
 
+    private _isExcludedPointerTarget(target: Element): boolean {
+        if (!shouldCaptureElement(target)) return true
+
+        const ignorelist = this._refreshConfig().css_selector_ignorelist ?? DEFAULT_AUTOCAPTURE_IGNORE_LIST
+        const seen = new Set<Element>()
+        let el: Element | null = target
+        while (el) {
+            if (seen.size >= MAX_DOM_ANCESTOR_DEPTH || seen.has(el)) return true
+            seen.add(el)
+            const current = el
+            const classes = getClassNames(current)
+            if (
+                includes(classes, 'ph-no-capture') ||
+                includes(classes, 'ph-sensitive') ||
+                isSensitiveElement(current) ||
+                ignorelist.some((selector) => elementMatchesCSSSelector(current, selector))
+            ) {
+                return true
+            }
+            const parent: ParentNode | null = el.parentNode
+            el = isShadowRoot(parent) ? parent.host : parent && isElementNode(parent) ? parent : null
+        }
+        return false
+    }
+
     private _trackPointer(e: PointerEvent): void {
         if (!this.isEnabled || e.type === 'pointercancel') {
             this._clearPointer()
@@ -346,6 +372,7 @@ export class Autocapture implements Extension {
             if (e.isPrimary && e.button === 0 && !e.ctrlKey && target && isElementNode(target)) {
                 this._pointerDown = {
                     target,
+                    excluded: this._isExcludedPointerTarget(target),
                     id: e.pointerId,
                     x: e.clientX,
                     y: e.clientY,
@@ -382,6 +409,9 @@ export class Autocapture implements Extension {
             target &&
             (isTag(target, 'html') || isTag(target, 'body'))
         ) {
+            // DOM changes after pointerdown must not erase the origin's privacy exclusions.
+            if (down.excluded) return null
+
             // The origin's normal checks stop at body. Recovery must also respect
             // opt-outs on the actual root hit by the click, including html.
             const ignorelist = this._refreshConfig().css_selector_ignorelist ?? DEFAULT_AUTOCAPTURE_IGNORE_LIST

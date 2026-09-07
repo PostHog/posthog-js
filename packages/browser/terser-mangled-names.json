@@ -393,6 +393,7 @@
         "_isDisabledServerSide",
         "_isDomainAllowed",
         "_isExceptionList",
+        "_isExcludedPointerTarget",
         "_isExtensionException",
         "_isIdle",
         "_isInitializing",

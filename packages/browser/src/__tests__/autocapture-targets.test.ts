@@ -1,3 +1,4 @@
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { Autocapture } from '../autocapture'
 import type { AutocaptureConfig } from '../autocapture-config'
 
@@ -140,6 +141,46 @@ describe('Autocapture click targets', () => {
         span().className = className
         dropdownClick()
         expect(capture).not.toHaveBeenCalled()
+    })
+
+    it.each(['ph-no-capture', 'ph-sensitive', 'ph-no-autocapture', 'data-ph-no-autocapture', 'ignored'])(
+        'retains pointerdown-time %s exclusions after reparenting',
+        (exclusion) => {
+            if (exclusion === 'ignored') config.css_selector_ignorelist = ['.ignored']
+            const container = document.createElement('div')
+            if (exclusion === 'data-ph-no-autocapture') {
+                container.setAttribute(exclusion, '')
+            } else {
+                container.className = exclusion
+            }
+            const button = document.querySelector('button')!
+            document.body.appendChild(container)
+            container.appendChild(button)
+            span().setAttribute('data-private', 'Private attribute')
+            span().textContent = 'Private text'
+            addEventListener(button, 'pointerdown', () => document.body.appendChild(button))
+
+            dropdownClick()
+
+            expect(button.parentElement).toBe(document.body)
+            expect(capture).not.toHaveBeenCalled()
+        }
+    )
+
+    it('recovers an unprotected target moved during pointerdown', () => {
+        const container = document.createElement('div')
+        const button = document.querySelector('button')!
+        document.body.appendChild(container)
+        container.appendChild(button)
+        addEventListener(button, 'pointerdown', () => document.body.appendChild(button))
+
+        dropdownClick()
+
+        expect(capture).toHaveBeenCalledTimes(1)
+        expect(capture).toHaveBeenCalledWith(
+            '$autocapture',
+            expect.objectContaining({ $event_type: 'click', $el_text: 'Actions' })
+        )
     })
 
     describe.each(['html', 'body'])('retargeted %s privacy', (tag) => {
