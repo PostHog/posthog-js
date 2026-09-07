@@ -467,6 +467,26 @@ describe('PostHog Core', () => {
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
     })
 
+    it('names the connect failure codes in the network error', async () => {
+      const connectFailure = new AggregateError(
+        [
+          Object.assign(new Error('connect ETIMEDOUT'), { code: 'ETIMEDOUT' }),
+          Object.assign(new Error('connect ENETUNREACH'), { code: 'ENETUNREACH' }),
+        ],
+        ''
+      )
+      mocks.fetch.mockImplementation(() =>
+        Promise.reject(Object.assign(new TypeError('fetch failed'), { cause: connectFailure }))
+      )
+      posthog.capture('test-event-1')
+
+      const flushExpectation = expect(posthog.flush()).rejects.toThrow(
+        'Network error while fetching PostHog (TypeError, ETIMEDOUT, ENETUNREACH)'
+      )
+      await vi.advanceTimersByTimeAsync(300)
+      await flushExpectation
+    })
+
     it('skips when client is disabled', async () => {
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 2 })
 

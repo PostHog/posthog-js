@@ -121,13 +121,47 @@ class PostHogFetchHttpError extends Error {
   }
 }
 
+/**
+ * Node reports a failed connect as an `AggregateError` whose sub-errors carry the only useful
+ * detail (`ETIMEDOUT`, `ENETUNREACH`, ...), and a failed `fetch` nests its own reason under
+ * `cause`. Walk both so a connect-stage failure is diagnosable from one log line. The depth limit
+ * also keeps a self-referencing `cause` from looping.
+ */
+function collectErrorCodes(error: unknown, codes: Set<string>, depth = 0): void {
+  if (depth > 3 || typeof error !== 'object' || error === null) {
+    return
+  }
+
+  const candidate = error as { code?: unknown; cause?: unknown; errors?: unknown }
+  if (typeof candidate.code === 'string') {
+    codes.add(candidate.code)
+  }
+  if (Array.isArray(candidate.errors)) {
+    for (const nested of candidate.errors) {
+      collectErrorCodes(nested, codes, depth + 1)
+    }
+  }
+  collectErrorCodes(candidate.cause, codes, depth + 1)
+}
+
+function describeNetworkError(error: unknown): string {
+  const codes = new Set<string>()
+  collectErrorCodes(error, codes)
+  const name = error instanceof Error ? error.name : undefined
+  const details = [...(name ? [name] : []), ...codes]
+  return details.length > 0 ? ` (${details.join(', ')})` : ''
+}
+
 class PostHogFetchNetworkError extends Error {
   name = 'PostHogFetchNetworkError'
 
   constructor(public error: unknown) {
     // TRICKY: "cause" is a newer property but is just ignored otherwise. Cast to any to ignore the type issue.
     // @ts-ignore
-    super('Network error while fetching PostHog', error instanceof Error ? { cause: error } : {})
+    super(
+      `Network error while fetching PostHog${describeNetworkError(error)}`,
+      error instanceof Error ? { cause: error } : {}
+    )
   }
 }
 

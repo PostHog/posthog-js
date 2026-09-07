@@ -41,7 +41,8 @@
   "module": "dist/entrypoints/index.node.mjs",
   "types": "dist/entrypoints/index.node.d.ts",
   "dependencies": {
-    "@posthog/core": "workspace:^"
+    "@posthog/core": "workspace:^",
+    "undici": "^7.16.0"
   },
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",

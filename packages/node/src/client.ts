@@ -248,7 +248,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           projectApiKey: normalizedApiKey,
           timeout: normalizedOptions.requestTimeout ?? 10000, // 10 seconds
           host: this.host,
-          fetch: normalizedOptions.fetch,
+          fetch: normalizedOptions.fetch ?? ((url, fetchOptions) => this.fetch(url, fetchOptions)),
           onError: (err: Error) => {
             this._events.emit('error', err)
           },
@@ -433,7 +433,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise resolving to the fetch response
    */
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
-    return this.options.fetch ? this.options.fetch(url, options) : fetch(url, options)
+    return this.options.fetch ? this.options.fetch(url, options) : this.defaultFetch(url, options)
+  }
+
+  // Transport used when the caller injected no `fetch`; runtime-specific subclasses override it.
+  protected defaultFetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
+    return fetch(url, options)
   }
 
   /**

@@ -4,15 +4,20 @@ import { createModulerModifier } from '../extensions/error-tracking/modifiers/mo
 import { addSourceContext } from '../extensions/error-tracking/modifiers/context-lines.node'
 import { createRelativePathModifier } from '../extensions/error-tracking/modifiers/relative-path.node'
 
-import type { PostHogFetchBodyBytes } from '@posthog/core'
+import type { PostHogFetchBodyBytes, PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
 import { PostHogBackendClient } from '../client'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { PostHogContext } from '../extensions/context/context'
 import { gzipCompress } from '../gzip.node'
+import { fetchWithConnectTimeout } from '../dispatcher.node'
 
 export class PostHog extends PostHogBackendClient {
   getLibraryId(): string {
     return 'posthog-node'
+  }
+
+  protected override defaultFetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
+    return fetchWithConnectTimeout(url, options, this.options.connectTimeout)
   }
 
   protected override compressPayload(payload: string): Promise<PostHogFetchBodyBytes | null> {

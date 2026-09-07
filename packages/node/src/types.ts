@@ -199,6 +199,17 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * @deprecated Use `secretKey` instead.
    */
   personalApiKey?: string
+  /**
+   * Per-address TCP connect budget in milliseconds, applied to requests the SDK sends itself.
+   *
+   * PostHog ingestion hosts publish many A and AAAA records, so Node races the addresses and
+   * cancels each attempt after 250 ms by default. That budget is shorter than a handshake between
+   * distant regions, which makes every request fail at connect. Raise this when the SDK runs far
+   * from the ingestion region. Ignored when you inject your own `fetch`, and on edge runtimes.
+   *
+   * @default 2000
+   */
+  connectTimeout?: number
   privacyMode?: boolean
   enableExceptionAutocapture?: boolean
   // The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
