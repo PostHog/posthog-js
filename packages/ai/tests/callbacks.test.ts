@@ -2107,3 +2107,69 @@ describe('LangChainCallbackHandler LangGraph interrupts', () => {
     expect(captureCall[0].properties).not.toHaveProperty('$ai_output_state')
   })
 })
+
+describe('served service tier', () => {
+  let handler: LangChainCallbackHandler
+  let mockPostHogClient: PostHog
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPostHogClient = new (PostHog as any)()
+    handler = new LangChainCallbackHandler({ client: mockPostHogClient })
+  })
+
+  const startRun = (runId: string): void => {
+    handler.handleLLMStart(
+      { lc: 1, type: 'not_implemented', id: ['langchain', 'llms', 'openai', 'OpenAI'] },
+      ['Hello'],
+      runId,
+      undefined,
+      { invocation_params: { temperature: 0.5, service_tier: 'flex' } },
+      undefined,
+      { ls_model_name: 'gpt-5-mini', ls_provider: 'openai' }
+    )
+  }
+
+  const capturedModelParams = (): Record<string, any> => {
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    return captureCall[0].properties['$ai_model_parameters']
+  }
+
+  it('merges the served tier from generationInfo and drops the requested one', () => {
+    const runId = 'run_served_tier'
+    startRun(runId)
+    handler.handleLLMEnd(
+      {
+        generations: [
+          [
+            {
+              text: 'Response',
+              message: new AIMessage('Response'),
+              generationInfo: { finish_reason: 'stop', service_tier: 'flex' },
+            },
+          ],
+        ],
+        llmOutput: {},
+      },
+      runId
+    )
+
+    expect(capturedModelParams()).toMatchObject({ temperature: 0.5, service_tier: 'flex' })
+  })
+
+  it('omits the tier entirely when the response never reported one', () => {
+    const runId = 'run_no_served_tier'
+    startRun(runId)
+    handler.handleLLMEnd(
+      {
+        generations: [[{ text: 'Response', message: new AIMessage('Response') }]],
+        llmOutput: {},
+      },
+      runId
+    )
+
+    const modelParams = capturedModelParams()
+    expect(modelParams.temperature).toBe(0.5)
+    expect(modelParams.service_tier).toBeUndefined()
+  })
+})

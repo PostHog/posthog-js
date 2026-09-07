@@ -507,6 +507,17 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
   ): void {
     const latency = run.endTime ? (run.endTime - run.startTime) / 1000 : 0
     warnIfPostHogAiGateway(run.baseUrl)
+    // The served tier comes from the response; a requested tier can be refused. langchain
+    // surfaces it in generationInfo on streamed generations only.
+    let modelParams = run.modelParams
+    const servedTier =
+      output instanceof Error
+        ? undefined
+        : (output.generations?.[0]?.[0]?.generationInfo?.service_tier ??
+          (output.llmOutput as Record<string, any> | undefined)?.service_tier)
+    if (servedTier != null) {
+      modelParams = { ...modelParams, service_tier: servedTier }
+    }
     const eventProperties: Record<string, any> = {
       $ai_lib: 'posthog-ai',
       $ai_lib_version: version,
@@ -515,7 +526,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_span_name: run.name,
       $ai_provider: run.provider,
       $ai_model: run.model,
-      $ai_model_parameters: run.modelParams,
+      $ai_model_parameters: modelParams,
       $ai_input: withPrivacyMode(this.client, this.privacyMode, run.input),
       $ai_http_status: 200,
       $ai_latency: latency,
