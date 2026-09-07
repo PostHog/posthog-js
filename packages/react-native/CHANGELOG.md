@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.67.2
+
+### Patch Changes
+
+- [#4802](https://github.com/PostHog/posthog-js/pull/4802) [`6a5025e`](https://github.com/PostHog/posthog-js/commit/6a5025e5b29dc71e67ab97b4c9220204690f6afe) Thanks [@marandaneto](https://github.com/marandaneto)! - Update displayed surveys when the person's language changes, preserving in-progress answers and keeping survey event language metadata in sync.
+  (2026-09-07)
+
 ## 4.67.1
 
 ### Patch Changes
