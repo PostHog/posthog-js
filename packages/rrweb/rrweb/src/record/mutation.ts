@@ -345,7 +345,9 @@ export default class MutationBuffer {
     // Match stateful patterns from zero without writing to the configured
     // regexp, whose lastIndex may be non-writable. Keep all flags, including y.
     const stateful =
-      typeof blockClass !== 'string' && (blockClass.global || blockClass.sticky)
+      blockClass &&
+      typeof blockClass !== 'string' &&
+      (blockClass.global || blockClass.sticky)
         ? new RegExp(blockClass)
         : null;
     while (node) {

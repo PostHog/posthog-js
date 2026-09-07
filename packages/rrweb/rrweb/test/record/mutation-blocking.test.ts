@@ -68,6 +68,48 @@ describe('mutation emission blocking', () => {
     },
   );
 
+  it.each([null, undefined])(
+    'tolerates runtime blockClass %s while retaining selector blocking',
+    (blockClass) => {
+      const root = document.createElement('div');
+      root.className = 'public';
+      const host = document.createElement('div');
+      const span = document.createElement('span');
+      host.attachShadow({ mode: 'open' }).append(span);
+      root.append(host);
+      document.body.append(root);
+      const buffer = createProbe();
+      // Untyped callers can supply nullish values despite the declared type.
+      Object.assign(buffer, { blockClass });
+      expect(buffer.isBlockedAtEmission(span)).toBe(false);
+      buffer.blockSelector = '.secret';
+      root.classList.add('secret');
+      expect(buffer.isBlockedAtEmission(span)).toBe(true);
+      root.classList.remove('secret');
+      expect(buffer.isBlockedAtEmission(span)).toBe(false);
+    },
+  );
+
+  it.each(['g', 'y'])(
+    'retains cross-frame stateful regexps with flag %s',
+    (flag) => {
+      const iframe = document.createElement('iframe');
+      document.body.append(iframe);
+      const blockClass = new (iframe.contentWindow as typeof window).RegExp(
+        'ph-no-capture',
+        flag,
+      );
+      expect(blockClass).not.toBeInstanceOf(RegExp);
+      blockClass.lastIndex = 4;
+      Object.freeze(blockClass);
+      const root = document.createElement('div');
+      root.className = 'ph-no-capture';
+      document.body.append(root);
+      expect(createProbe(blockClass).isBlockedAtEmission(root)).toBe(true);
+      expect(blockClass.lastIndex).toBe(4);
+    },
+  );
+
   it('does not write to a frozen non-stateful regexp', () => {
     const root = document.createElement('div');
     root.className = 'ph-no-capture';
