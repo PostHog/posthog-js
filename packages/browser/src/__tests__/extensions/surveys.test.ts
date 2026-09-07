@@ -866,6 +866,39 @@ describe('SurveyManager', () => {
         })
     })
 
+    describe('warns when advanced_disable_feature_flags hides a survey', () => {
+        const makeFlagGatedSurvey = (): Survey => ({
+            ...mockSurveys[0],
+            id: 'flag-gated-survey',
+            targeting_flag_key: 'survey-targeting-flag-key2',
+        })
+
+        let consoleError: ReturnType<typeof vi.spyOn>
+
+        beforeEach(() => {
+            consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+        })
+
+        afterEach(() => {
+            consoleError.mockRestore()
+        })
+
+        it('names the survey-only escape hatch, once per instance', () => {
+            mockPostHog.config.advanced_disable_feature_flags = true
+
+            expect(surveyManager.checkSurveyEligibility(makeFlagGatedSurvey()).eligible).toBe(false)
+            surveyManager.checkSurveyEligibility(makeFlagGatedSurvey())
+
+            expect(consoleError).toHaveBeenCalledTimes(1)
+            expect(consoleError.mock.calls[0].join(' ')).toContain('advanced_only_evaluate_survey_feature_flags')
+        })
+
+        it('stays quiet when a survey flag is false and flags are enabled', () => {
+            expect(surveyManager.checkSurveyEligibility(makeFlagGatedSurvey()).eligible).toBe(false)
+            expect(consoleError).not.toHaveBeenCalled()
+        })
+    })
+
     describe('respects the event trigger condition (issue #2501)', () => {
         const EVENT_GATED_SURVEY_ID = 'event-gated-survey'
 
