@@ -29,7 +29,7 @@ jobs:
     with:
       adapter-dockerfile: compliance/node/Dockerfile
       adapter-context: .
-      test-harness-version: "0.10.0"
+      test-harness-version: "1.0.0"
       report-name: node-sdk-compliance-report
 
   # Capture V1 contract (capture_v1, POST /i/v1/analytics/events). Runs in
@@ -41,5 +41,37 @@ jobs:
     with:
       adapter-dockerfile: compliance/node/Dockerfile.v1
       adapter-context: .
-      test-harness-version: "0.10.0"
+      test-harness-version: "1.0.0"
       report-name: node-sdk-compliance-report-v1
+
+  verify-reports:
+    name: Verify nonempty Node report inventories
+    needs: [test-node-sdk, test-node-sdk-v1]
+    if: always()
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - report: node-sdk-compliance-report
+            expected: 52
+          - report: node-sdk-compliance-report-v1
+            expected: 117
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ matrix.report }}
+      - name: Require every selected result (assertion failures remain advisory)
+        env:
+          EXPECTED: ${{ matrix.expected }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          report = Path('sdk-compliance-report.md').read_text()
+          expected = int(os.environ['EXPECTED'])
+          summary = re.search(r'\*\*(\d+)/(\d+)\*\* tests passed', report)
+          assert summary and int(summary[2]) == expected, 'Missing or unexpected inventory'
+          rows = re.findall(r'^\| .* \| [✅❌] \| \d+ms \|$', report, re.M)
+          assert len(rows) == expected, f'Expected {expected} results, got {len(rows)}'
+          print(f'Observed all {expected} results; {summary[1]} passed')
+          PY

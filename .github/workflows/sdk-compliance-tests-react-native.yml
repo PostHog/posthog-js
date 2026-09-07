@@ -1,0 +1,117 @@
+name: React Native Android SDK Compliance Tests
+
+on:
+  pull_request:
+    paths:
+      - 'packages/react-native/**'
+      - 'packages/react-native-plugin/**'
+      - 'packages/core/**'
+      - 'packages/types/**'
+      - 'compliance/react-native/**'
+      - 'examples/example-rn-native-plugin/android/**'
+      - 'examples/example-rn-native-plugin/babel.config.js'
+      - '.github/workflows/sdk-compliance-tests-react-native.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/react-native/**'
+      - 'packages/react-native-plugin/**'
+      - 'packages/core/**'
+      - 'packages/types/**'
+      - 'compliance/react-native/**'
+      - 'examples/example-rn-native-plugin/android/**'
+      - 'examples/example-rn-native-plugin/babel.config.js'
+      - '.github/workflows/sdk-compliance-tests-react-native.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  android-hermes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ANDROID_SERIAL: emulator-5580
+      PORT: '18213'
+      RN_ARCH: x86_64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          build: false
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: zulu
+          java-version: '17'
+      - name: Build the public RN package and exact workspace dependencies
+        run: |
+          pnpm --filter @posthog/types build
+          pnpm --filter @posthog/core build
+          pnpm --filter @posthog/react-native-plugin build
+          pnpm --filter posthog-react-native build
+          mkdir -p "$RUNNER_TEMP/rn-tarballs"
+          pnpm --filter @posthog/core pack --out "$RUNNER_TEMP/rn-tarballs/core.tgz"
+          pnpm --filter @posthog/types pack --out "$RUNNER_TEMP/rn-tarballs/types.tgz"
+          pnpm --filter posthog-react-native pack --out "$RUNNER_TEMP/rn-tarballs/react-native.tgz"
+      - name: Build bundled native app
+        run: bash compliance/react-native/prepare-app.sh "$RUNNER_TEMP/rn-app" "$RUNNER_TEMP/rn-tarballs"
+      - name: Start Android emulator
+        run: |
+          sudo chmod 666 /dev/kvm
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'system-images;android-29;google_apis;x86_64' 'emulator'
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name compliance --package 'system-images;android-29;google_apis;x86_64'
+          "$ANDROID_HOME/emulator/emulator" -avd compliance -port 5580 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          for attempt in $(seq 1 120); do
+            if [ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then break; fi
+            sleep 2
+          done
+          test "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed | tr -d '\r')" = 1
+          adb -s "$ANDROID_SERIAL" install "$RUNNER_TEMP/rn-app/android/app/build/outputs/apk/debug/app-debug.apk"
+          adb -s "$ANDROID_SERIAL" reverse tcp:18213 tcp:18213
+          adb -s "$ANDROID_SERIAL" reverse tcp:19213 tcp:19213
+      - name: Start native controller
+        run: |
+          mkdir -p "$RUNNER_TEMP/controller"
+          cp compliance/react-native/controller.js "$RUNNER_TEMP/controller/"
+          (cd "$RUNNER_TEMP/controller" && npm init -y && npm install express@5.2.1)
+          node "$RUNNER_TEMP/controller/controller.js" > "$RUNNER_TEMP/controller.log" 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:18213/health; then break; fi
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:18213/health
+      - name: Run all 47 server-wire cases on Android Hermes
+        continue-on-error: true
+        run: |
+          mkdir -p report
+          docker run --rm --network host -v "$PWD/report:/report" ghcr.io/posthog/sdk-test-harness:1.0.0 run \
+            --adapter-url http://127.0.0.1:18213 --mock-port 19213 --mock-url http://127.0.0.1:19213 \
+            --sdk-type server --concurrency 1 --output json --report /report/react-native-android.json
+      - name: Verify nonempty native inventory
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('report/react-native-android.json').read_text())
+          assert report['sdk_name'] == 'posthog-react-native'
+          assert report['summary']['total'] == 47, 'Expected all 47 server-wire tests'
+          assert sum(len(suite['tests']) for suite in report['suites']) == 47
+          print(report['summary'])
+          PY
+      - name: Collect native diagnostics
+        if: always()
+        run: |
+          mkdir -p report
+          adb -s "$ANDROID_SERIAL" logcat -d > report/android-logcat.txt || true
+          cp "$RUNNER_TEMP/controller.log" report/ 2>/dev/null || true
+          cp "$RUNNER_TEMP/emulator.log" report/ 2>/dev/null || true
+          adb -s "$ANDROID_SERIAL" emu kill || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: react-native-android-sdk-compliance-report
+          path: report/
+          if-no-files-found: error
