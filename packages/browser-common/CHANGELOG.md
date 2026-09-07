@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.8.1
+
+### Patch Changes
+
+- [#4804](https://github.com/PostHog/posthog-js/pull/4804) [`988f03a`](https://github.com/PostHog/posthog-js/commit/988f03a75c544eb928904085286446ad39281478) Thanks [@marandaneto](https://github.com/marandaneto)! - Recover autocapture targets for dropdown clicks retargeted to the page root, and attribute nested SVG icon clicks to their enclosing button or link while preserving privacy checks.
+  (2026-09-07)
+
 ## 0.8.0
 
 ### Minor Changes
