@@ -871,23 +871,42 @@ describe('SurveyManager', () => {
     })
 
     describe('reports when capturing is opted out', () => {
-        it('is not eligible, and names the reason', () => {
+        it('is not eligible to display, and names the reason', () => {
             mockPostHog.is_capturing = vi.fn(() => false)
-            const result = surveyManager.checkSurveyEligibility(mockSurveys[0])
+            const result = surveyManager.checkSurveyDisplayEligibility(mockSurveys[0])
             expect(result.eligible).toBe(false)
             expect(result.reason).toBe('Capturing is opted out, so a survey response cannot be captured')
         })
 
-        it('stays eligible while capturing is on', () => {
+        it('stays eligible to display while capturing is on', () => {
             mockPostHog.is_capturing = vi.fn(() => true)
-            expect(surveyManager.checkSurveyEligibility(mockSurveys[0]).eligible).toBe(true)
+            expect(surveyManager.checkSurveyDisplayEligibility(mockSurveys[0]).eligible).toBe(true)
         })
 
         it('keeps the survey out of the display loop', () => {
             mockPostHog.is_capturing = vi.fn(() => false)
+            const handlePopoverSurveyMock = vi
+                .spyOn(surveyManager as any, 'handlePopoverSurvey')
+                .mockImplementation(() => {})
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+
+            expect(handlePopoverSurveyMock).not.toHaveBeenCalled()
+        })
+
+        // Regression guard: the capture gate must stay out of the public discovery result. Custom
+        // integrations find API surveys through getActiveMatchingSurveys and record responses with
+        // their own backend, where PostHog's capture state says nothing about what can be recorded.
+        it('still returns the survey from getActiveMatchingSurveys', () => {
+            mockPostHog.is_capturing = vi.fn(() => false)
             const callback = vi.fn()
             surveyManager.getActiveMatchingSurveys(callback)
-            expect(callback).toHaveBeenCalledWith([])
+            expect(callback).toHaveBeenCalledWith([mockSurveys[0]])
+        })
+
+        it('checkSurveyEligibility stays eligible so discovery is unaffected', () => {
+            mockPostHog.is_capturing = vi.fn(() => false)
+            expect(surveyManager.checkSurveyEligibility(mockSurveys[0]).eligible).toBe(true)
         })
     })
 

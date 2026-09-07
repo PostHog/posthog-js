@@ -402,10 +402,10 @@ export class SurveyManager {
 
         // Re-check the full display predicate, not just the URL: eligibility can change
         // while the delay runs down (e.g. identify() reloads flags and the internal targeting flag
-        // flips to false), and we must not show a survey that is no longer eligible by the
-        // time the delay elapses.
+        // flips to false, or the person opts out of capturing), and we must not show a survey that
+        // is no longer eligible by the time the delay elapses.
         const renderIfStillEligible = () => {
-            if (!this._shouldDisplaySurvey(survey)) {
+            if (!this._posthog.is_capturing() || !this._shouldDisplaySurvey(survey)) {
                 logger.info(`Survey ${survey.id} no longer eligible when its display delay elapsed; not displaying`)
                 return this._removeSurveyFromFocus(survey)
             }
@@ -837,15 +837,6 @@ export class SurveyManager {
             return eligibility
         }
 
-        // A survey that cannot record a response must not reach a person: they type an answer, see
-        // the confirmation, and `capture()` drops the `survey sent` event. `is_capturing()` is the
-        // same gate `capture()` uses, so cookieless `on_reject` stays eligible.
-        if (!this._posthog.is_capturing()) {
-            eligibility.eligible = false
-            eligibility.reason = SURVEY_OPTED_OUT
-            return eligibility
-        }
-
         const linkedFlagVariant = survey.conditions?.linkedFlagVariant
         if (!this._isSurveyFeatureFlagEnabled(survey.linked_flag_key, linkedFlagVariant)) {
             eligibility.eligible = false
@@ -888,17 +879,37 @@ export class SurveyManager {
     }
 
     /**
-     * Renderability = eligibility (running, type, flags, wait period, already-seen) plus the
-     * survey's event/action activation trigger. Used by the programmatic `canRenderSurvey` /
-     * `canRenderSurveyAsync` checks so they match the display loop.
+     * Eligibility for a survey the SDK renders and captures the response for itself: everything
+     * `checkSurveyEligibility` checks, plus PostHog's capture state. Without the capture check a
+     * person types an answer, sees the confirmation, and `capture()` drops the `survey sent`
+     * event. `is_capturing()` is the same gate `capture()` uses, so cookieless `on_reject` stays
+     * eligible.
      *
-     * The trigger is intentionally kept out of `checkSurveyEligibility`: that method is also
-     * used by the explicit `displaySurvey` path, and the trigger state only lives in memory
+     * Deliberately kept out of `checkSurveyEligibility`: that also backs the public
+     * `getActiveMatchingSurveys`, which custom integrations use to discover API surveys they
+     * render themselves and record through their own backend (see `markSurveyAsSeen`). PostHog's
+     * capture state says nothing about whether such a response can be recorded, so discovery
+     * stays capture-independent.
+     */
+    public checkSurveyDisplayEligibility(survey: Survey): { eligible: boolean; reason?: string } {
+        if (!this._posthog.is_capturing()) {
+            return { eligible: false, reason: SURVEY_OPTED_OUT }
+        }
+        return this.checkSurveyEligibility(survey)
+    }
+
+    /**
+     * Renderability = display eligibility (running, type, flags, wait period, already-seen,
+     * capturing) plus the survey's event/action activation trigger. Used by the programmatic
+     * `canRenderSurvey` / `canRenderSurveyAsync` checks so they match the display loop.
+     *
+     * The trigger is intentionally kept out of `checkSurveyDisplayEligibility`: that method is
+     * also used by the explicit `displaySurvey` path, and the trigger state only lives in memory
      * (a reload clears it, server-side events never set it). Gating eligibility on it would
      * make explicit `displaySurvey('id')` calls silently show nothing.
      */
     public checkSurveyRenderability(survey: Survey): { eligible: boolean; reason?: string } {
-        const eligibility = this.checkSurveyEligibility(survey)
+        const eligibility = this.checkSurveyDisplayEligibility(survey)
         if (eligibility.eligible && !this._hasActionOrEventTriggeredSurvey(survey)) {
             return { eligible: false, reason: `Survey event/action trigger has not been fired yet` }
         }
@@ -942,6 +953,10 @@ export class SurveyManager {
      * survey that became ineligible *during* the delay (e.g. an identify() reloaded flags and
      * the internal targeting flag is now false) is not shown. Note this is purely an AND gate:
      * adding it can only ever suppress a display, never cause an extra one.
+     *
+     * PostHog's capture state is not part of this: it also backs the public
+     * `getActiveMatchingSurveys` discovery result, so the paths where the SDK renders the survey
+     * itself apply that gate separately — see `checkSurveyDisplayEligibility`.
      */
     private _shouldDisplaySurvey(survey: Survey): boolean {
         return (
@@ -961,8 +976,13 @@ export class SurveyManager {
 
     public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
         this.getActiveMatchingSurveys((surveys) => {
+            // Discovery above stays capture-independent for custom integrations; a survey the SDK
+            // shows itself must be able to record the response, so the gate lives here instead —
+            // see `checkSurveyDisplayEligibility`.
+            const canCaptureResponse = this._posthog.is_capturing()
             const inAppSurveysWithDisplayLogic = surveys.filter(
-                (survey) => survey.type === SurveyType.Popover || survey.type === SurveyType.Widget
+                (survey) =>
+                    canCaptureResponse && (survey.type === SurveyType.Popover || survey.type === SurveyType.Widget)
             )
 
             // Cancel any pending (delayed, not-yet-shown) survey whose eligibility changed since
