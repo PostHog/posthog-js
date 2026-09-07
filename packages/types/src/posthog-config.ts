@@ -187,6 +187,11 @@ export interface BootstrapConfig {
      * page and an iframe served from your second domain. Read `posthog.get_session_id()` on the
      * first origin and pass the value to the second one.
      *
+     * This carries the session, not the person. Storage is per origin, so pass `distinctID` from
+     * the same page as well — read `posthog.get_distinct_id()` on the first origin, and set
+     * `isIdentifiedID` when that user is identified. Without it the two origins report one
+     * session under two people.
+     *
      * The value MUST be:
      * - unique to this user
      * - a valid UUID v7
