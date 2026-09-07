@@ -193,9 +193,13 @@ export interface BootstrapConfig {
      * - the timestamp part must be <= the timestamp of the first event in the session
      * - the timestamp of the last event in the session must be < the timestamp part + 24 hours
      *
-     * The SDK applies the value once, while it loads. If the value breaks one of the rules above,
-     * the SDK writes the reason to the console and starts a new session instead. Each frame keeps
-     * its own idle clock after load, so a long visit can still split into two sessions.
+     * The SDK applies the value once, while it loads. It only checks what it can see from this
+     * page: that the value is a valid UUID v7, that its timestamp part is not in the future (one
+     * minute of clock skew is allowed), and that the session it names is not already past the 24
+     * hour maximum. When one of those checks fails, the SDK writes the reason to the console and
+     * starts a new session instead. It cannot tell whether the value is unique to this user, so an
+     * id reused across visitors is accepted with no report and merges them into one session. Each
+     * frame keeps its own idle clock after load, so a long visit can still split into two sessions.
      */
     sessionID?: string
 }
