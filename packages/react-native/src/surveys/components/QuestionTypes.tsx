@@ -330,9 +330,10 @@ export function MultipleChoiceQuestion({
   question = question as MultipleSurveyQuestion
   const isSingleChoice = question.type === SurveyQuestionType.SingleChoice
   const allowMultiple = question.type === SurveyQuestionType.MultipleChoice
-  const openChoice = question.hasOpenChoice ? question.choices[question.choices.length - 1] : null
+  const openChoiceIndex = question.hasOpenChoice ? question.choices.length - 1 : -1
   const choices = useMemo(() => getDisplayOrderChoices(question as MultipleSurveyQuestion), [question])
-  const [selectedChoices, setSelectedChoices] = useState<string[]>([])
+  // Choice labels change with survey translations; keep selection tied to the original order.
+  const [selectedChoiceIndices, setSelectedChoiceIndices] = useState<number[]>([])
   const [openEndedInput, setOpenEndedInput] = useState('')
 
   // Only skip submit for single-choice questions without open choice
@@ -345,12 +346,14 @@ export function MultipleChoiceQuestion({
           text={question.buttonText ?? appearance.submitButtonText}
           submitDisabled={
             !question.optional &&
-            (selectedChoices.length === 0 ||
-              (openChoice !== null && selectedChoices.includes(openChoice) && openEndedInput.length === 0))
+            (selectedChoiceIndices.length === 0 ||
+              (selectedChoiceIndices.includes(openChoiceIndex) && openEndedInput.length === 0))
           }
           appearance={appearance}
           onSubmit={() => {
-            const result = selectedChoices.map((c) => (c === openChoice ? openEndedInput : c))
+            const result = selectedChoiceIndices.map((index) =>
+              index === openChoiceIndex ? openEndedInput : question.choices[index]
+            )
             onSubmit(allowMultiple ? result : result[0])
           }}
           skipSubmitButton={shouldSkipSubmit}
@@ -364,15 +367,15 @@ export function MultipleChoiceQuestion({
         appearance={appearance}
       />
       <View style={styles.multipleChoiceOptions}>
-        {choices.map((choice: string, idx: number) => {
-          const isOpenChoice = choice === openChoice
-          const isSelected = selectedChoices.includes(choice)
+        {choices.map((choice: string, choiceIndex: number) => {
+          const isOpenChoice = choiceIndex === openChoiceIndex
+          const isSelected = selectedChoiceIndices.includes(choiceIndex)
 
           const choiceTextColor = appearance.inputTextColor ?? getContrastingTextColor(appearance.inputBackground)
 
           return (
             <Pressable
-              key={idx}
+              key={choiceIndex}
               style={[
                 styles.choiceOption,
                 { backgroundColor: appearance.inputBackground },
@@ -380,11 +383,13 @@ export function MultipleChoiceQuestion({
               ]}
               onPress={() => {
                 if (allowMultiple) {
-                  setSelectedChoices(
-                    isSelected ? selectedChoices.filter((c) => c !== choice) : [...selectedChoices, choice]
+                  setSelectedChoiceIndices(
+                    isSelected
+                      ? selectedChoiceIndices.filter((index) => index !== choiceIndex)
+                      : [...selectedChoiceIndices, choiceIndex]
                   )
                 } else {
-                  setSelectedChoices([choice])
+                  setSelectedChoiceIndices([choiceIndex])
                   if (shouldSkipSubmit && !isOpenChoice) {
                     onSubmit(choice)
                   }
@@ -404,7 +409,7 @@ export function MultipleChoiceQuestion({
                   onChangeText={(userValue) => {
                     setOpenEndedInput(userValue)
                     if (!isSelected) {
-                      setSelectedChoices(allowMultiple ? [...selectedChoices, choice] : [choice])
+                      setSelectedChoiceIndices(allowMultiple ? [...selectedChoiceIndices, choiceIndex] : [choiceIndex])
                     }
                   }}
                 />

@@ -1,4 +1,4 @@
-import { hasOwnProperty, isArray, isFormData, isNullish, isNumber, isString } from '@posthog/core'
+import { hasOwnProperty, isArray, isError, isFormData, isNullish, isNumber, isString } from '@posthog/core'
 import type { PostHogConfig, Properties } from '@posthog/types'
 
 import { logger } from './logger'
@@ -103,6 +103,20 @@ export const stripEmptyProperties = function (p: Properties): Properties {
     return ret
 }
 
+export function errorToProperties(error: Error & { cause?: unknown; errors?: unknown }): Record<string, unknown> {
+    const copy: Record<string, unknown> = { ...error }
+    for (const detail of ['name', 'message', 'stack', 'cause', 'errors'] as const) {
+        try {
+            if (detail in error) {
+                copy[detail] = error[detail]
+            }
+        } catch {
+            // An unreadable non-enumerable Error detail must not discard the rest of the event.
+        }
+    }
+    return copy
+}
+
 /**
  * Deep copies an object.
  * It handles cycles by replacing all references to them with `undefined`
@@ -132,7 +146,7 @@ function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
             })
         } else {
             const copy: Record<string, any> = {}
-            each(value, (val, key) => {
+            each(isError(value) ? errorToProperties(value) : value, (val, key) => {
                 if (!COPY_IN_PROGRESS_SET.has(val)) {
                     copy[key] = internalDeepCircularCopy(val, key)
                 }

@@ -1,5 +1,31 @@
 # @posthog/browser-common
 
+## 0.8.2
+
+### Patch Changes
+
+- [#4803](https://github.com/PostHog/posthog-js/pull/4803) [`87b34af`](https://github.com/PostHog/posthog-js/commit/87b34af44e46427eba97eaf63aafb82255896a42) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve Error details, causes, aggregate errors, and custom enumerable properties in event properties, including cross-realm Errors. Apply string truncation to ordinary capture properties and retain custom toJSON serialization for exception additional properties.
+  (2026-09-07)
+
+## 0.8.1
+
+### Patch Changes
+
+- [#4804](https://github.com/PostHog/posthog-js/pull/4804) [`988f03a`](https://github.com/PostHog/posthog-js/commit/988f03a75c544eb928904085286446ad39281478) Thanks [@marandaneto](https://github.com/marandaneto)! - Recover autocapture targets for dropdown clicks retargeted to the page root, and attribute nested SVG icon clicks to their enclosing button or link while preserving privacy checks.
+  (2026-09-07)
+
+## 0.8.0
+
+### Minor Changes
+
+- [#4809](https://github.com/PostHog/posthog-js/pull/4809) [`3a5b322`](https://github.com/PostHog/posthog-js/commit/3a5b32229a135af56d43a17350a222784d94c88d) Thanks [@marandaneto](https://github.com/marandaneto)! - Add best-effort in-app browser attribution using `$webview_app` and `$webview_app_version`, without changing existing `$browser` or `$browser_version` values. Detect explicit user-agent markers for Facebook, Facebook Lite, Messenger, Instagram, Threads, LinkedIn, Twitter, TikTok, WhatsApp, Snapchat, WeChat, LINE, Google, Bing, Pinterest, Naver, and KakaoTalk. Unknown apps and versions are omitted; missing markers do not imply a standalone browser.
+  (2026-09-07)
+
+### Patch Changes
+
+- Updated dependencies [[`3a5b322`](https://github.com/PostHog/posthog-js/commit/3a5b32229a135af56d43a17350a222784d94c88d)]:
+  - @posthog/core@1.51.0
+
 ## 0.7.3
 
 ### Patch Changes
