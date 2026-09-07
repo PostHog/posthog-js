@@ -532,7 +532,7 @@ describe('request', () => {
             mockedFetch.mockImplementation((_url: string, opts: any) => {
                 capturedSignal = opts.signal
                 return new Promise((_resolve, reject) => {
-                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
                     opts.signal?.addEventListener('abort', () => reject(capturedAbortReason))
                 })
             })
@@ -577,7 +577,7 @@ describe('request', () => {
             nativeAbortError.name = 'AbortError'
             mockedFetch.mockImplementation((_url: string, opts: any) => {
                 return new Promise((_resolve, reject) => {
-                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
                     opts.signal?.addEventListener('abort', () => reject(nativeAbortError))
                 })
             })

@@ -98,9 +98,9 @@ function resolveProxyConfig(proxy: boolean | PostHogProxyOptions | undefined): R
 
 function rewriteToPostHog(request: NextRequest, config: ResolvedRewriteConfig): NextResponse {
     const pathname = request.nextUrl.pathname.slice(config.pathPrefix.length) || '/'
-    // eslint-disable-next-line compat/compat
+    // oxlint-disable-next-line compat/compat
     const url = new URL(pathname, config.host)
-    // eslint-disable-next-line compat/compat
+    // oxlint-disable-next-line compat/compat
     const hostOrigin = new URL('/', config.host).origin
 
     if (url.origin !== hostOrigin) {

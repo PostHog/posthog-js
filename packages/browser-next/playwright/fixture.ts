@@ -35,7 +35,7 @@ let lastDelivery: { body: string; compressedBytes: number; encoding: string | nu
 const currentDelivery = () => lastDelivery
 const sessionChanges: string[] = []
 
-// eslint-disable-next-line posthog-js/no-add-event-listener
+// oxlint-disable-next-line posthog-js/no-add-event-listener
 window.addEventListener('storage', (event) => {
     if (event.key === '__ph_opt_in_out_ph_browser_next_playwright' && event.newValue === '0') {
         denialEvents++

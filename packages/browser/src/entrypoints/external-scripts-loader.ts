@@ -39,12 +39,12 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
             return callback(existingError)
         }
 
-        // eslint-disable-next-line posthog-js/no-add-event-listener
+        // oxlint-disable-next-line posthog-js/no-add-event-listener
         existingScript.addEventListener('load', (event) => {
             ;(existingScript as any).__posthog_loading_callback_fired = true
             callback(undefined, event)
         })
-        // eslint-disable-next-line posthog-js/no-add-event-listener
+        // oxlint-disable-next-line posthog-js/no-add-event-listener
         existingScript.addEventListener('error', (error) => {
             ;(existingScript as any).__posthog_loading_error = error
             callback(error)
@@ -97,7 +97,7 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
     } else {
         // Inlining this because we don't care about `passive: true` here
         // and this saves us ~3% of the bundle size
-        // eslint-disable-next-line posthog-js/no-add-event-listener
+        // oxlint-disable-next-line posthog-js/no-add-event-listener
         document?.addEventListener('DOMContentLoaded', addScript)
     }
 }

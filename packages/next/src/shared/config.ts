@@ -28,7 +28,7 @@ export function normalizeConfigValue(value?: unknown): string | undefined {
 export function resolveApiKey(apiKey?: unknown): string | undefined {
     const resolved = normalizeConfigValue(apiKey) ?? normalizeConfigValue(process.env.NEXT_PUBLIC_POSTHOG_KEY)
     if (!resolved) {
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
     }
     return resolved

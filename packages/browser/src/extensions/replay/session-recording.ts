@@ -1,6 +1,7 @@
 import {
     COOKIELESS_ALWAYS,
     SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
+    RECORDING_REMOTE_CONFIG_TTL_MS,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_SAMPLE_RATE,
     SESSION_RECORDING_OVERRIDE_SAMPLING,
@@ -25,7 +26,6 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { assignableWindow, LazyLoadedSessionRecordingInterface, PostHogExtensionKind } from '../../utils/globals'
-import { RECORDING_REMOTE_CONFIG_TTL_MS } from './external/lazy-loaded-session-recorder'
 import {
     AWAITING_CONFIG,
     DISABLED,

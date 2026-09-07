@@ -1,4 +1,4 @@
-/* eslint-disable compat/compat */
+/* oxlint-disable compat/compat */
 const pushMock = vi.hoisted(() => ({
   listeners: {} as { [event: string]: (payload: any) => void | Promise<void> },
   removed: [] as string[],

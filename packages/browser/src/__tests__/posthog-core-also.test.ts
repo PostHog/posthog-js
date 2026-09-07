@@ -26,7 +26,7 @@ import { SessionPropsManager } from '../session-props'
 // Previously masked by babel-vi transpiling `let` -> `var` because IE 11
 // was in package.json#browserslist. `vi.hoisted()` would be the modern
 // fix but needs babel-plugin-vi-hoist 30 (vi 30 catalog bump).
-// eslint-disable-next-line no-var
+// oxlint-disable-next-line no-var
 var mockGetProperties: vi.Mock
 
 vi.mock('@posthog/browser-common/utils/event-utils', async (importOriginal) => {
@@ -1735,7 +1735,7 @@ describe('posthog core', () => {
 
                 const eventPayload = vi.mocked(posthog._requestQueue!.enqueue).mock.calls[2][0]
                 // need to help TS know event payload data is not an array
-                // eslint-disable-next-line posthog-js/no-direct-array-check
+                // oxlint-disable-next-line posthog-js/no-direct-array-check
                 if (Array.isArray(eventPayload.data!)) {
                     throw new Error('')
                 }

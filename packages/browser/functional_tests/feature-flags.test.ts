@@ -8,7 +8,7 @@ import { Compression } from '@posthog/core'
 
 async function shortWait() {
     // no need to worry about ie11 compat in tests
-    // eslint-disable-next-line compat/compat
+    // oxlint-disable-next-line compat/compat
     await new Promise<void>((resolve: () => void) => setTimeout(resolve, 500))
 }
 

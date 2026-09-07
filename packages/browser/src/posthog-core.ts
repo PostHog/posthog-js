@@ -578,7 +578,7 @@ export class PostHog implements PostHogInterface {
         }
         this._hasWarnedAboutVolatileIdentity = true
         // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn(
             '[PostHog.js]',
             `${cause} but no bootstrap.distinctID was provided. ` +
@@ -799,13 +799,13 @@ export class PostHog implements PostHogInterface {
             if (normalizedToken !== this.config?.token) {
                 // A second init() with a different project token often means that someone is trying to send
                 // events to a second project without giving that instance a name.
-                // eslint-disable-next-line no-console
+                // oxlint-disable-next-line no-console
                 console.warn(
                     '[PostHog.js]',
                     `You have already initialized PostHog with a different project token! Re-initializing is a no-op, so events will keep going to the project this instance was initialized with. To capture into a second project, load PostHog once, then initialize a named instance after the SDK has loaded, e.g. posthog.init('${normalizedToken}', { ... }, 'project2')`
                 )
             } else {
-                // eslint-disable-next-line no-console
+                // oxlint-disable-next-line no-console
                 console.warn('[PostHog.js]', 'You have already initialized PostHog! Re-initializing is a no-op')
             }
             return this
@@ -949,7 +949,7 @@ export class PostHog implements PostHogInterface {
         this._hasStableInitialDistinctId = !!initialDistinctId && !isEmptyString(initialDistinctId)
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
-        // eslint-disable-next-line posthog-js/no-direct-undefined-check
+        // oxlint-disable-next-line posthog-js/no-direct-undefined-check
         if (config.bootstrap?.distinctID !== undefined) {
             const bootstrapDistinctId = config.bootstrap.distinctID
             const existingDistinctId = this.get_distinct_id()
@@ -1109,7 +1109,7 @@ export class PostHog implements PostHogInterface {
 
     private _initExtensions(startInCookielessMode: boolean): void {
         // we don't support IE11 anymore, so performance.now is safe
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const initStartTime = performance.now()
         const ext = { ...PostHog.__defaultExtensionClasses, ...this.config.__extensionClasses }
         const initTasks: Array<() => void> = []
@@ -1227,7 +1227,7 @@ export class PostHog implements PostHogInterface {
 
         // All tasks complete - record timing for both sync and deferred modes
         // we don't support IE11 anymore, so performance.now is safe
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const taskInitTiming = Math.round(performance.now() - initStartTime)
         this.register_for_session({
             [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: this.config.__preview_deferred_init_extensions
@@ -2385,7 +2385,10 @@ export class PostHog implements PostHogInterface {
      *
      * @remarks
      * Returns the feature flag value which can be a boolean, string, or undefined.
-     * Supports multivariate flags that can return custom string values.
+     * Supports multivariate flags that can return custom string values. An evaluated boolean flag
+     * returns `true` or `false`; `undefined` means no current evaluation is available for the key.
+     * Globally inactive flags are omitted from the remote `/flags` response, so after that response
+     * loads they are unavailable rather than represented by a `false` result.
      *
      * {@label Feature flags}
      *
@@ -2444,6 +2447,10 @@ export class PostHog implements PostHogInterface {
     /**
      * Get a feature flag evaluation result including both the flag value and payload.
      *
+     * A result with `enabled: false` is a conclusive off evaluation. `undefined` means no current
+     * evaluation is available for the key. This includes globally inactive flags, which are omitted
+     * from the remote `/flags` response.
+     *
      * By default, this method emits the `$feature_flag_called` event.
      *
      * {@label Feature flags}
@@ -2480,7 +2487,9 @@ export class PostHog implements PostHogInterface {
     /**
      * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
      * the flags from the last load (no network request); call `reloadFeatureFlags()` first to refresh.
-     * Unlike `getFeatureFlag()`, it does not send a `$feature_flag_called` event.
+     * Conclusive off evaluations are included with `enabled: false`; keys omitted from the response,
+     * including globally inactive flags, are absent. Unlike `getFeatureFlag()`, this method does not
+     * send a `$feature_flag_called` event.
      *
      * @returns {FeatureFlagResult[]} All loaded flags, or an empty array if none are loaded.
      */
@@ -2492,9 +2501,11 @@ export class PostHog implements PostHogInterface {
      * Checks if a feature flag is enabled for the current user.
      *
      * @remarks
-     * Returns true if the flag is enabled, false if disabled, or undefined if not found
-     * (unless `defaultValue` is given, which is returned instead of undefined).
-     * This is a convenience method that treats any truthy value as enabled.
+     * Returns `true` or `false` when the flag has an evaluation value. A `false` result means the
+     * value evaluated off; it does not mean the SDK observed the flag's global active setting.
+     * Returns `undefined` when no current evaluation is available, unless `defaultValue` is given.
+     * Globally inactive flags are omitted from the remote `/flags` response and therefore have no
+     * value. This is a convenience method that treats any truthy value as enabled.
      *
      * {@label Feature flags}
      *
@@ -2980,7 +2991,7 @@ export class PostHog implements PostHogInterface {
     canRenderSurveyAsync(surveyId: string, forceReload = false): Promise<SurveyRenderReason> {
         return (
             this.surveys?.canRenderSurveyAsync(surveyId, forceReload) ??
-            // eslint-disable-next-line compat/compat
+            // oxlint-disable-next-line compat/compat
             Promise.resolve({ visible: false, disabledReason: SURVEYS_NOT_AVAILABLE })
         )
     }
@@ -3600,7 +3611,7 @@ export class PostHog implements PostHogInterface {
 
         if (!isConsentTransition && wasCapturing && !this.is_capturing()) {
             // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
-            // eslint-disable-next-line no-console
+            // oxlint-disable-next-line no-console
             console.warn('[PostHog.js]', RESET_CONSENT_WARN)
         }
 
@@ -3654,7 +3665,7 @@ export class PostHog implements PostHogInterface {
 
             if (bootstrap) {
                 // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
-                // eslint-disable-next-line posthog-js/no-direct-undefined-check
+                // oxlint-disable-next-line posthog-js/no-direct-undefined-check
                 if (bootstrap.distinctID !== undefined && !this._inCookielessMode()) {
                     this.persistence?.set_property(
                         USER_STATE,
@@ -4181,17 +4192,23 @@ export class PostHog implements PostHogInterface {
      * @returns The result of the capture, or undefined if exception capture is unavailable.
      */
     captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined {
-        if (!this.exceptions) return
+        try {
+            if (!this.exceptions) return
 
-        const syntheticException = new Error('PostHog syntheticException')
-        const errorToProperties = this.exceptions.buildProperties(error, {
-            handled: true,
-            syntheticException,
-        })
-        return this.exceptions.sendExceptionEvent({
-            ...errorToProperties,
-            ...additionalProperties,
-        })
+            const syntheticException = new Error('PostHog syntheticException')
+            const errorToProperties = this.exceptions.buildProperties(error, {
+                handled: true,
+                syntheticException,
+            })
+            return this.exceptions.sendExceptionEvent({
+                ...errorToProperties,
+                ...additionalProperties,
+            })
+        } catch {
+            // Exception capture must never throw into customer code. Do not log here because
+            // console.error may be instrumented and would re-enter exception autocapture.
+            return
+        }
     }
 
     /**

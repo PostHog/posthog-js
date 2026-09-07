@@ -142,7 +142,6 @@ export class ShadowDomManager {
     },
     doc: Document,
   ) {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const manager = this;
     this.restoreHandlers.push({
       doc,

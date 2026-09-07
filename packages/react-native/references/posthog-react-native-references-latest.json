@@ -444,7 +444,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Gets the value of a feature flag for the current user.\nDefaults to undefined if not loaded yet or if there was a problem loading. Multivariant feature flags are returned as a string.",
+          "description": "Gets the value of a feature flag for the current user.\nReturns `true` or `false` for an evaluated boolean flag and a string for a multivariate flag. Returns `undefined` before flags load or when loading fails. For backwards compatibility, a missing key can resolve to `false` after a non-empty response is stored; use `getFeatureFlagResult()` to distinguish an unavailable key from a conclusive off result.\nGlobally inactive flags are omitted from remote responses, so they follow this missing-key behavior rather than carrying an explicit off evaluation.",
           "details": null,
           "id": "getFeatureFlag",
           "showDocs": true,
@@ -761,7 +761,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Checks if a feature flag is enabled for the current user.\nDefaults to undefined if not loaded yet or if there was a problem loading, unless `defaultValue` is provided.",
+          "description": "Checks if a feature flag is enabled for the current user.\nA `false` return value means the SDK resolved the current value as off. If no evaluation is available, this method returns `defaultValue` when provided. Without a default, it returns `undefined` before flags load; for backwards compatibility, a missing key can resolve to `false` after a non-empty response is stored.\nGlobally inactive flags are omitted from remote responses, so they follow this missing-key behavior rather than carrying an explicit off evaluation.",
           "details": null,
           "id": "isFeatureEnabled",
           "showDocs": true,
@@ -1730,6 +1730,7 @@
         },
         {
           "category": "",
+          "description": "Returns the current evaluation result for a feature flag. `enabled: false` is a conclusive off result; `undefined` means no evaluation is available for the key.",
           "details": null,
           "id": "getFeatureFlagResult",
           "showDocs": true,
