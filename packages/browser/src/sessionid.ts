@@ -20,10 +20,11 @@ export const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
 const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
 const BOOTSTRAP_SESSION_CLOCK_SKEW_TOLERANCE_MILLISECONDS = 60 * 1000 // 1 minute
 
-// Critical, not debug gated: a rejected id is replaced by a fresh one, so one
-// visit becomes two sessions, which is invisible until someone counts sessions.
+// Critical, not debug gated: a rejected id leaves this frame on a session of its own,
+// so one visit becomes two sessions, which is invisible until someone counts sessions.
+// The frame keeps a live stored session if it has one, so don't promise a new session.
 const rejectBootstrapSessionId = (reason: string): undefined => {
-    logger.critical(`Ignoring bootstrap sessionID because ${reason}. This page starts a new session instead.`)
+    logger.critical(`Ignoring bootstrap sessionID because ${reason}. This page uses its own session instead.`)
     return undefined
 }
 

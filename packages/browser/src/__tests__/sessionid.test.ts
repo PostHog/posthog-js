@@ -139,6 +139,28 @@ describe('Session ID manager', () => {
             })
         })
 
+        it('keeps a live stored session when the bootstrap sessionID is rejected at init', () => {
+            const storedSessionId = 'stored-session-id'
+            persistence.props[SESSION_ID] = [timestamp, storedSessionId, timestamp]
+            ;(uuid7ToTimestampMs as vi.Mock).mockReturnValue(now - 25 * 60 * 60 * 1000)
+            const sessionIdManager = new SessionIdManager(
+                createMockPostHog({
+                    config: { ...config, bootstrap: { sessionID: 'expired-bootstrap-session-id' } },
+                    persistence: persistence as PostHogPersistence,
+                    register: vi.fn(),
+                })
+            )
+
+            expect(consoleError).toHaveBeenCalledWith(
+                '[PostHog.js] [SessionId]',
+                expect.stringContaining('This page uses its own session instead')
+            )
+            expect(sessionIdManager.checkAndGetSessionAndWindowId(false, now)).toMatchObject({
+                sessionId: storedSessionId,
+                sessionStartTimestamp: timestamp,
+            })
+        })
+
         it('defers a reset bootstrap session until the next session check', () => {
             const sessionIdManager = sessionIdMgr(persistence)
             sessionIdManager.checkAndGetSessionAndWindowId(false, now)
