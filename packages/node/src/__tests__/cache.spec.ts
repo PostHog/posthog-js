@@ -48,6 +48,12 @@ describe('FlagDefinitionCacheProvider Integration', () => {
     minimalFlagCalledEvents: false,
   }
 
+  const publishedFlagData = {
+    ...testFlagData,
+    group_type_mapping: testFlagData.groupTypeMapping,
+    minimal_flag_called_events: false,
+  }
+
   vi.useFakeTimers()
 
   beforeEach(() => {
@@ -199,7 +205,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
       await vi.runOnlyPendingTimersAsync()
 
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
-      expect(mockCacheProvider.onFlagDefinitionsReceived).toHaveBeenCalledWith(testFlagData)
+      expect(mockCacheProvider.onFlagDefinitionsReceived).toHaveBeenCalledWith(publishedFlagData)
     })
 
     it('skips fetch and reloads from cache when shouldFetch returns false', async () => {
@@ -530,7 +536,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
 
       await vi.runOnlyPendingTimersAsync()
 
-      expect(mockCacheProvider.onFlagDefinitionsReceived).toHaveBeenCalledWith(testFlagData)
+      expect(mockCacheProvider.onFlagDefinitionsReceived).toHaveBeenCalledWith(publishedFlagData)
       expect(posthog.isLocalEvaluationReady()).toBe(true)
     })
 
