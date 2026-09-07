@@ -29,7 +29,7 @@ import type {
 import * as mittProxy from 'mitt';
 import { polyfill as smoothscrollPolyfill } from './smoothscroll';
 import { applyEventsWithYield } from './fast-forward';
-import { Timer } from './timer';
+import { Timer, firstPositionTimeOffset, positionTimeOffset } from './timer';
 import {
   createPlayerService,
   createSpeedService,
@@ -1039,11 +1039,13 @@ export class Replayer {
         let finish_buffer = 50; // allow for checking whether new events aren't just about to be loaded in
         if (
           event.type === EventType.IncrementalSnapshot &&
-          event.data.source === IncrementalSource.MouseMove &&
-          event.data.positions.length
+          event.data.source === IncrementalSource.MouseMove
         ) {
-          // extend finish event if the last event is a mouse move so that the timer isn't stopped by the service before checking the last event
-          finish_buffer += Math.max(0, -event.data.positions[0].timeOffset);
+          const firstOffset = firstPositionTimeOffset(event.data);
+          if (firstOffset !== undefined) {
+            // extend finish event if the last event is a mouse move so that the timer isn't stopped by the service before checking the last event
+            finish_buffer += Math.max(0, -firstOffset);
+          }
         }
         setTimeout(finish, finish_buffer);
       }
@@ -1398,12 +1400,18 @@ export class Replayer {
           };
         } else {
           d.positions.forEach((p) => {
+            const timeOffset = positionTimeOffset(p);
+            // a position with no usable offset would schedule a NaN delay: the
+            // timer never satisfies it, so it stalls at the head of the queue
+            if (timeOffset === undefined) {
+              return;
+            }
             const action = {
               doAction: () => {
                 this.moveAndHover(p.x, p.y, p.id, isSync, d);
               },
               delay:
-                p.timeOffset +
+                timeOffset +
                 e.timestamp -
                 this.service.state.context.baselineTime,
             };
@@ -1414,7 +1422,7 @@ export class Replayer {
             doAction() {
               //
             },
-            delay: e.delay! - d.positions[0]?.timeOffset,
+            delay: e.delay! - (firstPositionTimeOffset(d) ?? 0),
           });
         }
         break;
