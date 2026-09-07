@@ -23,7 +23,7 @@ import { AutocaptureConfig, PostHogConfig } from '../types'
 describe(`Autocapture utility functions`, () => {
     afterEach(() => {
         document!.getElementsByTagName('html')[0].innerHTML = ''
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
     })
 
     describe(`getSafeText`, () => {
@@ -213,7 +213,7 @@ describe(`Autocapture utility functions`, () => {
         })
 
         it(`does not throw when getComputedStyle throws for a cross-realm element`, () => {
-            jest.spyOn(window, 'getComputedStyle').mockImplementation(() => {
+            vi.spyOn(window, 'getComputedStyle').mockImplementation(() => {
                 throw new TypeError("Argument 1 ('element') to Window.getComputedStyle must be an instance of Element")
             })
 

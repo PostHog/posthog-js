@@ -15,15 +15,15 @@ function makeClient(
   { alreadyLoaded = false }: { alreadyLoaded?: boolean } = {}
 ): {
   client: PostHog
-  getFeatureFlagResult: jest.Mock
-  reloadFeatureFlags: jest.Mock
-  onFeatureFlags: jest.Mock
-  setPersonPropertiesForFlags: jest.Mock
-  group: jest.Mock
+  getFeatureFlagResult: vi.Mock
+  reloadFeatureFlags: vi.Mock
+  onFeatureFlags: vi.Mock
+  setPersonPropertiesForFlags: vi.Mock
+  group: vi.Mock
 } {
   let callback: ((flags: string[], variants: Record<string, unknown>) => void) | undefined
 
-  const onFeatureFlags = jest.fn((cb: (flags: string[], variants: Record<string, unknown>) => void) => {
+  const onFeatureFlags = vi.fn((cb: (flags: string[], variants: Record<string, unknown>) => void) => {
     callback = cb
     // posthog-js fires synchronously on subscribe when flags are already loaded.
     if (alreadyLoaded) {
@@ -34,12 +34,12 @@ function makeClient(
     }
   })
   // Simulate an async reload that notifies subscribers on completion.
-  const reloadFeatureFlags = jest.fn(() => {
+  const reloadFeatureFlags = vi.fn(() => {
     queueMicrotask(() => callback?.([], {}))
   })
-  const getFeatureFlagResult = jest.fn().mockReturnValue(result)
-  const setPersonPropertiesForFlags = jest.fn()
-  const group = jest.fn()
+  const getFeatureFlagResult = vi.fn().mockReturnValue(result)
+  const setPersonPropertiesForFlags = vi.fn()
+  const group = vi.fn()
 
   return {
     client: {
@@ -196,21 +196,21 @@ describe('PostHogWebProvider', () => {
       // onFeatureFlags never invokes its callback and reloadFeatureFlags is a no-op,
       // so only the reloadTimeoutMs safety net can settle initialize(). Fake timers
       // keep this deterministic and instant rather than waiting on real wall-clock.
-      jest.useFakeTimers()
+      vi.useFakeTimers()
       try {
         const client = {
-          getFeatureFlagResult: jest.fn(),
-          reloadFeatureFlags: jest.fn(),
-          onFeatureFlags: jest.fn(() => () => {}),
-          setPersonPropertiesForFlags: jest.fn(),
-          group: jest.fn(),
+          getFeatureFlagResult: vi.fn(),
+          reloadFeatureFlags: vi.fn(),
+          onFeatureFlags: vi.fn(() => () => {}),
+          setPersonPropertiesForFlags: vi.fn(),
+          group: vi.fn(),
         } as unknown as PostHog
         const provider = new PostHogWebProvider(client, { reloadTimeoutMs: 20 })
         const pending = provider.initialize()
-        await jest.runAllTimersAsync()
+        await vi.runAllTimersAsync()
         await expect(pending).resolves.toBeUndefined()
       } finally {
-        jest.useRealTimers()
+        vi.useRealTimers()
       }
     })
 

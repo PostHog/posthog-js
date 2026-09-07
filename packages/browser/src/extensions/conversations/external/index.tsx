@@ -209,7 +209,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         const token = this._config.token
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             const personTraits = this._getPersonTraits()
 
@@ -344,7 +344,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         const token = this._config.token
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             const identity = this._identityFields()
             const queryParams: Record<string, string> = {
@@ -410,7 +410,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         logger.info('Marking messages as read', { ticketId: targetTicketId })
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             const identity = this._identityFields()
             const data = identity || { widget_session_id: this._widgetSessionId }
@@ -545,7 +545,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             current_url: this._currentUrl(),
         }
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const data = await new Promise<RestoreFromTokenResponse>((resolve, reject) => {
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor('api', RESTORE_EXCHANGE_ENDPOINT),
@@ -1362,7 +1362,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             queryParams.status = options.status
         }
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor(
@@ -1411,7 +1411,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             request_url: this._currentUrl() || '',
         }
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor('api', RESTORE_REQUEST_ENDPOINT),

@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`featureflags _callFlagsEndpoint via reloadFeatureFlags builds a representative flags request 1`] = `
+exports[`featureflags > _callFlagsEndpoint via reloadFeatureFlags > builds a representative flags request 1`] = `
 {
   "callback": "<request-callback>",
   "compression": "best-available",
@@ -46,7 +46,7 @@ exports[`featureflags _callFlagsEndpoint via reloadFeatureFlags builds a represe
 }
 `;
 
-exports[`featureflags Feature Flag Request ID and Evaluated At captures rich feature flag called event properties 1`] = `
+exports[`featureflags > Feature Flag Request ID and Evaluated At > captures rich feature flag called event properties 1`] = `
 [
   "$feature_flag_called",
   {
@@ -69,7 +69,7 @@ exports[`featureflags Feature Flag Request ID and Evaluated At captures rich fea
 ]
 `;
 
-exports[`minimal $feature_flag_called events sends exactly the allowlisted properties when gated and the flag has no experiment 1`] = `
+exports[`minimal $feature_flag_called events > sends exactly the allowlisted properties when gated and the flag has no experiment 1`] = `
 {
   "event": "$feature_flag_called",
   "properties": {
@@ -100,7 +100,7 @@ exports[`minimal $feature_flag_called events sends exactly the allowlisted prope
 }
 `;
 
-exports[`minimal $feature_flag_called events sends the full event when gated but the flag has an experiment 1`] = `
+exports[`minimal $feature_flag_called events > sends the full event when gated but the flag has an experiment 1`] = `
 {
   "event": "$feature_flag_called",
   "properties": {

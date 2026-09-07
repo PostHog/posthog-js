@@ -6,7 +6,7 @@ import { LangChainCallbackHandler } from '../src/langchain/callbacks'
 import { createPostHogMiddleware } from '../src/langchain/middleware'
 
 const mockPostHogClient = {
-  capture: jest.fn(),
+  capture: vi.fn(),
 } as unknown as PostHog
 
 const model = {
@@ -52,11 +52,11 @@ const toolRequest = (state: Record<string, unknown>) => ({
 
 describe('createPostHogMiddleware', () => {
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   afterEach(() => {
-    jest.restoreAllMocks()
+    vi.restoreAllMocks()
   })
 
   it('captures an agent trace with model and tool children', async () => {
@@ -87,7 +87,7 @@ describe('createPostHogMiddleware', () => {
     )
     middleware.afterAgent({ ...state, messages: [...state.messages, modelResponse, toolResponse] }, runtime)
 
-    const events = (mockPostHogClient.capture as jest.Mock).mock.calls.map(([event]) => event)
+    const events = (mockPostHogClient.capture as vi.Mock).mock.calls.map(([event]) => event)
     expect(events.map(({ event }) => event)).toEqual(['$ai_generation', '$ai_span', '$ai_trace'])
 
     const [generation, toolSpan, trace] = events
@@ -127,7 +127,7 @@ describe('createPostHogMiddleware', () => {
     const result = await agent.invoke({ messages: [new HumanMessage('Hello')] })
 
     expect(result).not.toHaveProperty('_posthogRunId')
-    expect((mockPostHogClient.capture as jest.Mock).mock.calls.map(([event]) => event.event)).toEqual([
+    expect((mockPostHogClient.capture as vi.Mock).mock.calls.map(([event]) => event.event)).toEqual([
       '$ai_generation',
       '$ai_span',
       '$ai_generation',
@@ -153,7 +153,7 @@ describe('createPostHogMiddleware', () => {
       workflow: 'support',
     })
 
-    const trace = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const trace = (mockPostHogClient.capture as vi.Mock).mock.calls
       .map(([event]) => event)
       .find(({ event }) => event === '$ai_trace')
     expect(trace.properties).toMatchObject({
@@ -171,7 +171,7 @@ describe('createPostHogMiddleware', () => {
 
     await agent.invoke({ messages: [new HumanMessage('Hello')] })
 
-    const generation = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    const generation = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
     expect(generation.properties).toMatchObject({
       $ai_model: 'test-model',
       $ai_provider: 'test-provider',
@@ -195,7 +195,7 @@ describe('createPostHogMiddleware', () => {
 
     await agent.invoke({ messages: [new HumanMessage('Hello')] })
 
-    const generation = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    const generation = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
     expect(generation.properties.$ai_tools).toEqual([
       {
         type: 'function',
@@ -221,7 +221,7 @@ describe('createPostHogMiddleware', () => {
 
     await agent.invoke({ messages: [new HumanMessage('Hello')] })
 
-    const generation = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    const generation = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
     expect(generation.properties.$ai_input).toEqual([{ role: 'user', content: 'Hello' }])
   })
 
@@ -235,7 +235,7 @@ describe('createPostHogMiddleware', () => {
 
     await agent.invoke({ messages: [new HumanMessage('Hello')] })
 
-    const generation = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    const generation = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
     expect(generation.properties.$ai_input).toEqual([
       { role: 'system', content: [{ type: 'text', text: 'Be concise' }] },
       { role: 'user', content: 'Hello' },
@@ -254,7 +254,7 @@ describe('createPostHogMiddleware', () => {
       }
     }
 
-    const chainStart = jest.spyOn(LangChainCallbackHandler.prototype, 'handleChainStart')
+    const chainStart = vi.spyOn(LangChainCallbackHandler.prototype, 'handleChainStart')
     const agent = createAgent({
       model: new FailingModel(),
       tools: [],
@@ -264,7 +264,7 @@ describe('createPostHogMiddleware', () => {
     await expect(agent.invoke({ messages: [new HumanMessage('Hello')] })).rejects.toThrow('model failed')
 
     expect(chainStart).not.toHaveBeenCalled()
-    const events = (mockPostHogClient.capture as jest.Mock).mock.calls.map(([event]) => event)
+    const events = (mockPostHogClient.capture as vi.Mock).mock.calls.map(([event]) => event)
     expect(events.map(({ event }) => event)).toEqual(['$ai_generation'])
     expect(events[0].properties).not.toHaveProperty('$ai_parent_id')
   })
@@ -273,11 +273,11 @@ describe('createPostHogMiddleware', () => {
     const middleware = createPostHogMiddleware({ client: mockPostHogClient }) as any
     const state = middleware.beforeAgent({ messages: [] }, runtime)
     state._posthogStartTime = 1_000
-    jest.spyOn(Date, 'now').mockReturnValue(4_000)
+    vi.spyOn(Date, 'now').mockReturnValue(4_000)
 
     middleware.afterAgent(state, runtime)
 
-    const trace = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    const trace = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
     expect(trace.properties.$ai_latency).toBe(3)
   })
 
@@ -296,7 +296,7 @@ describe('createPostHogMiddleware', () => {
     )
     await expect(middleware.wrapToolCall(toolRequest(privateState), () => Promise.reject(error))).rejects.toBe(error)
 
-    const toolEvent = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const toolEvent = (mockPostHogClient.capture as vi.Mock).mock.calls
       .map(([event]) => event)
       .find(({ event }) => event === '$ai_span')
     expect(toolEvent.properties).toMatchObject({
@@ -316,7 +316,7 @@ describe('createPostHogMiddleware', () => {
     await middleware.wrapModelCall(modelRequest(state), () => Promise.resolve(new AIMessage('Recovered')))
     middleware.afterAgent(state, runtime)
 
-    const events = (mockPostHogClient.capture as jest.Mock).mock.calls.map(([event]) => event)
+    const events = (mockPostHogClient.capture as vi.Mock).mock.calls.map(([event]) => event)
     const [failedGeneration, successfulGeneration, trace] = events
     expect(failedGeneration.properties).not.toHaveProperty('$ai_parent_id')
     expect(successfulGeneration.properties.$ai_parent_id).toBe(trace.properties.$ai_span_id)
@@ -335,7 +335,7 @@ describe('createPostHogMiddleware', () => {
     middleware.afterAgent(stateB, runtime)
     middleware.afterAgent(stateA, runtime)
 
-    const events = (mockPostHogClient.capture as jest.Mock).mock.calls.map(([event]) => event)
+    const events = (mockPostHogClient.capture as vi.Mock).mock.calls.map(([event]) => event)
     const traceIds = events
       .filter(({ event }) => event === '$ai_trace')
       .map(({ properties }) => properties.$ai_trace_id)
@@ -359,7 +359,7 @@ describe('createPostHogMiddleware', () => {
     middleware.afterAgent(stateA, runtime)
     middleware.afterAgent(stateB, runtime)
 
-    const events = (mockPostHogClient.capture as jest.Mock).mock.calls.map(([event]) => event)
+    const events = (mockPostHogClient.capture as vi.Mock).mock.calls.map(([event]) => event)
     const traces = events.filter(({ event }) => event === '$ai_trace')
     const generations = events.filter(({ event }) => event === '$ai_generation')
     expect(traces).toHaveLength(2)
@@ -378,7 +378,7 @@ describe('createPostHogMiddleware', () => {
     await middleware.wrapModelCall(modelRequest(state), () => Promise.resolve(new AIMessage('private output')))
     middleware.afterAgent(state, runtime)
 
-    const [generation, trace] = (mockPostHogClient.capture as jest.Mock).mock.calls.map(([event]) => event)
+    const [generation, trace] = (mockPostHogClient.capture as vi.Mock).mock.calls.map(([event]) => event)
     expect(generation.properties).toMatchObject({ $ai_input: null, $ai_output_choices: null })
     expect(trace.properties).toMatchObject({ $ai_input_state: null, $ai_output_state: null })
   })
@@ -395,7 +395,7 @@ describe('createPostHogMiddleware', () => {
 
     await expect(middleware.wrapToolCall(toolRequest(state), () => Promise.resolve(response))).resolves.toBe(response)
 
-    const event = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    const event = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
     expect(event.properties).toMatchObject({
       $ai_is_error: true,
       $ai_error: expect.stringContaining('Invalid arguments'),

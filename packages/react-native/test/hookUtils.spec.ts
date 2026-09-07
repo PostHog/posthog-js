@@ -1,4 +1,4 @@
-/** @jest-environment jsdom */
+/** @vitest-environment jsdom */
 import { warnIfNoClient, resetWarnedCallers } from '../src/hooks/utils'
 import type { PostHog } from '../src/posthog-rn'
 
@@ -8,7 +8,7 @@ describe('warnIfNoClient', () => {
   })
 
   it('should log error when client is undefined', () => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     warnIfNoClient(undefined, 'useFeatureFlag')
 
@@ -19,7 +19,7 @@ describe('warnIfNoClient', () => {
   })
 
   it('should not log error when a valid client is provided', () => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const mockPostHog = {} as PostHog
 
     warnIfNoClient(mockPostHog, 'useFeatureFlag')
@@ -29,7 +29,7 @@ describe('warnIfNoClient', () => {
   })
 
   it('should only warn once per caller', () => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     warnIfNoClient(undefined, 'useFeatureFlag')
     warnIfNoClient(undefined, 'useFeatureFlag')
@@ -39,7 +39,7 @@ describe('warnIfNoClient', () => {
   })
 
   it('should warn independently for different callers', () => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     warnIfNoClient(undefined, 'useFeatureFlag')
     warnIfNoClient(undefined, 'usePostHog')

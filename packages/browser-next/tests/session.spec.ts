@@ -27,7 +27,7 @@ describe('browser-next session state', () => {
     let events: EventTarget
 
     beforeEach(() => {
-        jest.useFakeTimers({ now: START })
+        vi.useFakeTimers({ now: START })
         events = new EventTarget()
         for (const [key, value] of [
             ['addEventListener', events.addEventListener.bind(events)],
@@ -43,7 +43,7 @@ describe('browser-next session state', () => {
     })
 
     afterEach(() => {
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
         for (const key of [
             'addEventListener',
             'removeEventListener',
@@ -60,7 +60,7 @@ describe('browser-next session state', () => {
             }
         }
         descriptors.clear()
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     const setDefaultStorage = (local: StorageLike, session: StorageLike): void => {
@@ -76,7 +76,7 @@ describe('browser-next session state', () => {
     it('does not materialize a session for construction, reads, listeners, or invalid capture', async () => {
         const storage = new MemoryStorage()
         const posthog = await createMemoryClient(storage)
-        const listener = jest.fn()
+        const listener = vi.fn()
         posthog.onNewSession(listener)
 
         expect(posthog.session).toEqual(EMPTY_SESSION)
@@ -89,7 +89,7 @@ describe('browser-next session state', () => {
     it('does not materialize session or tab state for an oversized first capture', async () => {
         const local = new MemoryStorage()
         const tab = new MemoryStorage()
-        const tabRead = jest.spyOn(tab, 'getItem')
+        const tabRead = vi.spyOn(tab, 'getItem')
         setDefaultStorage(local, tab)
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -114,7 +114,7 @@ describe('browser-next session state', () => {
         await posthog.capture('first')
         const first = posthog.session
         const persisted = storage.values.get(STATE_KEY)
-        jest.setSystemTime(START + 1_800_001)
+        vi.setSystemTime(START + 1_800_001)
 
         await posthog.capture('oversized', { value: 'a'.repeat(8 * 1024 * 1024) })
 
@@ -132,7 +132,7 @@ describe('browser-next session state', () => {
         const response = new Promise<Response>((resolve) => {
             finish = resolve
         })
-        const fetch = jest
+        const fetch = vi
             .fn()
             .mockImplementationOnce(() => response)
             .mockResolvedValue(new Response('{}', { status: 200 }))
@@ -150,7 +150,7 @@ describe('browser-next session state', () => {
         await Promise.resolve()
         expect(fetch).toHaveBeenCalledTimes(1)
         const session = posthog.session
-        jest.setSystemTime(START + 120_000)
+        vi.setSystemTime(START + 120_000)
 
         await posthog.capture('rejected', { value: 'a'.repeat(1_000) })
 
@@ -186,7 +186,7 @@ describe('browser-next session state', () => {
     it('materializes and persists session and window together on the first valid capture without a notification', async () => {
         const storage = new MemoryStorage()
         const posthog = await createMemoryClient(storage)
-        const listener = jest.fn()
+        const listener = vi.fn()
         posthog.onNewSession(listener)
 
         await posthog.capture('first')
@@ -239,11 +239,11 @@ describe('browser-next session state', () => {
         await posthog.capture('first')
         const first = posthog.session
 
-        jest.setSystemTime(START + 1_800_000)
+        vi.setSystemTime(START + 1_800_000)
         await posthog.capture('at-boundary')
         expect(posthog.session).toEqual(first)
 
-        jest.setSystemTime(START + 3_600_001)
+        vi.setSystemTime(START + 3_600_001)
         await posthog.capture('after-boundary')
         expect(posthog.session.sessionId).not.toBe(first.sessionId)
         expect(posthog.session.windowId).not.toBe(first.windowId)
@@ -256,7 +256,7 @@ describe('browser-next session state', () => {
         await posthog.capture('first')
         const firstRevision = JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.revision
 
-        jest.setSystemTime(START + 1_800_001)
+        vi.setSystemTime(START + 1_800_001)
         await posthog.capture('rotated')
         const rotatedRevision = JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.revision
         posthog.reset()
@@ -292,7 +292,7 @@ describe('browser-next session state', () => {
         )
         const posthog = await createMemoryClient(storage)
         await posthog.capture('adopt')
-        jest.setSystemTime(START + 1_800_001)
+        vi.setSystemTime(START + 1_800_001)
         await posthog.capture('rotate')
         const rotated = posthog.session
         const persistedRevision = JSON.parse(storage.values.get(STATE_KEY) ?? '{}').session.revision
@@ -348,12 +348,12 @@ describe('browser-next session state', () => {
         const first = posthog.session
 
         for (let interval = 1; interval <= 72; interval++) {
-            jest.setSystemTime(START + interval * 20 * 60 * 1000)
+            vi.setSystemTime(START + interval * 20 * 60 * 1000)
             await posthog.capture(`tick-${interval}`)
         }
         expect(posthog.session).toEqual(first)
 
-        jest.setSystemTime(START + 86_400_001)
+        vi.setSystemTime(START + 86_400_001)
         await posthog.capture('after-maximum')
         expect(posthog.session.sessionId).not.toBe(first.sessionId)
         expect(posthog.session.windowId).not.toBe(first.windowId)
@@ -363,19 +363,19 @@ describe('browser-next session state', () => {
     it('does no time-driven work across multiple idle days', async () => {
         const storage = new MemoryStorage()
         const posthog = await createMemoryClient(storage)
-        const changes = jest.fn()
+        const changes = vi.fn()
         posthog.onNewSession(changes)
         await posthog.capture('first')
         const first = posthog.session
         const persisted = storage.values.get(STATE_KEY)
 
-        jest.setSystemTime(START + 3 * 86_400_000)
-        await jest.advanceTimersByTimeAsync(0)
+        vi.setSystemTime(START + 3 * 86_400_000)
+        await vi.advanceTimersByTimeAsync(0)
 
         expect(posthog.session).toEqual(first)
         expect(storage.values.get(STATE_KEY)).toBe(persisted)
         expect(changes).not.toHaveBeenCalled()
-        expect(jest.getTimerCount()).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
     })
 
     it('defers reset session creation and notification until the next capture', async () => {
@@ -404,9 +404,9 @@ describe('browser-next session state', () => {
         const shared = second.session.sessionId
         const secondWindow = second.session.windowId
 
-        jest.setSystemTime(START + 29 * 60 * 1000)
+        vi.setSystemTime(START + 29 * 60 * 1000)
         await first.capture('recent-sibling-activity')
-        jest.setSystemTime(START + 31 * 60 * 1000)
+        vi.setSystemTime(START + 31 * 60 * 1000)
         await second.capture('after-local-idle')
 
         expect(second.session.sessionId).toBe(shared)
@@ -422,7 +422,7 @@ describe('browser-next session state', () => {
         const oldSession = first.session.sessionId
         const secondWindow = second.session.windowId
 
-        jest.setSystemTime(START + 1_800_001)
+        vi.setSystemTime(START + 1_800_001)
         await first.capture('rotated')
         expect(first.session.sessionId).not.toBe(oldSession)
         await second.capture('adopt')
@@ -490,13 +490,13 @@ describe('browser-next session state', () => {
         await posthog.capture('first')
         await sibling.capture('adopt')
         for (let index = 0; index < 999; index++) {
-            jest.setSystemTime(START + (index + 1) * 100)
+            vi.setSystemTime(START + (index + 1) * 100)
             await posthog.capture(`queued-${index}`)
         }
         const observed: string[] = []
         posthog.onEvent(({ event }) => observed.push(event))
         let reset = false
-        jest.spyOn(console, 'warn').mockImplementation(() => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {
             if (!reset) {
                 reset = true
                 sibling.reset()
@@ -529,7 +529,7 @@ describe('browser-next session state', () => {
         await staleGroup.capture('stale-group')
         const oldSessionId = first.session.sessionId
 
-        jest.setSystemTime(START + 1_800_001)
+        vi.setSystemTime(START + 1_800_001)
         await first.capture('rotate')
         const rotatedSessionId = first.session.sessionId
         expect(rotatedSessionId).not.toBe(oldSessionId)
@@ -567,7 +567,7 @@ describe('browser-next session state', () => {
     it('does not treat lazy absence or malformed session values as a reset', async () => {
         const storage = new MemoryStorage()
         const posthog = await createMemoryClient(storage)
-        const observed = jest.fn()
+        const observed = vi.fn()
         posthog.onEvent(observed)
         await posthog.capture('first')
         const first = posthog.session
@@ -632,7 +632,7 @@ describe('browser-next session state', () => {
         const posthog = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
         await posthog.capture('before-denial')
         const before = posthog.session
-        const changes = jest.fn()
+        const changes = vi.fn()
         posthog.onNewSession(changes)
         expect(tab.values.has(WINDOW_KEY)).toBe(true)
 
@@ -732,7 +732,7 @@ describe('browser-next session state', () => {
         setDefaultStorage(local, tab)
         const posthog = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
         await posthog.capture('first')
-        jest.setSystemTime(START + 30_000)
+        vi.setSystemTime(START + 30_000)
         await posthog.capture('activity')
         expect(JSON.parse(local.values.get(STATE_KEY) ?? '{}').session.lastActivityTimestamp).toBe(START)
 
@@ -753,9 +753,9 @@ describe('browser-next session state', () => {
         Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: secondTab })
         const second = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
         await second.capture('second')
-        jest.setSystemTime(START + 30_000)
+        vi.setSystemTime(START + 30_000)
         await second.capture('pending-older-activity')
-        jest.setSystemTime(START + 120_000)
+        vi.setSystemTime(START + 120_000)
         await first.capture('persisted-newer-activity')
 
         globalThis.dispatchEvent(new Event('beforeunload'))
@@ -774,9 +774,9 @@ describe('browser-next session state', () => {
         Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: secondTab })
         const second = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
         await second.capture('second')
-        jest.setSystemTime(START + 30_000)
+        vi.setSystemTime(START + 30_000)
         await second.capture('pending-activity')
-        jest.setSystemTime(START + 1_800_001)
+        vi.setSystemTime(START + 1_800_001)
         await first.capture('rotated')
         const rotatedSession = first.session.sessionId
 
@@ -786,7 +786,7 @@ describe('browser-next session state', () => {
     })
 
     it('does not access default tab storage for custom, disabled, denied, or blocked storage', async () => {
-        const getter = jest.fn(() => {
+        const getter = vi.fn(() => {
             throw new Error('session storage unavailable')
         })
         Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, get: getter })
@@ -864,7 +864,7 @@ describe('browser-next session state', () => {
         const local = new MemoryStorage()
         const tab = new MemoryStorage()
         setDefaultStorage(local, tab)
-        const remove = jest.spyOn(globalThis, 'removeEventListener')
+        const remove = vi.spyOn(globalThis, 'removeEventListener')
         const posthog = await createPostHog({ projectToken: 'ph_test', navigator: false, fetch: false })
         await posthog.capture('first')
 

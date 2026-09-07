@@ -277,7 +277,7 @@ describe('modifyExistingXcodeBuildScript', () => {
   })
 
   it('warns instead of throwing when the bundle phase is missing', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     expect(() => modifyExistingXcodeBuildScript(undefined)).not.toThrow()
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('Bundle React Native code and images'))
     warn.mockRestore()
@@ -285,9 +285,9 @@ describe('modifyExistingXcodeBuildScript', () => {
 })
 
 const mockXcodeProjectForBuildPhase = (existingPhase: any = undefined, buildPhases: any[] = []) => ({
-  pbxItemByComment: jest.fn(() => existingPhase),
-  addBuildPhase: jest.fn(),
-  getFirstTarget: jest.fn(() => ({ firstTarget: { buildPhases } })),
+  pbxItemByComment: vi.fn(() => existingPhase),
+  addBuildPhase: vi.fn(),
+  getFirstTarget: vi.fn(() => ({ firstTarget: { buildPhases } })),
 })
 
 describe('buildDsymUploadShellScript', () => {
@@ -585,14 +585,14 @@ describe('addDsymUploadBuildPhase', () => {
   })
 
   it('finalizes phase ordering after all Expo Xcode project mods', async () => {
-    jest.useRealTimers()
+    vi.useRealTimers()
     let uploadPhase: any
     const bundlePhase = {
       shellScript: JSON.stringify('../node_modules/react-native/scripts/react-native-xcode.sh'),
     }
     const buildPhases: any[] = [{ value: 'SOURCES', comment: 'Sources' }]
     const xcodeProject = {
-      pbxItemByComment: jest.fn((comment: string) => {
+      pbxItemByComment: vi.fn((comment: string) => {
         if (comment === 'Bundle React Native code and images') {
           return bundlePhase
         }
@@ -600,15 +600,15 @@ describe('addDsymUploadBuildPhase', () => {
           return uploadPhase
         }
       }),
-      addBuildPhase: jest.fn((_files, _isa, comment, _target, options) => {
+      addBuildPhase: vi.fn((_files, _isa, comment, _target, options) => {
         uploadPhase = {
           isa: 'PBXShellScriptBuildPhase',
           shellScript: encodePbx(options.shellScript),
         }
         buildPhases.push({ value: 'POSTHOG', comment })
       }),
-      getFirstTarget: jest.fn(() => ({ firstTarget: { buildPhases } })),
-      pbxXCBuildConfigurationSection: jest.fn(() => ({})),
+      getFirstTarget: vi.fn(() => ({ firstTarget: { buildPhases } })),
+      pbxXCBuildConfigurationSection: vi.fn(() => ({})),
     }
 
     let config: any = { name: 'Test', slug: 'test' }
@@ -628,7 +628,7 @@ describe('addDsymUploadBuildPhase', () => {
       'Embed App Extensions',
       'Upload PostHog Debug Symbols',
     ])
-    jest.useFakeTimers()
+    vi.useFakeTimers()
   })
 
   it('refreshing with unchanged options preserves the stored pbxproj representation', () => {
@@ -723,7 +723,7 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
   })
 
   it('leaves contents unchanged and reports not present when there is no buildscript dependencies block', () => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const contents = 'plugins {\n  id "com.android.application"\n}'
     const result = addPostHogAndroidGradlePluginClasspath(contents)
     expect(result.contents).toBe(contents)
@@ -732,7 +732,7 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
   })
 
   it('does not place the classpath in a later block when buildscript has no dependencies block', () => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const contents = [
       'buildscript {',
       '    repositories { google() }',

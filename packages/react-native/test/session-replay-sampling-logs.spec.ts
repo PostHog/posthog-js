@@ -5,33 +5,33 @@ import { wait } from './test-utils'
 
 // Mock the native plugin bridge. No `setup` key, so the SDK takes the legacy start()
 // path (same surface as the standalone posthog-react-native-session-replay package).
-jest.mock('../src/optional/OptionalPlugin', () => ({
+vi.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePlugin: {
-    start: jest.fn(async () => {}),
-    startSession: jest.fn(async () => {}),
-    endSession: jest.fn(async () => {}),
-    isEnabled: jest.fn(async () => false),
-    identify: jest.fn(async () => {}),
-    startRecording: jest.fn(async () => {}),
-    stopRecording: jest.fn(async () => {}),
+    start: vi.fn(async () => {}),
+    startSession: vi.fn(async () => {}),
+    endSession: vi.fn(async () => {}),
+    isEnabled: vi.fn(async () => false),
+    identify: vi.fn(async () => {}),
+    startRecording: vi.fn(async () => {}),
+    stopRecording: vi.fn(async () => {}),
   },
   OptionalReactNativePluginVersion: '1.4.0',
 }))
 
-const replay = OptionalReactNativePlugin as unknown as { start: jest.Mock; isEnabled: jest.Mock }
+const replay = OptionalReactNativePlugin as unknown as { start: vi.Mock; isEnabled: vi.Mock }
 
-Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
-AppState.addEventListener = jest.fn()
+Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
+AppState.addEventListener = vi.fn()
 
 describe('PostHog RN session replay sampleRate logging', () => {
-  jest.useRealTimers()
+  vi.useRealTimers()
 
   let posthog: PostHog
   let cache: any = {}
   let mockStorage: PostHogCustomStorage
   let currentSessionRecording: any = {}
-  let warnSpy: jest.SpyInstance
-  let logSpy: jest.SpyInstance
+  let warnSpy: vi.SpyInstance
+  let logSpy: vi.SpyInstance
 
   const warnings = (): string[] => warnSpy.mock.calls.map((args) => args.join(' '))
   const infos = (): string[] => logSpy.mock.calls.map((args) => args.join(' '))
@@ -39,13 +39,13 @@ describe('PostHog RN session replay sampleRate logging', () => {
   beforeEach(() => {
     replay.start.mockClear()
     replay.isEnabled.mockImplementation(async () => false)
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
-    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     currentSessionRecording = { endpoint: '/s/' } // no linkedFlag => recording active
     // Attach sessionRecording to every response: the remote config endpoint feeds the cached
     // RemoteConfig that startSessionReplay reads for the remote sampleRate, and /flags re-arms it.
-    ;(globalThis as any).window.fetch = jest.fn(async (url: string) => {
+    ;(globalThis as any).window.fetch = vi.fn(async (url: string) => {
       const res: any = { status: 'ok', sessionRecording: currentSessionRecording }
       if (url.includes('flags')) {
         res.featureFlags = {}

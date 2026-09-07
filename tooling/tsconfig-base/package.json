@@ -6,6 +6,7 @@
     "author": "PostHog",
     "license": "ISC",
     "files": [
-        "tsconfig.json"
+        "tsconfig.json",
+        "vitest-compat.d.ts"
     ]
 }

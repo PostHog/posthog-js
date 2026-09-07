@@ -3,7 +3,7 @@
 // Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 
 import * as crypto from 'crypto'
-// eslint-disable-next-line import/no-extraneous-dependencies
+// oxlint-disable-next-line import/no-extraneous-dependencies
 import type { MixedOutput, Module, ReadOnlyGraph, SerializerOptions } from 'metro'
 import type CountingSet from 'metro/src/lib/CountingSet' // types are in src but exports are in private
 import countLines from './vendor/metro/countLines'
@@ -35,6 +35,19 @@ export type MetroSerializer = (
   graph: ReadOnlyGraph,
   options: SerializerOptions
 ) => MetroSerializerOutput
+
+/**
+ * Metro removed `hot` from transform options in 0.83.2. On newer versions,
+ * dev-server requests can be distinguished from development CLI bundles by
+ * the source URL that Metro supplies.
+ */
+export function isDevServerBuild(graph: ReadOnlyGraph, options: SerializerOptions): boolean {
+  const transformOptions = graph.transformOptions as { hot?: boolean; dev?: boolean }
+  if ('hot' in transformOptions) {
+    return Boolean(transformOptions.hot)
+  }
+  return Boolean(transformOptions.dev) && options.sourceUrl != null
+}
 
 /**
  * Returns minified Chunk ID code snippet.
@@ -102,7 +115,7 @@ function resolveSetCreator(): () => CountingSet<string> {
  */
 function safeRequireCountingSetFromSrc(): { default: new <T>() => CountingSet<T> } | undefined {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, import/no-extraneous-dependencies
+    // oxlint-disable-next-line typescript/no-var-requires, import/no-extraneous-dependencies
     return require('metro/src/lib/CountingSet')
   } catch (e) {
     return undefined
@@ -116,7 +129,7 @@ function safeRequireCountingSetFromSrc(): { default: new <T>() => CountingSet<T>
  */
 function safeRequireCountingSetFromPrivate(): { default: new <T>() => CountingSet<T> } | undefined {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, import/no-extraneous-dependencies
+    // oxlint-disable-next-line typescript/no-var-requires, import/no-extraneous-dependencies
     return require('metro/private/lib/CountingSet')
   } catch (e) {
     return undefined
@@ -190,7 +203,7 @@ export function getExpoConfig(projectRoot: string): Partial<{
   version: string
 }> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, import/no-extraneous-dependencies
+    // oxlint-disable-next-line typescript/no-var-requires, import/no-extraneous-dependencies
     const expoConfig = require('@expo/config') as {
       getConfig?: (projectRoot: string) => { exp: Record<string, unknown> }
     }

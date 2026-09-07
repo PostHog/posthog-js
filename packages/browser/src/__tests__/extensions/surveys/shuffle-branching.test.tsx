@@ -11,24 +11,24 @@ import {
 } from '../../../posthog-surveys-types'
 import * as uuid from '@posthog/browser-common/utils/uuidv7'
 
-jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
-    ...jest.requireActual('../../../extensions/surveys/surveys-extension-utils'),
-    getInProgressSurveyState: jest.fn(),
-    setInProgressSurveyState: jest.fn(),
-    sendSurveyEvent: jest.fn(),
-    dismissedSurveyEvent: jest.fn(),
+vi.mock('../../../extensions/surveys/surveys-extension-utils', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../extensions/surveys/surveys-extension-utils')>()),
+    getInProgressSurveyState: vi.fn(),
+    setInProgressSurveyState: vi.fn(),
+    sendSurveyEvent: vi.fn(),
+    dismissedSurveyEvent: vi.fn(),
 }))
 
-jest.mock('@posthog/browser-common/utils/uuidv7')
+vi.mock('@posthog/browser-common/utils/uuidv7')
 
-const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as jest.Mock
-const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as jest.Mock
-const mockedUuidv7 = uuid.uuidv7 as jest.Mock
+const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as vi.Mock
+const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as vi.Mock
+const mockedUuidv7 = uuid.uuidv7 as vi.Mock
 
 const mockPosthog = {
-    capture: jest.fn(),
-    get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
-    reloadFeatureFlags: jest.fn(),
+    capture: vi.fn(),
+    get_session_replay_url: vi.fn().mockReturnValue('http://example.com/replay'),
+    reloadFeatureFlags: vi.fn(),
 }
 
 const shuffledSurvey = (questions: SurveyQuestion[]): Survey =>
@@ -55,17 +55,17 @@ const openQuestion = (id: string, question: string): SurveyQuestion =>
     ({ type: SurveyQuestionType.Open, question, id }) as SurveyQuestion
 
 describe('Surveys: shuffled questions', () => {
-    let randomSpy: jest.SpyInstance
+    let randomSpy: vi.SpyInstance
 
     beforeEach(() => {
         cleanup()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         mockedUuidv7.mockReturnValue('generated-uuid')
         mockedGetInProgressSurveyState.mockReturnValue(null)
-        HTMLFormElement.prototype.submit = jest.fn()
+        HTMLFormElement.prototype.submit = vi.fn()
 
         // Sort keys 5, 1, 9 shuffle [q1, q2, q3] into [q2, q1, q3].
-        randomSpy = jest
+        randomSpy = vi
             .spyOn(Math, 'random')
             .mockReturnValueOnce(0.5)
             .mockReturnValueOnce(0.1)
@@ -90,7 +90,7 @@ describe('Surveys: shuffled questions', () => {
             openQuestion('q3', 'Question 3'),
         ])
 
-        render(<SurveyPopup survey={survey} removeSurveyFromFocus={jest.fn()} isPopup posthog={mockPosthog as any} />)
+        render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
 
         expect(screen.getByText('Question 2')).toBeVisible()
         answerCurrentQuestion()
@@ -109,7 +109,7 @@ describe('Surveys: shuffled questions', () => {
             openQuestion('q3', 'Question 3'),
         ])
 
-        render(<SurveyPopup survey={survey} removeSurveyFromFocus={jest.fn()} isPopup posthog={mockPosthog as any} />)
+        render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
 
         expect(screen.getByText('Question 1')).toBeVisible()
         answerCurrentQuestion()
@@ -124,7 +124,7 @@ describe('Surveys: shuffled questions', () => {
             openQuestion('q3', 'Question 3'),
         ])
 
-        render(<SurveyPopup survey={survey} removeSurveyFromFocus={jest.fn()} isPopup posthog={mockPosthog as any} />)
+        render(<SurveyPopup survey={survey} removeSurveyFromFocus={vi.fn()} isPopup posthog={mockPosthog as any} />)
 
         expect(screen.getByText('Question 1')).toBeVisible()
         answerCurrentQuestion()

@@ -8,9 +8,9 @@ import {
 } from '@/extensions/feature-flags/feature-flags'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, waitForPromises } from './utils'
 
-jest.spyOn(console, 'debug').mockImplementation()
+vi.spyOn(console, 'debug').mockImplementation()
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
@@ -19,7 +19,7 @@ const posthogImmediateResolveOptions: PostHogOptions = {
 describe('local evaluation', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
     // ensure clean shutdown & no test interdependencies
@@ -2516,7 +2516,7 @@ describe('local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    const eventHandler = jest.fn()
+    const eventHandler = vi.fn()
     posthog.on('localEvaluationFlagsLoaded', eventHandler)
 
     // Wait for initial load
@@ -2536,7 +2536,7 @@ describe('local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    const eventHandler = jest.fn()
+    const eventHandler = vi.fn()
     posthog.on('localEvaluationFlagsLoaded', eventHandler)
 
     // Wait for initial load
@@ -2572,7 +2572,7 @@ describe('local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    const eventHandler = jest.fn()
+    const eventHandler = vi.fn()
     posthog.on('localEvaluationFlagsLoaded', eventHandler)
 
     // Wait for initial load
@@ -2971,7 +2971,7 @@ describe('local evaluation', () => {
 describe('local evaluation with evaluation contexts', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
     await posthog.shutdown()
@@ -3325,7 +3325,7 @@ describe('getFeatureFlag', () => {
 })
 
 describe('match properties', () => {
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   it('with operator exact', () => {
     const property_a = { key: 'key', value: 'value' }
@@ -3682,14 +3682,14 @@ describe('match properties', () => {
     ['is_date_after', '1y', '2021-04-30 00:00:00 GMT', false],
     ['is_date_after', '1y', '2021-03-01 12:13:00 GMT', false],
   ])('with relative date operators: %s, %s, %s', (operator, value, date, expectation) => {
-    jest.setSystemTime(new Date('2022-05-01'))
+    vi.setSystemTime(new Date('2022-05-01'))
     expect(matchProperty({ key: 'key', value, operator }, { key: date })).toBe(expectation)
 
     return
   })
 
   it('with relative date operators handles invalid keys', () => {
-    jest.setSystemTime(new Date('2022-05-01'))
+    vi.setSystemTime(new Date('2022-05-01'))
 
     // # can't be an invalid string
     expect(() => matchProperty({ key: 'key', value: '1d', operator: 'is_date_before' }, { key: 'abcdef' })).toThrow(
@@ -4328,9 +4328,9 @@ describe('semver operators', () => {
 })
 
 describe('relative date parsing', () => {
-  jest.useFakeTimers()
+  vi.useFakeTimers()
   beforeEach(() => {
-    jest.setSystemTime(new Date('2020-01-01T12:01:20.134Z'))
+    vi.setSystemTime(new Date('2020-01-01T12:01:20.134Z'))
   })
 
   it('invalid input', () => {
@@ -4399,7 +4399,7 @@ describe('relative date parsing', () => {
     expect(relativeDateParseForFeatureFlagMatching('1y')).toEqual(new Date('2019-01-01T12:01:20.134Z'))
     expect(relativeDateParseForFeatureFlagMatching('12m')).toEqual(relativeDateParseForFeatureFlagMatching('1y'))
 
-    jest.setSystemTime(new Date('2020-04-03T00:00:00Z'))
+    vi.setSystemTime(new Date('2020-04-03T00:00:00Z'))
     expect(relativeDateParseForFeatureFlagMatching('1m')).toEqual(new Date('2020-03-03T00:00:00Z'))
     expect(relativeDateParseForFeatureFlagMatching('2m')).toEqual(new Date('2020-02-03T00:00:00Z'))
     expect(relativeDateParseForFeatureFlagMatching('4m')).toEqual(new Date('2019-12-03T00:00:00Z'))
@@ -4427,7 +4427,7 @@ describe('consistency tests', () => {
   // # They ensure that the server and library hash calculations are in sync.
 
   let posthog: PostHog
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
     await posthog.shutdown()
@@ -6511,7 +6511,7 @@ describe('consistency tests', () => {
 
 describe('quota limiting', () => {
   it('should clear local flags when quota limited', async () => {
-    const consoleSpy = jest.spyOn(console, 'warn')
+    const consoleSpy = vi.spyOn(console, 'warn')
 
     mockedFetch.mockImplementation(
       apiImplementation({
@@ -6548,7 +6548,7 @@ describe('quota limiting', () => {
 describe('fetch context handling', () => {
   it('should call fetch without bound context to avoid illegal invocation errors in edge environments', async () => {
     let fetchContext: any
-    const mockFetch = jest.fn(function (this: any, ..._args: unknown[]) {
+    const mockFetch = vi.fn(function (this: any, ..._args: unknown[]) {
       fetchContext = this
       return Promise.resolve(
         new Response(
@@ -6576,12 +6576,12 @@ describe('fetch context handling', () => {
 describe('feature flag definition request timeout', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
-    jest.useRealTimers()
+    vi.useRealTimers()
     await posthog.shutdown()
-    jest.useFakeTimers()
+    vi.useFakeTimers()
   })
 
   const successfulFlagDefinitions = {
@@ -6599,7 +6599,7 @@ describe('feature flag definition request timeout', () => {
 
   it('aborts a stalled 200 response body without pinning reload, local evaluation, or polling', async () => {
     const signals: AbortSignal[] = []
-    const fetchDefinitions = jest.fn((_url: string, options: { signal?: AbortSignal }) => {
+    const fetchDefinitions = vi.fn((_url: string, options: { signal?: AbortSignal }) => {
       const signal = options.signal
       if (!signal) {
         throw new Error('Expected feature flag definition request to include an AbortSignal')
@@ -6638,7 +6638,7 @@ describe('feature flag definition request timeout', () => {
     const reloadPromise = posthog.reloadFeatureFlags()
     expect(signals).toHaveLength(1)
 
-    await jest.advanceTimersByTimeAsync(10)
+    await vi.advanceTimersByTimeAsync(10)
 
     expect(signals[0].aborted).toBe(true)
     await expect(reloadPromise).resolves.toBeUndefined()
@@ -6649,12 +6649,12 @@ describe('feature flag definition request timeout', () => {
     })
     expect(signals).toHaveLength(2)
 
-    await jest.advanceTimersByTimeAsync(10)
+    await vi.advanceTimersByTimeAsync(10)
 
     expect(signals[1].aborted).toBe(true)
     await expect(evaluationPromise).resolves.toBeUndefined()
 
-    await jest.advanceTimersByTimeAsync(100)
+    await vi.advanceTimersByTimeAsync(100)
 
     expect(fetchDefinitions).toHaveBeenCalledTimes(3)
     await expect(
@@ -6667,7 +6667,7 @@ describe('feature flag definition request timeout', () => {
 
   it('allows a slow 200 response body to complete before the deadline and clears its timer', async () => {
     let signal: AbortSignal | undefined
-    const fetchDefinitions = jest.fn((_url: string, options: { signal?: AbortSignal }) => {
+    const fetchDefinitions = vi.fn((_url: string, options: { signal?: AbortSignal }) => {
       signal = options.signal
       if (!signal) {
         throw new Error('Expected feature flag definition request to include an AbortSignal')
@@ -6700,7 +6700,7 @@ describe('feature flag definition request timeout', () => {
     })
 
     const reloadPromise = posthog.reloadFeatureFlags()
-    await jest.advanceTimersByTimeAsync(5)
+    await vi.advanceTimersByTimeAsync(5)
 
     await expect(reloadPromise).resolves.toBeUndefined()
     expect(signal?.aborted).toBe(false)
@@ -6711,15 +6711,15 @@ describe('feature flag definition request timeout', () => {
       })
     ).resolves.toBe(true)
 
-    await jest.advanceTimersByTimeAsync(5)
+    await vi.advanceTimersByTimeAsync(5)
 
     expect(signal?.aborted).toBe(false)
   })
 
   it('clears the request timer after consuming a 200 response as text and preserves its body', async () => {
     const signals: AbortSignal[] = []
-    const body = { cancel: jest.fn() } as unknown as ReadableStream<Uint8Array>
-    const fetchDefinitions = jest.fn((_url: string, options: { signal?: AbortSignal }) => {
+    const body = { cancel: vi.fn() } as unknown as ReadableStream<Uint8Array>
+    const fetchDefinitions = vi.fn((_url: string, options: { signal?: AbortSignal }) => {
       if (!options.signal) {
         throw new Error('Expected feature flag definition request to include an AbortSignal')
       }
@@ -6746,15 +6746,15 @@ describe('feature flag definition request timeout', () => {
 
     expect(response.body).toBe(body)
     await expect(response.text()).resolves.toBe('response body')
-    await jest.advanceTimersByTimeAsync(10)
+    await vi.advanceTimersByTimeAsync(10)
 
     expect(signals[0].aborted).toBe(false)
   })
 
   it.each([304, 500])('clears the request timer for a %i response without consuming its body', async (status) => {
     let signal: AbortSignal | undefined
-    const json = jest.fn()
-    const fetchDefinitions = jest.fn((_url: string, options: { signal?: AbortSignal }) => {
+    const json = vi.fn()
+    const fetchDefinitions = vi.fn((_url: string, options: { signal?: AbortSignal }) => {
       signal = options.signal
       return Promise.resolve({
         status,
@@ -6774,7 +6774,7 @@ describe('feature flag definition request timeout', () => {
     })
 
     await posthog.reloadFeatureFlags()
-    await jest.advanceTimersByTimeAsync(10)
+    await vi.advanceTimersByTimeAsync(10)
 
     expect(json).not.toHaveBeenCalled()
     expect(signal?.aborted).toBe(false)
@@ -6784,12 +6784,12 @@ describe('feature flag definition request timeout', () => {
 describe('ETag support for local evaluation polling', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
-    jest.useRealTimers()
+    vi.useRealTimers()
     await posthog.shutdown()
-    jest.useFakeTimers()
+    vi.useFakeTimers()
   })
 
   it('stores ETag from response and sends it on subsequent requests', async () => {
@@ -6801,7 +6801,7 @@ describe('ETag support for local evaluation polling', () => {
 
     // Track all fetch calls
     const fetchCalls: { url: string; options: any }[] = []
-    const mockFetch = jest.fn((url: string, options: any) => {
+    const mockFetch = vi.fn((url: string, options: any) => {
       fetchCalls.push({ url, options })
       return Promise.resolve({
         status: 200,
@@ -6852,7 +6852,7 @@ describe('ETag support for local evaluation polling', () => {
     // Track all fetch calls to verify headers
     const fetchCalls: { url: string; options: any }[] = []
     let callCount = 0
-    const mockFetch = jest.fn((url: string, options: any) => {
+    const mockFetch = vi.fn((url: string, options: any) => {
       fetchCalls.push({ url, options })
       callCount++
       if (callCount === 1) {
@@ -6909,7 +6909,7 @@ describe('ETag support for local evaluation polling', () => {
 
   it('updates ETag when flags change', async () => {
     let callCount = 0
-    const mockFetch = jest.fn(() => {
+    const mockFetch = vi.fn(() => {
       callCount++
       return Promise.resolve({
         status: 200,
@@ -6927,7 +6927,7 @@ describe('ETag support for local evaluation polling', () => {
     })
 
     const fetchCalls: { url: string; options: any }[] = []
-    const wrappedFetch = jest.fn((url: string, options: any) => {
+    const wrappedFetch = vi.fn((url: string, options: any) => {
       fetchCalls.push({ url, options })
       return mockFetch()
     })
@@ -6956,7 +6956,7 @@ describe('ETag support for local evaluation polling', () => {
 
   it('clears ETag when server stops sending it', async () => {
     let callCount = 0
-    const mockFetch = jest.fn(() => {
+    const mockFetch = vi.fn(() => {
       callCount++
       return Promise.resolve({
         status: 200,
@@ -6975,7 +6975,7 @@ describe('ETag support for local evaluation polling', () => {
     })
 
     const fetchCalls: { url: string; options: any }[] = []
-    const wrappedFetch = jest.fn((url: string, options: any) => {
+    const wrappedFetch = vi.fn((url: string, options: any) => {
       fetchCalls.push({ url, options })
       return mockFetch()
     })
@@ -7001,7 +7001,7 @@ describe('ETag support for local evaluation polling', () => {
 
   it('resets backoff on 304 response', async () => {
     let callCount = 0
-    const mockFetch = jest.fn(() => {
+    const mockFetch = vi.fn(() => {
       callCount++
       if (callCount === 1) {
         // First call: return full response
@@ -7063,7 +7063,7 @@ describe('ETag support for local evaluation polling', () => {
   it('updates ETag when server sends new ETag with 304 response', async () => {
     let callCount = 0
     const fetchCalls: { url: string; options: any }[] = []
-    const mockFetch = jest.fn((url: string, options: any) => {
+    const mockFetch = vi.fn((url: string, options: any) => {
       fetchCalls.push({ url, options })
       callCount++
       if (callCount === 1) {
@@ -7130,12 +7130,12 @@ describe('ETag support for local evaluation polling', () => {
 describe('local evaluation poll scheduling', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
-    jest.useRealTimers()
+    vi.useRealTimers()
     await posthog.shutdown(100).catch(() => undefined)
-    jest.useFakeTimers()
+    vi.useFakeTimers()
   })
 
   it('schedules the next poll after a slow fetch completes', async () => {
@@ -7143,7 +7143,7 @@ describe('local evaluation poll scheduling', () => {
     const deferredFetch = new Promise<any>((resolve) => {
       resolveFetch = resolve
     })
-    const mockFetch = jest.fn(() => deferredFetch)
+    const mockFetch = vi.fn(() => deferredFetch)
 
     posthog = new PostHog('TEST_API_KEY', {
       host: 'http://example.com',
@@ -7156,7 +7156,7 @@ describe('local evaluation poll scheduling', () => {
     const initialLoad = posthog.reloadFeatureFlags()
     expect(mockFetch).toHaveBeenCalledTimes(1)
 
-    await jest.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(1000)
     expect(mockFetch).toHaveBeenCalledTimes(1)
 
     resolveFetch({
@@ -7166,10 +7166,10 @@ describe('local evaluation poll scheduling', () => {
     })
     await initialLoad
 
-    await jest.advanceTimersByTimeAsync(999)
+    await vi.advanceTimersByTimeAsync(999)
     expect(mockFetch).toHaveBeenCalledTimes(1)
 
-    await jest.advanceTimersByTimeAsync(1)
+    await vi.advanceTimersByTimeAsync(1)
     expect(mockFetch).toHaveBeenCalledTimes(2)
   })
 
@@ -7178,7 +7178,7 @@ describe('local evaluation poll scheduling', () => {
     const deferredFetch = new Promise<any>((resolve) => {
       resolveFetch = resolve
     })
-    const mockFetch = jest.fn(() => deferredFetch)
+    const mockFetch = vi.fn(() => deferredFetch)
 
     posthog = new PostHog('TEST_API_KEY', {
       host: 'http://example.com',
@@ -7197,7 +7197,7 @@ describe('local evaluation poll scheduling', () => {
       headers: { get: () => null },
     })
     await initialLoad
-    await jest.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(1000)
 
     expect(mockFetch).toHaveBeenCalledTimes(1)
   })
@@ -7206,21 +7206,21 @@ describe('local evaluation poll scheduling', () => {
 describe('error handling and backoff', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
-    jest.useRealTimers()
+    vi.useRealTimers()
     await posthog.shutdown(100).catch(() => undefined)
-    jest.useFakeTimers()
+    vi.useFakeTimers()
   })
 
   /**
    * Helper to create a mock fetch that returns a specific status code for flag requests.
    * Returns 200 for all other endpoints.
    */
-  function createMockFetch(statusCode: number, onFlagFetch?: () => void): jest.Mock & { callCount: number } {
+  function createMockFetch(statusCode: number, onFlagFetch?: () => void): vi.Mock & { callCount: number } {
     let callCount = 0
-    const mockFetch = jest.fn((url: string) => {
+    const mockFetch = vi.fn((url: string) => {
       if ((url as string).includes('flags/definitions')) {
         callCount++
         onFlagFetch?.()
@@ -7240,7 +7240,7 @@ describe('error handling and backoff', () => {
         text: () => Promise.resolve('ok'),
         json: () => Promise.resolve({ status: 'ok' }),
       })
-    }) as jest.Mock & { callCount: number }
+    }) as vi.Mock & { callCount: number }
 
     Object.defineProperty(mockFetch, 'callCount', {
       get: () => callCount,
@@ -7263,10 +7263,10 @@ describe('error handling and backoff', () => {
     await posthog.reloadFeatureFlags()
     expect(mockFetch.callCount).toBe(1)
 
-    await jest.advanceTimersByTimeAsync(1999)
+    await vi.advanceTimersByTimeAsync(1999)
     expect(mockFetch.callCount).toBe(1)
 
-    await jest.advanceTimersByTimeAsync(1)
+    await vi.advanceTimersByTimeAsync(1)
     expect(mockFetch.callCount).toBe(2)
   })
 
@@ -7335,8 +7335,8 @@ describe('error handling and backoff', () => {
   })
 
   it('should allow on-demand fetches after backoff period expires', async () => {
-    // Use real timers for this test to avoid jest.useFakeTimers() resetting Date.now mock
-    jest.useRealTimers()
+    // Use real timers for this test to avoid vi.useFakeTimers() resetting Date.now mock
+    vi.useRealTimers()
 
     let fetchCallCount = 0
     // Track time to simulate time passing
@@ -7344,7 +7344,7 @@ describe('error handling and backoff', () => {
     const originalDateNow = Date.now
     Date.now = () => mockTime
 
-    const mockFetch = jest.fn((url: string) => {
+    const mockFetch = vi.fn((url: string) => {
       if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         // Always return 401 to keep triggering backoff
@@ -7391,20 +7391,20 @@ describe('error handling and backoff', () => {
 
     // Restore Date.now and fake timers
     Date.now = originalDateNow
-    jest.useFakeTimers()
+    vi.useFakeTimers()
   })
 
   it('should increase backoff intervals exponentially (2s → 4s → 8s)', async () => {
     // Verifies exponential backoff: interval = min(60s, baseInterval * 2^backoffCount)
     // With baseInterval=1000ms: 2000ms → 4000ms → 8000ms
-    jest.useRealTimers()
+    vi.useRealTimers()
 
     let fetchCallCount = 0
     let mockTime = Date.now()
     const originalDateNow = Date.now
     Date.now = () => mockTime
 
-    const mockFetch = jest.fn((url: string) => {
+    const mockFetch = vi.fn((url: string) => {
       if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         return Promise.resolve({
@@ -7454,12 +7454,12 @@ describe('error handling and backoff', () => {
     expect(fetchCallCount).toBe(4) // Exponential backoff verified!
 
     Date.now = originalDateNow
-    jest.useFakeTimers()
+    vi.useFakeTimers()
   })
 
   it('should clear backoff after successful response', async () => {
     let fetchCallCount = 0
-    const mockFetch = jest.fn((url: string) => {
+    const mockFetch = vi.fn((url: string) => {
       if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         if (fetchCallCount === 1) {
@@ -7521,7 +7521,7 @@ describe('error handling and backoff', () => {
 
   it('should allow reloadFeatureFlags() to bypass backoff', async () => {
     let fetchCallCount = 0
-    const mockFetch = jest.fn((url: string) => {
+    const mockFetch = vi.fn((url: string) => {
       if ((url as string).includes('flags/definitions')) {
         fetchCallCount++
         // Always return 401 to keep backoff active
@@ -7570,13 +7570,13 @@ describe('error handling and backoff', () => {
 
 describe('experience continuity warning', () => {
   let posthog: PostHog
-  let warnSpy: jest.SpyInstance
+  let warnSpy: vi.SpyInstance
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   beforeEach(() => {
     mockedFetch.mockClear()
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation()
   })
 
   afterEach(async () => {
@@ -7617,7 +7617,7 @@ describe('experience continuity warning', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag'))
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('experience continuity'))
@@ -7647,7 +7647,7 @@ describe('experience continuity warning', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
 
     expect(warnSpy).not.toHaveBeenCalled()
   })
@@ -7685,7 +7685,7 @@ describe('experience continuity warning', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag-1'))
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exp-cont-flag-2'))
@@ -7716,7 +7716,7 @@ describe('experience continuity warning', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
 
     // Warning should NOT be emitted because strictLocalEvaluation prevents server fallback
     expect(warnSpy).not.toHaveBeenCalled()
@@ -7758,7 +7758,7 @@ describe('experience continuity warning', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
 
     // Only the kept flag is evaluated locally, so only it should appear in the warning.
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('included-cont-flag'))
@@ -7770,13 +7770,13 @@ describe('experience continuity warning', () => {
 
 describe('strictLocalEvaluation option', () => {
   let posthog: PostHog
-  let warnSpy: jest.SpyInstance
+  let warnSpy: vi.SpyInstance
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   beforeEach(() => {
     mockedFetch.mockClear()
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation()
   })
 
   afterEach(async () => {
@@ -7809,7 +7809,7 @@ describe('strictLocalEvaluation option', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
 
     // Reset mock to track decide calls
     mockedFetch.mockClear()
@@ -7855,7 +7855,7 @@ describe('strictLocalEvaluation option', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
     mockedFetch.mockClear()
 
     // Override per-call to allow server fallback
@@ -7897,7 +7897,7 @@ describe('strictLocalEvaluation option', () => {
     })
 
     // Wait for flags to load
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
 
     // Verify flag definitions loaded timestamp is available
     const flagDefinitionsLoadedAt = posthog.featureFlagsPoller?.getFlagDefinitionsLoadedAt()
@@ -7907,7 +7907,7 @@ describe('strictLocalEvaluation option', () => {
 
     // Test that locally evaluated flags include evaluation timestamps
     const capturedEvents: any[] = []
-    posthog.capture = jest.fn().mockImplementation((event) => {
+    posthog.capture = vi.fn().mockImplementation((event) => {
       capturedEvents.push(event)
     })
 
@@ -7952,7 +7952,7 @@ describe('strictLocalEvaluation option', () => {
     })
 
     // Wait for flags to load
-    await jest.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
 
     // Check that flag definitions loaded timestamp is available
     const flagDefinitionsLoadedAt = posthog.featureFlagsPoller?.getFlagDefinitionsLoadedAt()
@@ -7965,7 +7965,7 @@ describe('strictLocalEvaluation option', () => {
 describe('mixed targeting local evaluation', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   afterEach(async () => {
     await posthog.shutdown()

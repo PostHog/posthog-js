@@ -1,10 +1,10 @@
 import { captureAiEvent, captureAiEventImmediate, isFullAiCaptureEnabled } from '../src/captureAiEvent'
 
 const makeClient = (overrides: Record<string, unknown> = {}): any => ({
-  capture: jest.fn(),
-  captureImmediate: jest.fn().mockResolvedValue(undefined),
-  captureAi: jest.fn(),
-  captureAiImmediate: jest.fn().mockResolvedValue(undefined),
+  capture: vi.fn(),
+  captureImmediate: vi.fn().mockResolvedValue(undefined),
+  captureAi: vi.fn(),
+  captureAiImmediate: vi.fn().mockResolvedValue(undefined),
   ...overrides,
 })
 
@@ -26,7 +26,7 @@ describe('captureAiEvent routing', () => {
   })
 
   it('requires the flag to be strictly true (truthy mock attributes stay opted out)', () => {
-    const client = makeClient({ enableFullAiCapture: jest.fn() })
+    const client = makeClient({ enableFullAiCapture: vi.fn() })
     captureAiEvent(client, event)
     expect(client.capture).toHaveBeenCalledWith(event)
     expect(client.captureAi).not.toHaveBeenCalled()

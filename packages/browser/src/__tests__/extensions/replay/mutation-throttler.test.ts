@@ -4,10 +4,10 @@ import {
     MUTATION_SOURCE_TYPE,
 } from '../../../extensions/replay/external/sessionrecording-utils'
 import type { rrwebRecord } from '../../../extensions/replay/types/rrweb'
-import { jest } from '@jest/globals'
+import { vi } from 'vitest'
 import type { eventWithTime, mutationData } from '../../../extensions/replay/types/rrweb-types'
 
-jest.useFakeTimers()
+vi.useFakeTimers()
 
 const makeEvent = (mutations: {
     adds?: mutationData['adds']
@@ -26,25 +26,25 @@ const makeEvent = (mutations: {
 })
 
 describe('MutationThrottler', () => {
-    const mockGetNode = jest.fn()
-    const mockGetId = jest.fn()
-    const rrwebMock: jest.Mock<rrwebRecord> = {
+    const mockGetNode = vi.fn()
+    const mockGetId = vi.fn()
+    const rrwebMock: vi.Mock<rrwebRecord> = {
         mirror: {
             getNode: mockGetNode,
             getId: mockGetId,
         },
-    } as unknown as jest.Mock<rrwebRecord>
+    } as unknown as vi.Mock<rrwebRecord>
 
     let mutationThrottler: MutationThrottler
     let onBlockedNodeMock: (id: number, node: Node | null) => void
-    let onDroppedAttributeMutationsMock: jest.Mock
+    let onDroppedAttributeMutationsMock: vi.Mock
 
     beforeEach(() => {
         mockGetNode.mockReturnValueOnce({ nodeName: 'div' })
         mockGetId.mockReturnValueOnce(1)
 
-        onBlockedNodeMock = jest.fn()
-        onDroppedAttributeMutationsMock = jest.fn()
+        onBlockedNodeMock = vi.fn()
+        onDroppedAttributeMutationsMock = vi.fn()
         mutationThrottler = new MutationThrottler(rrwebMock as unknown as rrwebRecord, {
             onBlockedNode: onBlockedNodeMock,
             onDroppedAttributeMutations: onDroppedAttributeMutationsMock,
@@ -52,7 +52,7 @@ describe('MutationThrottler', () => {
     })
 
     afterEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
     })
 
     test('event is passed through unchanged when not throttled', () => {
@@ -156,7 +156,7 @@ describe('MutationThrottler', () => {
 
     describe('stop()', () => {
         test('clears the rate limiter interval', () => {
-            const stopSpy = jest.spyOn(mutationThrottler['_rateLimiter'], 'stop')
+            const stopSpy = vi.spyOn(mutationThrottler['_rateLimiter'], 'stop')
 
             mutationThrottler.stop()
 
@@ -177,16 +177,16 @@ describe('MutationThrottler', () => {
     })
 
     describe('byte budget', () => {
-        let onDroppedOversizedMutation: jest.Mock
-        let requestFullSnapshot: jest.Mock
+        let onDroppedOversizedMutation: vi.Mock
+        let requestFullSnapshot: vi.Mock
         let throttler: MutationThrottler
 
         const eventOfRoughSize = (chars: number): eventWithTime =>
             makeEvent({ adds: [{ parentId: 1, nextId: null, node: { textContent: 'x'.repeat(chars) } } as any] })
 
         beforeEach(() => {
-            onDroppedOversizedMutation = jest.fn()
-            requestFullSnapshot = jest.fn()
+            onDroppedOversizedMutation = vi.fn()
+            requestFullSnapshot = vi.fn()
             throttler = new MutationThrottler(rrwebMock as unknown as rrwebRecord, {
                 bytesBucketSize: 1000,
                 bytesRefillRate: 100,
@@ -216,7 +216,7 @@ describe('MutationThrottler', () => {
             expect(throttler.throttleMutations(eventOfRoughSize(300))).toBeDefined()
             expect(throttler.throttleMutations(eventOfRoughSize(300))).toBeUndefined()
 
-            jest.advanceTimersByTime(5000)
+            vi.advanceTimersByTime(5000)
 
             expect(throttler.throttleMutations(eventOfRoughSize(300))).toBeDefined()
         })
@@ -225,22 +225,22 @@ describe('MutationThrottler', () => {
             throttler.throttleMutations(eventOfRoughSize(2000))
             expect(requestFullSnapshot).not.toHaveBeenCalled()
 
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
 
             expect(requestFullSnapshot).toHaveBeenCalledTimes(1)
         })
 
         test('requests at most one resync per interval while dropping continuously', () => {
             throttler.throttleMutations(eventOfRoughSize(2000))
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
             expect(requestFullSnapshot).toHaveBeenCalledTimes(1)
 
             throttler.throttleMutations(eventOfRoughSize(2000))
             throttler.throttleMutations(eventOfRoughSize(2000))
-            jest.advanceTimersByTime(1000)
+            vi.advanceTimersByTime(1000)
             expect(requestFullSnapshot).toHaveBeenCalledTimes(1)
 
-            jest.advanceTimersByTime(10_000)
+            vi.advanceTimersByTime(10_000)
             expect(requestFullSnapshot).toHaveBeenCalledTimes(2)
         })
 
@@ -257,7 +257,7 @@ describe('MutationThrottler', () => {
             throttler.throttleMutations(eventOfRoughSize(2000))
 
             throttler.reset()
-            jest.advanceTimersByTime(60_000)
+            vi.advanceTimersByTime(60_000)
 
             expect(requestFullSnapshot).not.toHaveBeenCalled()
         })
@@ -271,11 +271,11 @@ describe('MutationThrottler', () => {
             })
 
             zeroInterval.throttleMutations(eventOfRoughSize(2000))
-            jest.runOnlyPendingTimers()
+            vi.runOnlyPendingTimers()
             expect(requestFullSnapshot).toHaveBeenCalledTimes(1)
 
             zeroInterval.throttleMutations(eventOfRoughSize(2000))
-            jest.advanceTimersByTime(10_000)
+            vi.advanceTimersByTime(10_000)
             expect(requestFullSnapshot).toHaveBeenCalledTimes(1)
         })
 

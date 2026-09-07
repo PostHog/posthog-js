@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { detectUserLanguage, applySurveyTranslationForUser } from '../../utils/survey-translations'
 import { Survey, SurveyType, SurveyQuestionType } from '../../posthog-surveys-types'
 import { PostHog } from '../../posthog-core'
@@ -23,7 +23,7 @@ describe('Survey Translations', () => {
 
     beforeEach(() => {
         mockPostHog = {
-            get_property: jest.fn(),
+            get_property: vi.fn(),
             config: {},
         } as unknown as PostHog
         setBrowserLanguage(undefined)
@@ -115,7 +115,7 @@ describe('Survey Translations', () => {
                 setBrowserLanguage(browserLanguage)
 
                 if (hasGetProperty) {
-                    ;(mockPostHog.get_property as jest.Mock).mockReturnValue(storedPersonProperties)
+                    ;(mockPostHog.get_property as vi.Mock).mockReturnValue(storedPersonProperties)
                 } else {
                     delete (mockPostHog as Partial<PostHog>).get_property
                 }
@@ -147,9 +147,9 @@ describe('Survey Translations', () => {
         })
 
         it('only logs language detection when browser debug logging is enabled', () => {
-            const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
+            const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
             setBrowserLanguage('en-US')
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({})
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({})
 
             try {
                 expect(detectUserLanguage(mockPostHog)).toBe('en-US')
@@ -195,7 +195,7 @@ describe('Survey Translations', () => {
         })
 
         it('should return original survey when no language is detected', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({})
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({})
             const survey = createBaseSurvey()
 
             const result = applySurveyTranslationForUser(survey, mockPostHog)
@@ -205,7 +205,7 @@ describe('Survey Translations', () => {
         })
 
         it('should return original survey when no translations exist', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language: 'fr' })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language: 'fr' })
             const survey = createBaseSurvey()
 
             const result = applySurveyTranslationForUser(survey, mockPostHog)
@@ -215,7 +215,7 @@ describe('Survey Translations', () => {
         })
 
         it('should apply exact match translation', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language: 'fr' })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language: 'fr' })
             const survey = createBaseSurvey()
             survey.translations = {
                 fr: {
@@ -231,7 +231,7 @@ describe('Survey Translations', () => {
         })
 
         it('should apply case-insensitive match', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language: 'FR' })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language: 'FR' })
             const survey = createBaseSurvey()
             survey.translations = {
                 fr: {
@@ -246,7 +246,7 @@ describe('Survey Translations', () => {
         })
 
         it('should fallback to base language for language variants', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language: 'fr-CA' })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language: 'fr-CA' })
             const survey = createBaseSurvey()
             survey.translations = {
                 fr: {
@@ -261,7 +261,7 @@ describe('Survey Translations', () => {
         })
 
         it('should prefer exact match over base language', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language: 'fr-CA' })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language: 'fr-CA' })
             const survey = createBaseSurvey()
             survey.translations = {
                 fr: {
@@ -420,7 +420,7 @@ describe('Survey Translations', () => {
                 },
             },
         ])('should translate $name', ({ language, prepareSurvey, assertTranslatedSurvey }) => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language })
             const survey = createBaseSurvey()
 
             prepareSurvey(survey)
@@ -430,7 +430,7 @@ describe('Survey Translations', () => {
         })
 
         it('should translate thank you message', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language: 'pt' })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language: 'pt' })
             const survey = createBaseSurvey()
             survey.translations = {
                 pt: {
@@ -448,7 +448,7 @@ describe('Survey Translations', () => {
         })
 
         it('should handle partial translations gracefully', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language: 'fr' })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language: 'fr' })
             const survey = createBaseSurvey()
             survey.translations = {
                 fr: {
@@ -463,7 +463,7 @@ describe('Survey Translations', () => {
         })
 
         it('should ignore unsupported root translation fields', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language: 'fr' })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language: 'fr' })
             const survey = createBaseSurvey()
             survey.translations = {
                 fr: {
@@ -496,7 +496,7 @@ describe('Survey Translations', () => {
                 },
             },
         ])('should ignore $name', ({ translations }) => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language: 'es' })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language: 'es' })
             const survey = createBaseSurvey()
             survey.questions[0].translations = translations
 
@@ -508,7 +508,7 @@ describe('Survey Translations', () => {
         })
 
         it('should translate multiple questions independently', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language: 'es' })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language: 'es' })
             const survey = createBaseSurvey()
             survey.questions = [
                 {
@@ -540,7 +540,7 @@ describe('Survey Translations', () => {
         })
 
         it('should not mutate the original survey object', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language: 'fr' })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language: 'fr' })
             const survey = createBaseSurvey()
             const originalName = survey.name
             survey.translations = {
@@ -556,7 +556,7 @@ describe('Survey Translations', () => {
         })
 
         it('should handle surveys without appearance object', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language: 'fr' })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language: 'fr' })
             const survey = createBaseSurvey()
             survey.appearance = null
             survey.translations = {
@@ -572,7 +572,7 @@ describe('Survey Translations', () => {
         })
 
         it('should track matched language for thank you translations without appearance', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language: 'fr' })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language: 'fr' })
             const survey = createBaseSurvey()
             survey.appearance = null
             survey.translations = {
@@ -588,7 +588,7 @@ describe('Survey Translations', () => {
         })
 
         it('should return original language code that matched', () => {
-            ;(mockPostHog.get_property as jest.Mock).mockReturnValue({ language: 'zh-CN' })
+            ;(mockPostHog.get_property as vi.Mock).mockReturnValue({ language: 'zh-CN' })
             const survey = createBaseSurvey()
             survey.translations = {
                 'zh-CN': {

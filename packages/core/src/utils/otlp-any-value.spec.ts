@@ -21,7 +21,7 @@ describe('otlp-any-value', () => {
     })
 
     it('logs a debug line when an integer falls outside int64', () => {
-      const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), critical: jest.fn() }
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), critical: vi.fn() }
       toOtlpAnyValue(2 ** 63, logger as any)
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('outside the int64 range'))
     })
@@ -48,7 +48,7 @@ describe('otlp-any-value', () => {
     })
 
     it('converts a bigint beyond int64 to a string, with a warning', () => {
-      const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), critical: jest.fn() }
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), critical: vi.fn() }
       expect(toOtlpAnyValue(18446744073709551616n as unknown as LogAttributeValue, logger as any)).toEqual({
         stringValue: '18446744073709551616',
       })
@@ -237,7 +237,7 @@ describe('otlp-any-value', () => {
     // Both `null` and `{}` here are rejected for the whole request; iOS and
     // Android drop them too.
     it('drops holes and nullish elements from arrays', () => {
-      // eslint-disable-next-line no-sparse-arrays
+      // oxlint-disable-next-line no-sparse-arrays
       expect(toOtlpAnyValue([1, , 3])).toEqual({
         arrayValue: { values: [{ intValue: '1' }, { intValue: '3' }] },
       })
@@ -273,7 +273,7 @@ describe('otlp-any-value', () => {
       for (let i = 0; i < 5000; i++) {
         wide[`k${i}`] = i
       }
-      const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), critical: jest.fn() }
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), critical: vi.fn() }
       const values = toOtlpAnyValue(wide, logger as any).kvlistValue!.values
       expect(values).toHaveLength(1000)
       expect(values.every((v) => v.key.startsWith('k'))).toBe(true)

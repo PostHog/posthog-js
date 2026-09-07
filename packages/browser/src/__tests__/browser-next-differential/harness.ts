@@ -105,7 +105,7 @@ export class ControlledRuntime {
         listener: EventListenerOrEventListenerObject
         capture: boolean
     }> = []
-    private _windowAddListenerSpy: jest.SpyInstance | undefined
+    private _windowAddListenerSpy: vi.SpyInstance | undefined
     private _removeWindowListener: Window['removeEventListener'] | undefined
 
     readonly navigator = {
@@ -125,13 +125,13 @@ export class ControlledRuntime {
         this._snapshotStorage(sessionStorage, this._previousSessionStorage)
         localStorage.clear()
         sessionStorage.clear()
-        jest.useFakeTimers({ now: TEST_NOW })
+        vi.useFakeTimers({ now: TEST_NOW })
         this._setNavigatorProperty('userAgent', this.navigator.userAgent)
         this._setNavigatorProperty('webdriver', this.navigator.webdriver)
         this._setNavigatorProperty('sendBeacon', this.navigator.sendBeacon)
         const addWindowListener = window.addEventListener.bind(window)
         this._removeWindowListener = window.removeEventListener.bind(window)
-        this._windowAddListenerSpy = jest
+        this._windowAddListenerSpy = vi
             .spyOn(window, 'addEventListener')
             .mockImplementation(
                 (
@@ -147,7 +147,7 @@ export class ControlledRuntime {
     }
 
     advanceTime(milliseconds: number): void {
-        jest.setSystemTime(Date.now() + milliseconds)
+        vi.setSystemTime(Date.now() + milliseconds)
     }
 
     recordRequest(request: RecordedRequest): void {
@@ -210,7 +210,7 @@ export class ControlledRuntime {
             }
         }
         this._navigatorDescriptors.clear()
-        jest.useRealTimers()
+        vi.useRealTimers()
         this._restoreStorage(localStorage, this._previousLocalStorage)
         this._restoreStorage(sessionStorage, this._previousSessionStorage)
     }

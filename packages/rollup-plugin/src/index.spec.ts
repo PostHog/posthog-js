@@ -11,10 +11,10 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 
-jest.mock('@posthog/plugin-utils', () => ({
-    ...jest.requireActual('@posthog/plugin-utils'),
-    runSourcemapCli: jest.fn().mockResolvedValue(undefined),
-    resolveReleaseId: jest.fn().mockResolvedValue('release-id-1'),
+vi.mock('@posthog/plugin-utils', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/plugin-utils')>()),
+    runSourcemapCli: vi.fn().mockResolvedValue(undefined),
+    resolveReleaseId: vi.fn().mockResolvedValue('release-id-1'),
 }))
 
 const options = {
@@ -164,7 +164,7 @@ describe('posthogRollupPlugin', () => {
             const eventOptions = { ...options, sourcemaps: { releaseMode: 'event' as const } }
 
             beforeEach(() => {
-                jest.mocked(resolveReleaseId).mockResolvedValue('release-id-1')
+                vi.mocked(resolveReleaseId).mockResolvedValue('release-id-1')
             })
 
             it('injects the resolved release id so exceptions carry it', async () => {
@@ -204,9 +204,9 @@ describe('posthogRollupPlugin', () => {
             it('still injects chunk ids when no release can be resolved', async () => {
                 // Chunk ids alone still symbolicate, so a build with no identifiable release warns
                 // instead of failing, the way posthog-cli does.
-                jest.mocked(resolveReleaseId).mockResolvedValue(undefined)
+                vi.mocked(resolveReleaseId).mockResolvedValue(undefined)
                 const plugin = testPlugin(eventOptions)
-                const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+                const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
                 const result = await plugin.renderChunk.handler(code, { fileName: 'index.js' })
 
@@ -320,7 +320,7 @@ describe('posthogRollupPlugin', () => {
 
         it('keeps maps when the upload fails', async () => {
             const plugin = testPlugin(options)
-            jest.mocked(runSourcemapCli).mockRejectedValueOnce(new Error('upload failed'))
+            vi.mocked(runSourcemapCli).mockRejectedValueOnce(new Error('upload failed'))
 
             await expect(plugin.writeBundle.handler({ dir } as OutputOptions, bundle)).rejects.toThrow('upload failed')
 
@@ -343,8 +343,8 @@ describe('posthogRollupPlugin', () => {
 
         it('does not fail the build when map cleanup fails after a successful upload', async () => {
             const plugin = testPlugin(options)
-            const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
-            const rm = jest.spyOn(fs, 'rm').mockRejectedValueOnce(new Error('EPERM: operation not permitted'))
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const rm = vi.spyOn(fs, 'rm').mockRejectedValueOnce(new Error('EPERM: operation not permitted'))
 
             await expect(plugin.writeBundle.handler({ dir } as OutputOptions, bundle)).resolves.toBeUndefined()
 

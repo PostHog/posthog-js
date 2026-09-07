@@ -47,6 +47,13 @@ The repository contains the following SDK packages in `./packages/`:
 - This repository is structured as a pnpm workspace and each SDK and tooling package is a member of this global workspace.
 - Example and playground projects are independent pnpm workspaces. You can install their dependencies by running `pnpm install` inside the specific project folder. All dependencies and sub-dependencies to PostHog SDKs will be overwritten using a pnpmfile.
 
+## Dependency Release-Age Exceptions
+
+`minimumReleaseAgeExclude` entries are repository-local and are not inherited by consumers of published packages. Before adding an exception:
+
+1. Check whether the dependency remains in a published package's manifest and will be resolved by consumers rather than bundled into the package.
+2. If `PostHog/posthog` will resolve the immature dependency during its automated SDK upgrade, ensure the same exact-version exception is merged into its `pnpm-workspace.yaml` before releasing. Otherwise, wait until the dependency satisfies the consumer's minimum release age.
+
 ## Environment Setup
 
 ```bash

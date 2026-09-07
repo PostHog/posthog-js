@@ -11,20 +11,20 @@ describe('PostHogCaptureOnViewed component', () => {
 
     beforeEach(() => {
         fakePosthog = {
-            capture: jest.fn(),
+            capture: vi.fn(),
         } as unknown as PostHog
 
-        const mockIntersectionObserver = jest.fn((callback) => {
+        const mockIntersectionObserver = vi.fn((callback) => {
             mockObserverCallback = callback
             return {
-                observe: jest.fn(),
-                unobserve: jest.fn(),
-                disconnect: jest.fn(),
+                observe: vi.fn(),
+                unobserve: vi.fn(),
+                disconnect: vi.fn(),
             }
         })
 
         mockIntersectionObserver.prototype = {}
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         window.IntersectionObserver = mockIntersectionObserver as unknown as typeof IntersectionObserver
     })
 

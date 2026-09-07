@@ -99,7 +99,7 @@ describe('Edge Runtime Compatibility', () => {
 
     afterEach(() => {
       globalThis.process = originalProcess
-      jest.resetModules()
+      vi.resetModules()
     })
 
     it('should not throw when process.once is unavailable', async () => {
@@ -110,7 +110,7 @@ describe('Edge Runtime Compatibility', () => {
       globalThis.process = mockProcess
 
       // Reset modules to re-run module-level code
-      jest.resetModules()
+      vi.resetModules()
 
       // Should not throw when importing
       await expect(import('../extensions/capture')).resolves.toBeDefined()
@@ -120,7 +120,7 @@ describe('Edge Runtime Compatibility', () => {
       // @ts-expect-error - intentionally removing process for test
       globalThis.process = undefined
 
-      jest.resetModules()
+      vi.resetModules()
 
       // Should not throw - capture module should still load without process
       const module = await import('../extensions/capture')
@@ -256,7 +256,7 @@ describe('Integration: SDK in Limited Environment', () => {
 
   afterEach(() => {
     globalThis.process = originalProcess
-    jest.resetModules()
+    vi.resetModules()
   })
 
   it('should work when process has limited functionality', async () => {
@@ -274,7 +274,7 @@ describe('Integration: SDK in Limited Environment', () => {
     } as unknown as typeof process
 
     globalThis.process = limitedProcess
-    jest.resetModules()
+    vi.resetModules()
 
     // SDK should still load
     const mcpAnalytics = await import('../index')

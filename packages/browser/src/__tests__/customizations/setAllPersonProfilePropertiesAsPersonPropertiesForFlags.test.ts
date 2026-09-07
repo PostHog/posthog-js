@@ -2,11 +2,12 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { createPosthogInstance } from '../helpers/posthog-instance'
 import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from '../../customizations/setAllPersonProfilePropertiesAsPersonPropertiesForFlags'
 import { STORED_PERSON_PROPERTIES_KEY } from '../../constants'
+import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 
-jest.mock('@posthog/browser-common/utils/globals', () => {
-    const orig = jest.requireActual('@posthog/browser-common/utils/globals')
-    const mockURLGetter = jest.fn()
-    const mockReferrerGetter = jest.fn()
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
+    const mockURLGetter = vi.fn()
+    const mockReferrerGetter = vi.fn()
     return {
         ...orig,
         mockURLGetter,
@@ -35,8 +36,7 @@ jest.mock('@posthog/browser-common/utils/globals', () => {
     }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter } = require('@posthog/browser-common/utils/globals')
+const { mockURLGetter, mockReferrerGetter } = mockedGlobals as any
 
 describe('setAllPersonPropertiesForFlags', () => {
     beforeEach(() => {
@@ -47,7 +47,7 @@ describe('setAllPersonPropertiesForFlags', () => {
     it('should called setPersonPropertiesForFlags with all saved properties that are used for person properties', async () => {
         // arrange
         const token = uuidv7()
-        const posthog = await createPosthogInstance(token)
+        const posthog = await createPosthogInstance(token, { capture_pageview: false })
 
         // act
         setAllPersonProfilePropertiesAsPersonPropertiesForFlags(posthog)

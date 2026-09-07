@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* oxlint-disable */
 /**
  * Generated data model types.
  *

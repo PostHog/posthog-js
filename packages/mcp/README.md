@@ -137,9 +137,10 @@ cannot tell that it is yours, its value is recorded as `$mcp_intent`. It never l
 and it is capped at 2048 characters. Two ways out, both one line:
 
 ```ts
-instrument(server, posthog, { context: false })                   // no injection, no capture
+instrument(server, posthog, { context: false }) // no injection, no capture
 
-instrument(server, posthog, {                                     // keep it, drop the property
+instrument(server, posthog, {
+  // keep it, drop the property
   beforeSend: (event) => {
     delete event.properties.$mcp_intent
     return event
@@ -148,6 +149,14 @@ instrument(server, posthog, {                                     // keep it, dr
 ```
 
 `intentFallback` is the third option: supply the intent yourself when the agent did not send one.
+
+Whatever the agent narrates, the SDK redacts structured personal identifiers — email addresses, phone
+numbers, IPv4/IPv6 addresses, Luhn-valid card numbers, and US SSNs — from `$mcp_intent` before it is
+sent. This is always on and needs no configuration. It is best-effort for those well-defined shapes,
+not for free-form personal data such as names or postal addresses, which a regex cannot catch without
+over-redacting ordinary prose. It also applies only to `$mcp_intent`: structured tool `arguments` and
+results are left as-is, because the same shapes are often legitimate data there. If you need a stronger
+guarantee, `context: false` and the `beforeSend` hook above remain the ways to drop the field entirely.
 
 ### What `$mcp_llm_model` records, and when it stays empty
 
@@ -177,6 +186,25 @@ and the capture require the SDK to have confirmed the parameter is its own:
 As with `context`, what matters is instance lifetime rather than statelessness: a transport-stateless
 server (`sessionIdGenerator: undefined`) that keeps one long-lived server object learns ownership
 from the first `tools/list` and keeps it.
+
+For a custom dispatcher, enable the same option on `PostHogMCP`. Its `prepareToolList()` helper
+injects the field and records ownership by tool name; `prepareToolCall()` returns `llmModel` and
+`llmModelSource` while removing the SDK-owned argument before dispatch. Pass both fields to
+`captureToolCall()`. Pass the original tool descriptor on each call so this also works when
+`tools/list` and `tools/call` reach different server replicas:
+
+```ts
+const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN, { captureModel: true })
+
+const tools = posthog.prepareToolList(serverTools)
+const originalTool = serverTools.find((tool) => tool.name === toolName)
+const { args, llmModel, llmModelSource } = posthog.prepareToolCall(toolName, rawArgs, { originalTool })
+const result = await dispatch(toolName, args)
+
+posthog.captureToolCall({ toolName, llmModel, llmModelSource, isError: false })
+```
+
+A persistent single-process dispatcher can omit `originalTool` after it has prepared its tool list.
 
 ### If you switched to `instrument(server.server)`
 

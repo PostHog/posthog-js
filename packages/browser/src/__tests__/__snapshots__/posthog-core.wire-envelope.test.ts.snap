@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`PostHog final decoded request envelopes serializes complete enriched /e/ and configured /s/ JSON bodies 1`] = `
+exports[`PostHog final decoded request envelopes > serializes complete enriched /e/ and configured /s/ JSON bodies 1`] = `
 {
   "api_key": "wire-snapshot-token",
   "batch": [
@@ -64,7 +64,7 @@ exports[`PostHog final decoded request envelopes serializes complete enriched /e
 }
 `;
 
-exports[`PostHog final decoded request envelopes serializes complete enriched /e/ and configured /s/ JSON bodies 2`] = `
+exports[`PostHog final decoded request envelopes > serializes complete enriched /e/ and configured /s/ JSON bodies 2`] = `
 {
   "event": "$snapshot",
   "properties": {

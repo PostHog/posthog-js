@@ -1,8 +1,8 @@
 // The real @google/adk package pulls in the full agent runtime (and ESM-only
-// deps jest does not transform), so stub the BasePlugin base class the adapter
+// dependencies that the test runner does not transform), so stub the BasePlugin base class the adapter
 // extends. This mirrors how processor.test.ts mocks its heavy OpenTelemetry
 // deps, and keeps the test focused on the adapter's capture behavior.
-jest.mock('@google/adk', () => ({
+vi.mock('@google/adk', () => ({
   BasePlugin: class {
     public readonly name: string
     constructor(name: string) {
@@ -19,9 +19,9 @@ import { PostHogADKPlugin } from '../src/adk'
 // captureAiGeneration primitive.
 function createMockClient() {
   return {
-    capture: jest.fn(),
-    captureImmediate: jest.fn().mockResolvedValue(undefined),
-    flush: jest.fn().mockResolvedValue(undefined),
+    capture: vi.fn(),
+    captureImmediate: vi.fn().mockResolvedValue(undefined),
+    flush: vi.fn().mockResolvedValue(undefined),
   } as any
 }
 
@@ -371,13 +371,13 @@ describe('PostHogADKPlugin', () => {
   })
 
   it('evicts only model calls older than the maximum pending age', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-01-01T00:00:00Z'))
+    vi.useFakeTimers().setSystemTime(new Date('2026-01-01T00:00:00Z'))
     try {
       await plugin.beforeModelCallback({
         callbackContext: createContext({ invocationId: 'stale' }),
         llmRequest: createRequest({ contents: [{ role: 'user', parts: [{ text: 'stale' }] }] }),
       })
-      jest.advanceTimersByTime(60 * 60 * 1000 + 1)
+      vi.advanceTimersByTime(60 * 60 * 1000 + 1)
       await plugin.beforeModelCallback({
         callbackContext: createContext({ invocationId: 'recent' }),
         llmRequest: createRequest({ contents: [{ role: 'user', parts: [{ text: 'recent' }] }] }),
@@ -387,7 +387,7 @@ describe('PostHogADKPlugin', () => {
         expect.stringContaining('recent'),
       ])
     } finally {
-      jest.useRealTimers()
+      vi.useRealTimers()
     }
   })
 
@@ -574,10 +574,10 @@ describe('PostHogADKPlugin', () => {
     client.capture.mockImplementation(() => {
       throw captureError
     })
-    const onError = jest.fn()
+    const onError = vi.fn()
     plugin = new PostHogADKPlugin({ client, onError })
     const ctx = createContext()
-    const consoleWarn = jest.spyOn(console, 'warn').mockImplementation()
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
 
     await plugin.beforeModelCallback({ callbackContext: ctx, llmRequest: createRequest() })
     await plugin.afterModelCallback({ callbackContext: ctx, llmResponse: createResponse() })

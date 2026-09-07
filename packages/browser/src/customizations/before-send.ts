@@ -95,7 +95,7 @@ export function sampleByEvent(eventNames: (KnownEventName | string)[], percent: 
 }
 
 export const printAndDropEverything: BeforeSendFn = (result) => {
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.log('Would have sent event:', result)
     return null
 }

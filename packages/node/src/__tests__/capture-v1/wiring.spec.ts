@@ -4,10 +4,10 @@ import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { CaptureV1Error } from '@/capture-v1/errors'
 import { V1_URL, V1WiringHarness, v0Response, v1Response, waitForFlushTimer } from '../utils/v1-wiring'
 
-jest.mock('../../version', () => ({ version: '1.2.3' }))
+vi.mock('../../version', () => ({ version: '1.2.3' }))
 
 describe('capture v1 wiring (Node SDK)', () => {
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   const harness = new V1WiringHarness()
   const mockedFetch = harness.fetch
@@ -17,15 +17,15 @@ describe('capture v1 wiring (Node SDK)', () => {
   const eventsIn = (fragment: string): string[] => harness.eventsIn(fragment)
 
   beforeEach(() => {
-    jest.spyOn(console, 'warn').mockImplementation(() => {})
-    jest.spyOn(console, 'error').mockImplementation(() => {})
-    jest.spyOn(console, 'info').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(console, 'info').mockImplementation(() => {})
     harness.useDefaultRouting()
   })
 
   afterEach(async () => {
     await harness.cleanup()
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   describe('v0 mode (default)', () => {
@@ -44,7 +44,7 @@ describe('capture v1 wiring (Node SDK)', () => {
 
   describe('Node gzip compression', () => {
     let originalCompressionStream: PropertyDescriptor | undefined
-    let compressionStreamSpy: jest.Mock
+    let compressionStreamSpy: vi.Mock
 
     const readCompressedBody = async (body: Blob | Uint8Array): Promise<any> => {
       const bytes = body instanceof Uint8Array ? Buffer.from(body) : Buffer.from(await body.arrayBuffer())
@@ -53,7 +53,7 @@ describe('capture v1 wiring (Node SDK)', () => {
 
     beforeEach(() => {
       originalCompressionStream = Object.getOwnPropertyDescriptor(globalThis, 'CompressionStream')
-      compressionStreamSpy = jest.fn(() => {
+      compressionStreamSpy = vi.fn(() => {
         throw new Error('The Node SDK should not use CompressionStream')
       })
       Object.defineProperty(globalThis, 'CompressionStream', {

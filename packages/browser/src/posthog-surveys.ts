@@ -520,7 +520,7 @@ export class PostHogSurveys implements Extension {
             })
         }
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise<SurveyRenderReason>((resolve) => {
             this.getSurveys((surveys) => {
                 const survey = surveys.find((x) => x.id === surveyId) ?? null

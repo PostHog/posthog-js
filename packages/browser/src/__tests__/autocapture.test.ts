@@ -67,10 +67,10 @@ describe('Autocapture system', () => {
 
     let autocapture: Autocapture
     let posthog: PostHog
-    let beforeSendMock: jest.Mock
+    let beforeSendMock: vi.Mock
 
     beforeEach(async () => {
-        jest.spyOn(window!.console, 'log').mockImplementation()
+        vi.spyOn(window!.console, 'log').mockImplementation(() => {})
 
         Object.defineProperty(window, 'location', {
             configurable: true,
@@ -80,7 +80,7 @@ describe('Autocapture system', () => {
             value: new URL('https://example.com'),
         })
 
-        beforeSendMock = jest.fn().mockImplementation((...args) => args)
+        beforeSendMock = vi.fn().mockImplementation((...args) => args)
         posthog = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
             token: 'testtoken',
@@ -171,7 +171,7 @@ describe('Autocapture system', () => {
                 autocapture: autocaptureConfig,
                 capture_pageview: false,
             })
-            const capture = jest.spyOn(instance, 'capture')
+            const capture = vi.spyOn(instance, 'capture')
             const button = document.createElement('button')
             document.body.appendChild(button)
 
@@ -190,7 +190,7 @@ describe('Autocapture system', () => {
         })
 
         it('receives each remote config result once', async () => {
-            const onRemoteConfig = jest.spyOn(Autocapture.prototype, 'onRemoteConfig')
+            const onRemoteConfig = vi.spyOn(Autocapture.prototype, 'onRemoteConfig')
             const instance = await createPosthogInstance(uuidv7(), { capture_pageview: false })
             onRemoteConfig.mockClear()
             const result = { ok: true, config: { autocapture_opt_out: false } as FlagsResponse } as const
@@ -204,7 +204,7 @@ describe('Autocapture system', () => {
         })
 
         it('stops receiving remote config after shutdown', async () => {
-            const onRemoteConfig = jest.spyOn(Autocapture.prototype, 'onRemoteConfig')
+            const onRemoteConfig = vi.spyOn(Autocapture.prototype, 'onRemoteConfig')
             const instance = await createPosthogInstance(uuidv7(), { capture_pageview: false })
             await instance.shutdown()
             onRemoteConfig.mockClear()
@@ -216,9 +216,9 @@ describe('Autocapture system', () => {
         })
 
         it('releases remote config and DOM listeners on dispose', () => {
-            const remoteConfigDispose = jest.fn()
-            const initialize = jest.fn()
-            const capture = jest.fn().mockResolvedValue(undefined)
+            const remoteConfigDispose = vi.fn()
+            const initialize = vi.fn()
+            const capture = vi.fn().mockResolvedValue(undefined)
             let remoteConfigHandler: ((result: RemoteConfigResult) => void) | undefined
             const extension = new Autocapture({
                 refresh: (config) => {
@@ -233,13 +233,13 @@ describe('Autocapture system', () => {
             })
             const client = {
                 capture,
-                kv: { initialize, get: jest.fn(), set: jest.fn(), remove: jest.fn() },
+                kv: { initialize, get: vi.fn(), set: vi.fn(), remove: vi.fn() },
                 onRemoteConfig: (handler: (result: RemoteConfigResult) => void) => {
                     remoteConfigHandler = handler
                     return { dispose: remoteConfigDispose }
                 },
             } as any
-            const captureEvent = jest.spyOn(extension as any, '_captureEvent')
+            const captureEvent = vi.spyOn(extension as any, '_captureEvent')
 
             extension.setup(client)
             expect(extension['_initialized']).toBe(true)
@@ -900,7 +900,7 @@ describe('Autocapture system', () => {
             })
 
             it('captures paste without reading pasted text', async () => {
-                const pasteBeforeSend = jest.fn().mockImplementation((event) => event)
+                const pasteBeforeSend = vi.fn().mockImplementation((event) => event)
                 const pastePosthog = await createPosthogInstance(uuidv7(), {
                     autocapture: { capture_copied_text: true, dom_event_allowlist: ['click'] },
                     before_send: pasteBeforeSend,
@@ -909,7 +909,7 @@ describe('Autocapture system', () => {
                 try {
                     document.body.appendChild(elTarget)
                     const pasteEvent = new Event('paste', { bubbles: true, cancelable: true })
-                    const getData = jest.fn().mockReturnValue('paste this test')
+                    const getData = vi.fn().mockReturnValue('paste this test')
                     Object.defineProperty(pasteEvent, 'clipboardData', { value: { getData } })
 
                     elTarget.dispatchEvent(pasteEvent)
@@ -927,7 +927,7 @@ describe('Autocapture system', () => {
             })
 
             it('captures paste from sensitive fields and ancestors without content', async () => {
-                const pasteBeforeSend = jest.fn().mockImplementation((event) => event)
+                const pasteBeforeSend = vi.fn().mockImplementation((event) => event)
                 const pastePosthog = await createPosthogInstance(uuidv7(), {
                     autocapture: { capture_copied_text: true },
                     before_send: pasteBeforeSend,
@@ -1612,7 +1612,7 @@ describe('Autocapture system', () => {
         beforeEach(() => {
             document.title = 'test page'
 
-            jest.spyOn(autocapture, '_addDomEventHandlers')
+            vi.spyOn(autocapture, '_addDomEventHandlers')
         })
 
         it('should be enabled after init when autocapture is true in config', () => {
@@ -1990,7 +1990,7 @@ describe('Autocapture system', () => {
             const button = document.createElement('button')
             button.innerHTML = 'bla'
             Object.defineProperty(button, 'matches', { value: undefined })
-            ;(button as any).msMatchesSelector = jest.fn(() => true)
+            ;(button as any).msMatchesSelector = vi.fn(() => true)
             const e = makeMouseEvent({ target: button })
 
             expect(

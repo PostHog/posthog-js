@@ -148,7 +148,7 @@ describe('Low-level Server reportMissing ownership (e2e)', () => {
   })
 
   it('warns and runs a default-named real tool normally when reportMissing is enabled', async () => {
-    const logger = jest.fn()
+    const logger = vi.fn()
     const { server, client, connect, cleanup } = await setupLowLevelServer('get_more_tools')
     try {
       instrument(server, fakePostHog(), { reportMissing: true, enableConversationId: true, logger })
@@ -178,7 +178,7 @@ describe('Low-level Server reportMissing ownership (e2e)', () => {
 
   it('warns and runs a custom-named real tool normally when the configured name collides', async () => {
     const customName = 'posthog_find_tools'
-    const logger = jest.fn()
+    const logger = vi.fn()
     const { server, client, connect, cleanup } = await setupLowLevelServer(customName)
     try {
       instrument(server, fakePostHog(), { reportMissing: true, missingCapabilityToolName: customName, logger })
@@ -331,7 +331,7 @@ describe('Low-level Server reportMissing ownership (e2e)', () => {
   })
 
   it('fails open to a colliding real handler when the ownership probe fails', async () => {
-    const logger = jest.fn()
+    const logger = vi.fn()
     const { server, client, connect, cleanup } = await setupLowLevelServer('get_more_tools')
     server.setRequestHandler(ListToolsRequestSchema, async () => {
       throw new Error('listing unavailable')
@@ -860,7 +860,7 @@ describe('Low-level Server — synthetic tools/call fallback', () => {
     // threw `Server does not support tools (required for tools/call)`, which
     // aborted instrumentLowLevelServer with setRequestHandler already patched —
     // instrumentation half-applied, and only a warning to show for it.
-    const logger = jest.fn()
+    const logger = vi.fn()
     const server = new Server({ name: 'no tools capability', version: '1.0.0' }, { capabilities: {} })
 
     instrument(server, fakePostHog(), { logger })

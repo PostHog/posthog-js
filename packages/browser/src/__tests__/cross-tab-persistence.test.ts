@@ -75,7 +75,7 @@ const buildTab = (
     const instance = createMockPostHog({
         config,
         persistence,
-        register: jest.fn(),
+        register: vi.fn(),
     })
     const manager = new SessionIdManager(
         instance,
@@ -99,14 +99,14 @@ const CASES = [
 
 describe('cross-tab persistence interactions', () => {
     beforeEach(() => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         window.localStorage.clear()
         resetLocalStorageSupported()
     })
 
     afterEach(() => {
-        jest.clearAllTimers()
-        jest.useRealTimers()
+        vi.clearAllTimers()
+        vi.useRealTimers()
         window.localStorage.clear()
     })
 
@@ -280,7 +280,7 @@ describe('cross-tab persistence interactions', () => {
                 // session-scoped props) on the old session.
                 const { tabB, newSessionId, activeAt } = setupSiblingRotation()
 
-                const handler = jest.fn()
+                const handler = vi.fn()
                 tabB.manager.onSessionId(handler)
                 handler.mockClear()
 
@@ -436,7 +436,7 @@ describe('cross-tab persistence interactions', () => {
         describe('onSessionId handlers', () => {
             it('fires on a local rotation', () => {
                 const rotated = makeTab({ sessionId: 'session-A-new', windowId: 'window-A' })
-                const handler = jest.fn()
+                const handler = vi.fn()
                 rotated.manager.onSessionId(handler)
                 handler.mockClear()
 
@@ -449,7 +449,7 @@ describe('cross-tab persistence interactions', () => {
                 const tab = makeTab({ sessionId: 'session-A', windowId: 'window-A' })
                 tab.manager.checkAndGetSessionAndWindowId(false, T0)
 
-                const handler = jest.fn()
+                const handler = vi.fn()
                 tab.manager.onSessionId(handler)
                 handler.mockClear()
 
@@ -503,7 +503,7 @@ describe('cross-tab persistence interactions', () => {
                 const original = (tabB.persistence[refreshMethod] as (...a: unknown[]) => unknown).bind(
                     tabB.persistence
                 )
-                const refreshSpy = jest
+                const refreshSpy = vi
                     .spyOn(tabB.persistence, refreshMethod)
                     .mockImplementation((...args: unknown[]) => {
                         tabA.manager.checkAndGetSessionAndWindowId(false, siblingActivityAt)
@@ -874,8 +874,8 @@ describe('cross-tab persistence interactions', () => {
             const tabA = new PostHogPersistence(config)
             tabA.register({ [ENABLED_FEATURE_FLAGS]: { flag: false } })
             const tabB = new PostHogPersistence(config)
-            const firstHandler = jest.fn()
-            const secondHandler = jest.fn()
+            const firstHandler = vi.fn()
+            const secondHandler = vi.fn()
             const unsubscribeFirst = tabB.onCrossTabFeatureFlagChange(firstHandler)
             tabB.onCrossTabFeatureFlagChange(secondHandler)
 
@@ -901,7 +901,7 @@ describe('cross-tab persistence interactions', () => {
             const config = makeConfig(0)
             const tab = new PostHogPersistence(config)
             tab.register({ [ENABLED_FEATURE_FLAGS]: { flag: true } })
-            const mergeSpy = jest.spyOn(tab as any, '_mergeCrossTabFeatureFlagProperties')
+            const mergeSpy = vi.spyOn(tab as any, '_mergeCrossTabFeatureFlagProperties')
 
             tab.register({ unrelated_property: 'updated' })
 
@@ -1093,7 +1093,7 @@ describe('cross-tab persistence interactions', () => {
             const { tabB } = setupAliveSibling()
 
             tabB.persistence.register({ custom_prop: 'tab-B-value' })
-            jest.advanceTimersByTime(HARDENED_DEBOUNCE_MS + 1)
+            vi.advanceTimersByTime(HARDENED_DEBOUNCE_MS + 1)
 
             expect(storageSessionId()[0]).toBe(T0 + 100)
             expect(readStorage().custom_prop).toBe('tab-B-value')

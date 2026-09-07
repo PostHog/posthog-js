@@ -10,6 +10,7 @@ import {
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_FACEBOOK_CLICK_ID,
     PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
     PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
     PRODUCT_TOURS,
@@ -28,7 +29,7 @@ import {
 import { PERSISTENCE_KEY_POLICY } from '../persistence-key-policy'
 import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
-import { window } from '@posthog/browser-common/utils/globals'
+import * as globals from '@posthog/browser-common/utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import {
     cookieStore,
@@ -41,8 +42,9 @@ import {
     sessionStore,
 } from '../storage'
 import { defaultPostHog } from './helpers/posthog-instance'
-import Mock = jest.Mock
+import Mock = vi.Mock
 
+const { window } = globals
 let referrer = '' // No referrer by default
 Object.defineProperty(document, 'referrer', { get: () => referrer })
 
@@ -77,6 +79,7 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     '$feature_flag_errors',
     '$feature_flag_evaluated_at',
     '$minimal_flag_called_events',
+    '$fbc_persistence',
     '$client_session_props',
     '$capture_rate_limit',
     '$initial_campaign_params',
@@ -116,6 +119,7 @@ describe('persistence', () => {
         library?.clear()
         document.cookie = ''
         referrer = ''
+        vi.restoreAllMocks()
     })
 
     const persistenceModes: string[] = ['cookie', 'localStorage', 'localStorage+cookie']
@@ -155,7 +159,7 @@ describe('persistence', () => {
         it(`should only call save if props changes`, () => {
             const lib = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
             lib.register({ distinct_id: 'hi', test_prop: 'test_val' })
-            const saveMock: Mock = jest.fn()
+            const saveMock: Mock = vi.fn()
             lib.save = saveMock
 
             lib.register({ distinct_id: 'hi', test_prop: 'test_val' })
@@ -197,7 +201,7 @@ describe('persistence', () => {
         it('should save once when unregistering multiple properties', () => {
             const lib = new PostHogPersistence(makePostHogConfig('test', persistenceMode))
             lib.register({ first: true, second: 'value', retained: 3 })
-            const saveMock: Mock = jest.fn()
+            const saveMock: Mock = vi.fn()
             lib.save = saveMock
 
             lib.unregister(['first', 'second', 'missing'])
@@ -344,7 +348,7 @@ describe('persistence', () => {
 
             it('skips storage writes when props are unchanged', () => {
                 library.register({ distinct_id: 'hi' })
-                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                const storageSetSpy = vi.spyOn(library['_storage'], '_set')
                 storageSetSpy.mockClear()
 
                 library.save()
@@ -356,7 +360,7 @@ describe('persistence', () => {
 
             it('writes when a value changes', () => {
                 library.register({ distinct_id: 'hi' })
-                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                const storageSetSpy = vi.spyOn(library['_storage'], '_set')
                 storageSetSpy.mockClear()
 
                 library.register({ distinct_id: 'bye' })
@@ -365,7 +369,7 @@ describe('persistence', () => {
 
             it('writes again after a remove() resets the cache', () => {
                 library.register({ distinct_id: 'hi' })
-                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                const storageSetSpy = vi.spyOn(library['_storage'], '_set')
 
                 // Without remove(), the save below would be deduped.
                 library.remove()
@@ -378,7 +382,7 @@ describe('persistence', () => {
             it('writes through after remove() even if props are unchanged', () => {
                 library.register({ distinct_id: 'hi' })
                 library.remove()
-                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                const storageSetSpy = vi.spyOn(library['_storage'], '_set')
                 storageSetSpy.mockClear()
 
                 // save() with unchanged props would normally be a no-op.
@@ -390,7 +394,7 @@ describe('persistence', () => {
 
             it('treats equivalent props (same JSON) as no-op even with new object identity', () => {
                 library.register({ distinct_id: 'hi', tags: ['a', 'b'] })
-                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                const storageSetSpy = vi.spyOn(library['_storage'], '_set')
                 storageSetSpy.mockClear()
 
                 // Force a save() with no real change. register() guards
@@ -422,7 +426,7 @@ describe('persistence', () => {
                 // saw props) would short-circuit, and the cookie keeps
                 // its old `Expires` header until some other prop changes.
                 library.register({ distinct_id: 'hi' })
-                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                const storageSetSpy = vi.spyOn(library['_storage'], '_set')
                 storageSetSpy.mockClear()
 
                 mutate(library)
@@ -457,7 +461,7 @@ describe('persistence', () => {
             // Pulls a single key from on-disk storage into in-memory props
             // without a whole-blob flush() (which would clobber a sibling's
             // write) or load() (which would discard pending in-memory writes).
-            let parseSpy: jest.SpyInstance
+            let parseSpy: vi.SpyInstance
 
             afterEach(() => {
                 parseSpy?.mockRestore()
@@ -468,7 +472,7 @@ describe('persistence', () => {
 
                 // Simulate a sibling having written a different value for one key.
                 const onDisk = { ...library.props, distinct_id: 'from-sibling' }
-                parseSpy = jest.spyOn(library['_storage'], '_parse').mockReturnValue(onDisk)
+                parseSpy = vi.spyOn(library['_storage'], '_parse').mockReturnValue(onDisk)
 
                 library.refreshKey('distinct_id')
 
@@ -478,8 +482,8 @@ describe('persistence', () => {
 
             it('does not write to storage', () => {
                 library.register({ distinct_id: 'mine' })
-                parseSpy = jest.spyOn(library['_storage'], '_parse').mockReturnValue({ distinct_id: 'from-sibling' })
-                const storageSetSpy = jest.spyOn(library['_storage'], '_set')
+                parseSpy = vi.spyOn(library['_storage'], '_parse').mockReturnValue({ distinct_id: 'from-sibling' })
+                const storageSetSpy = vi.spyOn(library['_storage'], '_set')
                 storageSetSpy.mockClear()
 
                 library.refreshKey('distinct_id')
@@ -490,7 +494,7 @@ describe('persistence', () => {
 
             it('deletes the in-memory key when storage no longer has it', () => {
                 library.register({ distinct_id: 'mine', keep: 'me' })
-                parseSpy = jest.spyOn(library['_storage'], '_parse').mockReturnValue({ keep: 'me' })
+                parseSpy = vi.spyOn(library['_storage'], '_parse').mockReturnValue({ keep: 'me' })
 
                 library.refreshKey('distinct_id')
 
@@ -503,18 +507,18 @@ describe('persistence', () => {
             // `persistence_save_debounce_ms` coalesces rapid save() calls
             // into a single write per window. The default is 0 (immediate).
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             afterEach(() => {
-                jest.runOnlyPendingTimers()
-                jest.useRealTimers()
+                vi.runOnlyPendingTimers()
+                vi.useRealTimers()
             })
 
             it('writes immediately when debounce is 0 (default)', () => {
                 const config = makePostHogConfig('test-debounce-off', persistenceMode)
                 const debounced = new PostHogPersistence(config)
-                const spy = jest.spyOn(debounced['_storage'], '_set')
+                const spy = vi.spyOn(debounced['_storage'], '_set')
                 spy.mockClear()
 
                 debounced.register({ distinct_id: 'a' })
@@ -530,7 +534,7 @@ describe('persistence', () => {
                     persistence_save_debounce_ms: 250,
                 }
                 const debounced = new PostHogPersistence(config)
-                const spy = jest.spyOn(debounced['_storage'], '_set')
+                const spy = vi.spyOn(debounced['_storage'], '_set')
                 spy.mockClear()
 
                 debounced.register({ a: '1' })
@@ -539,7 +543,7 @@ describe('persistence', () => {
 
                 expect(spy).not.toHaveBeenCalled()
 
-                jest.advanceTimersByTime(250)
+                vi.advanceTimersByTime(250)
 
                 expect(spy).toHaveBeenCalledTimes(1)
                 expect(debounced.props).toMatchObject({ a: '1', b: '2', c: '3' })
@@ -564,7 +568,7 @@ describe('persistence', () => {
                     persistence_save_debounce_ms: 250,
                 }
                 const debounced = new PostHogPersistence(config)
-                const spy = jest.spyOn(debounced['_storage'], '_set')
+                const spy = vi.spyOn(debounced['_storage'], '_set')
                 spy.mockClear()
 
                 debounced.register({ distinct_id: 'before-flush' })
@@ -573,7 +577,7 @@ describe('persistence', () => {
                 debounced.flush()
                 expect(spy).toHaveBeenCalledTimes(1)
 
-                jest.advanceTimersByTime(1000)
+                vi.advanceTimersByTime(1000)
                 expect(spy).toHaveBeenCalledTimes(1)
                 debounced.clear()
             })
@@ -584,15 +588,15 @@ describe('persistence', () => {
                     persistence_save_debounce_ms: 250,
                 }
                 const debounced = new PostHogPersistence(config)
-                const setSpy = jest.spyOn(debounced['_storage'], '_set')
-                const removeSpy = jest.spyOn(debounced['_storage'], '_remove')
+                const setSpy = vi.spyOn(debounced['_storage'], '_set')
+                const removeSpy = vi.spyOn(debounced['_storage'], '_remove')
 
                 debounced.register({ distinct_id: 'doomed' })
                 setSpy.mockClear()
                 removeSpy.mockClear()
 
                 debounced.remove()
-                jest.advanceTimersByTime(1000)
+                vi.advanceTimersByTime(1000)
 
                 expect(setSpy).not.toHaveBeenCalled()
                 expect(removeSpy).toHaveBeenCalled()
@@ -617,7 +621,7 @@ describe('persistence', () => {
                 // Simulate reset
                 debounced.clear()
 
-                const setSpy = jest.spyOn(debounced['_storage'], '_set')
+                const setSpy = vi.spyOn(debounced['_storage'], '_set')
                 setSpy.mockClear()
 
                 // Simulate the unload listener firing after reset
@@ -636,7 +640,7 @@ describe('persistence', () => {
                 // pending write isn't lost on page close.
                 const config: any = makePostHogConfig('test-late-debounce', persistenceMode)
                 const debounced = new PostHogPersistence(config)
-                const spy = jest.spyOn(debounced['_storage'], '_set')
+                const spy = vi.spyOn(debounced['_storage'], '_set')
 
                 // Enable debounce after construction.
                 config.persistence_save_debounce_ms = 250
@@ -655,6 +659,21 @@ describe('persistence', () => {
             })
         })
     })
+
+    it.each(['localStorage', 'sessionStorage', 'memory'])(
+        'should preserve initial person URL length with %s persistence',
+        (persistenceMode) => {
+            const longUrl = `https://www.example.com/?${'&'.repeat(2000)}`
+            vi.spyOn(globals, 'location', 'get').mockReturnValue({ href: longUrl } as Location)
+            referrer = longUrl
+            library = new PostHogPersistence(makePostHogConfig('test', persistenceMode))
+
+            library.set_initial_person_info()
+
+            expect(library.props[INITIAL_PERSON_INFO].r).toHaveLength(1000)
+            expect(library.props[INITIAL_PERSON_INFO].u).toHaveLength(1000)
+        }
+    )
 
     describe('localStorage+cookie', () => {
         const encode = (props: any) => encodeURIComponent(JSON.stringify(props))
@@ -739,6 +758,62 @@ describe('persistence', () => {
                 $initial_person_info: { u: 'https://www.example.com', r: 'https://www.referrer.com' },
                 $user_state: 'identified',
             })
+        })
+
+        it('should limit initial person URLs by their encoded cookie size', () => {
+            const longUrl = `https://www.example.com/?${'&'.repeat(2000)}`
+            vi.spyOn(globals, 'location', 'get').mockReturnValue({ href: longUrl } as Location)
+            referrer = longUrl
+            library = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
+            library.register({
+                distinct_id: '0195ad79-114c-7cba-b50c-f5669fc3c9c9',
+                $device_id: '0195ad79-114c-7cba-b50c-f5669fc3c9c9',
+                $sesid: [1742372694303, '0195ad79-1843-77fd-a2c8-274d23d9c647', 1742372149315],
+            })
+
+            library.set_initial_person_info()
+
+            const personInfo = library.props[INITIAL_PERSON_INFO]
+            expect(encodeURIComponent(JSON.stringify(personInfo.r).slice(1, -1)).length).toBeLessThanOrEqual(1000)
+            expect(encodeURIComponent(JSON.stringify(personInfo.u).slice(1, -1)).length).toBeLessThanOrEqual(1000)
+            const persistedCookieValue = cookieStore._get('ph__posthog')
+            expect(persistedCookieValue).toBeTruthy()
+            const encodedCookieValue = encodeURIComponent(persistedCookieValue || '')
+            expect(`ph__posthog=${encodedCookieValue}; SameSite=Lax; path=/`.length).toBeLessThan(4096 * 0.9)
+        })
+
+        it('should normalize initial person URLs loaded from localStorage', () => {
+            const longUrl = `https://www.example.com/?${'&'.repeat(2000)}`
+            const previousLibrary = new PostHogPersistence(makePostHogConfig('test', 'localStorage'))
+            previousLibrary.register({ [INITIAL_PERSON_INFO]: { r: longUrl, u: longUrl } })
+
+            library = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
+
+            expect(
+                encodeURIComponent(JSON.stringify(library.props[INITIAL_PERSON_INFO].r).slice(1, -1)).length
+            ).toBeLessThanOrEqual(1000)
+            expect(
+                encodeURIComponent(JSON.stringify(library.props[INITIAL_PERSON_INFO].u).slice(1, -1)).length
+            ).toBeLessThanOrEqual(1000)
+            expect(document.cookie.length).toBeLessThan(4096 * 0.9)
+        })
+
+        it('should normalize initial person URLs when switching to cookie persistence', () => {
+            const longUrl = `https://www.example.com/?${'&'.repeat(2000)}`
+            const oldConfig = makePostHogConfig('test', 'localStorage')
+            const newConfig = makePostHogConfig('test', 'localStorage+cookie')
+            library = new PostHogPersistence(oldConfig)
+            library.register({ [INITIAL_PERSON_INFO]: { r: longUrl, u: longUrl } })
+
+            library.update_config(newConfig, oldConfig)
+
+            expect(
+                encodeURIComponent(JSON.stringify(library.props[INITIAL_PERSON_INFO].r).slice(1, -1)).length
+            ).toBeLessThanOrEqual(1000)
+            expect(
+                encodeURIComponent(JSON.stringify(library.props[INITIAL_PERSON_INFO].u).slice(1, -1)).length
+            ).toBeLessThanOrEqual(1000)
+            expect(document.cookie.length).toBeLessThan(4096 * 0.9)
         })
 
         it('should persist custom properties to cookies when using localStorage+cookie', () => {
@@ -858,6 +933,30 @@ describe('persistence', () => {
                     u: 'https://app.example.com/dash',
                     r: 'https://www.example.com/',
                 })
+            })
+
+            it('carries pending $fbc state to another subdomain through the shared cookie', () => {
+                const config = makeConfig('localStorage+cookie', true)
+                const firstSubdomain = new PostHogPersistence(config)
+                const fbcState = { value: 'fb.1.1700000000000.cross-subdomain', delivered: false }
+                firstSubdomain.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: fbcState })
+
+                localStorage.clear()
+                const secondSubdomain = new PostHogPersistence(config)
+
+                expect(secondSubdomain.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(fbcState)
+            })
+
+            it('preserves sibling $fbc state before a stale localStorage tab writes', () => {
+                const config = makeConfig('localStorage', false)
+                const landingTab = new PostHogPersistence(config)
+                const staleTab = new PostHogPersistence(config)
+                const fbcState = { value: 'fb.1.1700000000000.cross-tab', delivered: false }
+
+                landingTab.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: fbcState })
+                staleTab.register({ unrelated: 'write' })
+
+                expect(new PostHogPersistence(config).props[PERSISTENCE_FACEBOOK_CLICK_ID]).toEqual(fbcState)
             })
 
             it('flag on: self-heals stale localStorage by writing the merged value back', () => {
@@ -1095,7 +1194,7 @@ describe('persistence', () => {
                     JSON.stringify({ distinct_id: 'anonymous', $user_state: 'anonymous' })
                 )
                 const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
-                const setSpy = jest.spyOn(cookieStore, '_set').mockImplementation(() => false)
+                const setSpy = vi.spyOn(cookieStore, '_set').mockImplementation(() => false)
 
                 lib.register({ distinct_id: 'identified-user', $user_state: 'identified' })
                 setSpy.mockRestore()
@@ -1149,7 +1248,7 @@ describe('persistence', () => {
                 )
                 const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
                 const writeEntry = (lib as any)._writeEntry.bind(lib)
-                const writeSpy = jest.spyOn(lib as any, '_writeEntry').mockImplementation((...args: any[]) => {
+                const writeSpy = vi.spyOn(lib as any, '_writeEntry').mockImplementation((...args: any[]) => {
                     const stored = writeEntry(...args)
                     // Models a sibling write after our storage write but before
                     // `_rememberCurrentCookieProperties` runs.
@@ -1186,6 +1285,29 @@ describe('persistence', () => {
                 expect(lib.props.$user_state).toBe('anonymous')
                 expect(lib.props.$user_id).toBeUndefined()
                 expect(lib.props.__alias).toBeUndefined()
+            })
+
+            it('flag on: a live tab drops prior-user $fbc when it adopts a sibling reset', () => {
+                const fbcState = { value: 'fb.1.1700000000000.prior-user', delivered: true }
+                document.cookie = encodeCookie({
+                    distinct_id: 'identified-user',
+                    $user_state: 'identified',
+                    [PERSISTENCE_FACEBOOK_CLICK_ID]: fbcState,
+                })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({
+                        distinct_id: 'identified-user',
+                        $user_state: 'identified',
+                        [PERSISTENCE_FACEBOOK_CLICK_ID]: fbcState,
+                    })
+                )
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                document.cookie = encodeCookie({ distinct_id: 'new-anonymous', $user_state: 'anonymous' })
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props[PERSISTENCE_FACEBOOK_CLICK_ID]).toBeUndefined()
             })
 
             it('flag on: a same-ID sibling reset clears stale user identity', () => {
@@ -1282,7 +1404,7 @@ describe('persistence', () => {
             })
 
             it('flag on: canceling suppression drops pending partial writes', () => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
                 const config = {
                     ...makeConfig('localStorage+cookie', true),
                     persistence_save_debounce_ms: 250,
@@ -1293,10 +1415,10 @@ describe('persistence', () => {
                 lib._beginCookieSyncSuppression()
                 lib.register({ distinct_id: 'partial-identity', $user_state: 'identified' })
                 lib._endCookieSyncSuppression(false)
-                jest.advanceTimersByTime(250)
+                vi.advanceTimersByTime(250)
 
                 expect(document.cookie).toBe(cookieBefore)
-                jest.useRealTimers()
+                vi.useRealTimers()
             })
 
             it('flag on: suppression publishes only the complete identity snapshot without debounce', () => {
@@ -1741,7 +1863,7 @@ describe('flag and survey storage split', () => {
         })
 
         it('never writes to the group entries', () => {
-            const setSpy = jest.spyOn(localStore, '_set')
+            const setSpy = vi.spyOn(localStore, '_set')
             const lib = new PostHogPersistence(gateOffConfig())
             lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
 
@@ -1784,7 +1906,7 @@ describe('flag and survey storage split', () => {
             const lib = new PostHogPersistence(makeConfig())
             lib.register({ distinct_id: 'd' })
 
-            const setSpy = jest.spyOn(localStore, '_set')
+            const setSpy = vi.spyOn(localStore, '_set')
             setSpy.mockClear()
 
             lib.register(FLAG_CLUSTER)
@@ -1825,7 +1947,7 @@ describe('flag and survey storage split', () => {
             const lib = new PostHogPersistence(makeConfig())
             lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, [SURVEYS_LOADED_AT]: 1717200000000, distinct_id: 'd' })
 
-            const setSpy = jest.spyOn(localStore, '_set')
+            const setSpy = vi.spyOn(localStore, '_set')
             setSpy.mockClear()
             lib.register(register)
 
@@ -1861,7 +1983,7 @@ describe('flag and survey storage split', () => {
             localStorage.setItem(FLAGS, JSON.stringify(FLAG_CLUSTER))
 
             const lib = new PostHogPersistence(makeConfig())
-            const setSpy = jest.spyOn(localStore, '_set')
+            const setSpy = vi.spyOn(localStore, '_set')
             setSpy.mockClear()
 
             lib.register({
@@ -1879,7 +2001,7 @@ describe('flag and survey storage split', () => {
             const lib = new PostHogPersistence(makeConfig())
             lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
 
-            const setSpy = jest.spyOn(localStore, '_set')
+            const setSpy = vi.spyOn(localStore, '_set')
             setSpy.mockClear()
 
             lib.register({ distinct_id: 'd2' })
@@ -1895,7 +2017,7 @@ describe('flag and survey storage split', () => {
             const lib = new PostHogPersistence(makeConfig())
             lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
 
-            const setSpy = jest.spyOn(localStore, '_set')
+            const setSpy = vi.spyOn(localStore, '_set')
             setSpy.mockClear()
 
             lib.register({ [ENABLED_FEATURE_FLAGS]: { beta: false, exp: 'test' } })
@@ -1928,7 +2050,7 @@ describe('flag and survey storage split', () => {
             localStorage.setItem(MAIN, JSON.stringify({ distinct_id: 'd' }))
             localStorage.setItem(FLAGS, JSON.stringify(FLAG_CLUSTER))
 
-            const setSpy = jest.spyOn(localStore, '_set')
+            const setSpy = vi.spyOn(localStore, '_set')
             const lib = new PostHogPersistence(makeConfig(extra))
 
             // construction must not have rewritten the entry it just loaded
@@ -1950,7 +2072,7 @@ describe('flag and survey storage split', () => {
             localStorage.setItem(MAIN, JSON.stringify({ distinct_id: 'd' }))
             localStorage.setItem(SURVEYS_ENTRY, JSON.stringify(SURVEY_DATA))
 
-            const setSpy = jest.spyOn(localStore, '_set')
+            const setSpy = vi.spyOn(localStore, '_set')
             const lib = new PostHogPersistence(makeConfig())
 
             expect(setSpy.mock.calls.filter(([name]) => name === SURVEYS_ENTRY)).toEqual([])
@@ -1973,7 +2095,7 @@ describe('flag and survey storage split', () => {
             localStorage.setItem(FLAGS, JSON.stringify(FLAG_CLUSTER))
 
             const lib = new PostHogPersistence(makeConfig())
-            const setSpy = jest.spyOn(localStore, '_set')
+            const setSpy = vi.spyOn(localStore, '_set')
             setSpy.mockClear()
 
             lib.register({ [ENABLED_FEATURE_FLAGS]: { beta: false, exp: 'control' } })
@@ -2287,7 +2409,7 @@ describe('flag and survey storage split', () => {
 
     describe('empty group entries are not eagerly created', () => {
         it('a gate-on instance with no flag/survey data writes only the main blob', () => {
-            const setSpy = jest.spyOn(localStore, '_set')
+            const setSpy = vi.spyOn(localStore, '_set')
             const lib = new PostHogPersistence(makeConfig())
             lib.register({ distinct_id: 'd' })
 
@@ -2310,18 +2432,18 @@ describe('flag and survey storage split', () => {
         })
 
         it('clears a pre-existing group entry emptied within the debounce window', () => {
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             try {
                 localStorage.setItem(FLAGS, JSON.stringify(FLAG_CLUSTER))
 
                 const lib = new PostHogPersistence(makeConfig({ persistence_save_debounce_ms: 250 }))
                 Object.keys(FLAG_CLUSTER).forEach((k) => lib.unregister(k))
-                jest.advanceTimersByTime(250)
+                vi.advanceTimersByTime(250)
 
                 expect(parse(FLAGS)).toEqual({})
             } finally {
-                jest.runOnlyPendingTimers()
-                jest.useRealTimers()
+                vi.runOnlyPendingTimers()
+                vi.useRealTimers()
             }
         })
     })
@@ -2374,7 +2496,7 @@ describe('flag and survey storage split', () => {
             const lib = new PostHogPersistence(makeConfig())
             const realSet = localStore._set.bind(localStore)
             let failFlags = true
-            jest.spyOn(localStore, '_set').mockImplementation((name, value, expire, cross, secure, debug) => {
+            vi.spyOn(localStore, '_set').mockImplementation((name, value, expire, cross, secure, debug) => {
                 if (name === FLAGS && failFlags) {
                     return false // simulate a swallowed quota failure scoped to the flags entry
                 }
@@ -2395,7 +2517,7 @@ describe('flag and survey storage split', () => {
             expect(parse(FLAGS)[ENABLED_FEATURE_FLAGS]).toEqual(FLAG_CLUSTER[ENABLED_FEATURE_FLAGS])
             // only after the confirmed write is it recorded as persisted
             expect(!!(lib as any)._slotState['flags']?.persisted).toBe(true)
-            jest.restoreAllMocks()
+            vi.restoreAllMocks()
         })
     })
 
@@ -2404,14 +2526,14 @@ describe('flag and survey storage split', () => {
             const lib = new PostHogPersistence(makeConfig())
             lib.register({ ...FLAG_CLUSTER, ...SURVEY_DATA, distinct_id: 'd' })
 
-            const stringifySpy = jest.spyOn(JSON, 'stringify')
+            const stringifySpy = vi.spyOn(JSON, 'stringify')
             lib.register({ distinct_id: 'd2' })
 
             const serializedAGroupPayload = stringifySpy.mock.calls.some(
                 ([arg]) => arg && typeof arg === 'object' && (ENABLED_FEATURE_FLAGS in arg || SURVEYS in arg)
             )
             expect(serializedAGroupPayload).toBe(false)
-            jest.restoreAllMocks()
+            vi.restoreAllMocks()
         })
     })
 
@@ -2549,7 +2671,7 @@ describe('posthog instance persistence', () => {
         resetLocalStorageSupported()
     })
     it('should not write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is true', () => {
-        const sessionSpy = jest.spyOn(sessionStore, '_set')
+        const sessionSpy = vi.spyOn(sessionStore, '_set')
 
         // init posthog while opting out
         const posthog = defaultPostHog().init(
@@ -2565,7 +2687,7 @@ describe('posthog instance persistence', () => {
         // Spy on the created store instance's _set method
         // Note: We spy after initialization, so we're checking that no further calls are made
         const createdStore = (posthog.persistence as any)._storage
-        const localPlusCookieSpy = jest.spyOn(createdStore, '_set')
+        const localPlusCookieSpy = vi.spyOn(createdStore, '_set')
 
         // we do one call to check if session storage is supported, but don't actually store anything
         // the important thing is that we don't store the session id or window id, etc. This test was added alongside
@@ -2580,7 +2702,7 @@ describe('posthog instance persistence', () => {
     })
 
     it('should write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is false', () => {
-        const sessionSpy = jest.spyOn(sessionStore, '_set')
+        const sessionSpy = vi.spyOn(sessionStore, '_set')
 
         // init posthog while opting out
         const posthog = defaultPostHog().init(
@@ -2595,7 +2717,7 @@ describe('posthog instance persistence', () => {
 
         // Spy on the created store instance's _set method
         const createdStore = (posthog.persistence as any)._storage
-        const localPlusCookieSpy = jest.spyOn(createdStore, '_set')
+        const localPlusCookieSpy = vi.spyOn(createdStore, '_set')
 
         // Trigger a save to verify storage is called. We force a real
         // state change because save() now no-ops identical writes.
@@ -2613,16 +2735,16 @@ describe('posthog instance persistence', () => {
 
 describe('persistence fallback when no browser storage is available', () => {
     afterEach(() => {
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
     })
 
     // A page served from a `data:` URL -- a Figma plugin, for example -- has both
     // localStorage and cookies disabled by Chrome. The selection chain used to end in
     // an unconditional `store = cookieStore`, so every read and write silently failed.
     it('degrades to memory rather than an unusable cookie store', () => {
-        jest.spyOn(localStore, '_is_supported').mockReturnValue(false)
-        jest.spyOn(cookieStore, '_is_supported').mockReturnValue(false)
-        const memorySet = jest.spyOn(memoryStore, '_set')
+        vi.spyOn(localStore, '_is_supported').mockReturnValue(false)
+        vi.spyOn(cookieStore, '_is_supported').mockReturnValue(false)
+        const memorySet = vi.spyOn(memoryStore, '_set')
 
         const lib = new PostHogPersistence(makePostHogConfig('no-storage', 'localStorage+cookie'))
         lib.register({ distinct_id: 'in-memory-id' })
@@ -2632,9 +2754,9 @@ describe('persistence fallback when no browser storage is available', () => {
     })
 
     it('still prefers cookies when only web storage is unavailable', () => {
-        jest.spyOn(localStore, '_is_supported').mockReturnValue(false)
-        jest.spyOn(cookieStore, '_is_supported').mockReturnValue(true)
-        const memorySet = jest.spyOn(memoryStore, '_set')
+        vi.spyOn(localStore, '_is_supported').mockReturnValue(false)
+        vi.spyOn(cookieStore, '_is_supported').mockReturnValue(true)
+        const memorySet = vi.spyOn(memoryStore, '_set')
 
         const lib = new PostHogPersistence(makePostHogConfig('cookies-only', 'localStorage+cookie'))
         lib.register({ distinct_id: 'cookie-id' })
@@ -2643,9 +2765,9 @@ describe('persistence fallback when no browser storage is available', () => {
     })
 
     it('does not pick a cookie store for an explicit cookie config when cookies are unusable', () => {
-        jest.spyOn(localStore, '_is_supported').mockReturnValue(false)
-        jest.spyOn(cookieStore, '_is_supported').mockReturnValue(false)
-        const memorySet = jest.spyOn(memoryStore, '_set')
+        vi.spyOn(localStore, '_is_supported').mockReturnValue(false)
+        vi.spyOn(cookieStore, '_is_supported').mockReturnValue(false)
+        const memorySet = vi.spyOn(memoryStore, '_set')
 
         const lib = new PostHogPersistence(makePostHogConfig('explicit-cookie', 'cookie'))
         lib.register({ distinct_id: 'explicit-id' })

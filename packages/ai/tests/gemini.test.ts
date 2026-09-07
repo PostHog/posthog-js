@@ -5,26 +5,26 @@ import { version } from '../package.json'
 let mockGeminiResponse: any = {}
 let mockGeminiStreamResponse: any = {}
 
-jest.mock('posthog-node', () => {
+vi.mock('posthog-node', () => {
   return {
-    PostHog: jest.fn().mockImplementation(() => {
+    PostHog: vi.fn().mockImplementation(() => {
       return {
-        capture: jest.fn(),
-        captureImmediate: jest.fn(),
+        capture: vi.fn(),
+        captureImmediate: vi.fn(),
         privacyMode: false,
       }
     }),
   }
 })
 
-jest.mock('@google/genai', () => {
+vi.mock('@google/genai', () => {
   class MockGoogleGenAI {
     models: any
     constructor() {
       this.models = {
-        generateContent: jest.fn(),
-        generateContentStream: jest.fn(),
-        embedContent: jest.fn(),
+        generateContent: vi.fn(),
+        generateContentStream: vi.fn(),
+        embedContent: vi.fn(),
       }
     }
   }
@@ -36,7 +36,7 @@ jest.mock('@google/genai', () => {
 
 // Helper function to mock generateContentStream with provided chunks
 const mockGenerateContentStream = (chunks: any[]) => {
-  return jest.fn().mockImplementation(() => {
+  return vi.fn().mockImplementation(() => {
     return (async function* () {
       for (const chunk of chunks) {
         yield chunk
@@ -50,7 +50,7 @@ describe('PostHogGemini - Jest test suite', () => {
   let client: PostHogGemini
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
 
     // Reset the default mocks
     mockPostHogClient = new (PostHog as any)()
@@ -128,7 +128,7 @@ describe('PostHogGemini - Jest test suite', () => {
     ]
 
     // Mock the generateContent method
-    ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+    ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue(mockGeminiResponse)
 
     // Mock the generateContentStream method
     ;(client as any).client.models.generateContentStream = mockGenerateContentStream(mockGeminiStreamResponse)
@@ -146,7 +146,7 @@ describe('PostHogGemini - Jest test suite', () => {
     // We expect 1 capture call
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
     // Check the capture arguments
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, event, properties } = captureArgs[0]
 
     expect(distinctId).toBe('test-id')
@@ -186,7 +186,7 @@ describe('PostHogGemini - Jest test suite', () => {
       ],
       usageMetadata: {},
     }
-    ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+    ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue(mockGeminiResponse)
     const request = {
       model: 'gemini-2.0-flash-001',
       contents: [
@@ -201,7 +201,7 @@ describe('PostHogGemini - Jest test suite', () => {
 
     expect(response).toBe(mockGeminiResponse)
     expect((client as any).client.models.generateContent).toHaveBeenCalledWith(request)
-    const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
     expect(JSON.stringify(properties['$ai_input'])).not.toContain(binary)
     expect(JSON.stringify(properties['$ai_output_choices'])).not.toContain(binary)
     expect(JSON.stringify(properties)).toContain('[base64 audio/wav redacted]')
@@ -227,7 +227,7 @@ describe('PostHogGemini - Jest test suite', () => {
     // We expect 1 capture call after streaming completes
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
 
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, event, properties } = captureArgs[0]
 
     expect(distinctId).toBe('test-id')
@@ -270,7 +270,7 @@ describe('PostHogGemini - Jest test suite', () => {
     // Breaking out of the loop returns the generator, which must still capture
     // what the stream reported before the consumer walked away.
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
     expect(properties['$ai_input_tokens']).toBe(15)
     expect(properties['$ai_output_tokens']).toBe(2)
     expect(properties['$ai_is_error']).toBeUndefined()
@@ -285,7 +285,7 @@ describe('PostHogGemini - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { groups } = captureArgs[0]
 
     expect(groups).toEqual({ team: 'ai-team' })
@@ -300,7 +300,7 @@ describe('PostHogGemini - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
 
     expect(properties['$ai_input']).toBeNull()
@@ -308,7 +308,7 @@ describe('PostHogGemini - Jest test suite', () => {
   })
 
   test('preserves the provider result when captureImmediate rejects', async () => {
-    ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+    ;(mockPostHogClient.captureImmediate as vi.Mock).mockRejectedValue(new Error('telemetry failed'))
 
     const response = await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
@@ -322,8 +322,8 @@ describe('PostHogGemini - Jest test suite', () => {
 
   test('preserves the provider error when captureImmediate rejects', async () => {
     const providerError = new Error('provider failed')
-    ;(client as any).client.models.generateContent = jest.fn().mockRejectedValue(providerError)
-    ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+    ;(client as any).client.models.generateContent = vi.fn().mockRejectedValue(providerError)
+    ;(mockPostHogClient.captureImmediate as vi.Mock).mockRejectedValue(new Error('telemetry failed'))
 
     const rejection = await client.models
       .generateContent({
@@ -339,7 +339,7 @@ describe('PostHogGemini - Jest test suite', () => {
 
   test('preserves output inline data when the client enables multimodal capture', async () => {
     const base64Data = 'A'.repeat(2000)
-    ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue({
+    ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue({
       candidates: [
         {
           content: {
@@ -359,7 +359,7 @@ describe('PostHogGemini - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
 
     const imageBlock = properties['$ai_output_choices'][0].content[0]
@@ -368,7 +368,7 @@ describe('PostHogGemini - Jest test suite', () => {
 
   test('redacts output inline data when the client does not enable multimodal capture', async () => {
     const base64Data = 'A'.repeat(2000)
-    ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue({
+    ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue({
       candidates: [
         {
           content: {
@@ -387,7 +387,7 @@ describe('PostHogGemini - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
 
     const imageBlock = properties['$ai_output_choices'][0].content[0]
@@ -398,7 +398,7 @@ describe('PostHogGemini - Jest test suite', () => {
   test('error handling', async () => {
     const error = new Error('API Error')
     ;(error as any).status = 400
-    ;(client as any).client.models.generateContent = jest.fn().mockRejectedValue(error)
+    ;(client as any).client.models.generateContent = vi.fn().mockRejectedValue(error)
 
     await expect(
       client.models.generateContent({
@@ -409,7 +409,7 @@ describe('PostHogGemini - Jest test suite', () => {
     ).rejects.toThrow('API Error')
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
 
     expect(properties['$ai_is_error']).toBe(true)
@@ -426,7 +426,7 @@ describe('PostHogGemini - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
 
     expect(properties['$ai_input']).toEqual([
@@ -443,7 +443,7 @@ describe('PostHogGemini - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
 
     expect(properties['$ai_input']).toEqual([{ role: 'user', content: 'Hello world' }])
@@ -485,7 +485,7 @@ describe('PostHogGemini - Jest test suite', () => {
     }
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
 
     // Time to first token should be present and be a number
@@ -586,7 +586,7 @@ describe('PostHogGemini - Jest test suite', () => {
 
     // Check PostHog capture
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
 
     expect(properties['$ai_output_choices']).toEqual([
@@ -649,7 +649,7 @@ describe('PostHogGemini - Jest test suite', () => {
 
     // Check PostHog capture for proper text accumulation
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { properties } = captureArgs[0]
 
     // Should have a single text item with all accumulated text
@@ -670,7 +670,7 @@ describe('PostHogGemini - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, properties } = captureArgs[0]
 
     expect(distinctId).toBe('trace-123')
@@ -686,7 +686,7 @@ describe('PostHogGemini - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, properties } = captureArgs[0]
 
     expect(distinctId).toBe('user-456')
@@ -702,7 +702,7 @@ describe('PostHogGemini - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, properties } = captureArgs[0]
 
     expect(distinctId).toBe('test-system-instruction')
@@ -721,7 +721,7 @@ describe('PostHogGemini - Jest test suite', () => {
     })
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, properties } = captureArgs[0]
 
     expect(distinctId).toBe('test-systemInstruction')
@@ -744,7 +744,7 @@ describe('PostHogGemini - Jest test suite', () => {
     }
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
     const { distinctId, properties } = captureArgs[0]
 
     expect(distinctId).toBe('test-stream-system')
@@ -765,7 +765,7 @@ describe('PostHogGemini - Jest test suite', () => {
           cachedContentTokenCount: 25000,
         },
       }
-      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+      ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue(mockGeminiResponse)
 
       await client.models.generateContent({
         model: 'gemini-2.0-flash-001',
@@ -773,7 +773,7 @@ describe('PostHogGemini - Jest test suite', () => {
         posthogDistinctId: 'test-id',
       })
 
-      const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+      const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
       expect(properties['$ai_cache_read_input_tokens']).toBe(25000)
       expect(properties['$ai_cache_reporting_exclusive']).toBe(false)
     })
@@ -788,7 +788,7 @@ describe('PostHogGemini - Jest test suite', () => {
           cachedContentTokenCount: 25000,
         },
       }
-      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+      ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue(mockGeminiResponse)
 
       await client.models.generateContent({
         model: 'gemini-2.0-flash-001',
@@ -797,7 +797,7 @@ describe('PostHogGemini - Jest test suite', () => {
         posthogProperties: { $ai_input_tokens: 400, $ai_cache_read_input_tokens: 25000 },
       })
 
-      const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+      const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
       expect(properties['$ai_tokens_source']).toBe('passthrough')
       expect(properties['$ai_input_tokens']).toBe(400)
       expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
@@ -813,7 +813,7 @@ describe('PostHogGemini - Jest test suite', () => {
           cachedContentTokenCount: 25000,
         },
       }
-      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+      ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue(mockGeminiResponse)
 
       await client.models.generateContent({
         model: 'gemini-2.0-flash-001',
@@ -826,12 +826,12 @@ describe('PostHogGemini - Jest test suite', () => {
         },
       })
 
-      const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+      const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
       expect(properties['$ai_cache_reporting_exclusive']).toBe(true)
     })
 
     test('omits the cache reporting flag when no tokens were cached', async () => {
-      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+      ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue(mockGeminiResponse)
 
       await client.models.generateContent({
         model: 'gemini-2.0-flash-001',
@@ -839,7 +839,7 @@ describe('PostHogGemini - Jest test suite', () => {
         posthogDistinctId: 'test-id',
       })
 
-      const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+      const { properties } = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0]
       expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
     })
   })
@@ -878,7 +878,7 @@ describe('PostHogGemini - Jest test suite', () => {
       } as any
 
       // Update the mock to use the new response
-      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+      ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue(mockGeminiResponse)
 
       await client.models.generateContent({
         model: 'gemini-2.0-flash-001',
@@ -886,7 +886,7 @@ describe('PostHogGemini - Jest test suite', () => {
         posthogDistinctId: 'test-user',
       })
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       // Gemini uses binary detection (1 or 0)
@@ -937,7 +937,7 @@ describe('PostHogGemini - Jest test suite', () => {
         // Just consume
       }
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       expect(properties['$ai_web_search_count']).toBe(1)
@@ -971,7 +971,7 @@ describe('PostHogGemini - Jest test suite', () => {
         posthogDistinctId: 'test-user',
       })
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       // Should not include web search count when grounding not present
@@ -1009,7 +1009,7 @@ describe('PostHogGemini - Jest test suite', () => {
         posthogDistinctId: 'test-user',
       })
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       // Empty arrays should not trigger web search count
@@ -1043,7 +1043,7 @@ describe('PostHogGemini - Jest test suite', () => {
         posthogDistinctId: 'test-user',
       })
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       // Empty groundingMetadata object should not trigger web search count
@@ -1079,7 +1079,7 @@ describe('PostHogGemini - Jest test suite', () => {
       } as any
 
       // Update the mock to use the new response
-      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+      ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue(mockGeminiResponse)
 
       await client.models.generateContent({
         model: 'gemini-2.0-flash-001',
@@ -1087,7 +1087,7 @@ describe('PostHogGemini - Jest test suite', () => {
         posthogDistinctId: 'test-user',
       })
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { properties } = captureArgs[0]
 
       // Function call with google_search should trigger web search count
@@ -1122,7 +1122,7 @@ describe('PostHogGemini - Jest test suite', () => {
           totalTokenCount: 10,
         },
       } as any
-      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+      ;(client as any).client.models.generateContent = vi.fn().mockResolvedValue(mockGeminiResponse)
 
       await client.models.generateContent({
         model: 'gemini-2.5-flash-preview-tts',
@@ -1141,14 +1141,14 @@ describe('PostHogGemini - Jest test suite', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalled()
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { distinctId, properties } = captureArgs[0]
 
       expect(distinctId).toBe('test-tts-user')
       expect(properties['$ai_model']).toBe('gemini-2.5-flash-preview-tts')
       expect(properties['$ai_input']).toEqual([{ role: 'user', content: [{ type: 'text', text: 'Say hello' }] }])
 
-      const generateContentCall = ((client as any).client.models.generateContent as jest.Mock).mock.calls[0][0]
+      const generateContentCall = ((client as any).client.models.generateContent as vi.Mock).mock.calls[0][0]
       expect(generateContentCall.config.responseModalities).toEqual(['AUDIO'])
       expect(generateContentCall.config.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe('Kore')
     })
@@ -1167,7 +1167,7 @@ describe('PostHogGemini - Jest test suite', () => {
     }
 
     test('basic embedding', async () => {
-      ;(client as any).client.models.embedContent = jest.fn().mockResolvedValue(mockEmbedResponse)
+      ;(client as any).client.models.embedContent = vi.fn().mockResolvedValue(mockEmbedResponse)
 
       const response = await client.models.embedContent({
         model: 'gemini-embedding-001',
@@ -1179,7 +1179,7 @@ describe('PostHogGemini - Jest test suite', () => {
       expect(response).toEqual(mockEmbedResponse)
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const { distinctId, event, properties } = captureArgs[0]
 
       expect(distinctId).toBe('test-id')
@@ -1194,13 +1194,13 @@ describe('PostHogGemini - Jest test suite', () => {
       expect(properties['$ai_base_url']).toBe('https://generativelanguage.googleapis.com')
       expect(properties['foo']).toBe('bar')
 
-      const embedCall = ((client as any).client.models.embedContent as jest.Mock).mock.calls[0][0]
+      const embedCall = ((client as any).client.models.embedContent as vi.Mock).mock.calls[0][0]
       expect(embedCall.model).toBe('gemini-embedding-001')
       expect(embedCall.contents).toBe('Hello world')
     })
 
     test('extracts token counts from Vertex AI statistics', async () => {
-      ;(client as any).client.models.embedContent = jest.fn().mockResolvedValue(mockEmbedResponseWithStats)
+      ;(client as any).client.models.embedContent = vi.fn().mockResolvedValue(mockEmbedResponseWithStats)
 
       await client.models.embedContent({
         model: 'gemini-embedding-001',
@@ -1208,12 +1208,12 @@ describe('PostHogGemini - Jest test suite', () => {
         posthogDistinctId: 'test-id',
       })
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       expect(captureArgs[0].properties['$ai_input_tokens']).toBe(13) // 5 + 8
     })
 
     test('returns 0 tokens when no statistics available', async () => {
-      ;(client as any).client.models.embedContent = jest.fn().mockResolvedValue(mockEmbedResponse)
+      ;(client as any).client.models.embedContent = vi.fn().mockResolvedValue(mockEmbedResponse)
 
       await client.models.embedContent({
         model: 'gemini-embedding-001',
@@ -1221,12 +1221,12 @@ describe('PostHogGemini - Jest test suite', () => {
         posthogDistinctId: 'test-id',
       })
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       expect(captureArgs[0].properties['$ai_input_tokens']).toBe(0)
     })
 
     test('privacy mode redacts input', async () => {
-      ;(client as any).client.models.embedContent = jest.fn().mockResolvedValue(mockEmbedResponse)
+      ;(client as any).client.models.embedContent = vi.fn().mockResolvedValue(mockEmbedResponse)
 
       await client.models.embedContent({
         model: 'gemini-embedding-001',
@@ -1235,13 +1235,13 @@ describe('PostHogGemini - Jest test suite', () => {
         posthogPrivacyMode: true,
       })
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       expect(captureArgs[0].properties['$ai_input']).toBeNull()
     })
 
     test('error handling captures event and rethrows', async () => {
       const mockError = new Error('API error')
-      ;(client as any).client.models.embedContent = jest.fn().mockRejectedValue(mockError)
+      ;(client as any).client.models.embedContent = vi.fn().mockRejectedValue(mockError)
 
       await expect(
         client.models.embedContent({
@@ -1252,14 +1252,14 @@ describe('PostHogGemini - Jest test suite', () => {
       ).rejects.toThrow()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       expect(captureArgs[0].event).toBe('$ai_embedding')
       expect(captureArgs[0].properties['$ai_is_error']).toBe(true)
       expect(captureArgs[0].properties['$ai_input_tokens']).toBeUndefined()
     })
 
     test('passes config through to underlying call', async () => {
-      ;(client as any).client.models.embedContent = jest.fn().mockResolvedValue(mockEmbedResponse)
+      ;(client as any).client.models.embedContent = vi.fn().mockResolvedValue(mockEmbedResponse)
 
       await client.models.embedContent({
         model: 'gemini-embedding-001',
@@ -1268,19 +1268,19 @@ describe('PostHogGemini - Jest test suite', () => {
         config: { outputDimensionality: 64 },
       })
 
-      const embedCall = ((client as any).client.models.embedContent as jest.Mock).mock.calls[0][0]
+      const embedCall = ((client as any).client.models.embedContent as vi.Mock).mock.calls[0][0]
       expect(embedCall.config).toEqual({ outputDimensionality: 64 })
     })
 
     test('no distinct id sets $process_person_profile to false', async () => {
-      ;(client as any).client.models.embedContent = jest.fn().mockResolvedValue(mockEmbedResponse)
+      ;(client as any).client.models.embedContent = vi.fn().mockResolvedValue(mockEmbedResponse)
 
       await client.models.embedContent({
         model: 'gemini-embedding-001',
         contents: 'Hello',
       })
 
-      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureArgs] = (mockPostHogClient.capture as vi.Mock).mock.calls
       expect(captureArgs[0].properties['$process_person_profile']).toBe(false)
       // distinctId should fall back to traceId
       expect(captureArgs[0].distinctId).toBe(captureArgs[0].properties['$ai_trace_id'])

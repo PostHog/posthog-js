@@ -6,21 +6,21 @@ import { Survey, SurveyQuestionType, SurveyType } from '../../../posthog-surveys
 import * as uuid from '@posthog/browser-common/utils/uuidv7' // Import uuidv7
 
 // Mock the utility functions
-jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
-    ...jest.requireActual('../../../extensions/surveys/surveys-extension-utils'), // Keep original implementations for non-mocked parts
-    getInProgressSurveyState: jest.fn(),
-    sendSurveyEvent: jest.fn(),
-    dismissedSurveyEvent: jest.fn(),
+vi.mock('../../../extensions/surveys/surveys-extension-utils', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../extensions/surveys/surveys-extension-utils')>()), // Keep original implementations for non-mocked parts
+    getInProgressSurveyState: vi.fn(),
+    sendSurveyEvent: vi.fn(),
+    dismissedSurveyEvent: vi.fn(),
 }))
 
 // Mock uuidv7
-jest.mock('@posthog/browser-common/utils/uuidv7')
+vi.mock('@posthog/browser-common/utils/uuidv7')
 
 // Mock PostHog instance needed by event handlers
 const mockPosthog = {
-    capture: jest.fn(),
-    get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
-    reloadFeatureFlags: jest.fn(),
+    capture: vi.fn(),
+    get_session_replay_url: vi.fn().mockReturnValue('http://example.com/replay'),
+    reloadFeatureFlags: vi.fn(),
 }
 
 describe('SurveyPopup', () => {
@@ -65,31 +65,31 @@ describe('SurveyPopup', () => {
     }
 
     // Mock functions passed as props
-    let mockRemoveSurveyFromFocus: jest.Mock
-    let mockOnCloseConfirmationMessage: jest.Mock
+    let mockRemoveSurveyFromFocus: vi.Mock
+    let mockOnCloseConfirmationMessage: vi.Mock
 
     // Type cast mocks for easier usage
-    const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as jest.Mock
+    const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as vi.Mock
     // Removed unused mocks for set/clear state
-    // const mockedSetInProgressSurveyState = surveyUtils.setInProgressSurveyState as jest.Mock
-    // const mockedClearInProgressSurveyState = surveyUtils.clearInProgressSurveyState as jest.Mock
-    const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as jest.Mock
-    const mockedDismissedSurveyEvent = surveyUtils.dismissedSurveyEvent as jest.Mock
-    const mockedUuidv7 = uuid.uuidv7 as jest.Mock
+    // const mockedSetInProgressSurveyState = surveyUtils.setInProgressSurveyState as vi.Mock
+    // const mockedClearInProgressSurveyState = surveyUtils.clearInProgressSurveyState as vi.Mock
+    const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as vi.Mock
+    const mockedDismissedSurveyEvent = surveyUtils.dismissedSurveyEvent as vi.Mock
+    const mockedUuidv7 = uuid.uuidv7 as vi.Mock
 
     beforeEach(() => {
         cleanup()
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         // Mock uuidv7 to return a predictable value
         mockedUuidv7.mockReturnValue('new-uuid-generated')
         // Default mock for getInProgressSurveyState (no state)
         mockedGetInProgressSurveyState.mockReturnValue(null)
 
-        mockRemoveSurveyFromFocus = jest.fn()
-        mockOnCloseConfirmationMessage = jest.fn()
+        mockRemoveSurveyFromFocus = vi.fn()
+        mockOnCloseConfirmationMessage = vi.fn()
 
         // Mock form.submit to prevent JSDOM error
-        HTMLFormElement.prototype.submit = jest.fn()
+        HTMLFormElement.prototype.submit = vi.fn()
     })
 
     afterEach(() => {
@@ -329,7 +329,7 @@ describe('SurveyPopup', () => {
     })
 
     test('clears the auto-disappear timer when unmounted', () => {
-        const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+        const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout')
         const { unmount } = render(
             <SurveyPopup
                 survey={{
@@ -612,7 +612,7 @@ describe('SurveyPopup', () => {
         })
 
         test('in preview mode the intro advance button delegates to onPreviewSubmit', () => {
-            const onPreviewSubmit = jest.fn()
+            const onPreviewSubmit = vi.fn()
             render(
                 <SurveyPopup
                     survey={introSurvey}

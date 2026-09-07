@@ -29,7 +29,7 @@ export const isNativeFunction = (x: unknown): x is (...args: any[]) => any =>
 
 // Underscore Addons
 export const isObject = (x: unknown): x is Record<string, any> => {
-  // eslint-disable-next-line posthog-js/no-direct-object-check
+  // oxlint-disable-next-line posthog-js/no-direct-object-check
   return x === Object(x) && !isArray(x)
 }
 export const isEmptyObject = (x: unknown) => {
@@ -46,7 +46,7 @@ export const isEmptyObject = (x: unknown) => {
 export const isUndefined = (x: unknown): x is undefined => x === void 0
 
 export const isString = (x: unknown): x is string => {
-  // eslint-disable-next-line posthog-js/no-direct-string-check
+  // oxlint-disable-next-line posthog-js/no-direct-string-check
   return toString.call(x) == '[object String]'
 }
 
@@ -75,12 +75,12 @@ export const isBoolean = (x: unknown): x is boolean => {
 }
 
 export const isFormData = (x: unknown): x is FormData => {
-  // eslint-disable-next-line posthog-js/no-direct-form-data-check
+  // oxlint-disable-next-line posthog-js/no-direct-form-data-check
   return x instanceof FormData
 }
 
 export const isFile = (x: unknown): x is File => {
-  // eslint-disable-next-line posthog-js/no-direct-file-check
+  // oxlint-disable-next-line posthog-js/no-direct-file-check
   return x instanceof File
 }
 

@@ -12,12 +12,12 @@ import { flushPromises } from './test-utils'
 import { version } from '../package.json'
 
 // Mock PostHog
-jest.mock('posthog-node', () => {
+vi.mock('posthog-node', () => {
   return {
-    PostHog: jest.fn().mockImplementation(() => {
+    PostHog: vi.fn().mockImplementation(() => {
       return {
-        capture: jest.fn(),
-        captureImmediate: jest.fn(),
+        capture: vi.fn(),
+        captureImmediate: vi.fn(),
         privacy_mode: false,
       }
     }),
@@ -68,7 +68,7 @@ const createMockV3Model = (modelId: string): LanguageModelV3 => {
     provider: 'openai',
     modelId: modelId,
     supportedUrls: {},
-    doGenerate: jest.fn().mockImplementation(async (params: LanguageModelV3CallOptions) => {
+    doGenerate: vi.fn().mockImplementation(async (params: LanguageModelV3CallOptions) => {
       const userMessage = params.prompt.find((m: any) => m.role === 'user')
       const promptText = getPromptText(userMessage?.content)
       const response = mockResponses[promptText as keyof typeof mockResponses] || {
@@ -86,7 +86,7 @@ const createMockV3Model = (modelId: string): LanguageModelV3 => {
         warnings: [],
       }
     }),
-    doStream: jest.fn(),
+    doStream: vi.fn(),
   } as LanguageModelV3
 }
 
@@ -103,7 +103,7 @@ const createMockV2Model = (modelId: string): LanguageModelV2 => {
     provider: 'openai',
     modelId: modelId,
     supportedUrls: {},
-    doGenerate: jest.fn().mockImplementation(async (params: LanguageModelV2CallOptions) => {
+    doGenerate: vi.fn().mockImplementation(async (params: LanguageModelV2CallOptions) => {
       const userMessage = params.prompt.find((m: any) => m.role === 'user')
       const promptText = getPromptText(userMessage?.content)
       const response = mockResponses[promptText as keyof typeof mockResponses] || {
@@ -121,7 +121,7 @@ const createMockV2Model = (modelId: string): LanguageModelV2 => {
         warnings: [],
       }
     }),
-    doStream: jest.fn(),
+    doStream: vi.fn(),
   } as LanguageModelV2
 }
 
@@ -167,8 +167,8 @@ const createMockStreamingModel = <T extends 'v2' | 'v3'>(
     provider: 'test-provider',
     modelId: 'test-streaming-model',
     supportedUrls: {},
-    doGenerate: jest.fn(),
-    doStream: jest.fn().mockImplementation(async () => {
+    doGenerate: vi.fn(),
+    doStream: vi.fn().mockImplementation(async () => {
       const stream = new ReadableStream({
         async start(controller) {
           for (const part of streamParts) {
@@ -192,12 +192,15 @@ describe('Vercel AI SDK - Dual Version Support', () => {
   let mockPostHogClient: PostHog
 
   beforeEach(async () => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     mockPostHogClient = new (PostHog as any)()
   })
 
   afterEach(() => {
-    jest.restoreAllMocks()
+    vi.clearAllMocks()
+    if (vi.isMockFunction(console.warn)) {
+      console.warn.mockRestore()
+    }
   })
 
   it('rejects AI SDK v7 models and points callers to the OpenTelemetry integration', () => {
@@ -238,7 +241,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
       expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
@@ -263,7 +266,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       }
       const baseModel = {
         ...createMockV3Model('image-model'),
-        doGenerate: jest.fn().mockResolvedValue(providerResult),
+        doGenerate: vi.fn().mockResolvedValue(providerResult),
       } as LanguageModelV3
       const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
       const params = {
@@ -279,7 +282,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
       expect(result).toBe(providerResult)
       expect(baseModel.doGenerate).toHaveBeenCalledWith(params)
-      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
       expect(JSON.stringify(properties['$ai_input'])).not.toContain(binary)
       expect(JSON.stringify(properties['$ai_output_choices'])).not.toContain(binary)
       expect(JSON.stringify(properties)).toContain('[base64 audio/wav redacted]')
@@ -312,7 +315,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await model.doGenerate(params)
 
       expect(baseModel.doGenerate).toHaveBeenCalledWith(params)
-      const input = JSON.stringify((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_input'])
+      const input = JSON.stringify((mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties['$ai_input'])
       expect(input).not.toContain(binary)
       expect(input).toContain('[base64 image/png redacted]')
     })
@@ -345,7 +348,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await model.doGenerate(params)
 
       expect(baseModel.doGenerate).toHaveBeenCalledWith(params)
-      const input = JSON.stringify((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_input'])
+      const input = JSON.stringify((mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties['$ai_input'])
       expect(input).toContain(binary)
       expect(input).not.toContain('redacted')
     })
@@ -371,7 +374,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await model.doGenerate(params)
 
       expect(baseModel.doGenerate).toHaveBeenCalledWith(params)
-      const input = JSON.stringify((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_input'])
+      const input = JSON.stringify((mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties['$ai_input'])
       expect(input).not.toContain(binary)
       expect(input).toContain('[base64 audio/wav redacted]')
       expect(input).toContain(httpUrl.toString())
@@ -394,7 +397,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       }
       const baseModel = {
         ...createMockV3Model('image-model'),
-        doGenerate: jest.fn().mockResolvedValue(providerResult),
+        doGenerate: vi.fn().mockResolvedValue(providerResult),
       } as LanguageModelV3
       const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
 
@@ -402,7 +405,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
       expect(result).toBe(providerResult)
       const output = JSON.stringify(
-        (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_output_choices']
+        (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties['$ai_output_choices']
       )
       expect(output).not.toContain(binary)
       expect(output).toContain('[base64 image/png redacted]')
@@ -415,7 +418,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'openai',
         modelId: 'gpt-4o',
         supportedUrls: {},
-        doGenerate: jest.fn().mockResolvedValue({
+        doGenerate: vi.fn().mockResolvedValue({
           content: undefined,
           text: '',
           usage: v3TokenUsage(10, 5),
@@ -424,7 +427,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           finishReason: { unified: 'stop' as const, raw: undefined },
           warnings: [],
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       }
 
       const model = withTracing(baseModel, mockPostHogClient, {
@@ -464,7 +467,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // Time to first token should be present and be a number
       expect(typeof captureCall[0].properties['$ai_time_to_first_token']).toBe('number')
@@ -504,7 +507,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // Time to first token should be present and be a number
       expect(typeof captureCall[0].properties['$ai_time_to_first_token']).toBe('number')
@@ -546,7 +549,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       expect(captureCall[0].properties.$ai_output_choices).toEqual([
         {
@@ -574,7 +577,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'openai',
         modelId: 'gpt-4o',
         supportedUrls: {},
-        doGenerate: jest.fn().mockResolvedValue({
+        doGenerate: vi.fn().mockResolvedValue({
           content: [
             {
               type: 'tool-call',
@@ -589,7 +592,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           finishReason: { unified: 'tool-calls' as const, raw: undefined },
           warnings: [],
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       }
 
       const model = withTracing(baseModel, mockPostHogClient, {
@@ -603,7 +606,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await model.doGenerate(callOptions)
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       expect(captureCall[0].properties.$ai_output_choices).toEqual([
         {
@@ -646,7 +649,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
       expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
@@ -686,7 +689,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       expect(captureCall[0].properties.$ai_output_choices).toEqual([
         {
@@ -711,8 +714,8 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     ])('preserves the provider result when captureImmediate rejects in %s models', async (_version, createModel) => {
       const baseModel = createModel('gpt-4')
       const providerResult = await (baseModel.doGenerate as any)({ prompt: [] })
-      baseModel.doGenerate = jest.fn().mockResolvedValue(providerResult) as any
-      ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+      baseModel.doGenerate = vi.fn().mockResolvedValue(providerResult) as any
+      ;(mockPostHogClient.captureImmediate as vi.Mock).mockRejectedValue(new Error('telemetry failed'))
 
       const model = withTracing(baseModel, mockPostHogClient, {
         posthogDistinctId: 'test-user',
@@ -730,8 +733,8 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     ])('preserves the provider error when captureImmediate rejects in %s models', async (_version, createModel) => {
       const providerError = new Error('provider failed')
       const baseModel = createModel('gpt-4')
-      baseModel.doGenerate = jest.fn().mockRejectedValue(providerError) as any
-      ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+      baseModel.doGenerate = vi.fn().mockRejectedValue(providerError) as any
+      ;(mockPostHogClient.captureImmediate as vi.Mock).mockRejectedValue(new Error('telemetry failed'))
 
       const model = withTracing(baseModel, mockPostHogClient, {
         posthogDistinctId: 'test-user',
@@ -748,7 +751,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       ['v3', createMockV3Model],
     ])('should handle errors in %s models', async (_version, createModel) => {
       const baseModel = createModel('gpt-4')
-      baseModel.doGenerate = jest.fn().mockRejectedValue(new Error('API Error'))
+      baseModel.doGenerate = vi.fn().mockRejectedValue(new Error('API Error'))
 
       const model = withTracing(baseModel, mockPostHogClient, {
         posthogDistinctId: 'test-user',
@@ -763,7 +766,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       ).rejects.toThrow('API Error')
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       expect(captureCall[0].properties).toEqual(
         expect.objectContaining({
@@ -803,7 +806,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
         expect(receivedParts).toEqual(streamParts)
         expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
         expect(captureCall[0].properties).toEqual(
           expect.objectContaining({
             $ai_is_error: true,
@@ -849,7 +852,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
         expect(receivedParts).toEqual(streamParts)
         expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
         expect(captureCall[0].properties).toEqual(
           expect.objectContaining({
             $ai_is_error: true,
@@ -876,7 +879,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           },
         })
         const baseModel = createMockStreamingModel(version, [] as any) as any
-        baseModel.doStream = jest.fn().mockResolvedValue({ stream: sourceStream })
+        baseModel.doStream = vi.fn().mockResolvedValue({ stream: sourceStream })
         const model = withTracing(baseModel, mockPostHogClient, {
           posthogDistinctId: 'test-user',
           posthogTraceId: `test-${version}-source-error`,
@@ -891,7 +894,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         await expect(reader.read()).rejects.toBe(sourceError)
 
         expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
         expect(captureCall[0].properties).toEqual(
           expect.objectContaining({
             $ai_is_error: true,
@@ -905,7 +908,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     it.each(['v2', 'v3'] as const)(
       'should propagate cancellation and capture partial output once in %s streams',
       async (version) => {
-        const cancelSource = jest.fn()
+        const cancelSource = vi.fn()
         const sourceStream = new ReadableStream({
           start(controller) {
             controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'partial response' })
@@ -913,7 +916,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           cancel: cancelSource,
         })
         const baseModel = createMockStreamingModel(version, [] as any) as any
-        baseModel.doStream = jest.fn().mockResolvedValue({ stream: sourceStream })
+        baseModel.doStream = vi.fn().mockResolvedValue({ stream: sourceStream })
         const model = withTracing(baseModel, mockPostHogClient, {
           posthogDistinctId: 'test-user',
           posthogTraceId: `test-${version}-cancel`,
@@ -928,7 +931,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         expect(cancelSource).toHaveBeenCalledTimes(1)
         expect(cancelSource).toHaveBeenCalledWith(cancelReason)
         expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
         expect(captureCall[0].properties).toEqual(
           expect.objectContaining({
             $ai_is_error: true,
@@ -944,7 +947,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       async (version) => {
         const streamParts = [{ type: 'text-delta' as const, id: 'text-1', delta: 'complete response' }]
         const baseModel = createMockStreamingModel(version, streamParts as any)
-        ;(mockPostHogClient.captureImmediate as jest.Mock).mockReturnValue(new Promise<void>(() => undefined))
+        ;(mockPostHogClient.captureImmediate as vi.Mock).mockReturnValue(new Promise<void>(() => undefined))
         const model = withTracing(baseModel, mockPostHogClient, {
           posthogDistinctId: 'test-user',
           posthogTraceId: `test-${version}-nonblocking-completion`,
@@ -974,8 +977,8 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           },
         })
         const baseModel = createMockStreamingModel(version, [] as any) as any
-        baseModel.doStream = jest.fn().mockResolvedValue({ stream: sourceStream })
-        ;(mockPostHogClient.captureImmediate as jest.Mock).mockReturnValue(new Promise<void>(() => undefined))
+        baseModel.doStream = vi.fn().mockResolvedValue({ stream: sourceStream })
+        ;(mockPostHogClient.captureImmediate as vi.Mock).mockReturnValue(new Promise<void>(() => undefined))
         const model = withTracing(baseModel, mockPostHogClient, {
           posthogDistinctId: 'test-user',
           posthogTraceId: `test-${version}-nonblocking-source-error`,
@@ -995,7 +998,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     it.each(['v2', 'v3'] as const)(
       'should cancel promptly when immediate telemetry never settles in %s streams',
       async (version) => {
-        const cancelSource = jest.fn()
+        const cancelSource = vi.fn()
         const sourceStream = new ReadableStream({
           start(controller) {
             controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'partial response' })
@@ -1003,8 +1006,8 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           cancel: cancelSource,
         })
         const baseModel = createMockStreamingModel(version, [] as any) as any
-        baseModel.doStream = jest.fn().mockResolvedValue({ stream: sourceStream })
-        ;(mockPostHogClient.captureImmediate as jest.Mock).mockReturnValue(new Promise<void>(() => undefined))
+        baseModel.doStream = vi.fn().mockResolvedValue({ stream: sourceStream })
+        ;(mockPostHogClient.captureImmediate as vi.Mock).mockReturnValue(new Promise<void>(() => undefined))
         const model = withTracing(baseModel, mockPostHogClient, {
           posthogDistinctId: 'test-user',
           posthogTraceId: `test-${version}-nonblocking-cancel`,
@@ -1027,8 +1030,8 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
     it.each(['v2', 'v3'] as const)('should not fail %s streams when immediate telemetry rejects', async (version) => {
       const telemetryError = new Error('telemetry delivery failed')
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-      ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(telemetryError)
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined as never)
+      ;(mockPostHogClient.captureImmediate as vi.Mock).mockRejectedValue(telemetryError)
       const streamParts = [{ type: 'text-delta' as const, id: 'text-1', delta: 'unchanged' }]
       const baseModel = createMockStreamingModel(version, streamParts as any)
       const model = withTracing(baseModel, mockPostHogClient, {
@@ -1068,7 +1071,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(3)
 
-      const calls = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const calls = (mockPostHogClient.capture as vi.Mock).mock.calls
       calls.forEach((call) => {
         expect(call[0].properties.$ai_trace_id).toBe('test-sequential')
         expect(call[0].properties['$ai_lib']).toBe('posthog-ai')
@@ -1080,7 +1083,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       ['v3', createMockV3Model, v3TokenUsage(15, 5), { unified: 'stop' as const, raw: undefined }],
     ])('should track tools in %s models when provided', async (_version, createModel, usageFormat, finishReason) => {
       const baseModel = createModel('gpt-4')
-      baseModel.doGenerate = jest.fn().mockImplementation(async () => ({
+      baseModel.doGenerate = vi.fn().mockImplementation(async () => ({
         text: 'Using tool',
         usage: usageFormat,
         content: [{ type: 'text', text: 'Using tool' }],
@@ -1109,7 +1112,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       } as any)
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       expect(captureCall[0].properties.$ai_tools).toEqual(tools)
     })
@@ -1128,7 +1131,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await simulateGenerateText({ model, prompt: 'What is 9 + 10?' })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // Input should be null in privacy mode (withPrivacyMode returns null)
       expect(captureCall[0].properties.$ai_input).toBeNull()
@@ -1156,7 +1159,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         await model.doGenerate({ prompt: oversizedPrompt as any })
 
         expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
         const input = captureCall[0].properties.$ai_input as Array<{ role: string; content: unknown }>
         expect(input.length).toBeGreaterThan(0)
@@ -1186,7 +1189,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await model.doGenerate({ prompt: oversizedPrompt as any })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       const input = captureCall[0].properties.$ai_input as Array<{ role: string; content: unknown }>
       expect(input).toHaveLength(oversizedPrompt.length)
@@ -1201,13 +1204,13 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'openai',
         modelId: 'gpt-4',
         supportedUrls: {},
-        doGenerate: jest.fn().mockResolvedValue({
+        doGenerate: vi.fn().mockResolvedValue({
           content: [{ type: 'text', text: oversizedText }],
           usage: { inputTokens: 1, outputTokens: 1 },
           finishReason: { unified: 'stop' as const, raw: undefined },
           warnings: [],
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       }
 
       const clientWithMultimodal = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
@@ -1222,7 +1225,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       } as any)
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const output = captureCall[0].properties.$ai_output_choices[0].content
       expect(output).toBe(oversizedText)
       expect(output).not.toContain('[truncated]')
@@ -1235,13 +1238,13 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'openai',
         modelId: 'gpt-4',
         supportedUrls: {},
-        doGenerate: jest.fn().mockResolvedValue({
+        doGenerate: vi.fn().mockResolvedValue({
           content: [{ type: 'text', text: oversizedText }],
           usage: { inputTokens: 1, outputTokens: 1 },
           finishReason: { unified: 'stop' as const, raw: undefined },
           warnings: [],
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       }
 
       const model = withTracing(baseModel, mockPostHogClient, {
@@ -1254,7 +1257,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       } as any)
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const output = captureCall[0].properties.$ai_output_choices[0].content
       expect(output.length).toBeLessThan(oversizedText.length)
       expect(output).toContain('... [truncated]')
@@ -1267,13 +1270,13 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'openai',
         modelId: 'gpt-4',
         supportedUrls: {},
-        doGenerate: jest.fn().mockResolvedValue({
+        doGenerate: vi.fn().mockResolvedValue({
           content: [{ type: 'file', data: base64Data, mediaType: 'image/png' }],
           usage: { inputTokens: 1, outputTokens: 1 },
           finishReason: { unified: 'stop' as const, raw: undefined },
           warnings: [],
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       }
 
       const clientWithMultimodal = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
@@ -1293,7 +1296,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       } as any)
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const inputFile = captureCall[0].properties.$ai_input[0].content[0]
       const outputFile = captureCall[0].properties.$ai_output_choices[0].content[0]
 
@@ -1308,13 +1311,13 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'openai',
         modelId: 'gpt-4',
         supportedUrls: {},
-        doGenerate: jest.fn().mockResolvedValue({
+        doGenerate: vi.fn().mockResolvedValue({
           content: [{ type: 'file', data: base64Data, mediaType: 'image/png' }],
           usage: { inputTokens: 1, outputTokens: 1 },
           finishReason: { unified: 'stop' as const, raw: undefined },
           warnings: [],
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       }
 
       const model = withTracing(baseModel, mockPostHogClient, {
@@ -1332,7 +1335,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       } as any)
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
       const inputFile = captureCall[0].properties.$ai_input[0].content[0]
       const outputFile = captureCall[0].properties.$ai_output_choices[0].content[0]
 
@@ -1365,7 +1368,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'anthropic',
         modelId: modelId,
         supportedUrls: {},
-        doGenerate: jest.fn().mockImplementation(async () => {
+        doGenerate: vi.fn().mockImplementation(async () => {
           return {
             text: 'Cached response',
             usage: v3TokenUsageWithCache(total, 50, cacheRead, cacheWrite),
@@ -1380,7 +1383,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
             warnings: [],
           }
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       } as LanguageModelV3
     }
 
@@ -1391,7 +1394,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'anthropic',
         modelId: modelId,
         supportedUrls: {},
-        doGenerate: jest.fn().mockImplementation(async () => {
+        doGenerate: vi.fn().mockImplementation(async () => {
           return {
             text: 'Cached response',
             // V2 style: inputTokens is already separate from cache (for Anthropic native)
@@ -1403,7 +1406,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
             warnings: [],
           }
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       } as LanguageModelV2
     }
 
@@ -1422,7 +1425,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // inputTokens should be adjusted: 1120 - 1000 - 20 = 100
       expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
@@ -1438,7 +1441,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'openai',
         modelId: 'gpt-4',
         supportedUrls: {},
-        doGenerate: jest.fn().mockImplementation(async () => {
+        doGenerate: vi.fn().mockImplementation(async () => {
           return {
             text: 'Cached response',
             // For OpenAI, inputTokens already excludes cache in the SDK
@@ -1453,7 +1456,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
             warnings: [],
           }
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       }
 
       const model = withTracing(baseModel, mockPostHogClient, {
@@ -1467,7 +1470,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // inputTokens should NOT be adjusted for OpenAI - stays at 100 (the total)
       expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
@@ -1488,7 +1491,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       })
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // V2 inputTokens should NOT be adjusted - stays at 100
       expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
@@ -1519,8 +1522,8 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'anthropic',
         modelId: 'claude-3-sonnet',
         supportedUrls: {},
-        doGenerate: jest.fn(),
-        doStream: jest.fn().mockImplementation(async () => {
+        doGenerate: vi.fn(),
+        doStream: vi.fn().mockImplementation(async () => {
           const stream = new ReadableStream({
             async start(controller) {
               for (const part of streamParts) {
@@ -1553,7 +1556,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // inputTokens should be adjusted: 1120 - 1000 - 20 = 100
       expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
@@ -1618,7 +1621,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           provider,
           modelId,
           supportedUrls: {},
-          doGenerate: jest.fn().mockImplementation(async () => ({
+          doGenerate: vi.fn().mockImplementation(async () => ({
             text: 'Cached response',
             usage: { inputTokens, outputTokens },
             content: [{ type: 'text', text: 'Cached response' }],
@@ -1627,7 +1630,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
             finishReason: { unified: 'stop' as const, raw: undefined },
             warnings: [],
           })),
-          doStream: jest.fn(),
+          doStream: vi.fn(),
         }
 
         const model = withTracing(baseModel, mockPostHogClient, {
@@ -1638,7 +1641,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         await simulateGenerateText({ model, prompt: 'Test non-anthropic-provider Claude cache' })
 
         expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
         const properties = captureCall[0].properties
 
         expect(properties['$ai_input_tokens']).toBe(expectedInputTokens)
@@ -1671,8 +1674,8 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         provider: 'amazon-bedrock',
         modelId: 'global.anthropic.claude-opus-4-6-v1',
         supportedUrls: {},
-        doGenerate: jest.fn(),
-        doStream: jest.fn().mockImplementation(async () => {
+        doGenerate: vi.fn(),
+        doStream: vi.fn().mockImplementation(async () => {
           const stream = new ReadableStream({
             async start(controller) {
               for (const part of streamParts) {
@@ -1705,7 +1708,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
 
       // 1120 - 1000 - 20 = 100
       expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
@@ -1747,7 +1750,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
       await flushPromises()
 
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
       expect(captureCall[0].properties.$ai_output_choices).toEqual([
         {
           role: 'assistant',
@@ -1782,7 +1785,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           ],
         } as any)
 
-        const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+        const properties = (mockPostHogClient.capture as vi.Mock).mock.calls[0][0].properties
         expect(properties.$ai_input[1]).toEqual({
           role: 'assistant',
           content: [
@@ -1812,7 +1815,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           return 'custom-value'
         }
 
-        doGenerate = jest.fn().mockResolvedValue({
+        doGenerate = vi.fn().mockResolvedValue({
           text: 'test',
           usage: { inputTokens: { total: 5 }, outputTokens: { total: 2 } },
           content: [{ type: 'text', text: 'test' }],
@@ -1822,7 +1825,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           warnings: [],
         })
 
-        doStream = jest.fn()
+        doStream = vi.fn()
       }
 
       const baseModel = new ModelWithGetters() as any
@@ -1855,7 +1858,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         modelId: 'gpt-4o',
         supportedUrls: {},
         config,
-        doGenerate: jest.fn().mockResolvedValue({
+        doGenerate: vi.fn().mockResolvedValue({
           content: [{ type: 'text', text: 'hi' }],
           usage: { inputTokens: 1, outputTokens: 1 },
           response: { modelId: 'gpt-4o' },
@@ -1863,12 +1866,12 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           finishReason: 'stop' as const,
           warnings: [],
         }),
-        doStream: jest.fn(),
+        doStream: vi.fn(),
       } as any
 
       const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
       await model.doGenerate({ prompt: [] } as any)
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
       return captureCall[0].properties
     }
 
@@ -1917,7 +1920,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       }
       await flushPromises()
 
-      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
       expect(captureCall[0].properties['$ai_base_url']).toBe('https://gateway.posthog.com/v1')
     })
   })

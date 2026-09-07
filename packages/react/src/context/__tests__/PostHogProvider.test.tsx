@@ -5,11 +5,11 @@ import posthogJs from 'posthog-js'
 import { setDefaultPostHogInstance } from '../posthog-default'
 
 // Mock posthog-js
-jest.mock('posthog-js', () => ({
+vi.mock('posthog-js', () => ({
     __esModule: true,
     default: {
-        init: jest.fn(),
-        set_config: jest.fn(),
+        init: vi.fn(),
+        set_config: vi.fn(),
         __loaded: false,
     },
 }))
@@ -39,11 +39,11 @@ describe('PostHogProvider component', () => {
         const updatedOptions = { api_host: 'https://eu.posthog.com' }
 
         beforeEach(() => {
-            jest.clearAllMocks()
+            vi.clearAllMocks()
         })
 
         it('does not initialize when apiKey is missing', () => {
-            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
             render(
                 <PostHogProvider apiKey={undefined as any} options={initialOptions}>
@@ -107,7 +107,7 @@ describe('PostHogProvider component', () => {
         })
 
         it('should warn when attempting to change apiKey', () => {
-            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
             const newApiKey = 'different-api-key'
 
             const { rerender } = render(
@@ -139,7 +139,7 @@ describe('PostHogProvider component', () => {
         it('warns if posthogJs has been loaded elsewhere', () => {
             ;(posthogJs as any).__loaded = true
 
-            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
             render(
                 <PostHogProvider apiKey={apiKey} options={initialOptions}>
                     <div>Test</div>

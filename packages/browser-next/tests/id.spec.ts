@@ -3,7 +3,7 @@ import { createId } from '../src/id'
 describe('createId', () => {
     it('returns a UUID when browser randomness throws', () => {
         const cryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
-        const random = jest.spyOn(Math, 'random').mockImplementation(() => {
+        const random = vi.spyOn(Math, 'random').mockImplementation(() => {
             throw new Error('randomness unavailable')
         })
         Object.defineProperty(globalThis, 'crypto', {

@@ -1,5 +1,14 @@
 # @posthog/browser-common
 
+## 0.7.2
+
+### Patch Changes
+
+- [#4732](https://github.com/PostHog/posthog-js/pull/4732) [`f00e24d`](https://github.com/PostHog/posthog-js/commit/f00e24d0109c88f667b6e477edae31a04dd18ac6) Thanks [@posthog](https://github.com/apps/posthog)! - Polyfill `Array.prototype.findLast` in the web vitals attribution bundles so they keep capturing on browsers older than Chrome 97 and Safari 15.4
+  (2026-09-03)
+- Updated dependencies [[`c475070`](https://github.com/PostHog/posthog-js/commit/c47507068cd8156334afb3c48758a1b92d590f99)]:
+  - @posthog/core@1.50.4
+
 ## 0.7.1
 
 ### Patch Changes
@@ -7,7 +16,7 @@
 - [#4683](https://github.com/PostHog/posthog-js/pull/4683) [`6309cb2`](https://github.com/PostHog/posthog-js/commit/6309cb22e3f1b419d232f7bfbd1656917d4e24dc) Thanks [@posthog](https://github.com/apps/posthog)! - Harden the directly importable `getElementsChainString` utility against runtime JavaScript callers that pass a non-array value. It now returns an empty string instead of calling `.map` on malformed input.
   (2026-09-01)
 - Updated dependencies [[`444bf35`](https://github.com/PostHog/posthog-js/commit/444bf350ea2334d207f1b2a26ccaff2e04c4a03b), [`6ae173f`](https://github.com/PostHog/posthog-js/commit/6ae173fdae206b54614184e804c6cdf78c8fcdf3), [`6723395`](https://github.com/PostHog/posthog-js/commit/67233955a77840e35ce62067e4f5a4c5106a6e5a)]:
-    - @posthog/core@1.50.0
+  - @posthog/core@1.50.0
 
 ## 0.7.0
 
@@ -30,7 +39,7 @@
 - [#4636](https://github.com/PostHog/posthog-js/pull/4636) [`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7) Thanks [@yfwmaniish](https://github.com/yfwmaniish)! - Narrow the `pinterest` entry in the bot-detection blocklist to `pinterestbot`, so real users on Pinterest's in-app browser (whose UA also contains the substring `pinterest`) are no longer misclassified as bots and silently excluded from analytics. The crawler's other UA variant remains covered by the existing generic `bot.htm` entry, so no bot-detection coverage is lost.
   (2026-08-27)
 - Updated dependencies [[`74ff567`](https://github.com/PostHog/posthog-js/commit/74ff567fa5c065f3e30c007c7a5155d2c7f1cee7)]:
-    - @posthog/core@1.49.1
+  - @posthog/core@1.49.1
 
 ## 0.6.0
 
@@ -44,7 +53,7 @@
 - [#4533](https://github.com/PostHog/posthog-js/pull/4533) [`53fcb2d`](https://github.com/PostHog/posthog-js/commit/53fcb2d34eac1e83afbfa810ab7b9e9f691d6ce6) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Expose host capture permission to browser extensions.
   (2026-08-25)
 - Updated dependencies [[`ed4dd97`](https://github.com/PostHog/posthog-js/commit/ed4dd97d461f9dd871507c8b929ab38cae376181)]:
-    - @posthog/types@1.406.1
+  - @posthog/types@1.406.1
 
 ## 0.5.2
 
@@ -53,7 +62,7 @@
 - [#4611](https://github.com/PostHog/posthog-js/pull/4611) [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12) Thanks [@marandaneto](https://github.com/marandaneto)! - Share survey property matching between the browser and React Native SDKs while preserving their existing missing-value behavior.
   (2026-08-25)
 - Updated dependencies [[`930de19`](https://github.com/PostHog/posthog-js/commit/930de1960872cb73d85bbeb71d8d5159d1740c74), [`d4eee8f`](https://github.com/PostHog/posthog-js/commit/d4eee8fe12de2caab4e91d6a0ada25ee6b822e12)]:
-    - @posthog/core@1.48.11
+  - @posthog/core@1.48.11
 
 ## 0.5.1
 
@@ -79,7 +88,7 @@
 ### Patch Changes
 
 - Updated dependencies [[`2da12b8`](https://github.com/PostHog/posthog-js/commit/2da12b8cbe7c3fa2354bfc157a4db927ef5a3ac1)]:
-    - @posthog/types@1.402.0
+  - @posthog/types@1.402.0
 
 ## 0.3.1
 
@@ -102,7 +111,7 @@
 - [#4325](https://github.com/PostHog/posthog-js/pull/4325) [`3bd8a2d`](https://github.com/PostHog/posthog-js/commit/3bd8a2d7599c0ee089594e27be39f3af171e5371) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix dead-click false positives on WebKit when the SDK uses an iframe-sourced MutationObserver fallback.
   (2026-07-30)
 - Updated dependencies [[`3bd8a2d`](https://github.com/PostHog/posthog-js/commit/3bd8a2d7599c0ee089594e27be39f3af171e5371)]:
-    - @posthog/core@1.45.3
+  - @posthog/core@1.45.3
 
 ## 0.2.4
 
@@ -110,7 +119,7 @@
 
 - [#4284](https://github.com/PostHog/posthog-js/pull/4284) [`fbd457f`](https://github.com/PostHog/posthog-js/commit/fbd457fbba704e9b42ff02728eae42ea844c7fd7) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Reduce extension runtime and contract overhead by replacing the `CoreExtension` and capability-token registry with one host-provided `Client`. Extensions now access analytics, identity, session, events, remote config, transport, persistence, and logging directly from that client.
 
-    Cross-extension `getExtension`/`provides` lookup and session lifecycle observation are no longer part of the shared contract. Extension cleanup is synchronous and best-effort: resources are released in reverse registration order, and Promise-returning legacy cleanup is not awaited but rejected Promises are contained. (2026-07-28)
+  Cross-extension `getExtension`/`provides` lookup and session lifecycle observation are no longer part of the shared contract. Extension cleanup is synchronous and best-effort: resources are released in reverse registration order, and Promise-returning legacy cleanup is not awaited but rejected Promises are contained. (2026-07-28)
 
 ## 0.2.3
 

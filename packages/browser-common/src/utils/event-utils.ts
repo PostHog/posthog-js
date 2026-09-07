@@ -305,7 +305,7 @@ export function getEventProperties(
 
     type DeviceDetectionOptions = NonNullable<Parameters<typeof detectDeviceType>[1]>
     const deviceOptions: DeviceDetectionOptions = {}
-    // eslint-disable-next-line compat/compat
+    // oxlint-disable-next-line compat/compat
     const userAgentDataPlatform = navigator?.userAgentData?.platform
     const maxTouchPoints = navigator?.maxTouchPoints
     const screenWidth = window?.screen?.width

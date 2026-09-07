@@ -72,8 +72,8 @@ const anthropicMessage = {
 
 const posthogClient = (): PostHog =>
   ({
-    capture: jest.fn(),
-    captureImmediate: jest.fn(),
+    capture: vi.fn(),
+    captureImmediate: vi.fn(),
     privacy_mode: false,
   }) as unknown as PostHog
 
@@ -122,7 +122,7 @@ const requestURL = (request: RequestInfo | URL): string => (request instanceof R
 
 describe('provider promise compatibility with real SDK resources', () => {
   test('OpenAI chat.completions.parse composes through the wrapped create promise', async () => {
-    const fetch = jest.fn(async () => jsonResponse(chatCompletion))
+    const fetch = vi.fn(async () => jsonResponse(chatCompletion))
     const posthog = posthogClient()
     const client = new PostHogOpenAI({ apiKey: 'test', posthog, fetch })
 
@@ -147,7 +147,7 @@ describe('provider promise compatibility with real SDK resources', () => {
 
   test('OpenAI responses.stream routes through the wrapped create method', async () => {
     let providerBody: Record<string, unknown> | undefined
-    const fetch = jest.fn(async (request: RequestInfo | URL, init?: RequestInit) => {
+    const fetch = vi.fn(async (request: RequestInfo | URL, init?: RequestInit) => {
       const body = request instanceof Request ? await request.clone().text() : String(init?.body)
       providerBody = JSON.parse(body)
       return eventStreamResponse([
@@ -187,7 +187,7 @@ describe('provider promise compatibility with real SDK resources', () => {
     expect(providerBody).not.toHaveProperty('posthogDistinctId')
     expect(providerBody).not.toHaveProperty('posthogTraceId')
     expect(posthog.capture).toHaveBeenCalledTimes(1)
-    expect((posthog.capture as jest.Mock).mock.calls[0][0]).toMatchObject({
+    expect((posthog.capture as vi.Mock).mock.calls[0][0]).toMatchObject({
       distinctId: 'stream-user',
       event: '$ai_generation',
       properties: {
@@ -198,7 +198,7 @@ describe('provider promise compatibility with real SDK resources', () => {
   })
 
   test('Azure chat and responses parse compose through wrapped provider promises', async () => {
-    const fetch = jest.fn(async (request: RequestInfo | URL) =>
+    const fetch = vi.fn(async (request: RequestInfo | URL) =>
       jsonResponse(requestURL(request).includes('/responses') ? responsesResult : chatCompletion)
     )
     const posthog = posthogClient()
@@ -243,7 +243,7 @@ describe('provider promise compatibility with real SDK resources', () => {
   })
 
   test('Azure create promises retain raw-response helpers and transformed data', async () => {
-    const fetch = jest.fn(async (request: RequestInfo | URL) =>
+    const fetch = vi.fn(async (request: RequestInfo | URL) =>
       jsonResponse(requestURL(request).includes('/responses') ? responsesResult : chatCompletion)
     )
     const client = new PostHogAzureOpenAI({
@@ -269,7 +269,7 @@ describe('provider promise compatibility with real SDK resources', () => {
   })
 
   test('Anthropic create promises retain raw-response helpers and transformed data', async () => {
-    const fetch = jest.fn(async () =>
+    const fetch = vi.fn(async () =>
       jsonResponse(anthropicMessage, 'request-id', { 'anthropic-workspace-id': 'wrkspc_provider_promise' })
     )
     const client = new PostHogAnthropic({ apiKey: 'test', posthog: posthogClient(), fetch })

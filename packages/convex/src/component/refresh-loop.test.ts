@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals'
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest'
 import { convexTest } from 'convex-test'
 import schema from './schema.js'
 import { api, internal } from './_generated/api.js'
@@ -18,7 +18,7 @@ let flagsFetches = 0
 
 function mockFetch() {
   flagsFetches = 0
-  return jest.fn(async (url: string | URL) => {
+  return vi.fn(async (url: string | URL) => {
     if (url.toString().includes('/flags/definitions')) flagsFetches++
     return new Response(JSON.stringify({ flags: [], group_type_mapping: {}, cohorts: {} }), {
       status: 200,

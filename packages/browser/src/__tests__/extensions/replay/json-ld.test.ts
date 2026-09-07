@@ -412,7 +412,7 @@ describe('JSON-LD replay capture', () => {
     })
 
     it('emits initial, added, and changed JSON-LD without duplicates', async () => {
-        const emit = jest.fn(() => true)
+        const emit = vi.fn(() => true)
         const initial = jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'One' })
         document.body.appendChild(initial)
 
@@ -463,8 +463,8 @@ describe('JSON-LD replay capture', () => {
     it('does not scan subtrees for ordinary text changes', async () => {
         const text = document.createTextNode('before')
         document.body.append(text)
-        const querySelectorAll = jest.spyOn(Element.prototype, 'querySelectorAll')
-        const capture = startJsonLdCapture(document, MutationObserver, { emit: jest.fn(() => true) })
+        const querySelectorAll = vi.spyOn(Element.prototype, 'querySelectorAll')
+        const capture = startJsonLdCapture(document, MutationObserver, { emit: vi.fn(() => true) })
         querySelectorAll.mockClear()
 
         text.data = 'after'
@@ -485,11 +485,11 @@ describe('JSON-LD replay capture', () => {
                 })
             )
         }
-        const emit = jest.fn(() => true)
+        const emit = vi.fn(() => true)
 
         const capture = startJsonLdCapture(document, MutationObserver, { emit })
         capture.scan()
-        const querySelectorAll = jest.spyOn(Element.prototype, 'querySelectorAll')
+        const querySelectorAll = vi.spyOn(Element.prototype, 'querySelectorAll')
         const container = document.createElement('div')
         container.appendChild(jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product' }))
         document.body.append(container)
@@ -503,7 +503,7 @@ describe('JSON-LD replay capture', () => {
 
     it('rescans after capture becomes enabled', () => {
         let enabled = false
-        const emit = jest.fn(() => true)
+        const emit = vi.fn(() => true)
         document.body.appendChild(
             jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' })
         )
@@ -524,7 +524,7 @@ describe('JSON-LD replay capture', () => {
     })
 
     it('drops scripts moved before capture into a masked shadow root or another document', async () => {
-        const emit = jest.fn(() => true)
+        const emit = vi.fn(() => true)
         const capture = startJsonLdCapture(document, MutationObserver, {
             maskTextClass: 'ph-mask',
             emit,
@@ -557,7 +557,7 @@ describe('JSON-LD replay capture', () => {
     })
 
     it('drops JSON-LD inside text masks and blocked elements', async () => {
-        const emit = jest.fn(() => true)
+        const emit = vi.fn(() => true)
         document.body.innerHTML = '<div class="ph-mask"></div><div class="private"></div>'
         document.body.children[0].appendChild(
             jsonLdScript({ '@context': 'https://schema.org', '@type': 'Person', '@id': 'masked' })
@@ -594,7 +594,7 @@ describe('JSON-LD replay capture', () => {
     })
 
     it('ignores non-JSON-LD scripts until their type changes', async () => {
-        const emit = jest.fn(() => true)
+        const emit = vi.fn(() => true)
         const value = JSON.stringify({ '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' })
         const scripts = ['', 'text/javascript', 'application/json'].map((type) => {
             const script = document.createElement('script')
@@ -623,7 +623,7 @@ describe('JSON-LD replay capture', () => {
 
     it('does not deduplicate an event that the recorder rejects', () => {
         let acceptsEvents = false
-        const emit = jest.fn(() => acceptsEvents)
+        const emit = vi.fn(() => acceptsEvents)
         document.body.appendChild(
             jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' })
         )
@@ -640,7 +640,7 @@ describe('JSON-LD replay capture', () => {
 
     it('retries an event that a forced scan cannot emit', () => {
         let acceptsEvents = true
-        const emit = jest.fn(() => acceptsEvents)
+        const emit = vi.fn(() => acceptsEvents)
         document.body.appendChild(
             jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' })
         )

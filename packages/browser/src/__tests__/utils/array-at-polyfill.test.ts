@@ -2,11 +2,9 @@
 
 // Loads the side-effecting polyfill module in a fresh module registry so we can control
 // whether Array.prototype.at exists at import time.
-function loadPolyfill(): void {
-    jest.isolateModules(() => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        require('@posthog/browser-common/utils/array-at-polyfill')
-    })
+async function loadPolyfill(): Promise<void> {
+    vi.resetModules()
+    await import('@posthog/browser-common/utils/array-at-polyfill')
 }
 
 describe('Array.prototype.at polyfill', () => {
@@ -27,11 +25,11 @@ describe('Array.prototype.at polyfill', () => {
     })
 
     describe('when Array.prototype.at is missing (old browser)', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             // simulate Chrome <92 / iOS Safari <15.4
 
             delete (Array.prototype as any).at
-            loadPolyfill()
+            await loadPolyfill()
         })
 
         it('installs a working at()', () => {
@@ -74,7 +72,7 @@ describe('Array.prototype.at polyfill', () => {
     })
 
     describe('when Array.prototype.at already exists (modern browser)', () => {
-        it('does not replace the native implementation', () => {
+        it('does not replace the native implementation', async () => {
             const sentinel = function at(): string {
                 return 'native'
             }
@@ -85,7 +83,7 @@ describe('Array.prototype.at polyfill', () => {
                 configurable: true,
             })
 
-            loadPolyfill()
+            await loadPolyfill()
 
             expect(Array.prototype.at).toBe(sentinel)
         })

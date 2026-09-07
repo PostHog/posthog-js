@@ -39,23 +39,23 @@ describe('posthog core - before send', () => {
     const posthogWith = (configOverride: Pick<Partial<PostHogConfig>, 'before_send'>): PostHog => {
         const posthog = defaultPostHog().init('testtoken', configOverride, uuidv7())
         return Object.assign(posthog, {
-            _send_request: jest.fn(),
+            _send_request: vi.fn(),
         })
     }
 
     beforeEach(() => {
-        jest.useFakeTimers().setSystemTime(baseUTCDateTime)
+        vi.useFakeTimers().setSystemTime(baseUTCDateTime)
     })
 
     afterEach(() => {
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     it('can reject an event', () => {
         const posthog = posthogWith({
             before_send: rejectingEventFn,
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_request as vi.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
@@ -68,7 +68,7 @@ describe('posthog core - before send', () => {
         const posthog = posthogWith({
             before_send: editingEventFn,
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_request as vi.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
@@ -87,7 +87,7 @@ describe('posthog core - before send', () => {
 
     it('uses a valid provided uuid', () => {
         const posthog = posthogWith({})
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_request as vi.Mock).mockClear()
         const uuid = uuidv7()
 
         const capturedData = posthog.capture(eventName, {}, { uuid })
@@ -97,7 +97,7 @@ describe('posthog core - before send', () => {
 
     it.each(invalidUuidCases)('generates a new uuid when the provided uuid is an invalid %s', (_, invalidUuid) => {
         const posthog = posthogWith({})
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_request as vi.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, { uuid: invalidUuid })
 
@@ -109,7 +109,7 @@ describe('posthog core - before send', () => {
         const posthog = posthogWith({
             before_send: (cr) => cr && { ...cr, uuid: invalidUuid },
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_request as vi.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
@@ -136,7 +136,7 @@ describe('posthog core - before send', () => {
                 (cr) => ({ ...cr, properties: { ...cr.properties, edited_two: true } }),
             ],
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_request as vi.Mock).mockClear()
 
         const capturedData = [posthog.capture(eventName, {}, {}), posthog.capture('to reject', {}, {})]
 
@@ -157,7 +157,7 @@ describe('posthog core - before send', () => {
 
     it('fails closed when a before_send function throws', () => {
         const error = new Error('before_send failed')
-        const sentinel = jest.fn((event: CaptureResult) => event)
+        const sentinel = vi.fn((event: CaptureResult) => event)
         const posthog = posthogWith({
             before_send: [
                 (event) => ({ ...event, properties: { ...event.properties, transformed: true } }),
@@ -167,7 +167,7 @@ describe('posthog core - before send', () => {
                 sentinel,
             ],
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_request as vi.Mock).mockClear()
         let capturedData: CaptureResult | undefined
 
         expect(() => {
@@ -187,7 +187,7 @@ describe('posthog core - before send', () => {
                 return cr
             },
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_request as vi.Mock).mockClear()
 
         const capturedData = posthog.capture('$set', {}, { $set: { value: 'provided' } })
 
@@ -210,7 +210,7 @@ describe('posthog core - before send', () => {
                 return cr
             },
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_request as vi.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, { value: 'provided' }, {})
 
@@ -233,7 +233,7 @@ describe('posthog core - before send', () => {
         const posthog = posthogWith({
             before_send: rejectingEventFn,
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_request as vi.Mock).mockClear()
         // chooses a random string from knownUnEditableEvent
         const randomUnsafeEditableEvent =
             knownUnsafeEditableEvent[Math.floor(Math.random() * knownUnsafeEditableEvent.length)]
@@ -262,7 +262,7 @@ describe('posthog core - before send', () => {
                 return cr
             },
         })
-        ;(posthog._send_request as jest.Mock).mockClear()
+        ;(posthog._send_request as vi.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 

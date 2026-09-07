@@ -12,17 +12,17 @@ type FlagResult = {
 
 function makeClient(result: FlagResult | undefined): {
   client: PostHog
-  getFeatureFlagResult: jest.Mock
-  reloadFeatureFlags: jest.Mock
-  on: jest.Mock
+  getFeatureFlagResult: vi.Mock
+  reloadFeatureFlags: vi.Mock
+  on: vi.Mock
   emit: (event: string, ...args: unknown[]) => void
 } {
-  const getFeatureFlagResult = jest.fn().mockResolvedValue(result)
-  const reloadFeatureFlags = jest.fn().mockResolvedValue(undefined)
+  const getFeatureFlagResult = vi.fn().mockResolvedValue(result)
+  const reloadFeatureFlags = vi.fn().mockResolvedValue(undefined)
   // Mirror posthog-node's event emitter: `on` registers a listener and returns
   // an unsubscribe fn; `emit` fans out to registered listeners.
   const listeners: Record<string, Array<(...args: unknown[]) => void>> = {}
-  const on = jest.fn((event: string, cb: (...args: unknown[]) => void) => {
+  const on = vi.fn((event: string, cb: (...args: unknown[]) => void) => {
     ;(listeners[event] ??= []).push(cb)
     return () => {
       listeners[event] = (listeners[event] ?? []).filter((fn) => fn !== cb)
@@ -246,7 +246,7 @@ describe('PostHogServerProvider', () => {
       reloadFeatureFlags.mockImplementationOnce(async () => {
         emit('error', preloadError)
       })
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       try {
         const provider = new PostHogServerProvider(client)
         await expect(provider.initialize()).resolves.toBeUndefined()
@@ -258,7 +258,7 @@ describe('PostHogServerProvider', () => {
 
     it('does not warn when preloading succeeds', async () => {
       const { client } = makeClient(undefined)
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       try {
         await new PostHogServerProvider(client).initialize()
         expect(warn).not.toHaveBeenCalled()

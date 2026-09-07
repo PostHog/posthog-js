@@ -9,14 +9,14 @@ class PostHogCoreLoggingTestClient extends PostHogCoreTestClient {
 
 const createLoggingTestClient = (apiKey: string): [PostHogCoreTestClient, PostHogCoreTestClientMocks] => {
   const mocks: PostHogCoreTestClientMocks = {
-    fetch: jest.fn(async () => ({
+    fetch: vi.fn(async () => ({
       status: 200,
       text: () => Promise.resolve('ok'),
       json: () => Promise.resolve({ status: 'ok' }),
     })),
     storage: {
-      getItem: jest.fn(),
-      setItem: jest.fn(),
+      getItem: vi.fn(),
+      setItem: vi.fn(),
     },
   }
 
@@ -56,7 +56,7 @@ describe('PostHog Core', () => {
       ['empty', '   '],
       ['non string', {} as string],
     ])('should log when %s api key disables the client', (_case, apiKey) => {
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       try {
         createLoggingTestClient(apiKey)
@@ -137,7 +137,7 @@ describe('PostHog Core', () => {
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
         bootstrap: { distinctId: 'new_id', isIdentifiedId: true },
       })
-      jest.runOnlyPendingTimers()
+      vi.runOnlyPendingTimers()
 
       expect((posthog as any).getDistinctId()).toEqual('new_id')
       expect((posthog as any).getAnonymousId()).not.toEqual('new_id')
@@ -155,7 +155,7 @@ describe('PostHog Core', () => {
         disabled: true,
         flushAt: 1,
       })
-      jest.runOnlyPendingTimers()
+      vi.runOnlyPendingTimers()
 
       expect(posthog.getFeatureFlags()).toEqual(undefined)
       posthog.capture('test')

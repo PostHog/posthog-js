@@ -6,7 +6,7 @@ describe('PostHog Core', () => {
 
   describe('shutdown', () => {
     beforeEach(() => {
-      jest.useRealTimers()
+      vi.useRealTimers()
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
         flushAt: 10,
         preloadFeatureFlags: false,
@@ -24,7 +24,7 @@ describe('PostHog Core', () => {
 
     it('logs and resolves when shutdown times out', async () => {
       mocks.fetch.mockImplementation(() => new Promise(() => {}))
-      const criticalSpy = jest.spyOn((posthog as any)._logger, 'critical').mockImplementation(() => {})
+      const criticalSpy = vi.spyOn((posthog as any)._logger, 'critical').mockImplementation(() => {})
 
       posthog.capture('test-event')
 
@@ -37,7 +37,7 @@ describe('PostHog Core', () => {
     })
 
     it('does not spin forever if flush resolves without draining the queue', async () => {
-      const flush = jest.fn(() => Promise.resolve())
+      const flush = vi.fn(() => Promise.resolve())
       posthog.flush = flush
       posthog.capture('test-event')
 

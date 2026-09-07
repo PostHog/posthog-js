@@ -10,7 +10,7 @@ describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
   let mocks: PostHogCoreTestClientMocks
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   beforeEach(() => {
     ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1 })
@@ -18,7 +18,7 @@ describe('PostHog Core', () => {
 
   describe('ai', () => {
     it('should capture feedback', async () => {
-      jest.setSystemTime(new Date('2022-01-01'))
+      vi.setSystemTime(new Date('2022-01-01'))
 
       posthog.captureTraceFeedback('trace-id', 'feedback')
 
@@ -40,7 +40,7 @@ describe('PostHog Core', () => {
     })
 
     it('should convert numeric traceId in captureTraceFeedback', async () => {
-      jest.setSystemTime(new Date('2022-01-01'))
+      vi.setSystemTime(new Date('2022-01-01'))
 
       posthog.captureTraceFeedback(10, 'feedback')
 
@@ -62,7 +62,7 @@ describe('PostHog Core', () => {
     })
 
     it('should capture a metric', async () => {
-      jest.setSystemTime(new Date('2022-01-01'))
+      vi.setSystemTime(new Date('2022-01-01'))
 
       posthog.captureTraceMetric('trace-id', 'metric-name', 'good')
 
@@ -85,7 +85,7 @@ describe('PostHog Core', () => {
     })
 
     it('should convert numeric arguments in captureTraceMetric', async () => {
-      jest.setSystemTime(new Date('2022-01-01'))
+      vi.setSystemTime(new Date('2022-01-01'))
 
       posthog.captureTraceMetric(10, 'metric-name', 1)
 

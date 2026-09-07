@@ -19,9 +19,11 @@
  * @see web-vitals-soft-navs.ts for the lighter soft-navs bundle
  * @see web-vitals-with-attribution.ts for the default attribution bundle
  */
-// Must be first: installs an Array.prototype.at polyfill before web-vitals (which uses it
-// internally) is evaluated, so the bundle doesn't throw on browsers that predate `.at()`.
+// Must be first: installs the Array.prototype.at and Array.prototype.findLast polyfills before
+// web-vitals (which uses both internally) is evaluated, so the bundle doesn't throw on browsers
+// that predate them.
 import '@posthog/browser-common/utils/array-at-polyfill'
+import '@posthog/browser-common/utils/array-find-last-polyfill'
 
 import { assignableWindow, type WebVitalsCallbacks } from '../utils/globals'
 

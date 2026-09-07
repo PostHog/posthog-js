@@ -1,6 +1,8 @@
+import { execFileSync } from 'child_process'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import { pathToFileURL } from 'url'
 import * as ts from 'typescript'
 // Sanity checks to check the built code does not contain any script loaders
 
@@ -79,6 +81,24 @@ describe('Module entrypoint', () => {
         expect(moduleFullJs).toContain('__PosthogExtensions__.loadExternalDependency=')
         expect(moduleNoExternalJs).not.toContain('__PosthogExtensions__.loadExternalDependency=')
         expect(moduleFullNoExternalJs).not.toContain('__PosthogExtensions__.loadExternalDependency=')
+    })
+
+    it('ships the package module as unambiguous ESM while preserving the legacy .js entrypoint', () => {
+        const packageRoot = path.resolve(__dirname, '../../..')
+        const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf-8'))
+        const modulePath = path.join(packageRoot, packageJson.module)
+
+        expect(packageJson.main).toBe('dist/main.js')
+        expect(packageJson.module).toBe('dist/module.mjs')
+        expect(fs.existsSync(path.join(packageRoot, 'dist/module.js'))).toBe(true)
+        expect(fs.existsSync(modulePath)).toBe(true)
+        expect(fs.readFileSync(modulePath, 'utf-8').replace('module.mjs.map', 'module.js.map') === moduleJs).toBe(true)
+
+        execFileSync(
+            process.execPath,
+            ['--input-type=module', '--eval', `await import(${JSON.stringify(pathToFileURL(modulePath).href)})`],
+            { stdio: 'pipe' }
+        )
     })
 })
 

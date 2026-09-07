@@ -30,11 +30,11 @@ describe('dismissedSurveyEvent', () => {
             responses: { $survey_response_q1: 'answer' },
             surveyLanguage: null,
         })
-        const mockPosthog = { capture: jest.fn(), get_session_replay_url: jest.fn() } as unknown as PostHog
+        const mockPosthog = { capture: vi.fn(), get_session_replay_url: vi.fn() } as unknown as PostHog
 
         dismissedSurveyEvent(survey, mockPosthog, false, 'fr')
 
-        const [, properties] = (mockPosthog.capture as jest.Mock).mock.calls[0]
+        const [, properties] = (mockPosthog.capture as vi.Mock).mock.calls[0]
         expect(properties).not.toHaveProperty('$survey_language')
     })
 
@@ -45,22 +45,22 @@ describe('dismissedSurveyEvent', () => {
             responses: { $survey_response_q1: 'answer' },
             surveyLanguage: 'es',
         })
-        const mockPosthog = { capture: jest.fn(), get_session_replay_url: jest.fn() } as unknown as PostHog
+        const mockPosthog = { capture: vi.fn(), get_session_replay_url: vi.fn() } as unknown as PostHog
 
         dismissedSurveyEvent(survey, mockPosthog, false, 'fr')
 
-        const [, properties] = (mockPosthog.capture as jest.Mock).mock.calls[0]
+        const [, properties] = (mockPosthog.capture as vi.Mock).mock.calls[0]
         expect(properties).toEqual(expect.objectContaining({ $survey_language: 'es' }))
     })
 
     it('falls back to the current display language when the survey was dismissed without answering', () => {
         // No in-progress state at all — nothing was ever answered, so there's no answer-time
         // language to prefer.
-        const mockPosthog = { capture: jest.fn(), get_session_replay_url: jest.fn() } as unknown as PostHog
+        const mockPosthog = { capture: vi.fn(), get_session_replay_url: vi.fn() } as unknown as PostHog
 
         dismissedSurveyEvent(survey, mockPosthog, false, 'fr')
 
-        const [, properties] = (mockPosthog.capture as jest.Mock).mock.calls[0]
+        const [, properties] = (mockPosthog.capture as vi.Mock).mock.calls[0]
         expect(properties).toEqual(expect.objectContaining({ $survey_language: 'fr' }))
     })
 })

@@ -125,7 +125,7 @@ describe('patch', () => {
         // extensions (A and B) each repeatedly wrap + restore window.fetch. Their
         // restores run out of order relative to each other, so before this fix each
         // cycle leaked a wrapper and the chain grew without bound.
-        const base = jest.fn()
+        const base = vi.fn()
         fakeWindow.fakeFetch = base
 
         // Counts how many wrapper frames a single call walks through.
@@ -133,7 +133,7 @@ describe('patch', () => {
         const makeWrapper = (next: any) =>
             function wrapper(this: unknown) {
                 framesPerCall += 1
-                // eslint-disable-next-line prefer-rest-params
+                // oxlint-disable-next-line prefer-rest-params
                 return next.apply(this, arguments)
             }
 

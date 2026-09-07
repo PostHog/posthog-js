@@ -32,37 +32,37 @@ function createMockPostHog(
 
     const persistence = {
         props,
-        get_property: jest.fn((prop: string) => props[prop]),
-        set_property: jest.fn((prop: string, value: Property) => (props[prop] = value)),
-        register: jest.fn((values: Properties) => Object.assign(props, values)),
-        unregister: jest.fn((keyOrKeys: string | readonly string[]) => {
+        get_property: vi.fn((prop: string) => props[prop]),
+        set_property: vi.fn((prop: string, value: Property) => (props[prop] = value)),
+        register: vi.fn((values: Properties) => Object.assign(props, values)),
+        unregister: vi.fn((keyOrKeys: string | readonly string[]) => {
             for (const key of typeof keyOrKeys === 'string' ? [keyOrKeys] : keyOrKeys) {
                 delete props[key]
             }
         }),
-        get_initial_props: jest.fn(() => ({ initial: 'person-property' })),
+        get_initial_props: vi.fn(() => ({ initial: 'person-property' })),
     } as unknown as PostHogPersistence
 
     const instance = {
         config: { token: 'test-token', debug: false },
         persistence,
         _lastRemoteConfig: options.remoteConfigResult,
-        _shouldDisableFlags: jest.fn(() => options.flagsDisabled ?? false),
-        get_distinct_id: jest.fn(() => props.distinct_id as string),
-        get_property: jest.fn((key: string) => props[key]),
-        getGroups: jest.fn(() => props.$groups),
-        is_capturing: jest.fn(() => true),
+        _shouldDisableFlags: vi.fn(() => options.flagsDisabled ?? false),
+        get_distinct_id: vi.fn(() => props.distinct_id as string),
+        get_property: vi.fn((key: string) => props[key]),
+        getGroups: vi.fn(() => props.$groups),
+        is_capturing: vi.fn(() => true),
         sessionManager: {
-            checkAndGetSessionAndWindowId: jest.fn(() => currentSession),
+            checkAndGetSessionAndWindowId: vi.fn(() => currentSession),
         },
-        capture: jest.fn(),
-        _registerExtensionEventProperties: jest.fn(() => jest.fn()),
+        capture: vi.fn(),
+        _registerExtensionEventProperties: vi.fn(() => vi.fn()),
         requestRouter: {
-            endpointFor: jest.fn((target: string, path: string) => `https://${target}.example.com${path}`),
+            endpointFor: vi.fn((target: string, path: string) => `https://${target}.example.com${path}`),
         },
-        _send_request: jest.fn(),
+        _send_request: vi.fn(),
         _internalEventEmitter: new SimpleEventEmitter(),
-        on: jest.fn((_event: string, handler: (event: { event: string; properties: Properties }) => void) => {
+        on: vi.fn((_event: string, handler: (event: { event: string; properties: Properties }) => void) => {
             eventHandlers.add(handler)
             return () => eventHandlers.delete(handler)
         }),
@@ -80,7 +80,7 @@ runClientConformanceSuite('legacy browser', async () => {
         before_send: (event) => event,
     })
     const client = posthog._getBrowserClientAdapter()
-    jest.spyOn(posthog, '_send_request').mockImplementation((options) => {
+    vi.spyOn(posthog, '_send_request').mockImplementation((options) => {
         options.callback?.({ statusCode: 200 })
     })
     return {
@@ -95,7 +95,7 @@ runClientConformanceSuite('legacy browser', async () => {
 function testExtension(
     name: string,
     setup: (client: Client) => void | Promise<void>,
-    dispose: () => void = jest.fn()
+    dispose: () => void = vi.fn()
 ): Extension {
     return { name, setup, dispose }
 }
@@ -125,7 +125,7 @@ describe('BrowserClientAdapter', () => {
             sessionStartTimestamp: 123,
         })
         expect(client?.canCapture).toBe(true)
-        ;(instance.is_capturing as jest.Mock).mockReturnValue(false)
+        ;(instance.is_capturing as vi.Mock).mockReturnValue(false)
         expect(client?.canCapture).toBe(false)
         expect(instance.sessionManager?.checkAndGetSessionAndWindowId).toHaveBeenCalledWith(true)
         expect(client?.logger).toBeDefined()
@@ -153,7 +153,7 @@ describe('BrowserClientAdapter', () => {
         const LogsExtension = 'logs' as ExtensionToken<LogsExtension>
         const MissingExtension = 'missing' as ExtensionToken<LogsExtension>
         const host = new BrowserClientAdapter(createMockPostHog())
-        const captureLog = jest.fn()
+        const captureLog = vi.fn()
         let client: Client | undefined
         let resolvedDuringSetup: LogsExtension | undefined
         const extension: LogsExtension = {
@@ -188,8 +188,8 @@ describe('BrowserClientAdapter', () => {
         const host = posthog._getBrowserClientAdapter()
         const extension: LogsExtension = {
             name: LogsExtension,
-            setup: jest.fn(),
-            captureLog: jest.fn(),
+            setup: vi.fn(),
+            captureLog: vi.fn(),
         }
 
         await host.add(extension)
@@ -202,8 +202,8 @@ describe('BrowserClientAdapter', () => {
 
     it('falls back to the distinct id and an empty session in limited environments', async () => {
         const instance = createMockPostHog()
-        instance.get_property = jest.fn(() => undefined)
-        instance.sessionManager!.checkAndGetSessionAndWindowId = jest.fn(() => {
+        instance.get_property = vi.fn(() => undefined)
+        instance.sessionManager!.checkAndGetSessionAndWindowId = vi.fn(() => {
             throw new Error('cookieless')
         })
         const host = new BrowserClientAdapter(instance)
@@ -276,7 +276,7 @@ describe('BrowserClientAdapter', () => {
         host.handleRemoteConfig(success)
         expect(changes).toEqual([{ ok: false }, success])
 
-        const lateListener = jest.fn()
+        const lateListener = vi.fn()
         client?.onRemoteConfig(lateListener)
         expect(lateListener).toHaveBeenCalledWith(success)
         await host.dispose()
@@ -286,8 +286,8 @@ describe('BrowserClientAdapter', () => {
         const host = new BrowserClientAdapter(createMockPostHog())
         let client: Client | undefined
         await host.add(testExtension('test', (value) => (client = value)))
-        const firstListener = jest.fn()
-        const secondListener = jest.fn()
+        const firstListener = vi.fn()
+        const secondListener = vi.fn()
         client?.onRemoteConfig(firstListener)
         client?.onRemoteConfig(secondListener)
         const result = { ok: true, config: { nested: { approved: true } } as any } as const
@@ -302,14 +302,14 @@ describe('BrowserClientAdapter', () => {
         const host = new BrowserClientAdapter(createMockPostHog())
         let client: Client | undefined
         await host.add(testExtension('test', (value) => (client = value)))
-        const listener = jest.fn()
+        const listener = vi.fn()
         client!.onRemoteConfig(listener)
 
         host.dispose()
         host.handleRemoteConfig({ ok: false })
 
         expect(listener).not.toHaveBeenCalled()
-        expect(client!.onRemoteConfig(jest.fn()).dispose).toEqual(expect.any(Function))
+        expect(client!.onRemoteConfig(vi.fn()).dispose).toEqual(expect.any(Function))
     })
 
     it('replays only canonical cached remote-config outcomes', async () => {
@@ -320,7 +320,7 @@ describe('BrowserClientAdapter', () => {
         const cachedHost = new BrowserClientAdapter(createMockPostHog({ remoteConfigResult: cachedResult }))
         let cachedClient: Client | undefined
         cachedHost.add(testExtension('cached', (client) => (cachedClient = client)))
-        const cachedListener = jest.fn()
+        const cachedListener = vi.fn()
         cachedClient?.onRemoteConfig(cachedListener)
         expect(cachedListener).toHaveBeenCalledWith(cachedResult)
         await cachedHost.dispose()
@@ -328,7 +328,7 @@ describe('BrowserClientAdapter', () => {
         const disabledHost = new BrowserClientAdapter(createMockPostHog({ flagsDisabled: true }))
         let disabledClient: Client | undefined
         disabledHost.add(testExtension('disabled', (client) => (disabledClient = client)))
-        const disabledListener = jest.fn()
+        const disabledListener = vi.fn()
         disabledClient?.onRemoteConfig(disabledListener)
         expect(disabledListener).not.toHaveBeenCalled()
         await disabledHost.dispose()
@@ -356,9 +356,9 @@ describe('BrowserClientAdapter', () => {
         const host = new BrowserClientAdapter(instance)
         let client: Client | undefined
         await host.add(testExtension('test', (value) => (client = value)))
-        const error = jest.spyOn(host.logger, 'error').mockImplementation()
-        const eventSibling = jest.fn()
-        const configSibling = jest.fn()
+        const error = vi.spyOn(host.logger, 'error').mockImplementation(() => {})
+        const eventSibling = vi.fn()
+        const configSibling = vi.fn()
 
         client?.onEvent(() => {
             throw new Error('event listener failed')
@@ -380,8 +380,8 @@ describe('BrowserClientAdapter', () => {
 
     it('delegates dynamic properties and returns an idempotent disposable', async () => {
         const instance = createMockPostHog()
-        const remove = jest.fn()
-        instance._registerExtensionEventProperties = jest.fn(() => remove)
+        const remove = vi.fn()
+        instance._registerExtensionEventProperties = vi.fn(() => remove)
         const host = new BrowserClientAdapter(instance)
         let client: Client | undefined
         host.add(testExtension('test', (value) => (client = value)))
@@ -397,7 +397,7 @@ describe('BrowserClientAdapter', () => {
 
     it('exposes the project token and adapts caller-owned request options', async () => {
         const instance = createMockPostHog()
-        const send = instance._send_request as jest.MockedFunction<(options: QueuedRequestWithOptions) => void>
+        const send = instance._send_request as vi.MockedFunction<(options: QueuedRequestWithOptions) => void>
         send.mockImplementation((options) =>
             options.callback?.({ statusCode: 201, json: { created: true }, text: '{"created":true}' })
         )
@@ -454,7 +454,7 @@ describe('BrowserClientAdapter', () => {
     it('uses the regular API target by default and resolves dropped requests', async () => {
         const instance = createMockPostHog()
         const requestError = new Error('network failure')
-        const send = instance._send_request as jest.MockedFunction<(options: QueuedRequestWithOptions) => void>
+        const send = instance._send_request as vi.MockedFunction<(options: QueuedRequestWithOptions) => void>
         send.mockImplementation((options) => options.callback?.({ statusCode: 0, error: requestError }))
         const host = new BrowserClientAdapter(instance)
         let client: Client | undefined
@@ -473,7 +473,7 @@ describe('BrowserClientAdapter', () => {
 
     it('returns a best-effort response immediately for an explicit sendBeacon transport', async () => {
         const instance = createMockPostHog()
-        const send = instance._send_request as jest.MockedFunction<(options: QueuedRequestWithOptions) => void>
+        const send = instance._send_request as vi.MockedFunction<(options: QueuedRequestWithOptions) => void>
         send.mockImplementation(() => undefined)
         const host = new BrowserClientAdapter(instance)
         let client: Client | undefined
@@ -500,14 +500,14 @@ describe('BrowserClientAdapter', () => {
     })
 
     it('serializes the caller-owned body through the selected browser transport', async () => {
-        const open = jest.spyOn(XMLHttpRequest.prototype, 'open').mockImplementation(() => undefined)
-        const setRequestHeader = jest
+        const open = vi.spyOn(XMLHttpRequest.prototype, 'open').mockImplementation(() => undefined)
+        const setRequestHeader = vi
             .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
             .mockImplementation(() => undefined)
-        const sendRequest = jest.spyOn(XMLHttpRequest.prototype, 'send').mockImplementation(() => undefined)
+        const sendRequest = vi.spyOn(XMLHttpRequest.prototype, 'send').mockImplementation(() => undefined)
         try {
             const instance = createMockPostHog()
-            instance._send_request = jest.fn((options: QueuedRequestWithOptions) => {
+            instance._send_request = vi.fn((options: QueuedRequestWithOptions) => {
                 request(options)
                 options.callback?.({ statusCode: 200 })
             })
@@ -577,8 +577,8 @@ describe('BrowserClientAdapter', () => {
             request_batching: true,
             before_send: (event) => event,
         })
-        const enqueue = jest.spyOn(posthog._requestQueue!, 'enqueue')
-        const send = jest.spyOn(posthog, '_send_retriable_request')
+        const enqueue = vi.spyOn(posthog._requestQueue!, 'enqueue')
+        const send = vi.spyOn(posthog, '_send_retriable_request')
         let client: Client | undefined
         await posthog._getBrowserClientAdapter().add(testExtension('capture-test', (value) => (client = value)))
 
@@ -606,7 +606,7 @@ describe('BrowserClientAdapter', () => {
         const initialCompression = posthog.compression
         const body = document.body
         body.remove()
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
             const canonicalConfig = {
                 supportedCompression: ['base64'],
@@ -620,7 +620,7 @@ describe('BrowserClientAdapter', () => {
             const host = posthog._getBrowserClientAdapter()
             let client: Client | undefined
             await host.add(testExtension('remote-config-test', (value) => (client = value)))
-            const earlySubscriber = jest.fn()
+            const earlySubscriber = vi.fn()
             client?.onRemoteConfig(earlySubscriber)
             const initialCallCount = earlySubscriber.mock.calls.length
 
@@ -630,7 +630,7 @@ describe('BrowserClientAdapter', () => {
             expect(posthog.autocapture!['_isDisabledServerSide']).not.toBe(true)
 
             document.documentElement.appendChild(body)
-            jest.advanceTimersByTime(500)
+            vi.advanceTimersByTime(500)
 
             expect(posthog.analyticsDefaultEndpoint).toBe('/new-endpoint/')
             expect(posthog.compression).toBe('base64')
@@ -638,7 +638,7 @@ describe('BrowserClientAdapter', () => {
             expect(earlySubscriber).toHaveBeenLastCalledWith(result)
             expect(posthog.autocapture!['_isDisabledServerSide']).toBe(true)
 
-            const lateSubscriber = jest.fn()
+            const lateSubscriber = vi.fn()
             client?.onRemoteConfig(lateSubscriber)
             expect(lateSubscriber).toHaveBeenCalledTimes(1)
             expect(lateSubscriber).toHaveBeenCalledWith(result)
@@ -646,7 +646,7 @@ describe('BrowserClientAdapter', () => {
             if (!document.body) {
                 document.documentElement.appendChild(body)
             }
-            jest.useRealTimers()
+            vi.useRealTimers()
             await posthog.shutdown(0)
         }
     })
@@ -660,10 +660,10 @@ describe('BrowserClientAdapter', () => {
         const host = posthog._getBrowserClientAdapter()
         let client: Client | undefined
         await host.add(testExtension('continuation-test', (value) => (client = value)))
-        const error = jest.spyOn(host.logger, 'error').mockImplementation()
-        const enqueue = jest.spyOn(posthog._requestQueue!, 'enqueue')
-        const eventSibling = jest.fn()
-        const configSibling = jest.fn()
+        const error = vi.spyOn(host.logger, 'error').mockImplementation(() => {})
+        const enqueue = vi.spyOn(posthog._requestQueue!, 'enqueue')
+        const eventSibling = vi.fn()
+        const configSibling = vi.fn()
 
         client?.onEvent(() => {
             throw new Error('event failed')
@@ -698,7 +698,7 @@ describe('BrowserClientAdapter', () => {
     it('bridges PostHog remote config, finalized events, persistence reset, and shutdown', async () => {
         const posthog = await createPosthogInstance(undefined, { before_send: (event) => event })
         const host = posthog._getBrowserClientAdapter()
-        const extensionDispose = jest.fn()
+        const extensionDispose = vi.fn()
         let client: Client | undefined
         host.add(testExtension('lifecycle', (value) => (client = value), extensionDispose))
         const remoteConfigs: unknown[] = []
@@ -715,7 +715,7 @@ describe('BrowserClientAdapter', () => {
 
         const body = document.body
         body.remove()
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
             posthog._onRemoteConfig({
                 ok: true,
@@ -723,7 +723,7 @@ describe('BrowserClientAdapter', () => {
             })
             expect(remoteConfigs).toHaveLength(initialRemoteConfigCount)
             document.documentElement.appendChild(body)
-            jest.advanceTimersByTime(500)
+            vi.advanceTimersByTime(500)
             expect(remoteConfigs).toHaveLength(initialRemoteConfigCount + 1)
             expect(remoteConfigs.at(-1)).toEqual({
                 ok: true,
@@ -733,7 +733,7 @@ describe('BrowserClientAdapter', () => {
             if (!document.body) {
                 document.documentElement.appendChild(body)
             }
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
 
         await client?.kv.set('state', 'before-reset')
@@ -749,9 +749,9 @@ describe('BrowserClientAdapter', () => {
 
 describe('PostHog extension dynamic properties', () => {
     it('merges producers before explicit properties, disposes them, and isolates producer errors', async () => {
-        const beforeSend = jest.fn((event) => event)
+        const beforeSend = vi.fn((event) => event)
         const posthog = await createPosthogInstance(undefined, { before_send: beforeSend })
-        const error = jest.spyOn(logger, 'error').mockImplementation()
+        const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
         posthog.register({ producerWinsPersistence: 'persistent' })
         const removeDynamic = posthog._registerExtensionEventProperties(() => ({
             dynamic: 'value',
@@ -762,7 +762,7 @@ describe('PostHog extension dynamic properties', () => {
         posthog._registerExtensionEventProperties(() => {
             throw new Error('producer failed')
         })
-        const duplicateProducer = jest.fn(() => ({ duplicated: true }))
+        const duplicateProducer = vi.fn(() => ({ duplicated: true }))
         const removeFirstDuplicate = posthog._registerExtensionEventProperties(duplicateProducer)
         posthog._registerExtensionEventProperties(duplicateProducer)
 

@@ -1,18 +1,21 @@
+import { resolveOptionalPlugin, type OptionalPluginLoaders } from '../src/optional/OptionalPlugin'
+
 const PRIMARY = { __plugin: 'primary' }
 const LEGACY = { __plugin: 'legacy' }
-
-const mockOptional = (path: string, installed: boolean, value: unknown): void =>
-  jest.doMock(path, () => {
-    if (!installed) {
-      throw new Error('not installed')
-    }
-    return value
-  })
 
 type LoadedOptionalPlugin = {
   plugin: unknown
   version: string | undefined
 }
+
+const optionalLoader =
+  <T>(available: boolean, value: T): (() => T) =>
+  () => {
+    if (!available) {
+      throw new Error('not installed')
+    }
+    return value
+  }
 
 const loadOptionalPlugin = (
   os: string,
@@ -22,31 +25,15 @@ const loadOptionalPlugin = (
     legacyInstalled = true,
   }: { primaryInstalled?: boolean; primaryMetadataAvailable?: boolean; legacyInstalled?: boolean } = {}
 ): LoadedOptionalPlugin => {
-  let loaded: LoadedOptionalPlugin = { plugin: undefined, version: undefined }
-  jest.isolateModules(() => {
-    jest.doMock('react-native', () => ({ Platform: { OS: os } }))
-    mockOptional('@posthog/react-native-plugin', primaryInstalled, PRIMARY)
-    mockOptional('@posthog/react-native-plugin/package.json', primaryMetadataAvailable, { version: '2.4.1' })
-    mockOptional('posthog-react-native-session-replay', legacyInstalled, LEGACY)
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- isolated require re-runs the module's platform-gated load under a fresh registry
-    const optionalPlugin = require('../src/optional/OptionalPlugin')
-    loaded = {
-      plugin: optionalPlugin.OptionalReactNativePlugin,
-      version: optionalPlugin.OptionalReactNativePluginVersion,
-    }
-  })
-  return loaded
+  const loaders: OptionalPluginLoaders = {
+    loadPrimary: optionalLoader(primaryInstalled, PRIMARY) as OptionalPluginLoaders['loadPrimary'],
+    loadPrimaryVersion: optionalLoader(primaryMetadataAvailable, '2.4.1'),
+    loadLegacy: optionalLoader(legacyInstalled, LEGACY) as OptionalPluginLoaders['loadLegacy'],
+  }
+  return resolveOptionalPlugin(os, loaders)
 }
 
 describe('OptionalPlugin loader', () => {
-  afterEach(() => {
-    jest.resetModules()
-    jest.dontMock('react-native')
-    jest.dontMock('@posthog/react-native-plugin')
-    jest.dontMock('@posthog/react-native-plugin/package.json')
-    jest.dontMock('posthog-react-native-session-replay')
-  })
-
   it('loads the primary plugin on macOS', () => {
     expect(loadOptionalPlugin('macos').plugin).toBe(PRIMARY)
   })

@@ -26,7 +26,7 @@ import type {
     UserProvidedTraits,
 } from '../posthog-conversations-types'
 // only importing types here, so won't affect the bundle
-// eslint-disable-next-line posthog-js/no-external-replay-imports
+// oxlint-disable-next-line posthog-js/no-external-replay-imports
 import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
 import type { TracingHeadersDistinctId, TracingHeadersHostnames } from '../extensions/tracing-headers-types'
 import type { eventWithTime } from '../extensions/replay/types/rrweb-types'
@@ -235,6 +235,7 @@ export interface LazyLoadedSessionRecordingInterface {
     isStarted: boolean
     tryAddCustomEvent(tag: string, payload: any): boolean
     setDocumentWasEverVisible?: (documentWasEverVisible: boolean) => void
+    flushBeforeIdentityReset?: () => void
 }
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {

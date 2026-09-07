@@ -16,7 +16,7 @@ export const testIngestion = testPostHog.extend<{}, { ingestion: IngestionPage }
             const ingestion = new IngestionPage()
             ingestion.checkEnv()
             await use(ingestion)
-            // eslint-disable-next-line no-console
+            // oxlint-disable-next-line no-console
             console.log(`
             Waiting for events from tests to appear in PostHog.
             You can manually confirm whether the events have shown up at ${POSTHOG_API_HOST}/project/${POSTHOG_PROJECT_ID}/activity/explore
@@ -132,7 +132,7 @@ export async function retryUntilResults(
         } catch (err) {
             api_errors++
             last_api_error = err
-            // eslint-disable-next-line no-console
+            // oxlint-disable-next-line no-console
             console.error('API Error:', err)
         }
 
@@ -141,7 +141,7 @@ export async function retryUntilResults(
             elapsedSeconds = Math.floor((Date.now() - start) / 1000)
 
             if (dedupedResults.length !== results.length) {
-                // eslint-disable-next-line no-console
+                // oxlint-disable-next-line no-console
                 console.warn(
                     `De-duped ${results.length - dedupedResults.length} duplicate ingested events (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
                 )
@@ -150,26 +150,26 @@ export async function retryUntilResults(
             if (validate) {
                 try {
                     await validate(dedupedResults)
-                    // eslint-disable-next-line no-console
+                    // oxlint-disable-next-line no-console
                     console.log(
                         `Validated results after ${elapsedSeconds} seconds (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle}, resultCount: ${dedupedResults.length})`
                     )
                     return dedupedResults
                 } catch (err) {
                     last_validation_error = err
-                    // eslint-disable-next-line no-console
+                    // oxlint-disable-next-line no-console
                     console.log(
                         `Validation pending with ${dedupedResults.length} results (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
                     )
                 }
             } else if (dedupedResults.length >= target_results) {
-                // eslint-disable-next-line no-console
+                // oxlint-disable-next-line no-console
                 console.log(
                     `Got correct number of results (${target_results}) after ${elapsedSeconds} seconds (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
                 )
                 return dedupedResults
             } else {
-                // eslint-disable-next-line no-console
+                // oxlint-disable-next-line no-console
                 console.log(
                     `Expected ${target_results} results, got ${dedupedResults.length} (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
                 )
@@ -207,7 +207,7 @@ export async function queryAPI(testSessionId: string) {
 
     if (!response.ok) {
         const data = await response.text()
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.error('Bad Response', response.status, data)
         throw new Error('Bad Response')
     }

@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals'
+import { describe, expect, it, vi } from 'vitest'
 import {
   applySurveyTranslation,
   detectSurveyLanguage,
@@ -81,7 +81,7 @@ describe('survey translations', () => {
     })
 
     it('does not log language detection by default', () => {
-      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
       try {
         expect(detectSurveyLanguage({ locale: 'en-US' })).toBe('en-US')
@@ -93,12 +93,12 @@ describe('survey translations', () => {
 
     it('logs language detection through a provided logger', () => {
       const logger: Logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        critical: jest.fn(),
-        createLogger: jest.fn(),
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        critical: vi.fn(),
+        createLogger: vi.fn(),
       }
 
       expect(detectSurveyLanguage({ locale: 'en-US' }, logger)).toBe('en-US')

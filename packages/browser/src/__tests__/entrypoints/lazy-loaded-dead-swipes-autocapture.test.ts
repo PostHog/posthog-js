@@ -5,8 +5,8 @@ import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../../utils/globals'
 
 // need to fake the timer before jsdom inits
-jest.useFakeTimers()
-jest.setSystemTime(1000)
+vi.useFakeTimers()
+vi.setSystemTime(1000)
 
 // jsdom doesn't implement the Touch/TouchEvent constructors, so we fake just
 // enough of the shape that the swipe observer reads (touches / changedTouches)
@@ -35,10 +35,10 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
     let lazyLoadedDeadClicksAutocapture: LazyLoadedDeadClicksAutocapture
 
     beforeEach(async () => {
-        jest.setSystemTime(1000)
+        vi.setSystemTime(1000)
 
         assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-        assignableWindow.__PosthogExtensions__.loadExternalDependency = jest
+        assignableWindow.__PosthogExtensions__.loadExternalDependency = vi
             .fn()
             .mockImplementation(() => (_ph: PostHog, _name: string, cb: (err?: Error) => void) => {
                 cb()
@@ -51,7 +51,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             persistence: {
                 props: {},
             },
-            capture: jest.fn(),
+            capture: vi.fn(),
         } as unknown as Partial<PostHog> as PostHog
 
         lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance)
@@ -188,10 +188,10 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         ])('does not store a candidate when $scenario while the finger was down', ({ act }) => {
             triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
 
-            jest.setSystemTime(1050)
+            vi.setSystemTime(1050)
             act()
 
-            jest.setSystemTime(1100)
+            vi.setSystemTime(1100)
             triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
@@ -202,12 +202,12 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         })
 
         it('still stores a candidate when the only activity happened before the gesture began', () => {
-            jest.setSystemTime(900)
+            vi.setSystemTime(900)
             document.body.dispatchEvent(new Event('scroll'))
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = 900
             lazyLoadedDeadClicksAutocapture['_lastSelectionChanged'] = 900
 
-            jest.setSystemTime(1000)
+            vi.setSystemTime(1000)
             triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
@@ -233,7 +233,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
 
         it('does not store a swipe when the finger was over a canvas', () => {
             addCanvas()
-            ;(document as any).elementsFromPoint = jest.fn().mockReturnValue([canvas, document.body])
+            ;(document as any).elementsFromPoint = vi.fn().mockReturnValue([canvas, document.body])
 
             triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
 
@@ -242,7 +242,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
 
         it('still stores a swipe when the finger was not over the surface', () => {
             addCanvas()
-            ;(document as any).elementsFromPoint = jest.fn().mockReturnValue([document.body])
+            ;(document as any).elementsFromPoint = vi.fn().mockReturnValue([document.body])
 
             triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
 
@@ -250,7 +250,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         })
 
         it('does not hit-test at all on pages without such surfaces', () => {
-            const elementsFromPoint = jest.fn().mockReturnValue([])
+            const elementsFromPoint = vi.fn().mockReturnValue([])
             ;(document as any).elementsFromPoint = elementsFromPoint
 
             triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
@@ -260,7 +260,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         })
 
         it('rechecks for surfaces once the DOM has mutated', () => {
-            const elementsFromPoint = jest.fn().mockReturnValue([])
+            const elementsFromPoint = vi.fn().mockReturnValue([])
             ;(document as any).elementsFromPoint = elementsFromPoint
 
             // first swipe: no canvas on the page, so the cached answer is "none" and no hit-test runs
@@ -273,7 +273,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = 3000
             elementsFromPoint.mockReturnValue([canvas])
 
-            jest.setSystemTime(5000)
+            vi.setSystemTime(5000)
             triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
 
             expect(elementsFromPoint).toHaveBeenCalled()
@@ -305,10 +305,10 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             const el = document.createElement('div')
             document.body.append(el)
 
-            jest.setSystemTime(1000)
+            vi.setSystemTime(1000)
             triggerSwipe(el, { x: 100, y: 200 }, { x: 100, y: 40 })
 
-            jest.setSystemTime(1500)
+            vi.setSystemTime(1500)
             triggerSwipe(el, { x: 100, y: 200 }, { x: 100, y: 40 })
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
@@ -343,7 +343,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
 
     describe('dead swipe capture', () => {
         beforeEach(() => {
-            jest.setSystemTime(0)
+            vi.setSystemTime(0)
         })
 
         const pushSwipeCandidate = (overrides: Partial<DeadClickCandidate> = {}) => {
@@ -408,7 +408,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         it('swipe followed by nothing for too long, dead swipe', () => {
             pushSwipeCandidate({ swipeDirection: 'left', swipeDistancePx: 120 })
 
-            jest.setSystemTime(3001 + 900)
+            vi.setSystemTime(3001 + 900)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
@@ -436,7 +436,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
 
     describe('page load capture limit', () => {
         beforeEach(() => {
-            jest.setSystemTime(0)
+            vi.setSystemTime(0)
         })
 
         it('drops dead swipes beyond max_dead_swipes_per_page_load instead of capturing them', () => {

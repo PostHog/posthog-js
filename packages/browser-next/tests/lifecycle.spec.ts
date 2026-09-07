@@ -1,3 +1,5 @@
+import type { Mock } from 'vitest'
+
 import { analytics } from '../src/analytics'
 import { createPostHog, type BrowserFetch } from '../src/core'
 
@@ -8,13 +10,13 @@ interface MutableNavigator {
 describe('browser-next analytics lifecycle', () => {
     const descriptors = new Map<PropertyKey, PropertyDescriptor | undefined>()
     let events: EventTarget
-    let add: jest.Mock
-    let remove: jest.Mock
+    let add: Mock
+    let remove: Mock
 
     beforeEach(() => {
         events = new EventTarget()
-        add = jest.fn(events.addEventListener.bind(events))
-        remove = jest.fn(events.removeEventListener.bind(events))
+        add = vi.fn(events.addEventListener.bind(events))
+        remove = vi.fn(events.removeEventListener.bind(events))
         for (const [key, value] of [
             ['addEventListener', add],
             ['removeEventListener', remove],
@@ -26,7 +28,7 @@ describe('browser-next analytics lifecycle', () => {
     })
 
     afterEach(() => {
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
         for (const key of ['addEventListener', 'removeEventListener', 'onpagehide']) {
             const descriptor = descriptors.get(key)
             if (descriptor) {
@@ -36,12 +38,12 @@ describe('browser-next analytics lifecycle', () => {
             }
         }
         descriptors.clear()
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     it('initiates an uncompressed headered keepalive request synchronously on pagehide', async () => {
-        const fetch = jest
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        const fetch = vi
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -78,7 +80,7 @@ describe('browser-next analytics lifecycle', () => {
 
         posthog.optOut()
         await posthog.dispose()
-        expect(remove.mock.calls.map(([event]) => event)).toEqual(
+        expect(remove.mock.calls.map(([event]: [string]) => event)).toEqual(
             expect.arrayContaining(['online', 'offline', 'pagehide'])
         )
     })
@@ -117,8 +119,8 @@ describe('browser-next analytics lifecycle', () => {
 
     it('uses unload only when pagehide is unavailable', async () => {
         delete (globalThis as Record<string, unknown>).onpagehide
-        const fetch = jest
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        const fetch = vi
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -141,8 +143,8 @@ describe('browser-next analytics lifecycle', () => {
 
     it('retains work while offline and redrives it once when online fires', async () => {
         const navigator: MutableNavigator = { onLine: false }
-        const fetch = jest
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        const fetch = vi
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -171,8 +173,8 @@ describe('browser-next analytics lifecycle', () => {
 
     it('does not lose a staged batch when the browser goes offline before delivery starts', async () => {
         const navigator: MutableNavigator = { onLine: true }
-        const fetch = jest
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        const fetch = vi
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -198,9 +200,9 @@ describe('browser-next analytics lifecycle', () => {
     })
 
     it('removes analytics lifecycle callbacks even when another extension cleanup stalls', async () => {
-        jest.useFakeTimers()
-        const fetch = jest
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        vi.useFakeTimers()
+        const fetch = vi
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -216,10 +218,10 @@ describe('browser-next analytics lifecycle', () => {
         await posthog.capture('shutdown')
 
         const shutdown = posthog.shutdown(5)
-        await jest.advanceTimersByTimeAsync(5)
+        await vi.advanceTimersByTimeAsync(5)
         await shutdown
         expect(fetch).toHaveBeenCalledTimes(1)
-        expect(remove.mock.calls.map(([event]) => event)).toEqual(
+        expect(remove.mock.calls.map(([event]: [string]) => event)).toEqual(
             expect.arrayContaining(['online', 'offline', 'pagehide'])
         )
 
@@ -228,9 +230,9 @@ describe('browser-next analytics lifecycle', () => {
     })
 
     it('preserves FIFO by stopping at an over-budget teardown head', async () => {
-        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
-        const fetch = jest
-            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const fetch = vi
+            .fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>()
             .mockResolvedValue(new Response('{}', { status: 200 }))
         const posthog = await createPostHog({
             projectToken: 'ph_test',
@@ -256,7 +258,7 @@ describe('browser-next analytics lifecycle', () => {
     })
 
     it('keeps aggregate teardown bodies below the conservative shared quota', async () => {
-        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
         const bodies: string[] = []
         const fetch: BrowserFetch = async (_input, init = {}) => {
             bodies.push(String(init.body))

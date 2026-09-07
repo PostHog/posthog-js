@@ -30,6 +30,7 @@ import {
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_FACEBOOK_CLICK_ID,
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
@@ -76,6 +77,23 @@ const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['pers
 ]
 
 const getCookieIdentityChangePendingName = (name: string): string => `${name}_cookie_identity_change_pending`
+
+const MAX_COOKIE_PERSON_INFO_FIELD_SIZE = 1000
+
+const truncateForCookie = (value: string): string => {
+    // Persistence JSON-stringifies and URI-encodes this value, so raw character count is not its cookie size.
+    let result = ''
+    let encodedLength = 0
+    for (const character of value) {
+        const encodedCharacterLength = encodeURIComponent(JSON.stringify(character).slice(1, -1)).length
+        if (encodedLength + encodedCharacterLength > MAX_COOKIE_PERSON_INFO_FIELD_SIZE) {
+            break
+        }
+        result += character
+        encodedLength += encodedCharacterLength
+    }
+    return result
+}
 
 const parseName = (config: PostHogConfig): string => {
     let token = ''
@@ -192,6 +210,8 @@ export class PostHogPersistence {
     // Whether the resolved storage backend can host the split (localStorage /
     // localStorage+cookie). Set by `_buildStorage`.
     private _splitStorageEligible = false
+    // Whether the resolved backend writes identity properties to a cookie.
+    private _storesIdentityInCookie = false
     // Whether flag config is stored in their own entries this session:
     // backend-eligible AND `split_storage` enabled.
     // Re-resolved on every `update_config` (backend rebuild or a runtime flag flip).
@@ -227,6 +247,7 @@ export class PostHogPersistence {
     private _storageMigrationInProgress = false
     private _localIdentityChangePending = false
     private _crossTabFeatureFlagIdentityMismatch = false
+    private _facebookClickIdChangePending = false
     private readonly _crossTabFeatureFlagHandlers = new Set<() => void>()
     private _onStorage?: (event: StorageEvent) => void
 
@@ -929,6 +950,7 @@ export class PostHogPersistence {
         )
 
         let store: PersistentStore
+        let storesIdentityInCookie = false
 
         // The flag split is only meaningful on a localStorage-backed
         // store: it is the one that broadcasts large cross-tab `storage` events.
@@ -943,18 +965,22 @@ export class PostHogPersistence {
         } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore._is_supported()) {
             store = localPlusCookieStore
             splitEligible = true
+            storesIdentityInCookie = true
         } else if (storage_type === 'sessionstorage' && sessionStore._is_supported()) {
             store = sessionStore
         } else if (storage_type === 'memory') {
             store = memoryStore
         } else if (storage_type === 'cookie' && cookieStore._is_supported()) {
             store = cookieStore
+            storesIdentityInCookie = true
         } else if (localPlusCookieStore._is_supported()) {
             // selected storage type wasn't supported, fallback to 'localstorage+cookie' if possible
             store = localPlusCookieStore
             splitEligible = true
+            storesIdentityInCookie = true
         } else if (cookieStore._is_supported()) {
             store = cookieStore
+            storesIdentityInCookie = true
         } else {
             // Neither web storage nor cookies are available -- e.g. a page served from a
             // `data:` URL, where Chrome disables both. Falling back to cookieStore here left
@@ -963,6 +989,7 @@ export class PostHogPersistence {
         }
 
         this._splitStorageEligible = splitEligible
+        this._storesIdentityInCookie = storesIdentityInCookie
         return store
     }
 
@@ -1173,10 +1200,13 @@ export class PostHogPersistence {
         if (this._disabled) {
             return
         }
+        if (prop === PERSISTENCE_FACEBOOK_CLICK_ID && this._facebookClickIdChangePending) {
+            return
+        }
         const group = this._splitStorage ? getPersistenceKeyPolicy(prop)?.storageGroup : undefined
         const entry = group ? localStore._parse(this._groupEntryName(group)) : this._storage._parse(this._name)
         if (entry && prop in entry) {
-            this._setProp(prop, entry[prop])
+            this._setProp(prop, entry[prop], false)
             return
         }
         // A grouped key that has not migrated yet still lives in the main blob;
@@ -1184,11 +1214,11 @@ export class PostHogPersistence {
         if (group) {
             const mainEntry = this._storage._parse(this._name)
             if (mainEntry && prop in mainEntry) {
-                this._setProp(prop, mainEntry[prop])
+                this._setProp(prop, mainEntry[prop], false)
                 return
             }
         }
-        this._deleteProp(prop)
+        this._deleteProp(prop, false)
     }
 
     /**
@@ -1247,6 +1277,12 @@ export class PostHogPersistence {
         // not adopt a sibling write that arrived while it was in progress.
         if (!forceSuppressedSnapshot) {
             this.syncCookieProperties()
+            if (
+                !this._facebookClickIdChangePending &&
+                (!this._config.cookieWinsOnConflict || this._config.persistence.toLowerCase() !== 'localstorage+cookie')
+            ) {
+                this.refreshKey(PERSISTENCE_FACEBOOK_CLICK_ID)
+            }
         }
 
         const shouldReconcileCrossTabProperties = !forceSuppressedSnapshot && !this._storageMigrationInProgress
@@ -1277,6 +1313,7 @@ export class PostHogPersistence {
         if (writeResult !== 'failed') {
             this._pendingCrossTabFeatureFlagChanges.clear()
             this._localIdentityChangePending = false
+            this._facebookClickIdChangePending = false
         }
         if (crossTabPropertiesChanged) {
             this._crossTabFeatureFlagHandlers.forEach((handler) => handler())
@@ -1302,6 +1339,7 @@ export class PostHogPersistence {
         }
         if (mainWriteResult !== 'failed') {
             this._localIdentityChangePending = false
+            this._facebookClickIdChangePending = false
             CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
                 if (!getPersistenceKeyPolicy(key)?.storageGroup) {
                     this._pendingCrossTabFeatureFlagChanges.delete(key)
@@ -1580,7 +1618,7 @@ export class PostHogPersistence {
         }
     }
 
-    update_campaign_params(): void {
+    update_campaign_params(): Properties | undefined {
         const currentUrl = document?.URL
         if (currentUrl === this._campaign_params_url) {
             return
@@ -1591,11 +1629,12 @@ export class PostHogPersistence {
             this._config.mask_personal_data_properties,
             this._config.custom_personal_data_properties
         )
-        // only save campaign params if there were any
-        if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
+        const hasCampaignParams = !isEmptyObject(stripEmptyProperties(campaignParams))
+        if (hasCampaignParams) {
             this.register(campaignParams)
         }
         this._campaign_params_url = currentUrl
+        return hasCampaignParams ? campaignParams : undefined
     }
     update_search_keyword(): void {
         this.register(getSearchInfo())
@@ -1611,13 +1650,19 @@ export class PostHogPersistence {
             return
         }
 
+        const personInfo = getPersonInfo(
+            this._config.mask_personal_data_properties,
+            this._config.custom_personal_data_properties,
+            this._config.disable_capture_url_hashes
+        )
         this.register_once(
             {
-                [INITIAL_PERSON_INFO]: getPersonInfo(
-                    this._config.mask_personal_data_properties,
-                    this._config.custom_personal_data_properties,
-                    this._config.disable_capture_url_hashes
-                ),
+                [INITIAL_PERSON_INFO]: this._storesIdentityInCookie
+                    ? {
+                          r: truncateForCookie(personInfo.r),
+                          u: personInfo.u ? truncateForCookie(personInfo.u) : undefined,
+                      }
+                    : personInfo,
             },
             undefined
         )
@@ -1704,6 +1749,7 @@ export class PostHogPersistence {
         // split flag from the fresh eligibility. The new backend may no longer be
         // split-eligible (e.g. localStorage -> memory).
         const newStore = persistenceChanged || cookiePrecedenceChanged ? this._buildStorage(config) : this._storage
+        this._truncateExistingPersonInfoForCookie()
         const wantSplit = this._resolveSplitStorage(config)
         const storageMigration = persistenceChanged || wantSplit !== this._splitStorage
         const cookieOptionsChanged =
@@ -1749,6 +1795,23 @@ export class PostHogPersistence {
                 // subdomain can initialize.
                 this._endCookieSyncSuppression()
             }
+        }
+    }
+
+    private _truncateExistingPersonInfoForCookie(): void {
+        const personInfo = this.props[INITIAL_PERSON_INFO]
+        if (!this._storesIdentityInCookie || !isObject(personInfo) || typeof personInfo.r !== 'string') {
+            return
+        }
+
+        const truncatedReferrer = truncateForCookie(personInfo.r)
+        const truncatedUrl = typeof personInfo.u === 'string' ? truncateForCookie(personInfo.u) : personInfo.u
+        if (truncatedReferrer !== personInfo.r || truncatedUrl !== personInfo.u) {
+            this._setProp(INITIAL_PERSON_INFO, {
+                ...personInfo,
+                r: truncatedReferrer,
+                u: truncatedUrl,
+            })
         }
     }
 
@@ -1813,6 +1876,9 @@ export class PostHogPersistence {
         if ((prop === DISTINCT_ID || prop === USER_STATE) && previousValue !== to) {
             this._localIdentityChangePending = true
         }
+        if (prop === PERSISTENCE_FACEBOOK_CLICK_ID && !isStorageValueEqual(previousValue, to)) {
+            this._facebookClickIdChangePending = true
+        }
         this._markPendingCrossTabFeatureFlagChanges(prop, previousValue, to)
         // A volatile value change never dirties its group — it changes on every
         // remote load and would otherwise force a rewrite of the large entry per
@@ -1830,6 +1896,9 @@ export class PostHogPersistence {
         }
         if (isCrossTabFeatureFlagKey(prop)) {
             this._setCrossTabFeatureFlagChangesPending(prop, true)
+        }
+        if (prop === PERSISTENCE_FACEBOOK_CLICK_ID) {
+            this._facebookClickIdChangePending = true
         }
         this._markGroupDirty(prop)
     }

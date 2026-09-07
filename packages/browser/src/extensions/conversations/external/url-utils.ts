@@ -51,7 +51,7 @@ export function getRestoreTokenFromUrl(): string | null {
     }
 
     try {
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const params = new URLSearchParams(window.location.search)
         const token = params.get(RESTORE_QUERY_PARAM)
         return token?.trim() || null
@@ -67,7 +67,7 @@ export function clearRestoreTokenFromUrl(): void {
     }
 
     try {
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const url = new URL(window.location.href)
         url.searchParams.delete(RESTORE_QUERY_PARAM)
         const newUrl = `${url.pathname}${url.search}${url.hash}`

@@ -35,7 +35,7 @@ describe('general utils', () => {
         })
 
         it('warns when using the old field', () => {
-            const warn = jest.fn()
+            const warn = vi.fn()
 
             migrateConfigField({ oldField: 'old' }, 'newField', 'oldField', 'default', { warn })
 
