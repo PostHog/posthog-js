@@ -50,7 +50,7 @@ describe('JSON-LD replay capture', () => {
         })
         script.id = 'json-ld-script'
         document.body.append(script)
-        const emit = jest.fn(() => true)
+        const emit = vi.fn(() => true)
         const capture = startJsonLdCapture(document, MutationObserver, {
             blockClass: 'ph-no-capture',
             getCapturedDomNodes: () =>
@@ -91,7 +91,7 @@ describe('JSON-LD replay capture', () => {
                     '@id': '#product-id',
                 })
             )
-            const emit = jest.fn(() => true)
+            const emit = vi.fn(() => true)
             const masking =
                 maskingOption === 'maskAllElementAttributes'
                     ? { maskAllElementAttributes: true }
