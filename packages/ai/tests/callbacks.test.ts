@@ -2155,6 +2155,16 @@ describe('served service tier', () => {
     expect(capturedModelParams()).toMatchObject({ temperature: 0.5, service_tier: 'flex' })
   })
 
+  it('reads the served tier from the message response_metadata (Responses API shape)', () => {
+    const runId = 'run_responses_tier'
+    startRun(runId)
+    const message = new AIMessage('Response')
+    message.response_metadata = { service_tier: 'priority' }
+    handler.handleLLMEnd({ generations: [[{ text: 'Response', message }]], llmOutput: {} }, runId)
+
+    expect(capturedModelParams().service_tier).toBe('priority')
+  })
+
   it('omits the tier entirely when the response never reported one', () => {
     const runId = 'run_no_served_tier'
     startRun(runId)

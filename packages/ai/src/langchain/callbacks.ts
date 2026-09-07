@@ -714,12 +714,15 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     if (!output.generations || !Array.isArray(output.generations)) {
       return undefined
     }
-    // langchain surfaces the tier in generationInfo on the final streamed chunk;
-    // llmOutput is where its Python counterpart puts it, kept as a fallback.
+    // The Responses adapter stores the tier on the message's response_metadata (streaming and
+    // not), the Completions adapter in generationInfo on the final streamed chunk; llmOutput is
+    // where the Python adapter puts it, kept as a fallback.
     const lastGeneration = output.generations[output.generations.length - 1]
     const gen = Array.isArray(lastGeneration) ? lastGeneration[0] : undefined
     const servedTier =
-      gen?.generationInfo?.service_tier ?? (output.llmOutput as Record<string, any> | undefined)?.service_tier
+      (gen as any)?.message?.response_metadata?.service_tier ??
+      gen?.generationInfo?.service_tier ??
+      (output.llmOutput as Record<string, any> | undefined)?.service_tier
     return servedTier != null ? String(servedTier) : undefined
   }
 
