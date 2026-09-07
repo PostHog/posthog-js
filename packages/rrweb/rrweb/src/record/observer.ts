@@ -10,6 +10,7 @@ import type { FontFaceSet } from 'css-font-loading-module';
 import {
   throttle,
   on,
+  callAllSafely,
   hookSetter,
   getWindowScroll,
   getWindowHeight,
@@ -1617,7 +1618,7 @@ export function initObservers(
     // torn down) without touching the rest of the page's shadow observation.
     o.shadowDomManager.resetForDoc(o.doc);
     mutationObserver?.disconnect();
-    handlers.forEach((handler) => handler());
+    callAllSafely(handlers);
   });
 
   try {

@@ -1475,7 +1475,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._jsonLdCapture?.stop()
         this._jsonLdCapture = undefined
         this._jsonLdCaptureReady = false
-        this._stopRrweb?.()
+        // rrweb's stop closure must neither abort the teardown that follows nor leave
+        // _stopRrweb set, which would keep isStarted reporting a stopped recorder
+        try {
+            this._stopRrweb?.()
+        } catch (e) {
+            logger.warn('could not stop rrweb', e)
+        }
         this._stopRrweb = undefined
     }
 

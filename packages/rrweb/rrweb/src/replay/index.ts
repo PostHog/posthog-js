@@ -1383,6 +1383,11 @@ export class Replayer {
       case IncrementalSource.Drag:
       case IncrementalSource.TouchMove:
       case IncrementalSource.MouseMove:
+        // recordings reach the player with a malformed `positions`; skip the
+        // event rather than let it end playback (`addDelay` guards it too)
+        if (!Array.isArray(d.positions) || !d.positions.length) {
+          break;
+        }
         if (isSync) {
           const lastPosition = d.positions[d.positions.length - 1];
           this.mousePos = {

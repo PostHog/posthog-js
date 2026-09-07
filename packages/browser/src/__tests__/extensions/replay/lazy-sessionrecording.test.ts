@@ -4456,6 +4456,26 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording.started).toEqual(false)
         })
 
+        it('completes teardown when the rrweb stop closure throws', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(sessionRecording.started).toEqual(true)
+
+            sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb'] = () => {
+                throw new TypeError('h is not a function')
+            }
+
+            expect(() => sessionRecording.stopRecording()).not.toThrow()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb']).toEqual(undefined)
+            expect(sessionRecording.started).toEqual(false)
+        })
+
         it('can emit when there are circular references', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.onRemoteConfig(
