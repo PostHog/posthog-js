@@ -1,5 +1,17 @@
 # @posthog/browser-common
 
+## 0.8.0
+
+### Minor Changes
+
+- [#4809](https://github.com/PostHog/posthog-js/pull/4809) [`3a5b322`](https://github.com/PostHog/posthog-js/commit/3a5b32229a135af56d43a17350a222784d94c88d) Thanks [@marandaneto](https://github.com/marandaneto)! - Add best-effort in-app browser attribution using `$webview_app` and `$webview_app_version`, without changing existing `$browser` or `$browser_version` values. Detect explicit user-agent markers for Facebook, Facebook Lite, Messenger, Instagram, Threads, LinkedIn, Twitter, TikTok, WhatsApp, Snapchat, WeChat, LINE, Google, Bing, Pinterest, Naver, and KakaoTalk. Unknown apps and versions are omitted; missing markers do not imply a standalone browser.
+  (2026-09-07)
+
+### Patch Changes
+
+- Updated dependencies [[`3a5b322`](https://github.com/PostHog/posthog-js/commit/3a5b32229a135af56d43a17350a222784d94c88d)]:
+  - @posthog/core@1.51.0
+
 ## 0.7.3
 
 ### Patch Changes

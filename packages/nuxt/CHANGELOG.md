@@ -1,5 +1,15 @@
 # @posthog/nuxt
 
+## 1.7.89
+
+### Patch Changes
+
+- [#4779](https://github.com/PostHog/posthog-js/pull/4779) [`41d37a5`](https://github.com/PostHog/posthog-js/commit/41d37a5487efd1c8dcaf53cc40e2fab2e5af294f) Thanks [@posthog](https://github.com/apps/posthog)! - Inject the Nitro server chunks before upload, upload only injected directories, upload the public source maps in one step regardless of the deletion mode, and pass the configured release to every source map command.
+  (2026-09-07)
+- Updated dependencies [[`3a5b322`](https://github.com/PostHog/posthog-js/commit/3a5b32229a135af56d43a17350a222784d94c88d)]:
+  - @posthog/core@1.51.0
+  - posthog-js@1.428.0
+
 ## 1.7.88
 
 ### Patch Changes
