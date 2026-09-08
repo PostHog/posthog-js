@@ -300,6 +300,9 @@ export class PostHogSpan implements Span {
 
 const EXCEPTION_EVENT_NAME = 'exception'
 
+/** The widest value the OTLP `dropped_*_count` fields, declared `uint32`, can carry. */
+const MAX_UINT32 = 0xffff_ffff
+
 /** A value as its string form, or the encoder's marker when it refuses to produce one. */
 function safeString(value: unknown): string {
   try {
@@ -309,9 +312,17 @@ function safeString(value: unknown): string {
   }
 }
 
-/** A caller-visible counter read back as a number, or 0 for anything else. */
+/**
+ * A caller-visible counter read back as a number, or 0 for anything else.
+ * Clamped to the `uint32` the OTLP field is declared as: a `beforeSpanSend` hook
+ * can write a larger number onto an event, and one that overflows the field is
+ * refused for the whole request.
+ */
 export function nonNegativeCount(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return 0
+  }
+  return Math.min(Math.floor(value), MAX_UINT32)
 }
 
 /**

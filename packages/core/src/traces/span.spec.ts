@@ -1,5 +1,6 @@
 import { NOOP_SPAN, PostHogSpan, describeError, truncateAttributeValue } from './span'
 import { buildOtlpSpan } from './otlp'
+import { resolveTracesConfig } from './config'
 import type { SpanInit } from './span'
 import type { SpanRecord } from './types'
 import type { Logger } from '../types'
@@ -306,6 +307,34 @@ describe('PostHogSpan', () => {
       expect(() => span.end()).not.toThrow()
 
       expect(ended[0].events[0].attributes).toEqual({})
+    })
+
+    it('drops the attribute past the shipped default and nothing before it', () => {
+      // Ties the default the SDK actually ships to the behaviour at its boundary:
+      // the other cases here pick small caps, so neither half moves the other.
+      const limit = resolveTracesConfig(undefined).maxAttributesPerEvent
+      const atLimit = Object.fromEntries(Array.from({ length: limit }, (_, index) => [`k${index}`, index]))
+
+      const span = createSpan({ maxAttributesPerEvent: limit })
+      span.addEvent('at-limit', atLimit)
+      span.addEvent('over-limit', { ...atLimit, extra: 1 })
+      span.end()
+
+      expect(ended[0].events[0].attributes).toEqual(atLimit)
+      expect(ended[0].events[0].droppedAttributesCount).toBeUndefined()
+      expect(ended[0].events[1].attributes).toEqual(atLimit)
+      expect(ended[0].events[1].droppedAttributesCount).toBe(1)
+    })
+
+    it('clamps a hook-written drop count to what the wire field holds', () => {
+      // The count is a uint32 on the wire, and a value over it is refused for the
+      // whole request rather than the one span that carried it.
+      const span = createSpan()
+      span.addEvent('query', { a: 1 })
+      span.end()
+      ended[0].events[0].droppedAttributesCount = Number.MAX_SAFE_INTEGER
+
+      expect(buildOtlpSpan(ended[0], logger).events?.[0].droppedAttributesCount).toBe(0xffff_ffff)
     })
 
     it('counts the span attribute cap separately from an event cap', () => {

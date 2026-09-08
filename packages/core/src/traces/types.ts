@@ -63,6 +63,14 @@ export interface SpanEventRecord {
   /** ms epoch. */
   timestamp: number
   attributes?: SpanAttributes
+  /**
+   * How many of this event's attributes the cap discarded.
+   *
+   * Unlike the span-level counts, this one is carried on an object a
+   * `beforeSpanSend` hook holds: the public event type omits it, so a hook that
+   * rebuilds its events returns them without it. Events have no identity to
+   * match a rebuilt array back against, so what a hook drops here stays dropped.
+   */
   droppedAttributesCount?: number
 }
 
