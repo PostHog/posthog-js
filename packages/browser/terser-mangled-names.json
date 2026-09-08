@@ -121,6 +121,7 @@
         "_clicks",
         "_client",
         "_coerceExceptionStepProperties",
+        "_collectJsonLdForFullSnapshot",
         "_combinedMatching",
         "_compileRegexCache",
         "_compileUrlPatterns",
