@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { waitForPackages } from './wait-for-packages.mjs'
+
 const packageDir = dirname(fileURLToPath(import.meta.url))
 const fixtureDir = mkdtempSync(join(tmpdir(), 'posthog-nuxt5-consumer-'))
 const packageRoot = join(packageDir, '..')
@@ -49,6 +51,7 @@ function withTimeout(promise, milliseconds, message) {
 
 try {
   const packageManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
+  const packagesToWaitFor = new Map()
   packageManifest.dependencies = Object.fromEntries(
     Object.entries(packageManifest.dependencies).map(([name, version]) => {
       if (version !== 'catalog:' && !version.startsWith('workspace:')) {
@@ -59,6 +62,7 @@ try {
         readFileSync(join(packageRoot, 'node_modules', ...name.split('/'), 'package.json'), 'utf8')
       )
       const range = version === 'workspace:^' ? '^' : version === 'workspace:~' ? '~' : ''
+      packagesToWaitFor.set(name, dependencyManifest.version)
       return [name, `${range}${dependencyManifest.version}`]
     })
   )
@@ -121,6 +125,7 @@ try {
     `setInterval(() => {}, 60_000)\nexport default () => { process.once('SIGUSR2', () => { Promise.reject(new Error('background shutdown test')) }) }\n`
   )
 
+  await waitForPackages(packagesToWaitFor)
   execFileSync('pnpm', ['install', '--ignore-scripts', '--no-frozen-lockfile'], { cwd: fixtureDir, stdio: 'inherit' })
   execFileSync('pnpm', ['exec', 'nuxt', 'build'], { cwd: fixtureDir, stdio: 'inherit' })
 

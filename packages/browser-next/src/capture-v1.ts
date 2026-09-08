@@ -256,7 +256,7 @@ const compressWithDeadline = async (
         if (signal) {
             onAbort = () => resolve(undefined)
             try {
-                // eslint-disable-next-line posthog-js/no-add-event-listener
+                // oxlint-disable-next-line posthog-js/no-add-event-listener
                 signal.addEventListener('abort', onAbort, { once: true })
                 if (signal.aborted) {
                     onAbort()
@@ -291,11 +291,11 @@ const cancelResponseBody = (response: Response | undefined): void => {
 }
 
 const coerceBoolean = (value: unknown): boolean | undefined => {
-    // eslint-disable-next-line posthog-js/no-direct-boolean-check
+    // oxlint-disable-next-line posthog-js/no-direct-boolean-check
     if (typeof value === 'boolean') {
         return value
     }
-    // eslint-disable-next-line posthog-js/no-direct-number-check
+    // oxlint-disable-next-line posthog-js/no-direct-number-check
     if (typeof value === 'number' && Number.isFinite(value)) {
         return value !== 0
     }
@@ -450,7 +450,7 @@ const waitForRetry = async (
             reject(cancellationError())
         }
         try {
-            // eslint-disable-next-line posthog-js/no-add-event-listener
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
             signal.addEventListener('abort', onAbort, { once: true })
             if (signal.aborted) {
                 onAbort()
@@ -576,7 +576,7 @@ const attemptOnce = async (
             cancelResponseBody(response)
         }
         try {
-            // eslint-disable-next-line posthog-js/no-add-event-listener
+            // oxlint-disable-next-line posthog-js/no-add-event-listener
             signal.addEventListener('abort', onAbort, { once: true })
             if (signal.aborted) {
                 onAbort()

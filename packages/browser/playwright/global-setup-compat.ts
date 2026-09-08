@@ -35,7 +35,7 @@ async function downloadNpmVersion(): Promise<void> {
     const version = packageInfo.version
     process.env.COMPAT_VERSION = version
 
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.log(
         `Compat tests using posthog-js@${version} and posthog-js@${LEGACY_EXCEPTION_AUTOCAPTURE_VERSION} from NPM`
     )

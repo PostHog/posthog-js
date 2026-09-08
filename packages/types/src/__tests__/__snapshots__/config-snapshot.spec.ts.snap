@@ -857,6 +857,11 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
     \\"\\\\\\"never\\\\\\"\\",
     \\"\\\\\\"identified_only\\\\\\"\\"
   ],
+  \\"reuseAnonymousId\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
   \\"process_person\\": [
     \\"undefined\\",
     \\"\\\\\\"always\\\\\\"\\",

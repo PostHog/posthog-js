@@ -147,23 +147,6 @@ export const getModelParams = (
   return modelParams
 }
 
-/**
- * Helper to format responses (non-streaming) for consumption
- */
-export const formatResponse = (response: any, provider: string, client?: FullAiCaptureGate): FormattedMessage[] => {
-  if (!response) {
-    return []
-  }
-  if (provider === 'anthropic') {
-    return formatResponseAnthropic(response)
-  } else if (provider === 'openai') {
-    return formatResponseOpenAI(response)
-  } else if (provider === 'gemini') {
-    return formatResponseGemini(response, client)
-  }
-  return []
-}
-
 export const formatResponseAnthropic = (response: any): FormattedMessage[] => {
   const output: FormattedMessage[] = []
   const content: FormattedContent = []

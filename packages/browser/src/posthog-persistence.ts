@@ -78,6 +78,23 @@ const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['pers
 
 const getCookieIdentityChangePendingName = (name: string): string => `${name}_cookie_identity_change_pending`
 
+const MAX_COOKIE_PERSON_INFO_FIELD_SIZE = 1000
+
+const truncateForCookie = (value: string): string => {
+    // Persistence JSON-stringifies and URI-encodes this value, so raw character count is not its cookie size.
+    let result = ''
+    let encodedLength = 0
+    for (const character of value) {
+        const encodedCharacterLength = encodeURIComponent(JSON.stringify(character).slice(1, -1)).length
+        if (encodedLength + encodedCharacterLength > MAX_COOKIE_PERSON_INFO_FIELD_SIZE) {
+            break
+        }
+        result += character
+        encodedLength += encodedCharacterLength
+    }
+    return result
+}
+
 const parseName = (config: PostHogConfig): string => {
     let token = ''
     if (config['token']) {
@@ -193,6 +210,8 @@ export class PostHogPersistence {
     // Whether the resolved storage backend can host the split (localStorage /
     // localStorage+cookie). Set by `_buildStorage`.
     private _splitStorageEligible = false
+    // Whether the resolved backend writes identity properties to a cookie.
+    private _storesIdentityInCookie = false
     // Whether flag config is stored in their own entries this session:
     // backend-eligible AND `split_storage` enabled.
     // Re-resolved on every `update_config` (backend rebuild or a runtime flag flip).
@@ -931,6 +950,7 @@ export class PostHogPersistence {
         )
 
         let store: PersistentStore
+        let storesIdentityInCookie = false
 
         // The flag split is only meaningful on a localStorage-backed
         // store: it is the one that broadcasts large cross-tab `storage` events.
@@ -945,18 +965,22 @@ export class PostHogPersistence {
         } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore._is_supported()) {
             store = localPlusCookieStore
             splitEligible = true
+            storesIdentityInCookie = true
         } else if (storage_type === 'sessionstorage' && sessionStore._is_supported()) {
             store = sessionStore
         } else if (storage_type === 'memory') {
             store = memoryStore
         } else if (storage_type === 'cookie' && cookieStore._is_supported()) {
             store = cookieStore
+            storesIdentityInCookie = true
         } else if (localPlusCookieStore._is_supported()) {
             // selected storage type wasn't supported, fallback to 'localstorage+cookie' if possible
             store = localPlusCookieStore
             splitEligible = true
+            storesIdentityInCookie = true
         } else if (cookieStore._is_supported()) {
             store = cookieStore
+            storesIdentityInCookie = true
         } else {
             // Neither web storage nor cookies are available -- e.g. a page served from a
             // `data:` URL, where Chrome disables both. Falling back to cookieStore here left
@@ -965,6 +989,7 @@ export class PostHogPersistence {
         }
 
         this._splitStorageEligible = splitEligible
+        this._storesIdentityInCookie = storesIdentityInCookie
         return store
     }
 
@@ -1625,13 +1650,19 @@ export class PostHogPersistence {
             return
         }
 
+        const personInfo = getPersonInfo(
+            this._config.mask_personal_data_properties,
+            this._config.custom_personal_data_properties,
+            this._config.disable_capture_url_hashes
+        )
         this.register_once(
             {
-                [INITIAL_PERSON_INFO]: getPersonInfo(
-                    this._config.mask_personal_data_properties,
-                    this._config.custom_personal_data_properties,
-                    this._config.disable_capture_url_hashes
-                ),
+                [INITIAL_PERSON_INFO]: this._storesIdentityInCookie
+                    ? {
+                          r: truncateForCookie(personInfo.r),
+                          u: personInfo.u ? truncateForCookie(personInfo.u) : undefined,
+                      }
+                    : personInfo,
             },
             undefined
         )
@@ -1718,6 +1749,7 @@ export class PostHogPersistence {
         // split flag from the fresh eligibility. The new backend may no longer be
         // split-eligible (e.g. localStorage -> memory).
         const newStore = persistenceChanged || cookiePrecedenceChanged ? this._buildStorage(config) : this._storage
+        this._truncateExistingPersonInfoForCookie()
         const wantSplit = this._resolveSplitStorage(config)
         const storageMigration = persistenceChanged || wantSplit !== this._splitStorage
         const cookieOptionsChanged =
@@ -1763,6 +1795,23 @@ export class PostHogPersistence {
                 // subdomain can initialize.
                 this._endCookieSyncSuppression()
             }
+        }
+    }
+
+    private _truncateExistingPersonInfoForCookie(): void {
+        const personInfo = this.props[INITIAL_PERSON_INFO]
+        if (!this._storesIdentityInCookie || !isObject(personInfo) || typeof personInfo.r !== 'string') {
+            return
+        }
+
+        const truncatedReferrer = truncateForCookie(personInfo.r)
+        const truncatedUrl = typeof personInfo.u === 'string' ? truncateForCookie(personInfo.u) : personInfo.u
+        if (truncatedReferrer !== personInfo.r || truncatedUrl !== personInfo.u) {
+            this._setProp(INITIAL_PERSON_INFO, {
+                ...personInfo,
+                r: truncatedReferrer,
+                u: truncatedUrl,
+            })
         }
     }
 

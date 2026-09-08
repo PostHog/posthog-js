@@ -274,6 +274,8 @@ export class PostHogFeatureFlags implements Extension {
     private _crossTabPersistenceUnsubscribe?: () => void
     private _baseEventProperties: Record<string, unknown> = {}
     private _eventPropertiesWithFlagValues: Record<string, unknown> = {}
+    // Bootstrap values are a transient view over the last durable flag snapshot.
+    private _bootstrapState?: FeatureFlagsState
     private _reloadingHandlers: Array<() => void> = []
     private _hasLoadedFlags: boolean = false
     private _requestInFlight: boolean = false
@@ -338,6 +340,7 @@ export class PostHogFeatureFlags implements Extension {
             this._isCacheStale() ? this._baseEventProperties : this._eventPropertiesWithFlagValues
         )
         this._crossTabPersistenceUnsubscribe = this._instance?.persistence?.onCrossTabFeatureFlagChange(() => {
+            this._clearBootstrapState()
             this._rebuildEventProperties()
             this._fireFeatureFlagsCallbacks()
         })
@@ -452,7 +455,25 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     private _prop<Key extends keyof FeatureFlagsState>(key: Key): FeatureFlagsState[Key] {
+        if (this._bootstrapState && key in this._bootstrapState) {
+            return this._bootstrapState[key]
+        }
         return this._client?.kv.get<FeatureFlagsState[Key]>(key)
+    }
+
+    private _clearBootstrapState(): boolean {
+        if (!this._bootstrapState) {
+            return false
+        }
+        this._bootstrapState = undefined
+        return true
+    }
+
+    private _fallBackToPersistedFlags(): boolean {
+        if (isUndefined(this._client?.kv.get(ENABLED_FEATURE_FLAGS))) {
+            return false
+        }
+        return this._clearBootstrapState()
     }
 
     private _set(properties: FeatureFlagsState): void {
@@ -615,20 +636,22 @@ export class PostHogFeatureFlags implements Extension {
         const hasBootstrappedFlags = Object.keys(bootstrapFlags).length
         if (hasBootstrappedFlags) {
             const bootstrapPayloads = config.bootstrap?.featureFlagPayloads ?? {}
-            const activeFlags = Object.keys(bootstrapFlags)
-                .filter((flag) => !!bootstrapFlags[flag])
+            const featureFlags = Object.keys(bootstrapFlags)
+                .filter((flag) => !isUndefined(bootstrapFlags[flag]))
                 .reduce((res: Record<string, string | boolean>, key) => {
-                    res[key] = bootstrapFlags[key] || false
+                    res[key] = bootstrapFlags[key]
                     return res
                 }, {})
             const featureFlagPayloads = Object.keys(bootstrapPayloads)
-                .filter((key) => activeFlags[key])
+                .filter((key) => featureFlags[key])
                 .reduce((res: Record<string, JsonType>, key) => {
                     res[key] = bootstrapPayloads[key]
                     return res
                 }, {})
 
-            return this._receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
+            return this._receivedFeatureFlags({ featureFlags, featureFlagPayloads }, undefined, {
+                persist: false,
+            })
         }
         return undefined
     }
@@ -826,6 +849,12 @@ export class PostHogFeatureFlags implements Extension {
             return
         }
 
+        if (this._requestInFlight) {
+            // Record the queued reload before the debounce fires so the in-flight response
+            // cannot clear identity state needed by the next request.
+            this._additionalReloadRequested = true
+        }
+
         if (this._reloadDebouncer) {
             // If we're already in a debounce then we don't want to do anything
             return
@@ -867,7 +896,7 @@ export class PostHogFeatureFlags implements Extension {
         this.reloadFeatureFlags()
     }
 
-    setAnonymousDistinctId(anon_distinct_id: string): void {
+    setAnonymousDistinctId(anon_distinct_id: string | undefined): void {
         this.$anon_distinct_id = anon_distinct_id
     }
 
@@ -985,6 +1014,9 @@ export class PostHogFeatureFlags implements Extension {
             }
             this._set({ [PERSISTENCE_FEATURE_FLAG_ERRORS]: [FeatureFlagError.CONNECTION_ERROR] })
             this._logger.error('Feature flag request failed', error)
+            if (this._fallBackToPersistedFlags()) {
+                this._fireFeatureFlagsCallbacks(true)
+            }
             requestAdditionalReload()
         }
 
@@ -1029,7 +1061,12 @@ export class PostHogFeatureFlags implements Extension {
      *
      * By default, this method may return cached values from localStorage if the `/flags` endpoint
      * hasn't responded yet. This reduces flicker but means you might briefly see stale values
-     * (e.g., a flag that was disabled on the server).
+     * (e.g., a flag that was made globally inactive on the server).
+     *
+     * An evaluated boolean flag returns `true` or `false`; `undefined` means no current evaluation
+     * is available for the key. Globally inactive flags are omitted from the remote `/flags`
+     * response, so after that response loads they are unavailable rather than represented by
+     * a `false` result.
      *
      * ### Usage:
      *
@@ -1043,8 +1080,8 @@ export class PostHogFeatureFlags implements Extension {
      * @param {boolean} [options.send_event=true] If false, won't send a $feature_flag_called event to PostHog.
      * @param {boolean} [options.fresh=false] If true, only returns values loaded from the server, not cached localStorage values.
      *                  Use this when you need to ensure the flag value reflects the current server state,
-     *                  such as after disabling a flag. Returns undefined until the /flags endpoint responds.
-     * @returns {boolean | string | undefined} The flag value, or undefined if not found or not yet loaded.
+     *                  such as after making a flag globally inactive. Returns undefined until the /flags endpoint responds.
+     * @returns {boolean | string | undefined} The flag value, or undefined if no current evaluation is available.
      */
     getFeatureFlag(key: string, options: FeatureFlagOptions = {}): boolean | string | undefined {
         if (options.fresh && !this._flagsLoadedFromRemote) {
@@ -1095,7 +1132,11 @@ export class PostHogFeatureFlags implements Extension {
      *
      * By default, this method may return cached values from localStorage if the `/flags` endpoint
      * hasn't responded yet. This reduces flicker but means you might briefly see stale values
-     * (e.g., a flag that was disabled on the server).
+     * (e.g., a flag that was made globally inactive on the server).
+     *
+     * A result with `enabled: false` is a conclusive off evaluation. `undefined` means no current
+     * evaluation is available for the key. This includes globally inactive flags, which are omitted
+     * from the remote `/flags` response.
      *
      * ### Usage:
      *
@@ -1314,7 +1355,12 @@ export class PostHogFeatureFlags implements Extension {
      *
      * By default, this method may return cached values from localStorage if the `/flags` endpoint
      * hasn't responded yet. This reduces flicker but means you might briefly see stale values
-     * (e.g., a flag that was disabled on the server).
+     * (e.g., a flag that was made globally inactive on the server).
+     *
+     * A `false` result means the flag value evaluated off; it does not mean the SDK observed the
+     * flag's global active setting. When no current evaluation is available, this method returns
+     * `options.defaultValue` if provided, otherwise `undefined`. Globally inactive flags are omitted
+     * from the remote `/flags` response and therefore have no value.
      *
      * ### Usage:
      *
@@ -1365,7 +1411,7 @@ export class PostHogFeatureFlags implements Extension {
     private _receivedFeatureFlags(
         response: Partial<FlagsResponse>,
         errorsLoading?: boolean,
-        options?: { partialResponse?: boolean }
+        options?: { partialResponse?: boolean; persist?: boolean }
     ): void {
         if (!this._client) {
             return
@@ -1384,8 +1430,20 @@ export class PostHogFeatureFlags implements Extension {
             this._logger
         )
         if (statePatch) {
-            this._markCrossTabFeatureFlagSnapshot(statePatch, response, !!options?.partialResponse)
-            this._set(statePatch)
+            if (options?.persist === false) {
+                const hasPersistedFlags = !isUndefined(this._client.kv.get(ENABLED_FEATURE_FLAGS))
+                this._bootstrapState = statePatch
+                // Keep bootstrapping durable on a first visit, but don't replace a prior remote snapshot.
+                if (!hasPersistedFlags) {
+                    this._set(statePatch)
+                }
+            } else {
+                this._clearBootstrapState()
+                this._markCrossTabFeatureFlagSnapshot(statePatch, response, !!options?.partialResponse)
+                this._set(statePatch)
+            }
+        } else if (errorsLoading) {
+            this._fallBackToPersistedFlags()
         }
         // Reset stale refresh flag when we successfully receive fresh flags
         if (!errorsLoading) {
@@ -1769,6 +1827,7 @@ export class PostHogFeatureFlags implements Extension {
         this._additionalReloadRequested = false
         this._baseEventProperties = {}
         this._eventPropertiesWithFlagValues = {}
+        this._bootstrapState = undefined
         this._hasLoadedFlags = false
         this._reloadingDisabled = false
         this._flagsLoadedFromRemote = false

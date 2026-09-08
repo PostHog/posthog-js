@@ -8,7 +8,7 @@ import { Compression } from '@posthog/core'
 
 async function shortWait() {
     // no need to worry about ie11 compat in tests
-    // eslint-disable-next-line compat/compat
+    // oxlint-disable-next-line compat/compat
     await new Promise<void>((resolve: () => void) => setTimeout(resolve, 500))
 }
 
@@ -146,6 +146,40 @@ describe('FunctionalTests / Feature Flags', () => {
                     token,
                 },
             ])
+        })
+    })
+
+    test('reuseAnonymousId omits the previous anonymous id from identify-triggered /flags requests', async () => {
+        const posthog = await createPosthogInstance(token, {
+            advanced_disable_flags: false,
+            advanced_disable_feature_flags_on_first_load: true,
+            reuseAnonymousId: true,
+            before_send: (cr) => cr,
+        })
+        const anonymousId = posthog.get_distinct_id()
+        posthog.featureFlags?.setAnonymousDistinctId('stale-anonymous-id')
+
+        posthog.identify('test-id', {
+            email: 'test@email.com',
+        })
+
+        await waitFor(() => {
+            const flagRequests = getRequests(token)['/flags/']
+            expect(flagRequests).toHaveLength(1)
+            expect(flagRequests[0]).toMatchObject({
+                $device_id: anonymousId,
+                distinct_id: 'test-id',
+                groups: {},
+                person_properties: expect.objectContaining({
+                    email: 'test@email.com',
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                }),
+                sent_at: expect.any(String),
+                timezone: expect.any(String),
+                token,
+            })
+            expect(flagRequests[0]).not.toHaveProperty('$anon_distinct_id')
         })
     })
 

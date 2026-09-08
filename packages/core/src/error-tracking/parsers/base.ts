@@ -34,8 +34,12 @@ export function createFrame(
     platform,
     filename,
     function: func === '<anonymous>' ? UNKNOWN_FUNCTION : func,
-    // Browser frames are considered in_app unless the runtime has masked or dropped their origin
-    in_app: !filename?.startsWith(MASKED_URL_PREFIX) && filename !== ANONYMOUS_FILENAME,
+    // Browser frames are considered in_app unless the runtime has masked or dropped their origin.
+    // A frame with no filename at all is the third case: the runtime reports a function name, a
+    // line and a column, but no script URL. Android in-app browsers report their injected native
+    // bridge scripts this way. Such a frame can never be symbolicated either, so it must not
+    // count as the page's own code.
+    in_app: !!filename && !filename.startsWith(MASKED_URL_PREFIX) && filename !== ANONYMOUS_FILENAME,
   }
 
   if (!isUndefined(lineno)) {

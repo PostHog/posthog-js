@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* oxlint-disable */
 import { posthog } from 'posthog-js'
 import * as ts from 'typescript'
 

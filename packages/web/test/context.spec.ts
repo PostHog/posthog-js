@@ -10,6 +10,43 @@ const windowWithUserAgent = (userAgent: string): Window =>
   }) as Window
 
 describe('getContext', () => {
+  const chromeUA =
+    'Mozilla/5.0 (Linux; Android 13; Pixel 7; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120.0.6099.230 Mobile Safari/537.36'
+
+  test.each([
+    ['LinkedInApp/2.295.106', 'LinkedIn', '2.295.106'],
+    ['musical_ly_2022803040 app_version/28.3.4', 'TikTok', '28.3.4'],
+    ['WA4A/2.26.30.97', 'WhatsApp', '2.26.30.97'],
+    ['[FBAN/Orca-Android;FBAV/440.0.0;]', 'Messenger', '440.0.0'],
+  ])('adds host app and full app version without replacing the browser: %s', (marker, app, version) => {
+    expect(getContext(windowWithUserAgent(chromeUA + ' ' + marker))).toEqual(
+      expect.objectContaining({
+        $browser: 'Chrome',
+        $browser_version: 120,
+        $webview_app: app,
+        $webview_app_version: version,
+      })
+    )
+  })
+
+  test('omits an unknown app version rather than using the browser version', () => {
+    const context = getContext(windowWithUserAgent(chromeUA + ' [LinkedInApp]'))
+    expect(context.$webview_app).toBe('LinkedIn')
+    expect(context).not.toHaveProperty('$webview_app_version')
+  })
+
+  test.each([chromeUA, chromeUA.replace('; wv', ''), ''])('omits unknown app properties for %s', (ua) => {
+    const context = getContext(windowWithUserAgent(ua))
+    expect(context).not.toHaveProperty('$webview_app')
+    expect(context).not.toHaveProperty('$webview_app_version')
+  })
+
+  test('does not require a browser environment', () => {
+    const context = getContext(undefined)
+    expect(context).not.toHaveProperty('$webview_app')
+    expect(context).not.toHaveProperty('$webview_app_version')
+  })
+
   test.each([
     {
       name: 'Claude desktop browser',

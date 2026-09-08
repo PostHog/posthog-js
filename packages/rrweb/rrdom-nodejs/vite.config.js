@@ -1,4 +1,6 @@
 import path from 'path';
 import config from '../vite.config.default';
 
-export default config(path.resolve(__dirname, 'src/index.ts'), 'rrdomNodejs');
+export default config(path.resolve(__dirname, 'src/index.ts'), 'rrdomNodejs', {
+  external: ['cssom', 'cssstyle', 'nwsapi', 'perf_hooks'],
+});

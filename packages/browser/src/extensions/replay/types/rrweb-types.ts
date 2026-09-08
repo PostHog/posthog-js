@@ -30,9 +30,9 @@ export interface IMirror<TNode> {
 }
 
 export declare class Mirror implements IMirror<Node> {
-    // eslint-disable-next-line posthog-js/private-members-leading-underscore
+    // oxlint-disable-next-line posthog-js/private-members-leading-underscore
     private idNodeMap
-    // eslint-disable-next-line posthog-js/private-members-leading-underscore
+    // oxlint-disable-next-line posthog-js/private-members-leading-underscore
     private nodeMetaMap
     getId(n: Node | undefined | null): number
     getNode(id: number): Node | null

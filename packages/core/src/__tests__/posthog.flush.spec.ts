@@ -445,12 +445,12 @@ describe('PostHog Core', () => {
       })
       posthog.capture('test-event-1')
 
-      const time = Date.now()
-      vi.useRealTimers()
-      await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
+      const flushExpectation = expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
+      await vi.advanceTimersByTimeAsync(299)
+      expect(mocks.fetch).toHaveBeenCalledTimes(3)
+      await vi.advanceTimersByTimeAsync(1)
+      await flushExpectation
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
-      expect(Date.now() - time).toBeGreaterThan(300)
-      expect(Date.now() - time).toBeLessThan(1000)
     })
 
     it('responds with an error after retries with network error ', async () => {
@@ -459,12 +459,12 @@ describe('PostHog Core', () => {
       })
       posthog.capture('test-event-1')
 
-      const time = Date.now()
-      vi.useRealTimers()
-      await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchNetworkError')
+      const flushExpectation = expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchNetworkError')
+      await vi.advanceTimersByTimeAsync(299)
+      expect(mocks.fetch).toHaveBeenCalledTimes(3)
+      await vi.advanceTimersByTimeAsync(1)
+      await flushExpectation
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
-      expect(Date.now() - time).toBeGreaterThan(300)
-      expect(Date.now() - time).toBeLessThan(1000)
     })
 
     it('skips when client is disabled', async () => {

@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable no-undef */
 /**
  * PostHog Node.js library example
  *

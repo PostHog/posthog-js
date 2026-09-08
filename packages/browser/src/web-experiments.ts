@@ -266,7 +266,7 @@ export class WebExperiments implements Extension {
                     transform
                 )
 
-                // eslint-disable-next-line no-restricted-globals
+                // oxlint-disable-next-line no-restricted-globals
                 const elements = document?.querySelectorAll(transform.selector)
                 elements?.forEach((element) => {
                     const htmlElement = element as HTMLElement

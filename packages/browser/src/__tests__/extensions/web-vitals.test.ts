@@ -24,7 +24,7 @@ vi.useFakeTimers()
 // Previously masked by babel-vi transpiling `let` -> `var` because IE 11
 // was in package.json#browserslist. `vi.hoisted()` would be the modern
 // fix but needs babel-plugin-vi-hoist 30 (vi 30 catalog bump).
-// eslint-disable-next-line no-var
+// oxlint-disable-next-line no-var
 var mockLocation: vi.Mock
 
 vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
