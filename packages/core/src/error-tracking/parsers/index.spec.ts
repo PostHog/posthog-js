@@ -122,8 +122,12 @@ describe('createDefaultStackParser repeated cycle collapsing', () => {
     expect(withCallers(0)).toHaveLength(50)
     expect(withCallers(1)).toEqual(withCallers(0))
 
+    // A distinct throw location is not a partial copy and must use a slot of the frame budget.
     const withThrowColumn = [OVERFLOW, frame('a', 1, 4), ...recursion(['a', 'b'], 30).slice(1), ...callers].join('\n')
-    expect(names(withThrowColumn)).toEqual(withCallers(0))
+    const frames = parse(withThrowColumn)
+    expect(frames).toHaveLength(50)
+    expect(frames.map((f) => f.function)).toEqual([...withCallers(0).slice(1), 'a'])
+    expect(frames[frames.length - 1]?.colno).toBe(4)
   })
 
   it('gives the same frames when the recursion path calls one function twice in a row', () => {
@@ -165,10 +169,9 @@ describe('createDefaultStackParser repeated cycle collapsing', () => {
     ])
   })
 
-  it('ignores that column for a recursion the runtime reports with no function name', () => {
-    // The parser has nothing but the position to tell two frames of a bundle apart when the runtime
-    // reports no name for them, so it holds on to that position while it reads the stack. The copies
-    // it collapses then say which code the innermost frame holds, and its own position can go.
+  it.each(['Error: boom', OVERFLOW])('preserves the unnamed throw location for %s', (header) => {
+    // Even a confirmed recursion cannot establish that a different innermost column is redundant.
+    // Keep that location for both ordinary errors and overflow stacks.
     const anonymous = (column: number): string => `    at https://posthog.com/app.js:1:${column}`
 
     const withThrowColumn = (column: number): string[] => {
@@ -178,29 +181,63 @@ describe('createDefaultStackParser repeated cycle collapsing', () => {
         lines.push(anonymous(10))
       }
 
-      return parse([OVERFLOW, ...lines, frame('handleClick', 90), frame('main', 91)].join('\n')).map(
+      return parse([header, ...lines, frame('handleClick', 90), frame('main', 91)].join('\n')).map(
         (f) => `${f.function}:${f.colno}`
       )
     }
 
-    expect(withThrowColumn(4)).toEqual(['main:10', 'handleClick:10', '?:10'])
-    expect(withThrowColumn(5)).toEqual(withThrowColumn(4))
-    expect(withThrowColumn(10)).toEqual(withThrowColumn(4))
+    expect(withThrowColumn(4)).toEqual(['main:10', 'handleClick:10', '?:10', '?:4'])
+    expect(withThrowColumn(5)).toEqual(['main:10', 'handleClick:10', '?:10', '?:5'])
+    expect(withThrowColumn(10)).toEqual(['main:10', 'handleClick:10', '?:10'])
   })
 
-  it('ignores the column of the call that ran out of stack', () => {
-    // Runtimes report the position of the failed call for the innermost frame, so that frame has a
-    // column of its own even though it is the same call site as the frames under it.
+  it('preserves the column of the call that ran out of stack', () => {
+    // Do not guess whether a different column is a redundant overflow location or a distinct throw.
     const stack = [OVERFLOW, frame('a', 1, 4), ...recursion(['a', 'b'], 3).slice(1), frame('handleClick', 90)].join(
       '\n'
     )
 
-    expect(parse(stack).map((f) => `${f.function}:${f.colno}`)).toEqual(['handleClick:10', 'b:10', 'a:10'])
+    expect(parse(stack).map((f) => `${f.function}:${f.colno}`)).toEqual(['handleClick:10', 'b:10', 'a:10', 'a:4'])
   })
 
   it('keeps frames that repeat without a complete second cycle', () => {
     const stack = ['Error: boom', frame('a', 1), frame('b', 2), frame('a', 1), frame('main', 91)].join('\n')
     expect(names(stack)).toEqual(['main', 'a', 'b', 'a'])
+  })
+
+  it('invalidates a cycle record subsumed by a later collapse', () => {
+    const stack = ['Error: boom', frame('a', 1), frame('b', 2), frame('a', 1), frame('a', 1), frame('b', 2)].join('\n')
+
+    expect(names(stack)).toEqual(['b', 'a'])
+  })
+
+  it('keeps disjoint cycle records when a later collapse subsumes another record', () => {
+    const stack = [
+      'Error: boom',
+      frame('inner', 90),
+      frame('inner', 90),
+      frame('a', 1),
+      frame('b', 2),
+      frame('a', 1),
+      frame('a', 1),
+      frame('b', 2),
+      frame('outer', 91),
+      frame('outer', 91),
+    ].join('\n')
+
+    expect(names(stack)).toEqual(['outer', 'b', 'a', 'inner'])
+  })
+
+  it.each([4, 5])('preserves the throw column %i of an ordinary recursive error', (column) => {
+    const stack = [
+      'Error: boom',
+      frame('recurse', 1, column),
+      frame('recurse', 1, 10),
+      frame('recurse', 1, 10),
+      frame('main', 91),
+    ].join('\n')
+
+    expect(parse(stack).map((f) => `${f.function}:${f.colno}`)).toEqual(['main:10', 'recurse:10', `recurse:${column}`])
   })
 
   it('keeps distinct innermost minified call sites for an ordinary error', () => {

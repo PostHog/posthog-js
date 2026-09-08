@@ -44,33 +44,29 @@ const STACKTRACE_FRAME_LIMIT = 50
 
 // A recursion spends the whole frame limit on one repeating cycle, so the frames that name the real
 // culprit sit past the limit, and where the runtime cut the stack decides which frames are left.
-// One fault then opens a new error tracking issue on every throw. The parser keeps a single copy of
-// the cycle instead, which holds the outer frames inside the limit and gives every throw the same
-// frames. Cycles longer than this are rare, and each extra length costs a comparison pass.
+// One fault can then open multiple error tracking issues. The parser keeps a single copy of an exact
+// cycle instead, making room for outer frames and reducing depth-dependent differences without
+// discarding distinct throw locations. Longer cycles are rare and cost an extra comparison pass.
 const MAX_REPEATED_CYCLE_LENGTH = 10
 // How many lines to read, now that a recursion no longer stops the parser at the frame limit.
 const STACKTRACE_LINE_LIMIT = 1000
 
 // A minified bundle puts many functions on one line and gives them the same short names, so the
-// column is what tells two of them apart. Only after exact copies confirm a cycle may trimming
-// ignore the innermost frame's column, which can be the position of the call that ran out of stack.
-function isSameFrame(a: StackFrame, b: StackFrame, ignoreColumn: boolean = false): boolean {
+// column is what tells two of them apart. Even a confirmed cycle must preserve a distinct throw
+// location: the frame list alone cannot distinguish an overflow from an ordinary recursive error.
+function isSameFrame(a: StackFrame, b: StackFrame): boolean {
   return (
     a.filename === b.filename &&
     a.function === b.function &&
     a.module === b.module &&
     a.lineno === b.lineno &&
-    (ignoreColumn || a.colno === b.colno)
+    a.colno === b.colno
   )
 }
 
 interface RepeatedCycle {
   start: number
   length: number
-}
-
-function isSameCycle(a: RepeatedCycle, b: RepeatedCycle | undefined): boolean {
-  return !!b && a.start === b.start && a.length === b.length
 }
 
 // Removes the cycle that ends at the last frame when the frames before it are the same cycle, and
@@ -94,8 +90,7 @@ function collapseRepeatedCycle(frames: StackFrame[]): RepeatedCycle | undefined 
     }
 
     if (isCycle) {
-      // Keep the positions of the outer copy. The innermost copy holds the column of the call that
-      // ran out of stack, which moves with the depth the runtime reached.
+      // Keep the outer copy of the matching frames.
       for (let offset = 0; offset < length; offset++) {
         frames[start + offset] = frames[start + length + offset] as StackFrame
       }
@@ -121,18 +116,13 @@ function trimPartialCycle(frames: StackFrame[], cycle: RepeatedCycle): void {
   }
 }
 
-// Counts the copy left over at the innermost end. Only the exact copies that confirmed the cycle
-// allow the innermost frame to match without its own column, even when the runtime gave it no name.
+// Counts an exact partial copy left over at the innermost end.
 function innermostPartialCycleLength(frames: StackFrame[], cycle: RepeatedCycle): number {
   let partialStart = cycle.start
 
   while (
     partialStart > 0 &&
-    isSameFrame(
-      frames[partialStart - 1] as StackFrame,
-      frames[partialStart - 1 + cycle.length] as StackFrame,
-      partialStart - 1 === 0
-    )
+    isSameFrame(frames[partialStart - 1] as StackFrame, frames[partialStart - 1 + cycle.length] as StackFrame)
   ) {
     partialStart--
   }
@@ -261,9 +251,17 @@ export function createStackParser(platform: Platform, ...parsers: StackLineParse
         if (frame) {
           frames.push(frame)
           const cycle = collapseRepeatedCycle(frames)
-          // The same section collapses again on every further copy the stack holds, so only record
-          // a section the frames before it did not already report.
-          if (cycle && !isSameCycle(cycle, repeatedCycles[repeatedCycles.length - 1])) {
+          if (cycle) {
+            // A collapse replaces the suffix starting at cycle.start. Discard records that overlap
+            // that suffix, including a previous copy of this cycle, before counting or trimming.
+            // The remaining records stay ordered and refer only to untouched earlier frames.
+            for (let i = repeatedCycles.length - 1; i >= 0; i--) {
+              const previous = repeatedCycles[i] as RepeatedCycle
+              if (previous.start + previous.length <= cycle.start) {
+                break
+              }
+              repeatedCycles.pop()
+            }
             repeatedCycles.push(cycle)
           }
           break
