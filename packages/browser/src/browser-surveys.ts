@@ -90,6 +90,28 @@ class BrowserSurveysConfigSource implements SurveysConfigSource {
     createEventReceiver(onActivationChanged: () => void): SurveyEventReceiver {
         return new SurveyEventReceiver(this._instance, onActivationChanged)
     }
+
+    onMatchingConditionsChanged(callback: () => void): () => void {
+        const unsubscribeCapture = this._instance._addCaptureHook((event) => {
+            if (event === '$pageview') {
+                callback()
+            }
+        })
+        // onFeatureFlags may synchronously deliver its cached value while registering.
+        // The subscription establishes its own initial value after these hooks are attached.
+        let listening = false
+        const unsubscribeFlags = this._instance.onFeatureFlags(() => {
+            if (listening) {
+                callback()
+            }
+        })
+        listening = true
+        return () => {
+            listening = false
+            unsubscribeCapture()
+            unsubscribeFlags()
+        }
+    }
 }
 
 /** Browser-v1 compatibility wrapper for the shared surveys extension. */

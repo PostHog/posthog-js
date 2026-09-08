@@ -29,4 +29,4 @@ export const createSurveysClient = (posthog: PostHog): Client =>
                     callback: resolve,
                 })
             }),
-    }) as Client
+    }) as unknown as Client

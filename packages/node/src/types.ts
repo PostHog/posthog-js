@@ -422,6 +422,7 @@ export type FeatureFlagErrorType = (typeof FeatureFlagError)[keyof typeof Featur
  */
 export type FeatureFlagResult = {
   key: string
+  /** Whether the returned feature flag evaluation is enabled. `false` is a conclusive off result. */
   enabled: boolean
   variant: string | undefined
   payload: JsonType | undefined
@@ -582,7 +583,7 @@ export interface IPostHog {
    * @param onlyEvaluateLocally optional - whether to only evaluate the flag locally. Defaults to false.
    * @param sendFeatureFlagEvents optional - whether to send feature flag events. Used for Experiments. Defaults to true.
    *
-   * @returns true if the flag is on, false if the flag is off, undefined if there was an error.
+   * @returns true if the flag evaluates on, false if it conclusively evaluates off, or undefined if no result is available. Local evaluation resolves cached inactive definitions to false; remote evaluation omits globally inactive flags, leaving no result.
    *
    * @deprecated Use {@link IPostHog.evaluateFlags} and call `flags.isEnabled(key)` on the
    *   returned snapshot. Will be removed in the next major version.
@@ -613,7 +614,7 @@ export interface IPostHog {
    * @param onlyEvaluateLocally optional - whether to only evaluate the flag locally. Defaults to false.
    * @param sendFeatureFlagEvents optional - whether to send feature flag events. Used for Experiments. Defaults to true.
    *
-   * @returns true or string(for multivariates) if the flag is on, false if the flag is off, undefined if there was an error.
+   * @returns true or a variant string if the flag evaluates on, false if it conclusively evaluates off, or undefined if no result is available. Local evaluation resolves cached inactive definitions to false; remote evaluation omits globally inactive flags, leaving no result.
    *
    * @deprecated Use {@link IPostHog.evaluateFlags} and call `flags.getFlag(key)` on the
    *   returned snapshot. Will be removed in the next major version.
@@ -744,6 +745,9 @@ export interface IPostHog {
    * }
    * posthog.capture({ distinctId: 'user_123', event: 'page_viewed', flags })
    * ```
+   *
+   * Local evaluation resolves cached inactive definitions to `false`. Remote evaluation omits
+   * globally inactive flags, so those keys are absent when no local definition is available.
    *
    * @param options - Optional configuration for flag evaluation. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. Missing local keys trigger fallback unless `onlyEvaluateLocally` is true.
    */

@@ -1,5 +1,26 @@
 # @posthog/mcp
 
+## 0.14.0
+
+### Minor Changes
+
+- [#4829](https://github.com/PostHog/posthog-js/pull/4829) [`6724f10`](https://github.com/PostHog/posthog-js/commit/6724f10bef008642d1ccbd6c38d393dc39e7008c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Capture model identity from recognized client metadata before falling back to the injected `llm_model` argument.
+  (2026-09-08)
+
+## 0.13.1
+
+### Patch Changes
+
+- [#4783](https://github.com/PostHog/posthog-js/pull/4783) [`6e9f931`](https://github.com/PostHog/posthog-js/commit/6e9f93123007a549142dac183f55ab648140005f) Thanks [@gesh](https://github.com/gesh)! - Reduce personal data in `$mcp_intent`, which is agent-narrated free text and could previously carry personal data a model read aloud.
+  - Automatically redact structured personal identifiers — email addresses, phone numbers, IPv4/IPv6 addresses, Luhn-valid card numbers, and US SSNs — from `$mcp_intent` before it is captured. Redaction is always on, scoped to the intent only (structured tool `arguments` and results are untouched, since the same shapes are often legitimate data there), and best-effort for those well-defined shapes rather than free-form names or addresses. Identifiers grouped with Unicode spaces, dots, or slashes (as produced by copy-paste) and SSNs with space/dot separators are recognized. The email pattern uses bounded quantifiers so a pathological intent cannot cause quadratic-time backtracking.
+  - Strengthen the default injected `context` prompt so agents are less likely to write personal data in the first place: the privacy rule is now explicit and lists the identifiers to avoid, and it tells the agent to refer to people and accounts by role ('a user', 'the customer') rather than by identity.
+
+  `context: false` and `beforeSend` remain the ways to drop the field entirely. (2026-09-07)
+
+- Updated dependencies [[`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829)]:
+  - posthog-node@5.51.7
+  - @posthog/core@1.50.6
+
 ## 0.13.0
 
 ### Minor Changes

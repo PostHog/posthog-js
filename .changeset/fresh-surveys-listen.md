@@ -3,4 +3,4 @@
 '@posthog/types': minor
 ---
 
-Add `onActiveMatchingSurveysChanged` to subscribe to event- and action-driven survey eligibility changes.
+Add `onActiveMatchingSurveysChanged` to subscribe to survey eligibility updates with safe unsubscribe and recoverable load-error reporting.

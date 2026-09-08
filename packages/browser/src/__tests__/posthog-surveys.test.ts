@@ -1006,23 +1006,23 @@ describe('posthog-surveys', () => {
                     captureHooks.forEach((hook) => hook(eventName, { event: eventName, properties } as any))
                 }
 
-                expect(captureHooks).toHaveLength(2)
-                expect(callback).toHaveBeenLastCalledWith([])
+                expect(captureHooks).toHaveLength(3)
+                expect(callback).toHaveBeenLastCalledWith([], { isLoaded: true })
 
                 capture('user_subscribed')
-                expect(callback).toHaveBeenLastCalledWith([eventSurvey])
+                expect(callback).toHaveBeenLastCalledWith([eventSurvey], { isLoaded: true })
 
                 capture('user_subscribed')
                 expect(callback).toHaveBeenCalledTimes(2)
 
                 capture('user_unsubscribed')
-                expect(callback).toHaveBeenLastCalledWith([])
+                expect(callback).toHaveBeenLastCalledWith([], { isLoaded: true })
 
                 capture('account_upgraded')
-                expect(callback).toHaveBeenLastCalledWith([eventSurvey])
+                expect(callback).toHaveBeenLastCalledWith([eventSurvey], { isLoaded: true })
 
                 capture(SurveyEventName.DISMISSED, { $survey_id: eventSurvey.id })
-                expect(callback).toHaveBeenLastCalledWith([])
+                expect(callback).toHaveBeenLastCalledWith([], { isLoaded: true })
 
                 unsubscribe()
                 capture('user_subscribed')

@@ -472,6 +472,8 @@ export class PostHog implements PostHogInterface {
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
+    _isPageUnloading = false
+    private _isShutdown = false
     sessionRecording?: SessionRecording
     externalIntegrations?: ExternalIntegrations
     webPerformance = new DeprecatedWebPerformanceObserver()
@@ -1030,6 +1032,16 @@ export class PostHog implements PostHogInterface {
         addEventListener(window, 'onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this), {
             passive: false,
         })
+        // `pagehide` also fires when the browser freezes the page into the back-forward cache, and
+        // the same instance resumes on `pageshow`. Without this the page would stay marked as
+        // unloading for the rest of its life, and every later unbatched capture would take the
+        // beacon path on a fully active page.
+        addEventListener(window, 'pageshow', () => {
+            this._isPageUnloading = false
+            if (!this._isShutdown) {
+                this._retryQueue?.resume()
+            }
+        })
 
         // We want to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
@@ -1343,6 +1355,8 @@ export class PostHog implements PostHogInterface {
     }
 
     _handle_unload(): void {
+        this._isPageUnloading = true
+
         // Optional-call the method, not just the receiver: after a deploy a cached older
         // lazy-loaded surveys chunk can yield an instance whose prototype lacks handlePageUnload,
         // and `this.surveys?.handlePageUnload()` would still throw "handlePageUnload is not a function".
@@ -1870,6 +1884,8 @@ export class PostHog implements PostHogInterface {
                 : {}),
         }
 
+        // NB an options object without a `_batchKey` also skips the queue, so most calls that pass
+        // options are unbatched already and `send_instantly` changes nothing for them
         if (
             this.config.request_batching &&
             (!options || options?._batchKey) &&
@@ -1878,6 +1894,16 @@ export class PostHog implements PostHogInterface {
         ) {
             this._requestQueue.enqueue(requestOptions)
         } else {
+            // Keep response-capable transports on active pages so failures can be retried.
+            // During unload, prefer sendBeacon unless a response or custom headers are required.
+            if (
+                !requestOptions.transport &&
+                !requestOptions.callback &&
+                isEmptyObject(this.config.request_headers ?? {}) &&
+                this._isPageUnloading
+            ) {
+                requestOptions.transport = 'sendBeacon'
+            }
             this._send_retriable_request(requestOptions)
         }
 
@@ -2385,7 +2411,10 @@ export class PostHog implements PostHogInterface {
      *
      * @remarks
      * Returns the feature flag value which can be a boolean, string, or undefined.
-     * Supports multivariate flags that can return custom string values.
+     * Supports multivariate flags that can return custom string values. An evaluated boolean flag
+     * returns `true` or `false`; `undefined` means no current evaluation is available for the key.
+     * Globally inactive flags are omitted from the remote `/flags` response, so after that response
+     * loads they are unavailable rather than represented by a `false` result.
      *
      * {@label Feature flags}
      *
@@ -2444,6 +2473,10 @@ export class PostHog implements PostHogInterface {
     /**
      * Get a feature flag evaluation result including both the flag value and payload.
      *
+     * A result with `enabled: false` is a conclusive off evaluation. `undefined` means no current
+     * evaluation is available for the key. This includes globally inactive flags, which are omitted
+     * from the remote `/flags` response.
+     *
      * By default, this method emits the `$feature_flag_called` event.
      *
      * {@label Feature flags}
@@ -2480,7 +2513,9 @@ export class PostHog implements PostHogInterface {
     /**
      * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
      * the flags from the last load (no network request); call `reloadFeatureFlags()` first to refresh.
-     * Unlike `getFeatureFlag()`, it does not send a `$feature_flag_called` event.
+     * Conclusive off evaluations are included with `enabled: false`; keys omitted from the response,
+     * including globally inactive flags, are absent. Unlike `getFeatureFlag()`, this method does not
+     * send a `$feature_flag_called` event.
      *
      * @returns {FeatureFlagResult[]} All loaded flags, or an empty array if none are loaded.
      */
@@ -2492,9 +2527,11 @@ export class PostHog implements PostHogInterface {
      * Checks if a feature flag is enabled for the current user.
      *
      * @remarks
-     * Returns true if the flag is enabled, false if disabled, or undefined if not found
-     * (unless `defaultValue` is given, which is returned instead of undefined).
-     * This is a convenience method that treats any truthy value as enabled.
+     * Returns `true` or `false` when the flag has an evaluation value. A `false` result means the
+     * value evaluated off; it does not mean the SDK observed the flag's global active setting.
+     * Returns `undefined` when no current evaluation is available, unless `defaultValue` is given.
+     * Globally inactive flags are omitted from the remote `/flags` response and therefore have no
+     * value. This is a convenience method that treats any truthy value as enabled.
      *
      * {@label Feature flags}
      *
@@ -2857,8 +2894,18 @@ export class PostHog implements PostHogInterface {
 
     /**
      * Register an event listener that runs when the set of active matching surveys changes.
-     * The listener is called with the initial matching set once surveys are loaded, and again
-     * after an event or action activates, cancels, or consumes a survey.
+     * The listener receives the initial matching set and updates after event/action triggers,
+     * cancellation, consumption, session expiry, definitions refresh, captured pageviews,
+     * feature-flag updates, marking a survey as seen, and reset. Unchanged results are suppressed.
+     *
+     * URL conditions are re-evaluated on captured `$pageview` events, including automatic SPA
+     * pageviews when `capture_pageview` is `'history_change'`. With automatic pageviews disabled,
+     * capture `$pageview` after navigation. This does not observe arbitrary DOM mutations or time
+     * passing; selector, device and wait-period conditions are checked on the supported updates.
+     *
+     * The optional callback context distinguishes load errors from a successfully loaded empty
+     * result. Recoverable load failures keep the subscription alive. Unsubscribing prevents any
+     * further delivery, including callbacks from an outstanding initial request.
      *
      * {@label Surveys}
      *
@@ -3618,6 +3665,9 @@ export class PostHog implements PostHogInterface {
         // checkout (~5 min later).
         const recordingRemoteConfig = this.get_property(SESSION_RECORDING_REMOTE_CONFIG)
 
+        // must run while the pre-reset distinct_id and consent state still apply
+        this.sessionRecording?.flushBeforeIdentityReset()
+
         // Consent is user state, so reset() clears it along with the rest. But when capturing is
         // opted out by default that flips capturing back off, and nothing else surfaces it: events
         // are dropped with no error. Warn instead of failing silently.
@@ -3754,6 +3804,7 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        this._isShutdown = true
         this._getBrowserClientAdapter().dispose()
         this.sessionRecording?.dispose()
 

@@ -43,6 +43,13 @@ export type SurveyFetchResult = {
 
 type SurveysClientState = Pick<Client, 'projectToken' | 'kv'>
 
+type ActiveMatchingSurveySubscription = {
+    callback: SurveyCallback
+    active: boolean
+    revision: number
+    lastResult?: string
+}
+
 export class PostHogSurveys implements Extension {
     readonly name = SurveysExtension
     // this is set to undefined until the remote config is loaded
@@ -54,7 +61,8 @@ export class PostHogSurveys implements Extension {
     private _surveyManager: SurveyManager | null = null
     private _isInitializingSurveys = false
     private _surveyCallbacks: SurveyCallback[] = []
-    private _activeMatchingSurveyCallbacks: SurveyCallback[] = []
+    private _activeMatchingSurveyCallbacks: ActiveMatchingSurveySubscription[] = []
+    private _activeMatchingSurveyConditionsUnsubscribe?: () => void
     // Promise for in-flight survey fetch - allows multiple callers to await the same request
     private _getSurveysInFlightPromise: Promise<SurveyFetchResult> | null = null
     // Backs off the stale-cache refresh for one TTL after a failure, so a surveys-API outage can't
@@ -105,7 +113,12 @@ export class PostHogSurveys implements Extension {
         this._surveyManager?.dispose?.()
         this._surveyManager = null
         this._surveyCallbacks = []
+        this._activeMatchingSurveyCallbacks.forEach((subscription) => {
+            subscription.active = false
+        })
         this._activeMatchingSurveyCallbacks = []
+        this._activeMatchingSurveyConditionsUnsubscribe?.()
+        this._activeMatchingSurveyConditionsUnsubscribe = undefined
         this._getSurveysInFlightPromise = null
         this._renderTimeouts.forEach((timeout) => clearTimeout(timeout))
         this._renderTimeouts.clear()
@@ -129,7 +142,10 @@ export class PostHogSurveys implements Extension {
         }
 
         if (!result.ok) {
-            // Failure behaves like a response without a surveys key: not loaded.
+            this._notifyActiveMatchingSurveyCallbacks({
+                isLoaded: false,
+                error: 'Remote config unavailable. Not loading surveys.',
+            })
             return logger.warn('Remote config unavailable. Not loading surveys.')
         }
 
@@ -161,6 +177,7 @@ export class PostHogSurveys implements Extension {
         } catch {
             // localStorage is not always available (e.g. in cross-origin iframes); resetting survey state is best-effort.
         }
+        this._notifyActiveMatchingSurveyCallbacks()
     }
 
     loadIfEnabled() {
@@ -187,7 +204,7 @@ export class PostHogSurveys implements Extension {
 
         const phExtensions = this._configSource.getExtensions()
         if (!phExtensions) {
-            logger.error('PostHog Extensions not found.')
+            this._handleSurveyLoadError('PostHog Extensions not found.')
             return
         }
 
@@ -260,6 +277,7 @@ export class PostHogSurveys implements Extension {
         logger.info('Surveys loaded successfully')
         // Establish the subscription's initial value before existing load callbacks can capture
         // events and cause activation transitions.
+        this._startActiveMatchingSurveyConditions()
         this._notifyActiveMatchingSurveyCallbacks()
         this._notifySurveyCallbacks({ isLoaded: true })
     }
@@ -267,6 +285,7 @@ export class PostHogSurveys implements Extension {
     /** Helper to handle errors during survey loading */
     private _handleSurveyLoadError(message: string, error?: any): void {
         logger.error(message, error)
+        this._notifyActiveMatchingSurveyCallbacks({ isLoaded: false, error: message })
         this._notifySurveyCallbacks({ isLoaded: false, error: message })
     }
 
@@ -361,6 +380,10 @@ export class PostHogSurveys implements Extension {
             .then((result) => {
                 clearInFlight()
                 if (!this._disposed) {
+                    // The cache and receiver definitions are now current, and the request is no
+                    // longer in flight. Notify even when a background refresh had a no-op caller.
+                    // Deliver errors directly so a failed refresh cannot recursively start a fetch.
+                    this._notifyActiveMatchingSurveyCallbacks(result.context)
                     callback(result.surveys, result.context)
                 }
             }, clearInFlight)
@@ -394,11 +417,11 @@ export class PostHogSurveys implements Extension {
 
         this._lastSurveyRefreshFailedAt = null
         const surveys = (response.json as { surveys?: Survey[] }).surveys || []
-        this._registerEventOrActionBasedSurveys(surveys)
 
         // Stamp when these definitions were fetched so the split-storage loader can tell a fresher
         // main-blob write-back from a stale `__surveys` entry.
         client.kv.set({ [SURVEYS]: surveys, [SURVEYS_LOADED_AT]: Date.now() })
+        this._registerEventOrActionBasedSurveys(surveys)
         return { surveys, context: { isLoaded: true } }
     }
 
@@ -458,6 +481,7 @@ export class PostHogSurveys implements Extension {
         } catch {
             // localStorage is not always available (e.g. in cross-origin iframes); best-effort only.
         }
+        this._notifyActiveMatchingSurveyCallbacks()
     }
 
     /** Helper method to notify all registered callbacks */
@@ -483,25 +507,79 @@ export class PostHogSurveys implements Extension {
     }
 
     onActiveMatchingSurveysChanged(callback: SurveyCallback): () => void {
-        this._activeMatchingSurveyCallbacks.push(callback)
+        if (this._disposed) {
+            return () => {}
+        }
+        const subscription: ActiveMatchingSurveySubscription = { callback, active: true, revision: 0 }
+        this._activeMatchingSurveyCallbacks.push(subscription)
+        this._startActiveMatchingSurveyConditions()
         if (this._surveyManager) {
-            this._notifyActiveMatchingSurveyCallback(callback)
+            this._notifyActiveMatchingSurveyCallback(subscription)
         }
         return () => {
-            this._activeMatchingSurveyCallbacks = this._activeMatchingSurveyCallbacks.filter((cb) => cb !== callback)
+            subscription.active = false
+            this._activeMatchingSurveyCallbacks = this._activeMatchingSurveyCallbacks.filter(
+                (current) => current !== subscription
+            )
+            if (this._activeMatchingSurveyCallbacks.length === 0) {
+                this._activeMatchingSurveyConditionsUnsubscribe?.()
+                this._activeMatchingSurveyConditionsUnsubscribe = undefined
+            }
         }
     }
 
-    private _notifyActiveMatchingSurveyCallback(callback: SurveyCallback): void {
+    private _startActiveMatchingSurveyConditions(): void {
+        if (this._surveyManager && this._activeMatchingSurveyCallbacks.length > 0) {
+            this._activeMatchingSurveyConditionsUnsubscribe ??= this._configSource.onMatchingConditionsChanged?.(
+                this._notifyActiveMatchingSurveyCallbacks
+            )
+        }
+    }
+
+    private _notifyActiveMatchingSurveyCallback(
+        subscription: ActiveMatchingSurveySubscription,
+        context?: { isLoaded: boolean; error?: string }
+    ): void {
+        if (this._disposed || !subscription.active) {
+            return
+        }
+        const revision = ++subscription.revision
+        const deliver: SurveyCallback = (surveys) => {
+            // Removing an entry from the registry cannot cancel an already queued callback.
+            // Also discard evaluations superseded by a refresh or a re-entrant capture.
+            if (this._disposed || !subscription.active || revision !== subscription.revision) {
+                return
+            }
+            try {
+                const resultContext = context ?? { isLoaded: true }
+                // Compare the matching definitions and load state, not just activation IDs.
+                // A changed URL, flag or definition can change eligibility without re-arming.
+                const result = JSON.stringify([surveys, resultContext])
+                if (result === subscription.lastResult) {
+                    return
+                }
+                subscription.lastResult = result
+                subscription.callback(surveys, resultContext)
+            } catch (error) {
+                // This guard runs at delivery time, including after an asynchronous fetch.
+                logger.error('Error in active matching surveys callback', error)
+            }
+        }
         try {
-            this.getActiveMatchingSurveys(callback)
+            if (context && !context.isLoaded) {
+                deliver([])
+            } else {
+                this.getActiveMatchingSurveys(deliver)
+            }
         } catch (error) {
             logger.error('Error in active matching surveys callback', error)
         }
     }
 
-    private _notifyActiveMatchingSurveyCallbacks = (): void => {
-        this._activeMatchingSurveyCallbacks.forEach((callback) => this._notifyActiveMatchingSurveyCallback(callback))
+    private _notifyActiveMatchingSurveyCallbacks = (context?: { isLoaded: boolean; error?: string }): void => {
+        this._activeMatchingSurveyCallbacks
+            .slice()
+            .forEach((subscription) => this._notifyActiveMatchingSurveyCallback(subscription, context))
     }
 
     private _getSurveyById(surveyId: string): Survey | null {

@@ -14,6 +14,7 @@ import {
   assertSnapshot,
   launchPuppeteer,
   stripBase64,
+  waitForCondition,
   waitForRAF,
 } from '../utils';
 import type { ICanvas } from '@posthog/rrweb-snapshot';
@@ -262,7 +263,8 @@ describe('record webgl', function (this: ISuite) {
       });
     });
 
-    await ctx.page.waitForTimeout(50);
+    // Wait for the final batch to reach the exposed emit callback as well.
+    await waitForCondition(() => ctx.events.length >= 5);
 
     await assertSnapshot(ctx.events);
     expect(ctx.events.length).toEqual(5);

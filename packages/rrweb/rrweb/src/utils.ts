@@ -64,6 +64,24 @@ export function callSafely(fn: () => void): void {
   }
 }
 
+// Runs a list of cleanup handlers to completion. A handler can be missing (a
+// plugin observer that returned a non-function) or throw, and neither may stop
+// the rest from releasing their observers and listeners. Deliberately not
+// `callSafely` per handler: that rethrows anything but a SecurityError, which
+// is what used to escape teardown and abort the callers below.
+export function callAllSafely(fns: listenerHandler[]): void {
+  fns.forEach((fn) => {
+    if (typeof fn !== 'function') {
+      return;
+    }
+    try {
+      fn();
+    } catch (e) {
+      //
+    }
+  });
+}
+
 // https://github.com/rrweb-io/rrweb/pull/407
 const DEPARTED_MIRROR_ACCESS_WARNING =
   'Please stop import mirror directly. Instead of that,' +
@@ -599,5 +617,9 @@ export function shadowHostInDom(n: Node): boolean {
 export function inDom(n: Node): boolean {
   const doc = n.ownerDocument;
   if (!doc) return false;
-  return dom.contains(doc, n) || shadowHostInDom(n);
+  if (dom.contains(doc, n)) return true;
+  // The common light-DOM path above stays unchanged. Read live connectivity
+  // rather than walking shadow hosts (or retrying containment for detached nodes).
+  const connected = dom.isConnected(n);
+  return typeof connected === 'boolean' ? connected : shadowHostInDom(n);
 }

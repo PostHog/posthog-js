@@ -260,7 +260,11 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             this._mergeItemMaps(this._eventToItems, eventToItems)
             this._mergeItemMaps(this._cancelEventToItems, cancelEventToItems)
         }
-        if (eventBasedItems.length === 0 && itemsWithCancelEvents.length === 0) {
+        if (
+            eventBasedItems.length === 0 &&
+            itemsWithCancelEvents.length === 0 &&
+            !items.some((item) => item.conditions?.actions?.values?.length)
+        ) {
             return
         }
 
@@ -342,7 +346,6 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         if (itemIds.length === 0) {
             return
         }
-        const previousActivatedIds = this.getActivatedIds()
         // A persisted activation is scoped to the current session, so it can only be persisted
         // when a session id is resolvable. With none (e.g. cookieless mode) we keep the in-memory
         // arming — a reload can't be scoped anyway, so persisting would make it unreadable.
@@ -361,7 +364,7 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             this._pendingActivatedItems = [...new Set([...this._pendingActivatedItems, ...armedInMemory])]
         }
         this._getLogger().info('updating activated items', { activatedItems: this.getActivatedIds() })
-        this._notifyActivationChanged(previousActivatedIds)
+        this._notifyActivationChanged()
     }
 
     /**
@@ -384,7 +387,6 @@ export abstract class EventReceiver<T extends EventTriggerable> {
 
     /** Drop items from both the in-memory and persisted activation sets. */
     private _deactivateItems(itemIds: string[]): void {
-        const previousActivatedIds = this.getActivatedIds()
         const remove = new Set(itemIds)
         this._pendingActivatedItems = this._pendingActivatedItems.filter((id) => !remove.has(id))
         const persisted = this._getRawPersistedActivatedIds()
@@ -396,19 +398,12 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             }
         }
         this._clearActivationTimestamps(itemIds)
-        this._notifyActivationChanged(previousActivatedIds)
+        this._notifyActivationChanged()
     }
 
-    private _notifyActivationChanged(previousActivatedIds?: string[]): void {
-        const activatedIds = this.getActivatedIds()
-        if (previousActivatedIds) {
-            const activatedIdsChanged =
-                activatedIds.length !== previousActivatedIds.length ||
-                activatedIds.some((itemId) => !previousActivatedIds.includes(itemId))
-            if (!activatedIdsChanged) {
-                return
-            }
-        }
+    private _notifyActivationChanged(): void {
+        // Matching eligibility can change even when a repeated trigger leaves the activated
+        // IDs unchanged. Subscribers deduplicate the evaluated result instead.
         try {
             this._onActivationChanged?.()
         } catch (error) {
@@ -579,14 +574,13 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     }
 
     reset(): void {
-        const previousActivatedIds = this.getActivatedIds()
         this._pendingActivatedItems = []
         if (this._getRawPersistedActivatedIds().length > 0) {
             this._setActivatedItems([])
         }
         this._clearActivationSession()
         this._clearAllActivationTimestamps()
-        this._notifyActivationChanged(previousActivatedIds)
+        this._notifyActivationChanged()
     }
 
     getEventToItemsMap(): Map<string, string[]> {
