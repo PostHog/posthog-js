@@ -86,11 +86,29 @@ function warnOnce(id: string, message: string): void {
   console.warn(`[PostHog] ${message}`)
 }
 
+// Every warning id is a fixed literal except `identify`'s, which carries caller-supplied property
+// names. Those names are tracked here and capped: past the cap every further combination shares a
+// single id, so an app that spreads varying keys next to `$set` can neither grow the dedup set for
+// the process lifetime nor defeat the warn-once guard by warning on every call.
+const MAX_IDENTIFY_WARNING_IDS = 50
+const _identifyWarningNames = new Set<string>()
+
+function identifyDroppedPropertiesWarningId(names: string): string {
+  if (!_identifyWarningNames.has(names)) {
+    if (_identifyWarningNames.size >= MAX_IDENTIFY_WARNING_IDS) {
+      return 'identify-dropped-properties'
+    }
+    _identifyWarningNames.add(names)
+  }
+  return `identify-dropped-properties:${names}`
+}
+
 /**
- * @internal — clears the process-wide warning dedup set. Test-only.
+ * @internal — clears the process-wide warning dedup sets. Test-only.
  */
 export function _resetDeprecationWarningsForTests(): void {
   _emittedWarnings.clear()
+  _identifyWarningNames.clear()
 }
 
 function normalizeApiKey(value?: unknown): string {
@@ -895,11 +913,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   private _identifyEventProperties(properties: Record<string | number, any>): Record<string, any> {
     const { $set, $set_once, $anon_distinct_id, ...rest } = properties
-    const droppedKeys = $set ? Object.keys(rest) : []
+    const droppedKeys = $set ? Object.keys(rest).sort() : []
     if (droppedKeys.length > 0) {
-      // Keyed on the dropped names, so a second broken call site is still reported.
+      // Keyed on the dropped names, so a second broken call site is still reported. Sorted first,
+      // so the same names in a different order are one call site rather than two.
       warnOnce(
-        `identify-dropped-properties:${droppedKeys.join(',')}`,
+        identifyDroppedPropertiesWarningId(droppedKeys.join(',')),
         `identify() ignored the top-level properties ${droppedKeys.join(', ')} because $set was also given. ` +
           `Move them inside $set (or $set_once) to store them on the person.`
       )
