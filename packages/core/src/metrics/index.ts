@@ -12,6 +12,7 @@ import type { Logger } from '../types'
 import { isArray } from '../utils'
 import { FlushTimer } from '../utils/flush-timer'
 import { RetryAfterWindow } from '../utils/retry-after'
+import { NO_JITTER, backoffDelayMs, drawJitter } from '../utils/backoff'
 import { toOtlpKeyValueList } from '../utils/otlp-any-value'
 import {
   DEFAULT_HISTOGRAM_BOUNDS,
@@ -80,6 +81,8 @@ export class PostHogMetrics {
   private _typeByName = new Map<string, MetricType>()
   private _typeCollisionWarned = new Set<string>()
   private _retryAfter = new RetryAfterWindow()
+  private _consecutiveFlushFailures = 0
+  private _flushJitter = NO_JITTER
   // Bumped by reset(). A flush that was in flight when reset() ran (e.g. it
   // lost a shutdown race) sees a stale generation when its send settles and
   // discards its window instead of merging it back and re-arming the timer.
@@ -144,6 +147,8 @@ export class PostHogMetrics {
   reset(): void {
     this._generation++
     this._retryAfter.reset()
+    this._consecutiveFlushFailures = 0
+    this._flushJitter = NO_JITTER
     this._flushTimer.clear()
     this._series = new Map()
     this._flushPromise = null
@@ -301,10 +306,15 @@ export class PostHogMetrics {
     this._flushTimer.arm(this._nextFlushDelay())
   }
 
-  // A floor, not a replacement: the header never retries us sooner than the
-  // flush interval would have.
+  // A floor, not a replacement: the header never retries us sooner than our own
+  // backoff would have. The backoff doubles per consecutive failure so a
+  // sustained outage is not retried every interval, and the jitter is drawn
+  // once per failure so a fleet refused together does not return together.
   private _nextFlushDelay(): number {
-    return Math.max(this._config.flushIntervalMs, this._retryAfter.remainingMs())
+    return Math.max(
+      backoffDelayMs(this._config.flushIntervalMs, this._consecutiveFlushFailures, this._flushJitter),
+      this._retryAfter.remainingMs()
+    )
   }
 
   private async _doFlush(): Promise<void> {
@@ -331,6 +341,15 @@ export class PostHogMetrics {
       return
     }
     this._retryAfter.record(outcome)
+    // Before any delay is taken from it, so the timer armed below is measured
+    // against this outcome rather than the one before it.
+    if (outcome.kind === 'retry-later') {
+      this._consecutiveFlushFailures++
+      this._flushJitter = drawJitter()
+    } else {
+      this._consecutiveFlushFailures = 0
+      this._flushJitter = NO_JITTER
+    }
     // Outright, not through the ratchet: a timer a mid-flight capture armed is
     // measured against a window this outcome may just have closed.
     if (this._flushTimer.pending) {

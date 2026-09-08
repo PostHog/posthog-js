@@ -4,10 +4,10 @@ import { Logger, PostHogPersistedProperty } from '../types'
 import { isArray, raceWithTimeout } from '../utils'
 import { FlushTimer } from '../utils/flush-timer'
 import { RetryAfterWindow } from '../utils/retry-after'
+import { NO_JITTER, backoffDelayMs, drawJitter } from '../utils/backoff'
 import type { BufferedLogEntry, CaptureLogOptions, LogSdkContext, LogsHost, ResolvedPostHogLogsConfig } from './types'
 
 // Caps the retry backoff at 2^6 = 64× the flush interval.
-const MAX_FLUSH_BACKOFF_EXPONENT = 6
 
 export class PostHogLogs {
   private _maxBufferSize: number
@@ -34,6 +34,7 @@ export class PostHogLogs {
   // Consecutive failed flushes; drives exponential backoff on the retry timer.
   // A successful flush resets it to 0.
   private _consecutiveFlushFailures = 0
+  private _flushJitter = NO_JITTER
 
   // Fixed-window rate cap. Tumbling (not sliding) for cheap arithmetic on the
   // hot path. Window rolls the first time `captureLog` fires after the window
@@ -95,6 +96,7 @@ export class PostHogLogs {
     this._intervalLogCount = 0
     this._droppedWarned = false
     this._consecutiveFlushFailures = 0
+    this._flushJitter = NO_JITTER
     this._retryAfter.reset()
     this._maxBatchRecordsPerPost = this._config.maxBatchRecordsPerPost
   }
@@ -107,6 +109,7 @@ export class PostHogLogs {
   // network handover.
   onReconnect(): void {
     this._consecutiveFlushFailures = 0
+    this._flushJitter = NO_JITTER
     if (this._retryAfter.isOpen()) {
       // The wait outlives the reconnect, but something still has to schedule
       // the retry: an explicit `flush()` leaves no timer behind.
@@ -416,13 +419,16 @@ export class PostHogLogs {
   }
 
   // Retry delay after a flush that left records: the first retry is at the base
-  // interval, then exponential backoff (capped) so a sustained outage isn't
-  // retried every interval.
+  // interval, then exponential backoff so a sustained outage isn't retried every
+  // interval. Jitter is drawn once per failure and reused, so two delays taken
+  // for the same failure cannot disagree.
   private _nextFlushDelay(): number {
-    const exponent = Math.min(Math.max(0, this._consecutiveFlushFailures - 1), MAX_FLUSH_BACKOFF_EXPONENT)
     // A floor, not a replacement: the header never retries us sooner than our
     // own backoff would have.
-    return Math.max(this._flushIntervalMs * 2 ** exponent, this._retryAfter.remainingMs())
+    return Math.max(
+      backoffDelayMs(this._flushIntervalMs, this._consecutiveFlushFailures, this._flushJitter),
+      this._retryAfter.remainingMs()
+    )
   }
 
   private _hasQueuedRecords(): boolean {
@@ -480,9 +486,11 @@ export class PostHogLogs {
       .then(
         () => {
           this._consecutiveFlushFailures = 0
+          this._flushJitter = NO_JITTER
         },
         (err) => {
           this._consecutiveFlushFailures++
+          this._flushJitter = drawJitter()
           this._logger.error('PostHog logs flush failed:', err)
         }
       )

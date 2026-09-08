@@ -65,14 +65,17 @@ export class RetryAfterWindow {
   /**
    * Folds one export outcome into the window.
    *
-   * A window still open is left as it stands, even when the refusal names a
-   * longer wait than the one being served. Sliding the deadline on each refusal
-   * means the window never elapses for a host that flushes faster than the
-   * window is long: logs gates its size trigger and `onReconnect` on the
-   * window, and metrics re-arms its timer from it, so neither would recover
-   * while such a host kept sending. Whether it is still open is read here
-   * rather than passed in, so a send that outlives the wait it was made under
-   * installs the fresh deadline it came back with.
+   * A refusal naming a longer wait than the one being served pushes the
+   * deadline out, but never past `MAX_RETRY_AFTER_MS` from where the window was
+   * first installed. That ceiling is the SDK's own policy rather than OTLP's,
+   * which asks for the header to be honoured and names no cap: a host flushing
+   * faster than the window is long would otherwise refresh the deadline forever
+   * and never recover, since logs gates its size trigger and `onReconnect` on
+   * the window and metrics re-arms its timer from it. The cost is that a wait
+   * longer than the ceiling is served short.
+   *
+   * The deadline is never pulled in, so a shorter header cannot cut a wait the
+   * endpoint already asked for.
    */
   record(outcome: RetryAfterOutcome): void {
     if (outcome.kind === 'too-large') {
@@ -86,13 +89,22 @@ export class RetryAfterWindow {
       this.reset()
       return
     }
-    if (!outcome.retryAfterMs || this.isOpen()) {
+    if (!outcome.retryAfterMs) {
       // A refusal that names no wait — a network error, a timeout, a
       // header-less 503 — does not revoke one the endpoint already named.
       return
     }
-    this._installedAt = Date.now()
-    this._until = this._installedAt + Math.min(outcome.retryAfterMs, MAX_RETRY_AFTER_MS)
+    // Read before `_installedAt` is used: a spent window resets it, and a
+    // backward clock step is caught here rather than extending off a stale one.
+    const open = this.isOpen()
+    const now = Date.now()
+    const asked = Math.min(outcome.retryAfterMs, MAX_RETRY_AFTER_MS)
+    if (!open) {
+      this._installedAt = now
+      this._until = now + asked
+      return
+    }
+    this._until = Math.max(this._until, Math.min(now + asked, this._installedAt + MAX_RETRY_AFTER_MS))
   }
 
   /**

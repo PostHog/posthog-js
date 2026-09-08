@@ -50,6 +50,9 @@ describe('PostHogMetrics', () => {
     vi.useFakeTimers()
     mockInstance = createMockInstance()
     logger = createMockLogger()
+    // Retry delays carry jitter; pinned to its midpoint so every timing
+    // assertion here measures the backoff itself and cannot flake.
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
   })
 
   afterEach(() => {
@@ -328,7 +331,7 @@ describe('PostHogMetrics', () => {
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(4)
     })
 
-    it('does not let a host out-pacing the window keep it open forever', async () => {
+    it('closes the window at the ceiling for a host out-pacing it', async () => {
       // Each refusal sliding the deadline would keep `_nextFlushDelay` pinned at
       // the full window, so the flush cadence would never recover.
       const instance = createMockInstance({
@@ -344,7 +347,7 @@ describe('PostHogMetrics', () => {
       // Sampled: whether a given moment falls inside a window is timing
       // dependent, but it must fall outside one sometimes.
       let sawWindowClosed = false
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 70; i++) {
         await vi.advanceTimersByTimeAsync(5000)
         // Sampled before the flush: a flush that finds the window closed opens
         // a fresh one, so sampling after it would always look open.
@@ -494,8 +497,9 @@ describe('PostHogMetrics', () => {
       await vi.advanceTimersByTimeAsync(300_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(2)
 
-      // Back on the plain interval, not another 300s.
-      await vi.advanceTimersByTimeAsync(10_000)
+      // Off the 300s window and back on our own backoff: two consecutive
+      // failures, so one doubling of the interval rather than another 300s.
+      await vi.advanceTimersByTimeAsync(20_000)
       expect(instance._sendMetricsBatch).toHaveBeenCalledTimes(3)
     })
 

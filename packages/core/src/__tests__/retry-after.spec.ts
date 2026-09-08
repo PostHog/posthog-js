@@ -113,12 +113,34 @@ describe('RetryAfterWindow', () => {
     expect(window.remainingMs()).toBe(0)
   })
 
-  it('does not extend an open window on a repeated refusal', () => {
+  it('extends an open window when a refusal names a longer wait', () => {
     const window = open(60_000)
     vi.setSystemTime(Date.now() + 20_000)
 
     window.record({ kind: 'retry-later', retryAfterMs: 60_000 })
-    expect(window.remainingMs()).toBe(40_000)
+    expect(window.remainingMs()).toBe(60_000)
+  })
+
+  it('does not pull an open window in when a refusal names a shorter wait', () => {
+    // A shorter header must not cut a wait the endpoint has already asked for.
+    const window = open(120_000)
+    vi.setSystemTime(Date.now() + 10_000)
+
+    window.record({ kind: 'retry-later', retryAfterMs: 5_000 })
+    expect(window.remainingMs()).toBe(110_000)
+  })
+
+  it('caps an extension at five minutes from where the window was installed', () => {
+    // The SDK's own ceiling, not OTLP's: without it a host refused faster than
+    // the window is long would refresh the deadline indefinitely.
+    const window = open(240_000)
+    vi.setSystemTime(Date.now() + 200_000)
+
+    window.record({ kind: 'retry-later', retryAfterMs: 240_000 })
+
+    // Asked for 440_000 from the install; capped at 300_000, of which 200_000
+    // has been served.
+    expect(window.remainingMs()).toBe(100_000)
   })
 
   it('keeps the window when a batch is refused for size', () => {

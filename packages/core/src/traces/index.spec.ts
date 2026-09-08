@@ -69,6 +69,9 @@ describe('PostHogTraces', () => {
     mockInstance = createMockInstance()
     logger = createMockLogger()
     context = {}
+    // Retry delays carry jitter; pinned to its midpoint so every timing
+    // assertion here measures the backoff itself and cannot flake.
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
   })
 
   describe('startSpan', () => {

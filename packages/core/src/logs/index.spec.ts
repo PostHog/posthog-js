@@ -164,6 +164,9 @@ describe('PostHogLogs', () => {
   beforeEach(() => {
     mockInstance = createMockInstance()
     logger = createMockLogger()
+    // Retry delays carry jitter; pinned to its midpoint so every timing
+    // assertion here measures the backoff itself and cannot flake.
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
   })
 
   it('constructs without throwing', () => {
@@ -1520,10 +1523,10 @@ describe('PostHogLogs', () => {
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(3)
     })
 
-    it('does not let a host out-pacing the window keep it open forever', async () => {
-      // RN takes flush() on every app-state transition. If each refusal slid the
-      // deadline forward, the window would never elapse and the gated paths —
-      // the size trigger and onReconnect — would stay suppressed indefinitely.
+    it('closes the window at the ceiling for a host out-pacing it', async () => {
+      // RN takes flush() on every app-state transition, and each refusal pushes
+      // the deadline out. The ceiling is what stops the gated paths — the size
+      // trigger and onReconnect — from being suppressed for good.
       mockInstance._sendLogsBatch = vi.fn(() =>
         Promise.resolve({ kind: 'retry-later', error: new Error('429'), retryAfterMs: 30_000 })
       )
@@ -1538,11 +1541,12 @@ describe('PostHogLogs', () => {
       await logs.flush().catch(() => {})
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
 
-      // Lifecycle flushes every 5s, well past the 30s window. Sampled rather
-      // than asserted through onReconnect: whether a given moment falls inside
-      // a window is timing-dependent, but it must fall outside one *sometimes*.
+      // Lifecycle flushes every 5s against a 30s window, for longer than the
+      // 5-minute ceiling. Sampled rather than asserted through onReconnect:
+      // whether a given moment falls inside a window is timing-dependent, but
+      // past the ceiling it must fall outside one.
       let sawWindowClosed = false
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 70; i++) {
         await vi.advanceTimersByTimeAsync(5000)
         // Sampled before the flush: a flush that finds the window closed opens
         // a fresh one, so sampling after it would always look open.

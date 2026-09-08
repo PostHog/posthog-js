@@ -27,6 +27,7 @@ import { buildOtlpSpan, buildOtlpTracesPayload, buildTracesResourceAttributes } 
 import { isPromise } from '../utils'
 import { FlushTimer } from '../utils/flush-timer'
 import { RetryAfterWindow } from '../utils/retry-after'
+import { NO_JITTER, backoffDelayMs, drawJitter } from '../utils/backoff'
 
 // Retriable failures on the same head batch before it is dropped, so a stuck
 // batch cannot pin the queue while fresher spans are refused at the cap. The
@@ -35,7 +36,6 @@ import { RetryAfterWindow } from '../utils/retry-after'
 // its own call rate what the timer path spends over minutes.
 const MAX_RETRIES_PER_BATCH = 8
 
-const MAX_FLUSH_BACKOFF_EXPONENT = 6
 const MAX_FLUSH_BACKOFF_MS = 30_000
 
 type SpanCallback<T> = (span: Span) => T
@@ -179,6 +179,7 @@ export class PostHogTraces {
   private _lastDropWarningAt = 0
   private _dropReasons = new Set<string>()
   private _consecutiveFlushFailures = 0
+  private _flushJitter = NO_JITTER
   private _retryAfter = new RetryAfterWindow()
   // Separate from the backoff counter: this one belongs to whatever batch is at
   // the head, and resets whenever that batch is removed or shrunk.
@@ -413,6 +414,7 @@ export class PostHogTraces {
     this._dropReasons.clear()
     this._lastDropWarningAt = 0
     this._consecutiveFlushFailures = 0
+    this._flushJitter = NO_JITTER
     this._retryAfter.reset()
     this._resetHeadBatchBudget()
   }
@@ -882,6 +884,7 @@ export class PostHogTraces {
 
         if (outcome.kind === 'ok') {
           this._consecutiveFlushFailures = 0
+          this._flushJitter = NO_JITTER
           this._resetHeadBatchBudget()
           this._queue.splice(0, size)
           remaining -= size
@@ -901,6 +904,7 @@ export class PostHogTraces {
             removed += 1
             this._recordDrop(1, 'it is too large for the ingestion endpoint')
             this._consecutiveFlushFailures = 0
+            this._flushJitter = NO_JITTER
             this._resetHeadBatchBudget()
             continue
           }
@@ -920,6 +924,7 @@ export class PostHogTraces {
 
         if (outcome.kind === 'retry-later') {
           this._consecutiveFlushFailures++
+          this._flushJitter = drawJitter()
           // One charge per backoff window: a refusal arriving before the window
           // the last charge bought has elapsed is the same refusal seen again,
           // not new evidence against the batch.
@@ -939,6 +944,7 @@ export class PostHogTraces {
           remaining -= size
           removed += size
           this._consecutiveFlushFailures = 0
+          this._flushJitter = NO_JITTER
           this._resetHeadBatchBudget()
           this._recordDrop(size, `the ingestion endpoint failed ${MAX_RETRIES_PER_BATCH} times in a row`)
           if (this._retryAfter.isOpen()) {
@@ -958,6 +964,7 @@ export class PostHogTraces {
         remaining -= size
         removed += size
         this._consecutiveFlushFailures = 0
+        this._flushJitter = NO_JITTER
         this._resetHeadBatchBudget()
         this._recordDrop(size, 'the ingestion endpoint rejected the batch')
       }
@@ -1012,13 +1019,19 @@ export class PostHogTraces {
   }
 
   // Retry delay: base interval, doubling, capped at 30s — never below an interval
-  // a host configured above the cap.
+  // a host configured above the cap. The jitter is drawn once per failure, so the
+  // timer and the retry-budget charge point are measured against the same delay.
   private _nextFlushDelay(): number {
-    const exponent = Math.min(Math.max(0, this._consecutiveFlushFailures - 1), MAX_FLUSH_BACKOFF_EXPONENT)
-    const delay = this._config.flushIntervalMs * 2 ** exponent
-    const capped = Math.min(delay, Math.max(MAX_FLUSH_BACKOFF_MS, this._config.flushIntervalMs))
     // A floor, not a replacement: the header never retries us sooner than our
     // own backoff would have.
-    return Math.max(capped, this._retryAfter.remainingMs())
+    return Math.max(
+      backoffDelayMs(
+        this._config.flushIntervalMs,
+        this._consecutiveFlushFailures,
+        this._flushJitter,
+        MAX_FLUSH_BACKOFF_MS
+      ),
+      this._retryAfter.remainingMs()
+    )
   }
 }
