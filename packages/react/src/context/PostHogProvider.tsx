@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* oxlint-disable no-console */
 import type { PostHogConfig } from 'posthog-js'
 
 import React, { ReactElement, useEffect, useMemo, useRef } from 'react'
@@ -80,7 +80,7 @@ export function PostHogProvider({
             '[PostHog.js] No `apiKey` or `client` were provided to `PostHogProvider`. Using default global `window.posthog` instance. You must initialize it manually. This is not recommended behavior.'
         )
         return defaultInstance
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // oxlint-disable-next-line react/exhaustive-deps
     }, [client, apiKey, JSON.stringify(options)]) // Stringify options to be a stable reference
 
     // TRICKY: The init needs to happen in a useEffect rather than useMemo, as useEffect does not happen during SSR. Otherwise
@@ -137,7 +137,7 @@ export function PostHogProvider({
                 options: options ?? {},
             }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // oxlint-disable-next-line react/exhaustive-deps
     }, [client, apiKey, JSON.stringify(options)]) // Stringify options to be a stable reference
 
     return (

@@ -116,7 +116,6 @@ export function getUntaintedPrototype<T extends keyof BasePrototypeCache>(
     const win = iframeEl.contentWindow;
     if (!win) return candidate.prototype as BasePrototypeCache[T];
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
     const untaintedObject = (win as any)[key]
       .prototype as BasePrototypeCache[T];
 
@@ -150,10 +149,20 @@ export function getUntaintedPrototype<T extends keyof BasePrototypeCache>(
   }
 }
 
-const untaintedAccessorCache: Record<
+// Group by prototype so every node access can reuse the property key instead
+// of allocating `${key}.${String(accessor)}` on the serialization hot path.
+// Both levels have null prototypes: neither prototype names nor accessor names
+// like `constructor` may resolve to inherited objects or functions.
+type AccessorCache = Record<
   string,
   (this: PrototypeOwner, ...args: unknown[]) => unknown
-> = {};
+>;
+const untaintedAccessorCache: Record<keyof BasePrototypeCache, AccessorCache> =
+  Object.create(null);
+untaintedAccessorCache.Node = Object.create(null);
+untaintedAccessorCache.ShadowRoot = Object.create(null);
+untaintedAccessorCache.MutationObserver = Object.create(null);
+untaintedAccessorCache.Element = Object.create(null);
 
 export function getUntaintedAccessor<
   K extends keyof BasePrototypeCache,
@@ -163,14 +172,11 @@ export function getUntaintedAccessor<
   instance: BasePrototypeCache[K],
   accessor: T,
 ): BasePrototypeCache[K][T] {
-  const cacheKey = `${key}.${String(accessor)}`;
-  if (untaintedAccessorCache[cacheKey])
-    return untaintedAccessorCache[cacheKey].call(
-      instance,
-    ) as BasePrototypeCache[K][T];
+  const cache: AccessorCache = untaintedAccessorCache[key];
+  const cached = cache[accessor as string];
+  if (cached) return cached.call(instance) as BasePrototypeCache[K][T];
 
   const untaintedPrototype = getUntaintedPrototype(key);
-  // eslint-disable-next-line @typescript-eslint/unbound-method
   const untaintedAccessor = Object.getOwnPropertyDescriptor(
     untaintedPrototype,
     accessor,
@@ -178,7 +184,7 @@ export function getUntaintedAccessor<
 
   if (!untaintedAccessor) return instance[accessor];
 
-  untaintedAccessorCache[cacheKey] = untaintedAccessor;
+  cache[accessor as string] = untaintedAccessor;
 
   return untaintedAccessor.call(instance) as BasePrototypeCache[K][T];
 }
@@ -188,7 +194,6 @@ type BaseMethod<K extends keyof BasePrototypeCache> = (
   ...args: unknown[]
 ) => unknown;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const untaintedMethodCache: Record<string, BaseMethod<any>> = {};
 export function getUntaintedMethod<
   K extends keyof BasePrototypeCache,
@@ -228,6 +233,24 @@ export function parentElement(n: Node): HTMLElement | null {
 
 export function textContent(n: Node): string | null {
   return getUntaintedAccessor('Node', n, 'textContent');
+}
+
+let isConnectedGetter: PropertyDescriptor['get'] | null | undefined;
+
+export function isConnected(n: Node): boolean | undefined {
+  if (isConnectedGetter === undefined) {
+    const getter = Object.getOwnPropertyDescriptor(
+      getUntaintedPrototype('Node'),
+      'isConnected',
+    )?.get;
+    // The prototype may have been cached before this optional getter was
+    // patched. Validate the function at first use, then cache only that function.
+    // Non-native or unavailable implementations retain the old containment path.
+    isConnectedGetter = getter?.toString().includes('[native code]')
+      ? getter
+      : null;
+  }
+  return isConnectedGetter?.call(n);
 }
 
 export function contains(n: Node, other: Node): boolean {
@@ -284,7 +307,6 @@ interface PatchLayer {
   next: (...args: unknown[]) => unknown;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function isFunction(value: any): value is (...args: any[]) => any {
   return typeof value === 'function';
 }
@@ -319,7 +341,6 @@ export function patch(
     // Make sure it's a function first, as we need to attach an empty prototype for `defineProperties` to work
     // otherwise it'll throw "TypeError: Object.defineProperties called on non-object"
     if (typeof wrapped === 'function') {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       wrapped.prototype = wrapped.prototype || {};
       Object.defineProperties(wrapped, {
         __rrweb_original__: {
@@ -352,10 +373,9 @@ export function patch(
       // and leave our wrapper in the call path for the life of the page.
       const layerOf = (method: unknown): PatchLayer | undefined =>
         isFunction(method)
-          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ?
             (((method as any).__rrweb_layer__ ?? (method as any).__posthog_layer__) as PatchLayer | undefined)
           : undefined;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let current: any = source[name];
       let currentLayer = layerOf(current);
       while (currentLayer) {
@@ -385,6 +405,7 @@ export default {
   parentNode,
   parentElement,
   textContent,
+  isConnected,
   contains,
   getRootNode,
   host,

@@ -16,6 +16,7 @@ import {
 } from './observer';
 import {
   on,
+  callAllSafely,
   callSafely,
   getWindowWidth,
   getWindowHeight,
@@ -66,7 +67,6 @@ try {
   if (Array.from([1], (x) => x * 2)[0] !== 2) {
     const cleanFrame = document.createElement('iframe');
     document.body.appendChild(cleanFrame);
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- Array.from is static and doesn't rely on binding
     Array.from = cleanFrame.contentWindow?.Array.from || Array.from;
     document.body.removeChild(cleanFrame);
   }
@@ -732,7 +732,6 @@ function record<T = eventWithTime>(
             }
             if (hasShadowRoot(n)) {
               shadowDomManager.addShadowRoot(
-                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
                 dom.shadowRoot(n as Node)!,
                 document,
               );
@@ -1118,7 +1117,7 @@ function record<T = eventWithTime>(
         // abort the teardown below and leak observers and listeners
       }
       deferredStylesheetInlining = undefined;
-      handlers.forEach((h) => callSafely(h));
+      callAllSafely(handlers);
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();
       iframeManager.destroy();

@@ -13,6 +13,7 @@ import {
   isNodeMetaEqual,
   extractFileExtension,
   attachShadowRootSafely,
+  SCRIPT_PLACEHOLDER,
 } from './utils';
 import postcss, { type Parser } from 'postcss';
 
@@ -123,6 +124,16 @@ function safeDocNode(
     cache: BuildCache;
   },
 ) {
+  // A `<script>` is rebuilt as `<noscript>` so it cannot execute (see tagMap).
+  // Its serialized content is the SCRIPT_PLACEHOLDER sentinel, never real script
+  // text. Scripting is off in the replay iframe, so `<noscript>` content renders
+  // as visible text — and the `noscript { display: none }` replay style is
+  // document-scoped, so it never reaches shadow roots. Emit an empty text node so
+  // the placeholder cannot render in any context.
+  if (n.textContent === SCRIPT_PLACEHOLDER) {
+    return options.doc.createTextNode('');
+  }
+
   let stringContent = n.textContent;
   if (n.isStyle && options.hackCss) {
     try {
@@ -476,9 +487,7 @@ export function buildNodeWithSN(
    */
   let staleNode: Node | null = null;
   if (mirror.has(n.id)) {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const nodeInMirror = mirror.getNode(n.id)!;
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const meta = mirror.getMeta(nodeInMirror)!;
     // For safety concern, check if the node in mirror is the same as the node we are trying to build
     if (isNodeMetaEqual(meta, n)) return mirror.getNode(n.id);
@@ -622,7 +631,6 @@ function visit(mirror: Mirror, onVisit: (node: Node) => void) {
 
   for (const id of mirror.getIds()) {
     if (mirror.has(id)) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       walk(mirror.getNode(id)!);
     }
   }

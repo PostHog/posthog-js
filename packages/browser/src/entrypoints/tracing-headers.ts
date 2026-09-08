@@ -46,7 +46,7 @@ const getRequestUrl = (url: URL | RequestInfo): string | undefined => {
             return url.url
         }
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new URL(url instanceof URL ? url.toString() : String(url), window?.location?.href).toString()
     } catch {
         return undefined
@@ -135,7 +135,7 @@ const addTracingHeaders = (
     let reqHostname: string
     try {
         // we don't need to support IE11 here
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         reqHostname = new URL(url).hostname
     } catch {
         // If the URL is invalid, we skip adding tracing headers
@@ -170,7 +170,7 @@ const patchFetch = (
     distinctId: TracingHeadersDistinctId,
     sessionManager?: SessionIdManager
 ): (() => void) => {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // oxlint-disable-next-line typescript/ban-ts-comment
     // @ts-ignore
     return patch(window, 'fetch', (originalFetch: typeof fetch) => {
         return function (this: unknown, url: URL | RequestInfo, init?: RequestInit | undefined) {
@@ -215,7 +215,7 @@ const patchXHR = (
         // we can assert this is present because we've checked previously
         window!.XMLHttpRequest.prototype,
         'open',
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // oxlint-disable-next-line typescript/ban-ts-comment
         // @ts-ignore
         (originalOpen: typeof XMLHttpRequest.prototype.open) => {
             return function (
@@ -226,7 +226,7 @@ const patchXHR = (
                 password?: string | null
             ) {
                 // because this function is returned in its actual context `this` _is_ an XMLHttpRequest
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // oxlint-disable-next-line typescript/ban-ts-comment
                 // @ts-ignore
                 const xhr = this as XMLHttpRequest
 

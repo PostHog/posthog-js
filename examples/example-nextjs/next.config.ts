@@ -1,5 +1,3 @@
-/* eslint-env node */
-
 import { withPostHogConfig } from '@posthog/nextjs-config'
 import packageJson from './package.json' with { type: 'json' }
 

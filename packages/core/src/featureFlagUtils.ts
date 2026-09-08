@@ -135,12 +135,12 @@ export const createFlagsResponseFromFlagsAndPayloads = (
 ): PostHogFeatureFlagsResponse => {
   // If a feature flag payload key is not in the feature flags, we treat it as true feature flag.
   const allKeys = [...new Set([...Object.keys(featureFlags ?? {}), ...Object.keys(featureFlagPayloads ?? {})])]
-  const enabledFlags = allKeys
-    .filter((flag) => !!featureFlags[flag] || !!featureFlagPayloads[flag])
-    .reduce((res: Record<string, FeatureFlagValue>, key) => ((res[key] = featureFlags[key] ?? true), res), {})
+  const flagValues = allKeys
+    .filter((flag) => featureFlags?.[flag] !== undefined || !!featureFlagPayloads?.[flag])
+    .reduce((res: Record<string, FeatureFlagValue>, key) => ((res[key] = featureFlags?.[key] ?? true), res), {})
 
   const flagDetails: PostHogFlagsAndPayloadsResponse = {
-    featureFlags: enabledFlags,
+    featureFlags: flagValues,
     featureFlagPayloads: featureFlagPayloads ?? {},
   }
 

@@ -24,7 +24,7 @@ describe('PostHogCaptureOnViewed component', () => {
         })
 
         mockIntersectionObserver.prototype = {}
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         window.IntersectionObserver = mockIntersectionObserver as unknown as typeof IntersectionObserver
     })
 

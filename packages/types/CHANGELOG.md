@@ -1,5 +1,36 @@
 # @posthog/types
 
+## 1.409.2
+
+### Patch Changes
+
+- [#4791](https://github.com/PostHog/posthog-js/pull/4791) [`b2affdc`](https://github.com/PostHog/posthog-js/commit/b2affdcd8e29a14b0f155489ac79672af8b1e97d) Thanks [@posthog](https://github.com/apps/posthog)! - Prefer `sendBeacon` for unbatched events, such as `{ send_instantly: true }` captures, once PostHog's own `pagehide` handler (or `unload` fallback) marks the page as unloading. Captures from `beforeunload` or earlier `pagehide` listeners retain their normal transport. Preserve response-capable transports on active pages so failed requests can be retried, including when `fetch` is unavailable.
+  (2026-09-08)
+
+## 1.409.1
+
+### Patch Changes
+
+- [#4785](https://github.com/PostHog/posthog-js/pull/4785) [`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829) Thanks [@marandaneto](https://github.com/marandaneto)! - Clarify feature flag return-value terminology across SDK APIs. A `false` value is a conclusive off evaluation, while `undefined` means no evaluation is available. Remote evaluation omits globally inactive flags, whereas backend local evaluation can resolve cached inactive definitions to `false`.
+  (2026-09-07)
+
+- [#4666](https://github.com/PostHog/posthog-js/pull/4666) [`5e74132`](https://github.com/PostHog/posthog-js/commit/5e74132a76a32d5df9c6706dddf1597c748061d2) Thanks [@robbie-c](https://github.com/robbie-c)! - Preserve universally safe JSON-LD properties and allowlisted tree structure when replay redacts other fields. Keep only DOM-backed ID fragments. Keep only `@type` values shaped like a Schema.org term, and limit types and payloads. Publish a reusable sanitization contract fixture.
+  (2026-09-07)
+
+## 1.409.0
+
+### Minor Changes
+
+- [#4774](https://github.com/PostHog/posthog-js/pull/4774) [`426e1fd`](https://github.com/PostHog/posthog-js/commit/426e1fd6c001c030e5753d0d25a0bdb9adc99448) Thanks [@Fhatu12](https://github.com/Fhatu12)! - Add `reuseAnonymousId` support to browser identify calls.
+  (2026-09-04)
+
+## 1.408.1
+
+### Patch Changes
+
+- [#4760](https://github.com/PostHog/posthog-js/pull/4760) [`41ed3af`](https://github.com/PostHog/posthog-js/commit/41ed3af41c1a98776d1686caf4e58875f95b0847) Thanks [@marandaneto](https://github.com/marandaneto)! - Require a distinct ID when calling `identify` and correct its API documentation to match the existing runtime validation.
+  (2026-09-03)
+
 ## 1.408.0
 
 ### Minor Changes

@@ -29,8 +29,8 @@ describe('stripSourceMapSourcesContent', () => {
         expect(result.stderr).toContain('FAIL: no source maps found in dist/, lib/ or react/dist/')
     })
 
-    it('retains source maps while removing sourcesContent', () => {
-        const mapPath = path.join(packageRoot, 'dist', 'main.js.map')
+    it.each(['main.js.map', 'module.mjs.map'])('retains %s while removing sourcesContent', (fileName) => {
+        const mapPath = path.join(packageRoot, 'dist', fileName)
         fs.writeFileSync(
             mapPath,
             JSON.stringify({

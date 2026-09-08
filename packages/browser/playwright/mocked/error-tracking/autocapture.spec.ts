@@ -290,7 +290,7 @@ test.describe('ErrorTracking autocapture', () => {
             })
             await network.waitForFlags()
             await page.evaluate(() => {
-                //eslint-disable-next-line no-console
+                //oxlint-disable-next-line no-console
                 console.error('This error should be captured with a stack')
             })
 
