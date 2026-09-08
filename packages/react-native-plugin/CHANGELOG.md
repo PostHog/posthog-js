@@ -1,5 +1,17 @@
 # @posthog/react-native-plugin
 
+## 2.5.2
+
+### Patch Changes
+
+- [#4789](https://github.com/PostHog/posthog-js/pull/4789) [`f8013ed`](https://github.com/PostHog/posthog-js/commit/f8013ed497fdf37765358df23152b328c339e586) Thanks [@gabrieldonadel](https://github.com/gabrieldonadel)! - Skip the explicit Kotlin plugin when AGP provides built-in Kotlin
+
+  Android Gradle Plugin 9 registers the `kotlin` extension itself, so applying
+  `kotlin-android` on top of it fails configuration with "Cannot add extension with
+  name 'kotlin'". The plugin is now applied only when nothing has registered that
+  extension yet, which keeps AGP 8 working unchanged and covers AGP 10, where the
+  `android.builtInKotlin` opt-out is removed. (2026-09-07)
+
 ## 2.5.1
 
 ### Patch Changes
