@@ -10,9 +10,39 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
+  build:
+    name: Build consumer package
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup
+        with:
+          node_version: 24
+          build: false
+
+      - name: Build browser package and React entrypoints
+        run: pnpm exec turbo --filter=posthog-js --filter=@posthog/react build
+
+      - name: Pack browser package
+        run: PACKAGE_DEST="${RUNNER_TEMP}/minimum-version-ts" pnpm --filter=posthog-js package
+
+      - name: Upload consumer package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: minimum-version-ts-package
+          path: ${{ runner.temp }}/minimum-version-ts/posthog-js.tgz
+          if-no-files-found: error
+          retention-days: 1
+
   unit:
     name: Check minimum TS version
+    needs: build
     runs-on: ubuntu-22.04
     strategy:
       matrix:
@@ -32,15 +62,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: ./.github/actions/setup
-        with:
-          node_version: 24
-          build: true
-
       - name: Prepare consumer fixture
-        run: |
-          cp -R .github/fixtures/minimum-version-ts "${RUNNER_TEMP}/minimum-version-ts"
-          PACKAGE_DEST="${RUNNER_TEMP}/minimum-version-ts" pnpm --filter=posthog-js package
+        run: cp -R .github/fixtures/minimum-version-ts "${RUNNER_TEMP}/minimum-version-ts"
+
+      - name: Download consumer package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: minimum-version-ts-package
+          path: ${{ runner.temp }}/minimum-version-ts
 
       - uses: ./.github/actions/setup
         with:
