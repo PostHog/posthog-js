@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3766": {
+    "key": "PostHog/posthog-js/issue/3766",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3766",
+    "url": "https://github.com/PostHog/posthog-js/issues/3766",
+    "conclusion": "Valid Session Replay maintenance tracker for keeping the vendored rrweb fork thin and contributing general fixes upstream.",
+    "labels": [
+      "enhancement",
+      "feature/replay",
+      "needs-to-be-contributed-back",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-08T10:40:22.342Z"
+  },
   "PostHog/posthog-js/issue/4825": {
     "key": "PostHog/posthog-js/issue/4825",
     "repo": "PostHog/posthog-js",
