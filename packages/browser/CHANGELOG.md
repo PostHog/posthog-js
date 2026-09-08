@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.428.3
+
+### Patch Changes
+
+- [#4805](https://github.com/PostHog/posthog-js/pull/4805) [`4cd5717`](https://github.com/PostHog/posthog-js/commit/4cd571766ba341fe64aab058f1132ab5dc0223f5) Thanks [@marandaneto](https://github.com/marandaneto)! - Wait for the initial remote config outcome before using cached autocapture enablement, so a newly disabled project does not capture events while its settings load. Disabled remote requests retain local startup behavior, and failed or incomplete responses retain the cached fallback.
+  (2026-09-07)
+
 ## 1.428.2
 
 ### Patch Changes
