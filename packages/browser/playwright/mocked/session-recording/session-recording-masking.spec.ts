@@ -1,6 +1,7 @@
 import { test, expect } from '../utils/posthog-playwright-test-base'
 import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page } from '@playwright/test'
+import { isNumber } from '@posthog/core'
 import { CaptureResult } from '@/types'
 
 // Local config not set
@@ -170,12 +171,33 @@ test.describe('Session recording - masking', () => {
             )
         await expect.poll(getEventBytes).toContain('ALLOWED_DYNAMIC_PRODUCT')
         const eventBytes = await getEventBytes()
-        const jsonLdEventBytes = JSON.stringify(
-            (await page.capturedEvents())
-                .filter((event) => event.event === '$snapshot')
-                .flatMap((event) => event.properties['$snapshot_data'])
-                .filter((event) => event.type === 5 && event.data.tag === '$json_ld')
-        )
+        const replayEvents = (await page.capturedEvents())
+            .filter((event) => event.event === '$snapshot')
+            .flatMap((batch) =>
+                batch.properties['$snapshot_data'].map((event) => ({
+                    event,
+                    sessionId: batch.properties['$session_id'],
+                    windowId: batch.properties['$window_id'],
+                }))
+            )
+        const jsonLdEvents = replayEvents.filter(({ event }) => event.type === 5 && event.data.tag === '$json_ld')
+        const jsonLdEventBytes = JSON.stringify(jsonLdEvents.map(({ event }) => event))
+        const pairedEvents = jsonLdEvents.filter(({ event }) => isNumber(event.data.fullSnapshotTimestamp))
+        expect(pairedEvents.length).toBeGreaterThan(0)
+        for (const { event, sessionId, windowId } of pairedEvents) {
+            expect(replayEvents).toContainEqual({
+                event: expect.objectContaining({ type: 2, timestamp: event.data.fullSnapshotTimestamp }),
+                sessionId,
+                windowId,
+            })
+        }
+        expect(pairedEvents.some(({ event }) => event.data.payload.name === 'ALLOWED_INITIAL_PRODUCT')).toBe(true)
+        expect(
+            jsonLdEvents.some(
+                ({ event }) =>
+                    event.data.payload.name === 'ALLOWED_DYNAMIC_PRODUCT' && !('fullSnapshotTimestamp' in event.data)
+            )
+        ).toBe(true)
         expect(eventBytes).toContain('ALLOWED_PRODUCT_ID')
         expect(eventBytes).toContain('ALLOWED_INITIAL_PRODUCT')
         expect(eventBytes).toContain('ALLOWED_DYNAMIC_PRODUCT')

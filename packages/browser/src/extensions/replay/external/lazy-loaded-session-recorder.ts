@@ -954,10 +954,30 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
-    private _scheduleJsonLdScan(force = false): void {
+    private _captureJsonLdForFullSnapshot(timestamp: number, sessionId: string, windowId: string): void {
+        if (!this._canCaptureJsonLd()) {
+            return
+        }
+        // Read before yielding to page code, but use the snapshot's queue and IDs if compression is pending.
+        this._jsonLdCapture?.scan(true, (jsonLd) => {
+            const event: eventWithTime = {
+                type: EventType.Custom,
+                timestamp,
+                data: { tag: JSON_LD_EVENT_TAG, payload: jsonLd, fullSnapshotTimestamp: timestamp },
+            }
+            if (this._queuedCompressionEvents > 0) {
+                this._enqueueCompression(event, false, sessionId, windowId)
+            } else {
+                this._captureProcessedEvent(event, event, estimateSize(event), sessionId, windowId)
+            }
+            return this._canCaptureJsonLd()
+        })
+    }
+
+    private _scheduleJsonLdScan(): void {
         // Run the scan after the current rrweb event updates the JSON-LD capture state.
         // oxlint-disable-next-line compat/compat
-        Promise.resolve().then(() => this._jsonLdCapture?.scan(force))
+        Promise.resolve().then(() => this._jsonLdCapture?.scan())
     }
 
     private _pageViewFallBack() {
@@ -2060,9 +2080,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         const jsonLdCaptureWasReady = this._jsonLdCaptureReady
         this._jsonLdCaptureReady = true
-        if (jsonLdRemovedFromPendingBuffer) {
-            this._scheduleJsonLdScan(true)
-        } else if (!jsonLdCaptureWasReady) {
+        if (!jsonLdCaptureWasReady && event.type !== EventType.FullSnapshot) {
             this._scheduleJsonLdScan()
         }
 
@@ -2073,13 +2091,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             (compressionEnabled && shouldUseNativeAsyncSessionRecordingGzip(event))
         ) {
             this._enqueueCompression(event, compressionEnabled, targetSessionId, targetWindowId)
-            return
+        } else {
+            const { event: eventToSend, size } = compressionEnabled
+                ? compressEventSync(event)
+                : { event, size: estimateSize(event) }
+            this._captureProcessedEvent(event, eventToSend, size, targetSessionId, targetWindowId)
         }
 
-        const { event: eventToSend, size } = compressionEnabled
-            ? compressEventSync(event)
-            : { event, size: estimateSize(event) }
-        this._captureProcessedEvent(event, eventToSend, size, targetSessionId, targetWindowId)
+        if (event.type === EventType.FullSnapshot) {
+            this._captureJsonLdForFullSnapshot(event.timestamp, targetSessionId, targetWindowId)
+        }
     }
 
     get status(): SessionRecordingStatus {
@@ -2969,38 +2990,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 requestFullSnapshot: () => this._tryTakeFullSnapshot(),
             })
 
-        const activePlugins = this._gatherRRWebPlugins()
-        this._stopRrweb = rrwebRecord({
-            emit: (event) => {
-                this.onRRwebEmit(event)
-            },
-            plugins: activePlugins,
-            errorHandler: (error, context) => {
-                // A host API patch shares its callback boundary with the native
-                // operation. Preserve the application's exception semantics when
-                // rrweb cannot reliably distinguish where that error originated.
-                if (context !== 'rrweb') {
-                    return false
-                }
-                if (!this._hasLoggedRecorderCallbackError) {
-                    this._hasLoggedRecorderCallbackError = true
-                    logger.error('rrweb internal error - recording will continue but may be incomplete', error)
-                }
-                return true
-            },
-            ...sessionRecordingOptions,
-        })
-
-        if (!this._stopRrweb) {
-            this._rrwebError = true
-            logger.error(
-                'rrweb failed to start - Loss of recording data is possible. Check the browser console for rrweb errors.'
-            )
-            return
-        }
-
-        this._rrwebError = false
-
         if (
             userSessionRecordingOptions?.captureJsonLd === true &&
             document &&
@@ -3028,6 +3017,41 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._jsonLdCapture.scan()
             }
         }
+
+        const activePlugins = this._gatherRRWebPlugins()
+        this._stopRrweb = rrwebRecord({
+            emit: (event) => {
+                this.onRRwebEmit(event)
+            },
+            plugins: activePlugins,
+            errorHandler: (error, context) => {
+                // A host API patch shares its callback boundary with the native
+                // operation. Preserve the application's exception semantics when
+                // rrweb cannot reliably distinguish where that error originated.
+                if (context !== 'rrweb') {
+                    return false
+                }
+                if (!this._hasLoggedRecorderCallbackError) {
+                    this._hasLoggedRecorderCallbackError = true
+                    logger.error('rrweb internal error - recording will continue but may be incomplete', error)
+                }
+                return true
+            },
+            ...sessionRecordingOptions,
+        })
+
+        if (!this._stopRrweb) {
+            this._jsonLdCapture?.stop()
+            this._jsonLdCapture = undefined
+            this._jsonLdCaptureReady = false
+            this._rrwebError = true
+            logger.error(
+                'rrweb failed to start - Loss of recording data is possible. Check the browser console for rrweb errors.'
+            )
+            return
+        }
+
+        this._rrwebError = false
 
         // We reset the last activity timestamp, resetting the idle timer
         this._lastActivityTimestamp = Date.now()

@@ -3,6 +3,7 @@ import { gzipSync, strToU8 } from 'fflate'
 type SetupOptions = {
     gzipSupported: boolean
     gzipCompress?: vi.Mock
+    captureJsonLd?: boolean
 }
 
 const createFullSnapshot = (data: Record<string, unknown> = {}) => ({
@@ -26,7 +27,7 @@ const createCustomSnapshot = () => ({
     timestamp: 124,
 })
 
-async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: SetupOptions) {
+async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress, captureJsonLd }: SetupOptions) {
     vi.resetModules()
 
     const gzipCompressMock =
@@ -75,6 +76,7 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
         session_recording: {
             maskAllInputs: false,
             compress_events: true,
+            captureJsonLd,
         },
         persistence: 'memory',
     })
@@ -217,6 +219,58 @@ describe('LazyLoadedSessionRecording compression paths', () => {
             }),
             expect.any(Object)
         )
+    })
+
+    it.each([true, false])('keeps snapshot JSON-LD paired with native gzip supported=%s', async (gzipSupported) => {
+        let releaseCompression = () => {}
+        const compressionGate = new Promise<void>((resolve) => {
+            releaseCompression = resolve
+        })
+        const gzipCompress = vi.fn(async (input: string) => {
+            await compressionGate
+            return new Blob([gzipSync(strToU8(input))])
+        })
+        const script = document.createElement('script')
+        script.type = 'application/ld+json'
+        const payload = { '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' }
+        script.textContent = JSON.stringify(payload)
+        document.body.appendChild(script)
+        const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+            gzipSupported,
+            gzipCompress,
+            captureJsonLd: true,
+        })
+
+        try {
+            emit(createFullSnapshot({ content: 'snapshot' }))
+            script.textContent = JSON.stringify({ ...payload, name: 'Changed after snapshot' })
+            lazyLoadedSessionRecording['_sessionId'] = 'nextSessionId'
+            lazyLoadedSessionRecording['_windowId'] = 'nextWindowId'
+            releaseCompression()
+            await lazyLoadedSessionRecording['_compressionQueue']
+            lazyLoadedSessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({
+                    $session_id: 'sessionId',
+                    $window_id: 'windowId',
+                    $snapshot_data: [
+                        expect.objectContaining({ type: 2, cv: '2024-10', timestamp: 123 }),
+                        {
+                            type: 5,
+                            timestamp: 123,
+                            data: { tag: '$json_ld', payload, fullSnapshotTimestamp: 123 },
+                        },
+                    ],
+                }),
+                expect.any(Object)
+            )
+        } finally {
+            releaseCompression()
+            lazyLoadedSessionRecording.discard()
+            script.remove()
+        }
     })
 
     it('flushes in-flight async compression before stop teardown', async () => {

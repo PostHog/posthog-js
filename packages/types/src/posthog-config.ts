@@ -715,6 +715,9 @@ export interface SessionRecordingOptions {
      * It drops every `@id` when `maskAllElementAttributes`, `maskAttributeFn`, or an `attributeFilter` without `id` can hide `id` attributes from replay.
      * It also keeps the containing entity tree, even when it redacts all other fields.
      * The event tag is `$json_ld`. The payload is a JSON-LD object or array.
+     * Each full snapshot also captures the current JSON-LD, subject to the capture size limit.
+     * These events include `data.fullSnapshotTimestamp`, which matches the full snapshot timestamp in the same session and window.
+     * JSON-LD events from later page mutations do not include this field.
      * The recorder removes all script nodes from snapshots when this option is enabled.
      * The JSON-LD observer starts only when this option is true at recording start.
      * @see https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/extensions/replay/external/json-ld.ts

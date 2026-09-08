@@ -4007,8 +4007,9 @@ describe('Lazy SessionRecording', () => {
                 const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
                 const pendingTrigger = vi.spyOn(lazyRecorder['_strategy']!, 'hasPendingTriggers').mockReturnValue(true)
                 try {
+                    const fullSnapshotTimestamp = Date.now()
                     _emit(createMetaSnapshot({ data: { href: 'https://test.com/second' } }))
-                    _emit(createFullSnapshot())
+                    _emit(createFullSnapshot({ timestamp: fullSnapshotTimestamp }))
                     await Promise.resolve()
 
                     const bufferedEvents = lazyRecorder['_buffer'].data
@@ -4019,13 +4020,15 @@ describe('Lazy SessionRecording', () => {
                     expect(bufferedEvents[0]).toEqual(createMetaSnapshot({ data: { href: 'https://test.com/second' } }))
                     expect(jsonLdIndexes).toHaveLength(1)
                     expect(jsonLdIndexes[0]).toBeGreaterThan(fullSnapshotIndex)
-                    expect(bufferedEvents[jsonLdIndexes[0]]).toEqual(
-                        createCustomSnapshot(
-                            {},
-                            { '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' },
-                            '$json_ld'
-                        )
-                    )
+                    expect(bufferedEvents[jsonLdIndexes[0]]).toEqual({
+                        type: EventType.Custom,
+                        timestamp: fullSnapshotTimestamp,
+                        data: {
+                            tag: '$json_ld',
+                            payload: { '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' },
+                            fullSnapshotTimestamp,
+                        },
+                    })
                 } finally {
                     pendingTrigger.mockRestore()
                 }
@@ -4034,6 +4037,115 @@ describe('Lazy SessionRecording', () => {
                 script.remove()
             }
         })
+
+        it('links unchanged JSON-LD to each snapshot but leaves later mutations unlinked', async () => {
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            const payload = { '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' }
+            script.textContent = JSON.stringify(payload)
+            document.body.appendChild(script)
+            posthog.config.session_recording.captureJsonLd = true
+
+            try {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                _addCustomEvent.mockImplementation((tag: string, payload: unknown) => {
+                    _emit(createCustomSnapshot({}, payload as Record<string, unknown>, tag))
+                })
+                const firstTimestamp = Date.now()
+                _emit(createFullSnapshot({ timestamp: firstTimestamp }))
+                _emit(createFullSnapshot({ timestamp: firstTimestamp + 1 }))
+                script.textContent = JSON.stringify({ ...payload, name: 'Updated camera' })
+                await Promise.resolve()
+
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                const jsonLdEvents = lazyRecorder['_buffer'].data.filter(
+                    (event: eventWithTime) => event.type === EventType.Custom && event.data.tag === '$json_ld'
+                )
+                expect(jsonLdEvents).toEqual([
+                    {
+                        type: EventType.Custom,
+                        timestamp: firstTimestamp,
+                        data: { tag: '$json_ld', payload, fullSnapshotTimestamp: firstTimestamp },
+                    },
+                    {
+                        type: EventType.Custom,
+                        timestamp: firstTimestamp + 1,
+                        data: { tag: '$json_ld', payload, fullSnapshotTimestamp: firstTimestamp + 1 },
+                    },
+                    createCustomSnapshot({}, { ...payload, name: 'Updated camera' }, '$json_ld'),
+                ])
+            } finally {
+                _addCustomEvent.mockReset()
+                script.remove()
+            }
+        })
+
+        it('captures JSON-LD for the full snapshot emitted during rrweb startup', () => {
+            const target = document.createElement('div')
+            target.id = 'product-id'
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            const payload = { '@context': 'https://schema.org', '@type': 'Product', '@id': 'product-id' }
+            script.textContent = JSON.stringify({ ...payload, '@id': '#product-id' })
+            document.body.append(target, script)
+            posthog.config.session_recording.captureJsonLd = true
+            const timestamp = Date.now()
+            addRRwebToWindow()
+            const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+            recordMock.mockImplementationOnce(({ emit }) => {
+                _emit = emit
+                emit(createMetaSnapshot())
+                emit(createFullSnapshot({ timestamp }))
+                script.textContent = JSON.stringify({ '@context': 'https://schema.org', '@type': 'Article' })
+                return () => {}
+            })
+
+            try {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+                const events = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data
+                const snapshotIndex = events.findIndex((event: eventWithTime) => event.type === EventType.FullSnapshot)
+                expect(snapshotIndex).toBeGreaterThanOrEqual(0)
+                expect(events[snapshotIndex + 1]).toEqual({
+                    type: EventType.Custom,
+                    timestamp,
+                    data: { tag: '$json_ld', payload, fullSnapshotTimestamp: timestamp },
+                })
+            } finally {
+                target.remove()
+                script.remove()
+            }
+        })
+
+        it.each(['disabled', 'idle', 'blocked', 'masked'] as const)(
+            'does not capture snapshot JSON-LD when %s',
+            (state) => {
+                const script = document.createElement('script')
+                script.type = 'application/ld+json'
+                script.textContent = JSON.stringify({ '@context': 'https://schema.org', '@type': 'Product' })
+                script.className = state === 'masked' ? 'ph-mask' : ''
+                document.body.appendChild(script)
+                posthog.config.session_recording.captureJsonLd = state !== 'disabled'
+
+                try {
+                    sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                    const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                    if (state === 'idle') {
+                        lazyRecorder['_isIdle'] = true
+                    }
+                    if (state === 'blocked') {
+                        lazyRecorder['_urlTriggerMatching'].urlBlocked = true
+                        vi.spyOn(lazyRecorder['_strategy']!, 'checkUrlTriggers').mockImplementation(() => {})
+                    }
+                    _emit(createFullSnapshot({ timestamp: Date.now() }))
+                    expect(lazyRecorder['_buffer'].data).not.toContainEqual(
+                        expect.objectContaining({ data: expect.objectContaining({ tag: '$json_ld' }) })
+                    )
+                } finally {
+                    script.remove()
+                }
+            }
+        )
 
         it('does not emit JSON-LD by default', () => {
             const script = document.createElement('script')

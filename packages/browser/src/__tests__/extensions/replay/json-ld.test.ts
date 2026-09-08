@@ -339,6 +339,54 @@ describe('JSON-LD replay capture', () => {
         capture.stop()
     })
 
+    it('does not restore suppressed JSON-LD through a forced snapshot scan', () => {
+        const emit = vi.fn(() => true)
+        const snapshotEmit = vi.fn(() => true)
+        let captureState: boolean | null = null
+        const script = jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'Suppressed' })
+        document.body.appendChild(script)
+        const capture = startJsonLdCapture(document, MutationObserver, {
+            emit,
+            getCaptureState: () => captureState,
+        })
+
+        capture.scan()
+        captureState = true
+        capture.scan(true, snapshotEmit)
+        capture.scan()
+        expect(snapshotEmit).not.toHaveBeenCalled()
+        expect(emit).not.toHaveBeenCalled()
+
+        const changed = { '@context': 'https://schema.org', '@type': 'Product', name: 'Changed after resume' }
+        script.textContent = JSON.stringify(changed)
+        capture.scan(true, snapshotEmit)
+        capture.scan()
+        expect(snapshotEmit).toHaveBeenCalledTimes(1)
+        expect(snapshotEmit).toHaveBeenCalledWith(changed)
+        expect(emit).not.toHaveBeenCalled()
+        capture.stop()
+    })
+
+    it('shares the capture size limit between snapshots and mutation events', () => {
+        const emit = vi.fn(() => true)
+        const snapshotEmit = vi.fn(() => true)
+        const payload = { '@context': 'https://schema.org', '@type': 'Product' }
+        const script = jsonLdScript(payload)
+        document.body.appendChild(script)
+        const capture = startJsonLdCapture(document, MutationObserver, { emit })
+        const allowedCaptures = Math.floor(100_000 / JSON.stringify(payload).length)
+
+        for (let index = 0; index < allowedCaptures + 1; index++) {
+            capture.scan(true, snapshotEmit)
+        }
+        script.textContent = JSON.stringify({ '@context': 'https://schema.org', '@type': 'Event' })
+        capture.scan()
+
+        expect(snapshotEmit).toHaveBeenCalledTimes(allowedCaptures)
+        expect(emit).not.toHaveBeenCalled()
+        capture.stop()
+    })
+
     it('does not deduplicate an event that the recorder rejects', () => {
         let acceptsEvents = false
         const emit = vi.fn(() => acceptsEvents)

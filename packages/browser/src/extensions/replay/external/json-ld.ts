@@ -445,13 +445,14 @@ export function startJsonLdCapture(
         // Null updates the deduplication baseline without an event.
         getCaptureState?: () => boolean | null
     }
-): { scan: (force?: boolean) => void; stop: () => void } {
+): { scan: (force?: boolean, emit?: (jsonLd: unknown) => boolean) => void; stop: () => void } {
     const lastJsonByScript = new WeakMap<HTMLScriptElement, string>()
+    const suppressedJsonByScript = new WeakMap<HTMLScriptElement, string>()
     const getCaptureState = options.getCaptureState || (() => true)
     let remainingLength = MAX_JSON_LD_LENGTH
     const hasCapturedDomId = createCapturedDomIdMatcher(doc, options)
 
-    const captureScript = (script: HTMLScriptElement): void => {
+    const captureScript = (script: HTMLScriptElement, emit = options.emit): void => {
         try {
             const captureState = getCaptureState()
             if (
@@ -471,14 +472,19 @@ export function startJsonLdCapture(
             const [jsonLd, json] = sanitized
             if (isNull(captureState)) {
                 lastJsonByScript.set(script, json)
+                suppressedJsonByScript.set(script, json)
                 return
             }
+            if (suppressedJsonByScript.get(script) === json) {
+                return
+            }
+            suppressedJsonByScript.delete(script)
             if (lastJsonByScript.get(script) !== json) {
                 if (json.length > remainingLength) {
                     remainingLength = 0
                     return
                 }
-                if (options.emit(jsonLd)) {
+                if (emit(jsonLd)) {
                     lastJsonByScript.set(script, json)
                     remainingLength -= json.length
                 }
@@ -527,7 +533,7 @@ export function startJsonLdCapture(
             childList: true,
             subtree: true,
         })
-        const scan = (force = false): void => {
+        const scan = (force = false, emit = options.emit): void => {
             if (!remainingLength || getCaptureState() === false) {
                 return
             }
@@ -535,7 +541,7 @@ export function startJsonLdCapture(
                 if (force) {
                     lastJsonByScript.delete(script)
                 }
-                captureScript(script)
+                captureScript(script, emit)
             })
         }
 

@@ -190,6 +190,7 @@ export type customEvent<T = unknown> = {
     data: {
         tag: string
         payload: T
+        fullSnapshotTimestamp?: number
     }
 }
 
