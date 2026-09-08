@@ -21,6 +21,7 @@
         "test": "turbo test",
         "test:unit": "turbo test:unit",
         "test:docs-scripts": "node --test \"scripts/docs/__tests__/*.test.js\"",
+        "test:dev-watch": "node --test scripts/test-dev-watch.mjs",
         "test:functional": "turbo test:functional",
         "test:e2e": "turbo test:e2e",
         "test:mcp-harness": "node packages/mcp/harness/run-all.mjs",

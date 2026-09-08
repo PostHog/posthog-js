@@ -10,6 +10,8 @@ After the initial build, run `pnpm dev` (or `pnpm start`) in this package to wat
 
 React bindings are built separately: run `pnpm --filter=@posthog/react dev` from the repository root when working on them.
 
+To test watch mode on Linux or macOS, run `pnpm turbo --filter=posthog-js build` followed by `pnpm test:dev-watch` from the repository root. The test temporarily edits browser and record entry points, verifies runtime and declaration rebuilds, then restores the source files and stops the watchers. Run it in an idle checkout without other builds or watchers. CI runs it after the unit tests.
+
 ## Testing
 
 > [!NOTE]
