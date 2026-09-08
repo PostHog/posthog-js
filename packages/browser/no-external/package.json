@@ -2,7 +2,7 @@
     "name": "posthog-js-no-external",
     "version": "1.0.0",
     "private": true,
-    "description": "Subpath entry point for the bundle that never loads external scripts, for browser extensions, desktop apps and strict CSP sites. Ships an ES module for bundlers and a CommonJS build for require.",
+    "description": "Subpath entry point for the bundle that never loads external scripts, for browser extensions, desktop apps and strict CSP sites. Ships an ES module for bundlers and a CommonJS build for require. Types come from the canonical dist/module.d.ts: PostHog is a class with private members, so a duplicate declaration file would be a nominally incompatible type.",
     "repository": {
         "type": "git",
         "url": "https://github.com/PostHog/posthog-js",
@@ -10,5 +10,5 @@
     },
     "main": "../dist/module.no-external.cjs",
     "module": "../dist/module.no-external.js",
-    "types": "../dist/module.no-external.d.ts"
+    "types": "../dist/module.d.ts"
 }

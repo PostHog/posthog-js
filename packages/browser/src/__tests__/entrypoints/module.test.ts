@@ -190,6 +190,7 @@ void extensionClasses
 
 describe('Published subpath entry points', () => {
     const packageRoot = path.resolve(__dirname, '../../..')
+    const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf-8'))
     // packages/browser links itself into its own node_modules, so Node resolves the specifiers
     // below exactly as a consumer would.
     const resolveAsConsumer = createRequire(path.join(packageRoot, 'node_modules', 'consumer.js'))
@@ -211,7 +212,57 @@ describe('Published subpath entry points', () => {
         const shim = JSON.parse(fs.readFileSync(shimPath, 'utf-8'))
         const resolveFromShim = (target: string) => path.resolve(path.dirname(shimPath), target)
         expect(resolveFromShim(shim.module)).toBe(path.join(packageRoot, `dist/${bundle}.js`))
-        expect(resolveFromShim(shim.types)).toBe(path.join(packageRoot, `dist/${bundle}.d.ts`))
+        // Declarations come from the package's own `types`, not the bundle's sibling .d.ts:
+        // PostHog has private members, so a second declaration file is a second, incompatible
+        // type — a client from here could not be passed to anything typed by `posthog-js`.
+        expect(resolveFromShim(shim.types)).toBe(path.join(packageRoot, packageJson.types))
+    })
+
+    it('type every subpath client as the PostHog that posthog-js exports', () => {
+        const fixtureDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-subpath-types-'))
+        const fixturePath = path.join(fixtureDirectory, 'index.ts')
+        fs.writeFileSync(
+            fixturePath,
+            `
+import type { PostHog } from 'posthog-js'
+import posthogFull from 'posthog-js/full'
+import posthogNoExternal from 'posthog-js/no-external'
+import posthogFullNoExternal from 'posthog-js/full/no-external'
+
+const clients: PostHog[] = [posthogFull, posthogNoExternal, posthogFullNoExternal]
+void clients
+`
+        )
+
+        const options: ts.CompilerOptions = {
+            esModuleInterop: true,
+            module: ts.ModuleKind.ESNext,
+            moduleResolution: ts.ModuleResolutionKind.Bundler,
+            noEmit: true,
+            skipLibCheck: true,
+            strict: true,
+            target: ts.ScriptTarget.ESNext,
+        }
+        const host = ts.createCompilerHost(options)
+        // The fixture lives outside the package, so resolve its imports from inside it — the same
+        // trick as `resolveAsConsumer` above, and the only way to exercise the real specifiers.
+        const containingFile = path.join(packageRoot, 'node_modules', 'consumer.ts')
+        host.resolveModuleNameLiterals = (moduleLiterals) =>
+            moduleLiterals.map((literal) => ts.resolveModuleName(literal.text, containingFile, options, host))
+
+        try {
+            const program = ts.createProgram([fixturePath], options, host)
+            const diagnostics = ts.getPreEmitDiagnostics(program)
+            expect(
+                ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+                    getCanonicalFileName: (fileName) => fileName,
+                    getCurrentDirectory: () => fixtureDirectory,
+                    getNewLine: () => '\n',
+                })
+            ).toBe('')
+        } finally {
+            fs.rmSync(fixtureDirectory, { recursive: true })
+        }
     })
 
     it.each([
