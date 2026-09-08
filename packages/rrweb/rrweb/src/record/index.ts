@@ -16,6 +16,7 @@ import {
 } from './observer';
 import {
   on,
+  callAllSafely,
   callSafely,
   getWindowWidth,
   getWindowHeight,
@@ -1116,7 +1117,7 @@ function record<T = eventWithTime>(
         // abort the teardown below and leak observers and listeners
       }
       deferredStylesheetInlining = undefined;
-      handlers.forEach((h) => callSafely(h));
+      callAllSafely(handlers);
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();
       iframeManager.destroy();
