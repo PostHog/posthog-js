@@ -12,6 +12,8 @@ It documents the **current state** only. The reasoning behind architectural deci
 - `$session_id` ties one MCP connection to one PostHog session. `distinct_id` falls back through `identified user → session id → "anonymous"`.
 - Tool calls additionally emit a sibling `$exception` event whenever a tool errors (unless `enableExceptionAutocapture: false`).
 
+Resource bodies are not captured. Resource addresses use the same credential redaction as request parameters, including on failed reads. Requests and responses keep their original addresses. Use `beforeSend` to remove any additional application-specific sensitive data.
+
 ---
 
 ## 1. Wire-up

@@ -168,29 +168,62 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
     expect(listings[0].properties.$mcp_listed_tool_names).toEqual(expect.arrayContaining(['get_trends']))
   })
 
-  it('wraps resource handlers registered after instrument()', async () => {
-    const server = makeServer()
-    instrument(server, fakePostHog())
+  it.each([
+    ['file:///guide.md', 'file:///guide.md', false],
+    [
+      'https://example.com/guide?token=phx_EXAMPLEONLYFAKEVALUE00000000000',
+      'https://example.com/guide?token=[redacted]',
+      false,
+    ],
+    [
+      'https://example.com/guide?token=phx_EXAMPLEONLYFAKEVALUE00000000000',
+      'https://example.com/guide?token=[redacted]',
+      true,
+    ],
+  ] as const)(
+    'wraps resource handlers and redacts captured URIs: %s -> %s (error=%s)',
+    async (uri, capturedUri, resourceError) => {
+      const server = makeServer()
+      instrument(server, fakePostHog())
+      const error = new Error(`Cannot read ${uri}`)
+      const readResource = vi.fn(async (request: MCPRequestLike) => {
+        if (resourceError) {
+          throw error
+        }
+        return { contents: [{ uri: request.params?.uri, text: '# Guide' }] }
+      })
+      server.setRequestHandler('resources/list', (async () => ({
+        resources: [{ name: 'Guide', uri: 'file:///guide.md' }],
+      })) as any)
+      server.setRequestHandler('resources/read', readResource as any)
 
-    server.setRequestHandler('resources/list', (async () => ({
-      resources: [{ name: 'Guide', uri: 'file:///guide.md' }],
-    })) as any)
-    server.setRequestHandler('resources/read', (async (request: MCPRequestLike) => ({
-      contents: [{ uri: request.params?.uri, text: '# Guide' }],
-    })) as any)
+      const listResult = await dispatch(server, { method: 'resources/list', params: {} })
+      const request = { method: 'resources/read', params: { uri } }
+      const read = dispatch(server, request)
+      if (resourceError) {
+        await expect(read).rejects.toBe(error)
+      } else {
+        await expect(read).resolves.toEqual({ contents: [{ uri, text: '# Guide' }] })
+      }
+      expect(readResource).toHaveBeenCalledWith(request, undefined)
+      expect(request.params.uri).toBe(uri)
+      await vi.waitFor(() => expect(eventCapture.findCapturesByEvent('$mcp_resource_read')).toHaveLength(1))
 
-    const listResult = await dispatch(server, { method: 'resources/list', params: {} })
-    const readResult = await dispatch(server, { method: 'resources/read', params: { uri: 'file:///guide.md' } })
-    await new Promise((r) => setTimeout(r, 20))
-
-    expect(listResult).toEqual({ resources: [{ name: 'Guide', uri: 'file:///guide.md' }] })
-    expect(readResult).toEqual({ contents: [{ uri: 'file:///guide.md', text: '# Guide' }] })
-    expect(eventCapture.findCapturesByEvent('$mcp_resources_list')).toHaveLength(1)
-    const reads = eventCapture.findCapturesByEvent('$mcp_resource_read')
-    expect(reads).toHaveLength(1)
-    expect(reads[0].properties.$mcp_resource_name).toBe('file:///guide.md')
-    expect(reads[0].properties.$mcp_response).toBeUndefined()
-  })
+      expect(listResult).toEqual({ resources: [{ name: 'Guide', uri: 'file:///guide.md' }] })
+      expect(eventCapture.findCapturesByEvent('$mcp_resources_list')).toHaveLength(1)
+      const props = eventCapture.findCapturesByEvent('$mcp_resource_read')[0].properties
+      expect(props.$mcp_resource_name).toBe(capturedUri)
+      expect(props.$mcp_parameters.request.params.uri).toBe(capturedUri)
+      expect(props.$mcp_is_error).toBe(resourceError)
+      expect(props.$mcp_response).toBeUndefined()
+      const exceptions = eventCapture.findCapturesByEvent('$exception')
+      expect(exceptions).toHaveLength(resourceError ? 1 : 0)
+      if (resourceError) {
+        expect(exceptions[0].properties.$mcp_resource_name).toBe(capturedUri)
+      }
+      expect(JSON.stringify(eventCapture.getCaptures())).not.toContain('phx_EXAMPLEONLYFAKEVALUE00000000000')
+    }
+  )
 
   it('forwards the three-argument custom-method form instead of breaking the host server', async () => {
     const server = makeServer()

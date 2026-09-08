@@ -4,6 +4,7 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { ErrorProperties, Event, McpEvent } from '../types'
+import { MCPAnalyticsEventType } from './event-types'
 import { redactPii, sanitizeCapturedValue } from './mcp-payloads'
 
 type SanitizedRecord = Record<string, unknown>
@@ -30,6 +31,10 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
 
   if (result.parameters != null) {
     result.parameters = sanitizeParameters(result.parameters)
+  }
+
+  if (result.eventType === MCPAnalyticsEventType.mcpResourcesRead && result.resourceName != null) {
+    result.resourceName = sanitizeCapturedValue(result.resourceName) as string
   }
 
   // The intent comes straight from an agent-narrated `context` string, so it can
