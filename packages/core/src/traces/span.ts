@@ -48,6 +48,7 @@ export interface SpanInit {
   autoAttributeKeys: string[]
   maxAttributes: number
   maxEvents: number
+  maxAttributesPerEvent: number
   maxAttributeValueLength: number
 }
 
@@ -71,6 +72,7 @@ export class PostHogSpan implements Span {
   private readonly _autoKeys: Set<string>
   private readonly _maxAttributes: number
   private readonly _maxEvents: number
+  private readonly _maxAttributesPerEvent: number
   private readonly _maxAttributeValueLength: number
   private _userAttributeCount = 0
   private _userEventCount = 0
@@ -93,6 +95,7 @@ export class PostHogSpan implements Span {
     this._autoKeys = new Set(init.autoAttributeKeys)
     this._maxAttributes = init.maxAttributes
     this._maxEvents = init.maxEvents
+    this._maxAttributesPerEvent = init.maxAttributesPerEvent
     this._maxAttributeValueLength = init.maxAttributeValueLength
     // Null-prototype: a `__proto__` key would otherwise swap this object's prototype
     // instead of becoming an entry, and `toString` and friends would read as
@@ -189,12 +192,15 @@ export class PostHogSpan implements Span {
         return this
       }
       this._userEventCount++
+      // Copied so a caller reusing one object across events can't mutate a recorded one.
+      const bounded =
+        attributes && boundAttributes(attributes, this._maxAttributesPerEvent, this._maxAttributeValueLength)
       this._events.push({
         name: sanitizeName(name, 'Span event name', this._maxAttributeValueLength, this._logger),
         timestamp: resolveSuppliedTime(timestamp, this._now(), 'event timestamp', this._logger),
-        // Copied so a caller reusing one object across events can't mutate a recorded one.
-        ...(attributes && {
-          attributes: truncateAttributes(assignUserAttributes({}, attributes), this._maxAttributeValueLength),
+        ...(bounded && {
+          attributes: bounded.attributes,
+          ...(bounded.dropped && { droppedAttributesCount: bounded.dropped }),
         }),
       })
     }
@@ -300,6 +306,9 @@ export class PostHogSpan implements Span {
 
 const EXCEPTION_EVENT_NAME = 'exception'
 
+/** The widest value the OTLP `dropped_*_count` fields, declared `uint32`, can carry. */
+const MAX_UINT32 = 0xffff_ffff
+
 /** A value as its string form, or the encoder's marker when it refuses to produce one. */
 function safeString(value: unknown): string {
   try {
@@ -309,9 +318,17 @@ function safeString(value: unknown): string {
   }
 }
 
-/** A caller-visible counter read back as a number, or 0 for anything else. */
+/**
+ * A caller-visible counter read back as a number, or 0 for anything else.
+ * Clamped to the `uint32` the OTLP field is declared as: a `beforeSpanSend` hook
+ * can write a larger number onto an event, and one that overflows the field is
+ * refused for the whole request.
+ */
 export function nonNegativeCount(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return 0
+  }
+  return Math.min(Math.floor(value), MAX_UINT32)
 }
 
 /**
@@ -348,6 +365,7 @@ export function applySpanLimits(
   autoKeys: ReadonlySet<string>,
   maxAttributes: number,
   maxEvents: number,
+  maxAttributesPerEvent: number,
   maxAttributeValueLength: number,
   keysBeforeHook: readonly string[] = []
 ): void {
@@ -397,7 +415,13 @@ export function applySpanLimits(
     }
     keptEvents++
     if (event.attributes) {
-      event.attributes = truncateAttributes({ ...event.attributes }, maxAttributeValueLength)
+      // A hook can widen an event as freely as it can add one, and neither goes
+      // through `addEvent`.
+      const bounded = boundAttributes(event.attributes, maxAttributesPerEvent, maxAttributeValueLength)
+      event.attributes = bounded.attributes
+      if (bounded.dropped) {
+        event.droppedAttributesCount = nonNegativeCount(event.droppedAttributesCount) + bounded.dropped
+      }
     }
     events.push(event)
   }
@@ -698,6 +722,54 @@ function resolveToJson(value: object): { selfDescribed: boolean; value?: SpanAtt
     // Falls through to the plain walk.
   }
   return { selfDescribed: false }
+}
+
+/**
+ * A copy of a caller-supplied attribute bag holding at most `max` entries, each
+ * value bounded to `maxLength`, plus how many entries the cap refused.
+ *
+ * Once the cap is spent the remaining keys are counted without being read, so a
+ * wide object does not pay for the getters on values it is about to drop.
+ */
+function boundAttributes(
+  source: SpanAttributes,
+  max: number,
+  maxLength: number
+): { attributes: SpanAttributes; dropped: number } {
+  let keys: string[]
+  try {
+    keys = Object.keys(source)
+  } catch {
+    // A hostile own-keys trap costs the bag, not the event carrying it.
+    return { attributes: {}, dropped: 0 }
+  }
+  const attributes: SpanAttributes = {}
+  let kept = 0
+  let dropped = 0
+  for (const key of keys) {
+    if (kept >= max) {
+      dropped++
+      continue
+    }
+    let value: SpanAttributeValue
+    try {
+      value = truncateAttributeValue(source[key], maxLength)
+    } catch {
+      // A throwing getter costs its own key, as it does in `assignUserAttributes`.
+      value = UNSERIALIZABLE_VALUE
+    }
+    // Nullish spends no slot, matching `_writeAttribute` and the span half of
+    // `applySpanLimits`: the encoder drops these, so a caller who blanked a value
+    // rather than omitting the key must not lose a real attribute to it.
+    if (isNullish(value)) {
+      continue
+    }
+    kept++
+    // defineProperty, not assignment: `attributes['__proto__'] = v` hits the
+    // prototype setter and the attribute vanishes.
+    Object.defineProperty(attributes, key, { value, enumerable: true, writable: true, configurable: true })
+  }
+  return { attributes, dropped }
 }
 
 /** `truncateAttributeValue` across an attribute bag, in place. */

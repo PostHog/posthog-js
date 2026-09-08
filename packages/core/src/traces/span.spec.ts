@@ -1,5 +1,6 @@
 import { NOOP_SPAN, PostHogSpan, describeError, truncateAttributeValue } from './span'
 import { buildOtlpSpan } from './otlp'
+import { resolveTracesConfig } from './config'
 import type { SpanInit } from './span'
 import type { SpanRecord } from './types'
 import type { Logger } from '../types'
@@ -26,6 +27,7 @@ describe('PostHogSpan', () => {
         autoAttributeKeys: [],
         maxAttributes: 128,
         maxEvents: 128,
+        maxAttributesPerEvent: 128,
         maxAttributeValueLength: 8192,
         ...init,
       },
@@ -224,6 +226,129 @@ describe('PostHogSpan', () => {
 
       expect(ended[0].events.map((event) => event.name)).toEqual(['step-0', 'step-1'])
       expect(ended[0].droppedEventsCount).toBe(3)
+    })
+  })
+
+  describe('event attribute cap', () => {
+    it('keeps the first attributes and reports the rest as dropped', () => {
+      const span = createSpan({ maxAttributesPerEvent: 2 })
+      span.addEvent('query', { a: 1, b: 2, c: 3, d: 4 })
+      span.end()
+
+      expect(ended[0].events[0].attributes).toEqual({ a: 1, b: 2 })
+      expect(ended[0].events[0].droppedAttributesCount).toBe(2)
+    })
+
+    it('leaves the count off an event that lost nothing', () => {
+      const span = createSpan({ maxAttributesPerEvent: 2 })
+      span.addEvent('query', { a: 1, b: 2 })
+      span.end()
+
+      expect(ended[0].events[0].droppedAttributesCount).toBeUndefined()
+    })
+
+    it('bounds an exception event like any other', () => {
+      // The SDK's own `exception.*` attributes are width the caller sees too, so
+      // they spend the cap rather than being exempt from it.
+      const span = createSpan({ maxAttributesPerEvent: 1 })
+      span.recordException(new Error('boom'))
+      span.end()
+
+      expect(Object.keys(ended[0].events[0].attributes ?? {})).toEqual(['exception.type'])
+      expect(ended[0].events[0].droppedAttributesCount).toBe(2)
+    })
+
+    it('does not read a value past the cap', () => {
+      // The cap is spent before the value is bounded, so a wide bag does not pay
+      // for getters on entries that are about to be dropped.
+      const read: string[] = []
+      const watched: any = {}
+      for (const key of ['a', 'b', 'c']) {
+        Object.defineProperty(watched, key, {
+          enumerable: true,
+          get() {
+            read.push(key)
+            return key
+          },
+        })
+      }
+
+      const span = createSpan({ maxAttributesPerEvent: 2 })
+      span.addEvent('query', watched)
+      span.end()
+
+      expect(read).toEqual(['a', 'b'])
+      expect(ended[0].events[0].droppedAttributesCount).toBe(1)
+    })
+
+    it('does not let a nullish value spend a slot', () => {
+      // The encoder drops these, so a caller who blanked a value rather than
+      // omitting the key must not cost the event a real attribute. Same rule the
+      // span half of the cap already follows.
+      const span = createSpan({ maxAttributesPerEvent: 2 })
+      span.addEvent('query', { blanked: undefined, cleared: null, real: 1, second: 2 })
+      span.end()
+
+      expect(ended[0].events[0].attributes).toEqual({ real: 1, second: 2 })
+      expect(ended[0].events[0].droppedAttributesCount).toBeUndefined()
+    })
+
+    it('survives an attribute bag whose own keys cannot be read', () => {
+      const hostile = new Proxy(
+        {},
+        {
+          ownKeys() {
+            throw new Error('ownKeys exploded')
+          },
+        }
+      )
+      const span = createSpan()
+      expect(() => span.addEvent('query', hostile)).not.toThrow()
+      expect(() => span.end()).not.toThrow()
+
+      expect(ended[0].events[0].attributes).toEqual({})
+    })
+
+    it('drops the attribute past the shipped default and nothing before it', () => {
+      // Ties the default the SDK actually ships to the behaviour at its boundary:
+      // the other cases here pick small caps, so neither half moves the other.
+      const limit = resolveTracesConfig(undefined).maxAttributesPerEvent
+      const atLimit = Object.fromEntries(Array.from({ length: limit }, (_, index) => [`k${index}`, index]))
+
+      const span = createSpan({ maxAttributesPerEvent: limit })
+      span.addEvent('at-limit', atLimit)
+      span.addEvent('over-limit', { ...atLimit, extra: 1 })
+      span.end()
+
+      expect(ended[0].events[0].attributes).toEqual(atLimit)
+      expect(ended[0].events[0].droppedAttributesCount).toBeUndefined()
+      expect(ended[0].events[1].attributes).toEqual(atLimit)
+      expect(ended[0].events[1].droppedAttributesCount).toBe(1)
+    })
+
+    it('clamps a hook-written drop count to what the wire field holds', () => {
+      // The count is a uint32 on the wire, and a value over it is refused for the
+      // whole request rather than the one span that carried it.
+      const span = createSpan()
+      span.addEvent('query', { a: 1 })
+      span.end()
+      ended[0].events[0].droppedAttributesCount = Number.MAX_SAFE_INTEGER
+
+      expect(buildOtlpSpan(ended[0], logger).events?.[0].droppedAttributesCount).toBe(0xffff_ffff)
+    })
+
+    it('counts the span attribute cap separately from an event cap', () => {
+      // maxAttributesPerSpan does not reach inside events, which is the gap this
+      // cap closes: a span at its own cap can still carry full-width events.
+      const span = createSpan({ maxAttributes: 1, maxAttributesPerEvent: 3 })
+      span.setAttributes({ kept: 1, dropped: 2 })
+      span.addEvent('query', { a: 1, b: 2, c: 3 })
+      span.end()
+
+      expect(ended[0].attributes).toEqual({ kept: 1 })
+      expect(ended[0].droppedAttributesCount).toBe(1)
+      expect(ended[0].events[0].attributes).toEqual({ a: 1, b: 2, c: 3 })
+      expect(ended[0].events[0].droppedAttributesCount).toBeUndefined()
     })
   })
 
@@ -900,6 +1025,7 @@ describe('attribute store', () => {
         autoAttributeKeys: [],
         maxAttributes: 128,
         maxEvents: 128,
+        maxAttributesPerEvent: 128,
         maxAttributeValueLength: 8192,
       },
       (record) => ended.push(record)
@@ -926,6 +1052,7 @@ describe('attribute store', () => {
         autoAttributeKeys: [],
         maxAttributes: 128,
         maxEvents: 128,
+        maxAttributesPerEvent: 128,
         maxAttributeValueLength: 8192,
       },
       (record) => ended.push(record)

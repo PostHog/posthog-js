@@ -65,6 +65,15 @@ export interface SpanEventRecord {
   /** ms epoch. */
   timestamp: number
   attributes?: SpanAttributes
+  /**
+   * How many of this event's attributes the cap discarded.
+   *
+   * Unlike the span-level counts, this one is carried on an object a
+   * `beforeSpanSend` hook holds: the public event type omits it, so a hook that
+   * rebuilds its events returns them without it. Events have no identity to
+   * match a rebuilt array back against, so what a hook drops here stays dropped.
+   */
+  droppedAttributesCount?: number
 }
 
 /**
@@ -74,6 +83,8 @@ export interface SpanEventRecord {
  * field `beforeSpanSend` cannot see, and so cannot corrupt.
  */
 export interface SpanRecord extends HookSpanRecord {
+  /** The hook-visible event plus the SDK's own per-event drop count. */
+  events: SpanEventRecord[]
   traceState?: string
   /** The W3C trace-flags byte this span propagates, e.g. `01` sampled. */
   traceFlags: string
@@ -112,6 +123,7 @@ export interface ResolvedTracesConfig extends TracesConfig {
   beforeSpanSend: BeforeSpanSendFn[]
   maxAttributesPerSpan: number
   maxEventsPerSpan: number
+  maxAttributesPerEvent: number
   maxAttributeValueLength: number
   /** Bound on spans started but not yet ended. At the bound `startSpan` returns a no-op handle. */
   maxLiveSpans: number
