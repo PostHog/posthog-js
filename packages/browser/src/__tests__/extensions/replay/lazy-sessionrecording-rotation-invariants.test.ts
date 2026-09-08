@@ -420,6 +420,49 @@ describe('lazy session recording rotation invariants', () => {
 })
 
 describe('suspended tab session timestamps (#4825)', () => {
+    it('reports a consistent debug session start and duration while rotating', () => {
+        const h = createHarness(600)
+        try {
+            const observations: Array<{ sessionId: string; start: number; duration: number; lastTimestamp: number }> =
+                []
+            h.capture.mockImplementation((name, props) => {
+                if (name === '$snapshot') {
+                    // Probe the getter during a flush; snapshot capture does not attach these properties itself.
+                    const debug = h.lazy.sdkDebugProperties
+                    observations.push({
+                        sessionId: props.$session_id,
+                        start: debug.$sdk_debug_session_start,
+                        duration: debug.$sdk_debug_current_session_duration,
+                        lastTimestamp: props.$snapshot_data[props.$snapshot_data.length - 1].timestamp,
+                    })
+                }
+            })
+            const startedAt = Date.now()
+            const oldSessionId = h.lazy._sessionId
+            h.emitEvent(incrementalEvent({ source: IncrementalSource.MouseInteraction }))
+            vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+            observations.length = 0
+
+            vi.setSystemTime(startedAt + 3 * 24 * 60 * 60 * 1000)
+            h.emitEvent(incrementalEvent({ source: IncrementalSource.MouseInteraction }))
+            vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+            const newSessionId = h.lazy._sessionId
+            expect(newSessionId).not.toBe(oldSessionId)
+            expect(new Set(observations.map(({ sessionId }) => sessionId))).toEqual(
+                new Set([oldSessionId, newSessionId])
+            )
+            for (const observation of observations) {
+                expect(observation.start).toBe(h.mint.get(observation.sessionId))
+                expect(observation.duration).toBe(observation.lastTimestamp - observation.start)
+            }
+        } finally {
+            h.sessionRecording.stopRecording()
+            vi.useRealTimers()
+            vi.clearAllMocks()
+        }
+    })
+
     it.each([
         { lastActivityMs: 0, expectedOldCaptures: 0 },
         { lastActivityMs: 25_000, expectedOldCaptures: 1 },

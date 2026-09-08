@@ -2633,7 +2633,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     get sdkDebugProperties(): Properties {
-        const { sessionStartTimestamp } = this._sessionManager.checkAndGetSessionAndWindowId(true)
         // deferred sheets that never made it back into the recording (see rrweb-snapshot),
         // undefined on recorder chunks that predate the counters
         const deferredStylesheetStats = getRRWeb()?.getDeferredStylesheetStats?.()
@@ -2646,7 +2645,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_internal_buffer_length: this._buffer.data.length,
             $sdk_debug_replay_internal_buffer_size: this._buffer.size,
             $sdk_debug_current_session_duration: this._sessionDuration,
-            $sdk_debug_session_start: sessionStartTimestamp,
+            $sdk_debug_session_start: this._sessionStartTimestamp,
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize(this.sessionId),
             $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
             $snapshot_max_depth_exceeded: this._maxDepthExceeded,
