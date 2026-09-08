@@ -22,6 +22,9 @@ const shapes = (process.env.REPLAY_BENCH_SHAPES || 'table,css').split(',')
 const profiling = process.env.REPLAY_BENCH_PROFILE === '1'
 const preprocessingWorkloads = process.env.REPLAY_BENCH_PREPROCESSING === '1'
 const orderingWorkloads = preprocessingWorkloads || process.env.REPLAY_BENCH_ORDERING === '1'
+const mirrorCounters = orderingWorkloads && profiling && process.env.REPLAY_BENCH_MIRROR_COUNTERS !== '0'
+const layoutCounters = process.env.REPLAY_BENCH_LAYOUT_COUNTERS === '1'
+assert(!layoutCounters || profiling, 'Layout counters require profiling')
 const depth = Number(process.env.REPLAY_BENCH_DEPTH || 32)
 assert(Number.isInteger(depth) && depth >= 1 && depth <= 128)
 const mutationWorkloads = orderingWorkloads || process.env.REPLAY_BENCH_MUTATIONS === '1'
@@ -281,7 +284,7 @@ try {
                                 }),
                             ])
                         })
-                        if (orderingWorkloads && profiling)
+                        if (mirrorCounters)
                             await page.evaluate(() => {
                                 const mirror = window.__PosthogExtensions__.rrweb.record.mirror
                                 let seen,
@@ -317,6 +320,29 @@ try {
                             })
                         const metrics = []
                         const checkpoints = []
+                        if (layoutCounters)
+                            await page.evaluate(() => {
+                                const original = Element.prototype.getBoundingClientRect
+                                window.resetLayoutStats = () => {
+                                    window.layoutStats = { calls: 0, distinctNodes: 0, elapsedMs: 0 }
+                                    window.layoutSeen = new WeakSet()
+                                }
+                                window.resetLayoutStats()
+                                Element.prototype.getBoundingClientRect = function (...args) {
+                                    const stats = window.layoutStats
+                                    stats.calls++
+                                    if (!window.layoutSeen.has(this)) {
+                                        window.layoutSeen.add(this)
+                                        stats.distinctNodes++
+                                    }
+                                    const start = performance.now()
+                                    try {
+                                        return original.apply(this, args)
+                                    } finally {
+                                        stats.elapsedMs += performance.now() - start
+                                    }
+                                }
+                            })
                         const phases = preprocessingWorkloads
                             ? ['off-repeat-move', 'off-mixed-move', 'start', 'repeat-move', 'mixed-move', 'remove']
                             : orderingWorkloads
@@ -360,7 +386,8 @@ try {
                                 })
                                 await page.waitForTimeout(100)
                             }
-                            if (orderingWorkloads && profiling) await page.evaluate(() => window.resetMirrorStats())
+                            if (mirrorCounters) await page.evaluate(() => window.resetMirrorStats())
+                            if (layoutCounters) await page.evaluate(() => window.resetLayoutStats())
                             if (preprocessingProbe) await page.evaluate(() => window.__rrwebMutationProbe.reset())
                             const startIndex = wireEvents.length
                             const bytesBefore = requestBytes
@@ -559,6 +586,7 @@ try {
                                                         definitions,
                                                         inputDelays,
                                                         mirrorStats: window.mirrorStats || null,
+                                                        layoutStats: window.layoutStats || null,
                                                         preprocessingStats:
                                                             window.__rrwebMutationProbe?.snapshot() || null,
                                                         maxFrameGapMs,
@@ -627,6 +655,12 @@ try {
                                 inputDelayMs: observation.inputDelays[0] ?? null,
                                 mirrorStats: observation.mirrorStats,
                                 preprocessingStats: observation.preprocessingStats,
+                                layoutStats: observation.layoutStats,
+                                layoutCpuMs:
+                                    1000 * (metric(after, 'LayoutDuration') - metric(before, 'LayoutDuration')),
+                                styleCpuMs:
+                                    1000 *
+                                    (metric(after, 'RecalcStyleDuration') - metric(before, 'RecalcStyleDuration')),
                                 maxTaskMs: Math.max(0, ...observation.longTasks.map((t) => t.duration)),
                                 longTaskCount: observation.longTasks.length,
                                 maxFrameGapMs: observation.maxFrameGapMs,
@@ -852,6 +886,8 @@ try {
                 cpu: os.cpus()[0]?.model,
                 cpuRate,
                 profiling,
+                mirrorCounters,
+                layoutCounters,
                 benchmarkSha256: createHash('sha256')
                     .update(await readFile(fileURLToPath(import.meta.url)))
                     .digest('hex'),
