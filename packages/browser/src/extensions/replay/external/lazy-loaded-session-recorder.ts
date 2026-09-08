@@ -501,6 +501,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _jsonLdCapture: ReturnType<typeof startJsonLdCapture> | undefined
     private _jsonLdCaptureReady = false
     private _lastActivityTimestamp: number = Date.now()
+    private _sessionStartTimestamp: number
     private _isActivatingTrigger: boolean = false
     /**
      * if pageview capture is disabled,
@@ -637,9 +638,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._documentWasEverVisible = documentWasEverVisible ?? true
 
         // we know there's a sessionManager, so don't need to start without a session id
-        const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
+        const { sessionId, windowId, sessionStartTimestamp } = this._sessionManager.checkAndGetSessionAndWindowId()
         this._sessionId = sessionId
         this._windowId = windowId
+        this._sessionStartTimestamp = sessionStartTimestamp
 
         this._linkedFlagMatching = new LinkedFlagMatching(this._instance)
         this._urlTriggerMatching = new URLTriggerMatching(this._instance)
@@ -1207,9 +1209,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // We want to ensure the sessionManager is reset if necessary on loading the recorder
-        const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
+        const { sessionId, windowId, sessionStartTimestamp } = this._sessionManager.checkAndGetSessionAndWindowId()
         this._sessionId = sessionId
         this._windowId = windowId
+        this._sessionStartTimestamp = sessionStartTimestamp
 
         // Reset first full snapshot tracking for the new session
         this._instance.persistence?.unregister(SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP)
@@ -2412,8 +2415,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _sessionDuration(): number | null {
         const mostRecentSnapshot = this._buffer?.data[this._buffer?.data.length - 1]
-        const { sessionStartTimestamp } = this._sessionManager.checkAndGetSessionAndWindowId(true)
-        return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
+        // During rotation the manager already owns the new session, but stop() must
+        // evaluate the old buffer before start() adopts the new session's start time.
+        return mostRecentSnapshot ? mostRecentSnapshot.timestamp - this._sessionStartTimestamp : null
     }
 
     private _clearBufferBeforeMostRecentMeta(): SnapshotBuffer {
@@ -2560,6 +2564,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
+        // Check before updating activity: rotation synchronously emits $session_ending,
+        // which must use the old session's last activity, not the waking interaction.
+        // Read-only checks still enforce the 24-hour cap in every idle state.
+        const { windowId, sessionId } = this._sessionManager.checkAndGetSessionAndWindowId(
+            !isUserInteraction,
+            event.timestamp
+        )
+
         let returningFromIdle = false
         if (isUserInteraction) {
             this._lastActivityTimestamp = event.timestamp
@@ -2578,19 +2590,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 }
             }
         }
-
-        // The session check runs in every idle state (it only reads in-memory persistence
-        // props, so it is cheap). While 'unknown' the recorder still captures, so it must keep
-        // checking or its events are stamped with a stale session id. While confirmed idle,
-        // the readOnly check below still enforces the 24-hour session cap
-        // (sessionPastMaximumLength rotates even on readOnly calls) and hears cross-tab
-        // rotations. Bailing here is how idle tabs used to accrete multi-day recordings that
-        // blew straight through SESSION_LENGTH_LIMIT under one session id.
-        // We only want to extend the session if it is an interactive event.
-        const { windowId, sessionId } = this._sessionManager.checkAndGetSessionAndWindowId(
-            !isUserInteraction,
-            event.timestamp
-        )
 
         const sessionIdChanged = this._sessionId !== sessionId
         const windowIdChanged = this._windowId !== windowId
@@ -2634,7 +2633,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     get sdkDebugProperties(): Properties {
-        const { sessionStartTimestamp } = this._sessionManager.checkAndGetSessionAndWindowId(true)
         // deferred sheets that never made it back into the recording (see rrweb-snapshot),
         // undefined on recorder chunks that predate the counters
         const deferredStylesheetStats = getRRWeb()?.getDeferredStylesheetStats?.()
@@ -2647,7 +2645,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_internal_buffer_length: this._buffer.data.length,
             $sdk_debug_replay_internal_buffer_size: this._buffer.size,
             $sdk_debug_current_session_duration: this._sessionDuration,
-            $sdk_debug_session_start: sessionStartTimestamp,
+            $sdk_debug_session_start: this._sessionStartTimestamp,
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize(this.sessionId),
             $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
             $snapshot_max_depth_exceeded: this._maxDepthExceeded,
