@@ -517,6 +517,7 @@ export class PostHogTraces {
     if (!record) {
       return
     }
+    this._reportLimitDrops(record)
 
     if (this._queue.length >= this._config.maxQueueSize) {
       // Drop the incoming span, not queued ones: those are completed parents whose
@@ -542,6 +543,26 @@ export class PostHogTraces {
       this._flushInBackground()
     } else {
       this._armFlushTimerIfQueued()
+    }
+  }
+
+  /**
+   * One diagnostic per span when its limits discarded anything, which is what
+   * OTel asks for. Counted after the post-hook pass, so drops a `beforeSpanSend`
+   * hook caused are included.
+   */
+  private _reportLimitDrops(record: SpanRecord): void {
+    const attributes = record.droppedAttributesCount ?? 0
+    const events = record.droppedEventsCount ?? 0
+    let eventAttributes = 0
+    for (const event of record.events) {
+      eventAttributes += event.droppedAttributesCount ?? 0
+    }
+    if (attributes || events || eventAttributes) {
+      this._logger.debug(
+        `Span limits discarded data from "${record.name}": ` +
+          `${attributes} attributes, ${events} events, ${eventAttributes} event attributes`
+      )
     }
   }
 

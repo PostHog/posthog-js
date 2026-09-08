@@ -876,6 +876,34 @@ describe('PostHogTraces', () => {
       expect(sent.droppedAttributesCount).toBe(1)
     })
 
+    it('reports every limit drop once per span, hook drops included', () => {
+      const traces = createTraces({
+        maxAttributesPerSpan: 1,
+        maxEventsPerSpan: 1,
+        beforeSpanSend: [
+          (span: SpanRecord) => ({ ...span, attributes: { ...span.attributes, added: 1, alsoAdded: 2 } }),
+        ],
+      })
+
+      const span = traces.startSpan('checkout', { attributes: { route: '/checkout' } })
+      span.addEvent('first', { a: 1 })
+      span.addEvent('second')
+      span.end()
+
+      const messages = logger.debug.mock.calls.map(([message]) => String(message))
+      expect(messages.filter((message) => message.includes('Span limits discarded'))).toEqual([
+        'Span limits discarded data from "checkout": 2 attributes, 1 events, 0 event attributes',
+      ])
+    })
+
+    it('stays quiet for a span that lost nothing', () => {
+      const traces = createTraces()
+      traces.startSpan('checkout', { attributes: { route: '/checkout' } }).end()
+
+      const messages = logger.debug.mock.calls.map(([message]) => String(message))
+      expect(messages.some((message) => message.includes('Span limits discarded'))).toBe(false)
+    })
+
     it('rejects a timestamp the server could not decode', async () => {
       const instance = createMockInstance()
       const traces = createTraces(
