@@ -255,7 +255,8 @@ describe('Low-level Server reportMissing ownership (e2e)', () => {
       expect(captures).toHaveLength(1)
       expect(captures[0].properties.$mcp_llm_model).toBe('claude-opus-4-8')
       expect(captures[0].properties.$mcp_llm_model_source).toBe('self_reported')
-      expect((captures[0].properties.$mcp_parameters as any)?.llm_model).toBeUndefined()
+      expect(captures[0].properties.$mcp_parameters).toMatchObject({ request: { params: { arguments: {} } } })
+      expect(captures[0].properties.$mcp_parameters).not.toHaveProperty('request.params.arguments.llm_model')
     } finally {
       await Promise.all([podA.cleanup(), podB.cleanup()])
     }
