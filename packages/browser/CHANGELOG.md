@@ -1,5 +1,39 @@
 # posthog-js
 
+## 1.428.5
+
+### Patch Changes
+
+- [#4703](https://github.com/PostHog/posthog-js/pull/4703) [`5c34aee`](https://github.com/PostHog/posthog-js/commit/5c34aeecb2061368ebf3fdd2e0b23c5a1f58bd30) Thanks [@posthog](https://github.com/apps/posthog)! - Stop the internal `SCRIPT_PLACEHOLDER` from rendering during replay. A recorded `<script>` is rebuilt as `<noscript>`, whose text shows when scripting is off in the replay iframe. The document-scoped hide style never reaches shadow roots, so the placeholder leaked over third-party widgets recorded in a shadow root. Rebuild now emits an empty text node for the placeholder, so it cannot render in any context.
+  (2026-09-08)
+
+- [#4801](https://github.com/PostHog/posthog-js/pull/4801) [`7ae27fe`](https://github.com/PostHog/posthog-js/commit/7ae27feb0c2a0a0fc6fa818dce65b8508706c348) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce session replay DOM traversal overhead by reusing native-accessor cache keys instead of constructing a new string for every node access.
+  (2026-09-08)
+
+- [#4808](https://github.com/PostHog/posthog-js/pull/4808) [`60644f7`](https://github.com/PostHog/posthog-js/commit/60644f71aca84173d00067bf7cb1d9b6d6770176) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid repeatedly traversing the same subtree during session replay mirror cleanup when it moves multiple times in one mutation batch.
+  (2026-09-08)
+
+- [#4816](https://github.com/PostHog/posthog-js/pull/4816) [`c80df37`](https://github.com/PostHog/posthog-js/commit/c80df37dca234479fb642298bb0dd7e48d54bea9) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce shadow DOM connectivity checks during session recording.
+  (2026-09-08)
+
+- [#4812](https://github.com/PostHog/posthog-js/pull/4812) [`4163648`](https://github.com/PostHog/posthog-js/commit/4163648004266ef41fdb053f0dad57602e70a22e) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce session recording overhead by avoiding empty child-list reads for text nodes during mutation processing.
+  (2026-09-08)
+
+- [#4811](https://github.com/PostHog/posthog-js/pull/4811) [`44b0a6c`](https://github.com/PostHog/posthog-js/commit/44b0a6c1d029f001f2d8f4df53cf2c27627b8972) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce session recording overhead when DOM subtrees are moved repeatedly by avoiding per-node traversal callbacks.
+  (2026-09-08)
+
+- [#4819](https://github.com/PostHog/posthog-js/pull/4819) [`fe828ff`](https://github.com/PostHog/posthog-js/commit/fe828ff56857f8fbfb7d0d3b7e36999df2c50c05) Thanks [@posthog](https://github.com/apps/posthog)! - Fix two silent session replay failures. Recorder teardown no longer stops when a cleanup handler throws, so recording restarts after an idle reset and `isRecording()` stops reporting a stopped recorder as started. Playback no longer ends or stalls when a recording holds a malformed mouse-move `positions` value; the player skips that one event and falls back to the event's own timestamp instead of scheduling it at a time the timer can never reach.
+  (2026-09-08)
+
+- [#4756](https://github.com/PostHog/posthog-js/pull/4756) [`54be921`](https://github.com/PostHog/posthog-js/commit/54be9215d32e2e67ed8127eaaa283abe54d769ec) Thanks [@posthog](https://github.com/apps/posthog)! - Session replay no longer loses the start of a recording when a page unloads while a timing gate holds the buffer. The minimum-duration gate and the markers-only gate both hold the buffer for a retry that an unloading page never runs, so the buffered snapshots died with the page. They are now parked in `sessionStorage` and picked up by the next page in the same tab, which keeps the configured minimum duration intact: a session that really ended on that page still ships nothing
+  (2026-09-08)
+
+- [#4813](https://github.com/PostHog/posthog-js/pull/4813) [`8e58a12`](https://github.com/PostHog/posthog-js/commit/8e58a12e8b5405a89304a14880430e070c59643a) Thanks [@posthog](https://github.com/apps/posthog)! - fix(browser): drop Safari extension exceptions that report a WebKit messaging failure
+  (2026-09-08)
+
+- [#4807](https://github.com/PostHog/posthog-js/pull/4807) [`7222acc`](https://github.com/PostHog/posthog-js/commit/7222accf674b6e005a92d6987174db61d39c9540) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce per-node allocations when serializing session replay mutations by reusing serialization options within each emission.
+  (2026-09-08)
+
 ## 1.428.4
 
 ### Patch Changes
