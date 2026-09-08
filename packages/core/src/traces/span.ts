@@ -514,6 +514,8 @@ function readStack(error: unknown): { stack?: string } {
 /**
  * The handle to return when a span cannot be recorded: a pass-through when the
  * caller supplied a usable `parent` header, the shared no-op otherwise.
+ *
+ * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
  */
 export function inertSpan(options?: { parent?: unknown; tracestate?: unknown }): Span {
   const parent = options?.parent
@@ -778,6 +780,8 @@ export function truncateAttributes(attributes: SpanAttributes, maxLength: number
  * reads null — callbacks should use the handle they're given. A pass-through
  * handle is activated, so `getActiveSpan()?.traceparent()` still propagates an
  * inbound trace through a service with tracing off.
+ *
+ * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
  */
 export function runWithActiveSpan<T>(contextManager: SpanContextManager, span: Span, fn: (span: Span) => T): T {
   return span === NOOP_SPAN ? fn(span) : contextManager.with(span, () => fn(span))

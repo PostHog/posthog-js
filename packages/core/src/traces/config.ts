@@ -107,6 +107,8 @@ function resolveBeforeSpanSend(beforeSpanSend: TracesConfig['beforeSpanSend'], l
  * OTLP resource attributes take precedence over the named fields, matching the
  * logs config. `hostResourceAttributes` are runtime-detected by the entrypoint and
  * merge first, so a user-supplied value of the same key wins.
+ *
+ * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
  */
 export function resolveTracesConfig(
   config: TracesConfig | undefined,
