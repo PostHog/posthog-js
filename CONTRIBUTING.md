@@ -126,6 +126,28 @@ pnpm clean
 pnpm clean:dep
 ```
 
+### Dead code audit (Knip)
+
+[Knip](https://knip.dev/) is an opt-in local audit, not a lint or CI gate. After `pnpm install --frozen-lockfile`, run it from the repository root; no SDK build is required:
+
+```bash
+# Full audit, including dependencies
+pnpm knip
+
+# Focus on unused files, exports, and types
+pnpm knip --include files,exports,types
+
+# Focus on a workspace (Knip also follows related workspaces)
+pnpm knip --workspace packages/browser
+
+# Save machine-readable findings without pnpm's script banner
+pnpm --silent knip --reporter json > /tmp/knip.json
+```
+
+Knip exits non-zero when it finds issues. Findings are review candidates, not proof that code can be deleted. The config excludes independent examples/playgrounds, preserves public SDK subpaths and dynamically discovered browser bundles, and ignores exports still used within their own file. Keep `knip.jsonc` in sync when adding public entry points that plugins cannot discover; do not enable `includeEntryExports` for published SDKs.
+
+Before removing anything, check public/deep imports, dynamic loading, shared build configuration, test fixtures, and native tooling. Dependency reports still need particular care: shared Babel/Vite configuration and CLI binaries resolved at runtime can make required dependencies look unused. An unused re-export does not imply that its underlying implementation is dead. Do not run `--fix` or `--allow-remove-files` indiscriminately. Verify any cleanup with the affected packages' tests/builds and measure bundle size separately rather than assuming source deletion reduces shipped bytes.
+
 ### Package Scripts
 
 Common package scripts are listed below. Availability and build output directories vary; check the package's `package.json` before running them:

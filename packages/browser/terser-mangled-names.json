@@ -406,6 +406,7 @@
         "_isLoaded",
         "_isLoading",
         "_isLogsEnabled",
+        "_isPageUnloading",
         "_isPaused",
         "_isPolling",
         "_isPollingMessages",
