@@ -104,6 +104,35 @@ describe('RequestQueue', () => {
             ])
         })
 
+        it('does not merge requests that share a batch key but not a batch group', () => {
+            queue.enqueue({
+                data: { event: '$snapshot', timestamp: EPOCH - 2000 },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'session-one-window-one',
+            })
+            queue.enqueue({
+                data: { event: '$snapshot', timestamp: EPOCH - 1000 },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'session-two-window-two',
+            })
+            queue.enqueue({
+                data: { event: '$snapshot', timestamp: EPOCH },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'session-one-window-one',
+            })
+
+            queue.enable()
+            vi.runOnlyPendingTimers()
+
+            expect(vi.mocked(sendRequest).mock.calls.map(([req]) => [req.batchGroup, req.data?.length])).toEqual([
+                ['session-one-window-one', 2],
+                ['session-two-window-two', 1],
+            ])
+        })
+
         it('handles unload', () => {
             queue.enqueue({ url: '/s', data: { recording_payload: 'example' } })
             queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: 1_610_000_000 } })

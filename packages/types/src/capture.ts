@@ -82,6 +82,13 @@ export interface CaptureOptions {
     _batchKey?: string
 
     /**
+     * Splits a batch key into separate payloads. Requests that share a `_batchKey` but not a
+     * `_batchGroup` are queued together but never merged into one request body.
+     * @internal
+     */
+    _batchGroup?: string
+
+    /**
      * If set, overrides and disables config.properties_string_max_length
      * @internal
      */

@@ -94,7 +94,9 @@ export class RequestQueue {
         const requests: Record<string, QueuedRequestWithOptions> = {}
         each(this._queue, (request: QueuedRequestWithOptions) => {
             const req = request
-            const key = (req ? req.batchKey : null) || req.url
+            // a batch group splits one batch key across payloads, for requests that share a key but
+            // must not share a body, such as snapshots from two different session or window ids
+            const key = ((req ? req.batchKey : null) || req.url) + (req.batchGroup ? `:${req.batchGroup}` : '')
             if (isUndefined(requests[key])) {
                 // TODO: What about this -it seems to batch data into an array - do we always want that?
                 requests[key] = { ...req, data: [] }

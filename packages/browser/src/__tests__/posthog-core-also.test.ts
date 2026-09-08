@@ -402,6 +402,27 @@ describe('posthog core', () => {
             )
         })
 
+        it('carries the batch group onto the request so the queue can keep it separate', () => {
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+
+            posthog.capture(
+                'event-name',
+                { foo: 'bar' },
+                {
+                    _url: 'https://app.posthog.com/s/',
+                    _batchKey: 'recordings',
+                    _batchGroup: 'session-one-window-one',
+                }
+            )
+
+            expect(posthog._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    batchKey: 'recordings',
+                    batchGroup: 'session-one-window-one',
+                })
+            )
+        })
+
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
             posthog._onRemoteConfig({ ok: true, config: { analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig })

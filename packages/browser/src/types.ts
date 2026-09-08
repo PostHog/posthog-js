@@ -273,6 +273,8 @@ export interface RequestWithOptions {
 export interface QueuedRequestWithOptions extends RequestWithOptions {
     /** key of queue, e.g. 'sessionRecording' vs 'event' */
     batchKey?: string
+    /** sub-key of the queue: requests that share a batchKey but not a batchGroup are never merged into one request body */
+    batchGroup?: string
 }
 
 // Used explicitly for retriable requests
