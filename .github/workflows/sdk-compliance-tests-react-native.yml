@@ -34,6 +34,7 @@ jobs:
     timeout-minutes: 35
     env:
       ANDROID_SERIAL: emulator-5580
+      ANDROID_AVD_HOME: ${{ runner.temp }}/compliance-avd
       PORT: '18213'
       RN_ARCH: x86_64
     steps:
@@ -60,8 +61,13 @@ jobs:
       - name: Start Android emulator
         run: |
           sudo chmod 666 /dev/kvm
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'system-images;android-29;google_apis;x86_64' 'emulator'
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name compliance --package 'system-images;android-29;google_apis;x86_64'
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          mkdir -p "$ANDROID_AVD_HOME"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'system-images;android-29;google_apis;x86_64' 'emulator'
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name compliance --package 'system-images;android-29;google_apis;x86_64' --path "$ANDROID_AVD_HOME/compliance.avd"
+          test -f "$ANDROID_AVD_HOME/compliance.ini"
+          adb version
           "$ANDROID_HOME/emulator/emulator" -avd compliance -port 5580 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > "$RUNNER_TEMP/emulator.log" 2>&1 &
           for attempt in $(seq 1 120); do
             if [ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then break; fi
