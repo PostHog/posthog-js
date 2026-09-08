@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.428.4
+
+### Patch Changes
+
+- [#4828](https://github.com/PostHog/posthog-js/pull/4828) [`4ae6405`](https://github.com/PostHog/posthog-js/commit/4ae6405e0c807b0e03bfa5092d7e209eb4671b1c) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent waking an idle tab from extending the previous session recording across the entire idle gap.
+  (2026-09-08)
+
 ## 1.428.3
 
 ### Patch Changes

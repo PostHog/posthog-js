@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.68.0
+
+### Minor Changes
+
+- [#4822](https://github.com/PostHog/posthog-js/pull/4822) [`a6320d5`](https://github.com/PostHog/posthog-js/commit/a6320d57cbde8fb8f2e9e89f273c72856126f0c7) Thanks [@AyobamiH](https://github.com/AyobamiH)! - feat(react-native): support shuffled survey questions and answer options
+  (2026-09-08)
+
 ## 4.67.3
 
 ### Patch Changes
