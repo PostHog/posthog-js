@@ -724,7 +724,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * ```
    */
   startSpan(name: string, options?: StartSpanOptions): Span {
-    return this._tracesPipeline?.startSpan(name, options) ?? inertSpan(options)
+    return this._tracesPipeline?.startSpan(name, options) ?? inertSpan(options, this._spanContextManager.active())
   }
 
   /**
@@ -766,7 +766,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       // Tracing off: still run the callback exactly once, with an inert handle.
       // A handle carrying an inbound `parent` is activated, so `getActiveSpan()`
       // inside the callback can propagate the trace onward.
-      return runWithActiveSpan(this._spanContextManager, inertSpan(options), fn)
+      return runWithActiveSpan(this._spanContextManager, inertSpan(options, this._spanContextManager.active()), fn)
     }
     return options ? pipeline.withSpan(name, options, fn) : pipeline.withSpan(name, fn)
   }

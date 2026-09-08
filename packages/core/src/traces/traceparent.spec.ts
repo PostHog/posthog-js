@@ -107,10 +107,33 @@ describe('traceparent', () => {
       ['a member without a value', 'vendor'],
       ['a non-string', 42],
       ['undefined', undefined],
-      ['more than 32 members', Array.from({ length: 33 }, (_v, i) => `k${i}=v`).join(',')],
-      ['an overlong value', `vendor=${'a'.repeat(600)}`],
+      [
+        'more than 32 members, which the list grammar does not admit',
+        Array.from({ length: 33 }, (_v, i) => `k${i}=v`).join(','),
+      ],
+      ['a single member longer than the whole limit', `vendor=${'a'.repeat(600)}`],
     ])('discards %s', (_name, value) => {
       expect(sanitizeTracestate(value)).toBeUndefined()
+    })
+
+    it('drops the largest members first when a valid list is too long', () => {
+      // W3C names members over 128 characters as the ones to drop first, so the
+      // small entries survive even though they sit to the right of the big one.
+      const big = `big=${'a'.repeat(200)}`
+      const small = Array.from({ length: 4 }, (_v, i) => `k${i}=${'b'.repeat(80)}`)
+
+      expect(sanitizeTracestate([big, ...small].join(','))).toBe(small.join(','))
+    })
+
+    it('drops from the right once no member is oversized', () => {
+      // 102 characters each, so the fifth crosses 512 and the first four stay.
+      const members = Array.from({ length: 6 }, (_v, i) => `k${i}=${'a'.repeat(100)}`)
+      expect(sanitizeTracestate(members.join(','))).toBe(members.slice(0, 4).join(','))
+    })
+
+    it('leaves a valid header inside the limit exactly as received', () => {
+      const members = Array.from({ length: 32 }, (_v, i) => `k${i}=v`)
+      expect(sanitizeTracestate(members.join(','))).toBe(members.join(','))
     })
   })
 })

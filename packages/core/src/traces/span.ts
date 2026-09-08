@@ -1,7 +1,13 @@
 import type { Span, SpanAttributes, SpanAttributeValue, SpanKind, SpanStatusCode, SpanTimeInput } from '@posthog/types'
 import type { Logger } from '../types'
 import type { SpanContextManager, SpanEventRecord, SpanRecord } from './types'
-import { formatTraceparent, normalizeTraceparent, sanitizeTracestate, TRACE_FLAGS_SAMPLED } from './traceparent'
+import {
+  formatTraceparent,
+  normalizeTraceparent,
+  sanitizeTracestate,
+  traceparentHeader,
+  TRACE_FLAGS_SAMPLED,
+} from './traceparent'
 import { clampEndTime, resolveSuppliedTime, sanitizeName } from './sanitize'
 import { isArray, isError, isNullish } from '../utils'
 import {
@@ -488,13 +494,14 @@ function readStack(error: unknown): { stack?: string } {
 }
 
 /**
- * The handle to return when a span cannot be recorded: a pass-through when the
- * caller supplied a usable `parent` header, the shared no-op otherwise.
+ * The handle to return when a span cannot be recorded: a pass-through when a
+ * context is available, the shared no-op otherwise. With no explicit `parent`
+ * the active handle supplies it, so an inbound trace survives nesting.
  *
  * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
  */
-export function inertSpan(options?: { parent?: unknown; tracestate?: unknown }): Span {
-  const parent = options?.parent
+export function inertSpan(options?: { parent?: unknown; tracestate?: unknown }, active?: Span): Span {
+  const parent = traceparentHeader(options?.parent) ?? active
   // A handle parent reports its own context, read behind a guard because a
   // foreign handle's accessor may throw. A no-op reports none and stays a no-op.
   const inbound = typeof parent === 'string' || parent == null ? parent : readHandle(parent, 'traceparent')

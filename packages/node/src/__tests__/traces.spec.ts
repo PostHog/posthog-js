@@ -104,6 +104,24 @@ describe('PostHog traces', () => {
       expect(propagated).toBe(inbound)
       expect(untraced.getActiveSpan()).toBeNull()
     })
+
+    it('gives a nested span the inbound context, across an await', async () => {
+      const untraced = createClient({ traces: undefined })
+      const inbound = `00-${'4bf92f3577b34da6a3ce929d0e0e4736'}-00f067aa0ba902b7-01`
+
+      const propagated = await untraced.withSpan('outer', { parent: inbound }, async () => {
+        await Promise.resolve()
+        return untraced.withSpan('inner', async (span) => {
+          await Promise.resolve()
+          return span.traceparent()
+        })
+      })
+      await untraced.shutdown()
+
+      // The handle the callback is given, not just `getActiveSpan()`: a nested
+      // span that names no parent must still carry the trace onward.
+      expect(propagated).toBe(inbound)
+    })
   })
 
   describe('transport', () => {

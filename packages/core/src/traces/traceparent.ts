@@ -80,6 +80,15 @@ export function normalizeTraceparent(value: unknown): string | undefined {
   return matchTraceparent(value) && (value as string).trim()
 }
 
+/**
+ * A `traceparent` as the string it is, unwrapping the one-element array Node's
+ * `headersDistinct` hands over. A longer array is two different inbound values,
+ * and picking either would be a guess.
+ */
+export function traceparentHeader(value: unknown): unknown {
+  return Array.isArray(value) && value.length === 1 ? value[0] : value
+}
+
 /** The W3C sampled bit, set on a trace this SDK started. */
 export const TRACE_FLAGS_SAMPLED = '01'
 
@@ -103,15 +112,21 @@ const TRACESTATE_MAX_LENGTH = 512
 
 /**
  * Validates an incoming `tracestate` far enough to know it is safe to echo back.
- * An invalid one is discarded without invalidating its traceparent, so a
- * malformed vendor entry never costs us the trace continuation.
+ * A malformed one is discarded without invalidating its traceparent, so a bad
+ * vendor entry never costs us the trace continuation. More than 32 members is
+ * malformed: W3C's list grammar admits no more.
+ *
+ * A valid header over the length W3C asks us to propagate is trimmed instead,
+ * by whole members. Members over 128 characters go first — W3C names those as
+ * the ones to drop — and the rest from the right, so the entries nearest the
+ * caller survive.
  */
 export function sanitizeTracestate(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined
   }
   const trimmed = value.trim()
-  if (!trimmed || trimmed.length > TRACESTATE_MAX_LENGTH) {
+  if (!trimmed) {
     return undefined
   }
   // W3C restricts tracestate to printable ASCII plus HTAB as optional whitespace.
@@ -131,5 +146,27 @@ export function sanitizeTracestate(value: unknown): string | undefined {
       return undefined
     }
   }
-  return trimmed
+  if (trimmed.length <= TRACESTATE_MAX_LENGTH) {
+    return trimmed
+  }
+  return trimToLength(members)
+}
+
+// W3C's own guidance for which members to drop when a list is too long.
+const TRACESTATE_LARGE_MEMBER_LENGTH = 128
+
+/** The members that fit, dropping the largest first and then from the right. */
+function trimToLength(members: string[]): string | undefined {
+  const kept = [...members]
+  const joinedLength = (): number => kept.reduce((total, member) => total + member.length, 0) + kept.length - 1
+
+  for (let index = kept.length - 1; index >= 0 && joinedLength() > TRACESTATE_MAX_LENGTH; index--) {
+    if (kept[index].length > TRACESTATE_LARGE_MEMBER_LENGTH) {
+      kept.splice(index, 1)
+    }
+  }
+  while (kept.length && joinedLength() > TRACESTATE_MAX_LENGTH) {
+    kept.pop()
+  }
+  return kept.length ? kept.join(',') : undefined
 }
