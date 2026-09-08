@@ -4,13 +4,19 @@ type JsonLdScalar = string | number | boolean | null
 type JsonLdPropertyRule = true | readonly string[]
 type JsonLdEntityRules = Record<string, JsonLdPropertyRule>
 type JsonLdRuleGroup = readonly [readonly string[], JsonLdEntityRules]
+type IsCapturedDomId = (id: string) => boolean
 
 const MAX_JSON_LD_LENGTH = 100_000
 const MAX_JSON_LD_OUTPUT_LENGTH = 20_000
+const MAX_JSON_LD_TYPE_LENGTH = 100
+const SCHEMA_TERM_PATTERN = /^[A-Za-z0-9]*[A-Za-z][A-Za-z0-9]*$/
+const MAX_JSON_LD_TYPES = 20
+const MAX_JSON_LD_NODES = 2_048
 const SCHEMA_CONTEXT = 'https://schema.org'
 const ANY_ENTITY_TYPES: readonly string[] = []
-const TYPE_INDEPENDENT_LEAF_PROPERTIES =
-    'actionStatus availability bestRating contentRating encodingFormat eventAttendanceMode eventStatus highPrice inLanguage isAccessibleForFree isFamilyFriendly itemCondition itemListOrder lowPrice maximumAttendeeCapacity nonprofitStatus numberOfItems offerCount position price priceCurrency priceValidUntil publicAccess ratingCount ratingValue reviewCount smokingAllowed worstRating'.split(
+const NO_CAPTURED_DOM_IDS: IsCapturedDomId = () => false
+const UNIVERSALLY_ALLOWED_PROPERTIES =
+    '@type @id actionStatus availability bestRating contentRating encodingFormat eventAttendanceMode eventStatus highPrice inLanguage isAccessibleForFree isFamilyFriendly itemCondition itemListOrder lowPrice maximumAttendeeCapacity nonprofitStatus numberOfItems offerCount position price priceCurrency priceValidUntil publicAccess ratingCount ratingValue reviewCount smokingAllowed worstRating'.split(
         ' '
     )
 const ACTION_TYPES = 'Action BorrowAction ReadAction SearchAction SeekToAction SolveMathAction WatchAction'.split(' ')
@@ -68,7 +74,6 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
         aggregateRating: ['AggregateRating'],
         brand: ['Brand'],
     },
-    Person: {},
     Place: {
         aggregateRating: ['AggregateRating'],
     },
@@ -112,9 +117,7 @@ const ENTITY_RULES: Record<string, JsonLdEntityRules> = {
     },
 }
 
-const EMPTY_ENTITY_RULES: JsonLdEntityRules = {}
 const INHERITED_RULE_GROUPS: readonly JsonLdRuleGroup[] = [
-    [ACTION_TYPES, EMPTY_ENTITY_RULES],
     [
         '3DModel AboutPage Answer Article AudioObject Blog BlogPosting Book Clip CollectionPage Comment ContactPage Course CreativeWorkSeason CreativeWorkSeries DataCatalog DataDownload DataFeed Dataset DiscussionForumPosting Episode FAQPage Game HowTo HowToDirection HowToSection HowToStep HowToTip ImageObject LearningResource MediaObject Message MobileApplication Movie MusicPlaylist MusicRecording NewsArticle Photograph PodcastEpisode PodcastSeries ProfilePage QAPage Question Quiz Recipe Review ScholarlyArticle SearchResultsPage SiteNavigationElement SocialMediaPosting SoftwareApplication TVEpisode TVSeries TechArticle VacationRental VideoGame VideoObject WebApplication WebPage WebPageElement WebSite'.split(
             ' '
@@ -128,12 +131,7 @@ const INHERITED_RULE_GROUPS: readonly JsonLdRuleGroup[] = [
     [ORGANIZATION_TYPES, ENTITY_RULES.Organization],
     [PLACE_TYPES, ENTITY_RULES.Place],
     ['Car IndividualProduct ProductGroup ProductModel'.split(' '), ENTITY_RULES.Product],
-    ['AggregateRating EmployerAggregateRating Rating'.split(' '), EMPTY_ENTITY_RULES],
 ]
-const TYPES_WITHOUT_PROPERTIES =
-    'AlignmentObject BedDetails Certification ContactPoint CreditCard DefinedRegion EducationalOccupationalCredential EntryPoint GeoCoordinates GeoShape InteractionCounter JobPosting LocationFeatureSpecification MathSolver MemberProgram MemberProgramTier MerchantReturnPolicy MerchantReturnPolicySeasonalOverride MonetaryAmount NutritionInformation OccupationalExperienceRequirements OfferShippingDetails OpeningHoursSpecification PeopleAudience PostalAddress PriceSpecification PropertyValue QuantitativeValue ServicePeriod ShippingConditions ShippingDeliveryTime ShippingRateSettings ShippingService SpeakableSpecification Thing UnitPriceSpecification'.split(
-        ' '
-    )
 
 export const JSON_LD_EVENT_TAG = '$json_ld'
 
@@ -150,6 +148,25 @@ function sanitizeScalar(value: unknown): JsonLdScalar | JsonLdScalar[] | undefin
     return isScalar(value) || (isArray(value) && value.every(isScalar)) ? value : undefined
 }
 
+function sanitizeId(value: unknown, isCapturedDomId: IsCapturedDomId): string | undefined {
+    if (typeof value !== 'string') {
+        return undefined
+    }
+
+    const id = value.trim()
+    const hashIndex = id.indexOf('#')
+    const fragment = hashIndex >= 0 ? id.slice(hashIndex + 1) : id
+    if (!fragment || (hashIndex < 0 && (/^[a-z][a-z\d+.-]*:/i.test(id) || id.includes('/') || id.includes('?')))) {
+        return undefined
+    }
+
+    try {
+        return isCapturedDomId(fragment) ? fragment : undefined
+    } catch {
+        return undefined
+    }
+}
+
 function getEntityRules(type: string): JsonLdEntityRules | undefined {
     if (hasOwnProperty.call(ENTITY_RULES, type)) {
         return ENTITY_RULES[type]
@@ -159,43 +176,102 @@ function getEntityRules(type: string): JsonLdEntityRules | undefined {
             return rules
         }
     }
-    return TYPES_WITHOUT_PROPERTIES.includes(type) ? EMPTY_ENTITY_RULES : undefined
+    return undefined
 }
 
 function getEntityTypes(value: unknown): string[] {
+    const seen = new Set<string>()
     const values = typeof value === 'string' ? [value] : isArray(value) ? value : []
-    return values
-        .filter((type): type is string => typeof type === 'string')
-        .map((type) => type.replace(/^https?:\/\/schema\.org\//, ''))
-        .filter((type) => !!getEntityRules(type))
+    const types: string[] = []
+    for (const value of values) {
+        if (typeof value !== 'string') {
+            continue
+        }
+        const type = value.replace(/^https?:\/\/schema\.org\//, '')
+        if (type.length > MAX_JSON_LD_TYPE_LENGTH || !SCHEMA_TERM_PATTERN.test(type) || seen.has(type)) {
+            continue
+        }
+        seen.add(type)
+        types.push(type)
+        if (types.length === MAX_JSON_LD_TYPES) {
+            break
+        }
+    }
+    return types
 }
 
-function sanitizeEntity(value: unknown, allowedTypes?: readonly string[]): Record<string, unknown> | null {
-    if (!isObject(value)) {
+type SanitizationBudget = {
+    remainingNodes: number
+    exceeded: boolean
+}
+
+function takeNode(budget: SanitizationBudget): boolean {
+    if (!budget.remainingNodes) {
+        budget.exceeded = true
+        return false
+    }
+    budget.remainingNodes--
+    return true
+}
+
+function setOwnProperty(result: Record<string, unknown>, property: string, value: unknown): void {
+    Object.defineProperty(result, property, {
+        configurable: true,
+        enumerable: true,
+        value,
+        writable: true,
+    })
+}
+
+function sanitizeEntityValue(
+    value: unknown,
+    isCapturedDomId: IsCapturedDomId,
+    budget: SanitizationBudget,
+    allowedTypes?: readonly string[]
+): unknown | undefined {
+    if (isArray(value)) {
+        const items = value
+            .map((item) => sanitizeEntityValue(item, isCapturedDomId, budget, allowedTypes))
+            .filter((item) => !isUndefined(item))
+        return items.length ? items : undefined
+    }
+
+    return sanitizeEntity(value, isCapturedDomId, budget, allowedTypes) || undefined
+}
+
+function sanitizeEntity(
+    value: unknown,
+    isCapturedDomId: IsCapturedDomId,
+    budget: SanitizationBudget,
+    allowedTypes?: readonly string[]
+): Record<string, unknown> | null {
+    if (!isObject(value) || !takeNode(budget)) {
         return null
     }
     const typeValue = getOwnProperty(value, '@type')
-    const types = getEntityTypes(typeValue).filter(
-        (type) => !allowedTypes || !allowedTypes.length || allowedTypes.includes(type)
+    const types = getEntityTypes(typeValue)
+    const typesWithAllowedFields = types.filter(
+        (type) => !!getEntityRules(type) && (!allowedTypes || !allowedTypes.length || allowedTypes.includes(type))
     )
-    if (!types.length) {
-        return null
-    }
+    const result: Record<string, unknown> = {}
 
-    const result: Record<string, unknown> = { '@type': typeof typeValue === 'string' ? types[0] : types }
-    const id = sanitizeScalar(getOwnProperty(value, '@id'))
-    if (!isUndefined(id)) {
-        result['@id'] = id
-    }
-
-    for (const property of TYPE_INDEPENDENT_LEAF_PROPERTIES) {
-        const scalar = sanitizeScalar(getOwnProperty(value, property))
-        if (!isUndefined(scalar)) {
-            result[property] = scalar
+    for (const property of UNIVERSALLY_ALLOWED_PROPERTIES) {
+        const propertyValue =
+            property === '@type'
+                ? types.length
+                    ? typeof typeValue === 'string'
+                        ? types[0]
+                        : types
+                    : undefined
+                : property === '@id'
+                  ? sanitizeId(getOwnProperty(value, property), isCapturedDomId)
+                  : sanitizeScalar(getOwnProperty(value, property))
+        if (!isUndefined(propertyValue)) {
+            setOwnProperty(result, property, propertyValue)
         }
     }
 
-    for (const type of types) {
+    for (const type of typesWithAllowedFields) {
         const rules = getEntityRules(type)!
         for (const property of Object.keys(rules)) {
             const propertyValue = getOwnProperty(value, property)
@@ -203,26 +279,30 @@ function sanitizeEntity(value: unknown, allowedTypes?: readonly string[]): Recor
             if (rule === true) {
                 const scalar = sanitizeScalar(propertyValue)
                 if (!isUndefined(scalar)) {
-                    result[property] = scalar
-                }
-            } else if (isArray(propertyValue)) {
-                const items = propertyValue.map((item) => sanitizeEntity(item, rule)).filter(isObject)
-                if (items.length) {
-                    result[property] = items
+                    setOwnProperty(result, property, scalar)
                 }
             } else {
-                const nestedEntity = sanitizeEntity(propertyValue, rule)
-                if (nestedEntity) {
-                    result[property] = nestedEntity
+                const nestedValue = sanitizeEntityValue(propertyValue, isCapturedDomId, budget, rule)
+                if (!isUndefined(nestedValue)) {
+                    setOwnProperty(result, property, nestedValue)
                 }
             }
         }
     }
 
-    return result
+    const graph = sanitizeEntityValue(getOwnProperty(value, '@graph'), isCapturedDomId, budget)
+    if (!isUndefined(graph)) {
+        setOwnProperty(result, '@graph', graph)
+    }
+
+    return Object.keys(result).length ? result : null
 }
 
-function sanitizeRoot(value: unknown): Record<string, unknown> | null {
+function sanitizeRoot(
+    value: unknown,
+    isCapturedDomId: IsCapturedDomId,
+    budget: SanitizationBudget
+): Record<string, unknown> | null {
     if (!isObject(value)) {
         return null
     }
@@ -231,28 +311,32 @@ function sanitizeRoot(value: unknown): Record<string, unknown> | null {
         return null
     }
 
-    const entity = sanitizeEntity(value)
-    if (entity) {
-        return { '@context': SCHEMA_CONTEXT, ...entity }
-    }
-
-    const graph = getOwnProperty(value, '@graph')
-    if (!isArray(graph)) {
-        return null
-    }
-    const entities = graph.map((entity) => sanitizeEntity(entity)).filter(isObject)
-    return entities.length ? { '@context': SCHEMA_CONTEXT, '@graph': entities } : null
+    const entity = sanitizeEntity(value, isCapturedDomId, budget)
+    return entity ? { '@context': SCHEMA_CONTEXT, ...entity } : null
 }
 
-export function sanitizeJsonLd(text: string): [unknown, string] | null {
+export function sanitizeJsonLd(
+    text: string,
+    isCapturedDomId: IsCapturedDomId = NO_CAPTURED_DOM_IDS
+): [unknown, string] | null {
     if (!text || text.length > MAX_JSON_LD_LENGTH) {
         return null
     }
 
     try {
         const value: unknown = JSON.parse(text)
-        const sanitized = isArray(value) ? value.map(sanitizeRoot) : sanitizeRoot(value)
-        if (isNull(sanitized) || (isArray(sanitized) && (!sanitized.length || sanitized.some(isNull)))) {
+        const budget: SanitizationBudget = {
+            remainingNodes: MAX_JSON_LD_NODES,
+            exceeded: false,
+        }
+        const sanitized = isArray(value)
+            ? value.map((root) => sanitizeRoot(root, isCapturedDomId, budget))
+            : sanitizeRoot(value, isCapturedDomId, budget)
+        if (
+            budget.exceeded ||
+            isNull(sanitized) ||
+            (isArray(sanitized) && (!sanitized.length || sanitized.some(isNull)))
+        ) {
             return null
         }
 
@@ -271,8 +355,12 @@ function isJsonLdScript(node: Node): node is HTMLScriptElement {
 }
 
 type JsonLdPrivacyOptions = {
+    attributeFilter?: string[]
     blockClass?: string | RegExp
     blockSelector?: string | null
+    isRecordedElement?: (element: Element) => boolean
+    maskAllElementAttributes?: boolean
+    maskAttributeFn?: ((name: string, value: string, element: Element) => string) | null
     maskTextClass?: string | RegExp
     maskTextSelector?: string | null
 }
@@ -296,12 +384,9 @@ function matchesPrivacyRule(element: Element, classRule?: string | RegExp, selec
     }
 }
 
-function isWithinPrivacyBoundary(element: Element, options: JsonLdPrivacyOptions): boolean {
+function isWithinBoundary(element: Element, classRule?: string | RegExp, selector?: string | null): boolean {
     for (let current: Element | null = element; current;) {
-        if (
-            matchesPrivacyRule(current, options.blockClass, options.blockSelector) ||
-            matchesPrivacyRule(current, options.maskTextClass, options.maskTextSelector)
-        ) {
+        if (matchesPrivacyRule(current, classRule, selector)) {
             return true
         }
         const parentNode: Node | null = current.parentNode
@@ -312,6 +397,34 @@ function isWithinPrivacyBoundary(element: Element, options: JsonLdPrivacyOptions
                 : null)
     }
     return false
+}
+
+function isWithinPrivacyBoundary(element: Element, options: JsonLdPrivacyOptions): boolean {
+    return (
+        isWithinBoundary(element, options.blockClass, options.blockSelector) ||
+        isWithinBoundary(element, options.maskTextClass, options.maskTextSelector)
+    )
+}
+
+function createCapturedDomIdMatcher(doc: Document, options: JsonLdPrivacyOptions): IsCapturedDomId {
+    const attributeFilter = options.attributeFilter
+    if (
+        options.maskAllElementAttributes ||
+        options.maskAttributeFn ||
+        (attributeFilter?.length && !attributeFilter.includes('id'))
+    ) {
+        return NO_CAPTURED_DOM_IDS
+    }
+
+    return (id) => {
+        const element = doc.getElementById(id)
+        return (
+            !!element &&
+            element.nodeName !== 'SCRIPT' &&
+            (!options.isRecordedElement || options.isRecordedElement(element)) &&
+            !isWithinBoundary(element, options.blockClass, options.blockSelector)
+        )
+    }
 }
 
 function getJsonLdScripts(node: Node): HTMLScriptElement[] {
@@ -336,6 +449,7 @@ export function startJsonLdCapture(
     const lastJsonByScript = new WeakMap<HTMLScriptElement, string>()
     const getCaptureState = options.getCaptureState || (() => true)
     let remainingLength = MAX_JSON_LD_LENGTH
+    const hasCapturedDomId = createCapturedDomIdMatcher(doc, options)
 
     const captureScript = (script: HTMLScriptElement): void => {
         try {
@@ -349,7 +463,7 @@ export function startJsonLdCapture(
             ) {
                 return
             }
-            const sanitized = sanitizeJsonLd(script.text)
+            const sanitized = sanitizeJsonLd(script.text, hasCapturedDomId)
             if (!sanitized) {
                 lastJsonByScript.delete(script)
                 return
