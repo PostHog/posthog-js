@@ -238,6 +238,22 @@ Follow [RELEASING.md](./RELEASING.md) for changeset requirements and writing gui
 | `bundled-size.yaml`       | Monitors bundle size changes                             | PR                                                        |
 | `generate-references.yml` | Generates API documentation                              | Workflow dispatch                                         |
 
+### CI credentials and restricted PRs
+
+Fork and Dependabot PRs may not have repository secrets, and their default `GITHUB_TOKEN` can be read-only. A same-repository PR is not proof that credentials are available.
+
+- `integration.yml` checks `POSTHOG_API_HOST`, `POSTHOG_PROJECT_ID`, `POSTHOG_PROJECT_API_KEY`, and `POSTHOG_PERSONAL_API_KEY` before checkout, dependency installation, builds, or live tests.
+- `testcafe.yml` checks both `BROWSERSTACK_USERNAME`/`BROWSERSTACK_ACCESS_KEY` and both PostHog API keys before setup, browser sessions, or event polling. Its PostHog host and project ID have defaults in the test helper.
+- `dependabot-changeset.yml` checks both GitHub App credentials before token creation or checkout. When unavailable, add any required changeset manually.
+
+These optional credential-dependent jobs succeed with an explicit skip notice when required values are missing. Never print credential values or turn authentication errors, network errors, or test failures into success when credentials are present. Keep fork guards; do not use `pull_request_target` to give PR code access to secrets.
+
+Bundle-size, compatibility, incident-risk, description, and versioning checks skip PR comment operations for forks and Dependabot while retaining their local checks and reports. The shared feature-flags project-board workflow already excludes fork and Dependabot PRs.
+
+The main unit, functional, local Playwright, MCP, SDK compliance, and native plugin checks do not require live API credentials. AI live-provider tests already skip without their respective `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`. Next.js CI smoke builds use dummy configuration and disable real sourcemap uploads.
+
+Publishing, S3 recovery, reference-generation, downstream-upgrade, and watcher worker/sweep workflows run in trusted push, manual, or scheduled contexts rather than untrusted PR test jobs. Their required GitHub App, AWS/OIDC, Slack, and OpenAI configuration must not be bypassed to make a release or automation run appear successful.
+
 ## Configuration Files
 
 - `package.json` - Root workspace scripts and dependencies
