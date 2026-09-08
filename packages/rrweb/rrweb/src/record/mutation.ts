@@ -774,16 +774,6 @@ export default class MutationBuffer {
         ) {
           return;
         }
-        if (!item) {
-          item = {
-            node: m.target,
-            attributes: {},
-            styleDiff: {},
-            _unchangedStyles: {},
-          };
-          this.attributes.push(item);
-          this.attributeMap.set(m.target, item);
-        }
 
         // Keep this property on inputs that used to be password inputs
         // This is used to ensure we do not unmask value when using e.g. a "Show password" type button
@@ -796,6 +786,16 @@ export default class MutationBuffer {
         }
 
         if (!ignoreAttribute(tagNameLower, attributeName, value)) {
+          if (!item) {
+            item = {
+              node: m.target,
+              attributes: {},
+              styleDiff: {},
+              _unchangedStyles: {},
+            };
+            this.attributes.push(item);
+            this.attributeMap.set(m.target, item);
+          }
           // Transform with the source name before representing an inaccessible
           // iframe's source under the final rr_src key.
           const transformedValue = transformAttribute(
