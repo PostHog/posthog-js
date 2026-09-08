@@ -64,6 +64,24 @@ export function callSafely(fn: () => void): void {
   }
 }
 
+// Runs a list of cleanup handlers to completion. A handler can be missing (a
+// plugin observer that returned a non-function) or throw, and neither may stop
+// the rest from releasing their observers and listeners. Deliberately not
+// `callSafely` per handler: that rethrows anything but a SecurityError, which
+// is what used to escape teardown and abort the callers below.
+export function callAllSafely(fns: listenerHandler[]): void {
+  fns.forEach((fn) => {
+    if (typeof fn !== 'function') {
+      return;
+    }
+    try {
+      fn();
+    } catch (e) {
+      //
+    }
+  });
+}
+
 // https://github.com/rrweb-io/rrweb/pull/407
 const DEPARTED_MIRROR_ACCESS_WARNING =
   'Please stop import mirror directly. Instead of that,' +
