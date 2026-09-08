@@ -117,6 +117,30 @@ describe('untainted accessor cache', () => {
     }
   });
 
+  it.each(['__proto__', 'constructor', 'toString'])(
+    'does not use inherited %s as an accessor-cache bucket',
+    (key) => {
+      const element = document.createElement('div');
+      const setPrototype = vi.spyOn(Object.prototype, '__proto__', 'set');
+      try {
+        // Untyped library callers can supply keys outside BasePrototypeCache.
+        // Reject them before treating an inherited object as a writable cache.
+        expect(() =>
+          Reflect.apply(utils.getUntaintedAccessor, undefined, [
+            key,
+            element,
+            '__proto__',
+          ]),
+        ).toThrow(TypeError);
+        expect(setPrototype).not.toHaveBeenCalled();
+      } finally {
+        setPrototype.mockRestore();
+      }
+      expect(Object.getPrototypeOf(Object.prototype)).toBeNull();
+      expect(utils.childNodes(element).length).toBe(0);
+    },
+  );
+
   it('retains the instance fallback for properties without a getter', () => {
     const element = document.createElement('div');
     // Object.prototype properties must not look like cached DOM accessors.
@@ -126,6 +150,14 @@ describe('untainted accessor cache', () => {
     expect(utils.getUntaintedAccessor('Node', element, 'constructor')).toBe(
       element.constructor,
     );
+    // A special accessor name is safe inside a valid prototype bucket.
+    expect(
+      Reflect.apply(utils.getUntaintedAccessor, undefined, [
+        'Node',
+        element,
+        '__proto__',
+      ]),
+    ).toBe(Object.getPrototypeOf(element));
   });
 });
 
