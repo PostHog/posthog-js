@@ -246,6 +246,7 @@
         "_flushInner",
         "_flushInterval",
         "_flushIntervalMs",
+        "_flushJitter",
         "_flushPendingActivityTimestamp",
         "_flushPromise",
         "_flushTimeout",
