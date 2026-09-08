@@ -72,6 +72,19 @@ test('a filtered rrweb build includes non-rrweb prerequisites in the outer graph
     }
 })
 
+test('the browser compliance image builds the SDK and its prerequisites through Turbo', () => {
+    const dockerfile = readFileSync(resolve(root, 'compliance/browser/Dockerfile'), 'utf8')
+    const commands = [...dockerfile.matchAll(/^RUN pnpm turbo (.+)$/gm)]
+    assert.equal(commands.length, 1)
+    const tasks = dryRun(commands[0][1].split(' '))
+    assert.ok(executable(tasks).some((task) => task.taskId === 'posthog-js#build'))
+    const dependencies = prerequisites(tasks, 'posthog-js#build')
+    for (const pkg of ['@posthog/types', '@posthog/core', '@posthog/browser-common', '@posthog/rrweb-record']) {
+        assert.ok(dependencies.has(`${pkg}#build`), pkg)
+    }
+    assert.ok(executable(tasks).every((task) => task.task === 'build'))
+})
+
 test('type checks use dependency builds without scheduling a second compilation graph', () => {
     const tasks = dryRun(['run', 'check-types'])
     assert.ok(!tasks.some((task) => task.task === 'prepublish'))
