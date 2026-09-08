@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4840](https://github.com/PostHog/posthog-js/issues/4840) | Valid, well-scoped testing-infrastructure enhancement; an offline @posthog/ai pilot is justified, but it is not a small or low-risk PR. | enhancement, node, team/ai-observability, team/client-libraries |  | no | 2026-09-08T13:45:28.136Z |
 | PostHog/posthog-js | [issue 3765](https://github.com/PostHog/posthog-js/issues/3765) | Valid session-replay maintenance tracker; keep open and address upstream rrweb changes individually. | enhancement, feature/replay |  | no | 2026-09-08T10:41:24.216Z |
 | PostHog/posthog-js | [issue 3766](https://github.com/PostHog/posthog-js/issues/3766) | Valid Session Replay maintenance tracker for keeping the vendored rrweb fork thin and contributing general fixes upstream. | enhancement, feature/replay, needs-to-be-contributed-back, team/client-libraries |  | no | 2026-09-08T10:40:22.342Z |
 | PostHog/posthog-js | [issue 4825](https://github.com/PostHog/posthog-js/issues/4825) | Likely confirmed Session Replay idle/rotation bug with a specific event-ordering gap; it should not be closed as already fixed. | feature/replay, javascript, web, team/client-libraries |  | no | 2026-09-07T13:35:42.866Z |
