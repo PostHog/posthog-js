@@ -26,12 +26,11 @@
             "outputs": ["dist/**", "lib/**", "react/**"],
             "env": ["WRITE_MANGLED_PROPERTIES"]
         },
-        "prepublish": {
-            "dependsOn": ["^prepublish"],
-            "outputs": ["dist/**", "lib/**"]
-        },
         "check-types": {
-            "dependsOn": ["^prepublish", "^build"]
+            "dependsOn": ["^build"]
+        },
+        "@posthog/browser#check-types": {
+            "dependsOn": ["build"]
         },
         "package": {
             "cache": false,
@@ -44,7 +43,7 @@
             "cache": false
         },
         "@posthog/next#build": {
-            "dependsOn": ["^build", "@posthog/react#build"]
+            "dependsOn": ["^build"]
         },
         "posthog-js#package": {
             "dependsOn": ["@posthog/react#build"],
@@ -72,14 +71,22 @@
             "dependsOn": ["^build", "build"],
             "cache": false
         },
+        "@posthog/browser#test:unit": {
+            "dependsOn": ["^build"],
+            "cache": false
+        },
+        "test:built": {
+            "dependsOn": ["build"],
+            "cache": false
+        },
+        "test:rrweb": {
+            "dependsOn": ["build"]
+        },
         "test:functional": {},
         "@posthog/rollup-plugin#test:functional": {
             "dependsOn": ["build"]
         },
         "test:e2e": {},
-        "test": {
-            "dependsOn": ["lint", "test:unit", "test:functional", "test:e2e"]
-        },
         "dev": {
             "cache": false,
             "persistent": true
