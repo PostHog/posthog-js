@@ -875,7 +875,7 @@ describe('SurveyManager', () => {
             mockPostHog.is_capturing = vi.fn(() => false)
             const result = surveyManager.checkSurveyDisplayEligibility(mockSurveys[0])
             expect(result.eligible).toBe(false)
-            expect(result.reason).toBe('Capturing is opted out, so a survey response cannot be captured')
+            expect(result.reason).toBe('PostHog is not capturing, so a survey response cannot be recorded')
         })
 
         it('stays eligible to display while capturing is on', () => {
@@ -892,6 +892,34 @@ describe('SurveyManager', () => {
             surveyManager.callSurveysAndEvaluateDisplayLogic()
 
             expect(handlePopoverSurveyMock).not.toHaveBeenCalled()
+        })
+
+        // A tab widget draws its own trigger, so it stays mounted until something removes it.
+        // Filtering it out of the display loop is not enough: the button stays on screen and opens
+        // a survey whose answer capture() then drops.
+        it('removes a tab widget that is already on screen', () => {
+            const widgetSurvey: Survey = {
+                ...mockSurveys[0],
+                id: 'tabWidgetSurvey',
+                type: SurveyType.Widget,
+                appearance: { widgetType: SurveyWidgetType.Tab },
+            }
+            const originalGetSurveys = mockPostHog.surveys.getSurveys
+            mockPostHog.surveys.getSurveys = vi.fn((callback: (surveys: Survey[]) => void) => callback([widgetSurvey]))
+            const container = getSurveyContainerClass(widgetSurvey, true)
+
+            try {
+                mockPostHog.is_capturing = vi.fn(() => true)
+                surveyManager.callSurveysAndEvaluateDisplayLogic()
+                expect(document.querySelector(container)).not.toBeNull()
+
+                mockPostHog.is_capturing = vi.fn(() => false)
+                surveyManager.callSurveysAndEvaluateDisplayLogic()
+                expect(document.querySelector(container)).toBeNull()
+            } finally {
+                mockPostHog.surveys.getSurveys = originalGetSurveys
+                document.querySelector(container)?.remove()
+            }
         })
 
         // Regression guard: the capture gate must stay out of the public discovery result. Custom
@@ -922,7 +950,7 @@ describe('SurveyManager', () => {
                 mockPostHog.has_opted_out_capturing = vi.fn(() => true)
                 const result = surveyManager.checkSurveyDisplayEligibility(mockSurveys[0])
                 expect(result.eligible).toBe(false)
-                expect(result.reason).toBe('Capturing is opted out, so a survey response cannot be captured')
+                expect(result.reason).toBe('PostHog is not capturing, so a survey response cannot be recorded')
             })
 
             it('still displays the survey when that core says the person opted in', () => {

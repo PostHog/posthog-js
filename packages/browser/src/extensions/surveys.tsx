@@ -28,7 +28,7 @@ import {
     isSurveyIterationBased,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
-    SURVEY_OPTED_OUT,
+    SURVEY_CAPTURING_DISABLED,
 } from '../utils/survey-utils'
 import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
 import { Properties } from '../types'
@@ -145,6 +145,7 @@ export class SurveyManager {
     private _surveyTimeouts: Map<string, ReturnType<Window['setTimeout']>> = new Map()
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
+    private _renderedTabWidgets: Map<string, Survey> = new Map()
     private _renderedTargets: Map<ShadowRoot, Element> = new Map()
     private _prefillHandledSurveys: Set<string> = new Set()
     private _automaticDisplayDispose?: () => void
@@ -299,6 +300,7 @@ export class SurveyManager {
             container?.remove()
         })
         this._renderedTargets.clear()
+        this._renderedTabWidgets.clear()
         this._surveyInFocus = null
     }
 
@@ -446,6 +448,9 @@ export class SurveyManager {
         // Ensure widget container exists if it doesn't
         const { shadow, isNewlyCreated } = retrieveSurveyShadow(translatedSurvey, this._posthog)
         this._renderedTargets.set(shadow, shadow.host)
+        if (survey.appearance?.widgetType === SurveyWidgetType.Tab) {
+            this._renderedTabWidgets.set(survey.id, survey)
+        }
 
         // If the widget is already rendered, do nothing. Otherwise the widget will be re-rendered every second
         if (!isNewlyCreated) {
@@ -486,6 +491,19 @@ export class SurveyManager {
         }
         this._removeSurveyFromDom(survey)
         this._detachWidgetSelectorListener(survey.id)
+    }
+
+    // A tab widget draws its own trigger, so it stays on screen until something removes it. The
+    // display poll no longer matches a survey once it becomes ineligible, which leaves the trigger
+    // as a live entry point to a survey whose response would be dropped.
+    private _removeTabWidget = (survey: Survey): void => {
+        // Same deferral as the selector widget: a teardown while the survey is open would make it
+        // vanish under the person. The next display poll retries.
+        if (this._isWidgetSurveyOpen(survey)) {
+            return
+        }
+        this._removeSurveyFromDom(survey)
+        this._renderedTabWidgets.delete(survey.id)
     }
 
     private _isWidgetSurveyOpen = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): boolean => {
@@ -894,7 +912,7 @@ export class SurveyManager {
      */
     public checkSurveyCaptureEligibility(): { eligible: boolean; reason?: string } {
         if (!isCapturingEnabled(this._posthog)) {
-            return { eligible: false, reason: SURVEY_OPTED_OUT }
+            return { eligible: false, reason: SURVEY_CAPTURING_DISABLED }
         }
         return { eligible: true }
     }
@@ -1015,11 +1033,13 @@ export class SurveyManager {
 
             // Keep track of surveys processed this cycle to remove listeners for inactive ones
             const activeSelectorSurveys = new Set<string>()
+            const activeTabWidgetSurveys = new Set<string>()
 
             inAppSurveysQueue.forEach((survey) => {
                 // Widget Type Logic
                 if (survey.type === SurveyType.Widget) {
                     if (survey.appearance?.widgetType === SurveyWidgetType.Tab) {
+                        activeTabWidgetSurveys.add(survey.id)
                         this._handleWidget(survey)
                         return
                     }
@@ -1044,6 +1064,13 @@ export class SurveyManager {
             this._widgetSelectorListeners.forEach(({ survey }) => {
                 if (!activeSelectorSurveys.has(survey.id)) {
                     this._removeWidgetSelectorListener(survey)
+                }
+            })
+
+            // Same cleanup for a tab widget, which has no listener entry to key off.
+            this._renderedTabWidgets.forEach((tabSurvey, surveyId) => {
+                if (!activeTabWidgetSurveys.has(surveyId)) {
+                    this._removeTabWidget(tabSurvey)
                 }
             })
         }, forceReload)

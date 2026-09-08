@@ -9,7 +9,10 @@ export { doesSurveyActivateByEvent, getSurveyInteractionProperty, isSurveyIterat
 
 export const SURVEY_LOGGER = createLogger('[Surveys]')
 
-export const SURVEY_OPTED_OUT = 'Capturing is opted out, so a survey response cannot be captured'
+// Covers every state in which `capture()` drops events, not only an explicit opt-out: with
+// `opt_out_capturing_by_default` a visitor who has not answered the consent banner yet is also
+// not captured, and that person made no choice.
+export const SURVEY_CAPTURING_DISABLED = 'PostHog is not capturing, so a survey response cannot be recorded'
 
 /**
  * `is_capturing()` was only added to the core in 1.260.0, and a newly deployed surveys bundle can

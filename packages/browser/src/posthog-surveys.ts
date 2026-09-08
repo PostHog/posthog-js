@@ -603,7 +603,12 @@ export class PostHogSurveys implements Extension {
         // that branch so a forced display cannot show a survey whose answer would be thrown away.
         const captureEligibility = this._surveyManager.checkSurveyCaptureEligibility()
         if (!captureEligibility.eligible) {
-            logger.warn('Survey is not eligible to be displayed: ', captureEligibility.reason)
+            // `critical` is the only level a production console shows. A caller that reaches this
+            // point has already decided to show the survey, so a silent return is the same dead end
+            // the dropped response used to be.
+            logger.critical(
+                `[displaySurvey] ${captureEligibility.reason}. Survey "${surveyId}" was not displayed. Check posthog.surveys.canRenderSurvey(surveyId) before you show a survey.`
+            )
             return
         }
         if (options.ignoreConditions === false) {

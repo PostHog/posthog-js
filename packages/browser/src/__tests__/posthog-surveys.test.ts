@@ -4,6 +4,7 @@ vi.mock('@posthog/browser-common/utils/logger', async (importOriginal) => ({
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        critical: vi.fn(),
     }),
 }))
 vi.useFakeTimers()
@@ -192,6 +193,23 @@ describe('posthog-surveys', () => {
                 expect(result.visible).toBeTruthy()
                 expect(result.disabledReason).toBeUndefined()
             })
+
+            // The public entry point is what an integrator calls before it shows a survey, so the
+            // capture gate has to reach this far. `_checkSurveyRenderability` and
+            // `_checkSurveyEligibility` sit next to each other, and only the first applies the gate.
+            it('reports the capture state through the public entry point', () => {
+                mockPostHog.get_property.mockReturnValue([survey])
+                mockPostHog.is_capturing = vi.fn(() => false)
+                surveys['_surveyManager'] = new SurveyManager(mockPostHog as PostHog)
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+
+                const result = surveys.canRenderSurvey(survey.id)
+
+                expect(result.visible).toBe(false)
+                expect(result.disabledReason).toBe('PostHog is not capturing, so a survey response cannot be recorded')
+            })
         })
 
         describe('displaySurvey', () => {
@@ -216,9 +234,13 @@ describe('posthog-surveys', () => {
                 surveys.displaySurvey(survey.id, { ...DEFAULT_DISPLAY_SURVEY_OPTIONS, ignoreConditions: true })
 
                 expect(handlePopoverSurvey).not.toHaveBeenCalled()
-                expect(mockLogger.warn).toHaveBeenCalledWith(
-                    'Survey is not eligible to be displayed: ',
-                    'Capturing is opted out, so a survey response cannot be captured'
+                // `critical` and not `warn`: a production console shows nothing below it, so a
+                // warning here would leave the caller with the same silence the PR set out to remove.
+                expect(mockLogger.critical).toHaveBeenCalledWith(
+                    expect.stringContaining('PostHog is not capturing, so a survey response cannot be recorded')
+                )
+                expect(mockLogger.critical).toHaveBeenCalledWith(
+                    expect.stringContaining(`Survey "${survey.id}" was not displayed`)
                 )
             })
 

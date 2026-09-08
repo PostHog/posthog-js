@@ -21,7 +21,7 @@ import {
     SURVEY_LOGGER as logger,
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
-    SURVEY_OPTED_OUT,
+    SURVEY_CAPTURING_DISABLED,
 } from '../../utils/survey-utils'
 import { isNullish, type SurveyResponses } from '@posthog/core'
 import {
@@ -441,7 +441,7 @@ export const sendSurveyEvent = ({
         // or an opt-out during the survey, still reaches this point. `critical` is the only level
         // a production console shows.
         logger.critical(
-            `[survey sent] ${SURVEY_OPTED_OUT}. The response to survey "${survey.id}" was dropped. Check posthog.surveys.canRenderSurvey(surveyId) before you show a survey.`
+            `[survey sent] ${SURVEY_CAPTURING_DISABLED}. The response to survey "${survey.id}" was dropped. Check posthog.surveys.canRenderSurvey(surveyId) before you show a survey.`
         )
     }
     setSurveySeenOnLocalStorage(survey)
