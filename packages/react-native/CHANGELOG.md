@@ -1,5 +1,53 @@
 # posthog-react-native
 
+## 4.68.0
+
+### Minor Changes
+
+- [#4822](https://github.com/PostHog/posthog-js/pull/4822) [`a6320d5`](https://github.com/PostHog/posthog-js/commit/a6320d57cbde8fb8f2e9e89f273c72856126f0c7) Thanks [@AyobamiH](https://github.com/AyobamiH)! - feat(react-native): support shuffled survey questions and answer options
+  (2026-09-08)
+
+## 4.67.3
+
+### Patch Changes
+
+- [#4799](https://github.com/PostHog/posthog-js/pull/4799) [`3161e0d`](https://github.com/PostHog/posthog-js/commit/3161e0d92f6da33217ea552fb635c08edee3f4dc) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve Expo static exports and their per-asset Chunk IDs when wrapping Expo's Metro serializer.
+  (2026-09-07)
+
+## 4.67.2
+
+### Patch Changes
+
+- [#4802](https://github.com/PostHog/posthog-js/pull/4802) [`6a5025e`](https://github.com/PostHog/posthog-js/commit/6a5025e5b29dc71e67ab97b4c9220204690f6afe) Thanks [@marandaneto](https://github.com/marandaneto)! - Update displayed surveys when the person's language changes, preserving in-progress answers and keeping survey event language metadata in sync.
+  (2026-09-07)
+
+## 4.67.1
+
+### Patch Changes
+
+- [#4785](https://github.com/PostHog/posthog-js/pull/4785) [`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829) Thanks [@marandaneto](https://github.com/marandaneto)! - Clarify feature flag return-value terminology across SDK APIs. A `false` value is a conclusive off evaluation, while `undefined` means no evaluation is available. Remote evaluation omits globally inactive flags, whereas backend local evaluation can resolve cached inactive definitions to `false`.
+  (2026-09-07)
+
+- [#4778](https://github.com/PostHog/posthog-js/pull/4778) [`1d26ccf`](https://github.com/PostHog/posthog-js/commit/1d26ccf7900d695feaead6a74cf14c2f8dea72a3) Thanks [@posthog](https://github.com/apps/posthog)! - fix(react-native): keep Metro async chunks serialized when the chunk ID is absent
+  (2026-09-07)
+- Updated dependencies [[`f8013ed`](https://github.com/PostHog/posthog-js/commit/f8013ed497fdf37765358df23152b328c339e586), [`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829), [`5e74132`](https://github.com/PostHog/posthog-js/commit/5e74132a76a32d5df9c6706dddf1597c748061d2)]:
+  - @posthog/react-native-plugin@2.5.2
+  - @posthog/core@1.50.6
+  - @posthog/types@1.409.1
+
+## 4.67.0
+
+### Minor Changes
+
+- [#4717](https://github.com/PostHog/posthog-js/pull/4717) [`b1863c5`](https://github.com/PostHog/posthog-js/commit/b1863c5900ad72fcffad0e574523349ef1193e10) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Default `releaseMode` to `event` and apply it to the Hermes source map upload only, so iOS dSYMs and Android R8 mappings always bind to the release their build creates. Set `releaseMode: 'symbol-set'` to opt out. Event mode needs posthog-cli 0.16.0 or newer, and an unconfigured build on an older CLI warns and keeps binding. The `posthog.releaseMode` gradle property becomes `posthog.hermesReleaseMode`, the old key still works with a deprecation warning, and a prebuild now pins `com.posthog.android` 1.6.0.
+  (2026-09-03)
+
+### Patch Changes
+
+- Updated dependencies [[`41ed3af`](https://github.com/PostHog/posthog-js/commit/41ed3af41c1a98776d1686caf4e58875f95b0847), [`dbbb58e`](https://github.com/PostHog/posthog-js/commit/dbbb58e286db3762673f71995a8aeea89aa44123)]:
+  - @posthog/types@1.408.1
+  - @posthog/core@1.50.3
+
 ## 4.66.3
 
 ### Patch Changes
@@ -327,10 +375,14 @@
   Backend services can now record metrics through the same statsd-style pre-aggregating client the browser SDK ships, with no OpenTelemetry setup:
 
   ```ts
-  const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } })
-  client.metrics.count('invoices.processed', 1, { attributes: { plan: 'pro' } })
-  client.metrics.gauge('queue.depth', 42)
-  client.metrics.histogram('job.duration', 187, { unit: 'ms' })
+  const client = new PostHog("phc_...", {
+    metrics: { serviceName: "billing-worker" },
+  });
+  client.metrics.count("invoices.processed", 1, {
+    attributes: { plan: "pro" },
+  });
+  client.metrics.gauge("queue.depth", 42);
+  client.metrics.histogram("job.duration", 187, { unit: "ms" });
   ```
 
   Samples aggregate in memory and flush as OTLP/JSON to `/i/v1/metrics` (one data point per series per window). Pending metrics are flushed on `shutdown()`. Core gains `_sendMetricsBatch` on `PostHogCoreStateless` (same outcome contract as `_sendLogsBatch`) and a shared `resolveMetricsConfig`, so any core-based SDK can host `PostHogMetrics`. (2026-07-15)
@@ -1280,9 +1332,9 @@
 - [#3292](https://github.com/PostHog/posthog-js/pull/3292) [`4bdfdbc`](https://github.com/PostHog/posthog-js/commit/4bdfdbcfe6a5600664a609a6b17c7d7cb72cd20f) Thanks [@marandaneto](https://github.com/marandaneto)! - `captureAppLifecycleEvents` is now enabled by default. If you want to disable it, you can set `captureAppLifecycleEvents: false` in the PostHog options:
 
   ```js
-  const posthog = new PostHog('<ph_project_api_key>', {
+  const posthog = new PostHog("<ph_project_api_key>", {
     captureAppLifecycleEvents: false,
-  })
+  });
   ```
 
   Or when using the PostHogProvider:
@@ -1900,10 +1952,10 @@
   Users can now configure the SDK with an `evaluationEnvironments` option:
 
   ```typescript
-  const posthog = new PostHog('api-key', {
-    host: 'https://app.posthog.com',
-    evaluationEnvironments: ['production', 'mobile', 'react-native'],
-  })
+  const posthog = new PostHog("api-key", {
+    host: "https://app.posthog.com",
+    evaluationEnvironments: ["production", "mobile", "react-native"],
+  });
   ```
 
   When set, only feature flags that have at least one matching evaluation tag will be evaluated for this SDK instance. Feature flags with no evaluation tags will always be evaluated.
@@ -2196,13 +2248,13 @@ Do not use this version, please use [3.15.1](https://github.com/PostHog/posthog-
    3. If you don't want to capture these events, set the `captureLifecycleEvents` autocapture option to `false` and capture the events manually, example below.
 
 ```js
-AppState.addEventListener('change', (state) => {
-  if (state === 'active') {
-    posthog.capture('Application Became Active')
-  } else if (state === 'background') {
-    posthog.capture('Application Backgrounded')
+AppState.addEventListener("change", (state) => {
+  if (state === "active") {
+    posthog.capture("Application Became Active");
+  } else if (state === "background") {
+    posthog.capture("Application Backgrounded");
   }
-})
+});
 ```
 
 ## 3.10.0 - 2025-02-20
@@ -2335,10 +2387,10 @@ export const posthog = new PostHog(
    1. To keep the session id across restarts, set the `enablePersistSessionIdAcrossRestart` option to `true` when initializing the PostHog client.
 
 ```js
-export const posthog = new PostHog('apiKey...', {
+export const posthog = new PostHog("apiKey...", {
   // ...
   enablePersistSessionIdAcrossRestart: true,
-})
+});
 ```
 
 ## 3.2.1 - 2024-09-24
@@ -2366,10 +2418,10 @@ npm i -s posthog-react-native-session-replay
 Enable Session Replay for React-Native:
 
 ```js
-export const posthog = new PostHog('apiKey...', {
+export const posthog = new PostHog("apiKey...", {
   // ...
   enableSessionReplay: true,
-})
+});
 ```
 
 Or using the `PostHogProvider`

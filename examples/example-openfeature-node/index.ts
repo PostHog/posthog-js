@@ -31,14 +31,12 @@ async function main(): Promise<void> {
     'my-payload-flag': payload,
   }
 
-  // eslint-disable-next-line no-console
   console.log(result)
 
   await posthog.shutdown()
 }
 
 main().catch((err) => {
-  // eslint-disable-next-line no-console
   console.error('OpenFeature example failed:', err)
   process.exit(1)
 })

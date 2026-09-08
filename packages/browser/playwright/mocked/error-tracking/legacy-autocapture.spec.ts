@@ -40,6 +40,30 @@ test('captures exceptions with the posthog-js 1.140.1 core', async ({ posthog, p
         })
 })
 
+test('does not throw when exception property building fails with the legacy core', async ({
+    posthog,
+    page,
+    network,
+}) => {
+    await network.mockFlags({ autocaptureExceptions: true })
+    await posthog.init()
+
+    await page.waitForFunction(() => (window as any).onerror?.__POSTHOG_INSTRUMENTED__ === true)
+
+    const result = await page.evaluate(() => {
+        const error = new Error('legacy error')
+        Object.defineProperty(error, 'message', {
+            get() {
+                throw new TypeError('property building failed')
+            },
+        })
+
+        return window.onerror?.('message', 'source', 1, 2, error)
+    })
+
+    expect(result).toBe(false)
+})
+
 test('respects legacy exception exclusion rules', async ({ posthog, page, network }) => {
     await network.mockFlags({
         autocaptureExceptions: {

@@ -10,6 +10,7 @@ import type { FontFaceSet } from 'css-font-loading-module';
 import {
   throttle,
   on,
+  callAllSafely,
   hookSetter,
   getWindowScroll,
   getWindowHeight,
@@ -578,7 +579,11 @@ function initInputObserver({
     );
   }
   return callbackWrapper(() => {
-    handlers.forEach((h) => h());
+    // the hook resetters below restore shared DOM prototype accessors through a
+    // bare `Object.defineProperty`, which throws if the page made one of them
+    // non-configurable after we hooked it. Run them all: a leaked hook keeps
+    // intercepting every `value`/`checked` write for the life of the page.
+    callAllSafely(handlers);
   });
 }
 
@@ -767,7 +772,6 @@ function initStyleSheetObserver(
     };
   }
 
-  // eslint-disable-next-line @typescript-eslint/unbound-method
   const insertRule = win.CSSStyleSheet.prototype.insertRule;
   win.CSSStyleSheet.prototype.insertRule = new Proxy(insertRule, {
     apply: callbackWrapper(
@@ -816,7 +820,6 @@ function initStyleSheetObserver(
     return win.CSSStyleSheet.prototype.insertRule.apply(this, [rule, index]);
   };
 
-  // eslint-disable-next-line @typescript-eslint/unbound-method
   const deleteRule = win.CSSStyleSheet.prototype.deleteRule;
   win.CSSStyleSheet.prototype.deleteRule = new Proxy(deleteRule, {
     apply: callbackWrapper(
@@ -863,7 +866,6 @@ function initStyleSheetObserver(
   let replace: (text: string) => Promise<CSSStyleSheet>;
 
   if (win.CSSStyleSheet.prototype.replace) {
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     replace = win.CSSStyleSheet.prototype.replace;
     win.CSSStyleSheet.prototype.replace = new Proxy(replace, {
       apply: callbackWrapper(
@@ -938,7 +940,6 @@ function initStyleSheetObserver(
 
   let replaceSync: (text: string) => void;
   if (win.CSSStyleSheet.prototype.replaceSync) {
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     replaceSync = win.CSSStyleSheet.prototype.replaceSync;
     win.CSSStyleSheet.prototype.replaceSync = new Proxy(replaceSync, {
       apply: callbackWrapper(
@@ -1003,9 +1004,7 @@ function initStyleSheetObserver(
 
   Object.entries(supportedNestedCSSRuleTypes).forEach(([typeKey, type]) => {
     unmodifiedFunctions[typeKey] = {
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       insertRule: type.prototype.insertRule,
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       deleteRule: type.prototype.deleteRule,
     };
 
@@ -1198,9 +1197,7 @@ export function initAdoptedStyleSheetObserver(
     Object.defineProperty(host, 'adoptedStyleSheets', {
       configurable: originalPropertyDescriptor.configurable,
       enumerable: originalPropertyDescriptor.enumerable,
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       get: originalPropertyDescriptor.get,
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       set: originalPropertyDescriptor.set,
     });
   });
@@ -1218,7 +1215,6 @@ function initStyleDeclarationObserver(
     mutationQueue,
   }: { win: IWindow; mutationQueue: StyleSheetMutationQueue },
 ): listenerHandler {
-  // eslint-disable-next-line @typescript-eslint/unbound-method
   const setProperty = win.CSSStyleDeclaration.prototype.setProperty;
   win.CSSStyleDeclaration.prototype.setProperty = new Proxy(setProperty, {
     apply: callbackWrapper(
@@ -1243,7 +1239,6 @@ function initStyleDeclarationObserver(
           stylesheetManager.styleMirror,
         );
         if ((id && id !== -1) || (styleId && styleId !== -1)) {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           const index = getNestedCSSRulePositions(thisArg.parentRule!);
           mutationQueue.queueMutation(sheet, () =>
             styleDeclarationCb({
@@ -1264,7 +1259,6 @@ function initStyleDeclarationObserver(
     ),
   });
 
-  // eslint-disable-next-line @typescript-eslint/unbound-method
   const removeProperty = win.CSSStyleDeclaration.prototype.removeProperty;
   win.CSSStyleDeclaration.prototype.removeProperty = new Proxy(removeProperty, {
     apply: callbackWrapper(
@@ -1289,7 +1283,6 @@ function initStyleDeclarationObserver(
           stylesheetManager.styleMirror,
         );
         if ((id && id !== -1) || (styleId && styleId !== -1)) {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           const index = getNestedCSSRulePositions(thisArg.parentRule!);
           mutationQueue.queueMutation(sheet, () =>
             styleDeclarationCb({
@@ -1470,7 +1463,6 @@ function initCustomElementObserver({
   customElementCb,
 }: observerParam): listenerHandler {
   const win = doc.defaultView as IWindow;
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
   if (!win || !win.customElements) return () => {};
   const restoreHandler = patch(
     win.customElements,
@@ -1616,21 +1608,31 @@ export function initObservers(
   const handlers: listenerHandler[] = [];
 
   const cleanup = callbackWrapper(() => {
-    // Clean up this observer's mutation buffer
-    if (mutationBuffer) {
-      mutationBuffer.destroy();
-      mutationBuffer.reset();
-      // Remove only this buffer from the global array
-      const index = mutationBuffers.indexOf(mutationBuffer);
-      if (index !== -1) {
-        mutationBuffers.splice(index, 1);
+    try {
+      // Clean up this observer's mutation buffer
+      if (mutationBuffer) {
+        try {
+          mutationBuffer.destroy();
+          mutationBuffer.reset();
+        } finally {
+          // Remove only this buffer from the global array. In a finally: a throw
+          // above would otherwise leave it pinned there, holding this document
+          // and its canvas manager alive.
+          const index = mutationBuffers.indexOf(mutationBuffer);
+          if (index !== -1) {
+            mutationBuffers.splice(index, 1);
+          }
+        }
       }
+      // Disconnect the shadow observers owned by this document (e.g. an iframe being
+      // torn down) without touching the rest of the page's shadow observation.
+      o.shadowDomManager.resetForDoc(o.doc);
+      mutationObserver?.disconnect();
+    } finally {
+      // Releasing this document's listeners and patched APIs is the whole point
+      // of teardown, so it runs even when a step above throws.
+      callAllSafely(handlers);
     }
-    // Disconnect the shadow observers owned by this document (e.g. an iframe being
-    // torn down) without touching the rest of the page's shadow observation.
-    o.shadowDomManager.resetForDoc(o.doc);
-    mutationObserver?.disconnect();
-    handlers.forEach((handler) => handler());
   });
 
   try {

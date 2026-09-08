@@ -6,7 +6,14 @@ import { SDK_DIST_CHANNEL } from '../constants'
 import { each, extend, stripEmptyProperties } from './general-utils'
 import { document, location, userAgent, window } from './globals'
 import type { BrowserDetectionHints, BrowserDetectionOptions } from '@posthog/core'
-import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from '@posthog/core'
+import {
+    detectBrowser,
+    detectBrowserVersion,
+    detectDevice,
+    detectDeviceType,
+    detectOS,
+    detectWebviewApp,
+} from '@posthog/core'
 import { getCookieValue } from './cookie-utils'
 
 const URL_REGEX_PREFIX = 'https?://(.*)'
@@ -297,6 +304,7 @@ export function getEventProperties(
         ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
         : []
     const [os_name, os_version] = detectOS(userAgent)
+    const [webviewApp, webviewAppVersion] = detectWebviewApp(userAgent)
     const browserHints = getBrowserDetectionHints()
     const browserOptions: BrowserDetectionOptions = {}
     if (!isUndefined(detectGoogleSearchApp)) {
@@ -305,7 +313,7 @@ export function getEventProperties(
 
     type DeviceDetectionOptions = NonNullable<Parameters<typeof detectDeviceType>[1]>
     const deviceOptions: DeviceDetectionOptions = {}
-    // eslint-disable-next-line compat/compat
+    // oxlint-disable-next-line compat/compat
     const userAgentDataPlatform = navigator?.userAgentData?.platform
     const maxTouchPoints = navigator?.maxTouchPoints
     const screenWidth = window?.screen?.width
@@ -332,6 +340,8 @@ export function getEventProperties(
             $os: os_name,
             $os_version: os_version,
             $browser: detectBrowser(userAgent, navigator.vendor, browserHints, browserOptions),
+            $webview_app: webviewApp,
+            $webview_app_version: webviewAppVersion,
             $device: detectDevice(userAgent),
             $device_type: detectDeviceType(userAgent, deviceOptions),
             $timezone: getTimezone(),

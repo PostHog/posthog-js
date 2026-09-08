@@ -118,7 +118,7 @@ function RouteTemplatePageViewTracker() {
     if (typeof useParams !== 'function') {
         if (!hasWarnedAboutUnsupportedRouteTemplates) {
             hasWarnedAboutUnsupportedRouteTemplates = true
-            // eslint-disable-next-line no-console
+            // oxlint-disable-next-line no-console
             console.warn(
                 '[PostHog Next.js] captureRouteTemplate requires Next.js 13.3 or later. Capturing pageview without $route.'
             )

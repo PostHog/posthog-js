@@ -171,6 +171,16 @@
             }
         },
         {
+            "files": [
+                "examples/example-nextjs/next.config.ts",
+                "packages/node/examples/etag-polling-test.mjs",
+                "playground/vite/vite.config.ts"
+            ],
+            "env": {
+                "node": true
+            }
+        },
+        {
             "files": ["packages/react-native/src/**", "packages/react-native-plugin/src/**"],
             "rules": {
                 "typescript/no-require-imports": "off"

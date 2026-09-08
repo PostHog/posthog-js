@@ -58,7 +58,7 @@ const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {
 
         critical: (...args: any[]) => {
             // Critical errors are always logged to the console
-            // eslint-disable-next-line no-console
+            // oxlint-disable-next-line no-console
             console.error(prefix, ...args)
         },
 

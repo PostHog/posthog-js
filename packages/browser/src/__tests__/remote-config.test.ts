@@ -11,7 +11,11 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import { RemoteConfigLoader } from '../remote-config'
 import { RequestRouter } from '../utils/request-router'
 import { PostHog } from '../posthog-core'
-import { PostHogConfig, RemoteConfig } from '../types'
+import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
+import type { Client } from '@posthog/browser-common'
+import type { RequestResponse } from '@posthog/types'
+import { Autocapture } from '../autocapture'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import '../entrypoints/external-scripts-loader'
 import { assignableWindow } from '../utils/globals'
 import { createMockPostHog } from './helpers/posthog-instance'
@@ -51,6 +55,127 @@ describe('RemoteConfigLoader', () => {
 
     afterEach(() => {
         vi.useRealTimers()
+    })
+
+    describe('autocapture with cached remote config', () => {
+        let autocapture: Autocapture
+        let capture: ReturnType<typeof vi.fn>
+        let button: HTMLButtonElement
+        let completeRequest: (response: RequestResponse) => void
+        let cachedOptOut: boolean | undefined
+
+        beforeEach(() => {
+            cachedOptOut = false
+            capture = vi.fn()
+            button = document.createElement('button')
+            document.body.appendChild(button)
+            assignableWindow._POSTHOG_REMOTE_CONFIG = undefined
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn((_ph, _name, cb) => cb())
+            posthog.config.autocapture = true
+            posthog._send_request = vi.fn(({ callback }) => {
+                completeRequest = callback!
+            })
+            autocapture = new Autocapture({
+                refresh: (config) => {
+                    config.enabled = !!posthog.config.autocapture
+                    config.remoteRequestsDisabled = posthog._shouldDisableFlags()
+                },
+            })
+            autocapture.setup({
+                capture,
+                kv: {
+                    get: (key: string) => (key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? cachedOptOut : undefined),
+                    set: (_key: string, value: boolean) => {
+                        cachedOptOut = value
+                    },
+                },
+                onRemoteConfig: (handler: (result: RemoteConfigResult) => void) => {
+                    posthog._onRemoteConfig = handler
+                    return { dispose: vi.fn() }
+                },
+            } as unknown as Client)
+        })
+
+        afterEach(() => {
+            autocapture.dispose()
+            assignableWindow._POSTHOG_REMOTE_CONFIG = undefined
+        })
+
+        it.each([
+            ['enabled', { statusCode: 200, json: { autocapture_opt_out: false } }, true],
+            ['disabled', { statusCode: 200, json: { autocapture_opt_out: true } }, false],
+            ['missing opt-out', { statusCode: 200, json: {} }, true],
+            ['unavailable config', { statusCode: 200 }, true],
+            ['network error', { statusCode: 0, error: new TypeError('Failed to fetch') }, true],
+            ['timeout', { statusCode: 0, error: new DOMException('Timed out', 'AbortError') }, true],
+        ])('waits for the initial %s outcome before using cached enablement', (_name, response, enabled) => {
+            new RemoteConfigLoader(posthog).load()
+            button.click()
+            expect(capture).not.toHaveBeenCalled()
+            expect(autocapture.isEnabled).toBe(false)
+
+            completeRequest(response)
+            expect(autocapture.isEnabled).toBe(enabled)
+            expect(capture).not.toHaveBeenCalled() // Do not replay clicks from before the config outcome.
+            button.click()
+            expect(capture).toHaveBeenCalledTimes(enabled ? 1 : 0)
+        })
+
+        it.each([true, false, undefined])('preserves cached opt-out %s when requests are disabled', (optOut) => {
+            cachedOptOut = optOut
+            posthog.config.advanced_disable_flags = true
+            autocapture.startIfEnabled()
+
+            new RemoteConfigLoader(posthog).load()
+            button.click()
+
+            expect(posthog._send_request).not.toHaveBeenCalled()
+            expect(capture).toHaveBeenCalledTimes(optOut === true ? 0 : 1)
+        })
+
+        it.each([true, false])('applies preloaded opt-out %s synchronously', (optOut) => {
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [posthog.config.token]: { config: { autocapture_opt_out: optOut }, siteApps: [] },
+            }
+
+            new RemoteConfigLoader(posthog).load()
+            button.click()
+
+            expect(posthog._send_request).not.toHaveBeenCalled()
+            expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).not.toHaveBeenCalled()
+            expect(capture).toHaveBeenCalledTimes(optOut ? 0 : 1)
+        })
+
+        it.each([true, false])('preserves local opt-out with remote opt-out %s', (optOut) => {
+            posthog.config.autocapture = false
+            new RemoteConfigLoader(posthog).load()
+            button.click()
+            completeRequest({ statusCode: 200, json: { autocapture_opt_out: optOut } })
+            button.click()
+
+            expect(autocapture.isEnabled).toBe(false)
+            expect(capture).not.toHaveBeenCalled()
+        })
+
+        it('uses subsequent config outcomes without re-gating or duplicating listeners', () => {
+            const loader = new RemoteConfigLoader(posthog)
+            loader.load()
+            completeRequest({ statusCode: 200, json: { autocapture_opt_out: false } })
+            button.click()
+            expect(capture).toHaveBeenCalledTimes(1)
+
+            loader.load()
+            button.click()
+            expect(capture).toHaveBeenCalledTimes(2)
+            completeRequest({ statusCode: 200, json: { autocapture_opt_out: true } })
+            button.click()
+            expect(capture).toHaveBeenCalledTimes(2)
+
+            loader.load()
+            completeRequest({ statusCode: 200, json: { autocapture_opt_out: false } })
+            button.click()
+            expect(capture).toHaveBeenCalledTimes(3)
+        })
     })
 
     describe('remote config', () => {

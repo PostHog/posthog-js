@@ -17,6 +17,7 @@ import {
     SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
+import { resetSessionStorageSupported } from '../../../storage'
 import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
 import {
     FULL_SNAPSHOT_EVENT_TYPE,
@@ -61,6 +62,8 @@ import {
     RECORDING_BUFFER_TIMEOUT,
     RECORDING_MAX_EVENT_SIZE,
     RECORDING_REMOTE_CONFIG_TTL_MS,
+    PENDING_BUFFER_STORAGE_SUFFIX,
+    SEVEN_MEGABYTES,
 } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
 
 // Type and source defined here designate a non-user-generated recording event
@@ -269,6 +272,10 @@ describe('Lazy SessionRecording', () => {
             _emit(createFullSnapshot())
         })
         assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = _addCustomEvent
+        assignableWindow.__PosthogExtensions__.rrweb.record.mirror = {
+            getId: (node) => (!node || !document.contains(node) ? -1 : node.nodeName === 'LINK' ? -2 : 1),
+            getNode: () => null,
+        }
 
         assignableWindow.__PosthogExtensions__.rrwebPlugins = {
             getRecordConsolePlugin: vi.fn(),
@@ -2311,6 +2318,154 @@ describe('Lazy SessionRecording', () => {
 
                     expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
                 })
+
+                describe('reporting the hold', () => {
+                    // a held epoch reads as 'active' but uploads nothing, so the hold has to
+                    // report itself or support cannot tell it from a working recording
+                    const holdReason = () =>
+                        sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties
+                            .$sdk_debug_replay_flush_hold_reason
+
+                    it('names a fresh-start hold on captured events while the status still reads active', () => {
+                        vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                        expect(posthog.capture).not.toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.anything(),
+                            expect.anything()
+                        )
+                        expect(sessionRecording.status).toEqual('active')
+                        expect(holdReason()).toEqual('no_interaction_since_recording_started')
+                    })
+
+                    it('names a rotation-born hold, and stops naming it once the hold releases', () => {
+                        const rotationTimestamp = rotateExternallyWhileUnknown()
+                        emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                        expect(holdReason()).toEqual('no_interaction_since_session_rotated')
+
+                        emitActiveEvent(rotationTimestamp + 200)
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                        expect(holdReason()).toBeUndefined()
+                    })
+
+                    it('logs the hold reason once per held epoch', () => {
+                        assignableWindow.POSTHOG_DEBUG = true
+                        const logSpy = vi.spyOn(window!.console, 'log').mockImplementation(() => {})
+
+                        const rotationTimestamp = rotateExternallyWhileUnknown()
+                        emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+                        emitInactiveEvent(rotationTimestamp + 200, 'unknown')
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                        // the logger prepends a prefix arg, so the message is the second call arg
+                        const holdLogs = logSpy.mock.calls.filter(
+                            (call) => typeof call[1] === 'string' && call[1].includes('holding buffer')
+                        )
+                        expect(holdLogs).toHaveLength(1)
+                        expect(holdLogs[0][1]).toContain('no_interaction_since_session_rotated')
+
+                        logSpy.mockRestore()
+                        assignableWindow.POSTHOG_DEBUG = undefined
+                    })
+
+                    it('logs a new held epoch after an explicit stop and restart in the same session', () => {
+                        assignableWindow.POSTHOG_DEBUG = true
+                        const logSpy = vi.spyOn(window!.console, 'log').mockImplementation(() => {})
+                        const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                        lazyRecorder.stop()
+                        logSpy.mockClear()
+                        lazyRecorder.start()
+
+                        const holdLogs = logSpy.mock.calls.filter(
+                            (call) => typeof call[1] === 'string' && call[1].includes('holding buffer')
+                        )
+                        expect(holdLogs).toHaveLength(1)
+                        expect(holdLogs[0][1]).toContain('no_interaction_since_recording_started')
+
+                        logSpy.mockRestore()
+                        assignableWindow.POSTHOG_DEBUG = undefined
+                    })
+
+                    it('logs one reason for a rotation-born epoch even when the dedup key does not absorb the transient fresh-start hold', () => {
+                        // the "logs once" guarantee also has to hold when the previous dedup key
+                        // does not happen to match the transient fresh-start hold that start()
+                        // sets before the rotation reason overwrites it. A prior rotation leaves a
+                        // `...:no_interaction_since_session_rotated` key, so the second rotation's
+                        // transient `no_interaction_since_recording_started` no longer collides.
+                        assignableWindow.POSTHOG_DEBUG = true
+                        const logSpy = vi.spyOn(window!.console, 'log').mockImplementation(() => {})
+
+                        const firstRotationTimestamp = rotateExternallyWhileUnknown()
+                        emitInactiveEvent(firstRotationTimestamp + 100, 'unknown')
+
+                        sessionIdGeneratorMock.mockImplementation(() => 'second-rotated-session-id')
+                        const secondRotationTimestamp =
+                            firstRotationTimestamp + sessionManager['_sessionTimeoutMs'] + 1000
+                        vi.useFakeTimers().setSystemTime(new Date(secondRotationTimestamp))
+                        logSpy.mockClear()
+                        sessionManager.checkAndGetSessionAndWindowId(false, secondRotationTimestamp)
+
+                        const holdLogs = logSpy.mock.calls.filter(
+                            (call) => typeof call[1] === 'string' && call[1].includes('holding buffer')
+                        )
+                        expect(holdLogs).toHaveLength(1)
+                        expect(holdLogs[0][1]).toContain('no_interaction_since_session_rotated')
+
+                        logSpy.mockRestore()
+                        assignableWindow.POSTHOG_DEBUG = undefined
+                    })
+
+                    // the sdkDebugProperties getter keeps running after stop()/discard() (the
+                    // recorder is torn down but not dropped), so the hold reason has to clear or a
+                    // stopped recorder keeps blaming user inactivity on every later captured event
+                    it('stops naming the hold once the recorder is stopped (opt-out)', () => {
+                        vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                        expect(holdReason()).toEqual('no_interaction_since_recording_started')
+
+                        sessionRecording['_lazyLoadedSessionRecording'].stop()
+
+                        expect(holdReason()).toBeUndefined()
+                    })
+
+                    it('stops naming the hold immediately while queued compression drains', async () => {
+                        const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                        expect(holdReason()).toEqual('no_interaction_since_recording_started')
+
+                        lazyRecorder['_queuedCompressionEvents'] = 1
+                        let resolveDrain: () => void = () => {}
+                        const compressionQueue = new Promise<void>((resolve) => {
+                            resolveDrain = resolve
+                        })
+                        lazyRecorder['_compressionQueue'] = compressionQueue
+
+                        lazyRecorder.stop()
+
+                        expect(lazyRecorder['_isStoppingAfterCompression']).toBe(true)
+                        const reasonImmediatelyAfterStop = holdReason()
+                        resolveDrain()
+                        await compressionQueue
+                        await Promise.resolve()
+                        await Promise.resolve()
+
+                        expect(reasonImmediatelyAfterStop).toBeUndefined()
+                    })
+
+                    it('stops naming the hold once the recorder is discarded', () => {
+                        vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                        expect(holdReason()).toEqual('no_interaction_since_recording_started')
+
+                        sessionRecording['_lazyLoadedSessionRecording'].discard()
+
+                        expect(holdReason()).toBeUndefined()
+                    })
+                })
             })
 
             describe('recording volume invariants', () => {
@@ -2702,61 +2857,74 @@ describe('Lazy SessionRecording', () => {
                 }
             })
 
-            it('attributes the backdated sessionIdle marker to the session that went idle, not a rotation-born session', () => {
-                // A suspended tab emits nothing while backgrounded, so idle is only detected on
-                // wake — by which time an app-level capture may already have rotated the session.
-                // The sessionIdle marker is restamped to lastActivity + threshold (up to hours in
-                // the past); if it follows the rotation into the new session, it drags the new
-                // recording's start back by the whole idle gap and the player reports the prefix
-                // as unplayable ("the initial snapshot of the screen arrived late").
-                _addCustomEvent.mockImplementation((tag: string, payload: any) => {
-                    _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
-                })
-                try {
-                    const lazy = sessionRecording['_lazyLoadedSessionRecording']!
-                    vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
-                    emitActiveEvent(startingTimestamp + 100)
-                    _emit(createFullSnapshot({ timestamp: startingTimestamp + 110 }))
-                    vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
-                    ;(posthog.capture as Mock).mockClear()
-
-                    // the tab sleeps well past the session timeout; on wake an app-level capture
-                    // rotates the session before any rrweb event reaches the recorder
-                    const rotatedSessionId = 'wake-rotated-session-id'
-                    sessionIdGeneratorMock.mockImplementation(() => rotatedSessionId)
-                    const wakeTimestamp = startingTimestamp + 97 * 60 * 1000
-                    vi.setSystemTime(new Date(wakeTimestamp))
-                    sessionManager.checkAndGetSessionAndWindowId(false, wakeTimestamp)
-                    expect(lazy['_sessionId']).toEqual(rotatedSessionId)
-
-                    // the idle marker ships with the session that actually went idle
-                    expect(posthog.capture).toHaveBeenCalledWith(
-                        '$snapshot',
-                        expect.objectContaining({
-                            $session_id: sessionId,
-                            $snapshot_data: expect.arrayContaining([
-                                expect.objectContaining({ data: expect.objectContaining({ tag: 'sessionIdle' }) }),
-                            ]),
-                        }),
-                        expect.any(Object)
-                    )
-
-                    // nothing attributed to the rotation-born session predates the rotation
-                    const newEpochEvents = [
-                        ...(posthog.capture as Mock).mock.calls
-                            .filter(([name, props]) => name === '$snapshot' && props.$session_id === rotatedSessionId)
-                            .flatMap(([, props]) => props.$snapshot_data),
-                        ...lazy['_buffer'].data,
-                    ]
-                    expect(lazy['_buffer'].sessionId).toEqual(rotatedSessionId)
-                    expect(newEpochEvents.length).toBeGreaterThan(0)
-                    newEpochEvents.forEach((e) => {
-                        expect(e.timestamp).toBeGreaterThanOrEqual(wakeTimestamp)
+            it.each([
+                ['idle is detected on wake', false],
+                ['idle was detected before the tab slept', true],
+            ])(
+                'attributes the backdated sessionIdle marker to the session that went idle, not a rotation-born session, when %s',
+                (_, idleBeforeWake) => {
+                    const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                    _addCustomEvent.mockImplementation((tag: string, payload: any) => {
+                        _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
                     })
-                } finally {
-                    _addCustomEvent.mockReset()
+                    // rrweb takes Meta and FullSnapshot synchronously inside record()
+                    recordMock.mockImplementation(({ emit }) => {
+                        _emit = emit
+                        emit(createMetaSnapshot({ timestamp: Date.now() }))
+                        emit(createFullSnapshot({ timestamp: Date.now() }))
+                        return () => {}
+                    })
+                    try {
+                        const lazy = sessionRecording['_lazyLoadedSessionRecording']!
+                        vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        emitActiveEvent(startingTimestamp + 100)
+                        _emit(createFullSnapshot({ timestamp: startingTimestamp + 110 }))
+                        vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        if (idleBeforeWake) {
+                            const idleTimestamp = startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000
+                            vi.setSystemTime(new Date(idleTimestamp))
+                            emitInactiveEvent(idleTimestamp, true)
+                        }
+
+                        const rotatedSessionId = 'wake-rotated-session-id'
+                        sessionIdGeneratorMock.mockImplementation(() => rotatedSessionId)
+                        const wakeTimestamp = startingTimestamp + 97 * 60 * 1000
+                        vi.setSystemTime(new Date(wakeTimestamp))
+                        sessionManager.checkAndGetSessionAndWindowId(false, wakeTimestamp)
+                        expect(lazy['_sessionId']).toEqual(rotatedSessionId)
+
+                        expect(posthog.capture).toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.objectContaining({
+                                $session_id: sessionId,
+                                $snapshot_data: expect.arrayContaining([
+                                    expect.objectContaining({ data: expect.objectContaining({ tag: 'sessionIdle' }) }),
+                                ]),
+                            }),
+                            expect.any(Object)
+                        )
+
+                        const newEpochEvents: any[] = [
+                            ...(posthog.capture as Mock).mock.calls
+                                .filter(
+                                    ([name, props]) => name === '$snapshot' && props.$session_id === rotatedSessionId
+                                )
+                                .flatMap(([, props]) => props.$snapshot_data),
+                            ...lazy['_buffer'].data,
+                        ]
+                        expect(lazy['_buffer'].sessionId).toEqual(rotatedSessionId)
+                        expect(newEpochEvents.map((e) => e.type)).toEqual(
+                            expect.arrayContaining([META_EVENT_TYPE, FULL_SNAPSHOT_EVENT_TYPE])
+                        )
+                        newEpochEvents.forEach((e) => {
+                            expect(e.data?.tag).not.toEqual('sessionIdle')
+                            expect(e.timestamp).toBeGreaterThanOrEqual(wakeTimestamp)
+                        })
+                    } finally {
+                        _addCustomEvent.mockReset()
+                    }
                 }
-            })
+            )
 
             it('drops a held buffer at the size cap and recovers with a fresh full snapshot on release', () => {
                 vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
@@ -2914,6 +3082,42 @@ describe('Lazy SessionRecording', () => {
                 // cleared so status returns 'disabled'.
                 expect(lazyRecorder['isStarted']).toEqual(true)
                 expect(['active', 'sampled', 'buffering']).toContain(sessionRecording.status)
+            })
+
+            it('completes the rotation restart when capturing a queued compression event throws', () => {
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+
+                emitActiveEvent(startingTimestamp + 100)
+                lazyRecorder['_pendingCompressionEvents'].push({
+                    event: createIncrementalSnapshot({ timestamp: startingTimestamp + 200 }),
+                    compressionEnabled: false,
+                    targetSessionId: lazyRecorder['_sessionId'],
+                    targetWindowId: lazyRecorder['_windowId'],
+                    generation: lazyRecorder['_compressionQueueGeneration'],
+                    processed: false,
+                    counted: true,
+                })
+                lazyRecorder['_queuedCompressionEvents'] = 1
+                lazyRecorder['_compressionQueue'] = Promise.resolve()
+                const captureSpy = vi
+                    .spyOn(lazyRecorder as any, '_captureQueuedCompressionEvent')
+                    .mockImplementationOnce(() => {
+                        throw new Error('capture failed')
+                    })
+
+                sessionIdGeneratorMock.mockImplementation(() => 'rotated-session-id')
+                const rotationTimestamp = startingTimestamp + 100 + sessionManager['_sessionTimeoutMs'] + 1000
+                vi.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                emitActiveEvent(rotationTimestamp)
+
+                expect(captureSpy).toHaveBeenCalledTimes(1)
+                expect(recordMock).toHaveBeenCalledTimes(2)
+                expect(lazyRecorder['isStarted']).toEqual(true)
+                expect(lazyRecorder['_sessionId']).toEqual('rotated-session-id')
+                expect(lazyRecorder['_isRestartingForSessionIdChange']).toEqual(false)
+                expect(lazyRecorder['_queuedCompressionEvents']).toEqual(0)
+                expect(lazyRecorder['_pendingCompressionEvents']).toEqual([])
             })
 
             // The rotation must not leave behind stale stop-in-progress state. If start()
@@ -3205,6 +3409,59 @@ describe('Lazy SessionRecording', () => {
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_isRestartingForSessionIdChange']).toBe(false)
                 const refreshedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG) as any
                 expect(refreshedConfig.cache_timestamp).toBeGreaterThan(Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS)
+            })
+
+            describe('with rrweb-faithful custom events and snapshots', () => {
+                let recordMock: Mock
+                beforeEach(() => {
+                    recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                    // real rrweb delivers addCustomEvent back through emit
+                    assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = vi.fn(
+                        (tag: string, payload: any) => {
+                            _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
+                        }
+                    )
+                    // real rrweb emits Meta + FullSnapshot synchronously when record() starts
+                    recordMock.mockImplementation(({ emit }: any) => {
+                        _emit = emit
+                        emit(createMetaSnapshot({ timestamp: Date.now() }))
+                        emit(createFullSnapshot({ timestamp: Date.now() }))
+                        return () => {}
+                    })
+                })
+
+                it('attributes the restart snapshot and $session_id_change to the new session on reset while active', () => {
+                    const firstSessionId = sessionId
+                    releaseInteractionHold()
+                    _emit(createFullSnapshot({ timestamp: 1000 }))
+                    _emit(createIncrementalSnapshot({ data: { source: IncrementalSource.MouseInteraction } }))
+
+                    const preservedConfig = posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+                    posthog.persistence?.clear()
+                    posthog.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: preservedConfig })
+                    sessionManager.resetSessionId()
+                    sessionId = 'rotated-session-id'
+                    ;(posthog.capture as Mock).mockClear()
+
+                    // identify() after reset() runs the session check while recording is active
+                    sessionManager.checkAndGetSessionAndWindowId()
+
+                    releaseInteractionHold()
+                    sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                    const snapshotCalls = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+                    const attributionFor = (predicate: (e: any) => boolean): string[] =>
+                        snapshotCalls.flatMap(([, props]) =>
+                            props.$snapshot_data.filter(predicate).map(() => props.$session_id)
+                        )
+
+                    expect(recordMock.mock.calls.length).toBe(2)
+                    expect(attributionFor((e) => e.data?.tag === '$session_id_change')).toEqual(['rotated-session-id'])
+                    expect(attributionFor((e) => e.type === FULL_SNAPSHOT_EVENT_TYPE && e.timestamp !== 1000)).toEqual([
+                        'rotated-session-id',
+                    ])
+                    expect(firstSessionId).not.toBe('rotated-session-id')
+                })
             })
         })
 
@@ -3574,12 +3831,15 @@ describe('Lazy SessionRecording', () => {
         })
 
         it('emits sanitized JSON-LD only while capture is enabled', async () => {
+            const target = document.createElement('div')
+            target.id = 'product-123'
+            document.body.appendChild(target)
             const script = document.createElement('script')
             script.type = 'application/ld+json'
             script.textContent = JSON.stringify({
                 '@context': 'https://schema.org',
                 '@type': 'Product',
-                '@id': 'https://example.com/products/123',
+                '@id': 'https://example.com/products/123#product-123',
                 name: 'Camera',
                 email: 'private@example.com',
             })
@@ -3596,7 +3856,7 @@ describe('Lazy SessionRecording', () => {
                 expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
                     '@context': 'https://schema.org',
                     '@type': 'Product',
-                    '@id': 'https://example.com/products/123',
+                    '@id': 'product-123',
                     name: 'Camera',
                 })
 
@@ -3617,7 +3877,43 @@ describe('Lazy SessionRecording', () => {
                     expect.objectContaining({ name: 'After disable' })
                 )
             } finally {
+                target.remove()
                 document.querySelectorAll('script[type="application/ld+json"]').forEach((element) => element.remove())
+            }
+        })
+
+        it.each([
+            ['rrweb ignored the target element', 'link', undefined],
+            ['attributeFilter omits id', 'div', ['class']],
+        ])('drops a JSON-LD @id when %s', async (_reason, tagName, attributeFilter) => {
+            const target = document.createElement(tagName)
+            target.id = 'product-123'
+            document.body.appendChild(target)
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            script.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                '@id': '#product-123',
+                name: 'Camera',
+            })
+            document.body.appendChild(script)
+            posthog.config.session_recording.captureJsonLd = true
+            posthog.config.session_recording.attributeFilter = attributeFilter
+
+            try {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                _emit(createMetaSnapshot())
+                await Promise.resolve()
+
+                expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    name: 'Camera',
+                })
+            } finally {
+                target.remove()
+                script.remove()
             }
         })
 
@@ -4348,6 +4644,26 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb']).not.toEqual(undefined)
 
             sessionRecording.stopRecording()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb']).toEqual(undefined)
+            expect(sessionRecording.started).toEqual(false)
+        })
+
+        it('completes teardown when the rrweb stop closure throws', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(sessionRecording.started).toEqual(true)
+
+            sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb'] = () => {
+                throw new TypeError('h is not a function')
+            }
+
+            expect(() => sessionRecording.stopRecording()).not.toThrow()
 
             expect(sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb']).toEqual(undefined)
             expect(sessionRecording.started).toEqual(false)
@@ -6828,6 +7144,191 @@ describe('Lazy SessionRecording', () => {
         })
     })
 
+    describe('parking a held buffer across a page unload', () => {
+        const parkedBufferKey = 'ph_test-token' + PENDING_BUFFER_STORAGE_SUFFIX
+        const parkedBuffer = () => JSON.parse(window!.sessionStorage.getItem(parkedBufferKey) || 'null')
+
+        // the shared harness leaves recorders from earlier tests listening on the window, so drive
+        // the handler directly rather than dispatching a real unload event
+        const unload = () => sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
+
+        beforeEach(() => {
+            // a frozen clock keeps the session from ageing out between the emit and the flush
+            vi.useFakeTimers()
+            vi.setSystemTime(new Date())
+            // the shared harness uses memory persistence, which opts out of every browser store
+            config.persistence = 'localStorage'
+            window!.sessionStorage.clear()
+            resetSessionStorageSupported()
+        })
+
+        afterEach(() => {
+            window!.sessionStorage.clear()
+        })
+
+        const startBelowMinimumDuration = (): number => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
+            return sessionStartTimestamp
+        }
+
+        it('parks the buffer the minimum-duration gate is holding, instead of losing it with the page', () => {
+            startBelowMinimumDuration()
+
+            unload()
+
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+            expect(parkedBuffer().data).toHaveLength(1)
+            expect(parkedBuffer().sessionId).toBe(sessionId)
+        })
+
+        it('parks a sampled-in buffer the minimum-duration gate is holding', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500, sampleRate: '1.00' },
+                })
+            )
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
+
+            // guard against a vacuous pass: a sampled-in session reports SAMPLED, not ACTIVE, and the
+            // minimum-duration gate must park it the same way
+            expect(sessionRecording.status).toBe('sampled')
+
+            unload()
+
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+            expect(parkedBuffer().data).toHaveLength(1)
+            expect(parkedBuffer().sessionId).toBe(sessionId)
+        })
+
+        it('parks markers that would otherwise open a recording with nothing to play', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            releaseInteractionHold()
+            _emit(createCustomSnapshot({ timestamp: Date.now() }, {}, 'sessionIdle'))
+
+            unload()
+
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+            expect(parkedBuffer().data).toHaveLength(1)
+        })
+
+        it('ships the parked buffer from the next page in the tab', () => {
+            const sessionStartTimestamp = startBelowMinimumDuration()
+            unload()
+            sessionRecording.stopRecording()
+            ;(posthog.capture as Mock).mockClear()
+
+            // the next page load in the same tab, so the same session and the same window
+            sessionRecording = new SessionRecording(posthog)
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+            expect(parkedBuffer()).toBeNull()
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 2000 }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            const shipped = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+            expect(shipped).toHaveLength(1)
+            const timestamps = (shipped[0][1].$snapshot_data as any[]).map((e) => e.timestamp)
+            expect(timestamps).toContain(sessionStartTimestamp + 100)
+            expect(timestamps).toContain(sessionStartTimestamp + 2000)
+        })
+
+        it.each(['_flushBuffer', '_onPageHide'] as const)(
+            'does not restore snapshots already shipped by %s after parking',
+            (flushMethod) => {
+                const sessionStartTimestamp = startBelowMinimumDuration()
+                unload()
+                expect(parkedBuffer().data).toHaveLength(1)
+
+                // beforeunload can be cancelled, or pagehide can flush later events past the gate.
+                _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 2000 }))
+                sessionRecording['_lazyLoadedSessionRecording'][flushMethod]()
+
+                const firstPageSnapshots = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+                expect(firstPageSnapshots).toHaveLength(1)
+                expect(
+                    firstPageSnapshots[0][1].$snapshot_data.map((event: eventWithTime) => event.timestamp)
+                ).toContain(sessionStartTimestamp + 100)
+
+                unload()
+                sessionRecording.stopRecording()
+                ;(posthog.capture as Mock).mockClear()
+                sessionRecording = new SessionRecording(posthog)
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: { minimumDurationMilliseconds: 1500 },
+                    })
+                )
+                _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 3000 }))
+                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                const nextPageSnapshots = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+                expect(nextPageSnapshots).toHaveLength(1)
+                expect(
+                    nextPageSnapshots[0][1].$snapshot_data.map((event: eventWithTime) => event.timestamp)
+                ).not.toContain(sessionStartTimestamp + 100)
+            }
+        )
+
+        it('keeps the parked buffer while a later flush is still held', () => {
+            startBelowMinimumDuration()
+            unload()
+            const parked = parkedBuffer()
+
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(parkedBuffer()).toEqual(parked)
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+        })
+
+        it('does not restore a buffer parked by another session', () => {
+            startBelowMinimumDuration()
+            unload()
+            sessionRecording.stopRecording()
+
+            window!.sessionStorage.setItem(
+                parkedBufferKey,
+                JSON.stringify({ ...parkedBuffer(), sessionId: 'some-other-session' })
+            )
+
+            sessionRecording = new SessionRecording(posthog)
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(0)
+        })
+
+        it('does not park a buffer a flush holds while the page stays open', () => {
+            startBelowMinimumDuration()
+
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(parkedBuffer()).toBeNull()
+        })
+
+        it('does not park while recording is paused', () => {
+            startBelowMinimumDuration()
+            sessionRecording['_lazyLoadedSessionRecording']['_pauseRecording']()
+
+            unload()
+
+            expect(parkedBuffer()).toBeNull()
+        })
+    })
+
     describe('canvas', () => {
         it('passes the remote config to rrweb', () => {
             sessionRecording.onRemoteConfig(
@@ -8718,7 +9219,7 @@ describe('Lazy SessionRecording', () => {
                 recordMock.mockImplementation(({ emit }) => {
                     _emit = emit
                     const flushDeferredCss = () => emit(deferredCssMutation)
-                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
                     window!.addEventListener('pagehide', flushDeferredCss)
                     return () => window!.removeEventListener('pagehide', flushDeferredCss)
                 })
@@ -8781,7 +9282,7 @@ describe('Lazy SessionRecording', () => {
             timestamp: Date.now(),
         })
 
-        it('ships mutations the recorder emits while stopping, not just buffers them', () => {
+        function startWithStopEmittingRecorder(stopEvents = [deferredCssMutation]): void {
             loadScriptMock.mockImplementation((_ph, _path, callback) => {
                 addRRwebToWindow()
                 const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as vi.Mock
@@ -8789,13 +9290,25 @@ describe('Lazy SessionRecording', () => {
                     _emit = emit
                     // mirror the real recorder: stopping rrweb synchronously flushes the
                     // still-deferred stylesheet mutations through the emit path
-                    return () => emit(deferredCssMutation)
+                    return () => {
+                        for (const event of stopEvents) {
+                            emit(event)
+                        }
+                    }
                 })
                 // the mutation throttler resolves the mutated node through the mirror
                 recordMock.mirror = { getNode: () => null }
                 callback()
             })
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+        }
+
+        afterEach(() => {
+            vi.useRealTimers()
+        })
+
+        it('ships mutations the recorder emits while stopping, not just buffers them', () => {
+            startWithStopEmittingRecorder()
             releaseInteractionHold()
             _emit(createFullSnapshot())
 
@@ -8808,6 +9321,48 @@ describe('Lazy SessionRecording', () => {
                 expect.objectContaining({ $snapshot_data: expect.arrayContaining([deferredCssMutation]) }),
                 expect.any(Object)
             )
+        })
+
+        it('drops mutations the recorder emits while discarding a held epoch', () => {
+            startWithStopEmittingRecorder()
+            // no interaction, so the epoch is still held - the usual state when remote config
+            // arrives and turns recording off
+            _emit(createFullSnapshot())
+            vi.useFakeTimers()
+
+            sessionRecording['_lazyLoadedSessionRecording'].discard()
+
+            // discard means nothing from this epoch is billable, so the mutation rrweb emits as it
+            // stops must not schedule a flush that outlives teardown's timer clear
+            vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT * 2)
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
+        })
+
+        it('does not upload when stop-time mutations exceed the size cap during discard', () => {
+            const largeDeferredCssMutation = createIncrementalSnapshot({
+                data: {
+                    source: 0,
+                    texts: [],
+                    attributes: [
+                        {
+                            id: 42,
+                            attributes: { _cssText: `/*${'x'.repeat(RECORDING_MAX_EVENT_SIZE * 0.6)}*/` },
+                        },
+                    ],
+                    removes: [],
+                    adds: [],
+                },
+                timestamp: Date.now(),
+            })
+            startWithStopEmittingRecorder([largeDeferredCssMutation, largeDeferredCssMutation])
+            releaseInteractionHold()
+            ;(posthog.capture as Mock).mockClear()
+
+            sessionRecording['_lazyLoadedSessionRecording'].discard()
+
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
         })
     })
 
@@ -8891,6 +9446,50 @@ describe('Lazy SessionRecording', () => {
                 // recording survives the telemetry failure
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(2)
             })
+        })
+    })
+
+    describe('when capturing one snapshot chunk throws', () => {
+        let logSpy: vi.SpyInstance
+        let warnSpy: vi.SpyInstance
+
+        beforeEach(() => {
+            assignableWindow.POSTHOG_DEBUG = true
+            logSpy = vi.spyOn(window!.console, 'log').mockImplementation(() => {})
+            warnSpy = vi.spyOn(window!.console, 'warn').mockImplementation(() => {})
+        })
+
+        afterEach(() => {
+            logSpy.mockRestore()
+            warnSpy.mockRestore()
+            assignableWindow.POSTHOG_DEBUG = undefined
+        })
+
+        it('warns and ships the chunks after it', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            releaseInteractionHold()
+
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 'first' } }))
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 'second' } }))
+
+            const lazy = sessionRecording['_lazyLoadedSessionRecording']
+            // over the split limit, so the flush ships one chunk per buffered event
+            lazy['_buffer'].size = SEVEN_MEGABYTES
+
+            let snapshotCaptures = 0
+            ;(posthog.capture as Mock).mockImplementation((eventName: string) => {
+                if (eventName === '$snapshot' && ++snapshotCaptures === 1) {
+                    throw new RangeError('invalid field value')
+                }
+            })
+
+            expect(() => lazy['_flushBuffer']()).not.toThrow()
+            expect(snapshotCaptures).toEqual(2)
+            expect(warnSpy).toHaveBeenCalledWith(
+                expect.any(String),
+                'could not capture snapshot chunk - skipping it',
+                expect.any(RangeError)
+            )
         })
     })
 })

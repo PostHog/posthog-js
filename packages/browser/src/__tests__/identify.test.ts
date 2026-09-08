@@ -2,6 +2,7 @@ import { mockLogger } from './helpers/mock-logger'
 
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { isUndefined } from '@posthog/core'
 
 describe('identify', () => {
     // Note that there are other tests for identify in posthog-core.identify.js
@@ -63,7 +64,12 @@ describe('identify', () => {
             const beforeSendMock = vi.fn().mockImplementation((e) => e)
             const posthog = await createPosthogInstance(token, { before_send: beforeSendMock })
 
-            posthog.identify(invalidId as any)
+            if (isUndefined(invalidId)) {
+                // @ts-expect-error A distinct ID is required.
+                posthog.identify()
+            } else {
+                posthog.identify(invalidId as any)
+            }
 
             expect(beforeSendMock).not.toHaveBeenCalled()
             expect(mockLogger.critical).toHaveBeenCalledWith(expectedMessage)

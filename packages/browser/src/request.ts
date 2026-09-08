@@ -454,8 +454,15 @@ const _sendBeacon = (options: RequestWithOptions) => {
             return
         }
 
-        logger.warn(`Beacon of ~${estimatedSize ?? 0} bytes was rejected by the browser, falling back to fetch`)
-        _fetch({ ...options, _keepaliveDisabled: true })
+        logger.warn(
+            `Beacon of ~${estimatedSize ?? 0} bytes was rejected by the browser, falling back to ${fetch ? 'fetch' : 'XHR'}`
+        )
+        if (fetch) {
+            // _keepaliveDisabled: a beacon-rejected payload would fail a keepalive fetch too (shared quota)
+            _fetch({ ...options, _keepaliveDisabled: true })
+        } else {
+            xhr(options)
+        }
     } catch (error) {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here
@@ -481,7 +488,7 @@ const addSentAtToCaptureBody = (data: NonNullable<RequestWithOptions['data']>): 
     const batch = (isArray(data) ? data : [data]).map((event) => ({
         ...event,
         // This is the typed canonical timestamp override, not an arbitrary event property.
-        // eslint-disable-next-line posthog-js/no-direct-date-check
+        // oxlint-disable-next-line posthog-js/no-direct-date-check
         ...(event.timestamp instanceof Date && !isNaN(event.timestamp.getTime())
             ? { timestamp: event.timestamp.toISOString() }
             : {}),

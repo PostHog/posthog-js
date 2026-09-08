@@ -34,6 +34,7 @@ import {
   checkDataURLSize,
   recompressBase64Image,
   absolutifyURLs,
+  SCRIPT_PLACEHOLDER,
 } from './utils';
 import dom from '@posthog/rrweb-utils';
 import {
@@ -74,9 +75,9 @@ function getValidTagName(element: Element): Lowercase<string> {
 let canvasService: HTMLCanvasElement | null;
 let canvasCtx: CanvasRenderingContext2D | null;
 
-// eslint-disable-next-line no-control-regex
+// oxlint-disable-next-line no-control-regex
 const SRCSET_NOT_SPACES = /^[^ \t\n\r\u000c]+/; // Don't use \s, to avoid matching non-breaking space
-// eslint-disable-next-line no-control-regex
+// oxlint-disable-next-line no-control-regex
 const SRCSET_COMMAS_OR_SPACES = /^[, \t\n\r\u000c]+/;
 
 function getAbsoluteSrcsetString(doc: Document, attributeValue: string) {
@@ -106,7 +107,6 @@ function getAbsoluteSrcsetString(doc: Document, attributeValue: string) {
   }
 
   const output = [];
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     collectCharacters(SRCSET_COMMAS_OR_SPACES);
     if (pos >= attributeValue.length) {
@@ -124,7 +124,6 @@ function getAbsoluteSrcsetString(doc: Document, attributeValue: string) {
       let descriptorsStr = '';
       url = absoluteToDoc(doc, url);
       let inParens = false;
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const c = attributeValue.charAt(pos);
         if (c === '') {
@@ -269,7 +268,6 @@ export function transformAttribute(
 export function ignoreAttribute(
   tagName: string,
   name: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _value: unknown,
 ): boolean {
   return (tagName === 'video' || tagName === 'audio') && name === 'autoplay';
@@ -678,7 +676,7 @@ function serializeTextNode(
     text = absolutifyURLs(text, getHref(options.doc));
   }
   if (isScript) {
-    text = 'SCRIPT_PLACEHOLDER';
+    text = SCRIPT_PLACEHOLDER;
   }
   if (!isStyle && !isScript && text && needsMask) {
     text = maskTextFn

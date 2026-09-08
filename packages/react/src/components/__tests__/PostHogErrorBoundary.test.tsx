@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* oxlint-disable no-console */
 
 import * as React from 'react'
 import { render } from '@testing-library/react'

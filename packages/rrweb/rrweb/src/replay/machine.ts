@@ -12,7 +12,7 @@ import {
   type Emitter,
   IncrementalSource,
 } from '@posthog/rrweb-types';
-import { Timer, addDelay } from './timer';
+import { Timer, addDelay, firstPositionTimeOffset } from './timer';
 
 export type PlayerContext = {
   events: eventWithTime[];
@@ -222,9 +222,10 @@ export function createPlayerService(
             lastPlayedEvent?.type === EventType.IncrementalSnapshot &&
             lastPlayedEvent.data.source === IncrementalSource.MouseMove
           ) {
-            lastPlayedTimestamp =
-              lastPlayedEvent.timestamp +
-              lastPlayedEvent.data.positions[0]?.timeOffset;
+            const firstOffset = firstPositionTimeOffset(lastPlayedEvent.data);
+            if (firstOffset !== undefined) {
+              lastPlayedTimestamp = lastPlayedEvent.timestamp + firstOffset;
+            }
           }
           if (baselineTime < (lastPlayedTimestamp || 0)) {
             emitter.emit(ReplayerEvents.PlayBack);

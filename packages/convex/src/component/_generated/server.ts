@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* oxlint-disable */
 /**
  * Generated utilities for implementing server-side Convex query and mutation functions.
  *

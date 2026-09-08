@@ -1,6 +1,8 @@
 /// <reference lib="dom" />
 
 import { TextDecoder } from 'util'
+import { runInNewContext } from 'node:vm'
+import { createPosthogInstance } from './helpers/posthog-instance'
 import * as fflate from 'fflate'
 import { extendURLParams, request } from '../request'
 import { Compression, RequestWithOptions } from '../types'
@@ -104,6 +106,55 @@ describe('request', () => {
         beforeEach(() => {
             transport = 'XHR'
         })
+        it.each(['same-realm', 'cross-realm'])(
+            'preserves %s Error properties in an ordinary capture request',
+            async (realm) => {
+                const instance = await createPosthogInstance(uuidv7(), {
+                    api_transport: 'XHR',
+                    disable_compression: true,
+                    capture_pageview: false,
+                    before_send: (event) => event,
+                    properties_string_max_length: 20,
+                })
+                mockedXHR.send.mockClear()
+                const cause =
+                    realm === 'cross-realm'
+                        ? (runInNewContext('new TypeError("a long root cause message to truncate")') as Error)
+                        : new TypeError('a long root cause message to truncate')
+                const error = Object.assign(
+                    new AggregateError([cause, 'other reason'], 'aggregate', { cause: 'root reason' }),
+                    { code: 'E_TEST' }
+                )
+                const expectedCause = {
+                    name: cause.name,
+                    message: cause.message.slice(0, 20),
+                    stack: cause.stack?.slice(0, 20),
+                }
+
+                instance.capture('ordinary event', { nested: [{ error }] })
+
+                expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+                const {
+                    batch: [body],
+                } = JSON.parse((mockedXHR.send.mock.calls[0] as unknown[])[0] as string)
+                expect(body.event).toBe('ordinary event')
+                expect(body.properties.nested).toEqual([
+                    {
+                        error: {
+                            name: error.name,
+                            message: error.message,
+                            stack: error.stack?.slice(0, 20),
+                            code: 'E_TEST',
+                            cause: 'root reason',
+                            errors: [expectedCause, 'other reason'],
+                        },
+                    },
+                ])
+                expect(cause.message).toBe('a long root cause message to truncate')
+                expect(Object.keys(error)).toEqual(['code'])
+            }
+        )
+
         it('performs the request with default params', () => {
             request(
                 createRequest({
@@ -532,7 +583,7 @@ describe('request', () => {
             mockedFetch.mockImplementation((_url: string, opts: any) => {
                 capturedSignal = opts.signal
                 return new Promise((_resolve, reject) => {
-                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
                     opts.signal?.addEventListener('abort', () => reject(capturedAbortReason))
                 })
             })
@@ -577,7 +628,7 @@ describe('request', () => {
             nativeAbortError.name = 'AbortError'
             mockedFetch.mockImplementation((_url: string, opts: any) => {
                 return new Promise((_resolve, reject) => {
-                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
                     opts.signal?.addEventListener('abort', () => reject(nativeAbortError))
                 })
             })
@@ -914,6 +965,65 @@ describe('request', () => {
                     'Content-Type',
                     'application/x-www-form-urlencoded'
                 )
+            })
+
+            it.each(['name', 'message', 'stack'] as const)(
+                'sends the full batch when an additional Error has an unreadable %s',
+                (detail) => {
+                    const error = Object.assign(new Error('additional'), { code: 'E_TEST' })
+                    error.stack = 'safe stack'
+                    const expected: Record<string, unknown> = {
+                        name: error.name,
+                        message: error.message,
+                        stack: error.stack,
+                        code: error.code,
+                    }
+                    delete expected[detail]
+                    Object.defineProperty(error, detail, {
+                        enumerable: false,
+                        get() {
+                            throw new Error(`unreadable ${detail}`)
+                        },
+                    })
+
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: [
+                                { event: '$exception', properties: { error, kept: true } },
+                                { event: 'sibling event', properties: { kept: true } },
+                            ],
+                        })
+                    )
+
+                    expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+                    expect(JSON.parse(mockedXHR.send.mock.calls[0][0])).toEqual([
+                        { event: '$exception', properties: { error: expected, kept: true } },
+                        { event: 'sibling event', properties: { kept: true } },
+                    ])
+                    expect(mockCallback).not.toHaveBeenCalled()
+                }
+            )
+
+            it('sends sibling events when a circular Error uses the existing safe fallback', () => {
+                const error = new Error('circular error')
+                Object.assign(error, { self: error })
+
+                request(
+                    createRequest({
+                        method: 'POST',
+                        data: [{ event: '$exception', properties: { error } }, { event: 'sibling event' }],
+                    })
+                )
+
+                expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+                expect(JSON.parse(mockedXHR.send.mock.calls[0][0])).toEqual([
+                    {
+                        event: '$exception',
+                        properties: { error: { name: error.name, message: error.message, stack: error.stack } },
+                    },
+                    { event: 'sibling event' },
+                ])
             })
 
             it('converts bigint properties to string without throwing', () => {

@@ -1,5 +1,31 @@
 # @posthog/mcp
 
+## 0.13.1
+
+### Patch Changes
+
+- [#4783](https://github.com/PostHog/posthog-js/pull/4783) [`6e9f931`](https://github.com/PostHog/posthog-js/commit/6e9f93123007a549142dac183f55ab648140005f) Thanks [@gesh](https://github.com/gesh)! - Reduce personal data in `$mcp_intent`, which is agent-narrated free text and could previously carry personal data a model read aloud.
+  - Automatically redact structured personal identifiers — email addresses, phone numbers, IPv4/IPv6 addresses, Luhn-valid card numbers, and US SSNs — from `$mcp_intent` before it is captured. Redaction is always on, scoped to the intent only (structured tool `arguments` and results are untouched, since the same shapes are often legitimate data there), and best-effort for those well-defined shapes rather than free-form names or addresses. Identifiers grouped with Unicode spaces, dots, or slashes (as produced by copy-paste) and SSNs with space/dot separators are recognized. The email pattern uses bounded quantifiers so a pathological intent cannot cause quadratic-time backtracking.
+  - Strengthen the default injected `context` prompt so agents are less likely to write personal data in the first place: the privacy rule is now explicit and lists the identifiers to avoid, and it tells the agent to refer to people and accounts by role ('a user', 'the customer') rather than by identity.
+
+  `context: false` and `beforeSend` remain the ways to drop the field entirely. (2026-09-07)
+
+- Updated dependencies [[`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829)]:
+  - posthog-node@5.51.7
+  - @posthog/core@1.50.6
+
+## 0.13.0
+
+### Minor Changes
+
+- [#4735](https://github.com/PostHog/posthog-js/pull/4735) [`cbadf11`](https://github.com/PostHog/posthog-js/commit/cbadf116d776c6184d37752b7d39fb35215f989f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Add self-reported model capture to the `PostHogMCP` custom-dispatcher path. The preparation helpers preserve application-owned fields and work across stateless server replicas when given the original tool descriptor. Tool calls and missing-capability reports can record the model properties.
+  (2026-09-03)
+
+### Patch Changes
+
+- Updated dependencies [[`dbbb58e`](https://github.com/PostHog/posthog-js/commit/dbbb58e286db3762673f71995a8aeea89aa44123)]:
+  - @posthog/core@1.50.3
+
 ## 0.12.0
 
 ### Minor Changes
@@ -313,7 +339,7 @@
 - [#3936](https://github.com/PostHog/posthog-js/pull/3936) [`06c23d8`](https://github.com/PostHog/posthog-js/commit/06c23d8959a6a5c1c322d7eb722ac4731121a50f) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Re-export `PostHog` (and the `PostHogOptions` type) from `@posthog/mcp`, so you can import the client and `instrument` from a single package:
 
   ```ts
-  import { PostHog, instrument } from '@posthog/mcp'
+  import { PostHog, instrument } from "@posthog/mcp";
   ```
 
   `posthog-node` remains a peer dependency (resolved from the host app's installed copy); this only unifies the import. `PostHogMCP` is also already accepted by `instrument()` if you prefer a single client class. (2026-06-23)

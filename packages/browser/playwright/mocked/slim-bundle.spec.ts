@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* oxlint-disable no-console */
 import { test, expect } from './utils/posthog-playwright-test-base'
 import { Compression, FlagsResponse, PostHogConfig } from '@/types'
 import { PostHog } from '@/posthog-core'
