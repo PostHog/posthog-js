@@ -1,6 +1,6 @@
 {
     "name": "@posthog/browser",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "description": "A small, extension-based PostHog client for modern browsers",
     "license": "MIT",
     "private": true,

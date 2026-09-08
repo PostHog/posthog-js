@@ -29,7 +29,7 @@ import type { MixedOutput, Module, ReadOnlyGraph } from 'metro'
 import type * as baseJSBundleType from 'metro/private/DeltaBundler/Serializers/baseJSBundle'
 import type * as sourceMapStringType from 'metro/private/DeltaBundler/Serializers/sourceMapString'
 import type * as bundleToStringType from 'metro/private/lib/bundleToString'
-import type { Bundle, MetroSerializer } from '../../utils'
+import { isDevServerBuild, type Bundle, type MetroSerializer } from '../../utils'
 
 let baseJSBundleModule: any
 try {
@@ -121,12 +121,12 @@ export const createDefaultMetroSerializer = (): MetroSerializer => {
 
     // Inject the final Chunk ID before both code rendering and source-map
     // generation so they describe the same bundle bytes.
-    if (serializerOptions.posthogBundleCallback && !graph.transformOptions.hot) {
+    if (serializerOptions.posthogBundleCallback && !isDevServerBuild(graph, options)) {
       bundle = serializerOptions.posthogBundleCallback(bundle)
     }
 
     const { code } = (bundleToString.default || bundleToString)(bundle)
-    if (graph.transformOptions.hot) {
+    if (isDevServerBuild(graph, options)) {
       // Hot means running in dev server, sourcemaps are generated on demand
       return code
     }

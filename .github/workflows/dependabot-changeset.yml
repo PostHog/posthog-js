@@ -7,13 +7,35 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Check changeset credentials
+        id: credentials
+        env:
+          GH_APP_POSTHOG_JS_TESTS_APP_ID: ${{ secrets.GH_APP_POSTHOG_JS_TESTS_APP_ID }}
+          GH_APP_POSTHOG_JS_TESTS_PRIVATE_KEY: ${{ secrets.GH_APP_POSTHOG_JS_TESTS_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          missing=()
+          for name in GH_APP_POSTHOG_JS_TESTS_APP_ID GH_APP_POSTHOG_JS_TESTS_PRIVATE_KEY; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            echo "::notice::Skipping automatic changeset generation; missing required environment variables: ${missing[*]}"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Get app token
+        if: steps.credentials.outputs.available == 'true'
         id: app-token
         uses: getsentry/action-github-app-token@5c1e90706fe007857338ac1bfbd7a4177db2f789 # v4.0.0
         with:
           app_id: ${{ secrets.GH_APP_POSTHOG_JS_TESTS_APP_ID }}
           private_key: ${{ secrets.GH_APP_POSTHOG_JS_TESTS_PRIVATE_KEY }}
       - name: Checkout
+        if: steps.credentials.outputs.available == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -25,6 +47,7 @@ jobs:
       # The guard below makes sure this only tolerates the rejected push, not a real
       # failure of the action.
       - name: Generate changeset
+        if: steps.credentials.outputs.available == 'true'
         id: generate
         continue-on-error: true
         uses: the-guild-org/changesets-dependencies-action@f11b16181c79e07d62b112c2f32c9db534a9df09 # v1.2.2
@@ -71,6 +94,7 @@ jobs:
           git reset --mixed HEAD^
 
       - name: Check for a generated changeset
+        if: steps.credentials.outputs.available == 'true'
         id: changes
         env:
           GENERATE_OUTCOME: ${{ steps.generate.outcome }}

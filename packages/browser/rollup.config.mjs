@@ -1,9 +1,10 @@
-import babel from '@rollup/plugin-babel'
+import babel, { getBabelOutputPlugin } from '@rollup/plugin-babel'
 import json from '@rollup/plugin-json'
 import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
 import { dts } from 'rollup-plugin-dts'
 import terser from '@rollup/plugin-terser'
+import { minify as minifyWithTerser } from 'terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import commonjs from '@rollup/plugin-commonjs'
 import { Features, transform as transformCss } from 'lightningcss'
@@ -13,6 +14,9 @@ import crossBundlePropertyConfig from './terser-cross-bundle-properties.cjs'
 
 const { crossBundlePrivateProperties, globallyReservedPrivateProperties } = crossBundlePropertyConfig
 const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
+const IS_ROLLDOWN = process.env.BUNDLER === 'rolldown'
+const BUILD_TYPES_ONLY = process.env.BUILD_TYPES_ONLY === '1'
+const BUILD_ROLLUP_RUNTIME = process.env.BUILD_ROLLUP_RUNTIME === '1'
 const nameCachePath = './terser-mangled-names.json'
 const nameCache = {}
 
@@ -21,6 +25,55 @@ const nameCache = {}
 // Only property names (props) are shared; top-level variable names (vars) are
 // reset per-entry by the plugin below since each module has its own scope.
 
+// Rolldown renders chunks after renderChunk hooks, which would reformat @rollup/plugin-terser's output.
+// Minify the final chunk instead and feed the existing map into Terser so source maps stay chained.
+// Serialize calls because every runtime bundle must update the same property name cache atomically.
+let finalTerserQueue
+const finalTerser = (options) => ({
+    name: 'terser',
+    async generateBundle(outputOptions, bundle) {
+        for (const file of Object.values(bundle)) {
+            if (file.type !== 'chunk') {
+                continue
+            }
+            let code = file.code
+            let sourceMap = file.map
+            if (outputOptions.format === 'iife' && sourceMap) {
+                // Babel's output plugin places helpers before Rolldown's IIFE. Wrap the complete output so
+                // independently loaded bundles cannot overwrite each other's helpers on window.
+                code = `!function(){\n${code}\n}();`
+                sourceMap = { ...sourceMap, mappings: `;${sourceMap.mappings}` }
+            }
+            const minify = () => {
+                nameCache.vars = { props: {} }
+                return minifyWithTerser(code, {
+                    ...options,
+                    module: outputOptions.format === 'es',
+                    sourceMap: outputOptions.sourcemap
+                        ? { content: sourceMap, asObject: true, url: `${file.fileName}.map` }
+                        : false,
+                })
+            }
+            const resultPromise = finalTerserQueue ? finalTerserQueue.then(minify) : minify()
+            finalTerserQueue = resultPromise.then(
+                () => undefined,
+                () => undefined
+            )
+            const result = await resultPromise
+            file.code = result.code
+            if (result.map) {
+                result.map.ignoreList = result.map.sources.map((_, index) => index)
+                result.map.x_google_ignoreList = result.map.ignoreList
+                file.map = result.map
+                const mapAsset = bundle[`${file.fileName}.map`]
+                if (mapAsset?.type === 'asset') {
+                    mapAsset.source = JSON.stringify(result.map)
+                }
+            }
+        }
+    },
+})
+
 const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
     {
         name: 'reset-vars-name-cache',
@@ -28,10 +81,14 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
             nameCache.vars = { props: {} }
         },
     },
-    json(),
-    resolve({ browser: true }),
-    typescript({ sourceMap: true, outDir: './dist', module: 'es2015' }),
-    commonjs(),
+    ...(!IS_ROLLDOWN
+        ? [
+              json(),
+              resolve({ browser: true }),
+              typescript({ sourceMap: true, outDir: './dist', module: 'es2015' }),
+              commonjs(),
+          ]
+        : []),
     {
         name: 'lightningcss',
         transform(code, id) {
@@ -54,20 +111,28 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
             return {
                 code: `export default ${JSON.stringify(result.code.toString())}`,
                 map: { mappings: '' },
+                ...(IS_ROLLDOWN ? { moduleType: 'js' } : {}),
             }
         },
     },
-    babel({
-        extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx'],
-        babelHelpers: 'bundled',
-        overrides: [
-            {
-                // This prebuilt rrweb module intentionally exceeds Babel's 500 KB compacting threshold.
-                // Make the existing behavior explicit without hiding warnings for other unexpectedly large modules.
-                test: /[\\/]packages[\\/]rrweb[\\/]rrweb[\\/]dist[\\/]rrweb\.js$/,
-                compact: true,
-            },
-        ],
+    // Transform the final Rolldown chunk after tree-shaking. Using bundled Babel helpers as an input
+    // plugin leaves side-effectful, unused helper definitions in Rolldown output.
+    (IS_ROLLDOWN ? getBabelOutputPlugin : babel)({
+        ...(IS_ROLLDOWN
+            ? { allowAllFormats: true, compact: true }
+            : { extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx'], babelHelpers: 'bundled' }),
+        ...(!IS_ROLLDOWN
+            ? {
+                  overrides: [
+                      {
+                          // This prebuilt rrweb module intentionally exceeds Babel's 500 KB compacting threshold.
+                          // Make the existing behavior explicit without hiding warnings for other unexpectedly large modules.
+                          test: /[\\/]packages[\\/]rrweb[\\/]rrweb[\\/]dist[\\/]rrweb\.js$/,
+                          compact: true,
+                      },
+                  ],
+              }
+            : {}),
         plugins: [
             '@babel/plugin-transform-nullish-coalescing-operator',
             // Explicitly included so we transform 1 ** 2 to Math.pow(1, 2) for ES6 compatibility
@@ -78,6 +143,7 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
                 '@babel/preset-env',
                 {
                     loose: true,
+                    ...(IS_ROLLDOWN ? { modules: false, exclude: ['transform-dynamic-import'] } : {}),
                     targets: es5
                         ? [
                               '> 0.5%, last 2 versions, Firefox ESR, not dead',
@@ -100,7 +166,7 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
             ],
         ],
     }),
-    terser({
+    (IS_ROLLDOWN ? finalTerser : terser)({
         nameCache,
         toplevel: true,
         compress: {
@@ -290,14 +356,22 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
                 return
             }
 
-            const names = Object.keys(nameCache.props.props).map((k) => {
-                // strip leading dollar to make operating on terser-mangled-names.json easier
-                if (!k.startsWith('$')) {
-                    throw new Error('Unexpected format')
+            const names = new Set(
+                Object.keys(nameCache.props.props).map((k) => {
+                    // strip leading dollar to make operating on terser-mangled-names.json easier
+                    if (!k.startsWith('$')) {
+                        throw new Error('Unexpected format')
+                    }
+                    return k.substring(1)
+                })
+            )
+            // The Rollup fallback runs in a second process, so retain names collected by Rolldown.
+            if (BUILD_ROLLUP_RUNTIME && fs.existsSync(nameCachePath)) {
+                for (const name of JSON.parse(fs.readFileSync(nameCachePath, 'utf8')).names) {
+                    names.add(name)
                 }
-                return k.substring(1)
-            })
-            names.sort()
+            }
+            const sortedNames = [...names].sort()
             // save the props section to a file
             fs.writeFileSync(
                 nameCachePath,
@@ -308,7 +382,7 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
                             'If a line has been added to this file after a build, it means that the terser mangler has added a new property to the list of mangled properties.\n' +
                             'CI will fail unless changes to this file are committed.\n' +
                             'Run a build with `WRITE_MANGLED_PROPERTIES=1 pnpm run build` and commit the new version of this file',
-                        names,
+                        names: sortedNames,
                     },
                     null,
                     4
@@ -334,8 +408,16 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
 const entryFilter = process.env.ENTRY
 const allEntrypoints = fs.readdirSync('./src/entrypoints')
 const entrypoints = entryFilter ? allEntrypoints.filter((file) => file.startsWith(entryFilter)) : allEntrypoints
+// These artifacts share a Terser property-name cache and form a private cross-bundle ABI. Keeping
+// them in one Rollup process also avoids Rolldown retaining request compression code in extensions.
+const rollupRuntimeEntries = new Set(['extension-bundles.es.ts', 'module.slim.es.ts', 'module.slim.no-external.es.ts'])
+const runtimeEntrypoints = BUILD_ROLLUP_RUNTIME
+    ? entrypoints.filter((file) => rollupRuntimeEntries.has(file))
+    : IS_ROLLDOWN
+      ? entrypoints.filter((file) => !rollupRuntimeEntries.has(file))
+      : entrypoints
 
-const entrypointTargets = entrypoints.map((file) => {
+const entrypointTargets = runtimeEntrypoints.map((file) => {
     const fileParts = file.split('.')
     // pop the extension
     fileParts.pop()
@@ -366,6 +448,16 @@ const entrypointTargets = entrypoints.map((file) => {
     /** @type {import('rollup').RollupOptions} */
     return {
         input: `src/entrypoints/${file}`,
+        ...(IS_ROLLDOWN
+            ? {
+                  platform: 'browser',
+                  treeshake: {
+                      // @posthog/core is a pure utility package without package.json sideEffects metadata.
+                      // Declaring that here prevents unused barrel exports from being retained.
+                      moduleSideEffects: [{ test: /\/packages\/core\/dist\//, sideEffects: false }],
+                  },
+              }
+            : {}),
         output: outputExtensions.map((extension) => ({
             file: `dist/${fileName}.${extension}`,
             sourcemap: true,
@@ -497,4 +589,8 @@ const typeTargets = entrypoints
         }
     })
 
-export default [...entrypointTargets, ...typeTargets]
+export default BUILD_TYPES_ONLY
+    ? typeTargets
+    : IS_ROLLDOWN || BUILD_ROLLUP_RUNTIME
+      ? entrypointTargets
+      : [...entrypointTargets, ...typeTargets]

@@ -37,6 +37,19 @@ export type MetroSerializer = (
 ) => MetroSerializerOutput
 
 /**
+ * Metro removed `hot` from transform options in 0.83.2. On newer versions,
+ * dev-server requests can be distinguished from development CLI bundles by
+ * the source URL that Metro supplies.
+ */
+export function isDevServerBuild(graph: ReadOnlyGraph, options: SerializerOptions): boolean {
+  const transformOptions = graph.transformOptions as { hot?: boolean; dev?: boolean }
+  if ('hot' in transformOptions) {
+    return Boolean(transformOptions.hot)
+  }
+  return Boolean(transformOptions.dev) && options.sourceUrl != null
+}
+
+/**
  * Returns minified Chunk ID code snippet.
  */
 export function createDebugIdSnippet(debugId: string): string {
