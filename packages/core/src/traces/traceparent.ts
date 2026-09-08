@@ -80,6 +80,15 @@ export function normalizeTraceparent(value: unknown): string | undefined {
   return matchTraceparent(value) && (value as string).trim()
 }
 
+/**
+ * A `traceparent` as the string it is, unwrapping the one-element array Node's
+ * `headersDistinct` hands over. A longer array is two different inbound values,
+ * and picking either would be a guess.
+ */
+export function traceparentHeader(value: unknown): unknown {
+  return Array.isArray(value) && value.length === 1 ? value[0] : value
+}
+
 /** The W3C sampled bit, set on a trace this SDK started. */
 export const TRACE_FLAGS_SAMPLED = '01'
 
@@ -103,15 +112,19 @@ const TRACESTATE_MAX_LENGTH = 512
 
 /**
  * Validates an incoming `tracestate` far enough to know it is safe to echo back.
- * An invalid one is discarded without invalidating its traceparent, so a
- * malformed vendor entry never costs us the trace continuation.
+ * A malformed one is discarded without invalidating its traceparent, so a bad
+ * vendor entry never costs us the trace continuation.
+ *
+ * Over-long input is trimmed rather than discarded: W3C makes the limits a
+ * reason to drop members from the end, so the entries that fit are still valid
+ * state the next hop can use.
  */
 export function sanitizeTracestate(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined
   }
   const trimmed = value.trim()
-  if (!trimmed || trimmed.length > TRACESTATE_MAX_LENGTH) {
+  if (!trimmed) {
     return undefined
   }
   // W3C restricts tracestate to printable ASCII plus HTAB as optional whitespace.
@@ -121,9 +134,6 @@ export function sanitizeTracestate(value: unknown): string | undefined {
     return undefined
   }
   const members = trimmed.split(',')
-  if (members.length > TRACESTATE_MAX_MEMBERS) {
-    return undefined
-  }
   for (const member of members) {
     // An empty member is tolerated by the spec (list optional-white-space), but
     // a member without a `=` is not a key/value pair at all.
@@ -131,5 +141,15 @@ export function sanitizeTracestate(value: unknown): string | undefined {
       return undefined
     }
   }
-  return trimmed
+  const kept: string[] = []
+  let length = 0
+  for (const member of members.slice(0, TRACESTATE_MAX_MEMBERS)) {
+    const separator = kept.length ? 1 : 0
+    if (length + separator + member.length > TRACESTATE_MAX_LENGTH) {
+      break
+    }
+    kept.push(member)
+    length += separator + member.length
+  }
+  return kept.length ? kept.join(',') : undefined
 }

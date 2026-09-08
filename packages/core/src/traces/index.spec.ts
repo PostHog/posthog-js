@@ -15,6 +15,7 @@ import { createMockLogger } from '@/testing'
 
 const TRACE_ID = '4bf92f3577b34da6a3ce929d0e0e4736'
 const REMOTE_SPAN_ID = '00f067aa0ba902b7'
+const DUPLICATED_HEADERS = [`00-${TRACE_ID}-${REMOTE_SPAN_ID}-01`, `00-${TRACE_ID}-${REMOTE_SPAN_ID}-00`]
 
 const resolveForTest = (partial?: Partial<ResolvedTracesConfig>): ResolvedTracesConfig => ({
   flushIntervalMs: 5000,
@@ -269,9 +270,20 @@ describe('PostHogTraces', () => {
       expect(span.parentSpanId).toBeUndefined()
     })
 
-    it('starts a fresh root when the parent is not a span, as a duplicated header is', async () => {
+    it('continues the trace when the header arrives as a one-element array', async () => {
+      // What `headersDistinct.traceparent` hands over for a single inbound header.
       const traces = createTraces()
       traces.startSpan('handler', { parent: [`00-${TRACE_ID}-${REMOTE_SPAN_ID}-01`] as unknown as string }).end()
+      await traces.flush()
+
+      const [span] = sentSpans()
+      expect(span.traceId).toBe(TRACE_ID)
+      expect(span.parentSpanId).toBe(REMOTE_SPAN_ID)
+    })
+
+    it('starts a fresh root when the parent is not a span, as two inbound headers are', async () => {
+      const traces = createTraces()
+      traces.startSpan('handler', { parent: DUPLICATED_HEADERS as unknown as string }).end()
       await traces.flush()
 
       const [span] = sentSpans()
@@ -302,7 +314,7 @@ describe('PostHogTraces', () => {
     it('parents to the active span when the parent is not a span', async () => {
       const traces = createTraces()
       traces.withSpan('handler', () => {
-        traces.startSpan('child', { parent: [`00-${TRACE_ID}-${REMOTE_SPAN_ID}-01`] as unknown as string }).end()
+        traces.startSpan('child', { parent: DUPLICATED_HEADERS as unknown as string }).end()
       })
       await traces.flush()
 
@@ -530,6 +542,33 @@ describe('PostHogTraces', () => {
 
       expect(traces.startSpan('no-parent')).toBe(NOOP_SPAN)
       expect(traces.startSpan('bad-parent', { parent: 'not-a-traceparent' })).toBe(NOOP_SPAN)
+    })
+
+    it('keeps the inbound context in a nested span that names no parent', () => {
+      const traces = createTraces({}, createMockInstance({ optedOut: true }))
+
+      const propagated = traces.withSpan('outer', { parent: INBOUND_UNSAMPLED }, () =>
+        traces.withSpan('inner', (span) => span.traceparent())
+      )
+
+      expect(propagated).toBe(INBOUND_UNSAMPLED)
+    })
+
+    it('parents a recorded span to an active pass-through handle', async () => {
+      // Tracing is on, but the span that received the header was inert, so its
+      // child is the first recorded span of the inbound trace.
+      const foreign = { traceparent: () => INBOUND_UNSAMPLED, tracestate: () => 'vendor=abc' }
+      const traces = createTraces()
+
+      traces.withSpan('proxied', { parent: foreign as unknown as Span }, () => {
+        traces.startSpan('child').end()
+      })
+      await traces.flush()
+
+      const child = sentSpans().find((span) => span.name === 'child')!
+      expect(child.traceId).toBe(TRACE_ID)
+      expect(child.parentSpanId).toBe(REMOTE_SPAN_ID)
+      expect(child.traceState).toBe('vendor=abc')
     })
 
     it('keeps the inbound context when a pass-through handle is used as a parent', () => {
