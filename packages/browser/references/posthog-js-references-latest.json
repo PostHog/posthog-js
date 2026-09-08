@@ -4497,6 +4497,11 @@
       "name": "QueuedRequestWithOptions",
       "properties": [
         {
+          "description": "sub-key of the queue: requests that share a batchKey but not a batchGroup are never merged into one request body",
+          "type": "string",
+          "name": "batchGroup"
+        },
+        {
           "description": "key of queue, e.g. 'sessionRecording' vs 'event'",
           "type": "string",
           "name": "batchKey"

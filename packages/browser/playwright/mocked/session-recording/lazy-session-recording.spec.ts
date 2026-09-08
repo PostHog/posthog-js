@@ -2,6 +2,7 @@ import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-tes
 import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page } from '@playwright/test'
 import { isUndefined } from '@posthog/core'
+import { pollUntilCondition } from '../utils/event-capture-utils'
 
 async function ensureRecordingIsStopped(page: Page) {
     await page.resetCapturedEvents()
@@ -279,6 +280,10 @@ test.describe('Session recording - array.js', () => {
                 await page.locator('[data-cy-input]').type('more activity')
             },
         })
+
+        // the old session's tail and the new session's snapshot ship as separate uploads, so the
+        // three snapshots below do not arrive in a fixed number of requests
+        await pollUntilCondition(page, async () => (await page.capturedEvents()).length >= 3)
 
         const capturedEvents = await page.capturedEvents()
 
