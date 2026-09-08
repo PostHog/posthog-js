@@ -1,15 +1,24 @@
 # @posthog/react
 
+## 1.10.6
+
+### Patch Changes
+
+- [#4785](https://github.com/PostHog/posthog-js/pull/4785) [`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829) Thanks [@marandaneto](https://github.com/marandaneto)! - Clarify feature flag return-value terminology across SDK APIs. A `false` value is a conclusive off evaluation, while `undefined` means no evaluation is available. Remote evaluation omits globally inactive flags, whereas backend local evaluation can resolve cached inactive definitions to `false`.
+  (2026-09-07)
+- Updated dependencies [[`c207020`](https://github.com/PostHog/posthog-js/commit/c20702023ed05de61799e4d186b7dd1d040ce251), [`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829), [`fd4ece8`](https://github.com/PostHog/posthog-js/commit/fd4ece8db1aa313f09724a747e4d450ecdc77da2), [`d73455e`](https://github.com/PostHog/posthog-js/commit/d73455e470822483abbf0e0a20bb3c8fa1bc6e2e), [`95b159a`](https://github.com/PostHog/posthog-js/commit/95b159a6491c29de87ca0aaf5ea40c787cf0518d), [`24f1937`](https://github.com/PostHog/posthog-js/commit/24f193719a7d87a2b66591c3ab903031bbea62a6), [`5e74132`](https://github.com/PostHog/posthog-js/commit/5e74132a76a32d5df9c6706dddf1597c748061d2), [`21dcebd`](https://github.com/PostHog/posthog-js/commit/21dcebd3361a2fe24b022601b8131ae85a3f077d)]:
+  - posthog-js@1.427.3
+
 ## 1.10.5
 
 ### Patch Changes
 
 - [#4645](https://github.com/PostHog/posthog-js/pull/4645) [`cb7cc12`](https://github.com/PostHog/posthog-js/commit/cb7cc128d06913552bccd08c0b32f21df97537da) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Type declarations no longer import the `JSX` namespace from `react`, so they typecheck against `@types/react` back to the declared 16.8.0 floor. Component return types are now spelled `ReactElement<any, any>`, which is the definition of `JSX.Element` — the same type, so consuming code is unaffected.
 
-    `JSX` only became an exported member of the `react` types module in `@types/react@18.2.6`, so projects on older React types previously saw `TS2305: Module '"react"' has no exported member 'JSX'` when checking these declarations with `skipLibCheck: false`. (2026-08-25)
+  `JSX` only became an exported member of the `react` types module in `@types/react@18.2.6`, so projects on older React types previously saw `TS2305: Module '"react"' has no exported member 'JSX'` when checking these declarations with `skipLibCheck: false`. (2026-08-25)
 
 - Updated dependencies [[`cb7cc12`](https://github.com/PostHog/posthog-js/commit/cb7cc128d06913552bccd08c0b32f21df97537da)]:
-    - posthog-js@1.419.2
+  - posthog-js@1.419.2
 
 ## 1.10.4
 
@@ -18,7 +27,7 @@
 - [#4567](https://github.com/PostHog/posthog-js/pull/4567) [`5bd2c8d`](https://github.com/PostHog/posthog-js/commit/5bd2c8d0f30ecdd2fa14f0f05b3d43ef4e6b8d41) Thanks [@github-actions](https://github.com/apps/github-actions)! - Render React component stacks as linked exception causes so error tracking identifies the crashing component.
   (2026-08-21)
 - Updated dependencies [[`caed377`](https://github.com/PostHog/posthog-js/commit/caed377b3827c365fcb4bc9a093ec811030a7356), [`5bd2c8d`](https://github.com/PostHog/posthog-js/commit/5bd2c8d0f30ecdd2fa14f0f05b3d43ef4e6b8d41)]:
-    - posthog-js@1.418.7
+  - posthog-js@1.418.7
 
 ## 1.10.3
 
@@ -27,7 +36,7 @@
 - [#3905](https://github.com/PostHog/posthog-js/pull/3905) [`870cfa4`](https://github.com/PostHog/posthog-js/commit/870cfa42229079e2154a4044e7485b0670425d41) Thanks [@marandaneto](https://github.com/marandaneto)! - Filter disabled bootstrap feature flags from useActiveFeatureFlags.
   (2026-06-22)
 - Updated dependencies [[`1fce04f`](https://github.com/PostHog/posthog-js/commit/1fce04f79240971dc2776e4d9381dadeb0aff1c3)]:
-    - posthog-js@1.391.8
+  - posthog-js@1.391.8
 
 ## 1.10.2
 
@@ -36,7 +45,7 @@
 - [#3837](https://github.com/PostHog/posthog-js/pull/3837) [`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad) Thanks [@marandaneto](https://github.com/marandaneto)! - Add missing bugs metadata to package manifests.
   (2026-06-15)
 - Updated dependencies [[`29bf8e3`](https://github.com/PostHog/posthog-js/commit/29bf8e386a4050531e9cfd906c33b75945fcb6ad), [`d3a9462`](https://github.com/PostHog/posthog-js/commit/d3a9462b8b21994764bdd2802973d82ffe472294)]:
-    - posthog-js@1.386.7
+  - posthog-js@1.386.7
 
 ## 1.10.1
 
@@ -45,7 +54,7 @@
 - [#3748](https://github.com/PostHog/posthog-js/pull/3748) [`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6) Thanks [@marandaneto](https://github.com/marandaneto)! - Reduce duplicate internal code found by dry4ts.
   (2026-06-09)
 - Updated dependencies [[`7820929`](https://github.com/PostHog/posthog-js/commit/78209299874f932e55b0050d3b891f5c8dbd66a6)]:
-    - posthog-js@1.383.2
+  - posthog-js@1.383.2
 
 ## 1.10.0
 
@@ -61,7 +70,7 @@
 - [#3646](https://github.com/PostHog/posthog-js/pull/3646) [`4f87827`](https://github.com/PostHog/posthog-js/commit/4f87827dda9c102a6deded986f2afd9fdddfb2e5) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid throwing or initializing PostHogProvider when no API key or client is provided
   (2026-05-21)
 - Updated dependencies [[`87e2145`](https://github.com/PostHog/posthog-js/commit/87e2145b5d09ed8a24df1fc337dad5c3c90c1b8a), [`4f87827`](https://github.com/PostHog/posthog-js/commit/4f87827dda9c102a6deded986f2afd9fdddfb2e5), [`280832b`](https://github.com/PostHog/posthog-js/commit/280832b50b4c058e010436c4aab861cb143577c1)]:
-    - posthog-js@1.374.4
+  - posthog-js@1.374.4
 
 ## 1.9.0
 
@@ -73,7 +82,7 @@
 ### Patch Changes
 
 - Updated dependencies [[`fc5589f`](https://github.com/PostHog/posthog-js/commit/fc5589fcc51bd53ba818822831867d3c00d83a11)]:
-    - posthog-js@1.365.0
+  - posthog-js@1.365.0
 
 ## 1.8.3
 
@@ -82,7 +91,7 @@
 - [#3309](https://github.com/PostHog/posthog-js/pull/3309) [`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371) Thanks [@marandaneto](https://github.com/marandaneto)! - Extract CLI and sourcemap utilities from @posthog/core into @posthog/plugin-utils to remove cross-spawn from React Native dependencies
   (2026-04-01)
 - Updated dependencies [[`197eeda`](https://github.com/PostHog/posthog-js/commit/197eeda0b09fd2671a8a40f1bfd48a7b940f7371), [`c5feb5c`](https://github.com/PostHog/posthog-js/commit/c5feb5c35eefe0a459facc3b72752ab7d6696c1c), [`7b944fc`](https://github.com/PostHog/posthog-js/commit/7b944fc2a6099c0dfa4aa28f55872bd226b17b37)]:
-    - posthog-js@1.364.5
+  - posthog-js@1.364.5
 
 ## 1.8.2
 
@@ -98,7 +107,7 @@
 - [#3146](https://github.com/PostHog/posthog-js/pull/3146) [`85030ed`](https://github.com/PostHog/posthog-js/commit/85030edfe9737d30d78a589462f4c9388f9ea057) Thanks [@gustavohstrassburger](https://github.com/gustavohstrassburger)! - Fix PostHogFeature component to properly handle undefined flags and false values
   (2026-02-25)
 - Updated dependencies [[`4d0c783`](https://github.com/PostHog/posthog-js/commit/4d0c783fadac64718da01d1773a65f1d350f8201)]:
-    - posthog-js@1.354.0
+  - posthog-js@1.354.0
 
 ## 1.8.0
 
@@ -110,7 +119,7 @@
 ### Patch Changes
 
 - Updated dependencies [[`c4ca045`](https://github.com/PostHog/posthog-js/commit/c4ca0450e6bbd39e7e90c442776ba0cf0b848ce4), [`b11c3c5`](https://github.com/PostHog/posthog-js/commit/b11c3c58fe14121cda89bc48aeabf817ae44a8d0), [`d36a6ed`](https://github.com/PostHog/posthog-js/commit/d36a6ed75c68742b07863fed0e7a64ad3f842c8d)]:
-    - posthog-js@1.348.0
+  - posthog-js@1.348.0
 
 ## 1.7.1
 
@@ -119,7 +128,7 @@
 - [#3034](https://github.com/PostHog/posthog-js/pull/3034) [`de43d70`](https://github.com/PostHog/posthog-js/commit/de43d70e5d94f74cf58745695968eee09fbc64b6) Thanks [@adboio](https://github.com/adboio)! - add survey shown tracking to useThumbSurvey + option to disable shown tracking in displaySurvey
   (2026-02-10)
 - Updated dependencies [[`de43d70`](https://github.com/PostHog/posthog-js/commit/de43d70e5d94f74cf58745695968eee09fbc64b6)]:
-    - posthog-js@1.345.1
+  - posthog-js@1.345.1
 
 ## 1.7.0
 
@@ -131,7 +140,7 @@
 ### Patch Changes
 
 - Updated dependencies [[`8a5a3d5`](https://github.com/PostHog/posthog-js/commit/8a5a3d5693facda62b90b66dead338f7dca19705)]:
-    - posthog-js@1.332.0
+  - posthog-js@1.332.0
 
 ## 1.6.0
 
@@ -139,28 +148,28 @@
 
 - [#2900](https://github.com/PostHog/posthog-js/pull/2900) [`23770e9`](https://github.com/PostHog/posthog-js/commit/23770e9e2eed1aca5c2bc7a34a6d64dc115b0d11) Thanks [@dmarticus](https://github.com/dmarticus)! - Renamed `evaluationEnvironments` to `evaluationContexts` for clearer semantics. The term "contexts" better reflects that this feature is for specifying evaluation contexts (e.g., "web", "mobile", "checkout") rather than deployment environments (e.g., "staging", "production").
 
-    ### Deprecated
-    - `posthog.init` option `evaluationEnvironments` is now deprecated in favor of `evaluationContexts`. The old property will continue to work and will log a deprecation warning. It will be removed in a future major version.
+  ### Deprecated
+  - `posthog.init` option `evaluationEnvironments` is now deprecated in favor of `evaluationContexts`. The old property will continue to work and will log a deprecation warning. It will be removed in a future major version.
 
-    ### Migration Guide
+  ### Migration Guide
 
-    ````javascript
-    // Before
-    posthog.init('<ph_project_api_key>', {
-        evaluationEnvironments: ['production', 'web', 'checkout'],
-    })
+  ````javascript
+  // Before
+  posthog.init('<ph_project_api_key>', {
+      evaluationEnvironments: ['production', 'web', 'checkout'],
+  })
 
-    // After
-    posthog.init('<ph_project_api_key>', {
-        evaluationContexts: ['production', 'web', 'checkout'],
-    })
-    ``` (2026-01-19)
-    ````
+  // After
+  posthog.init('<ph_project_api_key>', {
+      evaluationContexts: ['production', 'web', 'checkout'],
+  })
+  ``` (2026-01-19)
+  ````
 
 ### Patch Changes
 
 - Updated dependencies [[`23770e9`](https://github.com/PostHog/posthog-js/commit/23770e9e2eed1aca5c2bc7a34a6d64dc115b0d11)]:
-    - posthog-js@1.331.0
+  - posthog-js@1.331.0
 
 ## 1.5.2
 
@@ -168,16 +177,16 @@
 
 - [#2690](https://github.com/PostHog/posthog-js/pull/2690) [`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4) Thanks [@robbie-c](https://github.com/robbie-c)! - Related to https://www.wiz.io/blog/critical-vulnerability-in-react-cve-2025-55182
 
-    We didn't include any of the vulnerable deps in any of our packages, however we did have them as dev / test / example project dependencies.
+  We didn't include any of the vulnerable deps in any of our packages, however we did have them as dev / test / example project dependencies.
 
-    There was no way that any of these vulnerable packages were included in any of our published packages.
+  There was no way that any of these vulnerable packages were included in any of our published packages.
 
-    We've now patched out those dependencies.
+  We've now patched out those dependencies.
 
-    Out of an abundance of caution, let's create a new release of all of our packages. (2025-12-04)
+  Out of an abundance of caution, let's create a new release of all of our packages. (2025-12-04)
 
 - Updated dependencies [[`e9c00fd`](https://github.com/PostHog/posthog-js/commit/e9c00fd451f6ee648ff40dcad538d38bfd5f3ff4)]:
-    - posthog-js@1.301.2
+  - posthog-js@1.301.2
 
 ## 1.5.1
 
@@ -186,7 +195,7 @@
 - [#2655](https://github.com/PostHog/posthog-js/pull/2655) [`d10783f`](https://github.com/PostHog/posthog-js/commit/d10783fb472bdc3a74994a7b74504b525ef725a3) Thanks [@ordehi](https://github.com/ordehi)! - Updated feature flag hooks to properly check if client is initialized and prevent client is undefined errors
   (2025-12-03)
 - Updated dependencies [[`4487d6b`](https://github.com/PostHog/posthog-js/commit/4487d6b28e4f76696f13cea5d08dfceda3aa2cd9), [`0e67750`](https://github.com/PostHog/posthog-js/commit/0e6775030aa43d24588f2e6dbe624e8d8a1f6d7c), [`e1617d9`](https://github.com/PostHog/posthog-js/commit/e1617d91255b23dc39b1dcb15b05ae64c735d9d0)]:
-    - posthog-js@1.300.0
+  - posthog-js@1.300.0
 
 ## 1.5.0
 
@@ -198,7 +207,7 @@
 ### Patch Changes
 
 - Updated dependencies [[`86dab38`](https://github.com/PostHog/posthog-js/commit/86dab38e49eeac9819b1ab5f7f0c8b5df88d9f86)]:
-    - posthog-js@1.298.0
+  - posthog-js@1.298.0
 
 ## 1.4.1
 
@@ -207,7 +216,7 @@
 - [#2618](https://github.com/PostHog/posthog-js/pull/2618) [`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe) Thanks [@marandaneto](https://github.com/marandaneto)! - last version was compromised
   (2025-11-24)
 - Updated dependencies [[`3eed1a4`](https://github.com/PostHog/posthog-js/commit/3eed1a42a50bff310fde3a91308a0f091b39e3fe)]:
-    - posthog-js@1.297.3
+  - posthog-js@1.297.3
 
 ## 1.4.0
 
@@ -218,7 +227,7 @@
 ### Patch Changes
 
 - Updated dependencies [[`10be1b0`](https://github.com/PostHog/posthog-js/commit/10be1b071ab30da45749b91cfdeff913912e7bbb)]:
-    - posthog-js@1.289.0
+  - posthog-js@1.289.0
 
 ## 1.3.0
 
@@ -231,7 +240,7 @@
 - [#2517](https://github.com/PostHog/posthog-js/pull/2517) [`46e3ca6`](https://github.com/PostHog/posthog-js/commit/46e3ca600ca478db1b319b36695dea090aa60f98) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: complete react sdk featureflag component refactor
 
 - Updated dependencies [[`46e3ca6`](https://github.com/PostHog/posthog-js/commit/46e3ca600ca478db1b319b36695dea090aa60f98), [`46e3ca6`](https://github.com/PostHog/posthog-js/commit/46e3ca600ca478db1b319b36695dea090aa60f98)]:
-    - posthog-js@1.282.0
+  - posthog-js@1.282.0
 
 ## 1.2.3
 
@@ -240,7 +249,7 @@
 - [#2390](https://github.com/PostHog/posthog-js/pull/2390) [`244b3ad`](https://github.com/PostHog/posthog-js/commit/244b3ad2f6dea8086747046044245b1514bd658b) Thanks [@hpouillot](https://github.com/hpouillot)! - fix react sourcemaps
 
 - Updated dependencies [[`244b3ad`](https://github.com/PostHog/posthog-js/commit/244b3ad2f6dea8086747046044245b1514bd658b)]:
-    - posthog-js@1.270.1
+  - posthog-js@1.270.1
 
 ## 1.2.2
 
@@ -255,7 +264,7 @@
 - [#2374](https://github.com/PostHog/posthog-js/pull/2374) [`5af6e2d`](https://github.com/PostHog/posthog-js/commit/5af6e2d1fb1694cecfa4ef515cac192fb194fa4e) Thanks [@hpouillot](https://github.com/hpouillot)! - fix react sourcemaps
 
 - Updated dependencies [[`5af6e2d`](https://github.com/PostHog/posthog-js/commit/5af6e2d1fb1694cecfa4ef515cac192fb194fa4e)]:
-    - posthog-js@1.268.10
+  - posthog-js@1.268.10
 
 ## 1.2.0
 
@@ -272,4 +281,4 @@
 ### Patch Changes
 
 - Updated dependencies [[`4387da4`](https://github.com/PostHog/posthog-js/commit/4387da42148a6b96c7bf1f9f5a2c529a3eb4dd8a), [`fda2932`](https://github.com/PostHog/posthog-js/commit/fda2932d0c4835d205fe0e0d0efb724b964f9f9b)]:
-    - posthog-js@1.260.0
+  - posthog-js@1.260.0

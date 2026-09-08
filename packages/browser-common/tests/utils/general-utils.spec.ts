@@ -1,6 +1,84 @@
-import { extend, migrateConfigField, stripEmptyProperties } from '../../src/utils/general-utils'
+import { runInNewContext } from 'node:vm'
+import {
+    _copyAndTruncateStrings,
+    extend,
+    migrateConfigField,
+    stripEmptyProperties,
+} from '../../src/utils/general-utils'
 
 describe('general utils', () => {
+    describe('_copyAndTruncateStrings', () => {
+        it.each([
+            ['same-realm', () => new TypeError('long error message')],
+            ['cross-realm', () => runInNewContext('new TypeError("long error message")') as Error],
+        ])('preserves and truncates %s Error details without mutating inputs', (_realm, createError) => {
+            const error = Object.assign(createError(), { code: 'long custom code' })
+            const stack = error.stack
+
+            expect(_copyAndTruncateStrings({ nested: [{ error }] }, 10)).toEqual({
+                nested: [
+                    {
+                        error: {
+                            name: 'TypeError',
+                            message: 'long error',
+                            stack: stack?.slice(0, 10),
+                            code: 'long custo',
+                        },
+                    },
+                ],
+            })
+            expect(error.message).toBe('long error message')
+            expect(error.stack).toBe(stack)
+            expect(Object.keys(error)).toEqual(['code'])
+        })
+
+        it('preserves causes and aggregate errors while truncating nested strings', () => {
+            const cause = new Error('root cause')
+            const error = new AggregateError([new Error('nested error'), 'other reason'], 'aggregate', { cause })
+
+            expect(_copyAndTruncateStrings({ error }, 5)).toEqual({
+                error: {
+                    name: 'Aggre',
+                    message: 'aggre',
+                    stack: error.stack?.slice(0, 5),
+                    cause: { name: 'Error', message: 'root ', stack: cause.stack?.slice(0, 5) },
+                    errors: [{ name: 'Error', message: 'neste', stack: error.errors[0].stack.slice(0, 5) }, 'other'],
+                },
+            })
+        })
+
+        it('omits circular causes without dropping other Error details', () => {
+            const error = new Error('circular')
+            Object.defineProperty(error, 'cause', { value: error })
+
+            expect(_copyAndTruncateStrings({ error }, 1000)).toEqual({
+                error: { name: error.name, message: error.message, stack: error.stack?.slice(0, 1000) },
+            })
+        })
+
+        it.each(['name', 'message', 'stack', 'cause', 'errors'] as const)(
+            'omits an unreadable Error %s without discarding sibling properties',
+            (detail) => {
+                const error = Object.assign(new Error('additional'), { code: 'E_TEST' })
+                error.stack = 'safe stack'
+                const expected: Record<string, unknown> = {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack,
+                    code: error.code,
+                }
+                delete expected[detail]
+                Object.defineProperty(error, detail, {
+                    get: () => {
+                        throw new Error('unreadable')
+                    },
+                })
+
+                expect(_copyAndTruncateStrings({ error, kept: true }, 100)).toEqual({ error: expected, kept: true })
+            }
+        )
+    })
+
     describe('extend', () => {
         it('overwrites existing values but preserves existing values when source is undefined', () => {
             expect(extend({ a: 1 }, { a: 2 })).toEqual({ a: 2 })
