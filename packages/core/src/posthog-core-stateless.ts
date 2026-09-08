@@ -288,7 +288,15 @@ function isPostHogEventProperties(value: JsonType | undefined): value is PostHog
  */
 export type SendLogsBatchOutcome =
   | { kind: 'ok' }
-  | { kind: 'too-large' }
+  | {
+      kind: 'too-large'
+      /**
+       * True when the SDK measured the body itself rather than the endpoint
+       * refusing it, so the caller can split this drain without lowering the
+       * batch size it keeps between them.
+       */
+      measuredLocally?: boolean
+    }
   | { kind: 'retry-later'; error: unknown; retryAfterMs?: number }
   | { kind: 'fatal'; error: unknown }
 
@@ -299,7 +307,15 @@ export type SendLogsBatchOutcome =
  */
 type SendOtlpBatchOutcome =
   | { kind: 'ok' }
-  | { kind: 'too-large' }
+  | {
+      kind: 'too-large'
+      /**
+       * True when the SDK measured the body itself rather than the endpoint
+       * refusing it, so the caller can split this drain without lowering the
+       * batch size it keeps between them.
+       */
+      measuredLocally?: boolean
+    }
   | { kind: 'retry-later'; error: unknown; retryAfterMs?: number }
   | { kind: 'fatal'; error: unknown }
 
@@ -1382,9 +1398,18 @@ export abstract class PostHogCoreStateless {
     if (this.pendingFlushPromise) {
       return
     }
-    void this.flush().catch(async (err) => {
+    void this.flushAutomatic().catch(async (err) => {
       await logFlushError(err)
     })
+  }
+
+  /**
+   * The flush the SDK runs on its own, from the interval timer or the `flushAt`
+   * threshold. Separate from `flush()` so a host can hold back work that an
+   * endpoint has asked it to wait on, which an explicit flush overrides.
+   */
+  protected flushAutomatic(): Promise<void> {
+    return this.flush()
   }
 
   private async waitForPendingPromises(
@@ -1731,7 +1756,7 @@ export abstract class PostHogCoreStateless {
       this.logMsgIfDebug(() =>
         console.warn(`[PostHog] Could not serialize a ${path} batch; reporting it as too large`, error)
       )
-      return { kind: 'too-large' }
+      return { kind: 'too-large', measuredLocally: true }
     }
 
     // Measured on the uncompressed payload: the endpoint decompresses the body
@@ -1747,7 +1772,7 @@ export abstract class PostHogCoreStateless {
           `[PostHog] Not sending a ${path} batch of ${payloadBytes} bytes: the endpoint accepts at most ${OTLP_MAX_BODY_BYTES}`
         )
       )
-      return { kind: 'too-large' }
+      return { kind: 'too-large', measuredLocally: true }
     }
 
     const url =

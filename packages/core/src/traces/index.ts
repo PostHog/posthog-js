@@ -323,6 +323,14 @@ export class PostHogTraces {
    * wait costs a request rather than the spans. The periodic flush does wait it
    * out.
    */
+  /**
+   * Whether the endpoint has asked this queue to wait. An automatic flush skips
+   * it; the traces flush timer already drains once the window closes.
+   */
+  get throttled(): boolean {
+    return this._retryAfter.isOpen()
+  }
+
   async flush(): Promise<void> {
     for (;;) {
       if (!this._queue.length) {
@@ -807,6 +815,10 @@ export class PostHogTraces {
     // Bounded by queue depth at flush start, so mid-drain arrivals ride the next flush.
     let remaining = this._queue.length
     let removed = 0
+    // Splits this drain only. A batch the SDK measured as too large says nothing
+    // about the ones after the oversized span is gone, so the cap kept between
+    // drains stays where it is and the next one starts at full size.
+    let localCap = Number.POSITIVE_INFINITY
     const generation = this._generation
 
     try {
@@ -823,7 +835,7 @@ export class PostHogTraces {
           this._headBatchFailures > 0
             ? Math.min(this._maxExportBatchSize, this._headBatchSize)
             : this._maxExportBatchSize
-        const size = Math.max(1, Math.min(cap, remaining, this._queue.length))
+        const size = Math.max(1, Math.min(cap, localCap, remaining, this._queue.length))
         const batch = this._queue.slice(0, size)
         const spans = this._encodeBatch(batch)
 
@@ -875,12 +887,17 @@ export class PostHogTraces {
             this._resetHeadBatchBudget()
             continue
           }
-          // Halve the batch the server rejected, not the configured maximum: when the
+          // Halve the batch that was refused, not the configured maximum: when the
           // queue is shallower than the maximum, shrinking it resends an identical body.
-          this._maxExportBatchSize = Math.max(1, Math.floor(size / 2))
+          const halved = Math.max(1, Math.floor(size / 2))
+          if (outcome.measuredLocally) {
+            localCap = halved
+          } else {
+            this._maxExportBatchSize = halved
+          }
           // A different batch from here on, so its budget starts fresh.
           this._resetHeadBatchBudget()
-          this._logger.debug(`Batch too large; retrying the same spans in batches of ${this._maxExportBatchSize}`)
+          this._logger.debug(`Batch too large; retrying the same spans in batches of ${halved}`)
           continue
         }
 
