@@ -21,6 +21,7 @@ import { resetSessionStorageSupported } from '../../../storage'
 import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
 import {
     FULL_SNAPSHOT_EVENT_TYPE,
+    estimateSize,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
 } from '../../../extensions/replay/external/sessionrecording-utils'
@@ -4079,6 +4080,73 @@ describe('Lazy SessionRecording', () => {
                 script.remove()
             }
         })
+
+        it.each([
+            ['mutate', 'snapshot'],
+            ['rotate', 'snapshot'],
+            ['discard', 'snapshot'],
+            ['mutate', 'jsonLd'],
+            ['rotate', 'jsonLd'],
+            ['discard', 'jsonLd'],
+        ] as const)(
+            'keeps snapshot labels valid when a callback performs %s during a %s size-limit flush',
+            (action, flushEvent) => {
+                const script = document.createElement('script')
+                script.type = 'application/ld+json'
+                const payload = { '@context': 'https://schema.org', '@type': 'Product', name: 'Before flush' }
+                script.textContent = JSON.stringify(payload)
+                document.body.appendChild(script)
+                posthog.config.session_recording.captureJsonLd = true
+
+                try {
+                    sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                    const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                    releaseInteractionHold()
+                    const timestamp = Date.now()
+                    _emit(createMetaSnapshot({ timestamp }))
+                    _emit(createFullSnapshot({ timestamp }))
+                    const nextSnapshot = createFullSnapshot({ timestamp: timestamp + 1 })
+                    lazyRecorder['_buffer'].size =
+                        flushEvent === 'snapshot'
+                            ? RECORDING_MAX_EVENT_SIZE
+                            : RECORDING_MAX_EVENT_SIZE -
+                              estimateSize(nextSnapshot) -
+                              2 -
+                              lazyRecorder['_buffer'].data.length
+                    ;(posthog.capture as Mock).mockClear().mockImplementationOnce(() => {
+                        script.textContent = JSON.stringify({ ...payload, name: 'After flush' })
+                        if (action === 'rotate') {
+                            sessionIdGeneratorMock.mockReturnValue('nextSessionId')
+                            sessionManager.resetSessionId()
+                            sessionManager.checkAndGetSessionAndWindowId()
+                        } else if (action === 'discard') {
+                            lazyRecorder.discard()
+                        }
+                    })
+
+                    _emit(nextSnapshot)
+
+                    expect(posthog.capture).toHaveBeenCalled()
+                    const jsonLdEvents = lazyRecorder['_buffer'].data.filter(
+                        (event: eventWithTime) => event.type === EventType.Custom && event.data.tag === '$json_ld'
+                    )
+                    expect(jsonLdEvents).toEqual(
+                        action === 'mutate'
+                            ? [
+                                  {
+                                      type: EventType.Custom,
+                                      timestamp: timestamp + 1,
+                                      data: { tag: '$json_ld', payload, fullSnapshotTimestamp: timestamp + 1 },
+                                  },
+                              ]
+                            : []
+                    )
+                } finally {
+                    ;(posthog.capture as Mock).mockReset()
+                    script.remove()
+                }
+            }
+        )
 
         it('captures JSON-LD for the full snapshot emitted during rrweb startup', () => {
             const target = document.createElement('div')

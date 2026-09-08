@@ -954,24 +954,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
-    private _captureJsonLdForFullSnapshot(timestamp: number, sessionId: string, windowId: string): void {
+    private _collectJsonLdForFullSnapshot(timestamp: number): eventWithTime[] {
+        const events: eventWithTime[] = []
         if (!this._canCaptureJsonLd()) {
-            return
+            return events
         }
-        // Read before yielding to page code, but use the snapshot's queue and IDs if compression is pending.
+        // Buffer flushes can run page callbacks, so read JSON-LD before buffering the snapshot.
         this._jsonLdCapture?.scan(true, (jsonLd) => {
-            const event: eventWithTime = {
+            events.push({
                 type: EventType.Custom,
                 timestamp,
                 data: { tag: JSON_LD_EVENT_TAG, payload: jsonLd, fullSnapshotTimestamp: timestamp },
-            }
-            if (this._queuedCompressionEvents > 0) {
-                this._enqueueCompression(event, false, sessionId, windowId)
-            } else {
-                this._captureProcessedEvent(event, event, estimateSize(event), sessionId, windowId)
-            }
-            return this._canCaptureJsonLd()
+            })
+            return true
         })
+        return events
     }
 
     private _scheduleJsonLdScan(): void {
@@ -2084,6 +2081,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._scheduleJsonLdScan()
         }
 
+        const jsonLdCapture = this._jsonLdCapture
+        const compressionGeneration = this._compressionQueueGeneration
+        const jsonLdEvents =
+            event.type === EventType.FullSnapshot ? this._collectJsonLdForFullSnapshot(event.timestamp) : undefined
+
         const compressionEnabled = this._instance.config.session_recording.compress_events ?? true
 
         if (
@@ -2098,8 +2100,30 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._captureProcessedEvent(event, eventToSend, size, targetSessionId, targetWindowId)
         }
 
-        if (event.type === EventType.FullSnapshot) {
-            this._captureJsonLdForFullSnapshot(event.timestamp, targetSessionId, targetWindowId)
+        if (!jsonLdEvents) {
+            return
+        }
+        for (const jsonLdEvent of jsonLdEvents) {
+            if (
+                !this._canCaptureJsonLd() ||
+                this._jsonLdCapture !== jsonLdCapture ||
+                this._compressionQueueGeneration !== compressionGeneration ||
+                this._sessionId !== targetSessionId ||
+                this._windowId !== targetWindowId
+            ) {
+                return
+            }
+            if (this._queuedCompressionEvents > 0) {
+                this._enqueueCompression(jsonLdEvent, false, targetSessionId, targetWindowId)
+            } else {
+                this._captureProcessedEvent(
+                    jsonLdEvent,
+                    jsonLdEvent,
+                    estimateSize(jsonLdEvent),
+                    targetSessionId,
+                    targetWindowId
+                )
+            }
         }
     }
 
@@ -2487,11 +2511,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
             const sessionBeforeFlush = this._sessionId
+            const generationBeforeFlush = this._compressionQueueGeneration
             this._buffer = this._flushBuffer()
-            // a rotation adopted re-entrantly during that flush owns this._buffer now; clearing it
-            // or relabeling it with this event's pre-rotation ids would mis-attribute the new
-            // epoch, so drop the stale event instead
-            if (this._sessionId !== sessionBeforeFlush) {
+            // A rotation or discard during a flush must not append the event that triggered it to the new buffer.
+            if (this._sessionId !== sessionBeforeFlush || this._compressionQueueGeneration !== generationBeforeFlush) {
                 return
             }
             // A suppressed flush (e.g. buffering, paused, held, below minimum duration) returns the buffer un-drained, and relabeling the prior session's events would mis-attribute them, so discard them instead.
