@@ -57,7 +57,7 @@ describe('OTLP bodies over the endpoint limit', () => {
     const unserializable: any = spansOf(8)
     unserializable.resourceSpans[0].scopeSpans[0].spans[0].self = unserializable
 
-    await expect(send(unserializable)).resolves.toEqual({ kind: 'too-large' })
+    await expect(send(unserializable)).resolves.toEqual({ kind: 'too-large', measuredLocally: true })
     expect(mocks.fetch).not.toHaveBeenCalled()
   })
 
@@ -71,7 +71,7 @@ describe('OTLP bodies over the endpoint limit', () => {
     ['logs', (payload: any) => posthog._sendLogsBatch(payload)],
     ['metrics', (payload: any) => posthog._sendMetricsBatch(payload)],
   ])('reports a %s batch over the limit as too-large without a request', async (_signal, send) => {
-    await expect(send(spansOf(OVER_LIMIT_BYTES))).resolves.toEqual({ kind: 'too-large' })
+    await expect(send(spansOf(OVER_LIMIT_BYTES))).resolves.toEqual({ kind: 'too-large', measuredLocally: true })
     expect(mocks.fetch).not.toHaveBeenCalled()
   })
 
@@ -81,7 +81,10 @@ describe('OTLP bodies over the endpoint limit', () => {
     vi.spyOn(posthog as any, 'compressPayload').mockResolvedValue(new Uint8Array(1024))
     ;(posthog as any).disableCompression = false
 
-    await expect(posthog._sendTracesBatch(spansOf(OVER_LIMIT_BYTES))).resolves.toEqual({ kind: 'too-large' })
+    await expect(posthog._sendTracesBatch(spansOf(OVER_LIMIT_BYTES))).resolves.toEqual({
+      kind: 'too-large',
+      measuredLocally: true,
+    })
     expect(mocks.fetch).not.toHaveBeenCalled()
   })
 
@@ -102,6 +105,7 @@ describe('OTLP bodies over the endpoint limit', () => {
   it('reports a batch one byte over the limit as too-large', async () => {
     await expect(posthog._sendTracesBatch(spansOf(LIMIT_BYTES - overheadBytes() + 1))).resolves.toEqual({
       kind: 'too-large',
+      measuredLocally: true,
     })
     expect(mocks.fetch).not.toHaveBeenCalled()
   })
@@ -113,7 +117,10 @@ describe('OTLP bodies over the endpoint limit', () => {
     const compressPayload = vi.spyOn(posthog as any, 'compressPayload')
     ;(posthog as any).disableCompression = false
 
-    await expect(posthog._sendTracesBatch(spansOf(OVER_LIMIT_BYTES))).resolves.toEqual({ kind: 'too-large' })
+    await expect(posthog._sendTracesBatch(spansOf(OVER_LIMIT_BYTES))).resolves.toEqual({
+      kind: 'too-large',
+      measuredLocally: true,
+    })
     expect(compressPayload).not.toHaveBeenCalled()
   })
 

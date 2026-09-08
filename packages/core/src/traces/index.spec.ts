@@ -1844,6 +1844,33 @@ describe('PostHogTraces', () => {
       expect(batchSizes).toEqual([3, 1, 2])
     })
 
+    it('splits a locally measured batch without shrinking the next drain', async () => {
+      // The SDK measured this body itself, so it knows the oversized span is gone
+      // once the batch is isolated. The next drain starts at full size instead of
+      // ramping back one healthy batch at a time.
+      const instance = createMockInstance({
+        _sendTracesBatch: vi
+          .fn()
+          .mockResolvedValueOnce({ kind: 'too-large', measuredLocally: true })
+          .mockResolvedValue({ kind: 'ok' }),
+      })
+      const traces = createTraces({ maxExportBatchSize: 512 }, instance)
+      for (let i = 0; i < 8; i++) {
+        traces.startSpan(`span-${i}`).end()
+      }
+      await traces.flush()
+      expect(sentPayloads(instance).map((p) => p.resourceSpans[0].scopeSpans[0].spans.length)).toEqual([8, 4, 4])
+
+      instance._sendTracesBatch.mockClear()
+      for (let i = 0; i < 8; i++) {
+        traces.startSpan(`later-${i}`).end()
+      }
+      await traces.flush()
+
+      // One batch, not the 6-then-2 that a persistent shrink plus its +1 ramp gives.
+      expect(sentPayloads(instance).map((p) => p.resourceSpans[0].scopeSpans[0].spans.length)).toEqual([8])
+    })
+
     it('ramps the batch size back up after a 413 shrink', async () => {
       // A one-off oversized payload shouldn't permanently halve throughput.
       const instance = createMockInstance({
