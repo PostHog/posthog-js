@@ -29,7 +29,8 @@
         "test:watch": "vitest watch",
         "build": "pnpm turbo run prepublish",
         "check-types": "tsc -noEmit",
-        "prepublish": "tsc -noEmit && vite build"
+        "build:declarations": "rolldown -c rolldown.dts.config.mts",
+        "prepublish": "tsc -noEmit && vite build && pnpm build:declarations"
     },
     "repository": {
         "type": "git",

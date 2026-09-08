@@ -12,7 +12,8 @@
     "dev": "vite build --watch",
     "build": "pnpm turbo run prepublish",
     "check-types": "tsc --noEmit",
-    "prepublish": "pnpm check-types && vite build",
+    "build:declarations": "rolldown -c rolldown.dts.config.mts",
+    "prepublish": "pnpm check-types && vite build && pnpm build:declarations",
     "lint": "oxlint src"
   },
   "type": "module",

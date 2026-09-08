@@ -7,7 +7,8 @@
     "check-types": "tsc -noEmit",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "prepublish": "tsc -noEmit && vite build",
+    "build:declarations": "rolldown -c rolldown.dts.config.mts",
+    "prepublish": "tsc -noEmit && vite build && pnpm build:declarations",
     "lint": "oxlint src"
   },
   "keywords": [
