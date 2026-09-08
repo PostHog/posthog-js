@@ -1,5 +1,40 @@
 # posthog-react-native
 
+## 4.68.0
+
+### Minor Changes
+
+- [#4822](https://github.com/PostHog/posthog-js/pull/4822) [`a6320d5`](https://github.com/PostHog/posthog-js/commit/a6320d57cbde8fb8f2e9e89f273c72856126f0c7) Thanks [@AyobamiH](https://github.com/AyobamiH)! - feat(react-native): support shuffled survey questions and answer options
+  (2026-09-08)
+
+## 4.67.3
+
+### Patch Changes
+
+- [#4799](https://github.com/PostHog/posthog-js/pull/4799) [`3161e0d`](https://github.com/PostHog/posthog-js/commit/3161e0d92f6da33217ea552fb635c08edee3f4dc) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve Expo static exports and their per-asset Chunk IDs when wrapping Expo's Metro serializer.
+  (2026-09-07)
+
+## 4.67.2
+
+### Patch Changes
+
+- [#4802](https://github.com/PostHog/posthog-js/pull/4802) [`6a5025e`](https://github.com/PostHog/posthog-js/commit/6a5025e5b29dc71e67ab97b4c9220204690f6afe) Thanks [@marandaneto](https://github.com/marandaneto)! - Update displayed surveys when the person's language changes, preserving in-progress answers and keeping survey event language metadata in sync.
+  (2026-09-07)
+
+## 4.67.1
+
+### Patch Changes
+
+- [#4785](https://github.com/PostHog/posthog-js/pull/4785) [`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829) Thanks [@marandaneto](https://github.com/marandaneto)! - Clarify feature flag return-value terminology across SDK APIs. A `false` value is a conclusive off evaluation, while `undefined` means no evaluation is available. Remote evaluation omits globally inactive flags, whereas backend local evaluation can resolve cached inactive definitions to `false`.
+  (2026-09-07)
+
+- [#4778](https://github.com/PostHog/posthog-js/pull/4778) [`1d26ccf`](https://github.com/PostHog/posthog-js/commit/1d26ccf7900d695feaead6a74cf14c2f8dea72a3) Thanks [@posthog](https://github.com/apps/posthog)! - fix(react-native): keep Metro async chunks serialized when the chunk ID is absent
+  (2026-09-07)
+- Updated dependencies [[`f8013ed`](https://github.com/PostHog/posthog-js/commit/f8013ed497fdf37765358df23152b328c339e586), [`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829), [`5e74132`](https://github.com/PostHog/posthog-js/commit/5e74132a76a32d5df9c6706dddf1597c748061d2)]:
+  - @posthog/react-native-plugin@2.5.2
+  - @posthog/core@1.50.6
+  - @posthog/types@1.409.1
+
 ## 4.67.0
 
 ### Minor Changes
