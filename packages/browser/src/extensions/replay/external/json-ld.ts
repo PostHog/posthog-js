@@ -447,8 +447,10 @@ export function startJsonLdCapture(
     }
 ): { scan: (force?: boolean, emit?: (jsonLd: unknown) => boolean) => void; stop: () => void } {
     const lastJsonByScript = new WeakMap<HTMLScriptElement, string>()
+    const suppressedTextByScript = new WeakMap<HTMLScriptElement, string>()
     const suppressedJsonByScript = new WeakMap<HTMLScriptElement, string>()
     const getCaptureState = options.getCaptureState || (() => true)
+    let stopped = false
     let remainingLength = MAX_JSON_LD_LENGTH
     const hasCapturedDomId = createCapturedDomIdMatcher(doc, options)
 
@@ -456,6 +458,7 @@ export function startJsonLdCapture(
         try {
             const captureState = getCaptureState()
             if (
+                stopped ||
                 !remainingLength ||
                 captureState === false ||
                 !script.isConnected ||
@@ -464,13 +467,18 @@ export function startJsonLdCapture(
             ) {
                 return
             }
-            const sanitized = sanitizeJsonLd(script.text, hasCapturedDomId)
+            const scriptText = script.text
+            if (!isNull(captureState) && suppressedTextByScript.get(script) === scriptText) {
+                return
+            }
+            const sanitized = sanitizeJsonLd(scriptText, hasCapturedDomId)
             if (!sanitized) {
                 lastJsonByScript.delete(script)
                 return
             }
             const [jsonLd, json] = sanitized
             if (isNull(captureState)) {
+                suppressedTextByScript.set(script, scriptText)
                 lastJsonByScript.set(script, json)
                 suppressedJsonByScript.set(script, json)
                 return
@@ -479,6 +487,7 @@ export function startJsonLdCapture(
                 return
             }
             suppressedJsonByScript.delete(script)
+            suppressedTextByScript.delete(script)
             if (lastJsonByScript.get(script) !== json) {
                 if (json.length > remainingLength) {
                     remainingLength = 0
@@ -494,36 +503,50 @@ export function startJsonLdCapture(
         }
     }
 
-    try {
-        const observer = new MutationObserverClass((mutations) => {
-            try {
-                if (!remainingLength || getCaptureState() === false) {
-                    return
-                }
-                const captureScripts = (node: Node): void => {
-                    for (const script of getJsonLdScripts(node)) {
-                        captureScript(script)
-                    }
-                }
-
-                for (const mutation of mutations) {
-                    if (mutation.type === 'childList') {
-                        if (isJsonLdScript(mutation.target)) {
-                            captureScript(mutation.target)
-                        }
-                        mutation.addedNodes.forEach(captureScripts)
-                    } else if (mutation.type === 'characterData') {
-                        const parent = mutation.target.parentNode
-                        if (parent && isJsonLdScript(parent)) {
-                            captureScript(parent)
-                        }
-                    } else if (mutation.type === 'attributes' && isJsonLdScript(mutation.target)) {
-                        captureScript(mutation.target)
-                    }
-                }
-            } catch {
+    const captureMutations = (mutations: MutationRecord[]): void => {
+        try {
+            if (stopped || !remainingLength || getCaptureState() === false) {
                 return
             }
+            const captureScripts = (node: Node): void => {
+                for (const script of getJsonLdScripts(node)) {
+                    captureScript(script)
+                }
+            }
+
+            for (const mutation of mutations) {
+                if (mutation.type === 'childList') {
+                    if (isJsonLdScript(mutation.target)) {
+                        captureScript(mutation.target)
+                    }
+                    mutation.addedNodes.forEach(captureScripts)
+                } else if (mutation.type === 'characterData') {
+                    const parent = mutation.target.parentNode
+                    if (parent && isJsonLdScript(parent)) {
+                        captureScript(parent)
+                    }
+                } else if (mutation.type === 'attributes' && isJsonLdScript(mutation.target)) {
+                    captureScript(mutation.target)
+                }
+            }
+        } catch {
+            return
+        }
+    }
+
+    try {
+        const observer = new MutationObserverClass((mutations) => {
+            const captureState = getCaptureState()
+            if (stopped || !remainingLength || captureState === false) {
+                return
+            }
+            if (isNull(captureState)) {
+                captureMutations(mutations)
+                return
+            }
+            // rrweb must update its DOM mirror before JSON-LD can validate new element IDs.
+            // oxlint-disable-next-line compat/compat
+            void Promise.resolve().then(() => captureMutations(mutations))
         })
 
         observer.observe(doc, {
@@ -534,7 +557,7 @@ export function startJsonLdCapture(
             subtree: true,
         })
         const scan = (force = false, emit = options.emit): void => {
-            if (!remainingLength || getCaptureState() === false) {
+            if (stopped || !remainingLength || getCaptureState() === false) {
                 return
             }
             getJsonLdScripts(doc.documentElement).forEach((script) => {
@@ -545,7 +568,13 @@ export function startJsonLdCapture(
             })
         }
 
-        return { scan, stop: () => observer.disconnect() }
+        return {
+            scan,
+            stop: () => {
+                stopped = true
+                observer.disconnect()
+            },
+        }
     } catch {
         return { scan: () => {}, stop: () => {} }
     }

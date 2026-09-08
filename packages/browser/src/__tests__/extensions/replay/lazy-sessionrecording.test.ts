@@ -5151,6 +5151,7 @@ describe('Lazy SessionRecording', () => {
                     name: 'Allowed page product',
                 })
                 await Promise.resolve()
+                await Promise.resolve()
                 expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
                     '@context': 'https://schema.org',
                     '@type': 'Product',

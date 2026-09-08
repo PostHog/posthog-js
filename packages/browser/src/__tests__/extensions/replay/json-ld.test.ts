@@ -172,7 +172,12 @@ describe('JSON-LD replay capture', () => {
             [{ '@context': 'https://schema.org', '@type': 'Product', name: 'Three' }],
         ])
 
+        document.body.appendChild(
+            jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'Pending' })
+        )
+        await Promise.resolve()
         capture.stop()
+        capture.scan(true)
         document.body.appendChild(jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'Four' }))
         await deliverMutations()
         expect(emit).toHaveBeenCalledTimes(3)
@@ -339,18 +344,32 @@ describe('JSON-LD replay capture', () => {
         capture.stop()
     })
 
-    it('does not restore suppressed JSON-LD through a forced snapshot scan', () => {
+    it.each(['scan', 'mutation'])('preserves suppression and resume across a %s', async (delivery) => {
         const emit = vi.fn(() => true)
         const snapshotEmit = vi.fn(() => true)
         let captureState: boolean | null = null
-        const script = jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product', name: 'Suppressed' })
-        document.body.appendChild(script)
+        let targetRecorded = false
+        const target = document.createElement('div')
+        target.id = 'pending-target'
+        const script = jsonLdScript({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            name: 'Suppressed',
+            '@id': '#pending-target',
+        })
         const capture = startJsonLdCapture(document, MutationObserver, {
             emit,
             getCaptureState: () => captureState,
+            isRecordedElement: () => targetRecorded,
         })
 
-        capture.scan()
+        document.body.append(target, script)
+        if (delivery === 'scan') {
+            capture.scan()
+        } else {
+            await Promise.resolve()
+        }
+        targetRecorded = true
         captureState = true
         capture.scan(true, snapshotEmit)
         capture.scan()
@@ -359,11 +378,13 @@ describe('JSON-LD replay capture', () => {
 
         const changed = { '@context': 'https://schema.org', '@type': 'Product', name: 'Changed after resume' }
         script.textContent = JSON.stringify(changed)
+        await deliverMutations()
+        expect(emit).toHaveBeenCalledWith(changed)
         capture.scan(true, snapshotEmit)
         capture.scan()
         expect(snapshotEmit).toHaveBeenCalledTimes(1)
         expect(snapshotEmit).toHaveBeenCalledWith(changed)
-        expect(emit).not.toHaveBeenCalled()
+        expect(emit).toHaveBeenCalledTimes(1)
         capture.stop()
     })
 

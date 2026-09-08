@@ -141,12 +141,16 @@ test.describe('Session recording - masking', () => {
         await waitForSessionRecordingToStart(page)
 
         await page.evaluate(() => {
+            const product = document.createElement('div')
+            product.id = 'ALLOWED_DYNAMIC_PRODUCT_ID'
+            document.body.append(product)
             const script = document.createElement('script')
             script.type = 'application/ld+json'
             script.textContent = JSON.stringify({
                 '@context': 'https://schema.org',
                 '@type': 'Product',
                 name: 'ALLOWED_DYNAMIC_PRODUCT',
+                '@id': '#ALLOWED_DYNAMIC_PRODUCT_ID',
                 email: 'PRIVATE_DYNAMIC_EMAIL',
             })
             document.head.append(script)
@@ -198,6 +202,11 @@ test.describe('Session recording - masking', () => {
                     event.data.payload.name === 'ALLOWED_DYNAMIC_PRODUCT' && !('fullSnapshotTimestamp' in event.data)
             )
         ).toBe(true)
+        expect(
+            jsonLdEvents.find(({ event }) => event.data.payload.name === 'ALLOWED_DYNAMIC_PRODUCT')?.event.data.payload[
+                '@id'
+            ]
+        ).toBe('ALLOWED_DYNAMIC_PRODUCT_ID')
         expect(eventBytes).toContain('ALLOWED_PRODUCT_ID')
         expect(eventBytes).toContain('ALLOWED_INITIAL_PRODUCT')
         expect(eventBytes).toContain('ALLOWED_DYNAMIC_PRODUCT')
