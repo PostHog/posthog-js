@@ -76,12 +76,9 @@ export interface StartSpanOptions {
      * Parent of this span: either a span handle, or a raw W3C `traceparent`
      * string to continue a trace started by another service.
      *
-     * When omitted the parent is the currently active span, or none. A recording
-     * handle from this SDK parents normally, and an inert one yields an inert
-     * span carrying the same context. A span from another tracer, which reports
-     * its context through `spanContext()` rather than `traceparent()`, is
-     * ignored: the span parents to the active span or starts a new trace. Pass
-     * that tracer's `traceparent` string to continue its trace.
+     * When omitted the parent is the currently active span, or none. Only
+     * handles returned by this SDK are honoured; any other `Span` yields an
+     * inert span.
      *
      * @example Continue an inbound trace
      * ```ts

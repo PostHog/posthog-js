@@ -113,11 +113,13 @@ const TRACESTATE_MAX_LENGTH = 512
 /**
  * Validates an incoming `tracestate` far enough to know it is safe to echo back.
  * A malformed one is discarded without invalidating its traceparent, so a bad
- * vendor entry never costs us the trace continuation.
+ * vendor entry never costs us the trace continuation. More than 32 members is
+ * malformed: W3C's list grammar admits no more.
  *
- * Over-long input is trimmed rather than discarded: W3C makes the limits a
- * reason to drop members from the end, so the entries that fit are still valid
- * state the next hop can use.
+ * A valid header over the length W3C asks us to propagate is trimmed instead,
+ * by whole members. Members over 128 characters go first — W3C names those as
+ * the ones to drop — and the rest from the right, so the entries nearest the
+ * caller survive.
  */
 export function sanitizeTracestate(value: unknown): string | undefined {
   if (typeof value !== 'string') {
@@ -134,6 +136,9 @@ export function sanitizeTracestate(value: unknown): string | undefined {
     return undefined
   }
   const members = trimmed.split(',')
+  if (members.length > TRACESTATE_MAX_MEMBERS) {
+    return undefined
+  }
   for (const member of members) {
     // An empty member is tolerated by the spec (list optional-white-space), but
     // a member without a `=` is not a key/value pair at all.
@@ -141,15 +146,27 @@ export function sanitizeTracestate(value: unknown): string | undefined {
       return undefined
     }
   }
-  const kept: string[] = []
-  let length = 0
-  for (const member of members.slice(0, TRACESTATE_MAX_MEMBERS)) {
-    const separator = kept.length ? 1 : 0
-    if (length + separator + member.length > TRACESTATE_MAX_LENGTH) {
-      break
+  if (trimmed.length <= TRACESTATE_MAX_LENGTH) {
+    return trimmed
+  }
+  return trimToLength(members)
+}
+
+// W3C's own guidance for which members to drop when a list is too long.
+const TRACESTATE_LARGE_MEMBER_LENGTH = 128
+
+/** The members that fit, dropping the largest first and then from the right. */
+function trimToLength(members: string[]): string | undefined {
+  const kept = [...members]
+  const joinedLength = (): number => kept.reduce((total, member) => total + member.length, 0) + kept.length - 1
+
+  for (let index = kept.length - 1; index >= 0 && joinedLength() > TRACESTATE_MAX_LENGTH; index--) {
+    if (kept[index].length > TRACESTATE_LARGE_MEMBER_LENGTH) {
+      kept.splice(index, 1)
     }
-    kept.push(member)
-    length += separator + member.length
+  }
+  while (kept.length && joinedLength() > TRACESTATE_MAX_LENGTH) {
+    kept.pop()
   }
   return kept.length ? kept.join(',') : undefined
 }
