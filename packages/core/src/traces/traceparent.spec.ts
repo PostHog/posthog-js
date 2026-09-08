@@ -107,10 +107,20 @@ describe('traceparent', () => {
       ['a member without a value', 'vendor'],
       ['a non-string', 42],
       ['undefined', undefined],
-      ['more than 32 members', Array.from({ length: 33 }, (_v, i) => `k${i}=v`).join(',')],
-      ['an overlong value', `vendor=${'a'.repeat(600)}`],
+      ['a single member longer than the whole limit', `vendor=${'a'.repeat(600)}`],
     ])('discards %s', (_name, value) => {
       expect(sanitizeTracestate(value)).toBeUndefined()
+    })
+
+    it('keeps the first 32 members of a longer list', () => {
+      const members = Array.from({ length: 33 }, (_v, i) => `k${i}=v`)
+      expect(sanitizeTracestate(members.join(','))).toBe(members.slice(0, 32).join(','))
+    })
+
+    it('keeps the members that fit inside the length limit', () => {
+      // 102 characters each, so the fifth crosses 512 and the first four stay.
+      const members = Array.from({ length: 6 }, (_v, i) => `k${i}=${'a'.repeat(100)}`)
+      expect(sanitizeTracestate(members.join(','))).toBe(members.slice(0, 4).join(','))
     })
   })
 })

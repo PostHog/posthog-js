@@ -10,6 +10,7 @@ import type {
   TracesHost,
 } from './types'
 import {
+  PassThroughSpan,
   PostHogSpan,
   applySpanLimits,
   describeError,
@@ -19,7 +20,7 @@ import {
   truncateAttributes,
 } from './span'
 import { newSpanId, newTraceId } from './ids'
-import { parseTraceparent, sanitizeTracestate } from './traceparent'
+import { parseTraceparent, sanitizeTracestate, traceparentHeader } from './traceparent'
 import { clampEndTime, resolveStartTime, resolveSuppliedTime, sanitizeName, toEpochMs } from './sanitize'
 import { assignUserAttributes } from '../utils/json-utils'
 import { buildOtlpSpan, buildOtlpTracesPayload, buildTracesResourceAttributes } from './otlp'
@@ -48,6 +49,21 @@ function isOwnSpan(value: unknown): value is PostHogSpan {
     return value instanceof PostHogSpan
   } catch {
     return false
+  }
+}
+
+/** A `traceparent` header as the parent context it describes, or nothing if it is malformed. */
+function remoteContext(header: string, tracestate: string | undefined): ParentContext | undefined {
+  const remote = parseTraceparent(header)
+  if (!remote) {
+    return undefined
+  }
+  return {
+    traceId: remote.traceId,
+    parentSpanId: remote.spanId,
+    traceState: sanitizeTracestate(tracestate),
+    traceFlags: remote.flags,
+    isRemote: true,
   }
 }
 
@@ -193,25 +209,26 @@ export class PostHogTraces {
    */
   startSpan(name: string, options?: StartSpanOptions): Span {
     if (this._instance.isDisabled || this._instance.optedOut) {
-      return inertSpan(options)
+      return inertSpan(options, this._contextManager.active())
     }
 
-    const explicitParent = options?.parent
+    const explicitParent = traceparentHeader(options?.parent)
     if (explicitParent && typeof explicitParent !== 'string' && !isOwnSpan(explicitParent)) {
       if (looksLikeSpan(explicitParent)) {
         // Inert like its parent, never an orphan with invented ids — but a
         // pass-through parent's inbound context carries to the child rather than
         // the trace ending here.
         this._logger.debug('Span parent is not a span from this SDK; returning an inert span')
-        return inertSpan(options)
+        return inertSpan(options, this._contextManager.active())
       }
-      // No `traceparent()` to read: `req.headers.traceparent` is `string[]` when the
-      // header arrives twice, and a span from another tracer exposes `spanContext()`
-      // instead. Ignored: falls back to the active span, or to a new trace.
+      // No `traceparent()` to read: a span from another tracer exposes
+      // `spanContext()` instead, and `headersDistinct.traceparent` is a `string[]`
+      // holding more than one inbound value. Ignored: falls back to the active
+      // span, or to a new trace.
       this._logger.debug('Ignoring an unusable span parent')
     }
 
-    const parent = this._resolveParent(options)
+    const parent = this._resolveParent(explicitParent, options)
 
     // Swept before the bound is read, so a process that has leaked its way to
     // the bound recovers on the first `startSpan` after the leaks age out.
@@ -221,7 +238,7 @@ export class PostHogTraces {
         1,
         `the live-span limit (${this._config.maxLiveSpans}) was reached — spans are being started and never ended`
       )
-      return inertSpan(options)
+      return inertSpan(options, this._contextManager.active())
     }
 
     const now = Date.now()
@@ -383,22 +400,13 @@ export class PostHogTraces {
    * Resolves a span's parent: an explicit `parent`, then the active span, then a
    * fresh root. A no-op explicit parent is rejected earlier, in `startSpan`.
    */
-  private _resolveParent(options?: StartSpanOptions): ParentContext | undefined {
-    const explicit = options?.parent
-
+  private _resolveParent(explicit: unknown, options?: StartSpanOptions): ParentContext | undefined {
     if (typeof explicit === 'string') {
-      const remote = parseTraceparent(explicit)
+      const remote = remoteContext(explicit, options?.tracestate)
       if (!remote) {
         this._logger.debug('Ignoring malformed traceparent; starting a new trace')
-        return undefined
       }
-      return {
-        traceId: remote.traceId,
-        parentSpanId: remote.spanId,
-        traceState: sanitizeTracestate(options?.tracestate),
-        traceFlags: remote.flags,
-        isRemote: true,
-      }
+      return remote
     }
 
     if (isOwnSpan(explicit)) {
@@ -408,7 +416,16 @@ export class PostHogTraces {
     }
 
     const active = this._contextManager.active()
-    return isOwnSpan(active) ? active.childContext() : undefined
+    if (isOwnSpan(active)) {
+      return active.childContext()
+    }
+    // A pass-through handle is active when an earlier span in this trace could
+    // not be recorded. Its context still parents this one, so the inbound trace
+    // survives a span the SDK declined rather than ending there.
+    if (active instanceof PassThroughSpan) {
+      return remoteContext(active.traceparent(), active.tracestate() ?? undefined)
+    }
+    return undefined
   }
 
   /**
@@ -500,6 +517,7 @@ export class PostHogTraces {
     if (!record) {
       return
     }
+    this._reportLimitDrops(record)
 
     if (this._queue.length >= this._config.maxQueueSize) {
       // Drop the incoming span, not queued ones: those are completed parents whose
@@ -525,6 +543,26 @@ export class PostHogTraces {
       this._flushInBackground()
     } else {
       this._armFlushTimerIfQueued()
+    }
+  }
+
+  /**
+   * One diagnostic per span when its limits discarded anything, which is what
+   * OTel asks for. Counted after the post-hook pass, so drops a `beforeSpanSend`
+   * hook caused are included.
+   */
+  private _reportLimitDrops(record: SpanRecord): void {
+    const attributes = record.droppedAttributesCount ?? 0
+    const events = record.droppedEventsCount ?? 0
+    let eventAttributes = 0
+    for (const event of record.events) {
+      eventAttributes += event.droppedAttributesCount ?? 0
+    }
+    if (attributes || events || eventAttributes) {
+      this._logger.debug(
+        `Span limits discarded data from "${record.name}": ` +
+          `${attributes} attributes, ${events} events, ${eventAttributes} event attributes`
+      )
     }
   }
 
