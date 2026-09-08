@@ -2,6 +2,7 @@ import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import ErrorTracking from '@/extensions/error-tracking'
 import type { IPostHog } from '@/types'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending, wait, waitForPromises } from './utils'
+import { _resetDeprecationWarningsForTests } from '@/client'
 import { randomUUID } from 'crypto'
 import { UUID_REGEX } from '@posthog/core'
 
@@ -297,6 +298,26 @@ describe('PostHog Node.js', () => {
             $geoip_disable: true,
           },
         },
+      ])
+    })
+
+    it('should warn when $set is mixed with top-level properties that are dropped', async () => {
+      _resetDeprecationWarningsForTests()
+
+      posthog.identify({ distinctId: '123', properties: { $set: { foo: 'bar' }, name: 'Max Hedgehog' } })
+      posthog.identify({ distinctId: '123', properties: { $set: { foo: 'bar' }, name: 'Max Hedgehog' } })
+      posthog.identify({ distinctId: '123', properties: { $set: { foo: 'bar' }, plan: 'premium' } })
+      await waitForFlushTimer()
+
+      // the drop itself is unchanged, but it is no longer silent
+      expect(getLastBatchEvents()?.[0]).toMatchObject({
+        event: '$identify',
+        properties: { $set: { foo: 'bar' } },
+      })
+      // repeats stay quiet, but a second call site dropping a different property is still reported
+      expect(warnSpy.mock.calls.map((call) => call[0])).toEqual([
+        expect.stringContaining('identify() ignored the top-level properties name'),
+        expect.stringContaining('identify() ignored the top-level properties plan'),
       ])
     })
 

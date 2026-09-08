@@ -41,6 +41,15 @@ describe('Rate Limiter', () => {
                 }),
             },
             capture: vi.fn(() => ({})),
+            _captureClientIngestionWarning: vi.fn((message: string) =>
+                mockPostHog.capture(
+                    '$$client_ingestion_warning',
+                    { $$client_ingestion_warning_message: message },
+                    {
+                        skip_client_rate_limiting: true,
+                    }
+                )
+            ),
             get_session_id: vi.fn(() => 'session-id'),
         }
 

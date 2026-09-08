@@ -208,7 +208,26 @@ describe('person processing', () => {
             expect(mockLogger.error).toHaveBeenCalledWith(
                 'posthog.identify was called, but process_person is set to "never". This call will be ignored.'
             )
-            expect(beforeSendMock).toBeCalledTimes(0)
+            expect(beforeSendMock.mock.calls.map((call) => call[0].event)).toEqual(['$$client_ingestion_warning'])
+        })
+
+        it('should report the dropped call as an ingestion warning, once per call site', async () => {
+            // arrange
+            const { posthog, beforeSendMock } = await setup('never')
+
+            // act
+            posthog.identify(distinctId, { name: 'Max Hedgehog' })
+            posthog.identify(distinctId, { name: 'Max Hedgehog' })
+            posthog.setPersonProperties({ name: 'Max Hedgehog' })
+
+            // assert
+            const warnings = beforeSendMock.mock.calls
+                .filter((call) => call[0].event === '$$client_ingestion_warning')
+                .map((call) => call[0].properties.$$client_ingestion_warning_message)
+            expect(warnings).toEqual([
+                'posthog-js person processing disabled: posthog.identify was called, but process_person is set to "never". This call will be ignored. Any person properties it carried were discarded.',
+                'posthog-js person processing disabled: posthog.setPersonProperties was called, but process_person is set to "never". This call will be ignored. Any person properties it carried were discarded.',
+            ])
         })
 
         it('should switch events to $person_process=true if process_person is identified_only', async () => {
@@ -633,11 +652,15 @@ describe('person processing', () => {
                 'posthog.setGroupPropertiesForFlags was called, but process_person is set to "never". This call will be ignored.'
             )
 
-            // no $groupidentify is sent, only the two custom events
-            expect(beforeSendMock).toBeCalledTimes(2)
+            // no $groupidentify is sent, only the two custom events and the ingestion warning
+            expect(beforeSendMock.mock.calls.map((call) => call[0].event)).toEqual([
+                'custom event before group',
+                '$$client_ingestion_warning',
+                'custom event after group',
+            ])
             const eventBeforeGroup = beforeSendMock.mock.calls[0]
             expect(eventBeforeGroup[0].properties.$process_person_profile).toEqual(false)
-            const eventAfterGroup = beforeSendMock.mock.calls[1]
+            const eventAfterGroup = beforeSendMock.mock.calls[2]
             expect(eventAfterGroup[0].event).toEqual('custom event after group')
             expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(false)
             expect(eventAfterGroup[0].properties.$groups).toEqual({ groupType: 'groupKey' })
@@ -653,7 +676,7 @@ describe('person processing', () => {
             posthog.setPersonProperties({ prop: 'value' })
 
             // assert
-            expect(beforeSendMock).toBeCalledTimes(0)
+            expect(beforeSendMock.mock.calls.map((call) => call[0].event)).toEqual(['$$client_ingestion_warning'])
             expect(mockLogger.error).toBeCalledTimes(1)
             expect(mockLogger.error).toHaveBeenCalledWith(
                 'posthog.setPersonProperties was called, but process_person is set to "never". This call will be ignored.'
@@ -720,7 +743,7 @@ describe('person processing', () => {
             posthog.alias('alias')
 
             // assert
-            expect(beforeSendMock).toBeCalledTimes(0)
+            expect(beforeSendMock.mock.calls.map((call) => call[0].event)).toEqual(['$$client_ingestion_warning'])
             expect(mockLogger.error).toBeCalledTimes(1)
             expect(mockLogger.error).toHaveBeenCalledWith(
                 'posthog.alias was called, but process_person is set to "never". This call will be ignored.'
@@ -1025,6 +1048,30 @@ describe('person processing', () => {
             const calls = beforeSendMock.mock.calls
             expect(calls.filter((call) => call[0].event === '$identify').length).toEqual(1)
             expect(calls.filter((call) => call[0].event === '$set').length).toEqual(1)
+        })
+
+        it('should not deduplicate a call that capture dropped', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+            // the first $set never leaves the SDK, so the retry must not look like a duplicate
+            beforeSendMock.mockImplementationOnce(() => null)
+
+            posthog.setPersonProperties({ name: 'Max Hedgehog' })
+            posthog.setPersonProperties({ name: 'Max Hedgehog' })
+
+            const calls = beforeSendMock.mock.calls
+            expect(calls.map((call) => call[0].event)).toEqual(['$set', '$set'])
+            expect(calls[1][0].properties.$set).toEqual({ name: 'Max Hedgehog' })
+        })
+
+        it('should not deduplicate an identify that capture dropped', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+            beforeSendMock.mockImplementationOnce(() => null)
+
+            posthog.identify('new-id', { name: 'Max Hedgehog' })
+            posthog.setPersonProperties({ name: 'Max Hedgehog' })
+
+            const calls = beforeSendMock.mock.calls
+            expect(calls.map((call) => call[0].event)).toEqual(['$identify', '$set'])
         })
 
         it('should not deduplicate a call after an identity change', async () => {

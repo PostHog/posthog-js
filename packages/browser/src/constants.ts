@@ -151,6 +151,7 @@ export const EVENT_PAGEVIEW = '$pageview'
 export const EVENT_PAGELEAVE = '$pageleave'
 export const EVENT_IDENTIFY = '$identify'
 export const EVENT_GROUPIDENTIFY = '$groupidentify'
+export const EVENT_CLIENT_INGESTION_WARNING = '$$client_ingestion_warning'
 
 /* Z-INDEX HIERARCHY: tours > surveys > support */
 export const Z_INDEX_TOURS = 2147483646
