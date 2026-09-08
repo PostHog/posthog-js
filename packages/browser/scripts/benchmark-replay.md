@@ -9,6 +9,8 @@ For nested mutations, sustained churn, trusted input probes, shadow DOM and sour
 attribution, see [the mutation investigation](benchmark-replay-mutations.md).
 For repeated moves, flat sibling lists and mirror cleanup counters, see
 [the ordering investigation](benchmark-replay-ordering.md).
+For repeated preprocessing, deep trees, mixed moves and diagnostic visit counters,
+see [the preprocessing investigation](benchmark-replay-preprocessing.md).
 
 ## Run
 

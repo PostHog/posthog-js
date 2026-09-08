@@ -20,10 +20,13 @@ const repetitions = Number(process.env.REPLAY_BENCH_RUNS || 3)
 const cpuRate = Number(process.env.REPLAY_BENCH_CPU || 1)
 const shapes = (process.env.REPLAY_BENCH_SHAPES || 'table,css').split(',')
 const profiling = process.env.REPLAY_BENCH_PROFILE === '1'
-const orderingWorkloads = process.env.REPLAY_BENCH_ORDERING === '1'
+const preprocessingWorkloads = process.env.REPLAY_BENCH_PREPROCESSING === '1'
+const orderingWorkloads = preprocessingWorkloads || process.env.REPLAY_BENCH_ORDERING === '1'
+const depth = Number(process.env.REPLAY_BENCH_DEPTH || 32)
+assert(Number.isInteger(depth) && depth >= 1 && depth <= 128)
 const mutationWorkloads = orderingWorkloads || process.env.REPLAY_BENCH_MUTATIONS === '1'
 const moveRounds = Number(process.env.REPLAY_BENCH_MOVE_ROUNDS || 5)
-assert(Number.isInteger(moveRounds) && moveRounds > 0 && moveRounds <= 20)
+assert(Number.isInteger(moveRounds) && moveRounds >= 0 && moveRounds <= 20)
 const churnSteps = Number(process.env.REPLAY_BENCH_CHURN_STEPS || 5)
 const compression = process.env.REPLAY_BENCH_COMPRESSION || 'both'
 assert(Number.isInteger(churnSteps) && churnSteps > 0 && churnSteps <= 20)
@@ -31,16 +34,23 @@ assert(['on', 'off', 'both'].includes(compression))
 assert(sizes.every((n) => Number.isInteger(n) && n > 0))
 assert(Number.isInteger(repetitions) && repetitions > 0)
 assert(Number.isFinite(cpuRate) && cpuRate >= 1)
-assert(shapes.every((shape) => ['table', 'css', 'shadow', 'flat'].includes(shape)))
+assert(shapes.every((shape) => ['table', 'css', 'shadow', 'flat', 'deep'].includes(shape)))
 
 const assets = new Map()
 for (const name of ['array.js', 'posthog-recorder.js']) {
     assets.set(name, await readFile(path.join(distRoot, name)))
 }
+const preprocessingProbe = await readFile(path.join(distRoot, 'mutation-probe.json'), 'utf8')
+    .then(JSON.parse)
+    .catch((error) => {
+        if (error.code === 'ENOENT') return null
+        throw error
+    })
+assert(!preprocessingProbe || profiling, 'Instrumented probe artifacts require REPLAY_BENCH_PROFILE=1')
 const replayer = await readFile(path.join(packageRoot, '../rrweb/rrweb/dist/rrweb.umd.cjs'), 'utf8')
 const origin = 'https://replay-benchmark.test'
 const markerTag = 'replay-benchmark-end'
-const privateValues = ['BENCH_PRIVATE_INPUT', 'BENCH_PRIVATE_TEXT', 'BENCH_BLOCKED_TEXT']
+const privateValues = ['BENCH_PRIVATE_INPUT', 'BENCH_PRIVATE_TEXT', 'BENCH_BLOCKED_TEXT', 'BENCH_TRANSIENT_PRIVATE']
 
 function decodeRequest(request) {
     const bytes = request.postDataBuffer()
@@ -145,8 +155,13 @@ try {
                         // Preload exact local artifacts: network/module loading is not serializer time.
                         await page.addScriptTag({ url: `${origin}/static/array.js` })
                         await page.addScriptTag({ url: `${origin}/static/posthog-recorder.js` })
+                        assert.equal(
+                            await page.evaluate(() => !!window.__rrwebMutationProbe),
+                            !!preprocessingProbe,
+                            'Probe manifest does not match loaded recorder'
+                        )
                         await page.evaluate(
-                            ({ targetNodes, shape, compress, origin }) => {
+                            ({ targetNodes, shape, compress, origin, depth }) => {
                                 const fixture = document.getElementById('fixture')
                                 window.benchmarkFixture = fixture
                                 const rowCount = Math.ceil(targetNodes / (shape === 'flat' ? 2 : 21))
@@ -161,6 +176,8 @@ try {
                                     generation++
                                     window.fixtureGeneration = generation
                                     window.fixtureReversed = false
+                                    window.maskedRowId = null
+                                    window.mixedAttribute = null
                                     if (nested) {
                                         fixture.replaceChildren()
                                         for (let i = 0; i < lightRows; i++) {
@@ -179,6 +196,18 @@ try {
                                     const sentinels =
                                         '<input type="password" value="BENCH_PRIVATE_INPUT"><span class="ph-mask">BENCH_PRIVATE_TEXT</span><div class="ph-no-capture">BENCH_BLOCKED_TEXT</div>'
                                     fixture.insertAdjacentHTML('beforeend', sentinels)
+                                    if (shape === 'deep') {
+                                        const rows = [...fixture.querySelectorAll('[data-row]')]
+                                        let parent = fixture
+                                        for (let i = 0; i < depth; i++) {
+                                            const wrapper = document.createElement('div')
+                                            wrapper.dataset.benchmarkDepth = String(i)
+                                            parent.append(wrapper)
+                                            parent = wrapper
+                                        }
+                                        parent.id = 'deep-rows'
+                                        rows.forEach((row) => parent.append(row))
+                                    }
                                     if (shape === 'shadow') {
                                         const host = document.createElement('div')
                                         host.id = 'benchmark-shadow'
@@ -222,7 +251,7 @@ try {
                                     },
                                 })
                             },
-                            { targetNodes, shape, compress, origin }
+                            { targetNodes, shape, compress, origin, depth }
                         )
                         await page.waitForFunction(
                             () =>
@@ -288,35 +317,37 @@ try {
                             })
                         const metrics = []
                         const checkpoints = []
-                        const phases = orderingWorkloads
-                            ? [
-                                  'off-remove',
-                                  'off-subtree-remove',
-                                  'off-repeat-move',
-                                  'off-reorder',
-                                  'start',
-                                  'reorder',
-                                  'repeat-move',
-                                  'subtree-remove',
-                                  'restore',
-                                  'remove',
-                              ]
-                            : mutationWorkloads
+                        const phases = preprocessingWorkloads
+                            ? ['off-repeat-move', 'off-mixed-move', 'start', 'repeat-move', 'mixed-move', 'remove']
+                            : orderingWorkloads
                               ? [
-                                    'off-rebuild',
-                                    'off-nested',
-                                    'off-churn',
-                                    'off-move',
                                     'off-remove',
+                                    'off-subtree-remove',
+                                    'off-repeat-move',
+                                    'off-reorder',
                                     'start',
-                                    'snapshot',
-                                    'rebuild',
-                                    'nested',
-                                    'churn',
-                                    'move',
+                                    'reorder',
+                                    'repeat-move',
+                                    'subtree-remove',
+                                    'restore',
                                     'remove',
                                 ]
-                              : ['off-rebuild', 'start', 'snapshot', 'rebuild', 'move', 'remove']
+                              : mutationWorkloads
+                                ? [
+                                      'off-rebuild',
+                                      'off-nested',
+                                      'off-churn',
+                                      'off-move',
+                                      'off-remove',
+                                      'start',
+                                      'snapshot',
+                                      'rebuild',
+                                      'nested',
+                                      'churn',
+                                      'move',
+                                      'remove',
+                                  ]
+                                : ['off-rebuild', 'start', 'snapshot', 'rebuild', 'move', 'remove']
                         for (const phase of phases) {
                             const off = phase.startsWith('off-')
                             if (mutationWorkloads && (off || phase === 'start')) {
@@ -330,6 +361,7 @@ try {
                                 await page.waitForTimeout(100)
                             }
                             if (orderingWorkloads && profiling) await page.evaluate(() => window.resetMirrorStats())
+                            if (preprocessingProbe) await page.evaluate(() => window.__rrwebMutationProbe.reset())
                             const startIndex = wireEvents.length
                             const bytesBefore = requestBytes
                             const before = await client.send('Performance.getMetrics')
@@ -368,6 +400,8 @@ try {
                                                 phase: marker,
                                                 generation: window.fixtureGeneration,
                                                 reversed: window.fixtureReversed,
+                                                maskedRowId: window.maskedRowId,
+                                                mixedAttribute: window.mixedAttribute,
                                                 present: !!fixture,
                                                 parent: fixture?.parentElement.id ?? null,
                                                 empty: !fixture?.childNodes.length,
@@ -442,9 +476,31 @@ try {
                                                                 if (parent)
                                                                     [...parent.querySelectorAll('[data-row]')]
                                                                         .reverse()
-                                                                        .forEach((row) => parent.append(row))
+                                                                        .forEach((row) => row.parentNode.append(row))
                                                             }
                                                             window.fixtureReversed = !window.fixtureReversed
+                                                            break
+                                                        }
+                                                        case 'mixed-move': {
+                                                            const root = window.benchmarkFixture
+                                                            const row = root.querySelector('[data-row]')
+                                                            window.maskedRowId = row.getAttribute('data-row')
+                                                            for (let round = 0; round <= moveRounds; round++) {
+                                                                document.getElementById('destination').append(root)
+                                                                row.classList.toggle('ph-mask', round % 2 === 0)
+                                                                row.setAttribute('data-mixed', `round-${round}`)
+                                                                const transient = document.createElement('span')
+                                                                transient.textContent = 'BENCH_TRANSIENT_PRIVATE'
+                                                                row.append(transient)
+                                                                transient.remove()
+                                                                if (round < moveRounds)
+                                                                    document.body.insertBefore(
+                                                                        root,
+                                                                        document.getElementById('destination')
+                                                                    )
+                                                            }
+                                                            row.classList.add('ph-mask')
+                                                            window.mixedAttribute = `round-${moveRounds}`
                                                             break
                                                         }
                                                         case 'repeat-move':
@@ -503,6 +559,8 @@ try {
                                                         definitions,
                                                         inputDelays,
                                                         mirrorStats: window.mirrorStats || null,
+                                                        preprocessingStats:
+                                                            window.__rrwebMutationProbe?.snapshot() || null,
                                                         maxFrameGapMs,
                                                         longTasks: longTasks.filter((t) => t.start >= start - 1),
                                                         debug: window.posthog.sessionRecording.sdkDebugProperties,
@@ -568,6 +626,7 @@ try {
                                 ),
                                 inputDelayMs: observation.inputDelays[0] ?? null,
                                 mirrorStats: observation.mirrorStats,
+                                preprocessingStats: observation.preprocessingStats,
                                 maxTaskMs: Math.max(0, ...observation.longTasks.map((t) => t.duration)),
                                 longTaskCount: observation.longTasks.length,
                                 maxFrameGapMs: observation.maxFrameGapMs,
@@ -642,7 +701,17 @@ try {
                         await writeFile(path.join(output, `${label}.json`), JSON.stringify(result, null, 2))
                         // Correctness validation is deliberately outside all measurement windows.
                         await page.evaluate(() => window.posthog.stopSessionRecording())
-                        for (const { phase, end, generation, parent, empty, present, reversed } of checkpoints) {
+                        for (const {
+                            phase,
+                            end,
+                            generation,
+                            parent,
+                            empty,
+                            present,
+                            reversed,
+                            maskedRowId,
+                            mixedAttribute,
+                        } of checkpoints) {
                             // Every churn generation and trusted input gets a replay checkpoint, not just the final DOM.
                             // A fresh context prevents destroyed replay DOMs accumulating across large prefixes.
                             const validationContext = await browser.newContext()
@@ -665,7 +734,7 @@ try {
                                     )
                                 }
                                 const replayed = await validationPage.evaluate(
-                                    ({ generation, shape, reversed }) => {
+                                    ({ generation, shape, reversed, maskedRowId, mixedAttribute, depth }) => {
                                         const events = JSON.parse(window.replayInput)
                                         delete window.replayInput
                                         const player = new window.rrweb.Replayer(events, { UNSAFE_replayCanvas: false })
@@ -694,13 +763,27 @@ try {
                                                 return (
                                                     row.getAttribute('data-row') === String(expectedIndex) &&
                                                     row.textContent ===
-                                                        (shape === 'flat'
-                                                            ? String(generation)
-                                                            : `${generation}label`.repeat(4)) &&
+                                                        (() => {
+                                                            const text =
+                                                                shape === 'flat'
+                                                                    ? String(generation)
+                                                                    : `${generation}label`.repeat(4)
+                                                            return row.getAttribute('data-row') === maskedRowId
+                                                                ? text.replace(/\S/g, '*')
+                                                                : text
+                                                        })() &&
+                                                    (row.getAttribute('data-row') !== maskedRowId ||
+                                                        (row.classList.contains('ph-mask') &&
+                                                            row.getAttribute('data-mixed') === mixedAttribute)) &&
                                                     row.querySelectorAll('.cell[data-label="metric"]').length ===
                                                         (shape === 'flat' ? 0 : 4)
                                                 )
                                             }),
+                                            depthPreserved:
+                                                shape !== 'deep' ||
+                                                rows.length === 0 ||
+                                                (fixture.querySelectorAll('[data-benchmark-depth]').length === depth &&
+                                                    rows.every((row) => row.parentElement.id === 'deep-rows')),
                                             stylesheet:
                                                 shape !== 'css' ||
                                                 (cssRules?.length === 10000 &&
@@ -715,7 +798,7 @@ try {
                                         player.destroy()
                                         return result
                                     },
-                                    { generation, shape, reversed }
+                                    { generation, shape, reversed, maskedRowId, mixedAttribute, depth }
                                 )
                                 assert.deepEqual(
                                     replayed,
@@ -724,6 +807,7 @@ try {
                                         parent,
                                         rows: empty ? 0 : Math.ceil(targetNodes / (shape === 'flat' ? 2 : 21)),
                                         orderedContent: true,
+                                        depthPreserved: true,
                                         stylesheet: true,
                                         adoptedStyle: true,
                                     },
@@ -773,6 +857,9 @@ try {
                     .digest('hex'),
                 mutationWorkloads,
                 orderingWorkloads,
+                preprocessingWorkloads,
+                preprocessingProbe,
+                depth,
                 moveRounds,
                 churnSteps,
                 compression,
