@@ -266,11 +266,14 @@ export function transformAttribute(
 }
 
 export function ignoreAttribute(
-  tagName: string,
+  tagName: Lowercase<string>,
   name: string,
   _value: unknown,
 ): boolean {
-  return (tagName === 'video' || tagName === 'audio') && name === 'autoplay';
+  return (
+    (tagName === 'video' || tagName === 'audio') &&
+    toLowerCase(name) === 'autoplay'
+  );
 }
 
 export function _isBlockedElement(
