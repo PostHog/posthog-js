@@ -4508,10 +4508,17 @@ export class PostHog implements PostHogInterface {
             // PostHog too. Once per call site per page load, because a call inside a render loop
             // would otherwise report the same mistake on every render.
             if (!this._personProcessingWarned.has(function_name)) {
+                // Marked before the capture so a `before_send` that calls back in cannot recurse,
+                // and unmarked again when capture returned nothing: opting out or waiting on
+                // consent must not silence the drop for the rest of the page load.
                 this._personProcessingWarned.add(function_name)
-                this._captureClientIngestionWarning(
-                    `posthog-js person processing disabled: ${message} Any person properties it carried were discarded.`
-                )
+                if (
+                    !this._captureClientIngestionWarning(
+                        `posthog-js person processing disabled: ${message} Any person properties it carried were discarded.`
+                    )
+                ) {
+                    this._personProcessingWarned.delete(function_name)
+                }
             }
             return false
         }

@@ -230,6 +230,26 @@ describe('person processing', () => {
             ])
         })
 
+        it('should still report the dropped call when capturing was off for the first one', async () => {
+            // arrange
+            const { posthog, beforeSendMock } = await setup('never')
+            posthog.opt_out_capturing()
+
+            // act
+            posthog.identify(distinctId, { name: 'Max Hedgehog' })
+            posthog.opt_in_capturing({ captureEventName: false })
+            posthog.identify(distinctId, { name: 'Max Hedgehog' })
+            posthog.identify(distinctId, { name: 'Max Hedgehog' })
+
+            // assert: the warning nobody could send is retried once, then deduped as usual
+            const warnings = beforeSendMock.mock.calls
+                .filter((call) => call[0].event === '$$client_ingestion_warning')
+                .map((call) => call[0].properties.$$client_ingestion_warning_message)
+            expect(warnings).toEqual([
+                'posthog-js person processing disabled: posthog.identify was called, but process_person is set to "never". This call will be ignored. Any person properties it carried were discarded.',
+            ])
+        })
+
         it('should switch events to $person_process=true if process_person is identified_only', async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('identified_only')
