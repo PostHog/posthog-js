@@ -447,8 +447,7 @@ export function startJsonLdCapture(
     }
 ): { scan: (force?: boolean, emit?: (jsonLd: unknown) => boolean) => void; stop: () => void } {
     const lastJsonByScript = new WeakMap<HTMLScriptElement, string>()
-    const suppressedTextByScript = new WeakMap<HTMLScriptElement, string>()
-    const suppressedJsonByScript = new WeakMap<HTMLScriptElement, string>()
+    const suppressedByScript = new WeakMap<HTMLScriptElement, [text: string, json: string]>()
     const getCaptureState = options.getCaptureState || (() => true)
     let stopped = false
     let remainingLength = MAX_JSON_LD_LENGTH
@@ -468,7 +467,8 @@ export function startJsonLdCapture(
                 return
             }
             const scriptText = script.text
-            if (!isNull(captureState) && suppressedTextByScript.get(script) === scriptText) {
+            const suppressed = suppressedByScript.get(script)
+            if (!isNull(captureState) && suppressed && suppressed[0] === scriptText) {
                 return
             }
             const sanitized = sanitizeJsonLd(scriptText, hasCapturedDomId)
@@ -478,16 +478,14 @@ export function startJsonLdCapture(
             }
             const [jsonLd, json] = sanitized
             if (isNull(captureState)) {
-                suppressedTextByScript.set(script, scriptText)
                 lastJsonByScript.set(script, json)
-                suppressedJsonByScript.set(script, json)
+                suppressedByScript.set(script, [scriptText, json])
                 return
             }
-            if (suppressedJsonByScript.get(script) === json) {
+            if (suppressed && suppressed[1] === json) {
                 return
             }
-            suppressedJsonByScript.delete(script)
-            suppressedTextByScript.delete(script)
+            suppressedByScript.delete(script)
             if (lastJsonByScript.get(script) !== json) {
                 if (json.length > remainingLength) {
                     remainingLength = 0

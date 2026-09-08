@@ -954,23 +954,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
-    private _collectJsonLdForFullSnapshot(timestamp: number): eventWithTime[] {
-        const events: eventWithTime[] = []
-        if (!this._canCaptureJsonLd()) {
-            return events
-        }
-        // Buffer flushes can run page callbacks, so read JSON-LD before buffering the snapshot.
-        this._jsonLdCapture?.scan(true, (jsonLd) => {
-            events.push({
-                type: EventType.Custom,
-                timestamp,
-                data: { tag: JSON_LD_EVENT_TAG, payload: jsonLd, fullSnapshotTimestamp: timestamp },
-            })
-            return true
-        })
-        return events
-    }
-
     private _scheduleJsonLdScan(): void {
         // Run the scan after the current rrweb event updates the JSON-LD capture state.
         // oxlint-disable-next-line compat/compat
@@ -2083,22 +2066,26 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         const jsonLdCapture = this._jsonLdCapture
         const compressionGeneration = this._compressionQueueGeneration
-        const jsonLdEvents =
-            event.type === EventType.FullSnapshot ? this._collectJsonLdForFullSnapshot(event.timestamp) : undefined
-
-        const compressionEnabled = this._instance.config.session_recording.compress_events ?? true
-
-        if (
-            this._queuedCompressionEvents > 0 ||
-            (compressionEnabled && shouldUseNativeAsyncSessionRecordingGzip(event))
-        ) {
-            this._enqueueCompression(event, compressionEnabled, targetSessionId, targetWindowId)
-        } else {
-            const { event: eventToSend, size } = compressionEnabled
-                ? compressEventSync(event)
-                : { event, size: estimateSize(event) }
-            this._captureProcessedEvent(event, eventToSend, size, targetSessionId, targetWindowId)
+        const jsonLdEvents: eventWithTime[] | undefined =
+            event.type === EventType.FullSnapshot && this._canCaptureJsonLd() ? [] : undefined
+        // Buffer flushes can run page callbacks, so read JSON-LD before buffering the snapshot.
+        if (jsonLdEvents) {
+            jsonLdCapture?.scan(true, (jsonLd) => {
+                jsonLdEvents.push({
+                    type: EventType.Custom,
+                    timestamp: event.timestamp,
+                    data: { tag: JSON_LD_EVENT_TAG, payload: jsonLd, fullSnapshotTimestamp: event.timestamp },
+                })
+                return true
+            })
         }
+
+        this._captureEventWithCompression(
+            event,
+            this._instance.config.session_recording.compress_events ?? true,
+            targetSessionId,
+            targetWindowId
+        )
 
         if (!jsonLdEvents) {
             return
@@ -2113,17 +2100,26 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             ) {
                 return
             }
-            if (this._queuedCompressionEvents > 0) {
-                this._enqueueCompression(jsonLdEvent, false, targetSessionId, targetWindowId)
-            } else {
-                this._captureProcessedEvent(
-                    jsonLdEvent,
-                    jsonLdEvent,
-                    estimateSize(jsonLdEvent),
-                    targetSessionId,
-                    targetWindowId
-                )
-            }
+            this._captureEventWithCompression(jsonLdEvent, false, targetSessionId, targetWindowId)
+        }
+    }
+
+    private _captureEventWithCompression(
+        event: eventWithTime,
+        compressionEnabled: boolean,
+        targetSessionId: string,
+        targetWindowId: string
+    ): void {
+        if (
+            this._queuedCompressionEvents > 0 ||
+            (compressionEnabled && shouldUseNativeAsyncSessionRecordingGzip(event))
+        ) {
+            this._enqueueCompression(event, compressionEnabled, targetSessionId, targetWindowId)
+        } else {
+            const { event: eventToSend, size } = compressionEnabled
+                ? compressEventSync(event)
+                : { event, size: estimateSize(event) }
+            this._captureProcessedEvent(event, eventToSend, size, targetSessionId, targetWindowId)
         }
     }
 
