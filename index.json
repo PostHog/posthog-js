@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/4840": {
+    "key": "PostHog/posthog-js/issue/4840",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4840",
+    "url": "https://github.com/PostHog/posthog-js/issues/4840",
+    "conclusion": "Valid, well-scoped testing-infrastructure enhancement; an offline @posthog/ai pilot is justified, but it is not a small or low-risk PR.",
+    "labels": [
+      "enhancement",
+      "node",
+      "team/ai-observability",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-08T13:45:28.136Z"
+  },
   "PostHog/posthog-js/issue/3765": {
     "key": "PostHog/posthog-js/issue/3765",
     "repo": "PostHog/posthog-js",
