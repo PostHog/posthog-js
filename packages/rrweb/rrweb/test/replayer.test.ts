@@ -1002,12 +1002,15 @@ describe('replayer', function () {
 
   it('replays same timestamp events in correct order', async () => {
     await page.evaluate(`events = ${JSON.stringify(orderingEvents)}`);
-    await page.evaluate(`
-      const { Replayer } = rrweb;
-      const replayer = new Replayer(events);
-      replayer.play();
-    `);
-    await page.waitForTimeout(50);
+    await page.evaluate((finishEvent) => {
+      const win = window as IWindow;
+      const replayer = new win.rrweb.Replayer(win.events);
+      // A loaded runner may not deliver the first frame within 50 ms.
+      return new Promise<void>((resolve) => {
+        replayer.on(finishEvent, () => resolve());
+        replayer.play();
+      });
+    }, ReplayerEvents.Finish);
 
     await assertDomSnapshot(page);
   });

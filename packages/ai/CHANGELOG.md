@@ -1,5 +1,15 @@
 # posthog-ai
 
+## 8.10.2
+
+### Patch Changes
+
+- [#4820](https://github.com/PostHog/posthog-js/pull/4820) [`56e0a44`](https://github.com/PostHog/posthog-js/commit/56e0a44f0721d63172bd53394446c6707a6b8765) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates:
+  - Updated dependency [`@anthropic-ai/sdk@>=0.112.3 <0.123.0` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.112.3) (from `>=0.112.3 <0.121.0`, in `peerDependencies`) (2026-09-07)
+- Updated dependencies [[`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829)]:
+  - posthog-node@5.51.7
+  - @posthog/core@1.50.6
+
 ## 8.10.1
 
 ### Patch Changes

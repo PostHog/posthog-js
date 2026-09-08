@@ -479,4 +479,8 @@ export class SessionRecording implements Extension {
     tryAddCustomEvent(tag: string, payload: any): boolean {
         return !!this._lazyLoadedSessionRecording?.tryAddCustomEvent(tag, payload)
     }
+
+    flushBeforeIdentityReset(): void {
+        this._lazyLoadedSessionRecording?.flushBeforeIdentityReset?.()
+    }
 }
