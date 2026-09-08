@@ -2,6 +2,14 @@
 export const MAX_FLUSH_BACKOFF_EXPONENT = 6
 
 /**
+ * Ceiling on the SDK's own retry delay, which the logs and traces contracts
+ * both state as "exponential backoff capped at ~30s". A host that configured a
+ * longer flush interval keeps it: the cap is there to stop the doubling running
+ * away, not to flush more often than asked.
+ */
+export const MAX_FLUSH_BACKOFF_MS = 30_000
+
+/**
  * How far a delay may be moved either side of its computed value. Clients that
  * fail together otherwise retry together, and arrive at the endpoint as one
  * burst each time it comes back — which is what OTel asks jitter to prevent.

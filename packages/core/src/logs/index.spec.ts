@@ -1650,6 +1650,29 @@ describe('PostHogLogs', () => {
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
     })
 
+    it('caps the retry delay at 30s however long the outage runs', async () => {
+      // The logs contract states the backoff as capped at ~30s. Without the cap
+      // a 5s interval reaches 320s after six doublings.
+      mockInstance._sendLogsBatch = vi.fn(() => Promise.resolve({ kind: 'retry-later', error: new Error('down') }))
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'retry-me' })
+
+      // Ten failures, well past the six doublings the exponent allows.
+      for (let i = 0; i < 10; i++) {
+        await vi.advanceTimersByTimeAsync(30_000)
+      }
+      // Capped, the delay settles at 30s and 300s of outage buys ten retries on
+      // top of the two the first doublings allow. Uncapped it reaches 320s and
+      // buys six attempts in total, so the difference is not a rounding one.
+      expect(mockInstance._sendLogsBatch.mock.calls.length).toBeGreaterThanOrEqual(11)
+    })
+
     it('backs off exponentially across consecutive failed flushes', async () => {
       // Every flush fails, so the record stays queued and the retry interval grows:
       // base (initial), base (1st retry), 2x, 4x, ...

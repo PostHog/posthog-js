@@ -4,7 +4,7 @@ import { Logger, PostHogPersistedProperty } from '../types'
 import { isArray, raceWithTimeout } from '../utils'
 import { FlushTimer } from '../utils/flush-timer'
 import { RetryAfterWindow } from '../utils/retry-after'
-import { NO_JITTER, backoffDelayMs, drawJitter } from '../utils/backoff'
+import { MAX_FLUSH_BACKOFF_MS, NO_JITTER, backoffDelayMs, drawJitter } from '../utils/backoff'
 import type { BufferedLogEntry, CaptureLogOptions, LogSdkContext, LogsHost, ResolvedPostHogLogsConfig } from './types'
 
 // Caps the retry backoff at 2^6 = 64× the flush interval.
@@ -426,7 +426,7 @@ export class PostHogLogs {
     // A floor, not a replacement: the header never retries us sooner than our
     // own backoff would have.
     return Math.max(
-      backoffDelayMs(this._flushIntervalMs, this._consecutiveFlushFailures, this._flushJitter),
+      backoffDelayMs(this._flushIntervalMs, this._consecutiveFlushFailures, this._flushJitter, MAX_FLUSH_BACKOFF_MS),
       this._retryAfter.remainingMs()
     )
   }

@@ -12,7 +12,7 @@ import type { Logger } from '../types'
 import { isArray } from '../utils'
 import { FlushTimer } from '../utils/flush-timer'
 import { RetryAfterWindow } from '../utils/retry-after'
-import { NO_JITTER, backoffDelayMs, drawJitter } from '../utils/backoff'
+import { MAX_FLUSH_BACKOFF_MS, NO_JITTER, backoffDelayMs, drawJitter } from '../utils/backoff'
 import { toOtlpKeyValueList } from '../utils/otlp-any-value'
 import {
   DEFAULT_HISTOGRAM_BOUNDS,
@@ -312,7 +312,12 @@ export class PostHogMetrics {
   // once per failure so a fleet refused together does not return together.
   private _nextFlushDelay(): number {
     return Math.max(
-      backoffDelayMs(this._config.flushIntervalMs, this._consecutiveFlushFailures, this._flushJitter),
+      backoffDelayMs(
+        this._config.flushIntervalMs,
+        this._consecutiveFlushFailures,
+        this._flushJitter,
+        MAX_FLUSH_BACKOFF_MS
+      ),
       this._retryAfter.remainingMs()
     )
   }

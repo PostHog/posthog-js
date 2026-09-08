@@ -27,7 +27,7 @@ import { buildOtlpSpan, buildOtlpTracesPayload, buildTracesResourceAttributes } 
 import { isPromise } from '../utils'
 import { FlushTimer } from '../utils/flush-timer'
 import { RetryAfterWindow } from '../utils/retry-after'
-import { NO_JITTER, backoffDelayMs, drawJitter } from '../utils/backoff'
+import { MAX_FLUSH_BACKOFF_MS, NO_JITTER, backoffDelayMs, drawJitter } from '../utils/backoff'
 
 // Retriable failures on the same head batch before it is dropped, so a stuck
 // batch cannot pin the queue while fresher spans are refused at the cap. The
@@ -35,8 +35,6 @@ import { NO_JITTER, backoffDelayMs, drawJitter } from '../utils/backoff'
 // every request would otherwise retire a batch in milliseconds, spending on
 // its own call rate what the timer path spends over minutes.
 const MAX_RETRIES_PER_BATCH = 8
-
-const MAX_FLUSH_BACKOFF_MS = 30_000
 
 type SpanCallback<T> = (span: Span) => T
 
