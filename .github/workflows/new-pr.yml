@@ -33,12 +33,12 @@ jobs:
               env:
                   RAW_BODY: ${{ github.event.pull_request.body || '' }}
 
-            - name: Skip shame comment for fork PR
-              if: ${{ steps.is-shame-worthy.outputs.is-shame-worthy == 'true' && github.event.pull_request.head.repo.full_name != github.repository }}
-              run: echo "Skipping no-description PR comment for fork PR because GitHub tokens are read-only."
+            - name: Skip shame comment with a read-only token
+              if: ${{ steps.is-shame-worthy.outputs.is-shame-worthy == 'true' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
+              run: echo "Skipping no-description PR comment for fork or Dependabot PRs because GitHub tokens are read-only."
 
             - name: Shame if PR has no description
-              if: ${{ steps.is-shame-worthy.outputs.is-shame-worthy == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+              if: ${{ steps.is-shame-worthy.outputs.is-shame-worthy == 'true' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |

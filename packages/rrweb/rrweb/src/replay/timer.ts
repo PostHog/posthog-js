@@ -107,21 +107,46 @@ export class Timer {
   }
 }
 
+/**
+ * A position arrives with the recording and does not always match its type.
+ * Without a numeric `timeOffset` the derived delay is `NaN`, which `rafCheck`
+ * can never satisfy: playback stops at that action and the frame loop keeps
+ * rescheduling with no work to do. Returns undefined when the offset cannot be
+ * trusted, so callers can fall back to the event's own timestamp.
+ */
+export function positionTimeOffset(position: unknown): number | undefined {
+  const timeOffset: unknown = (position as { timeOffset?: unknown } | null)
+    ?.timeOffset;
+  return typeof timeOffset === 'number' && !Number.isNaN(timeOffset)
+    ? timeOffset
+    : undefined;
+}
+
+export function firstPositionTimeOffset(data: {
+  positions?: unknown;
+}): number | undefined {
+  const positions: unknown = data.positions;
+  if (!Array.isArray(positions) || !positions.length) {
+    return undefined;
+  }
+  return positionTimeOffset(positions[0]);
+}
+
 // TODO: add speed to mouse move timestamp calculation
 export function addDelay(event: eventWithTime, baselineTime: number): number {
   // Mouse move events was recorded in a throttle function,
   // so we need to find the real timestamp by traverse the time offsets.
   if (
     event.type === EventType.IncrementalSnapshot &&
-    event.data.source === IncrementalSource.MouseMove &&
-    event.data.positions &&
-    event.data.positions.length
+    event.data.source === IncrementalSource.MouseMove
   ) {
-    const firstOffset = event.data.positions[0].timeOffset;
-    // timeOffset is a negative offset to event.timestamp
-    const firstTimestamp = event.timestamp + firstOffset;
-    event.delay = firstTimestamp - baselineTime;
-    return firstTimestamp - baselineTime;
+    const firstOffset = firstPositionTimeOffset(event.data);
+    if (firstOffset !== undefined) {
+      // timeOffset is a negative offset to event.timestamp
+      const firstTimestamp = event.timestamp + firstOffset;
+      event.delay = firstTimestamp - baselineTime;
+      return firstTimestamp - baselineTime;
+    }
   }
 
   event.delay = event.timestamp - baselineTime;
