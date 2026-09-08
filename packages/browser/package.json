@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.427.2",
+    "version": "1.428.4",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -55,6 +55,7 @@
     "files": [
         "lib/*",
         "dist/*",
+        "test-fixtures/*.json",
         "react/dist/**",
         "react/package.json",
         "react/surveys/package.json",
