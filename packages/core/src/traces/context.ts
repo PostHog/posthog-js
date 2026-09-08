@@ -8,6 +8,8 @@ import type { SpanContextManager } from './types'
  *
  * The fallback for runtimes with no ambient async context; Node injects an
  * `AsyncLocalStorage`-backed manager instead. `parent` is the escape hatch.
+ *
+ * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
  */
 export class SyncSpanContextManager implements SpanContextManager {
   private _active: Span | undefined

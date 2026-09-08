@@ -10,6 +10,7 @@ import type {
   TraceSdkContext,
 } from './types'
 import type { Logger } from '../types'
+import type { Span } from '@posthog/types'
 import { createMockLogger } from '@/testing'
 
 const TRACE_ID = '4bf92f3577b34da6a3ce929d0e0e4736'
@@ -275,6 +276,26 @@ describe('PostHogTraces', () => {
       const [span] = sentSpans()
       expect(span.traceId).not.toBe(TRACE_ID)
       expect(span.parentSpanId).toBeUndefined()
+    })
+
+    it('ignores a span from another tracer, which reports through spanContext', async () => {
+      // OTel's shape: no `traceparent()` to read, so it parents to the active
+      // span rather than continuing a trace the SDK cannot read the ids of.
+      const otelSpan = {
+        spanContext: () => ({ traceId: TRACE_ID, spanId: REMOTE_SPAN_ID, traceFlags: 1 }),
+      }
+
+      const traces = createTraces()
+      traces.withSpan('handler', () => {
+        traces.startSpan('child', { parent: otelSpan as unknown as Span }).end()
+      })
+      await traces.flush()
+
+      const child = sentSpans().find((s) => s.name === 'child')!
+      const handler = sentSpans().find((s) => s.name === 'handler')!
+      expect(child.traceId).toBe(handler.traceId)
+      expect(child.traceId).not.toBe(TRACE_ID)
+      expect(child.parentSpanId).toBe(handler.spanId)
     })
 
     it('parents to the active span when the parent is not a span', async () => {
