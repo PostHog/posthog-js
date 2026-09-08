@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4852](https://github.com/PostHog/posthog-js/issues/4852) | Confirmed React Native Expo config-plugin bug: an earlier appBuildGradle mod can cause Android native-symbol setup to silently omit the PostHog Gradle plugin. | react-native, Android, feature/error-tracking, team/error-tracking |  | no | 2026-09-08T22:21:27.919Z |
 | PostHog/posthog-js | [issue 3766](https://github.com/PostHog/posthog-js/issues/3766) | Valid Session Replay maintenance tracker for contributing general rrweb fork divergences upstream. | enhancement, feature/replay, needs-to-be-contributed-back, team/client-libraries |  | no | 2026-09-08T14:16:02.865Z |
 | PostHog/posthog-js | [issue 3765](https://github.com/PostHog/posthog-js/issues/3765) | Valid session-replay maintenance tracker; keep open and handle each upstream rrweb change independently. | enhancement, feature/replay |  | no | 2026-09-08T14:15:12.414Z |
 | PostHog/posthog-js | [issue 4840](https://github.com/PostHog/posthog-js/issues/4840) | Valid, well-scoped testing-infrastructure enhancement; an offline @posthog/ai pilot is justified, but it is not a small or low-risk PR. | enhancement, node, team/ai-observability, team/client-libraries |  | no | 2026-09-08T13:45:28.136Z |
