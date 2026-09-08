@@ -151,17 +151,18 @@ export function getUntaintedPrototype<T extends keyof BasePrototypeCache>(
 
 // Group by prototype so every node access can reuse the property key instead
 // of allocating `${key}.${String(accessor)}` on the serialization hot path.
-// Null prototypes keep names like `constructor` from appearing to be cached.
+// Both levels have null prototypes: neither prototype names nor accessor names
+// like `constructor` may resolve to inherited objects or functions.
 type AccessorCache = Record<
   string,
   (this: PrototypeOwner, ...args: unknown[]) => unknown
 >;
-const untaintedAccessorCache: Record<keyof BasePrototypeCache, AccessorCache> = {
-  Node: Object.create(null),
-  ShadowRoot: Object.create(null),
-  MutationObserver: Object.create(null),
-  Element: Object.create(null),
-};
+const untaintedAccessorCache: Record<keyof BasePrototypeCache, AccessorCache> =
+  Object.create(null);
+untaintedAccessorCache.Node = Object.create(null);
+untaintedAccessorCache.ShadowRoot = Object.create(null);
+untaintedAccessorCache.MutationObserver = Object.create(null);
+untaintedAccessorCache.Element = Object.create(null);
 
 export function getUntaintedAccessor<
   K extends keyof BasePrototypeCache,

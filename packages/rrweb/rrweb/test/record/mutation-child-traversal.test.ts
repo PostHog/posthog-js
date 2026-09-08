@@ -11,7 +11,9 @@ describe('mutation child traversal', () => {
   beforeEach(() => {
     document.body.innerHTML =
       '<main id="fixture">' +
-      '<span>value</span>'.repeat(100) +
+      Array.from({ length: 100 }, (_, i) => `<span>value ${i}</span>`).join(
+        '',
+      ) +
       '</main><aside id="destination"></aside>';
   });
 
@@ -51,7 +53,9 @@ describe('mutation child traversal', () => {
     destination.append(root);
     await settle();
 
-    expect([...buffer['movedSet']]).toEqual(nodes);
+    const moved = [...buffer['movedSet']];
+    expect(moved).toHaveLength(nodes.length);
+    moved.forEach((node, i) => expect(node).toBe(nodes[i]));
     // processRemoves still enumerates these lists once. genAdds/deepDelete
     // previously enumerated all of them another 21 times using callbacks.
     expect(enumerations).toBe(nodes.length);
@@ -71,12 +75,15 @@ describe('mutation child traversal', () => {
     const remove = vi.spyOn(buffer['movedSet'], 'delete');
     document.body.insertBefore(root, destination);
     await settle();
-    expect(remove.mock.calls.map(([node]) => node)).toEqual([
+    const expected = [
       root,
       ...Array.from(root.children)
         .reverse()
         .flatMap((span) => [span, span.firstChild]),
-    ]);
+    ];
+    const removed = remove.mock.calls.map(([node]) => node);
+    expect(removed).toHaveLength(expected.length);
+    removed.forEach((node, i) => expect(node).toBe(expected[i]));
   });
 
   it.each(['light', 'shadow'] as const)(
