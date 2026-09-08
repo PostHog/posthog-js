@@ -513,6 +513,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     if (servedTier != null) {
       modelParams = { ...modelParams, service_tier: servedTier }
     }
+    const eventPropertiesServedTier = servedTier != null ? { $ai_service_tier: String(servedTier) } : {}
     const eventProperties: Record<string, any> = {
       $ai_lib: 'posthog-ai',
       $ai_lib_version: version,
@@ -527,6 +528,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_latency: latency,
       $ai_base_url: run.baseUrl,
       $ai_framework: 'langchain',
+      ...eventPropertiesServedTier,
     }
     if (parentRunId) {
       eventProperties['$ai_parent_id'] = parentRunId

@@ -2153,6 +2153,8 @@ describe('served service tier', () => {
     )
 
     expect(capturedModelParams()).toMatchObject({ temperature: 0.5, service_tier: 'flex' })
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_service_tier']).toBe('flex')
   })
 
   it('reads the served tier from the message response_metadata (Responses API shape)', () => {
@@ -2179,5 +2181,7 @@ describe('served service tier', () => {
     const modelParams = capturedModelParams()
     expect(modelParams.temperature).toBe(0.5)
     expect(modelParams.service_tier).toBeUndefined()
+    const [captureCall] = (mockPostHogClient.capture as vi.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_service_tier']).toBeUndefined()
   })
 })
