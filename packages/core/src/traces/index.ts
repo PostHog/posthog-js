@@ -147,6 +147,8 @@ interface ParentContext {
  * The traces pipeline: span creation, active-span parenting, and OTLP export.
  * Separate from the analytics-events pipeline — own queue, endpoint and flush
  * cycle — mirroring logs and metrics.
+ *
+ * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
  */
 export class PostHogTraces {
   private _queue: SpanRecord[] = []

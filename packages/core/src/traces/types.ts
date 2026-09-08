@@ -46,6 +46,8 @@ export interface TracesHost {
  * PostHog context snapshotted onto every span at start, so traces join back to
  * persons and sessions. Each SDK fills the fields that apply to it; absent
  * fields add no attribute. Internal to `@posthog/core`.
+ *
+ * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
  */
 export interface TraceSdkContext {
   distinctId?: string
@@ -96,6 +98,8 @@ export interface SpanContextManager {
 /**
  * Fields `PostHogTraces` needs resolved at runtime. The host SDK applies its own
  * defaults and hands the resolved config to the constructor.
+ *
+ * @internal Exposed for cross-package use within this SDK; not part of the stable public API.
  */
 export interface ResolvedTracesConfig extends TracesConfig {
   flushIntervalMs: number
