@@ -1,4 +1,4 @@
-import { buildCapturedMcpParameters, redactPii } from '../extensions/mcp-payloads'
+import { buildCapturedMcpParameters, redactPii, sanitizeCapturedValue } from '../extensions/mcp-payloads'
 
 describe('buildCapturedMcpParameters', () => {
   it('captures useful tool-call inputs without transport internals or duplicated intent', () => {
@@ -63,6 +63,36 @@ describe('buildCapturedMcpParameters', () => {
         },
       },
     })
+  })
+})
+
+describe('URL credential redaction', () => {
+  it.each([
+    [
+      'https://example.com/guide?token=fakesecret&token=fakeaccess&empty=',
+      'https://example.com/guide?token=%5Bredacted%5D&token=%5Bredacted%5D&empty=',
+    ],
+    [
+      'https://example.com/guide?X-Goog-Credential=fakecredential&X-Goog-Signature=fakesignature',
+      'https://example.com/guide?X-Goog-Credential=%5Bredacted%5D&X-Goog-Signature=%5Bredacted%5D',
+    ],
+    [
+      'https://example.com/guide?sig=fakesignature&Signature=fakesignature&X-Amz-Security-Token=fakesecret',
+      'https://example.com/guide?sig=%5Bredacted%5D&Signature=%5Bredacted%5D&X-Amz-Security-Token=%5Bredacted%5D',
+    ],
+    ['https://fakeuser@example.com/guide', 'https://%5Bredacted%5D@example.com/guide'],
+    [
+      'https://example.com/guide?%61=hello%20world&empty=#part',
+      'https://example.com/guide?%61=hello%20world&empty=#part',
+    ],
+    [
+      'Cannot read https://fakeuser:fakepass@example.com/guide or https://example.com/guide?token=fakesecret',
+      'Cannot read https://%5Bredacted%5D@example.com/guide or https://example.com/guide?token=%5Bredacted%5D',
+    ],
+    ['https://fakeuser:fakepass@[invalid/guide?token=fakesecret', '[redacted]'],
+  ])('sanitizes %s', (value, expected) => {
+    expect(sanitizeCapturedValue(value)).toBe(expected)
+    expect(sanitizeCapturedValue(expected)).toBe(expected)
   })
 })
 

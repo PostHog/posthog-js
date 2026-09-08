@@ -16,6 +16,10 @@ const POSTHOG_TOKEN_PATTERN = /\bph[a-z]_[A-Za-z0-9_-]{20,}\b/g
 const SENSITIVE_KEY_PATTERN =
   /^(authorization|cookie|set-cookie|x-api-key|api[-_]?key|api[-_]?token|access[-_]?token|refresh[-_]?token|token|password|secret|client[-_]?secret|private[-_]?key)$/i
 
+const URL_PATTERN = /\b[a-z][a-z0-9+.-]{0,63}:\/\/[^\s<>"']+/gi
+const SENSITIVE_QUERY_KEY_PATTERN =
+  /^(auth|key|credential|signature|sig|AWSAccessKeyId|GoogleAccessId|Policy|Key-Pair-Id|X-Amz-(Credential|Signature|Security-Token)|X-Goog-(Credential|Signature))$/i
+
 // PII redaction for the agent-narrated intent string only. `$mcp_intent` is free
 // text the calling LLM writes into the injected `context` argument, so it can
 // carry personal data the model read aloud despite being told not to. We redact
@@ -91,6 +95,34 @@ function isBase64DataUrl(value: string): boolean {
   return BASE64_DATA_URL_PAYLOAD_PATTERN.test(payload.replace(/[\r\n]/g, ''))
 }
 
+function sanitizeUrl(value: string): string {
+  try {
+    const url = new URL(value)
+    let changed = false
+    if (url.username || url.password) {
+      url.username = REDACTED_VALUE
+      url.password = ''
+      changed = true
+    }
+    const query = new URLSearchParams()
+    for (const [key, item] of url.searchParams) {
+      if (shouldRedactKey(key) || SENSITIVE_QUERY_KEY_PATTERN.test(key)) {
+        query.append(key, REDACTED_VALUE)
+        changed = true
+      } else {
+        query.append(key, item)
+      }
+    }
+    if (!changed) {
+      return value
+    }
+    url.search = query.toString()
+    return url.toString()
+  } catch {
+    return REDACTED_VALUE
+  }
+}
+
 function sanitizeString(value: string): string {
   if (
     value.length >= SIZE_GATE &&
@@ -100,7 +132,7 @@ function sanitizeString(value: string): string {
   ) {
     return BINARY_REDACTED_VALUE
   }
-  return value.replace(POSTHOG_TOKEN_PATTERN, REDACTED_VALUE)
+  return value.replace(URL_PATTERN, sanitizeUrl).replace(POSTHOG_TOKEN_PATTERN, REDACTED_VALUE)
 }
 
 function passesLuhn(digits: string): boolean {

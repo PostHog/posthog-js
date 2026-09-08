@@ -170,14 +170,46 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
 
   it.each([
     ['file:///guide.md', 'file:///guide.md', false],
+    ['https://fakeuser:fakepass@example.com/guide', 'https://%5Bredacted%5D@example.com/guide', false],
+    ['https://fakeuser:fakepass@example.com/guide', 'https://%5Bredacted%5D@example.com/guide', true],
+    [
+      'https://example.com/guide?token=fakesecret&chapter=intro',
+      'https://example.com/guide?token=%5Bredacted%5D&chapter=intro',
+      false,
+    ],
+    [
+      'https://example.com/guide?token=fakesecret&chapter=intro',
+      'https://example.com/guide?token=%5Bredacted%5D&chapter=intro',
+      true,
+    ],
+    [
+      'https://example.com/guide?access_token=fakeaccess&X-Amz-Credential=fakecredential&X-Amz-Signature=fakesignature',
+      'https://example.com/guide?access_token=%5Bredacted%5D&X-Amz-Credential=%5Bredacted%5D&X-Amz-Signature=%5Bredacted%5D',
+      false,
+    ],
+    [
+      'https://example.com/guide?access_token=fakeaccess&X-Amz-Credential=fakecredential&X-Amz-Signature=fakesignature',
+      'https://example.com/guide?access_token=%5Bredacted%5D&X-Amz-Credential=%5Bredacted%5D&X-Amz-Signature=%5Bredacted%5D',
+      true,
+    ],
+    [
+      'ui://guide/page?%74oken=fakesecret&TOKEN=fakeaccess&chapter=intro#section',
+      'ui://guide/page?token=%5Bredacted%5D&TOKEN=%5Bredacted%5D&chapter=intro#section',
+      false,
+    ],
+    [
+      'ui://guide/page?%74oken=fakesecret&TOKEN=fakeaccess&chapter=intro#section',
+      'ui://guide/page?token=%5Bredacted%5D&TOKEN=%5Bredacted%5D&chapter=intro#section',
+      true,
+    ],
     [
       'https://example.com/guide?token=phx_EXAMPLEONLYFAKEVALUE00000000000',
-      'https://example.com/guide?token=[redacted]',
+      'https://example.com/guide?token=%5Bredacted%5D',
       false,
     ],
     [
       'https://example.com/guide?token=phx_EXAMPLEONLYFAKEVALUE00000000000',
-      'https://example.com/guide?token=[redacted]',
+      'https://example.com/guide?token=%5Bredacted%5D',
       true,
     ],
   ] as const)(
@@ -221,7 +253,17 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
       if (resourceError) {
         expect(exceptions[0].properties.$mcp_resource_name).toBe(capturedUri)
       }
-      expect(JSON.stringify(eventCapture.getCaptures())).not.toContain('phx_EXAMPLEONLYFAKEVALUE00000000000')
+      for (const secret of [
+        'phx_EXAMPLEONLYFAKEVALUE00000000000',
+        'fakeuser',
+        'fakepass',
+        'fakesecret',
+        'fakeaccess',
+        'fakecredential',
+        'fakesignature',
+      ]) {
+        expect(JSON.stringify(eventCapture.getCaptures())).not.toContain(secret)
+      }
     }
   )
 
