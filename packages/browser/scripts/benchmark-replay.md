@@ -7,6 +7,8 @@ thresholds; correctness assertions fail the command.
 
 For nested mutations, sustained churn, trusted input probes, shadow DOM and source-map
 attribution, see [the mutation investigation](benchmark-replay-mutations.md).
+For repeated moves, flat sibling lists and mirror cleanup counters, see
+[the ordering investigation](benchmark-replay-ordering.md).
 
 ## Run
 
