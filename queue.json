@@ -1,19 +1,4 @@
 {
   "version": 1,
-  "items": [
-    {
-      "id": "issue-4840-auto-none-no-comment-no-close-1788875020555",
-      "kind": "issue",
-      "number": 4840,
-      "mode": "auto",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-09-08T13:43:40.555Z",
-      "source": {
-        "eventName": "issues",
-        "runId": 34233737648,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/34233737648"
-      },
-      "attempts": 1
-    }
-  ]
+  "items": []
 }
