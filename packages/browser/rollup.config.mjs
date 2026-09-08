@@ -452,7 +452,11 @@ const entrypointTargets = runtimeEntrypoints.map((file) => {
     const outputVariants = [
         { extension: 'js', format },
         ...(format === 'es' && fileName === 'module' ? [{ extension: 'mjs', format: 'es' }] : []),
-        ...(format === 'es' && cjsBundles.has(fileName) ? [{ extension: 'cjs', format: 'cjs' }] : []),
+        // No source map for the CommonJS twin. It would describe the same sources as the ES module
+        // map shipping beside it, and every npm install pays for both. Bundlers read `module`, so
+        // the map they chain through is the ES module one; `require` consumers get our frames
+        // ignore-listed anyway (see `sourcemapIgnoreList` below).
+        ...(format === 'es' && cjsBundles.has(fileName) ? [{ extension: 'cjs', format: 'cjs', sourcemap: false }] : []),
     ]
 
     /** @type {import('rollup').RollupOptions} */
@@ -468,9 +472,9 @@ const entrypointTargets = runtimeEntrypoints.map((file) => {
                   },
               }
             : {}),
-        output: outputVariants.map(({ extension, format: outputFormat }) => ({
+        output: outputVariants.map(({ extension, format: outputFormat, sourcemap = true }) => ({
             file: `dist/${fileName}.${extension}`,
-            sourcemap: true,
+            sourcemap,
             // Mark every source in our bundles as third-party so devtools skip our frames.
             // Without this, wrappers we install on globals (most visibly the console capture
             // in entrypoints/logs.ts and rrweb's console plugin) become the reported location
