@@ -101,6 +101,10 @@ function toOtlpEvent(event: SpanRecord['events'][number], logger?: Logger): Otlp
       encoded.attributes = attributes
     }
   }
+  const dropped = nonNegativeCount(event.droppedAttributesCount)
+  if (dropped) {
+    encoded.droppedAttributesCount = dropped
+  }
   return encoded
 }
 

@@ -24,6 +24,7 @@ const resolveForTest = (partial?: Partial<ResolvedTracesConfig>): ResolvedTraces
   beforeSpanSend: [],
   maxAttributesPerSpan: 128,
   maxEventsPerSpan: 128,
+  maxAttributesPerEvent: 128,
   maxAttributeValueLength: 8192,
   maxLiveSpans: 10000,
   maxSpanAgeMs: 3600000,
@@ -878,6 +879,34 @@ describe('PostHogTraces', () => {
       expect(sent.droppedAttributesCount).toBe(1)
     })
 
+    it('reports every limit drop once per span, hook drops included', () => {
+      const traces = createTraces({
+        maxAttributesPerSpan: 1,
+        maxEventsPerSpan: 1,
+        beforeSpanSend: [
+          (span: SpanRecord) => ({ ...span, attributes: { ...span.attributes, added: 1, alsoAdded: 2 } }),
+        ],
+      })
+
+      const span = traces.startSpan('checkout', { attributes: { route: '/checkout' } })
+      span.addEvent('first', { a: 1 })
+      span.addEvent('second')
+      span.end()
+
+      const messages = logger.debug.mock.calls.map(([message]) => String(message))
+      expect(messages.filter((message) => message.includes('Span limits discarded'))).toEqual([
+        'Span limits discarded data from "checkout": 2 attributes, 1 events, 0 event attributes',
+      ])
+    })
+
+    it('stays quiet for a span that lost nothing', () => {
+      const traces = createTraces()
+      traces.startSpan('checkout', { attributes: { route: '/checkout' } }).end()
+
+      const messages = logger.debug.mock.calls.map(([message]) => String(message))
+      expect(messages.some((message) => message.includes('Span limits discarded'))).toBe(false)
+    })
+
     it('rejects a timestamp the server could not decode', async () => {
       const instance = createMockInstance()
       const traces = createTraces(
@@ -1570,6 +1599,26 @@ describe('PostHogTraces', () => {
       const [sent] = sentSpans()
       expect(sent.events!.map((event) => event.name)).toEqual(['original'])
       expect(sent.droppedEventsCount).toBe(1)
+    })
+
+    it('re-applies the event attribute cap to what beforeSpanSend widened', async () => {
+      const traces = createTraces({
+        maxAttributesPerEvent: 2,
+        beforeSpanSend: [
+          (span) => {
+            span.events[0].attributes = { a: 1, b: 2, c: 3, d: 4 }
+            return span
+          },
+        ],
+      })
+      const span = traces.startSpan('checkout')
+      span.addEvent('query', { a: 1 })
+      span.end()
+      await traces.flush()
+
+      const event = sentSpans()[0].events![0]
+      expect(event.attributes!.map((attribute) => attribute.key)).toEqual(['a', 'b'])
+      expect(event.droppedAttributesCount).toBe(2)
     })
 
     it('keeps the auto-context keys when beforeSpanSend pushes past the cap', async () => {
