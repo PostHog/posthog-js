@@ -49,9 +49,16 @@ export class RetryQueue {
     constructor(private _instance: PostHog) {
         this._queue = []
         this._areWeOnline = true
+        this.resume()
+    }
 
+    resume(): void {
         if (!isUndefined(window) && 'onLine' in window.navigator) {
             this._areWeOnline = window.navigator.onLine
+
+            if (this._onlineListener) {
+                return
+            }
 
             this._onlineListener = () => {
                 this._areWeOnline = true
