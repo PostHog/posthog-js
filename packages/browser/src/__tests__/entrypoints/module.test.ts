@@ -1,5 +1,6 @@
 import { execFileSync } from 'child_process'
 import fs from 'fs'
+import { createRequire } from 'module'
 import os from 'os'
 import path from 'path'
 import { pathToFileURL } from 'url'
@@ -184,6 +185,43 @@ void extensionClasses
         } finally {
             fs.rmSync(fixtureDirectory, { recursive: true })
         }
+    })
+})
+
+describe('Published subpath entry points', () => {
+    const packageRoot = path.resolve(__dirname, '../../..')
+    // packages/browser links itself into its own node_modules, so Node resolves the specifiers
+    // below exactly as a consumer would.
+    const resolveAsConsumer = createRequire(path.join(packageRoot, 'node_modules', 'consumer.js'))
+
+    it.each([
+        ['posthog-js/full', 'module.full'],
+        ['posthog-js/no-external', 'module.no-external'],
+        ['posthog-js/full/no-external', 'module.full.no-external'],
+    ])('%s requires as CommonJS and stays tree-shakeable for bundlers', (specifier, bundle) => {
+        // The extension is the fix: dist/*.js is ES module code, and Node reads .js in this
+        // package as CommonJS, so requiring it throws on any runtime without require(esm).
+        expect(resolveAsConsumer.resolve(specifier)).toBe(path.join(packageRoot, `dist/${bundle}.cjs`))
+        execFileSync(process.execPath, ['--eval', `require(${JSON.stringify(specifier)})`], {
+            cwd: packageRoot,
+            stdio: 'pipe',
+        })
+
+        const shimPath = resolveAsConsumer.resolve(`${specifier}/package.json`)
+        const shim = JSON.parse(fs.readFileSync(shimPath, 'utf-8'))
+        const resolveFromShim = (target: string) => path.resolve(path.dirname(shimPath), target)
+        expect(resolveFromShim(shim.module)).toBe(path.join(packageRoot, `dist/${bundle}.js`))
+        expect(resolveFromShim(shim.types)).toBe(path.join(packageRoot, `dist/${bundle}.d.ts`))
+    })
+
+    it.each([
+        'posthog-js',
+        'posthog-js/customizations',
+        'posthog-js/dist/module.full.no-external.js',
+        'posthog-js/dist/posthog-recorder',
+        'posthog-js/lib/src/constants',
+    ])('%s still resolves', (specifier) => {
+        expect(fs.existsSync(resolveAsConsumer.resolve(specifier))).toBe(true)
     })
 })
 

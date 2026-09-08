@@ -417,6 +417,12 @@ const runtimeEntrypoints = BUILD_ROLLUP_RUNTIME
       ? entrypoints.filter((file) => !rollupRuntimeEntries.has(file))
       : entrypoints
 
+// Bundles published under a named subpath (full/, no-external/, full/no-external/). Node reads
+// dist/*.js as CommonJS because this package is not `type: module`, so requiring the ES module
+// output throws. Each named subpath points `main` at a real CommonJS `.cjs` build instead.
+// `posthog-js` itself already has one in dist/main.js.
+const cjsBundles = new Set(['module.full', 'module.no-external', 'module.full.no-external'])
+
 const entrypointTargets = runtimeEntrypoints.map((file) => {
     const fileParts = file.split('.')
     // pop the extension
@@ -443,7 +449,11 @@ const entrypointTargets = runtimeEntrypoints.map((file) => {
     // oxlint-disable-next-line no-console
     console.log(`Building ${fileName} in ${format} format`)
 
-    const outputExtensions = format === 'es' && fileName === 'module' ? ['js', 'mjs'] : ['js']
+    const outputVariants = [
+        { extension: 'js', format },
+        ...(format === 'es' && fileName === 'module' ? [{ extension: 'mjs', format: 'es' }] : []),
+        ...(format === 'es' && cjsBundles.has(fileName) ? [{ extension: 'cjs', format: 'cjs' }] : []),
+    ]
 
     /** @type {import('rollup').RollupOptions} */
     return {
@@ -458,7 +468,7 @@ const entrypointTargets = runtimeEntrypoints.map((file) => {
                   },
               }
             : {}),
-        output: outputExtensions.map((extension) => ({
+        output: outputVariants.map(({ extension, format: outputFormat }) => ({
             file: `dist/${fileName}.${extension}`,
             sourcemap: true,
             // Mark every source in our bundles as third-party so devtools skip our frames.
@@ -468,8 +478,8 @@ const entrypointTargets = runtimeEntrypoints.map((file) => {
             // Rollup's default only ignore-lists paths containing node_modules, which misses
             // both our `src/` and workspace packages (they resolve through symlinks).
             sourcemapIgnoreList: () => true,
-            format,
-            ...(format === 'iife'
+            format: outputFormat,
+            ...(outputFormat === 'iife'
                 ? {
                       name: 'posthog',
                       globals: {
@@ -477,7 +487,7 @@ const entrypointTargets = runtimeEntrypoints.map((file) => {
                       },
                   }
                 : {}),
-            ...(format === 'cjs' ? { exports: 'named' } : {}),
+            ...(outputFormat === 'cjs' ? { exports: 'named' } : {}),
         })),
         plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true })],
     }

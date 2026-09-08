@@ -1,0 +1,14 @@
+{
+    "name": "posthog-js-full-no-external",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Subpath entry point for the bundle with every extension inlined and no external script loader, the combination desktop apps and strict CSP sites need. Ships an ES module for bundlers and a CommonJS build for require.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js",
+        "directory": "packages/browser/full/no-external"
+    },
+    "main": "../../dist/module.full.no-external.cjs",
+    "module": "../../dist/module.full.no-external.js",
+    "types": "../../dist/module.full.no-external.d.ts"
+}
