@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.428.7
+
+### Patch Changes
+
+- [#4842](https://github.com/PostHog/posthog-js/pull/4842) [`f93160d`](https://github.com/PostHog/posthog-js/commit/f93160db5518834b4b04f00cb25da97416742bde) Thanks [@marandaneto](https://github.com/marandaneto)! - Restore retry queue connectivity tracking when a page returns from the back-forward cache, without reactivating it after an explicit `shutdown()`.
+  (2026-09-08)
+
 ## 1.428.6
 
 ### Patch Changes
