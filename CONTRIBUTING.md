@@ -137,7 +137,7 @@ pnpm clean:dep
 
 ### rrweb declaration builds
 
-All 16 rrweb workspace packages run semantic checking before Vite's JavaScript build and a separate Rolldown declaration build. `build:declarations` only emits types; it is not a substitute for `check-types` or the production build.
+All 16 rrweb workspace packages use `build: pnpm check-types && vite build && pnpm build:declarations`, with `check-types: tsc --noEmit`. This explicit semantic-check step must succeed before JavaScript or declaration generation starts. `build:declarations` only emits types; it is not a substitute for `check-types` or the production build.
 
 The shared `packages/rrweb/rolldown.dts.config.mts` uses Oxc when a package opts into `isolatedDeclarations`. `rrweb`, `rrdom`, and `rrdom-nodejs` retain TypeScript generation because their annotation work is larger (including exported function properties and destructuring in `rrweb`). Keep this opt-in per package rather than enabling it in the shared TSConfig.
 
@@ -145,6 +145,7 @@ Declaration entries remain self-contained, external package imports remain exter
 
 ```sh
 pnpm turbo run build --filter='./packages/rrweb/**'
+pnpm turbo run check-types --filter='./packages/rrweb/**'
 pnpm test:rrweb-declarations
 ```
 
