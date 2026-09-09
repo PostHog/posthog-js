@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.14.0
+
+### Minor Changes
+
+- [#4829](https://github.com/PostHog/posthog-js/pull/4829) [`6724f10`](https://github.com/PostHog/posthog-js/commit/6724f10bef008642d1ccbd6c38d393dc39e7008c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Capture model identity from recognized client metadata before falling back to the injected `llm_model` argument.
+  (2026-09-08)
+
 ## 0.13.1
 
 ### Patch Changes

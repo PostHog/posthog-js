@@ -424,6 +424,7 @@
         "_isSampled",
         "_isSessionIdleAfterCrossTabRefresh",
         "_isSharedExtension",
+        "_isShutdown",
         "_isStoppingAfterCompression",
         "_isSurveyCacheStale",
         "_isSurveyConditionMatched",

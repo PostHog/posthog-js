@@ -50,6 +50,10 @@ jobs:
 
       - run: pnpm test:docs-scripts
 
+      - name: Test development watchers
+        timeout-minutes: 10
+        run: pnpm test:dev-watch
+
   edge-runtime:
     name: Node edge runtime tests
     runs-on: ubuntu-22.04

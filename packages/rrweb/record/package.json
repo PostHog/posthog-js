@@ -5,7 +5,9 @@
         "access": "public"
     },
     "scripts": {
-        "dev": "vite build --watch",
+        "dev": "pnpm --filter=@posthog/rrweb-record run --parallel \"/^dev:/\"",
+        "dev:runtime": "vite build --watch",
+        "dev:declarations": "pnpm build:declarations --watch",
         "build": "tsc -noEmit && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
         "test": "pnpm test:rrweb",

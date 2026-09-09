@@ -24,6 +24,7 @@
         "test:rrweb": "turbo test:rrweb",
         "test:build-graph": "node --test scripts/__tests__/build-graph.test.mjs",
         "test:docs-scripts": "node --test \"scripts/docs/__tests__/*.test.js\"",
+        "test:dev-watch": "node --test scripts/test-dev-watch.mjs",
         "test:functional": "turbo test:functional",
         "test:e2e": "turbo test:e2e",
         "test:mcp-harness": "node packages/mcp/harness/run-all.mjs",
