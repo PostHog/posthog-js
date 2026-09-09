@@ -160,17 +160,19 @@ guarantee, `context: false` and the `beforeSend` hook above remain the ways to d
 
 ### What `$mcp_llm_model` records, and when it stays empty
 
-`captureModel` is **off** by default. Turn it on and the SDK adds a required `llm_model` parameter to
-every tool it advertises — including the `get_more_tools` virtual tool — asks the agent which model
-it runs as, and records the answer as `$mcp_llm_model` with `$mcp_llm_model_source = "self_reported"`.
+`captureModel` is **off** by default. Turn it on and the SDK records the best model id visible to the
+server as `$mcp_llm_model`. Recognized client metadata wins with source `client_metadata`. Otherwise,
+the SDK injects a required `llm_model` parameter and records the answer with source `self_reported`.
 
-The value is self-reported and unverified, exactly like `clientInfo` in the MCP spec. Use it to spot
-degradation across models ("does our MCP get worse on model X?"), never for billing or access
-control. An agent that answers `unknown` is recorded as nothing rather than as a model called
-"unknown".
+MCP does not standardize or attest model identity. Client metadata and self-report are both
+unverified. Use the value to spot degradation across models, never for billing or access control.
+Missing, blank, and `unknown` values are recorded as nothing.
 
-Unlike `context`, this option degrades to **silence** rather than to a kept argument. Both the strip
-and the capture require the SDK to have confirmed the parameter is its own:
+The recognized metadata path is Codex's `x-codex-turn-metadata.model` field inside request `_meta`.
+Other clients keep using self-report until they expose a stable model field.
+
+Unlike `context`, the self-report fallback degrades to **silence** rather than to a kept argument.
+Its capture and stripping require the SDK to have confirmed the parameter is its own:
 
 - `instrument(server)` on a high-level `McpServer` resolves ownership for your registered tools per
   request from the live tool registry, so those work even on a fresh instance.
@@ -198,13 +200,18 @@ const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN, { captureModel
 
 const tools = posthog.prepareToolList(serverTools)
 const originalTool = serverTools.find((tool) => tool.name === toolName)
-const { args, llmModel, llmModelSource } = posthog.prepareToolCall(toolName, rawArgs, { originalTool })
+const { args, llmModel, llmModelSource } = posthog.prepareToolCall(toolName, rawArgs, {
+  originalTool,
+  requestMeta: request.params?._meta,
+})
 const result = await dispatch(toolName, args)
 
 posthog.captureToolCall({ toolName, llmModel, llmModelSource, isError: false })
 ```
 
 A persistent single-process dispatcher can omit `originalTool` after it has prepared its tool list.
+Pass `requestMeta` whenever the request supplies `_meta`; this enables recognized client metadata
+without changing the arguments sent to the tool.
 
 ### If you switched to `instrument(server.server)`
 

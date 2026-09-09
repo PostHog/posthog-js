@@ -29,12 +29,12 @@
     },
     "scripts": {
         "dev": "vite build --watch",
-        "build": "pnpm turbo run prepublish",
-        "check-types": "tsc -noEmit",
-        "test": "vitest run",
-        "test:watch": "vitest",
+        "build": "tsc -noEmit && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
-        "prepublish": "tsc -noEmit && vite build && pnpm build:declarations",
+        "check-types": "tsc -noEmit",
+        "test": "pnpm test:rrweb",
+        "test:rrweb": "vitest run",
+        "test:watch": "vitest",
         "lint": "oxlint src"
     },
     "devDependencies": {

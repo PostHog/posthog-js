@@ -4,13 +4,20 @@ This guide covers package-specific development for `posthog-js` in `packages/bro
 
 For repository-wide setup, see the root [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
+## Development
+
+After the initial build, run `pnpm dev` (or `pnpm start`) in this package to watch source changes. This runs TypeScript emission, Rolldown runtime bundling, the intentional Rollup runtime fallback, and Rollup declaration bundling in parallel, using the same bundler configurations as production.
+
+React bindings are built separately: run `pnpm --filter=@posthog/react dev` from the repository root when working on them.
+
+To test watch mode on Linux or macOS, run `pnpm turbo --filter=posthog-js build` followed by `pnpm test:dev-watch` from the repository root. The test temporarily edits browser and record entry points, verifies runtime and declaration rebuilds, then restores the source files and stops the watchers. Run it in an idle checkout without other builds or watchers. CI runs it after the unit tests.
+
 ## Testing
 
 > [!NOTE]
 > Run `pnpm build` at least once before running tests.
 
 - Unit tests: run `pnpm test`.
-- Cypress: run `pnpm start` to have a test server running and separately `pnpm cypress` to launch Cypress test engine.
 - Playwright: run e.g. `pnpm exec playwright test --ui --project webkit --project firefox` to run with UI and in webkit and firefox.
 
 ### Comparing `array.js` bundle size
@@ -31,7 +38,7 @@ You'll also need a [BrowserStack](https://www.browserstack.com/) account. If you
 
 After all this, run:
 
-1. Optional: rebuild `array.js` on changes: `nodemon -w src/ --exec bash -c "pnpm build-rollup"`.
+1. Optional: rebuild browser bundles on changes: `pnpm dev`.
 2. Export BrowserStack credentials: `export BROWSERSTACK_USERNAME=xxx BROWSERSTACK_ACCESS_KEY=xxx`.
 3. Run tests: `npx testcafe "browserstack:ie" testcafe/e2e.spec.js`.
 

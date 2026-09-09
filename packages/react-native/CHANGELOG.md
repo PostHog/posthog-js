@@ -1,5 +1,21 @@
 # posthog-react-native
 
+## 4.68.2
+
+### Patch Changes
+
+- [#4798](https://github.com/PostHog/posthog-js/pull/4798) [`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd) Thanks [@posthog](https://github.com/apps/posthog)! - fix(error-tracking): collapse repeated frame cycles in parsed stack traces to reduce grouping differences caused by recursion depth, while preserving distinct throw locations
+  (2026-09-09)
+- Updated dependencies [[`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd)]:
+  - @posthog/core@1.51.1
+
+## 4.68.1
+
+### Patch Changes
+
+- [#4855](https://github.com/PostHog/posthog-js/pull/4855) [`a81418d`](https://github.com/PostHog/posthog-js/commit/a81418dc7ced44a2b3c2756b2720bae1ea3a5fd0) Thanks [@dvd233](https://github.com/dvd233)! - Fix Android native symbol uploads when another Expo plugin registers an app Gradle mod first.
+  (2026-09-09)
+
 ## 4.68.0
 
 ### Minor Changes

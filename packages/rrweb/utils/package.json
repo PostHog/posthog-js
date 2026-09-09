@@ -6,7 +6,6 @@
         "build": "tsc -noEmit && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
         "check-types": "tsc -noEmit",
-        "prepublish": "npm run build",
         "lint": "oxlint src"
     },
     "repository": {

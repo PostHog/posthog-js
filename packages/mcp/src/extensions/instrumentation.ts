@@ -18,9 +18,9 @@ import { getAnalyticsParameterOwnership, stripOwnedAnalyticsArguments } from './
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
 import {
   addModelParameterToTools,
-  getModelArgument,
   getModelDescription,
   isCaptureModelEnabled,
+  resolveModel,
   setEventModel,
 } from './model-parameters'
 import {
@@ -271,12 +271,11 @@ async function prepareToolCallEvent(
 
     await applyResolvedMetadata(event, data, request, extra)
     setEventIntent(event, await resolveToolCallIntent(data, request, canCaptureContextIntent, extra))
-    // Unlike intent, the model is only read under positive ownership: with
-    // ownership unresolved, `llm_model` may be the application's own argument,
-    // and recording a customer value as the calling agent's model is worse
-    // than a gap in coverage.
-    if (ownership.llmModel) {
-      setEventModel(event, getModelArgument(request))
+    // Client metadata does not collide with an application's tool arguments.
+    // Self-report still requires positive ownership before we read `llm_model`.
+    if (isCaptureModelEnabled(data.options.captureModel)) {
+      const resolvedModel = resolveModel(request, ownership.llmModel)
+      setEventModel(event, resolvedModel?.model, resolvedModel?.source)
     }
     return { event, requestAttribution }
   } catch (error) {

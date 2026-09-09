@@ -1,5 +1,21 @@
 # posthog-js
 
+## 1.428.8
+
+### Patch Changes
+
+- [#4798](https://github.com/PostHog/posthog-js/pull/4798) [`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd) Thanks [@posthog](https://github.com/apps/posthog)! - fix(error-tracking): collapse repeated frame cycles in parsed stack traces to reduce grouping differences caused by recursion depth, while preserving distinct throw locations
+  (2026-09-09)
+- Updated dependencies [[`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd)]:
+  - @posthog/core@1.51.1
+
+## 1.428.7
+
+### Patch Changes
+
+- [#4842](https://github.com/PostHog/posthog-js/pull/4842) [`f93160d`](https://github.com/PostHog/posthog-js/commit/f93160db5518834b4b04f00cb25da97416742bde) Thanks [@marandaneto](https://github.com/marandaneto)! - Restore retry queue connectivity tracking when a page returns from the back-forward cache, without reactivating it after an explicit `shutdown()`.
+  (2026-09-08)
+
 ## 1.428.6
 
 ### Patch Changes

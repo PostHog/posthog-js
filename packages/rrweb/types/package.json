@@ -3,10 +3,9 @@
     "version": "0.0.62",
     "scripts": {
         "dev": "vite build --watch",
-        "build": "pnpm turbo run prepublish",
-        "check-types": "tsc -noEmit",
+        "build": "tsc -noEmit && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
-        "prepublish": "tsc -noEmit && vite build && pnpm build:declarations",
+        "check-types": "tsc -noEmit",
         "lint": "oxlint src"
     },
     "repository": {
