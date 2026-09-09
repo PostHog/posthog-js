@@ -1,6 +1,7 @@
 /* oxlint-disable */
 import { posthog } from 'posthog-js'
-import type { eventWithTime } from 'posthog-js/rrweb-types'
+import type { Replayer, ReplayPlugin, eventWithTime as ReplayerEvent } from 'posthog-js/rrweb'
+import type { EventType, eventWithTime } from 'posthog-js/rrweb-types'
 import * as ts from 'typescript'
 
 console.log(posthog)
@@ -16,3 +17,19 @@ function jsonLdUrl(event: eventWithTime): string | undefined {
 
 console.log(jsonLdUrl({ type: 5, timestamp: 0, data: { tag: '$json_ld', payload: {}, href: 'https://example.com' } }))
 console.log(jsonLdUrl({ type: 5, timestamp: 0, data: { tag: '$json_ld', payload: {} } }))
+
+function replayEvents(ReplayerClass: typeof Replayer, events: eventWithTime[]): eventWithTime[] {
+    const plugin: ReplayPlugin = {
+        handler(event: eventWithTime) {
+            console.log(jsonLdUrl(event))
+        },
+    }
+    const replayer = new ReplayerClass(events, { plugins: [plugin] })
+    const event: ReplayerEvent = events[0]
+    replayer.addEvent(events[0])
+    const type: EventType = event.type
+    console.log(type)
+    return [event]
+}
+
+console.log(replayEvents)
