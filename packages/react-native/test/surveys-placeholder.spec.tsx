@@ -1,11 +1,11 @@
-/** @jest-environment jsdom */
+/** @vitest-environment jsdom */
 import React from 'react'
 import { act, cleanup, render } from '@testing-library/react'
 import { Survey, SurveyQuestionType, SurveyType } from '@posthog/core'
 
 // Render native primitives in jsdom while keeping the provider, modal and question components real.
-jest.mock('react-native', () => {
-  const R = jest.requireActual('react')
+vi.mock('react-native', async () => {
+  const R = await vi.importActual<typeof import('react')>('react')
   const Box = ({ children }: any) => R.createElement('div', null, children)
   return {
     View: Box,
@@ -17,18 +17,18 @@ jest.mock('react-native', () => {
     TouchableOpacity: Box,
     TextInput: ({ placeholder, value, onChangeText }: any) =>
       R.createElement('textarea', { placeholder, value, onChange: (event: any) => onChangeText(event.target.value) }),
-    Keyboard: { dismiss: jest.fn(), addListener: () => ({ remove: jest.fn() }) },
-    Linking: { openURL: jest.fn() },
+    Keyboard: { dismiss: vi.fn(), addListener: () => ({ remove: vi.fn() }) },
+    Linking: { openURL: vi.fn() },
     Platform: { OS: 'android', select: (options: any) => options.android ?? options.default },
     StyleSheet: { create: (styles: any) => styles, flatten: (styles: any) => styles, absoluteFill: {} },
-    Appearance: { getColorScheme: () => 'light', addChangeListener: () => ({ remove: jest.fn() }) },
+    Appearance: { getColorScheme: () => 'light', addChangeListener: () => ({ remove: vi.fn() }) },
     useColorScheme: () => 'light',
     useWindowDimensions: () => ({ width: 375, height: 800 }),
   }
 })
 
-jest.mock('../src/native-deps', () => ({ currentDeviceType: 'Mobile' }))
-jest.mock('../src/hooks/usePostHog', () => ({ usePostHog: () => mockClient }))
+vi.mock('../src/native-deps', () => ({ currentDeviceType: 'Mobile' }))
+vi.mock('../src/hooks/usePostHog', () => ({ usePostHog: () => mockClient }))
 
 import { PostHogSurveyProvider } from '../src/surveys/PostHogSurveyProvider'
 
@@ -44,25 +44,25 @@ const survey: Survey = {
 
 describe('survey open text placeholder', () => {
   beforeEach(() => {
-    jest.useRealTimers()
+    vi.useRealTimers()
     mockClient = {
-      ready: jest.fn(() => Promise.resolve()),
-      _onSurveysReady: jest.fn(() => Promise.resolve()),
-      getSurveys: jest.fn(),
-      getFeatureFlags: jest.fn(() => ({})),
-      onFeatureFlags: jest.fn(() => () => {}),
-      getSurveyDisplayLanguageOverride: jest.fn(),
-      getCommonEventProperties: jest.fn(() => ({})),
-      getPersistedProperty: jest.fn(),
-      setPersistedProperty: jest.fn(),
-      capture: jest.fn(),
-      on: jest.fn(() => () => {}),
+      ready: vi.fn(() => Promise.resolve()),
+      _onSurveysReady: vi.fn(() => Promise.resolve()),
+      getSurveys: vi.fn(),
+      getFeatureFlags: vi.fn(() => ({})),
+      onFeatureFlags: vi.fn(() => () => {}),
+      getSurveyDisplayLanguageOverride: vi.fn(),
+      getCommonEventProperties: vi.fn(() => ({})),
+      getPersistedProperty: vi.fn(),
+      setPersistedProperty: vi.fn(),
+      capture: vi.fn(),
+      on: vi.fn(() => () => {}),
     }
   })
 
   afterEach(() => {
     cleanup()
-    jest.useFakeTimers()
+    vi.useFakeTimers()
   })
 
   it.each([
