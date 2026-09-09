@@ -58,11 +58,13 @@ export interface PostHogMCPOptions extends PostHogOptions {
    */
   missingCapabilityToolName?: string
   /**
-   * Configuration for the `send_feedback` virtual tool injected by
+   * Enable + configure the `send_feedback` virtual tool: injected by
    * {@link PostHogMCP.prepareToolList} (when its `collectFeedback` toggle is on)
    * and detected by {@link PostHogMCP.prepareToolCall}. Set once here so
-   * injection and detection can't drift. `onFeedback` is ignored on this path —
-   * the host dispatcher routes reports itself via
+   * injection and detection can't drift — without this option, `prepareToolCall`
+   * never flags a call as feedback, so a real tool that uses the name is not
+   * shadowed. Pick a `toolName` no real tool uses. `onFeedback` is ignored on
+   * this path — the host dispatcher routes reports itself via
    * {@link PreparedToolCall.feedbackReport}.
    */
   collectFeedback?: CollectFeedbackConfig
@@ -115,6 +117,7 @@ export class PostHogMCP extends PostHog {
   // The virtual-tool config lives here (not on the per-call options) so that
   // prepareToolList (inject) and prepareToolCall (detect) always agree.
   readonly #missingCapabilityToolName: string
+  readonly #collectFeedbackEnabled: boolean
   readonly #feedbackOptions: CollectFeedbackOptions
   readonly #feedbackToolName: string
   readonly #captureModel: MCPAnalyticsOptions['captureModel']
@@ -123,6 +126,10 @@ export class PostHogMCP extends PostHog {
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
     super(apiKey, options)
     this.#missingCapabilityToolName = options.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
+    // The constructor option is the enable switch: without it, prepareToolCall
+    // must never claim a call named like the virtual tool — the host may have a
+    // real tool by that name, and flagging it would shadow the real handler.
+    this.#collectFeedbackEnabled = Boolean(options.collectFeedback)
     this.#feedbackOptions = typeof options.collectFeedback === 'object' ? options.collectFeedback : {}
     this.#feedbackToolName = this.#feedbackOptions.toolName ?? SEND_FEEDBACK_TOOL_NAME
     // Fail fast on a config error (reserved extra key, undeclared extraRequired)
@@ -215,7 +222,11 @@ export class PostHogMCP extends PostHog {
       prepared = [...prepared, getReportMissingToolDescriptor(this.#missingCapabilityToolName) as TTool]
     }
 
-    if (options.collectFeedback && !prepared.some((tool) => tool?.name === this.#feedbackToolName)) {
+    if (
+      options.collectFeedback &&
+      this.#collectFeedbackEnabled &&
+      !prepared.some((tool) => tool?.name === this.#feedbackToolName)
+    ) {
       prepared = [...prepared, getFeedbackToolDescriptor(this.#feedbackOptions) as TTool]
     }
 
@@ -287,7 +298,7 @@ export class PostHogMCP extends PostHog {
       ? resolveModel({ params: { arguments: args, _meta: options.requestMeta } }, ownsModel)
       : undefined
     const strippedArgs = stripContext(args)
-    const isFeedback = name === this.#feedbackToolName
+    const isFeedback = this.#collectFeedbackEnabled && name === this.#feedbackToolName
     return {
       intent,
       intentSource: intent ? 'context_parameter' : undefined,
@@ -330,7 +341,9 @@ export class PostHogMCP extends PostHog {
   captureFeedback(data: FeedbackCaptureData): void {
     const event = baseEvent(MCPAnalyticsEventType.mcpFeedback, data)
     event.resourceName = this.#feedbackToolName
-    event.parameters = data.parameters
+    // Deliberately no `$mcp_parameters`: the arguments are agent-narrated free
+    // text, and the PII-redacted `$mcp_feedback_*` properties are the captured
+    // surface. Raw arguments would bypass that redaction.
     event.properties = { ...buildFeedbackEventProperties(data.report), ...event.properties }
     applyIntent(event, buildFeedbackIntent(data.report), 'context_parameter')
     setEventModel(event, data.llmModel, data.llmModelSource)

@@ -233,17 +233,21 @@ function captureFreeText(value: string): string {
   return truncateFeedbackText(redactPii(sanitizeCapturedValue(value) as string), MAX_FEEDBACK_TEXT_LENGTH)
 }
 
-/** A declared extra: sanitized, non-scalars JSON-stringified, then bounded. */
+/**
+ * A declared extra is agent-supplied like the core free-text fields, so it gets
+ * the same treatment: sanitize, strip structured PII, bound the length.
+ * Non-scalars are JSON-stringified first so the redaction sees the full text.
+ */
 function captureExtraValue(value: unknown): unknown {
   const sanitized = sanitizeCapturedValue(value)
   if (typeof sanitized === 'string') {
-    return truncateFeedbackText(sanitized, MAX_FEEDBACK_TEXT_LENGTH)
+    return truncateFeedbackText(redactPii(sanitized), MAX_FEEDBACK_TEXT_LENGTH)
   }
   if (sanitized == null || typeof sanitized === 'number' || typeof sanitized === 'boolean') {
     return sanitized
   }
   try {
-    return truncateFeedbackText(JSON.stringify(sanitized), MAX_FEEDBACK_TEXT_LENGTH)
+    return truncateFeedbackText(redactPii(JSON.stringify(sanitized)), MAX_FEEDBACK_TEXT_LENGTH)
   } catch {
     return undefined
   }
@@ -315,7 +319,9 @@ export async function handleFeedback(
   options: CollectFeedbackOptions = {},
   logger: LoggerFn = log
 ): Promise<CompatibleTextToolResult> {
-  logger(`Agent feedback reported (${report.feedbackType}): ${report.summary}`)
+  // Only the type: the summary is agent-narrated free text (possible PII,
+  // newlines for log forging, unbounded length) and does not belong in host logs.
+  logger(`Agent feedback reported (${report.feedbackType})`)
   if (options.onFeedback) {
     try {
       const reply = await options.onFeedback(report)

@@ -89,6 +89,13 @@ interface TraceToolCallParams {
    */
   extraEventProperties?: JsonRecord
   /**
+   * Drop the generically captured `$mcp_parameters` from the event. Used by
+   * `send_feedback`: its arguments are agent-narrated free text, so the
+   * PII-redacted `$mcp_feedback_*` properties are the captured surface — the
+   * raw arguments would bypass that redaction and record undeclared fields.
+   */
+  omitCapturedParameters?: boolean
+  /**
    * Optional accessor for an error the executor captured out-of-band. The
    * high-level SDK turns thrown tool errors into `isError: true` results before
    * they reach us, so the wrapped callback stashes the original error and we
@@ -116,6 +123,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     eventType,
     explicitContextIntent,
     extraEventProperties,
+    omitCapturedParameters,
     takeCapturedError,
   } = params
   const resolvedEventType = eventType ?? MCPAnalyticsEventType.mcpToolsCall
@@ -161,6 +169,9 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   }
   if (preparedEvent && extraEventProperties) {
     preparedEvent.event.properties = { ...preparedEvent.event.properties, ...extraEventProperties }
+  }
+  if (preparedEvent && omitCapturedParameters) {
+    preparedEvent.event.parameters = undefined
   }
 
   let result: unknown

@@ -669,9 +669,10 @@ export interface PrepareToolListOptions {
    */
   reportMissing?: boolean
   /**
-   * Append the `send_feedback` virtual tool (configured on the `PostHogMCP`
-   * constructor's `collectFeedback` option) so agents can send feedback.
-   * Defaults to `false`. When the agent calls it, route the call to
+   * Append the `send_feedback` virtual tool so agents can send feedback.
+   * Defaults to `false`, and requires the `PostHogMCP` constructor's
+   * `collectFeedback` option (the enable switch that also gates detection).
+   * When the agent calls it, route the call to
    * {@link PostHogMCP.captureFeedback} and reply with `sendFeedbackResult()`.
    */
   collectFeedback?: boolean
@@ -706,7 +707,11 @@ export interface PreparedToolCall {
   args?: Record<string, unknown>
   /** True when `name` is the `get_more_tools` virtual tool. */
   isMissingCapability: boolean
-  /** True when `name` is the `send_feedback` virtual tool. */
+  /**
+   * True when `name` is the `send_feedback` virtual tool AND the constructor's
+   * `collectFeedback` option is set. Always false without that opt-in, so a real
+   * tool that happens to use the name is never shadowed.
+   */
   isFeedback: boolean
   /**
    * The parsed feedback report, set only when {@link PreparedToolCall.isFeedback}
@@ -742,6 +747,4 @@ export interface FeedbackCaptureData extends McpCaptureCommon {
   llmModel?: string
   /** How the model id was obtained -> `$mcp_llm_model_source`. */
   llmModelSource?: MCPAnalyticsModelSource
-  /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
-  parameters?: unknown
 }

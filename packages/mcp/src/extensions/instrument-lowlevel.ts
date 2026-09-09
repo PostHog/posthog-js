@@ -118,6 +118,7 @@ async function handleToolCallRequest(
       extra,
       eventType: MCPAnalyticsEventType.mcpFeedback,
       explicitContextIntent: buildFeedbackIntent(report),
+      omitCapturedParameters: true,
       extraEventProperties: buildFeedbackEventProperties(report),
       parameterOwnership: getVirtualToolParameterOwnership(
         data,

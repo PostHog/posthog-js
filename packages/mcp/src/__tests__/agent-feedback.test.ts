@@ -181,6 +181,8 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       expect(p[PostHogMCPAnalyticsProperty.FeedbackSentiment]).toBe('negative')
       expect(p[PostHogMCPAnalyticsProperty.FeedbackTaskCompleted]).toBe(true)
       expect(p[PostHogMCPAnalyticsProperty.ResourceName]).toBe(SEND_FEEDBACK)
+      // No raw arguments: the redacted $mcp_feedback_* properties are the captured surface.
+      expect(p[PostHogMCPAnalyticsProperty.Parameters]).toBeUndefined()
 
       // It's a feedback report, not a tool invocation or a capability gap.
       expect(capture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(0)
@@ -243,6 +245,43 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       expect(p[PostHogMCPAnalyticsProperty.FeedbackSummary]).toContain('[redacted]')
 
       await capture.stop()
+    })
+
+    it('redacts PII in declared extras, scalar and stringified', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), {
+        collectFeedback: {
+          extraProperties: { reporter: { type: 'string' }, meta: { type: 'object' } },
+        },
+      })
+
+      await callTool(client, SEND_FEEDBACK, {
+        feedback_type: 'issue',
+        summary: 'A tool failed.',
+        reporter: 'jane@example.com',
+        meta: { contact: 'john@example.com' },
+      })
+
+      await new Promise((r) => setTimeout(r, 50))
+      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
+      expect(p.$mcp_feedback_reporter).toBe('[redacted]')
+      expect(p.$mcp_feedback_meta).not.toContain('john@example.com')
+      expect(p.$mcp_feedback_meta).toContain('[redacted]')
+
+      await capture.stop()
+    })
+
+    it('does not log the agent-supplied summary', async () => {
+      const logger = vi.fn()
+      instrument(server, fakePostHog(), { collectFeedback: true, logger })
+
+      await callTool(client, SEND_FEEDBACK, {
+        feedback_type: 'issue',
+        summary: 'secret-narrated-content',
+      })
+
+      expect(logger.mock.calls.flat().join('\n')).not.toContain('secret-narrated-content')
     })
 
     it('invokes onFeedback with the parsed report and uses its returned reply', async () => {
@@ -429,6 +468,21 @@ describe('PostHogMCP (custom dispatcher path)', () => {
     const regular = posthog.prepareToolCall('my_tool', { value: 1 })
     expect(regular.isFeedback).toBe(false)
     expect(regular.feedbackReport).toBeUndefined()
+
+    await posthog.shutdown()
+  })
+
+  it('never flags feedback calls without the constructor opt-in, so a real tool is not shadowed', async () => {
+    const posthog = newClient()
+
+    const prepared = posthog.prepareToolCall(SEND_FEEDBACK, { feedback_type: 'other', summary: 'A note.' })
+    expect(prepared.isFeedback).toBe(false)
+    expect(prepared.feedbackReport).toBeUndefined()
+
+    const myTools = [{ name: 'my_tool', inputSchema: { type: 'object', properties: {} } }]
+    expect(posthog.prepareToolList(myTools, { collectFeedback: true }).find((t) => t.name === SEND_FEEDBACK)).toBe(
+      undefined
+    )
 
     await posthog.shutdown()
   })
