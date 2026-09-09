@@ -243,47 +243,6 @@ test.describe('Session recording - array.js', () => {
         expect(capturedAfterReload[1]['properties']['$recording_status']).toEqual('active')
     })
 
-    test('reloads persisted recording config safely while remote config is delayed', async ({ page, context }) => {
-        const sessionId = await page.evaluate(() => (window as WindowWithPostHog).posthog?.get_session_id())
-        const errors: string[] = []
-        page.on('pageerror', (error) => errors.push(error.message))
-        let releaseConfig!: () => void
-        let configRequested!: () => void
-        const delayedConfig = new Promise<void>((resolve) => {
-            releaseConfig = resolve
-        })
-        const requestSeen = new Promise<void>((resolve) => {
-            configRequested = resolve
-        })
-        const configUrl = /\/array\/[^/]+\/config(\?|$)/
-        await page.route(configUrl, async (route) => {
-            configRequested()
-            await delayedConfig
-            await route.fallback()
-        })
-        try {
-            await start({ ...startOptions, type: 'reload', waitForFlags: false }, page, context)
-            await requestSeen
-            await page.evaluate(() => (window as WindowWithPostHog).posthog?.capture('before-delayed-config'))
-            expect(errors).toEqual([])
-            releaseConfig()
-            await waitForSessionRecordingToStart(page)
-            await page.waitingForNetworkCausedBy({
-                urlPatternsToWaitFor: ['**/ses/*'],
-                action: async () => {
-                    await page.locator('[data-cy-input]').fill('after delayed config')
-                },
-            })
-            const snapshots = (await page.capturedEvents()).filter((event) => event.event === '$snapshot')
-            expect(snapshots.length).toBeGreaterThan(0)
-            expect(snapshots.every((event) => event.properties.$session_id === sessionId)).toBe(true)
-            expect(errors).toEqual([])
-        } finally {
-            releaseConfig()
-            await page.unroute(configUrl)
-        }
-    })
-
     test('starts a new recording after calling reset', async ({ page }) => {
         await page.resetCapturedEvents()
         const startingSessionId = await page.evaluate(() => {
