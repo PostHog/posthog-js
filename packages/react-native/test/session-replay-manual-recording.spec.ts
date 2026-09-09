@@ -207,6 +207,24 @@ describe('PostHog RN manual session recording controls', () => {
     expect(await posthog.isSessionReplayActive()).toBe(false)
   })
 
+  it('does not retry a refused start for the next user after reset()', async () => {
+    nativeAccepts = false
+    posthog = newPostHog()
+    await posthog.ready()
+
+    expect(await posthog.startSessionRecording()).toBe(false)
+    const attempts = replay.startRecording.mock.calls.length
+
+    // Native has had its remote config for a while by logout, so a leaked pending start
+    // would succeed here and record a session the new, anonymous user never asked for.
+    nativeAccepts = true
+    posthog.reset()
+    await wait(50)
+
+    expect(replay.startRecording).toHaveBeenCalledTimes(attempts)
+    expect(await posthog.isSessionReplayActive()).toBe(false)
+  })
+
   it('reports failure when the plugin is too old to control recording', async () => {
     const startRecording = replay.startRecording
     delete (replay as any).startRecording
