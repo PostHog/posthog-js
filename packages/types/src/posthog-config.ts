@@ -2050,13 +2050,22 @@ export interface PostHogConfig {
      * By default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side
      * flag changes without requiring a page reload. This is useful for SPAs and long-running tabs.
      *
+     * **Each refresh is a billable feature flag request.** A page that stays open all day makes
+     * up to 288 requests per day per device on the default interval. Set this option to `0` to
+     * stop the background refreshes if that cost is not useful to you.
+     *
      * **Tradeoffs:**
-     * - **Shorter intervals**: Feature flag changes propagate faster, but increases network requests and server load.
-     * - **Longer intervals**: Reduces network traffic (better for mobile/battery), but flag changes take longer to propagate.
+     * - **Shorter intervals**: Feature flag changes propagate faster, but increases network requests, cost, and server load.
+     * - **Longer intervals**: Reduces network traffic (better for mobile/battery) and cost, but flag changes take longer to propagate.
      * - **Disabled (0 or any negative value)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.
      *   Use this if you control flag updates manually or have infrequent flag changes.
      *
      * Hidden pages skip scheduled refreshes and reload due flags when they become visible.
+     *
+     * A visible page that gets no user interaction (a kiosk or a signage screen) doubles the
+     * interval after every refresh, up to one hour. The next click, key press, scroll, or return
+     * to visibility puts the page back on the configured interval.
+     *
      * This option does not reload remote config.
      *
      * @default 300000 (5 minutes)
