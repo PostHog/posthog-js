@@ -1,4 +1,16 @@
 {
+  "PostHog/posthog-js/issue/4856": {
+    "key": "PostHog/posthog-js/issue/4856",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4856",
+    "url": "https://github.com/PostHog/posthog-js/issues/4856",
+    "conclusion": "Valid publisher-intent and licensing-provenance question; it needs an authoritative maintainer/legal response rather than a speculative code fix.",
+    "labels": [
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-09T01:07:15.889Z"
+  },
   "PostHog/posthog-js/issue/4852": {
     "key": "PostHog/posthog-js/issue/4852",
     "repo": "PostHog/posthog-js",
