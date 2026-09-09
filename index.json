@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/4857": {
+    "key": "PostHog/posthog-js/issue/4857",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4857",
+    "url": "https://github.com/PostHog/posthog-js/issues/4857",
+    "conclusion": "Valid Android React Native push-open capture gap; automatic warm-start handling is absent in the current plugin.",
+    "labels": [
+      "react-native",
+      "feature/mobile",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-09T02:28:28.988Z"
+  },
   "PostHog/posthog-js/issue/4856": {
     "key": "PostHog/posthog-js/issue/4856",
     "repo": "PostHog/posthog-js",
