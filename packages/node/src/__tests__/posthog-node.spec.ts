@@ -3069,6 +3069,7 @@ describe('PostHog Node.js', () => {
             },
             geoip_disable: true,
             flag_keys_to_evaluate: ['random_key'],
+            evaluation_runtime: 'server',
           }),
         })
       )
@@ -3098,6 +3099,7 @@ describe('PostHog Node.js', () => {
             },
             geoip_disable: true,
             flag_keys_to_evaluate: ['random_key'],
+            evaluation_runtime: 'server',
           }),
         })
       )
@@ -3123,6 +3125,7 @@ describe('PostHog Node.js', () => {
             person_properties: {},
             group_properties: {},
             geoip_disable: true,
+            evaluation_runtime: 'server',
           }),
         })
       )
@@ -3145,6 +3148,7 @@ describe('PostHog Node.js', () => {
             person_properties: {},
             group_properties: { company: { $group_key: 'id:5' } },
             geoip_disable: true,
+            evaluation_runtime: 'server',
           }),
         })
       )
@@ -3164,6 +3168,7 @@ describe('PostHog Node.js', () => {
             group_properties: {},
             geoip_disable: true,
             flag_keys_to_evaluate: ['random_key'],
+            evaluation_runtime: 'server',
           }),
         })
       )
@@ -3184,6 +3189,7 @@ describe('PostHog Node.js', () => {
             group_properties: {},
             geoip_disable: true,
             flag_keys_to_evaluate: ['random_key'],
+            evaluation_runtime: 'server',
           }),
         })
       )
@@ -3207,6 +3213,41 @@ describe('PostHog Node.js', () => {
       )
 
       errorSpy.mockRestore()
+    })
+  })
+
+  describe('evaluation runtime', () => {
+    beforeEach(() => {
+      mockedFetch.mockClear()
+    })
+
+    it('should declare the server runtime on /flags requests', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({
+          decideFlags: { 'test-flag': true },
+          flagsPayloads: {},
+        })
+      )
+
+      const posthogServer = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        ...posthogImmediateResolveOptions,
+      })
+
+      await posthogServer.getAllFlags('some-distinct-id')
+
+      // Without this the server infers the runtime from request headers. An unrecognized
+      // User-Agent falls through to browser signals like `sec-fetch-mode`, which Node's fetch
+      // always sends, so the request resolves to the client runtime and loses `server` flags.
+      expect(mockedFetch).toHaveBeenCalledWith(
+        'http://example.com/flags/?v=2',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"evaluation_runtime":"server"'),
+        })
+      )
+
+      await posthogServer.shutdown()
     })
   })
 

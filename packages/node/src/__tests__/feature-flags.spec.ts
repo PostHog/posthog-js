@@ -899,6 +899,7 @@ describe('local evaluation', () => {
           group_properties: {},
           geoip_disable: true,
           flag_keys_to_evaluate: ['complex-flag'],
+          evaluation_runtime: 'server',
         }),
       })
     )
@@ -919,6 +920,7 @@ describe('local evaluation', () => {
           group_properties: {},
           geoip_disable: true,
           flag_keys_to_evaluate: ['complex-flag'],
+          evaluation_runtime: 'server',
         }),
       })
     )

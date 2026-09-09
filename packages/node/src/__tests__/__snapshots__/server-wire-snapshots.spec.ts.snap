@@ -82,6 +82,7 @@ exports[`server wire snapshots > snapshots a maximal flags request body 1`] = `
       "production",
       "backend",
     ],
+    "evaluation_runtime": "server",
     "flag_keys_to_evaluate": [
       "new-checkout",
       "billing-v2",
