@@ -296,7 +296,7 @@ export interface DeadClickCandidate {
     scrollDelayMs?: number
     // time between click and the most recent mutation
     mutationDelayMs?: number
-    // time between click and the most recent selection changed event
+    // delay to the closest selection changed event; pre-candidate delays are stored only within the suppression window
     selectionChangedDelayMs?: number
     // delay between the click and the nearest visibility change within the suppression window, on
     // either side — a tab going to or from hidden near a click (opening a new tab, or waking the
@@ -365,7 +365,8 @@ export type DeadClicksAutoCaptureConfig = {
     scroll_threshold_ms?: number
 
     /**
-     * We'll not consider a click to be a dead click, if it's followed by a selection change within `selection_change_threshold_ms` milliseconds
+     * We'll not consider a click to be a dead click if a selection changes within
+     * `selection_change_threshold_ms` milliseconds immediately before or after it.
      *
      * @default 100
      */
