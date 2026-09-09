@@ -48,10 +48,10 @@ describe('gatewayWarning', () => {
   })
 
   describe('warnIfPostHogAiGateway', () => {
-    let warnSpy: jest.SpyInstance
+    let warnSpy: vi.SpyInstance
 
     beforeEach(() => {
-      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     })
 
     afterEach(() => {
@@ -88,10 +88,10 @@ describe('gatewayWarning', () => {
   })
 
   describe('warnIfPostHogAiGatewayOtelAttributes', () => {
-    let warnSpy: jest.SpyInstance
+    let warnSpy: vi.SpyInstance
 
     beforeEach(() => {
-      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     })
 
     afterEach(() => {

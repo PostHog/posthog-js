@@ -1,27 +1,33 @@
-jest.mock('@posthog/browser-common/utils/logger', () => ({
-    createLogger: jest.fn().mockReturnValue({
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
+vi.mock('@posthog/browser-common/utils/logger', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@posthog/browser-common/utils/logger')>()),
+    createLogger: vi.fn().mockReturnValue({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
     }),
 }))
 
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { RemoteConfigLoader } from '../remote-config'
 import { RequestRouter } from '../utils/request-router'
 import { PostHog } from '../posthog-core'
-import { PostHogConfig, RemoteConfig } from '../types'
+import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
+import type { Client } from '@posthog/browser-common'
+import type { RequestResponse } from '@posthog/types'
+import { Autocapture } from '../autocapture'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import '../entrypoints/external-scripts-loader'
 import { assignableWindow } from '../utils/globals'
 import { createMockPostHog } from './helpers/posthog-instance'
 
-const mockLogger = jest.requireMock('@posthog/browser-common/utils/logger').createLogger.mock.results[0].value
+const mockLogger = vi.mocked(createLogger).mock.results[0].value
 
 describe('RemoteConfigLoader', () => {
     let posthog: PostHog
 
     beforeEach(() => {
-        jest.useFakeTimers()
-        jest.clearAllMocks()
+        vi.useFakeTimers()
+        vi.clearAllMocks()
 
         const defaultConfig: Partial<PostHogConfig> = {
             token: 'testtoken',
@@ -31,24 +37,145 @@ describe('RemoteConfigLoader', () => {
 
         document.body.innerHTML = ''
         document.head.innerHTML = ''
-        jest.spyOn(window.console, 'error').mockImplementation()
+        vi.spyOn(window.console, 'error').mockImplementation(() => {})
 
         posthog = createMockPostHog({
             config: { ...defaultConfig },
-            _onRemoteConfig: jest.fn(),
-            _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
+            _onRemoteConfig: vi.fn(),
+            _send_request: vi.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
             _shouldDisableFlags: () =>
                 posthog.config.advanced_disable_flags || posthog.config.advanced_disable_decide || false,
             featureFlags: {
-                ensureFlagsLoaded: jest.fn(),
+                ensureFlagsLoaded: vi.fn(),
             },
-            reloadFeatureFlags: jest.fn(),
+            reloadFeatureFlags: vi.fn(),
             requestRouter: new RequestRouter(createMockPostHog({ config: defaultConfig })),
         })
     })
 
     afterEach(() => {
-        jest.useRealTimers()
+        vi.useRealTimers()
+    })
+
+    describe('autocapture with cached remote config', () => {
+        let autocapture: Autocapture
+        let capture: ReturnType<typeof vi.fn>
+        let button: HTMLButtonElement
+        let completeRequest: (response: RequestResponse) => void
+        let cachedOptOut: boolean | undefined
+
+        beforeEach(() => {
+            cachedOptOut = false
+            capture = vi.fn()
+            button = document.createElement('button')
+            document.body.appendChild(button)
+            assignableWindow._POSTHOG_REMOTE_CONFIG = undefined
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn((_ph, _name, cb) => cb())
+            posthog.config.autocapture = true
+            posthog._send_request = vi.fn(({ callback }) => {
+                completeRequest = callback!
+            })
+            autocapture = new Autocapture({
+                refresh: (config) => {
+                    config.enabled = !!posthog.config.autocapture
+                    config.remoteRequestsDisabled = posthog._shouldDisableFlags()
+                },
+            })
+            autocapture.setup({
+                capture,
+                kv: {
+                    get: (key: string) => (key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? cachedOptOut : undefined),
+                    set: (_key: string, value: boolean) => {
+                        cachedOptOut = value
+                    },
+                },
+                onRemoteConfig: (handler: (result: RemoteConfigResult) => void) => {
+                    posthog._onRemoteConfig = handler
+                    return { dispose: vi.fn() }
+                },
+            } as unknown as Client)
+        })
+
+        afterEach(() => {
+            autocapture.dispose()
+            assignableWindow._POSTHOG_REMOTE_CONFIG = undefined
+        })
+
+        it.each([
+            ['enabled', { statusCode: 200, json: { autocapture_opt_out: false } }, true],
+            ['disabled', { statusCode: 200, json: { autocapture_opt_out: true } }, false],
+            ['missing opt-out', { statusCode: 200, json: {} }, true],
+            ['unavailable config', { statusCode: 200 }, true],
+            ['network error', { statusCode: 0, error: new TypeError('Failed to fetch') }, true],
+            ['timeout', { statusCode: 0, error: new DOMException('Timed out', 'AbortError') }, true],
+        ])('waits for the initial %s outcome before using cached enablement', (_name, response, enabled) => {
+            new RemoteConfigLoader(posthog).load()
+            button.click()
+            expect(capture).not.toHaveBeenCalled()
+            expect(autocapture.isEnabled).toBe(false)
+
+            completeRequest(response)
+            expect(autocapture.isEnabled).toBe(enabled)
+            expect(capture).not.toHaveBeenCalled() // Do not replay clicks from before the config outcome.
+            button.click()
+            expect(capture).toHaveBeenCalledTimes(enabled ? 1 : 0)
+        })
+
+        it.each([true, false, undefined])('preserves cached opt-out %s when requests are disabled', (optOut) => {
+            cachedOptOut = optOut
+            posthog.config.advanced_disable_flags = true
+            autocapture.startIfEnabled()
+
+            new RemoteConfigLoader(posthog).load()
+            button.click()
+
+            expect(posthog._send_request).not.toHaveBeenCalled()
+            expect(capture).toHaveBeenCalledTimes(optOut === true ? 0 : 1)
+        })
+
+        it.each([true, false])('applies preloaded opt-out %s synchronously', (optOut) => {
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [posthog.config.token]: { config: { autocapture_opt_out: optOut }, siteApps: [] },
+            }
+
+            new RemoteConfigLoader(posthog).load()
+            button.click()
+
+            expect(posthog._send_request).not.toHaveBeenCalled()
+            expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).not.toHaveBeenCalled()
+            expect(capture).toHaveBeenCalledTimes(optOut ? 0 : 1)
+        })
+
+        it.each([true, false])('preserves local opt-out with remote opt-out %s', (optOut) => {
+            posthog.config.autocapture = false
+            new RemoteConfigLoader(posthog).load()
+            button.click()
+            completeRequest({ statusCode: 200, json: { autocapture_opt_out: optOut } })
+            button.click()
+
+            expect(autocapture.isEnabled).toBe(false)
+            expect(capture).not.toHaveBeenCalled()
+        })
+
+        it('uses subsequent config outcomes without re-gating or duplicating listeners', () => {
+            const loader = new RemoteConfigLoader(posthog)
+            loader.load()
+            completeRequest({ statusCode: 200, json: { autocapture_opt_out: false } })
+            button.click()
+            expect(capture).toHaveBeenCalledTimes(1)
+
+            loader.load()
+            button.click()
+            expect(capture).toHaveBeenCalledTimes(2)
+            completeRequest({ statusCode: 200, json: { autocapture_opt_out: true } })
+            button.click()
+            expect(capture).toHaveBeenCalledTimes(2)
+
+            loader.load()
+            completeRequest({ statusCode: 200, json: { autocapture_opt_out: false } })
+            button.click()
+            expect(capture).toHaveBeenCalledTimes(3)
+        })
     })
 
     describe('remote config', () => {
@@ -57,7 +184,7 @@ describe('RemoteConfigLoader', () => {
         beforeEach(() => {
             assignableWindow._POSTHOG_REMOTE_CONFIG = undefined
 
-            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
                     assignableWindow._POSTHOG_REMOTE_CONFIG = {}
                     assignableWindow._POSTHOG_REMOTE_CONFIG[_ph.config.token] = {
@@ -68,7 +195,7 @@ describe('RemoteConfigLoader', () => {
                 }
             )
 
-            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ json: config }))
+            posthog._send_request = vi.fn().mockImplementation(({ callback }) => callback?.({ json: config }))
         })
 
         it('properly pulls from the window and uses it if set', () => {
@@ -99,7 +226,7 @@ describe('RemoteConfigLoader', () => {
         })
 
         it('loads the json if window config not set and js failed', () => {
-            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
                     cb()
                 }
@@ -144,7 +271,7 @@ describe('RemoteConfigLoader', () => {
                     siteApps: [],
                 },
             }
-            posthog._onRemoteConfig = jest.fn(() => {
+            posthog._onRemoteConfig = vi.fn(() => {
                 throw new Error('config application failed')
             })
 
@@ -162,7 +289,7 @@ describe('RemoteConfigLoader', () => {
                     siteApps: [],
                 },
             }
-            posthog.featureFlags.ensureFlagsLoaded = jest.fn(() => {
+            posthog.featureFlags.ensureFlagsLoaded = vi.fn(() => {
                 throw new Error('feature flag initialization failed')
             })
 
@@ -173,7 +300,7 @@ describe('RemoteConfigLoader', () => {
         })
 
         it('reports synchronous loading errors as a failed outcome', () => {
-            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(() => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn(() => {
                 throw new Error('loader failed')
             })
 
@@ -184,12 +311,12 @@ describe('RemoteConfigLoader', () => {
         })
 
         it('still initializes extensions and loads flags when config fetch fails', () => {
-            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
                     cb()
                 }
             )
-            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ json: undefined }))
+            posthog._send_request = vi.fn().mockImplementation(({ callback }) => callback?.({ json: undefined }))
 
             new RemoteConfigLoader(posthog).load()
 
@@ -200,10 +327,10 @@ describe('RemoteConfigLoader', () => {
         })
 
         it('does not re-log status-zero failures already handled by the request layer', () => {
-            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => cb()
             )
-            posthog._send_request = jest
+            posthog._send_request = vi
                 .fn()
                 .mockImplementation(({ callback }) =>
                     callback?.({ statusCode: 0, error: new TypeError('Failed to fetch') })
@@ -217,10 +344,10 @@ describe('RemoteConfigLoader', () => {
         })
 
         it('warns once for a bare status-zero response', () => {
-            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => cb()
             )
-            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ statusCode: 0 }))
+            posthog._send_request = vi.fn().mockImplementation(({ callback }) => callback?.({ statusCode: 0 }))
 
             new RemoteConfigLoader(posthog).load()
 
@@ -229,10 +356,10 @@ describe('RemoteConfigLoader', () => {
         })
 
         it('keeps HTTP failures at error severity', () => {
-            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = vi.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => cb()
             )
-            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ statusCode: 500 }))
+            posthog._send_request = vi.fn().mockImplementation(({ callback }) => callback?.({ statusCode: 500 }))
 
             new RemoteConfigLoader(posthog).load()
 

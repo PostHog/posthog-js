@@ -389,7 +389,7 @@ describe('truncateEvent - size targeting', () => {
 
     const result = truncateEvent(event)
 
-    // Use a realm-safe Date check — jest's module isolation makes
+    // Use a realm-safe Date check — vi's module isolation makes
     // `structuredClone(date) instanceof Date` flaky across realms.
     expect(Object.prototype.toString.call(result.timestamp)).toBe('[object Date]')
     expect((result.timestamp as Date).toISOString()).toBe(ts.toISOString())

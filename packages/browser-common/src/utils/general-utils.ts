@@ -1,4 +1,4 @@
-import { hasOwnProperty, isArray, isFormData, isNullish, isNumber, isString } from '@posthog/core'
+import { hasOwnProperty, isArray, isError, isFormData, isNullish, isNumber, isString } from '@posthog/core'
 import type { PostHogConfig, Properties } from '@posthog/types'
 
 import { logger } from './logger'
@@ -74,7 +74,7 @@ export const trySafe = function <T>(fn: () => T): T | undefined {
 export const safewrap = function <F extends (...args: any[]) => any = (...args: any[]) => any>(f: F): F {
     return function (...args) {
         try {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // oxlint-disable-next-line typescript/ban-ts-comment
             // @ts-ignore
             return f.apply(this, args)
         } catch (e) {
@@ -86,7 +86,7 @@ export const safewrap = function <F extends (...args: any[]) => any = (...args: 
     } as F
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+// oxlint-disable-next-line typescript/no-unsafe-function-type
 export const safewrapClass = function (klass: Function, functions: string[]): void {
     for (let i = 0; i < functions.length; i++) {
         klass.prototype[functions[i]!] = safewrap(klass.prototype[functions[i]!])
@@ -101,6 +101,20 @@ export const stripEmptyProperties = function (p: Properties): Properties {
         }
     })
     return ret
+}
+
+export function errorToProperties(error: Error & { cause?: unknown; errors?: unknown }): Record<string, unknown> {
+    const copy: Record<string, unknown> = { ...error }
+    for (const detail of ['name', 'message', 'stack', 'cause', 'errors'] as const) {
+        try {
+            if (detail in error) {
+                copy[detail] = error[detail]
+            }
+        } catch {
+            // An unreadable non-enumerable Error detail must not discard the rest of the event.
+        }
+    }
+    return copy
 }
 
 /**
@@ -132,7 +146,7 @@ function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
             })
         } else {
             const copy: Record<string, any> = {}
-            each(value, (val, key) => {
+            each(isError(value) ? errorToProperties(value) : value, (val, key) => {
                 if (!COPY_IN_PROGRESS_SET.has(val)) {
                     copy[key] = internalDeepCircularCopy(val, key)
                 }
@@ -181,7 +195,7 @@ export function isCrossDomainCookie(documentLocation: Location | undefined) {
     return true
 }
 
-// Use this instead of element.addEventListener to avoid eslint errors
+// Use this instead of element.addEventListener to avoid lint errors
 // this properly implements the default options for passive event listeners
 export function addEventListener(
     element: Window | Document | Element | undefined,
@@ -193,7 +207,7 @@ export function addEventListener(
 
     // This is the only place where we are allowed to call this function
     // because the whole idea is that we should be calling this instead of the built-in one
-    // eslint-disable-next-line posthog-js/no-add-event-listener
+    // oxlint-disable-next-line posthog-js/no-add-event-listener
     element?.addEventListener(event, callback, { capture, passive })
 }
 

@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`identify() calls capture with user properties if passed 1`] = `
+exports[`identify() > calls capture with user properties if passed 1`] = `
 {
   "$set": {
     "email": "john@example.com",

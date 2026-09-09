@@ -30,9 +30,12 @@ const createInstance = async (
     } as typeof assignableWindow._POSTHOG_REMOTE_CONFIG
 
     let publicPostHog: PostHog | undefined
-    await jest.isolateModulesAsync(async () => {
+    vi.resetModules()
+    try {
         publicPostHog = (await import('../../entrypoints/module.es')).default
-    })
+    } finally {
+        vi.resetModules()
+    }
     if (!publicPostHog) {
         throw new Error('The canonical posthog-js module entry point did not initialize')
     }

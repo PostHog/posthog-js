@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { waitForPackages } from './wait-for-packages.mjs'
+
 const packageDir = dirname(fileURLToPath(import.meta.url))
 const fixtureDir = mkdtempSync(join(tmpdir(), 'posthog-nuxt5-consumer-'))
 const packageRoot = join(packageDir, '..')
@@ -19,7 +21,7 @@ async function availablePort() {
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
   const { port } = server.address()
-  await new Promise(resolve => server.close(resolve))
+  await new Promise((resolve) => server.close(resolve))
   return port
 }
 
@@ -31,7 +33,7 @@ async function waitForServer(url) {
     try {
       return await fetch(url)
     } catch {
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise((resolve) => setTimeout(resolve, 100))
     }
   }
   throw new Error('Nuxt server did not start')
@@ -49,6 +51,7 @@ function withTimeout(promise, milliseconds, message) {
 
 try {
   const packageManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
+  const packagesToWaitFor = new Map()
   packageManifest.dependencies = Object.fromEntries(
     Object.entries(packageManifest.dependencies).map(([name, version]) => {
       if (version !== 'catalog:' && !version.startsWith('workspace:')) {
@@ -56,11 +59,12 @@ try {
       }
 
       const dependencyManifest = JSON.parse(
-        readFileSync(join(packageRoot, 'node_modules', ...name.split('/'), 'package.json'), 'utf8'),
+        readFileSync(join(packageRoot, 'node_modules', ...name.split('/'), 'package.json'), 'utf8')
       )
       const range = version === 'workspace:^' ? '^' : version === 'workspace:~' ? '~' : ''
+      packagesToWaitFor.set(name, dependencyManifest.version)
       return [name, `${range}${dependencyManifest.version}`]
-    }),
+    })
   )
   delete packageManifest.scripts
   cpSync(join(packageRoot, 'dist'), join(packageStageDir, 'dist'), { recursive: true })
@@ -73,7 +77,7 @@ try {
 
   const packageTarball = join(
     fixtureDir,
-    readdirSync(fixtureDir).find(filename => filename.endsWith('.tgz')),
+    readdirSync(fixtureDir).find((filename) => filename.endsWith('.tgz'))
   )
   let resolveCapture
   const capture = new Promise((resolve) => {
@@ -108,19 +112,20 @@ try {
         },
       },
       null,
-      2,
-    ),
+      2
+    )
   )
   writeFileSync(
     join(fixtureDir, 'nuxt.config.mjs'),
-    `export default defineNuxtConfig({ modules: ['@posthog/nuxt'], posthogConfig: { publicKey: 'phc_test', host: '${posthogHost}', serverConfig: { enableExceptionAutocapture: true, flushAt: 100, flushInterval: 0, disableCompression: true, disableRemoteConfig: true } } })\n`,
+    `export default defineNuxtConfig({ modules: ['@posthog/nuxt'], posthogConfig: { publicKey: 'phc_test', host: '${posthogHost}', serverConfig: { enableExceptionAutocapture: true, flushAt: 100, flushInterval: 0, disableCompression: true, disableRemoteConfig: true } } })\n`
   )
   mkdirSync(join(fixtureDir, 'server', 'plugins'), { recursive: true })
   writeFileSync(
     join(fixtureDir, 'server', 'plugins', 'background-error.mjs'),
-    `setInterval(() => {}, 60_000)\nexport default () => { process.once('SIGUSR2', () => { Promise.reject(new Error('background shutdown test')) }) }\n`,
+    `setInterval(() => {}, 60_000)\nexport default () => { process.once('SIGUSR2', () => { Promise.reject(new Error('background shutdown test')) }) }\n`
   )
 
+  await waitForPackages(packagesToWaitFor)
   execFileSync('pnpm', ['install', '--ignore-scripts', '--no-frozen-lockfile'], { cwd: fixtureDir, stdio: 'inherit' })
   execFileSync('pnpm', ['exec', 'nuxt', 'build'], { cwd: fixtureDir, stdio: 'inherit' })
 
@@ -140,12 +145,12 @@ try {
   const nuxtHost = `http://127.0.0.1:${nuxtPort}`
   await waitForServer(nuxtHost)
   nuxtServer.kill('SIGUSR2')
-  await new Promise(resolve => setTimeout(resolve, 100))
+  await new Promise((resolve) => setTimeout(resolve, 100))
   const exit = once(nuxtServer, 'exit')
   nuxtServer.kill('SIGTERM')
   assert.match(
     await withTimeout(capture, 5_000, 'PostHog events were not flushed while the server had an active handle'),
-    /background shutdown test/,
+    /background shutdown test/
   )
   assert.equal(nuxtServer.exitCode, null)
   nuxtServer.kill('SIGKILL')
@@ -156,7 +161,7 @@ try {
     nuxtServer.kill('SIGKILL')
   }
   if (captureServer) {
-    await new Promise(resolve => captureServer.close(resolve))
+    await new Promise((resolve) => captureServer.close(resolve))
   }
   rmSync(fixtureDir, { recursive: true, force: true })
 }

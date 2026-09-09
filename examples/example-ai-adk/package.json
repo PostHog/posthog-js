@@ -1,0 +1,21 @@
+{
+    "name": "example-ai-adk",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@10.15.0",
+    "scripts": {
+        "chat": "tsx --require dotenv/config chat.ts",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@google/adk": "^2.0.0",
+        "@posthog/ai": "*",
+        "posthog-node": "*"
+    },
+    "devDependencies": {
+        "dotenv": "^16.0.0",
+        "tsx": "^4.0.0",
+        "typescript": "^5.0.0"
+    }
+}

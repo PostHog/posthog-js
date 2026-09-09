@@ -4,7 +4,7 @@ import { PostHog } from '@/entrypoints/index.node'
 
 import { V1WiringHarness, v413Response, v0Response, waitForFlushTimer } from '../utils/v1-wiring'
 
-jest.mock('../../version', () => ({ version: '1.2.3' }))
+vi.mock('../../version', () => ({ version: '1.2.3' }))
 
 describe('AI capture lane wiring (Node SDK)', () => {
   const harness = new V1WiringHarness()
@@ -29,17 +29,17 @@ describe('AI capture lane wiring (Node SDK)', () => {
   }
 
   beforeEach(() => {
-    jest.spyOn(console, 'warn').mockImplementation(() => {})
-    jest.spyOn(console, 'error').mockImplementation(() => {})
-    jest.spyOn(console, 'info').mockImplementation(() => {})
-    jest.spyOn(console, 'log').mockImplementation(() => {})
-    jest.spyOn(console, 'debug').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'debug').mockImplementation(() => {})
     harness.useDefaultRouting()
   })
 
   afterEach(async () => {
     await harness.cleanup()
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   it('captureAi posts to the AI endpoint with the V0 body shape', async () => {
@@ -87,7 +87,7 @@ describe('AI capture lane wiring (Node SDK)', () => {
   it('drops events over 8MiB with a name-and-size-only error log, delivering the rest', async () => {
     const posthog = harness.makeClient()
     posthog.debug(true)
-    const onError = jest.fn()
+    const onError = vi.fn()
     posthog.on('error', onError)
     const pad = 'x'.repeat(9 * 1024 * 1024)
     posthog.captureAi({ distinctId: 'u', event: '$ai_generation', properties: { pad } })
@@ -95,7 +95,7 @@ describe('AI capture lane wiring (Node SDK)', () => {
     await posthog.flush()
 
     expect(harness.eventsIn('/i/v0/ai/batch/')).toEqual(['$ai_span'])
-    const errorLog = (console.error as jest.Mock).mock.calls.flat().join(' ')
+    const errorLog = (console.error as vi.Mock).mock.calls.flat().join(' ')
     expect(errorLog).toContain('$ai_generation')
     expect(errorLog).toMatch(/\d+ bytes/)
     expect(errorLog).not.toContain('xxxx')
@@ -152,7 +152,7 @@ describe('AI capture lane wiring (Node SDK)', () => {
   it('drops a single event that still 413s alone, without throwing, and keeps the lane usable', async () => {
     const posthog = harness.makeClient()
     posthog.debug(true)
-    const onError = jest.fn()
+    const onError = vi.fn()
     posthog.on('error', onError)
     harness.fetch.mockImplementation((url: any) =>
       Promise.resolve(url.includes('/i/v0/ai/batch/') ? v413Response() : v0Response())
@@ -162,7 +162,7 @@ describe('AI capture lane wiring (Node SDK)', () => {
     await expect(posthog.flush()).resolves.not.toThrow()
 
     expect(await deliveredEventsIn('/i/v0/ai/batch/')).toEqual([])
-    const errorLog = (console.error as jest.Mock).mock.calls.flat().join(' ')
+    const errorLog = (console.error as vi.Mock).mock.calls.flat().join(' ')
     expect(errorLog).toContain('$ai_undeliverable')
     expect(errorLog).toMatch(/\d+ bytes/)
 
@@ -196,7 +196,7 @@ describe('AI capture lane wiring (Node SDK)', () => {
     posthog.captureAi({ distinctId: 'u', event: 'custom_event', properties: {} })
     await posthog.flush()
     expect(harness.eventsIn('/i/v0/ai/batch/')).toEqual(['custom_event'])
-    const debugLog = (console.debug as jest.Mock).mock.calls.flat().join(' ')
+    const debugLog = (console.debug as vi.Mock).mock.calls.flat().join(' ')
     expect(debugLog).toContain('custom_event')
   })
 

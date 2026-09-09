@@ -16,7 +16,7 @@ function makeResponse(status: number, body?: unknown, headers?: Record<string, s
   }
 }
 
-function makeStallingResponse(status: number, cancel: jest.Mock<Promise<void>, []>): PostHogFetchResponse {
+function makeStallingResponse(status: number, cancel: vi.Mock<Promise<void>, []>): PostHogFetchResponse {
   const stalledBody = () => new Promise<string>(() => {})
 
   return {
@@ -34,7 +34,7 @@ function msg(uuid: string, overrides: PostHogEventProperties = {}): PostHogEvent
 
 interface Harness {
   sender: V1CaptureSender
-  fetch: jest.Mock<Promise<PostHogFetchResponse>, [string, any]>
+  fetch: vi.Mock<Promise<PostHogFetchResponse>, [string, any]>
   sleeps: number[]
   errors: Error[]
   clock: { value: number }
@@ -47,7 +47,7 @@ function makeSender(
   const sleeps: number[] = []
   const errors: Error[] = []
   const clock = { value: CLOCK_START }
-  const fetch = jest.fn<Promise<PostHogFetchResponse>, [string, any]>()
+  const fetch = vi.fn<[string, any], Promise<PostHogFetchResponse>>()
 
   const sender = new V1CaptureSender(
     {
@@ -197,7 +197,7 @@ describe('V1CaptureSender', () => {
   describe('compression', () => {
     it('gzips the body and advertises Content-Encoding when compression succeeds', async () => {
       const blob = new Blob(['compressed'])
-      const compress = jest.fn().mockResolvedValue(blob)
+      const compress = vi.fn().mockResolvedValue(blob)
       const { sender, fetch } = makeSender({ compressionEnabled: true }, { compress })
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
@@ -209,7 +209,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('falls back to uncompressed when compression returns null', async () => {
-      const compress = jest.fn().mockResolvedValue(null)
+      const compress = vi.fn().mockResolvedValue(null)
       const { sender, fetch } = makeSender({ compressionEnabled: true }, { compress })
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
@@ -220,7 +220,7 @@ describe('V1CaptureSender', () => {
     })
 
     it('does not compress when disabled', async () => {
-      const compress = jest.fn()
+      const compress = vi.fn()
       const { sender, fetch } = makeSender({ compressionEnabled: false }, { compress })
       fetch.mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
@@ -405,17 +405,17 @@ describe('V1CaptureSender', () => {
 
     it('bounds response body cancellation by the request deadline before retrying a 5xx', async () => {
       const { sender, fetch, errors, sleeps } = makeSender({ maxAttempts: 2 })
-      const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+      const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
       fetch
         .mockResolvedValueOnce(makeStallingResponse(503, cancel))
         .mockResolvedValueOnce(makeResponse(503, 'still unavailable'))
 
       const sendPromise = sender.sendV1Batch([msg('u1')])
-      await jest.advanceTimersByTimeAsync(999)
+      await vi.advanceTimersByTimeAsync(999)
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(sleeps).toEqual([])
 
-      await jest.advanceTimersByTimeAsync(1)
+      await vi.advanceTimersByTimeAsync(1)
       await sendPromise
 
       expect(cancel).toHaveBeenCalledTimes(1)
@@ -425,7 +425,7 @@ describe('V1CaptureSender', () => {
       expect(errors[0]).toBeInstanceOf(CaptureV1Error)
       expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
       expect(((errors[0] as CaptureV1Error).cause as Error).message).toContain('HTTP 503: still unavailable')
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
   })
 
@@ -462,7 +462,7 @@ describe('V1CaptureSender', () => {
       )
 
       const sendPromise = sender.sendV1Batch([msg('u1')])
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       await sendPromise
 
       expect(errors).toHaveLength(1)
@@ -471,7 +471,7 @@ describe('V1CaptureSender', () => {
       expect((error.cause as Error).message).toBe(
         'Capture V1 request timed out waiting for response headers after 1000ms'
       )
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
 
     it('cancels a response body when custom fetch resolves after the header deadline', async () => {
@@ -485,39 +485,39 @@ describe('V1CaptureSender', () => {
       )
 
       const sendPromise = sender.sendV1Batch([msg('u1')])
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       await sendPromise
 
-      const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+      const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
       resolveFetch(makeStallingResponse(200, cancel))
-      await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(0)
 
       expect(cancel).toHaveBeenCalledTimes(1)
       expect(errors).toHaveLength(1)
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
 
     it('retries a stalled success body without waiting for body cancellation to settle', async () => {
       const { sender, fetch, errors, sleeps } = makeSender({ maxAttempts: 2, requestTimeoutMs: 1000 })
-      const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+      const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
       fetch
         .mockImplementationOnce(() => Promise.resolve(makeStallingResponse(200, cancel)))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
       const sendPromise = sender.sendV1Batch([msg('u1')])
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       await sendPromise
 
       expect(fetch).toHaveBeenCalledTimes(2)
       expect(sleeps).toEqual([100])
       expect(cancel).toHaveBeenCalledTimes(1)
       expect(errors).toEqual([])
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
 
     it('preserves the response-body timeout error when custom body reading rejects on abort', async () => {
       const { sender, fetch, errors } = makeSender({ maxAttempts: 1, requestTimeoutMs: 1000 })
-      const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+      const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
       fetch.mockImplementation((_url, options) => {
         const response = makeStallingResponse(200, cancel)
         response.text = () =>
@@ -528,7 +528,7 @@ describe('V1CaptureSender', () => {
       })
 
       const sendPromise = sender.sendV1Batch([msg('u1')])
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       await sendPromise
 
       expect(errors).toHaveLength(1)
@@ -538,21 +538,21 @@ describe('V1CaptureSender', () => {
         'Capture V1 request timed out while reading the response body after 1000ms'
       )
       expect(cancel).toHaveBeenCalledTimes(1)
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
 
     it('surfaces CaptureV1Error after stalled success bodies exhaust the timeout retry budget', async () => {
       const { sender, fetch, errors } = makeSender({ maxAttempts: 2, requestTimeoutMs: 1000 })
-      const cancels: jest.Mock<Promise<void>, []>[] = []
+      const cancels: vi.Mock<Promise<void>, []>[] = []
       fetch.mockImplementation(() => {
-        const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+        const cancel = vi.fn<[], Promise<void>>(() => new Promise<void>(() => {}))
         cancels.push(cancel)
         return Promise.resolve(makeStallingResponse(200, cancel))
       })
 
       const sendPromise = sender.sendV1Batch([msg('u1')])
-      await jest.advanceTimersByTimeAsync(1000)
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       await sendPromise
 
       expect(fetch).toHaveBeenCalledTimes(2)
@@ -566,16 +566,16 @@ describe('V1CaptureSender', () => {
       expect((error.cause as Error).message).toBe(
         'Capture V1 request timed out while reading the response body after 1000ms'
       )
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
 
     it('times out a stalled HTTP error body without changing terminal status classification', async () => {
       const { sender, fetch, errors } = makeSender({ maxAttempts: 2, requestTimeoutMs: 1000 })
-      const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+      const cancel = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
       fetch.mockResolvedValue(makeStallingResponse(400, cancel))
 
       const sendPromise = sender.sendV1Batch([msg('u1')])
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
       await sendPromise
 
       expect(fetch).toHaveBeenCalledTimes(1)
@@ -584,7 +584,7 @@ describe('V1CaptureSender', () => {
       expect(errors[0]).toBeInstanceOf(CaptureV1Error)
       expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
       expect(((errors[0] as CaptureV1Error).cause as Error).message).toContain('HTTP 400')
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
   })
 
@@ -717,15 +717,15 @@ describe('V1CaptureSender', () => {
 
     it('uses the real clock, request-id generator and sleep when not injected', async () => {
       const errors: Error[] = []
-      const fetch = jest
-        .fn<Promise<PostHogFetchResponse>, [string, any]>()
+      const fetch = vi
+        .fn<[string, any], Promise<PostHogFetchResponse>>()
         .mockResolvedValueOnce(makeResponse(503))
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
       const sender = new V1CaptureSender(baseConfig, { fetch, onError: (e) => errors.push(e) })
       // No injected sleep: the retry backoff schedules a real (fake-timer) setTimeout we must advance.
       const done = sender.sendV1Batch([msg('u1')])
-      await jest.advanceTimersByTimeAsync(baseConfig.initialRetryDelayMs)
+      await vi.advanceTimersByTimeAsync(baseConfig.initialRetryDelayMs)
       await done
 
       expect(fetch).toHaveBeenCalledTimes(2)
@@ -736,8 +736,8 @@ describe('V1CaptureSender', () => {
     })
 
     it('uses the real gzip compressor when not injected', async () => {
-      const fetch = jest
-        .fn<Promise<PostHogFetchResponse>, [string, any]>()
+      const fetch = vi
+        .fn<[string, any], Promise<PostHogFetchResponse>>()
         .mockResolvedValueOnce(makeResponse(200, { results: {} }))
 
       const sender = new V1CaptureSender({ ...baseConfig, compressionEnabled: true }, { fetch, onError: () => {} })

@@ -59,11 +59,8 @@ export class RRDocument extends BaseRRDocument {
   }
 
   createDocument(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _namespace: string | null,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _qualifiedName: string | null,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _doctype?: DocumentType | null,
   ) {
     return new RRDocument();
@@ -274,7 +271,6 @@ export function buildFromNode(
     case NodeType.DOCUMENT_FRAGMENT_NODE: {
       const shadowHost = parentRRNode as IRRElement;
       if (!attachShadowRootSafely(shadowHost)) return null;
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       rrNode = shadowHost.shadowRoot!;
       break;
     }
@@ -334,7 +330,6 @@ export function buildFromDom(
         node.nodeType === NodeType.ELEMENT_NODE &&
         (node as HTMLElement).shadowRoot
       )
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         walk((node as HTMLElement).shadowRoot!, rrNode);
       node.childNodes.forEach((childNode) => walk(childNode, rrNode));
     }

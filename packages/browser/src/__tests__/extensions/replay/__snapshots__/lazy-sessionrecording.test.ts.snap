@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Lazy SessionRecording recording records events emitted before and after starting recording 1`] = `
+exports[`Lazy SessionRecording > recording > records events emitted before and after starting recording 1`] = `
 [
   "$snapshot",
   {

@@ -74,14 +74,14 @@ export class ScrollManager {
         if (this._scrollRoot) {
             const selectors = isArray(this._scrollRoot) ? this._scrollRoot : [this._scrollRoot]
             for (const selector of selectors) {
-                const element = window?.document.querySelector(selector)
+                const element = window?.document?.querySelector(selector)
                 if (element) {
                     return element
                 }
             }
             return undefined
         } else {
-            return window?.document.documentElement
+            return window?.document?.documentElement
         }
     }
 
@@ -96,8 +96,8 @@ export class ScrollManager {
             return 0
         }
         return axis === 'y'
-            ? window.scrollY || window.pageYOffset || window.document.documentElement.scrollTop || 0
-            : window.scrollX || window.pageXOffset || window.document.documentElement.scrollLeft || 0
+            ? window.scrollY || window.pageYOffset || window.document?.documentElement?.scrollTop || 0
+            : window.scrollX || window.pageXOffset || window.document?.documentElement?.scrollLeft || 0
     }
 
     public scrollY(): number {

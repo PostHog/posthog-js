@@ -13,6 +13,7 @@ import { sanitizeLangChain } from '../sanitization'
 import { stringifyError } from '../serializeError'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
 import { isObject } from '../typeGuards'
+import { responsesStopReason } from '../openai/utils'
 import { captureAiEvent } from '../captureAiEvent'
 
 // Mirror LangGraph's isGraphBubbleUp guard without adding LangGraph as a dependency. Every
@@ -721,13 +722,11 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       generationResponseMetadata?.stop_reason ||
       generationResponseMetadata?.finish_reason ||
       gen.generationInfo?.stop_reason ||
-      // The Responses API reports no finish_reason. An early stop is named by
-      // `incomplete_details.reason`, and `status` covers the rest, matching the
-      // native OpenAI Responses wrapper.
-      messageResponseMetadata?.incomplete_details?.reason ||
-      generationResponseMetadata?.incomplete_details?.reason ||
-      messageResponseMetadata?.status ||
-      generationResponseMetadata?.status
+      // The Responses API reports no finish_reason: an incomplete run is named
+      // by what cut it short, and only terminal statuses count as stop reasons.
+      // Shared with the native OpenAI Responses wrapper.
+      responsesStopReason(messageResponseMetadata) ||
+      responsesStopReason(generationResponseMetadata)
 
     return stopReason != null ? String(stopReason) : undefined
   }

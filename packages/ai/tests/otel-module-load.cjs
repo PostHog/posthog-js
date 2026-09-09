@@ -65,11 +65,10 @@ try {
     cwd: fixtureRoot,
     stdio: 'inherit',
   })
-  execFileSync(
-    process.execPath,
-    ['--input-type=module', '--eval', `await import('@posthog/ai/otel')`],
-    { cwd: fixtureRoot, stdio: 'inherit' }
-  )
+  execFileSync(process.execPath, ['--input-type=module', '--eval', `await import('@posthog/ai/otel')`], {
+    cwd: fixtureRoot,
+    stdio: 'inherit',
+  })
 } finally {
   rmSync(fixtureRoot, { recursive: true, force: true })
 }

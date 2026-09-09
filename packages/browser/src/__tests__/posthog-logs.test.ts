@@ -9,23 +9,23 @@ import { assignableWindow } from '../utils/globals'
 
 // Mock the logger to avoid console output during tests
 const mockLogger = {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
 }
 
-jest.mock('@posthog/browser-common/utils/logger', () => ({
-    createLogger: jest.fn(() => mockLogger),
+vi.mock('@posthog/browser-common/utils/logger', () => ({
+    createLogger: vi.fn(() => mockLogger),
 }))
 
 describe('posthog-logs', () => {
     describe('PostHogLogs Class', () => {
         let mockPostHog: PostHog
         let logs: PostHogLogs
-        let mockDisposeLogs: jest.Mock
-        let mockInitializeLogs: jest.Mock
-        let mockReplayConsoleBuffer: jest.Mock
-        let mockLoadExternalDependency: jest.Mock
+        let mockDisposeLogs: vi.Mock
+        let mockInitializeLogs: vi.Mock
+        let mockReplayConsoleBuffer: vi.Mock
+        let mockLoadExternalDependency: vi.Mock
 
         const flagsResponse = {
             featureFlags: {
@@ -42,13 +42,13 @@ describe('posthog-logs', () => {
 
         beforeEach(() => {
             // Clear all mocks
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             // Mock window and PostHog extensions
-            mockDisposeLogs = jest.fn()
-            mockInitializeLogs = jest.fn(() => mockDisposeLogs)
-            mockReplayConsoleBuffer = jest.fn()
-            mockLoadExternalDependency = jest.fn((_instance, _name, callback) => {
+            mockDisposeLogs = vi.fn()
+            mockInitializeLogs = vi.fn(() => mockDisposeLogs)
+            mockReplayConsoleBuffer = vi.fn()
+            mockLoadExternalDependency = vi.fn((_instance, _name, callback) => {
                 callback(null) // Simulate successful loading
             })
 
@@ -71,18 +71,18 @@ describe('posthog-logs', () => {
                     logs_request_timeout_ms: 3000,
                 },
                 persistence: {
-                    register: jest.fn(),
+                    register: vi.fn(),
                     props: {},
                 },
                 requestRouter: {
-                    endpointFor: jest.fn(() => 'https://us.i.posthog.com'),
+                    endpointFor: vi.fn(() => 'https://us.i.posthog.com'),
                 },
-                _send_request: jest.fn((opts: any) => opts.callback?.({ statusCode: 200 })),
-                get_property: jest.fn(),
-                is_capturing: jest.fn(() => true),
-                get_distinct_id: jest.fn(() => 'distinct-id-123'),
+                _send_request: vi.fn((opts: any) => opts.callback?.({ statusCode: 200 })),
+                get_property: vi.fn(),
+                is_capturing: vi.fn(() => true),
+                get_distinct_id: vi.fn(() => 'distinct-id-123'),
                 sessionManager: {
-                    checkAndGetSessionAndWindowId: jest.fn(() => ({
+                    checkAndGetSessionAndWindowId: vi.fn(() => ({
                         sessionId: 'session-abc',
                         windowId: 'window-xyz',
                         sessionStartTimestamp: 1672567200000,
@@ -92,27 +92,27 @@ describe('posthog-logs', () => {
                 consent: {
                     _instance: mockPostHog,
                     _config: {},
-                    consent: jest.fn(),
-                    isOptedIn: jest.fn(() => true),
-                    isOptedOut: jest.fn(() => false),
-                    hasOptedInBefore: jest.fn(() => true),
-                    hasOptedOutBefore: jest.fn(() => false),
-                    optInCapturing: jest.fn(),
-                    optOutCapturing: jest.fn(),
-                    reset: jest.fn(),
-                    onConsentChange: jest.fn(),
+                    consent: vi.fn(),
+                    isOptedIn: vi.fn(() => true),
+                    isOptedOut: vi.fn(() => false),
+                    hasOptedInBefore: vi.fn(() => true),
+                    hasOptedOutBefore: vi.fn(() => false),
+                    optInCapturing: vi.fn(),
+                    optOutCapturing: vi.fn(),
+                    reset: vi.fn(),
+                    onConsentChange: vi.fn(),
                 },
                 featureFlags: {
-                    _send_retriable_request: jest.fn((_url, _params, callback) => {
+                    _send_retriable_request: vi.fn((_url, _params, callback) => {
                         callback({ statusCode: 200, json: flagsResponse })
                     }),
-                    getFeatureFlag: jest.fn((flag) => {
+                    getFeatureFlag: vi.fn((flag) => {
                         return flagsResponse.featureFlags[flag as keyof typeof flagsResponse.featureFlags]
                     }),
-                    isFeatureEnabled: jest.fn((flag) => {
+                    isFeatureEnabled: vi.fn((flag) => {
                         return !!flagsResponse.featureFlags[flag as keyof typeof flagsResponse.featureFlags]
                     }),
-                    getFlags: jest.fn(() => ['logs-capture-enabled']),
+                    getFlags: vi.fn(() => ['logs-capture-enabled']),
                 },
             } as unknown as PostHog
 
@@ -121,10 +121,10 @@ describe('posthog-logs', () => {
 
         describe('shared extension lifecycle', () => {
             it('subscribes to remote config during setup', () => {
-                const remoteConfigDispose = jest.fn()
+                const remoteConfigDispose = vi.fn()
                 let remoteConfigHandler: ((result: any) => void) | undefined
                 const client = {
-                    onRemoteConfig: jest.fn((handler: (result: any) => void) => {
+                    onRemoteConfig: vi.fn((handler: (result: any) => void) => {
                         remoteConfigHandler = handler
                         return { dispose: remoteConfigDispose }
                     }),
@@ -150,7 +150,7 @@ describe('posthog-logs', () => {
                 const client = {
                     onRemoteConfig: (handler: (result: any) => void) => {
                         handler({ ok: true, config: flagsResponse })
-                        return { dispose: jest.fn() }
+                        return { dispose: vi.fn() }
                     },
                 } as unknown as Client
 
@@ -168,7 +168,7 @@ describe('posthog-logs', () => {
                 const client = {
                     onRemoteConfig: (handler: (result: any) => void) => {
                         handler({ ok: true, config: flagsResponse })
-                        return { dispose: jest.fn() }
+                        return { dispose: vi.fn() }
                     },
                 } as unknown as Client
 
@@ -179,7 +179,7 @@ describe('posthog-logs', () => {
             })
 
             it('releases resources and ignores late work on dispose', () => {
-                const remoteConfigDispose = jest.fn()
+                const remoteConfigDispose = vi.fn()
                 let remoteConfigHandler: ((result: any) => void) | undefined
                 const client = {
                     onRemoteConfig: (handler: (result: any) => void) => {
@@ -187,7 +187,7 @@ describe('posthog-logs', () => {
                         return { dispose: remoteConfigDispose }
                     },
                 } as unknown as Client
-                const removeEventListener = jest.spyOn(window, 'removeEventListener')
+                const removeEventListener = vi.spyOn(window, 'removeEventListener')
 
                 logs.setup(client)
                 logs.dispose()
@@ -216,7 +216,7 @@ describe('posthog-logs', () => {
             })
 
             it('preserves queued logs for the shutdown transport flush', () => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
                 try {
                     logs.captureLog({ body: 'queued before shutdown' })
 
@@ -228,7 +228,7 @@ describe('posthog-logs', () => {
                         expect.objectContaining({ transport: 'sendBeacon', batchKey: 'logs' })
                     )
                 } finally {
-                    jest.useRealTimers()
+                    vi.useRealTimers()
                 }
             })
         })
@@ -294,7 +294,7 @@ describe('posthog-logs', () => {
             })
 
             it('should call loadIfEnabled when logs are enabled', () => {
-                const loadIfEnabledSpy = jest.spyOn(logs, 'loadIfEnabled')
+                const loadIfEnabledSpy = vi.spyOn(logs, 'loadIfEnabled')
                 const response = {
                     supportedCompression: [],
                     toolbarParams: {},
@@ -579,15 +579,15 @@ describe('posthog-logs', () => {
 
         describe('captureLog', () => {
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             afterEach(() => {
-                jest.useRealTimers()
+                vi.useRealTimers()
             })
 
             it('should silently skip when user has opted out of capturing', () => {
-                ;(mockPostHog.is_capturing as jest.Mock).mockReturnValue(false)
+                ;(mockPostHog.is_capturing as vi.Mock).mockReturnValue(false)
 
                 logs.captureLog({ body: 'should not be captured' })
 
@@ -623,7 +623,7 @@ describe('posthog-logs', () => {
             it('should flush on timer expiry and clear the queue on success', async () => {
                 logs.captureLog({ body: 'test message' })
 
-                await jest.advanceTimersByTimeAsync(3000)
+                await vi.advanceTimersByTimeAsync(3000)
 
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
                 expect((logs as any)._queue).toHaveLength(0)
@@ -644,7 +644,7 @@ describe('posthog-logs', () => {
                 // Hold the flush open so capture outpaces drain. maxBufferSize (2) only
                 // triggers a flush; the eviction backstop sits at the rate cap (1000), so
                 // a burst the cap admits is held in full rather than dropped at the trigger.
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(() => undefined)
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation(() => undefined)
                 ;(mockPostHog.config as any).logs = { maxBufferSize: 2, maxLogsPerInterval: 1000 }
                 logs = new PostHogLogs(mockPostHog)
 
@@ -658,18 +658,18 @@ describe('posthog-logs', () => {
 
             it('should send to the correct URL with token', () => {
                 logs.captureLog({ body: 'test' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
                 expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/i/v1/logs')
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                 expect(call.url).toContain('token=test-token')
             })
 
             it('should send OTLP formatted payload', () => {
                 logs.captureLog({ body: 'test', level: 'error' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                 expect(call.data.resourceLogs).toBeDefined()
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(1)
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords[0].severityText).toBe('ERROR')
@@ -677,17 +677,17 @@ describe('posthog-logs', () => {
 
             it('should use batchKey "logs" for independent rate limiting', () => {
                 logs.captureLog({ body: 'test' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                 expect(call.batchKey).toBe('logs')
             })
 
             it('should use best-available compression', () => {
                 logs.captureLog({ body: 'test' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                 expect(call.compression).toBe('best-available')
             })
 
@@ -695,18 +695,18 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'log 1' })
                 logs.captureLog({ body: 'log 2' })
                 logs.captureLog({ body: 'log 3' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(3)
             })
 
             it('should auto-populate SDK context', () => {
                 logs.captureLog({ body: 'test' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
 
@@ -723,7 +723,7 @@ describe('posthog-logs', () => {
             it.each(['sessionStartTimestamp', 'lastActivityTimestamp'])(
                 'omits %s and does not throw when the session manager returns null for it',
                 (attribute) => {
-                    ;(mockPostHog.sessionManager!.checkAndGetSessionAndWindowId as jest.Mock).mockReturnValue({
+                    ;(mockPostHog.sessionManager!.checkAndGetSessionAndWindowId as vi.Mock).mockReturnValue({
                         sessionId: 'session-abc',
                         windowId: 'window-xyz',
                         sessionStartTimestamp: null,
@@ -732,10 +732,10 @@ describe('posthog-logs', () => {
 
                     expect(() => {
                         logs.captureLog({ body: 'test' })
-                        jest.advanceTimersByTime(3000)
+                        vi.advanceTimersByTime(3000)
                     }).not.toThrow()
 
-                    const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                    const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                     const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                     const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
 
@@ -753,9 +753,9 @@ describe('posthog-logs', () => {
                 }
                 logs = new PostHogLogs(mockPostHog)
                 logs.captureLog({ body: 'test' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -773,9 +773,9 @@ describe('posthog-logs', () => {
                 try {
                     logs = new PostHogLogs(mockPostHog)
                     logs.captureLog({ body: 'test' })
-                    jest.advanceTimersByTime(3000)
+                    vi.advanceTimersByTime(3000)
 
-                    const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                    const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                     const attrsMap = Object.fromEntries(
                         call.data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
                     )
@@ -802,9 +802,9 @@ describe('posthog-logs', () => {
                 }
                 logs = new PostHogLogs(mockPostHog)
                 logs.captureLog({ body: 'test' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -821,9 +821,9 @@ describe('posthog-logs', () => {
                 logs = new PostHogLogs(mockPostHog)
                 logs.captureLog({ body: 'log 1' })
                 logs.captureLog({ body: 'log 2' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -833,9 +833,9 @@ describe('posthog-logs', () => {
 
             it('should default service.name to unknown_service when not configured', () => {
                 logs.captureLog({ body: 'test' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                 const resourceAttrs = call.data.resourceLogs[0].resource.attributes
                 const attrsMap = Object.fromEntries(resourceAttrs.map((a: any) => [a.key, a.value]))
 
@@ -879,7 +879,7 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'dropped' })
                 expect((logs as any)._queue).toHaveLength(2)
 
-                jest.advanceTimersByTime(3001)
+                vi.advanceTimersByTime(3001)
                 logs.captureLog({ body: 'c' })
                 expect((logs as any)._queue.some((e: any) => e.record.body.stringValue === 'c')).toBe(true)
             })
@@ -889,7 +889,7 @@ describe('posthog-logs', () => {
                 expect((logs as any)._isLogsEnabled).toBeFalsy()
 
                 logs.captureLog({ body: 'works without autocapture' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
             })
@@ -898,23 +898,23 @@ describe('posthog-logs', () => {
                 logs.captureLog({ body: 'unload log' })
                 logs.flushLogs('sendBeacon')
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                 expect(call.transport).toBe('sendBeacon')
             })
         })
 
         describe('logger convenience methods', () => {
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             it.each(['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const)(
                 'logger.%s() should capture a log with the correct level',
                 (level) => {
                     logs.logger[level]('test message', { key: 'value' })
-                    jest.advanceTimersByTime(3000)
+                    vi.advanceTimersByTime(3000)
 
-                    const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                    const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                     const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
 
                     expect(record.body.stringValue).toBe('test message')
@@ -925,9 +925,9 @@ describe('posthog-logs', () => {
 
             it('logger.info() should work without attributes', () => {
                 logs.logger.info('no attrs')
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls[0][0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls[0][0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 expect(record.body.stringValue).toBe('no attrs')
             })
@@ -1001,7 +1001,7 @@ describe('posthog-logs', () => {
 
                 logs.flushLogs('sendBeacon')
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
                 expect(call.transport).toBe('sendBeacon')
                 expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(2)
                 expect((logs as any)._queue).toHaveLength(0)
@@ -1033,7 +1033,7 @@ describe('posthog-logs', () => {
 
                     logs.flushLogs(transport)
 
-                    const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                    const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
                     expect(call.transport).toBe(transport)
                     expect(call.batchKey).toBe('logs')
                     expect(call.data.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(2)
@@ -1042,11 +1042,11 @@ describe('posthog-logs', () => {
             )
         })
 
-        const noopClient = () => ({ onRemoteConfig: jest.fn(() => ({ dispose: jest.fn() })) }) as unknown as Client
+        const noopClient = () => ({ onRemoteConfig: vi.fn(() => ({ dispose: vi.fn() })) }) as unknown as Client
 
         describe('persisted capture hint', () => {
             it('persists the server response so the next page load can buffer early console calls', () => {
-                const register = jest.fn()
+                const register = vi.fn()
                 ;(mockPostHog as any).persistence = { register, props: {} }
                 const persisting = new PostHogLogs(mockPostHog)
 
@@ -1074,7 +1074,7 @@ describe('posthog-logs', () => {
                 ({
                     ...mockPostHog,
                     persistence: {
-                        register: jest.fn(),
+                        register: vi.fn(),
                         props: { [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: true },
                     },
                 }) as unknown as PostHog
@@ -1102,7 +1102,7 @@ describe('posthog-logs', () => {
                 setupConsoleMethods = {}
                 for (const level of RECORDER_LEVELS) {
                     setupConsoleMethods[level] = assignableWindow.console[level]
-                    assignableWindow.console[level] = jest.fn()
+                    assignableWindow.console[level] = vi.fn()
                 }
             })
 
@@ -1128,7 +1128,7 @@ describe('posthog-logs', () => {
                 ({
                     ...mockPostHog,
                     config: { ...mockPostHog.config, logs: { captureConsoleLogs: true } },
-                    persistence: { register: jest.fn(), props: {} },
+                    persistence: { register: vi.fn(), props: {} },
                 }) as unknown as PostHog
 
             it('should buffer console entries when capture is enabled in local config', () => {
@@ -1257,7 +1257,7 @@ describe('posthog-logs', () => {
 
                 assignableWindow.console.log('before opt out')
                 expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
-                ;(instance as any).is_capturing = jest.fn(() => false)
+                ;(instance as any).is_capturing = vi.fn(() => false)
 
                 assignableWindow.console.log('after opt out')
 
@@ -1273,7 +1273,7 @@ describe('posthog-logs', () => {
                 logsFromPersisted.captureLog({ body: 'programmatic' })
                 logsFromPersisted.captureConsoleLog({ body: 'mirrored before the opt-out' })
                 expect((logsFromPersisted as any)._consoleQueue).toHaveLength(1)
-                ;(instance as any).is_capturing = jest.fn(() => false)
+                ;(instance as any).is_capturing = vi.fn(() => false)
 
                 logsFromPersisted._onOptOut()
 
@@ -1305,7 +1305,7 @@ describe('posthog-logs', () => {
                     ({
                         onRemoteConfig: (handler: (result: any) => void) => {
                             handler(remoteConfigResult(true))
-                            return { dispose: jest.fn() }
+                            return { dispose: vi.fn() }
                         },
                     }) as unknown as Client
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
@@ -1373,7 +1373,7 @@ describe('posthog-logs', () => {
 
             it('should not start a hint-only recorder when remote config cannot arrive', () => {
                 const instance = buildInstanceWithPersistedBit()
-                ;(instance as any)._shouldDisableFlags = jest.fn(() => true)
+                ;(instance as any)._shouldDisableFlags = vi.fn(() => true)
                 logsFromPersisted = new PostHogLogs(instance)
                 const originalLog = assignableWindow.console.log
                 logsFromPersisted.setup(noopClient())
@@ -1384,7 +1384,7 @@ describe('posthog-logs', () => {
 
             it('should still buffer with flags disabled when remote config was preloaded', () => {
                 const instance = buildInstanceWithPersistedBit()
-                ;(instance as any)._shouldDisableFlags = jest.fn(() => true)
+                ;(instance as any)._shouldDisableFlags = vi.fn(() => true)
                 ;(assignableWindow as any)._POSTHOG_REMOTE_CONFIG = { 'test-token': { config: {} } }
                 try {
                     logsFromPersisted = new PostHogLogs(instance)
@@ -1398,7 +1398,7 @@ describe('posthog-logs', () => {
             it('should not patch console when the server last said no', () => {
                 const instance = {
                     ...mockPostHog,
-                    persistence: { register: jest.fn(), props: { [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: false } },
+                    persistence: { register: vi.fn(), props: { [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: false } },
                 } as unknown as PostHog
                 logsFromPersisted = new PostHogLogs(instance)
                 const originalLog = assignableWindow.console.log
@@ -1533,7 +1533,7 @@ describe('posthog-logs', () => {
 
             it('should not buffer when the user has opted out', () => {
                 const instance = buildInstanceWithPersistedBit()
-                ;(instance as any).is_capturing = jest.fn(() => false)
+                ;(instance as any).is_capturing = vi.fn(() => false)
                 logsFromPersisted = new PostHogLogs(instance)
                 logsFromPersisted.setup(noopClient())
 
@@ -1542,20 +1542,20 @@ describe('posthog-logs', () => {
             })
 
             it('should stop the recorder after the max age passes with no resolution', () => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
                 try {
                     logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                     const originalLog = assignableWindow.console.log
                     logsFromPersisted.setup(noopClient())
 
                     assignableWindow.console.log('held too long')
-                    jest.advanceTimersByTime(RECORDER_MAX_AGE_MS)
+                    vi.advanceTimersByTime(RECORDER_MAX_AGE_MS)
 
                     expect(assignableWindow.console.log).toBe(originalLog)
                     expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
                     expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
                 } finally {
-                    jest.useRealTimers()
+                    vi.useRealTimers()
                 }
             })
 
@@ -1576,7 +1576,7 @@ describe('posthog-logs', () => {
                 const instance = buildInstanceWithPersistedBit()
                 let nested = 0
                 ;(instance as any).sessionManager = {
-                    checkAndGetSessionAndWindowId: jest.fn(() => {
+                    checkAndGetSessionAndWindowId: vi.fn(() => {
                         // Stands in for any context lookup that reaches the console
                         // directly: the nested call must not be buffered while the
                         // outer entry is still being built.
@@ -1683,16 +1683,16 @@ describe('posthog-logs', () => {
 
         describe('console capture instance', () => {
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             it('does not drop records captured after a reset mid-flush', async () => {
                 let releaseSend: (r: any) => void = () => {}
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }: any) => {
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation(({ callback }: any) => {
                     releaseSend = callback
                 })
                 logs.captureConsoleLog({ body: 'before the reset' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
                 expect(mockPostHog._send_request).toHaveBeenCalled()
 
                 logs.reset()
@@ -1709,11 +1709,11 @@ describe('posthog-logs', () => {
 
             it('does not drop records captured after opting back in mid-flush', async () => {
                 let releaseSend: (r: any) => void = () => {}
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(({ callback }: any) => {
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation(({ callback }: any) => {
                     releaseSend = callback
                 })
                 logs.captureConsoleLog({ body: 'before the opt-out' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
                 expect(mockPostHog._send_request).toHaveBeenCalled()
 
                 logs._onOptOut()
@@ -1734,9 +1734,9 @@ describe('posthog-logs', () => {
                     { distinctId: 'anon-before-identify', sessionId: 'session-before-roll' },
                     1700000000000
                 )
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
 
@@ -1747,7 +1747,7 @@ describe('posthog-logs', () => {
             })
 
             afterEach(() => {
-                jest.useRealTimers()
+                vi.useRealTimers()
             })
 
             it('buffers console captures on a separate queue from programmatic logs', () => {
@@ -1762,9 +1762,9 @@ describe('posthog-logs', () => {
 
             it('flushes console captures with service.name posthog-browser-logs', () => {
                 logs.captureConsoleLog({ body: 'console' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
                 const attrs = Object.fromEntries(
                     call.data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
                 )
@@ -1773,9 +1773,9 @@ describe('posthog-logs', () => {
 
             it('flushes console captures under the OTel-parity scope name "console"', () => {
                 logs.captureConsoleLog({ body: 'console' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
                 // Scope name labels the console stream...
                 expect(call.data.resourceLogs[0].scopeLogs[0].scope.name).toBe('console')
                 // ...but telemetry.sdk.name stays the SDK id, not the scope.
@@ -1787,17 +1787,17 @@ describe('posthog-logs', () => {
 
             it('flushes programmatic captures under the SDK scope name (not "console")', () => {
                 logs.captureLog({ body: 'programmatic' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
                 expect(call.data.resourceLogs[0].scopeLogs[0].scope.name).toBe('web')
             })
 
             it('auto-populates the shared SDK context (incl. feature_flags) on console records', () => {
                 logs.captureConsoleLog({ body: 'console' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
                 const record = call.data.resourceLogs[0].scopeLogs[0].logRecords[0]
                 const attrs = Object.fromEntries(record.attributes.map((a: any) => [a.key, a.value]))
 
@@ -1814,9 +1814,9 @@ describe('posthog-logs', () => {
             it('emits standard OTLP severity (text + number) on console records', () => {
                 logs.captureConsoleLog({ body: 'uh oh', level: 'warn' })
                 logs.captureConsoleLog({ body: 'boom', level: 'error' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const records = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0].data.resourceLogs[0]
+                const records = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0].data.resourceLogs[0]
                     .scopeLogs[0].logRecords
                 expect(records[0]).toMatchObject({ severityText: 'WARN', severityNumber: 13 })
                 expect(records[1]).toMatchObject({ severityText: 'ERROR', severityNumber: 17 })
@@ -1827,9 +1827,9 @@ describe('posthog-logs', () => {
                 logs = new PostHogLogs(mockPostHog)
 
                 logs.captureConsoleLog({ body: 'console' })
-                jest.advanceTimersByTime(3000)
+                vi.advanceTimersByTime(3000)
 
-                const call = (mockPostHog._send_request as jest.Mock).mock.calls.at(-1)?.[0]
+                const call = (mockPostHog._send_request as vi.Mock).mock.calls.at(-1)?.[0]
                 const attrs = Object.fromEntries(
                     call.data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
                 )
@@ -1842,7 +1842,7 @@ describe('posthog-logs', () => {
 
                 logs.flushLogs('sendBeacon')
 
-                const calls = (mockPostHog._send_request as jest.Mock).mock.calls
+                const calls = (mockPostHog._send_request as vi.Mock).mock.calls
                 const serviceNames = calls.map((c: any[]) => {
                     const attrs = Object.fromEntries(
                         c[0].data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
@@ -1859,7 +1859,7 @@ describe('posthog-logs', () => {
 
                 logs.flushLogs('sendBeacon')
 
-                expect(mockPostHog._send_request as jest.Mock).toHaveBeenCalledTimes(1)
+                expect(mockPostHog._send_request as vi.Mock).toHaveBeenCalledTimes(1)
             })
 
             it('clears both queues on reset', () => {
@@ -1879,7 +1879,7 @@ describe('posthog-logs', () => {
                 // console instance retains everything up to the eviction backstop (2048).
                 ;(mockPostHog.config as any).logs = { captureConsoleLogs: true, maxLogsPerInterval: 50 }
                 logs = new PostHogLogs(mockPostHog)
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(() => undefined)
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation(() => undefined)
 
                 for (let i = 0; i < 1500; i++) {
                     logs.captureConsoleLog({ body: `console ${i}` })
@@ -1913,15 +1913,15 @@ describe('posthog-logs', () => {
 
         describe('flush outcome handling', () => {
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             afterEach(() => {
-                jest.useRealTimers()
+                vi.useRealTimers()
             })
 
             const flushWith = async (statusCode: number) => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode })
                 )
                 logs.captureLog({ body: 'x' })
@@ -1958,7 +1958,7 @@ describe('posthog-logs', () => {
                 // Models the callback-less paths (request enqueued before load, or a
                 // transport that does not report back). Without the backstop timer the
                 // flush promise would never settle and wedge all future flushes.
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(() => undefined)
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation(() => undefined)
                 logs.captureLog({ body: 'x' })
 
                 const flushPromise = (logs as any)._core.flush().catch(() => {})
@@ -1969,9 +1969,9 @@ describe('posthog-logs', () => {
 
                 // The promise must stay pending until the 90s backstop fires, so a
                 // queue length of 1 here can't be confused with "no flush ran at all".
-                await jest.advanceTimersByTimeAsync(89000)
+                await vi.advanceTimersByTimeAsync(89000)
                 expect(settled).toBe(false)
-                await jest.advanceTimersByTimeAsync(2000)
+                await vi.advanceTimersByTimeAsync(2000)
                 await flushPromise
                 expect(settled).toBe(true)
 
@@ -1981,13 +1981,13 @@ describe('posthog-logs', () => {
             it('keeps records after a timer-driven flush hits a 429', async () => {
                 // Drives the real timer-expiry path (not _core.flush() directly) to
                 // confirm a transient response requeues end to end.
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode: 429 })
                 )
                 logs.captureLog({ body: 'x' })
                 mockLogger.error.mockClear()
 
-                await jest.advanceTimersByTimeAsync(3000)
+                await vi.advanceTimersByTimeAsync(3000)
 
                 expect((logs as any)._queue).toHaveLength(1)
                 expect(mockLogger.error).toHaveBeenCalledWith(
@@ -1997,14 +1997,14 @@ describe('posthog-logs', () => {
             })
 
             it('does not re-log timer-driven transport failures handled by the request layer', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode: 0, error: new TypeError('Failed to fetch') })
                 )
                 logs.captureLog({ body: 'x' })
                 mockLogger.warn.mockClear()
                 mockLogger.error.mockClear()
 
-                await jest.advanceTimersByTimeAsync(3000)
+                await vi.advanceTimersByTimeAsync(3000)
 
                 expect((logs as any)._queue).toHaveLength(1)
                 expect(mockLogger.warn).not.toHaveBeenCalled()
@@ -2012,14 +2012,14 @@ describe('posthog-logs', () => {
             })
 
             it('warns once for a bare status-zero logs response', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode: 0 })
                 )
                 logs.captureLog({ body: 'x' })
                 mockLogger.warn.mockClear()
                 mockLogger.error.mockClear()
 
-                await jest.advanceTimersByTimeAsync(3000)
+                await vi.advanceTimersByTimeAsync(3000)
 
                 expect(mockLogger.warn).toHaveBeenCalledTimes(1)
                 expect(mockLogger.warn).toHaveBeenCalledWith('Logs request failed before receiving an HTTP response')
@@ -2027,13 +2027,13 @@ describe('posthog-logs', () => {
             })
 
             it.each([400, 500])('keeps HTTP status %s at error severity', async (statusCode) => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode })
                 )
                 logs.captureLog({ body: 'x' })
                 mockLogger.error.mockClear()
 
-                await jest.advanceTimersByTimeAsync(3000)
+                await vi.advanceTimersByTimeAsync(3000)
 
                 expect(mockLogger.error).toHaveBeenCalledWith(
                     'PostHog logs flush failed:',
@@ -2042,7 +2042,7 @@ describe('posthog-logs', () => {
             })
 
             it('does not re-log handled failures from an explicit flush', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode: 0, error: new TypeError('Failed to fetch') })
                 )
                 logs.captureLog({ body: 'x' })
@@ -2058,7 +2058,7 @@ describe('posthog-logs', () => {
 
             it('logs unhandled failures from an explicit flush', async () => {
                 const error = { statusCode: 500 }
-                const flush = jest.fn().mockRejectedValue(error)
+                const flush = vi.fn().mockRejectedValue(error)
                 const core = (logs as any)._core
                 ;(logs as any)._core = { flush }
                 mockLogger.error.mockClear()
@@ -2077,23 +2077,23 @@ describe('posthog-logs', () => {
 
         describe('status 0 circuit breaker', () => {
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             afterEach(() => {
-                jest.useRealTimers()
+                vi.useRealTimers()
                 delete (window.navigator as any).onLine
             })
 
             const flushWith = async (statusCode: number) => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode })
                 )
                 logs.captureLog({ body: 'x' })
                 await (logs as any)._core.flush().catch(() => {})
             }
 
-            const sendCount = () => (mockPostHog._send_request as jest.Mock).mock.calls.length
+            const sendCount = () => (mockPostHog._send_request as vi.Mock).mock.calls.length
 
             const setOnline = (value: boolean) => {
                 Object.defineProperty(window.navigator, 'onLine', { value, configurable: true })
@@ -2186,7 +2186,7 @@ describe('posthog-logs', () => {
 
                 // Restore online — reconnect flush delivers the retained records.
                 setOnline(true)
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) =>
                     opts.callback?.({ statusCode: 200 })
                 )
                 assignableWindow.dispatchEvent(new Event('online'))
@@ -2278,11 +2278,11 @@ describe('posthog-logs', () => {
             })
 
             it('does not count the send-timeout backstop toward the status-0 trip', async () => {
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation(() => undefined)
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation(() => undefined)
                 for (let i = 0; i < 3; i++) {
                     logs.captureLog({ body: 'x' })
                     const flushPromise = (logs as any)._core.flush().catch(() => {})
-                    await jest.advanceTimersByTimeAsync(91000)
+                    await vi.advanceTimersByTimeAsync(91000)
                     await flushPromise
                 }
                 expect(sendCount()).toBe(3)
@@ -2295,16 +2295,16 @@ describe('posthog-logs', () => {
 
         describe('live config resolution', () => {
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             afterEach(() => {
-                jest.useRealTimers()
+                vi.useRealTimers()
             })
 
             const beaconResourceAttrs = () =>
                 Object.fromEntries(
-                    (mockPostHog._send_request as jest.Mock).mock.calls
+                    (mockPostHog._send_request as vi.Mock).mock.calls
                         .at(-1)![0]
                         .data.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
                 )
@@ -2350,7 +2350,7 @@ describe('posthog-logs', () => {
                 // the surviving core POSTs — otherwise both read the same head of the
                 // shared queue and double-send.
                 const callbacks: Array<(r: any) => void> = []
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) => {
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) => {
                     if (opts.callback) {
                         callbacks.push(opts.callback)
                     }
@@ -2360,7 +2360,7 @@ describe('posthog-logs', () => {
                 ;(mockPostHog.config as any).logs = { serviceName: 'changed' }
                 logs.captureLog({ body: 'b' }) // _getCore rebuilds → second core arms its timer
 
-                await jest.advanceTimersByTimeAsync(3000)
+                await vi.advanceTimersByTimeAsync(3000)
 
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
 
@@ -2375,7 +2375,7 @@ describe('posthog-logs', () => {
                 // the old console core so its armed timer can't double-send the shared
                 // `_consoleQueue`.
                 const callbacks: Array<(r: any) => void> = []
-                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) => {
+                ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) => {
                     if (opts.callback) {
                         callbacks.push(opts.callback)
                     }
@@ -2385,7 +2385,7 @@ describe('posthog-logs', () => {
                 ;(mockPostHog.config as any).logs = { captureConsoleLogs: true, serviceName: 'changed' }
                 logs.captureConsoleLog({ body: 'b' }) // _getConsoleCore rebuilds → new timer
 
-                await jest.advanceTimersByTimeAsync(3000)
+                await vi.advanceTimersByTimeAsync(3000)
 
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
 
@@ -2397,11 +2397,11 @@ describe('posthog-logs', () => {
 
         describe('reset with captureLog', () => {
             beforeEach(() => {
-                jest.useFakeTimers()
+                vi.useFakeTimers()
             })
 
             afterEach(() => {
-                jest.useRealTimers()
+                vi.useRealTimers()
             })
 
             it('should clear the buffer and cancel pending flush', () => {
@@ -2414,7 +2414,7 @@ describe('posthog-logs', () => {
                 expect((logs as any)._queue).toHaveLength(0)
 
                 // Advancing time should not trigger a flush
-                jest.advanceTimersByTime(5000)
+                vi.advanceTimersByTime(5000)
                 expect(mockPostHog._send_request).not.toHaveBeenCalled()
             })
         })

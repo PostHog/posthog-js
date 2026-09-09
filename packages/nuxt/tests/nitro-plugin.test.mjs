@@ -82,12 +82,7 @@ assert.deepEqual(calls[3], ['flush'])
 
 const backgroundError = new Error('background failure')
 await handlers.error(backgroundError)
-assert.deepEqual(calls[4], [
-  'captureException',
-  backgroundError,
-  'event-id',
-  { $process_person_profile: false },
-])
+assert.deepEqual(calls[4], ['captureException', backgroundError, 'event-id', { $process_person_profile: false }])
 assert.deepEqual(calls[5], ['flush'])
 
 await handlers.close()
@@ -100,11 +95,11 @@ function loadAdapter(filename, defineName) {
     .replace(`export default ${defineName}(`, `return ${defineName}(`)
   let bindings
   const plugin = new Function(defineName, 'useRuntimeConfig', 'setupPostHogNitroPlugin', executableAdapter)(
-    value => value,
+    (value) => value,
     () => ({}),
     (value) => {
       bindings = value
-    },
+    }
   )
   const adapterHandlers = {}
   plugin({
@@ -143,6 +138,6 @@ assert.equal(
   nitro3.adapterHandlers.error(error, {
     event: { req: { url: 'https://example.com/v3?query=ignored', method: 'POST', waitUntil } },
   }),
-  nitro3Promise,
+  nitro3Promise
 )
 assert.deepEqual(nitro3Request, { path: '/v3', method: 'POST' })

@@ -4,7 +4,7 @@ import goodEvent from './data/autocapture-event.json'
 import ignoreEvent from './data/autocapture-event-no-capture.json'
 
 describe('PostHog React Native', () => {
-  jest.useRealTimers()
+  vi.useRealTimers()
   describe('autocapture', () => {
     const nativeEvent = { pageX: 1, pageY: 2 }
     const localeProviderFiber = {
@@ -17,14 +17,14 @@ describe('PostHog React Native', () => {
       },
     }
     it('should capture a valid event', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       autocaptureFromTouchEvent({ _targetInst: goodEvent, nativeEvent }, mockPostHog)
       expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
       expect(mockPostHog.autocapture.mock.calls[0]).toMatchSnapshot()
     })
 
     it('should capture a valid event via the target fiber fallback when _targetInst is absent', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       const fallbackEvent = { target: { ['__reactFiber$abc123']: goodEvent }, nativeEvent }
       autocaptureFromTouchEvent(fallbackEvent, mockPostHog)
       expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
@@ -32,7 +32,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should skip framework-internal components so the touched component heads the chain', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       autocaptureFromTouchEvent({ target: { ['__reactFiber$abc123']: localeProviderFiber }, nativeEvent }, mockPostHog)
       expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
       const elements = mockPostHog.autocapture.mock.calls[0][1]
@@ -40,7 +40,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should keep an app component named LocaleProvider on the native _targetInst path', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       autocaptureFromTouchEvent({ _targetInst: localeProviderFiber, nativeEvent }, mockPostHog)
       expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
       const elements = mockPostHog.autocapture.mock.calls[0][1]
@@ -48,21 +48,21 @@ describe('PostHog React Native', () => {
     })
 
     it('should not throw when nativeEvent is missing', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       const fallbackEvent = { target: { ['__reactFiber$abc123']: goodEvent } }
       expect(() => autocaptureFromTouchEvent(fallbackEvent, mockPostHog)).not.toThrow()
       expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
     })
 
     it('should walk up to an ancestor that carries the fiber key', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       const parent = { ['__reactFiber$abc123']: goodEvent, parentNode: null }
       autocaptureFromTouchEvent({ target: { parentNode: parent }, nativeEvent }, mockPostHog)
       expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
     })
 
     it('should give up rather than loop when no ancestor carries the fiber key', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       const cyclic: any = {}
       cyclic.parentNode = cyclic
       expect(() => autocaptureFromTouchEvent({ target: cyclic, nativeEvent }, mockPostHog)).not.toThrow()
@@ -70,7 +70,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should keep a user-set ph-label that collides with a framework-internal name', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       const labelledFiber = {
         elementType: { name: 'Pressable' },
         memoizedProps: { 'ph-label': 'LocaleProvider' },
@@ -83,7 +83,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should keep an app component named LocaleProvider above the touched node on web', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       const appLocaleProvider = {
         elementType: { name: 'Pressable' },
         memoizedProps: {},
@@ -96,7 +96,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should resolve a fiber more than ten plain-DOM ancestors above the target', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       let node: any = { ['__reactFiber$abc123']: goodEvent }
       for (let i = 0; i < 25; i++) {
         node = { parentNode: node }
@@ -106,7 +106,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should capture via the legacy __reactInternalInstance$ fallback key', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       const fallbackEvent = { target: { ['__reactInternalInstance$xyz789']: goodEvent }, nativeEvent }
       autocaptureFromTouchEvent(fallbackEvent, mockPostHog)
       expect(mockPostHog.autocapture).toHaveBeenCalledTimes(1)
@@ -135,8 +135,8 @@ describe('PostHog React Native', () => {
       ],
     ])('should not capture or throw when %s', (_, makeEvent) => {
       // the throwing-target case warns once; setup.ts turns an unhandled console.warn into a failure
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const mockPostHog = { autocapture: vi.fn() } as any
       expect(() => autocaptureFromTouchEvent(makeEvent(), mockPostHog)).not.toThrow()
       expect(mockPostHog.autocapture).toHaveBeenCalledTimes(0)
       warn.mockRestore()
@@ -144,9 +144,9 @@ describe('PostHog React Native', () => {
 
     it('should warn once when reading the target fiber throws', async () => {
       // fresh module: the warn-once flag is module state, already tripped by the cases above
-      jest.resetModules()
+      vi.resetModules()
       const { autocaptureFromTouchEvent: freshAutocapture } = await import('../src/autocapture')
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       const throwingEvent = (): any => ({
         target: new Proxy(
           {},
@@ -158,7 +158,7 @@ describe('PostHog React Native', () => {
         ),
         nativeEvent,
       })
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
 
       freshAutocapture(throwingEvent(), mockPostHog)
       freshAutocapture(throwingEvent(), mockPostHog)
@@ -169,13 +169,13 @@ describe('PostHog React Native', () => {
     })
 
     it('should ignore an invalid event', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       autocaptureFromTouchEvent({ _targetInst: ignoreEvent, nativeEvent }, mockPostHog)
       expect(mockPostHog.autocapture).toHaveBeenCalledTimes(0)
     })
 
     it('should ignore a no-capture ancestor beyond maxElementsCaptured', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       let targetInst: any = {
         memoizedProps: { 'ph-no-capture': true },
         return: null,
@@ -195,7 +195,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should still cap the emitted elements at maxElementsCaptured', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       let targetInst: any = null
 
       for (let i = 0; i < 25; i++) {
@@ -213,7 +213,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should fall back to the default cap when maxElementsCaptured is not a number', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       let targetInst: any = null
 
       for (let i = 0; i < 25; i++) {
@@ -233,7 +233,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should still capture on an ordinarily deep component tree', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       let targetInst: any = null
 
       // autocapture-event.json is already 129 fibers deep for one trivial screen
@@ -251,7 +251,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should still capture at exactly the traversal bound', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       let targetInst: any = null
 
       for (let i = 0; i < maxAncestorsTraversed; i++) {
@@ -268,7 +268,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should fail closed when the ancestor chain exceeds the traversal bound', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
       let targetInst: any = null
 
       for (let i = 0; i <= maxAncestorsTraversed; i++) {
@@ -285,7 +285,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should handle animated styles without errors', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
 
       // Mock a Reanimated animated style
       const animatedStyle = {
@@ -323,7 +323,7 @@ describe('PostHog React Native', () => {
       ['number', 0],
       ['boolean', false],
     ] as const)('should capture %s data-ph-capture-attribute values', (_type, value) => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
 
       const eventWithCaptureAttributes = {
         _targetInst: {
@@ -353,7 +353,7 @@ describe('PostHog React Native', () => {
       ['empty attribute suffix', 'data-ph-capture-attribute-', 'empty suffix', ''],
       ['object value', 'data-ph-capture-attribute-object-value', { value: 'object' }, 'object-value'],
     ] as const)('should ignore data-ph-capture-attribute props with %s', (_case, key, value, propertyKey) => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
 
       const eventWithCaptureAttributes = {
         _targetInst: {
@@ -379,7 +379,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should capture data-ph-capture-attribute props from ignored labels', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
 
       const eventWithCaptureAttributes = {
         _targetInst: {
@@ -417,7 +417,7 @@ describe('PostHog React Native', () => {
     })
 
     it('should handle mixed animated and regular styles', () => {
-      const mockPostHog = { autocapture: jest.fn() } as any
+      const mockPostHog = { autocapture: vi.fn() } as any
 
       const mixedStyle = [
         { backgroundColor: 'red', padding: 10 },

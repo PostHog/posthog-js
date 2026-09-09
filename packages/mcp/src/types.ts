@@ -67,6 +67,7 @@ export interface CompatibleTextToolResult {
 }
 
 export interface MCPRequestParamsLike {
+  _meta?: JsonRecord
   arguments?: JsonRecord
   name?: string
   [key: string]: unknown
@@ -130,17 +131,15 @@ export interface MCPAnalyticsOptions {
   /** Inject a required `context` parameter on every tool to capture user intent. */
   context?: boolean | MCPAnalyticsContextOptions
   /**
-   * Inject a required `llm_model` parameter on every tool so the calling agent
-   * self-reports the model it runs as, captured as `$mcp_llm_model` with
-   * `$mcp_llm_model_source = "self_reported"`. Off by default.
+   * Capture the calling model as `$mcp_llm_model`. Recognized client metadata
+   * takes precedence, with an injected `llm_model` parameter as the fallback.
+   * Off by default.
    *
-   * The MCP wire deliberately carries no model identity, so self-report is the
-   * only capture path — harnesses inject the model id into the agent's system
-   * prompt, and agents restate it accurately. Like `clientInfo` in the MCP
-   * spec, the value is unverified: use it for per-model quality analytics, not
-   * billing or security. An honest `"unknown"` from the agent is dropped
-   * rather than captured. Reasoning effort is intentionally not collected —
-   * agents don't reliably know it, so it would only ever be noise.
+   * MCP does not standardize model identity. Some clients expose it through
+   * vendor metadata; other harnesses inject it into the agent's system prompt
+   * so the agent can restate it. `$mcp_llm_model_source` records which path won.
+   * Both paths are unverified: use them for quality analytics, not billing or
+   * security. Missing, blank, and `"unknown"` values are dropped.
    */
   captureModel?: boolean | MCPAnalyticsModelOptions
   /**
@@ -192,7 +191,7 @@ export interface MCPAnalyticsModelOptions {
 
 export type MaybePromise<T> = T | Promise<T>
 export type MCPAnalyticsIntentSource = 'context_parameter' | 'inferred'
-export type MCPAnalyticsModelSource = 'self_reported'
+export type MCPAnalyticsModelSource = 'client_metadata' | 'self_reported'
 
 export type ToolCallback =
   | ((
@@ -245,12 +244,11 @@ export interface Event {
   eventType: MCPAnalyticsEventType
   groups?: Record<string, string>
   /**
-   * The calling agent's self-reported model id → `$mcp_llm_model`. Read off
-   * the SDK-injected `llm_model` argument (`captureModel` option); unverified
-   * by design, like the MCP spec's own `clientInfo`.
+   * The calling model id → `$mcp_llm_model`. Resolved from recognized client
+   * metadata first, then the SDK-injected `llm_model` argument; unverified.
    */
   llmModel?: string
-  /** How the model id was obtained → `$mcp_llm_model_source`. Always `self_reported` today. */
+  /** How the model id was obtained → `$mcp_llm_model_source`. */
   llmModelSource?: MCPAnalyticsModelSource
   /**
    * Explicit PostHog event name. When set (via `capture(server, { event })`) it
@@ -511,6 +509,13 @@ export interface ToolCallCaptureData extends McpCaptureCommon {
    * the host derived it. Defaults to `context_parameter` when an intent is set.
    */
   intentSource?: MCPAnalyticsIntentSource
+  /**
+   * The calling model id -> `$mcp_llm_model`. On the custom-dispatcher path,
+   * read it from {@link PostHogMCP.prepareToolCall}.
+   */
+  llmModel?: string
+  /** How the model id was obtained -> `$mcp_llm_model_source`. */
+  llmModelSource?: MCPAnalyticsModelSource
   /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
   parameters?: unknown
   /** Captured tool result → `$mcp_response` (sanitized + truncated). */
@@ -586,18 +591,32 @@ export interface PrepareToolListOptions {
   reportMissing?: boolean
 }
 
+/** Options for {@link PostHogMCP.prepareToolCall}. */
+export interface PrepareToolCallOptions {
+  /**
+   * The tool descriptor before PostHog preparation. Pass this on stateless or
+   * multi-replica servers so SDK argument ownership is resolved per request.
+   */
+  originalTool?: { inputSchema?: unknown }
+  /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata. */
+  requestMeta?: JsonRecord
+}
+
 /**
  * Result of {@link PostHogMCP.prepareToolCall}: the intent pulled off the
- * incoming call, the arguments with the injected `context` removed (so your tool
- * handler and its schema validation never see it), and whether the call targeted
- * the `get_more_tools` virtual tool.
+ * incoming call, the arguments with SDK-owned analytics fields removed, and
+ * whether the call targeted the `get_more_tools` virtual tool.
  */
 export interface PreparedToolCall {
   /** The agent's stated intent (the `context` argument), if present. */
   intent?: string
   /** Where the intent came from. Always `context_parameter` here when set. */
   intentSource?: MCPAnalyticsIntentSource
-  /** The call arguments with the injected `context` key stripped out. */
+  /** The calling model id, when `captureModel` is enabled and a supported source provides it. */
+  llmModel?: string
+  /** How the model id was obtained. */
+  llmModelSource?: MCPAnalyticsModelSource
+  /** The call arguments with SDK-owned `context` and `llm_model` keys removed. */
   args?: Record<string, unknown>
   /** True when `name` is the `get_more_tools` virtual tool. */
   isMissingCapability: boolean
@@ -610,6 +629,10 @@ export interface MissingCapabilityCaptureData extends McpCaptureCommon {
    * on the `get_more_tools` call) → `$mcp_intent`.
    */
   context?: string
+  /** The calling model id -> `$mcp_llm_model`. */
+  llmModel?: string
+  /** How the model id was obtained -> `$mcp_llm_model_source`. */
+  llmModelSource?: MCPAnalyticsModelSource
   /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
   parameters?: unknown
 }

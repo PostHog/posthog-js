@@ -1,5 +1,23 @@
 # posthog-node
 
+## 5.51.8
+
+### Patch Changes
+
+- [#4798](https://github.com/PostHog/posthog-js/pull/4798) [`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd) Thanks [@posthog](https://github.com/apps/posthog)! - fix(error-tracking): collapse repeated frame cycles in parsed stack traces to reduce grouping differences caused by recursion depth, while preserving distinct throw locations
+  (2026-09-09)
+- Updated dependencies [[`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd)]:
+  - @posthog/core@1.51.1
+
+## 5.51.7
+
+### Patch Changes
+
+- [#4785](https://github.com/PostHog/posthog-js/pull/4785) [`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829) Thanks [@marandaneto](https://github.com/marandaneto)! - Clarify feature flag return-value terminology across SDK APIs. A `false` value is a conclusive off evaluation, while `undefined` means no evaluation is available. Remote evaluation omits globally inactive flags, whereas backend local evaluation can resolve cached inactive definitions to `false`.
+  (2026-09-07)
+- Updated dependencies [[`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829)]:
+  - @posthog/core@1.50.6
+
 ## 5.51.6
 
 ### Patch Changes
@@ -328,10 +346,14 @@
   Backend services can now record metrics through the same statsd-style pre-aggregating client the browser SDK ships, with no OpenTelemetry setup:
 
   ```ts
-  const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } })
-  client.metrics.count('invoices.processed', 1, { attributes: { plan: 'pro' } })
-  client.metrics.gauge('queue.depth', 42)
-  client.metrics.histogram('job.duration', 187, { unit: 'ms' })
+  const client = new PostHog("phc_...", {
+    metrics: { serviceName: "billing-worker" },
+  });
+  client.metrics.count("invoices.processed", 1, {
+    attributes: { plan: "pro" },
+  });
+  client.metrics.gauge("queue.depth", 42);
+  client.metrics.histogram("job.duration", 187, { unit: "ms" });
   ```
 
   Samples aggregate in memory and flush as OTLP/JSON to `/i/v1/metrics` (one data point per series per window). Pending metrics are flushed on `shutdown()`. Core gains `_sendMetricsBatch` on `PostHogCoreStateless` (same outcome contract as `_sendLogsBatch`) and a shared `resolveMetricsConfig`, so any core-based SDK can host `PostHogMetrics`. (2026-07-15)
@@ -910,11 +932,13 @@
 - [#3476](https://github.com/PostHog/posthog-js/pull/3476) [`f8bc02f`](https://github.com/PostHog/posthog-js/commit/f8bc02f946b51f27f55f97351ca8d81a1fa54e9d) Thanks [@dmarticus](https://github.com/dmarticus)! - Add `evaluateFlags()` and a new `flags` option on `capture()` so a single `/flags` request powers both flag branching and event enrichment per incoming request:
 
   ```ts
-  const flags = await posthog.evaluateFlags(distinctId, { personProperties: { plan: 'enterprise' } })
-  if (flags.isEnabled('new-dashboard')) {
-    renderNewDashboard()
+  const flags = await posthog.evaluateFlags(distinctId, {
+    personProperties: { plan: "enterprise" },
+  });
+  if (flags.isEnabled("new-dashboard")) {
+    renderNewDashboard();
   }
-  posthog.capture({ distinctId, event: 'page_viewed', flags })
+  posthog.capture({ distinctId, event: "page_viewed", flags });
   ```
 
   The returned `FeatureFlagEvaluations` snapshot exposes `isEnabled()`, `getFlag()`, `getFlagPayload()` for branching, plus `onlyAccessed()` and `only([keys])` for filtering which flags get attached to a captured event. Pass `flagKeys: [...]` to `evaluateFlags()` to scope the underlying `/flags` request itself. `captureException()` / `captureExceptionImmediate()` accept a `flags` argument so `$exception` events carry the same flag context as the rest of your request's events.
@@ -1629,10 +1653,10 @@
   Users can now configure the SDK with an `evaluationEnvironments` option:
 
   ```typescript
-  const client = new PostHog('api-key', {
-    host: 'https://app.posthog.com',
-    evaluationEnvironments: ['production', 'backend', 'api'],
-  })
+  const client = new PostHog("api-key", {
+    host: "https://app.posthog.com",
+    evaluationEnvironments: ["production", "backend", "api"],
+  });
   ```
 
   When set, only feature flags that have at least one matching evaluation tag will be evaluated for this SDK instance. Feature flags with no evaluation tags will always be evaluated.
@@ -1782,9 +1806,9 @@ Modified `sendFeatureFlags` to be type `boolean | SendFeatureFlagsOptions`, (whi
 
 ```ts
 export interface SendFeatureFlagsOptions {
-  onlyEvaluateLocally?: boolean
-  personProperties?: Record<string, any>
-  groupProperties?: Record<string, Record<string, any>>
+  onlyEvaluateLocally?: boolean;
+  personProperties?: Record<string, any>;
+  groupProperties?: Record<string, Record<string, any>>;
 }
 ```
 
@@ -1794,18 +1818,18 @@ Now, you can make calls like this
 
 ```ts
 posthog.captureImmediate({
-  distinctId: 'user123',
-  event: 'test event',
+  distinctId: "user123",
+  event: "test event",
   sendFeatureFlags: {
     onlyEvaluateLocally: true,
     personProperties: {
-      plan: 'premium',
+      plan: "premium",
     },
   },
   properties: {
-    foo: 'bar',
+    foo: "bar",
   },
-})
+});
 ```
 
 or simply
@@ -2168,7 +2192,7 @@ To restore previous behaviour, you can set the default to False like so:
 const posthog = new PostHog(PH_API_KEY, {
   host: PH_HOST,
   disableGeoip: false,
-})
+});
 ```
 
 ## 2.6.0 - 2023-03-14

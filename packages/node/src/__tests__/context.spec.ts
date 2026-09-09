@@ -2,13 +2,13 @@ import { PostHog } from '@/entrypoints/index.node'
 import { apiImplementation } from './utils'
 import { waitForPromises } from './utils'
 
-jest.mock('../version', () => ({ version: '1.2.3' }))
+vi.mock('../version', () => ({ version: '1.2.3' }))
 
-const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+const mockedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
 
 const waitForFlush = async (): Promise<void> => {
   await waitForPromises()
-  jest.runOnlyPendingTimers()
+  vi.runOnlyPendingTimers()
   await waitForPromises()
 }
 
@@ -21,10 +21,10 @@ const getLastBatchEvents = (): any[] | undefined => {
 describe('PostHog Context', () => {
   let posthog: PostHog
 
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     posthog = new PostHog('TEST_API_KEY', {
       host: 'http://example.com',
       flushAt: 1,
@@ -130,7 +130,7 @@ describe('PostHog Context', () => {
     })
 
     await waitForPromises()
-    jest.runOnlyPendingTimers()
+    vi.runOnlyPendingTimers()
     await waitForPromises()
 
     const events = getLastBatchEvents()
@@ -175,7 +175,7 @@ describe('PostHog Context', () => {
   })
 
   it('should isolate contexts across 50 concurrent async operations with random delays', async () => {
-    jest.useRealTimers()
+    vi.useRealTimers()
 
     const operations = Array.from({ length: 50 }, (_, index) => {
       return posthog.withContext({ properties: { index, operation: `op-${index}` } }, async () => {
@@ -191,7 +191,7 @@ describe('PostHog Context', () => {
       })
     })
 
-    jest.useFakeTimers()
+    vi.useFakeTimers()
 
     await Promise.all(operations)
 

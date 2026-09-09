@@ -12,9 +12,9 @@ const executableSource = source
 
 function loadPlugin({ posthog, useRuntimeConfig }) {
   return new Function('defineNuxtPlugin', 'useRuntimeConfig', 'posthog', executableSource)(
-    plugin => plugin,
+    (plugin) => plugin,
     useRuntimeConfig,
-    posthog,
+    posthog
   )
 }
 

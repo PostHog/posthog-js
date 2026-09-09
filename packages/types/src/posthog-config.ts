@@ -630,8 +630,15 @@ export interface SessionRecordingOptions {
     maskTextClass?: string | RegExp
 
     /**
-     * Derived from `rrweb.record` options
+     * Derived from `rrweb.record` options. A CSS selector for non-input text to mask in session
+     * replay. Session replay masks input values by default (see `maskAllInputs`), but it does
+     * not mask other DOM text or images. This selector and the `ph-mask` class mask text content
+     * only — for example a rendered card number — and do not hide an image, whose `src` is still
+     * recorded. To redact a rendered image such as a scanned document, block the image or a
+     * container element with `ph-no-capture` (see `blockClass`/`blockSelector`), which replaces it
+     * with a placeholder and stops recording its subtree.
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @see https://posthog.com/docs/session-replay/privacy
      */
     maskTextSelector?: string | null
 
@@ -642,14 +649,26 @@ export interface SessionRecordingOptions {
     maskTextFn?: ((text: string, element?: HTMLElement) => string) | null
 
     /**
-     * Derived from `rrweb.record` options
+     * Derived from `rrweb.record` options. When `true` (the default) session replay masks the
+     * value of every input, except `hidden` and `file` inputs, whose values are recorded
+     * unmasked — block those with `ph-no-capture` or `blockSelector` if they hold sensitive data.
+     * Set it to `false` to record input values, which is not recommended
+     * for apps that handle sensitive data. A `session_recording` masking option set in
+     * `posthog.init` takes precedence over the project "Privacy and masking" setting; the SDK
+     * warns once when the two differ.
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @see https://posthog.com/docs/session-replay/privacy
+     * @default true
      */
     maskAllInputs?: boolean
 
     /**
-     * Derived from `rrweb.record` options
+     * Derived from `rrweb.record` options. Selects which input types to mask by input attribute,
+     * for use when `maskAllInputs` is `false`. Password inputs are always masked by default: the
+     * SDK adds `password: true` to a partial override, so set `password: false` explicitly if you
+     * must record password fields.
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @see https://posthog.com/docs/session-replay/privacy
      */
     maskInputOptions?: Partial<MaskInputOptions>
 
@@ -690,8 +709,18 @@ export interface SessionRecordingOptions {
     /**
      * Captures sanitized Schema.org JSON-LD as session replay custom events.
      * JSON-LD inside a text mask or blocked element is never captured.
-     * The recorder keeps `@id` values without changes.
+     * The recorder keeps properties on its universal safe list at every depth. This list includes `@type` values shaped like a Schema.org term, which means letters and digits only.
+     * It drops property branches that are not on the allowlist.
+     * Retained strings starting with `http://`, `https://`, `//`, `/`, `./`, or `../` use replay URL masking, including query parameter and hash settings.
+     * This applies to nested entities and scalar arrays, but not to the fixed `@context`, normalized `@type`, or captured DOM IDs.
+     * Other strings, including bare relative paths and URLs embedded in text, are unchanged.
+     * A URL rejected by the masking callback is omitted. If the callback throws, the script is not captured.
+     * It keeps an `@id` as a fragment only when replay also captures a DOM element with the same `id` value.
+     * It drops every `@id` when `maskAllElementAttributes`, `maskAttributeFn`, or an `attributeFilter` without `id` can hide `id` attributes from replay.
+     * It also keeps the containing entity tree, even when it redacts all other fields.
      * The event tag is `$json_ld`. The payload is a JSON-LD object or array.
+     * The event includes the current page URL in `data.href`, subject to replay URL masking and hash capture settings.
+     * The URL is omitted when the masking callback rejects it or throws.
      * The recorder removes all script nodes from snapshots when this option is enabled.
      * The JSON-LD observer starts only when this option is true at recording start.
      * @see https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/extensions/replay/external/json-ld.ts
@@ -746,6 +775,8 @@ export interface SessionRecordingOptions {
      * Attributes left off the list are invisible to replay, so only set this when
      * that loss of fidelity is acceptable. When unset (the default) or set to an
      * empty array, all attributes are observed.
+     *
+     * A list without `id` also stops `captureJsonLd` from keeping `@id` fragments.
      *
      * Normally only altered alongside posthog support guidance.
      */
@@ -1543,6 +1574,15 @@ export interface PostHogConfig {
     identity_hash?: string
 
     /**
+     * Additional server-signed identity claims.
+     *
+     * Claims are forwarded to products such as conversations only when
+     * `identity_distinct_id` and `identity_hash` are also present. Claim
+     * verification and consumption happen server-side.
+     */
+    identity_claims?: Record<string, { value: string; hash: string }>
+
+    /**
      * Determines whether PostHog should disable web experiments.
      *
      * Currently disabled while we're in BETA. It will be toggled to `true` in a future release.
@@ -2173,6 +2213,15 @@ export interface PostHogConfig {
      * @default 'identified_only'
      */
     person_profiles?: 'always' | 'never' | 'identified_only'
+
+    /**
+     * When true, `identify()` omits `$anon_distinct_id` from the `$identify` event
+     * and the follow-up feature flag request, so PostHog does not merge the
+     * previous anonymous identity into the identified person.
+     *
+     * @default false
+     */
+    reuseAnonymousId?: boolean
 
     /** @deprecated - use `person_profiles` instead  */
     process_person?: 'always' | 'never' | 'identified_only'

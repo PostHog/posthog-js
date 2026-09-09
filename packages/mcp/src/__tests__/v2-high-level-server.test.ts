@@ -338,7 +338,7 @@ describe('instrument() on an MCP SDK v2 high-level server', () => {
   it('lets a host resolve identity from v2 headers through the exported getRequestHeaders', async () => {
     const server = makeV2Server()
     const seen: unknown[] = []
-    const identify = jest.fn(async (_request: unknown, extra: unknown) => {
+    const identify = vi.fn(async (_request: unknown, extra: unknown) => {
       seen.push(extra)
       const auth = getRequestHeaders(extra)?.['authorization']
       return typeof auth === 'string' ? { distinctId: auth.replace('Bearer ', '') } : null

@@ -1,5 +1,13 @@
 # @posthog/plugin-utils
 
+## 2.0.0
+
+### Major Changes
+
+- [#4705](https://github.com/PostHog/posthog-js/pull/4705) [`dd5888a`](https://github.com/PostHog/posthog-js/commit/dd5888a875f95ba7b1edaec98b1a8ff1b83f51f2) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Change the default `sourcemaps.releaseMode` to `event`: set `sourcemaps.releaseMode: 'symbol-set'`, or `POSTHOG_RELEASE_MODE=symbol-set`, to keep binding uploaded symbol sets to a release. The `@posthog/plugin-utils` bump is major, so an installed plugin keeps the old default until the plugin itself is upgraded.
+
+  `event` mode requires a posthog-cli with `release resolve` and `--release-mode`, and `posthog-js` 1.409.0, `posthog-node` 5.47.0, or `@posthog/core` 1.46.0 at runtime. An older CLI fails a rollup build and skips the upload on webpack and Next.js. An older SDK reports no release on exceptions. (2026-09-02)
+
 ## 1.2.0
 
 ### Minor Changes

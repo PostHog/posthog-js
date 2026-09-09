@@ -5,6 +5,7 @@
     "outDir": "dist",
     "module": "CommonJS",
     "moduleResolution": "node",
+    "skipLibCheck": true,
     "isolatedModules": true,
     "composite": false,
     "declaration": true,

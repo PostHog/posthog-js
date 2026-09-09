@@ -20,7 +20,7 @@ describe('_send_request fireCallbackOnDrop', () => {
         })
 
         it('does NOT call the callback for callers that did not opt in', () => {
-            const callback = jest.fn()
+            const callback = vi.fn()
 
             posthog._send_request({ url: 'https://example.com', batchKey: 'logs', callback })
 
@@ -28,7 +28,7 @@ describe('_send_request fireCallbackOnDrop', () => {
         })
 
         it('calls the callback with a 429 when the caller opted in', () => {
-            const callback = jest.fn()
+            const callback = vi.fn()
 
             posthog._send_request({ url: 'https://example.com', batchKey: 'logs', fireCallbackOnDrop: true, callback })
 
@@ -43,7 +43,7 @@ describe('_send_request fireCallbackOnDrop', () => {
         })
 
         it('does NOT call the callback for callers that did not opt in', () => {
-            const callback = jest.fn()
+            const callback = vi.fn()
 
             posthog._send_request({ url: 'https://example.com', batchKey: 'logs', callback })
 
@@ -51,7 +51,7 @@ describe('_send_request fireCallbackOnDrop', () => {
         })
 
         it('calls the callback with a 0 when the caller opted in', () => {
-            const callback = jest.fn()
+            const callback = vi.fn()
 
             posthog._send_request({ url: 'https://example.com', batchKey: 'logs', fireCallbackOnDrop: true, callback })
 

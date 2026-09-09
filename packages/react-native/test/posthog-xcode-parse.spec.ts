@@ -152,6 +152,8 @@ describe('posthog-xcode.sh bundle command composition', () => {
         DERIVED_FILE_DIR: derivedDir,
         HOME: homeDir,
         NODE_BINARY: process.execPath,
+        // The CLI stub reports no version. SKIP_BUNDLING skips the upload calls, and the
+        // event-mode floor check with them, so the run succeeds as it did before the default.
         SKIP_BUNDLING: '1',
         TRACE_PATH: tracePath,
       }
@@ -565,8 +567,48 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
     expect(invocations[0]).toContain('--release-mode event')
   })
 
-  it('omits the flag by default so an older posthog-cli keeps working', () => {
-    const { status, invocations } = runWrapper([], { POSTHOG_RELEASE_MODE: '' }, undefined, CLI_WITHOUT_VERSION)
+  it('does not apply the event-mode floor to a SKIP_BUNDLING build', () => {
+    // A native-only compile sets SKIP_BUNDLING and never uploads maps, so the default event mode
+    // must not fail it over an old posthog-cli it never exercises.
+    const { status, invocations } = runWrapper([], { SKIP_BUNDLING: '1' }, undefined, CLI_TOO_OLD)
+
+    expect(status).toBe(0)
+    expect(invocations.join('\n')).not.toContain('hermes')
+  })
+
+  it('passes the flag by default so a build that configures nothing uploads release-independent', () => {
+    const { status, invocations } = runWrapper([], {})
+
+    expect(status).toBe(0)
+    const uploads = invocations.filter((line) => line.includes('hermes'))
+    expect(uploads).toHaveLength(2)
+    expect(uploads.join('\n')).toContain('--release-mode event')
+  })
+
+  it.each([
+    ['is below the minimum', CLI_TOO_OLD],
+    ['reports no version at all', CLI_WITHOUT_VERSION],
+  ])('softens the default event mode when the posthog-cli on the box %s', (_case, cli) => {
+    // Nothing configured a mode, so upgrading the SDK must not fail the build: the wrapper warns,
+    // drops the flag, and uploads the maps bound to the release, like builds did before the
+    // default changed. Only an explicitly configured event mode fails on an old CLI.
+    const { status, invocations, output } = runWrapper([], {}, undefined, cli)
+
+    expect(status).toBe(0)
+    expect(output).toContain('warning:')
+    expect(output).toContain('npm install -g @posthog/cli@latest')
+    const uploads = invocations.filter((line) => line.includes('hermes'))
+    expect(uploads).toHaveLength(2)
+    expect(uploads.join('\n')).not.toContain('--release-mode')
+  })
+
+  it('omits the flag in symbol-set mode so an older posthog-cli keeps working', () => {
+    const { status, invocations } = runWrapper(
+      [],
+      { POSTHOG_RELEASE_MODE: 'symbol-set' },
+      undefined,
+      CLI_WITHOUT_VERSION
+    )
 
     expect(status).toBe(0)
     const uploads = invocations.filter((line) => line.includes('hermes'))
@@ -636,9 +678,10 @@ describe('posthog-xcode.sh posthog-cli invocation', () => {
 })
 
 /**
- * The accepted release modes are written out four times: POSTHOG_RELEASE_MODES, the case in
- * posthog-xcode.sh, the list in posthog.gradle, and the case in the generated dSYM phase. A third
- * mode would be accepted at prebuild and then rejected at build time by whichever copy was missed.
+ * The accepted release modes are written out three times: POSTHOG_RELEASE_MODES, the case in
+ * posthog-xcode.sh, and the list in posthog.gradle. A third mode would be accepted at prebuild and
+ * then rejected at build time by whichever copy was missed. The dSYM phase carries no mode, because
+ * it always binds.
  */
 describe('release mode lists stay in sync', () => {
   const GRADLE_PATH = path.resolve(__dirname, '..', 'tooling', 'posthog.gradle')
@@ -659,22 +702,15 @@ describe('release mode lists stay in sync', () => {
     return match[1].split(',').map((mode) => mode.trim().replace(/"/g, ''))
   }
 
-  // Reads the case labels out of the generated dSYM phase, dropping the `""` unset arm.
-  const dsymModes = (): string[] => {
-    const script = buildDsymUploadShellScript(false, false, undefined)
-    const start = script.indexOf('case "$POSTHOG_RESOLVED_RELEASE_MODE" in')
-    const end = script.indexOf('\n  *)', start)
-    if (start === -1 || end === -1) throw new Error('Could not locate the release mode case in the dSYM phase')
-    return [...script.slice(start, end).matchAll(/^ {2}([^)]+)\)/gm)]
-      .flatMap((match) => match[1].split('|'))
-      .map((mode) => mode.replace(/"/g, '').trim())
-      .filter(Boolean)
-  }
+  it('leaves the release mode out of the generated dSYM phase', () => {
+    // posthog-ios always binds its symbol sets, so the phase must carry no mode at all.
+    expect(buildDsymUploadShellScript()).not.toContain('POSTHOG_RESOLVED_RELEASE_MODE')
+    expect(buildDsymUploadShellScript()).not.toContain('POSTHOG_NO_RELEASE_BIND')
+  })
 
   it.each([
     ['posthog-xcode.sh', shellModes],
     ['posthog.gradle', gradleModes],
-    ['the generated dSYM phase', dsymModes],
   ])('%s accepts exactly the modes the plugin does', (_name, extract) => {
     expect((extract as () => string[])().sort()).toEqual([...POSTHOG_RELEASE_MODES].sort())
   })

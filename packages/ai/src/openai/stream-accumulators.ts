@@ -1,7 +1,7 @@
 import type OpenAI from 'openai'
 import type { FormattedContent, FormattedMessage, TokenUsage } from '../types'
 import { calculateWebSearchCount } from '../utils'
-import { extractCacheWriteTokens, isResponseTokenChunk, isTerminalResponse } from './utils'
+import { extractCacheWriteTokens, isResponseTokenChunk, isTerminalResponse, responsesStopReason } from './utils'
 
 export interface OpenAIChatStreamResult {
   output: FormattedMessage[]
@@ -172,7 +172,7 @@ export class OpenAIResponsesStreamAccumulator {
     if (isTerminalResponse(response)) {
       this.terminalResponse = response
       this.output = response.output ?? []
-      this.stopReason = response.status
+      this.stopReason = responsesStopReason(response)
     }
   }
 

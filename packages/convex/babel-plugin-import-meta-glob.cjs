@@ -58,10 +58,7 @@ module.exports = function ({ types: t }) {
           const properties = files.map((file) =>
             t.objectProperty(
               t.stringLiteral(file),
-              t.arrowFunctionExpression(
-                [],
-                t.callExpression(t.import(), [t.stringLiteral(file)])
-              )
+              t.arrowFunctionExpression([], t.callExpression(t.import(), [t.stringLiteral(file)]))
             )
           )
 

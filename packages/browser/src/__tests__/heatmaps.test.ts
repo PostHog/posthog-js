@@ -5,16 +5,16 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHog } from '../posthog-core'
 import { FlagsResponse } from '../types'
 import { isObject } from '@posthog/core'
-import { beforeEach, expect } from '@jest/globals'
+import { beforeEach, expect } from 'vitest'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from '../constants'
 import { Heatmaps } from '../heatmaps'
 import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '@posthog/browser-common/utils/autocapture-utils'
 
-jest.useFakeTimers()
+vi.useFakeTimers()
 
 describe('heatmaps', () => {
     let posthog: PostHog
-    let beforeSendMock = jest.fn().mockImplementation((e) => e)
+    let beforeSendMock = vi.fn().mockImplementation((e) => e)
 
     const createMockMouseEvent = (props: Partial<MouseEvent> = {}) =>
         ({
@@ -59,13 +59,13 @@ describe('heatmaps', () => {
     })
 
     afterEach(() => {
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
     })
 
     it('should send generated heatmap data', async () => {
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
 
-        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+        vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
         expect(beforeSendMock).toBeCalledTimes(1)
         expect(beforeSendMock.mock.lastCall[0]).toMatchObject({
@@ -111,14 +111,14 @@ describe('heatmaps', () => {
     it('requires interval to pass before sending data', async () => {
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
 
-        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds - 1)
+        vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds - 1)
 
         expect(beforeSendMock).toBeCalledTimes(0)
         expect(posthog.heatmaps!.getAndClearBuffer()).toBeDefined()
     })
 
     it('does not crash when getComputedStyle throws for a cross-realm element', async () => {
-        jest.spyOn(window, 'getComputedStyle').mockImplementation(() => {
+        vi.spyOn(window, 'getComputedStyle').mockImplementation(() => {
             throw new TypeError("Argument 1 ('element') to Window.getComputedStyle must be an instance of Element")
         })
 
@@ -127,14 +127,14 @@ describe('heatmaps', () => {
 
         expect(() => posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ target: el }))).not.toThrow()
 
-        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+        vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
         expect(beforeSendMock).toBeCalledTimes(1)
         expect(beforeSendMock.mock.lastCall[0].properties.$heatmap_data['http://replaced/'][0].target_fixed).toBe(false)
     })
 
     it('does not crash on mousemove when getComputedStyle throws for a cross-realm element', async () => {
-        jest.spyOn(window, 'getComputedStyle').mockImplementation(() => {
+        vi.spyOn(window, 'getComputedStyle').mockImplementation(() => {
             throw new TypeError("Argument 1 ('element') to Window.getComputedStyle must be an instance of Element")
         })
 
@@ -143,7 +143,7 @@ describe('heatmaps', () => {
 
         posthog.heatmaps?.['_onMouseMove']?.(createMockMouseEvent({ target: el }))
 
-        expect(() => jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)).not.toThrow()
+        expect(() => vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)).not.toThrow()
 
         expect(beforeSendMock).toBeCalledTimes(1)
         expect(beforeSendMock.mock.lastCall[0].properties.$heatmap_data['http://replaced/'][0]).toMatchObject({
@@ -155,7 +155,7 @@ describe('heatmaps', () => {
     it('should handle empty mouse moves', async () => {
         posthog.heatmaps?.['_onMouseMove']?.(new Event('mousemove'))
 
-        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+        vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
         expect(beforeSendMock).toBeCalledTimes(0)
     })
@@ -165,7 +165,7 @@ describe('heatmaps', () => {
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
 
-        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+        vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
         expect(beforeSendMock).toBeCalledTimes(1)
         expect(beforeSendMock.mock.lastCall[0].event).toEqual('$$heatmap')
@@ -185,7 +185,7 @@ describe('heatmaps', () => {
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ target: stepperButton }))
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent({ target: stepperButton }))
 
-        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+        vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
         expect(beforeSendMock).toBeCalledTimes(1)
         const heatmapData = beforeSendMock.mock.lastCall[0].properties.$heatmap_data
@@ -202,7 +202,7 @@ describe('heatmaps', () => {
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
 
-        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+        vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
         expect(beforeSendMock).toBeCalledTimes(1)
         expect(beforeSendMock.mock.lastCall[0].event).toEqual('$$heatmap')
@@ -211,7 +211,7 @@ describe('heatmaps', () => {
 
         expect(posthog.heatmaps!['buffer']).toEqual(undefined)
 
-        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+        vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
         expect(beforeSendMock).toBeCalledTimes(1)
     })
@@ -253,7 +253,7 @@ describe('heatmaps', () => {
 
         expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
 
-        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+        vi.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
         expect(beforeSendMock.mock.calls).toEqual([])
     })
@@ -404,7 +404,7 @@ describe('heatmaps', () => {
                 posthogWithMasking.heatmaps!.startIfEnabled()
                 posthogWithMasking.heatmaps?.['_onClick']?.(createMockMouseEvent())
 
-                jest.advanceTimersByTime(posthogWithMasking.heatmaps!.flushIntervalMilliseconds + 1)
+                vi.advanceTimersByTime(posthogWithMasking.heatmaps!.flushIntervalMilliseconds + 1)
             })
 
             it('masks properties accordingly', async () => {

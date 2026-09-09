@@ -2,8 +2,8 @@ import { AppState, Linking } from 'react-native'
 
 import { PostHog } from '../src'
 
-Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
-AppState.addEventListener = jest.fn()
+Linking.getInitialURL = vi.fn(() => Promise.resolve(null))
+AppState.addEventListener = vi.fn()
 
 const fixedTime = new Date('2024-01-02T03:04:05.000Z')
 const clients: PostHog[] = []
@@ -16,8 +16,8 @@ const mockResponse = (body: Record<string, unknown> = { status: 'ok' }) => ({
   json: () => Promise.resolve(body),
 })
 
-const installFetchMock = (responseForUrl?: (url: string) => Record<string, unknown>): jest.Mock => {
-  const fetchMock = jest.fn(async (url: string) => mockResponse(responseForUrl?.(url)))
+const installFetchMock = (responseForUrl?: (url: string) => Record<string, unknown>): vi.Mock => {
+  const fetchMock = vi.fn(async (url: string) => mockResponse(responseForUrl?.(url)))
   ;(globalThis as any).window = (globalThis as any).window ?? {}
   ;(globalThis as any).window.fetch = fetchMock
   ;(globalThis as any).fetch = fetchMock
@@ -50,7 +50,7 @@ const normalizeEvent = (event: WireEvent): WireEvent => {
   }
 }
 
-const parsedCall = (fetchMock: jest.Mock, path: string): { url: string; options: FetchCall[1]; body: any } => {
+const parsedCall = (fetchMock: vi.Mock, path: string): { url: string; options: FetchCall[1]; body: any } => {
   const call = fetchMock.mock.calls.find(([url]) => new URL(url).pathname === path) as FetchCall | undefined
   expect(call).toBeDefined()
   expect(call![1].method).toBe('POST')
@@ -93,13 +93,13 @@ const createClient = (options: ConstructorParameters<typeof PostHog>[1] = {}): P
 
 describe('PostHog React Native event and request snapshots', () => {
   beforeEach(() => {
-    jest.useFakeTimers({ doNotFake: ['nextTick'] })
-    jest.setSystemTime(fixedTime)
+    vi.useFakeTimers({ doNotFake: ['nextTick'] })
+    vi.setSystemTime(fixedTime)
   })
 
   afterEach(async () => {
     await Promise.all(clients.splice(0).map((client) => client.shutdown()))
-    jest.useRealTimers()
+    vi.useRealTimers()
   })
 
   it('serializes timestamp overrides as UTC without rewriting caller properties', async () => {

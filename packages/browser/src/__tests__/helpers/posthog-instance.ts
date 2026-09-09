@@ -65,10 +65,10 @@ export const createMockPostHog = (overrides: Partial<PostHog> = {}): PostHog =>
             api_host: 'https://test.com',
         } as PostHogConfig,
         get_distinct_id: () => 'test-distinct-id',
-        capture: jest.fn(),
-        reloadFeatureFlags: jest.fn(),
-        _send_request: jest.fn(),
-        onFeatureFlags: jest.fn().mockReturnValue(() => {}),
+        capture: vi.fn(),
+        reloadFeatureFlags: vi.fn(),
+        _send_request: vi.fn(),
+        onFeatureFlags: vi.fn().mockReturnValue(() => {}),
         ...overrides,
     }) as PostHog
 
@@ -81,7 +81,7 @@ export const createMockConfig = (overrides: Partial<PostHogConfig> = {}): PostHo
 
 export const createMockPersistence = (overrides: Partial<PostHogPersistence> = {}): PostHogPersistence =>
     ({
-        register: jest.fn(),
+        register: vi.fn(),
         props: {},
         ...overrides,
     }) as PostHogPersistence

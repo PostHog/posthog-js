@@ -430,7 +430,7 @@ app.post('/get_feature_flag', async (req, res) => {
         groups,
         group_properties,
         // disable_geoip is not exposed per-call by the browser SDK; accepted but ignored
-        // eslint-disable-next-line no-unused-vars
+        // oxlint-disable-next-line no-unused-vars
         disable_geoip,
         force_remote = true,
     } = req.body || {}

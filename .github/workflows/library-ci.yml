@@ -35,6 +35,9 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup
 
+      - name: Check task graph
+        run: pnpm test:build-graph
+
       - name: Run unit tests
         run: |
           set -o pipefail
@@ -46,6 +49,10 @@ jobs:
           fi
 
       - run: pnpm test:docs-scripts
+
+      - name: Test development watchers
+        timeout-minutes: 10
+        run: pnpm test:dev-watch
 
   edge-runtime:
     name: Node edge runtime tests
@@ -198,7 +205,7 @@ jobs:
           report_failures "$FAILED_TESTS"
 
       - name: Find existing compat comment
-        if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         id: find-comment
         with:
@@ -207,7 +214,7 @@ jobs:
           body-includes: '<!-- compat-test-results -->'
 
       - name: Create or update compat comment
-        if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
@@ -254,7 +261,7 @@ jobs:
             </details>
 
       - name: Delete compat comment if tests pass
-        if: ${{ steps.process-results.outputs.has_failures == 'false' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ steps.process-results.outputs.has_failures == 'false' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         id: find-passing-comment
         with:
@@ -263,7 +270,7 @@ jobs:
           body-includes: '<!-- compat-test-results -->'
 
       - name: Remove outdated comment
-        if: ${{ steps.find-passing-comment.outputs.comment-id != '' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ steps.find-passing-comment.outputs.comment-id != '' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           COMMENT_ID: ${{ steps.find-passing-comment.outputs.comment-id }}
@@ -353,7 +360,7 @@ jobs:
 
       - name: Run rrweb tests
         if: steps.changed.outputs.rrweb-changed == 'true'
-        run: xvfb-run --server-args="-screen 0 1920x1080x24" pnpm turbo run test --filter='./packages/rrweb/**'
+        run: xvfb-run --server-args="-screen 0 1920x1080x24" pnpm turbo run lint test:rrweb --filter='./packages/rrweb/**'
 
       - name: Upload diff images on failure
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

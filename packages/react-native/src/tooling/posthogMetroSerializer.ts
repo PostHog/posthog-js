@@ -3,13 +3,14 @@
 // Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 
 import * as crypto from 'crypto'
-// eslint-disable-next-line import/no-extraneous-dependencies
+// oxlint-disable-next-line import/no-extraneous-dependencies
 import type { MixedOutput, Module, ReadOnlyGraph } from 'metro'
-import type { Bundle, MetroSerializer, MetroSerializerOutput, SerializedBundle, VirtualJSOutput } from './utils'
+import type { Bundle, MetroSerializer, VirtualJSOutput } from './utils'
 import {
   createDebugIdSnippet,
   createVirtualJSModule,
   determineDebugIdFromBundleSource,
+  isDevServerBuild,
   prependModule,
   stringToUUID,
 } from './utils'
@@ -18,6 +19,7 @@ import { createDefaultMetroSerializer } from './vendor/metro/utils'
 type SourceMap = Record<string, unknown>
 type PostHogSerializerOptions = Parameters<MetroSerializer>[3] & {
   posthogBundleCallback?: (bundle: Bundle) => Bundle
+  serializerOptions?: { output?: string }
 }
 
 const DEBUG_ID_PLACE_HOLDER = '__POSTHOG_CHUNK_ID__'
@@ -49,7 +51,7 @@ export function unstableBeforeAssetSerializationDebugIdPlugin({
 
   const debugIdModuleExists = premodules.some((module) => module.path === DEBUG_ID_MODULE_PATH)
   if (debugIdModuleExists) {
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.warn('\n\nChunk ID module found. Skipping PostHog Chunk ID module...\n\n')
     return premodules
   }
@@ -61,20 +63,35 @@ export function unstableBeforeAssetSerializationDebugIdPlugin({
 /**
  * Creates a Metro serializer that adds Chunk ID module to the plain bundle.
  * The Chunk ID module is a virtual module that provides a Chunk ID in runtime.
+ * Expo static exports are delegated unchanged. Use getPostHogExpoConfig to
+ * enable PostHog Chunk IDs through Expo's per-asset serialization hook.
  *
  * RAM Bundles do not support custom serializers.
  */
 export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer): MetroSerializer => {
   const serializer = customSerializer || createDefaultMetroSerializer()
   return async function (entryPoint, premodules, graph, options) {
-    if (graph.transformOptions.hot) {
+    if (isDevServerBuild(graph, options)) {
+      return serializer(entryPoint, premodules, graph, options)
+    }
+
+    // Expo static exports can contain multiple assets (or JSON), not one plain
+    // bundle. Its per-asset PostHog plugin injects real IDs before source maps
+    // are generated. A placeholder here would prevent that plugin from running.
+    if (customSerializer && isExpoStaticExport(options)) {
       return serializer(entryPoint, premodules, graph, options)
     }
 
     const debugIdModuleExists = premodules.some((module) => module.path === DEBUG_ID_MODULE_PATH)
     if (debugIdModuleExists) {
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.warn('Chunk ID module found. Skipping PostHog Chunk ID module...')
+      return serializer(entryPoint, premodules, graph, options)
+    }
+
+    // Async chunks are serialized with `modulesOnly`, which drops the premodules
+    // that carry the Chunk ID. There is nothing to inject into such a chunk.
+    if (options.modulesOnly) {
       return serializer(entryPoint, premodules, graph, options)
     }
 
@@ -86,8 +103,9 @@ export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer)
     // The default serializer invokes posthogBundleCallback after Metro assembles
     // the bundle and before it renders code/source maps, so both outputs contain
     // the same real Chunk ID.
-    const serializerResult = serializer(entryPoint, modifiedPremodules, graph, serializerOptions)
-    const { code: bundleCode, map: bundleMapString } = await extractSerializerResult(serializerResult)
+    const serializerResult = await serializer(entryPoint, modifiedPremodules, graph, serializerOptions)
+    const { code: bundleCode, map: bundleMapString } =
+      typeof serializerResult === 'string' ? { code: serializerResult, map: '{}' } : serializerResult
 
     const debugId = determineDebugIdFromBundleSource(bundleCode)
     if (!debugId) {
@@ -95,7 +113,7 @@ export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer)
     }
 
     // Only print Chunk ID for command line builds => not hot reload from dev server
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.log('info ' + `Bundle Chunk ID: ${debugId}`)
 
     const debugIdComment = `${DEBUG_ID_COMMENT}${debugId}`
@@ -119,6 +137,31 @@ export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer)
   }
 }
 
+function isExpoStaticExport(options: PostHogSerializerOptions): boolean {
+  // Match Expo's precedence: explicit serializer options override the URL,
+  // even when they do not specify an output mode.
+  if (options.serializerOptions) {
+    return options.serializerOptions.output === 'static'
+  }
+  if (!options.sourceUrl) {
+    return false
+  }
+
+  try {
+    const url = new URL(options.sourceUrl, 'https://expo.dev')
+    // JSC-safe URLs move the query into the path after //&. Only decode that
+    // form when there is no actual query, as Expo's serializer does.
+    const jscQueryStart = url.pathname.indexOf('//&')
+    const query =
+      !options.sourceUrl.split('#')[0].includes('?') && jscQueryStart !== -1
+        ? new URLSearchParams(url.pathname.slice(jscQueryStart + 3))
+        : url.searchParams
+    return query.get('serializer.output') === 'static'
+  } catch {
+    return false
+  }
+}
+
 /**
  * Called by the default Metro serializer after baseJSBundle has produced the
  * final bundle but before source-map generation. That ordering is important:
@@ -133,23 +176,6 @@ function createPostHogBundleCallback(
     bundle.pre = injectDebugId(bundle.pre, debugId)
     return bundle
   }
-}
-
-async function extractSerializerResult(serializerResult: MetroSerializerOutput): Promise<SerializedBundle> {
-  if (typeof serializerResult === 'string') {
-    return { code: serializerResult, map: '{}' }
-  }
-
-  if ('map' in serializerResult) {
-    return { code: serializerResult.code, map: serializerResult.map }
-  }
-
-  const awaitedResult = await serializerResult
-  if (typeof awaitedResult === 'string') {
-    return { code: awaitedResult, map: '{}' }
-  }
-
-  return { code: awaitedResult.code, map: awaitedResult.map }
 }
 
 function createDebugIdModule(debugId: string): Module<VirtualJSOutput> & { setSource: (code: string) => void } {

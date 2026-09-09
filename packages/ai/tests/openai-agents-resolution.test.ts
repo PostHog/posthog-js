@@ -1,6 +1,17 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs'
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'fs'
 import { tmpdir } from 'os'
-import { dirname, join, resolve } from 'path'
+import { dirname, join, relative, resolve, sep } from 'path'
 import { execFileSync } from 'child_process'
 
 const packageRoot = resolve(__dirname, '..')
@@ -12,6 +23,25 @@ function linkPackage(fixture: string, packageName: string, target: string): void
   const link = join(fixture, 'node_modules', ...packageName.split('/'))
   mkdirSync(dirname(link), { recursive: true })
   symlinkSync(target, link, 'junction')
+}
+
+function listFiles(root: string, directory = root): string[] {
+  return readdirSync(directory).flatMap((name) => {
+    const path = join(directory, name)
+    return statSync(path).isDirectory() ? listFiles(root, path) : relative(root, path).split(sep).join('/')
+  })
+}
+
+function expectPublicBuildArtifacts(): void {
+  const packageJson = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as {
+    exports: Record<string, { require: string; import: string; types: string }>
+  }
+  const expectedArtifacts = Object.values(packageJson.exports)
+    .flatMap((entry) => [entry.require, `${entry.require}.map`, entry.import, `${entry.import}.map`, entry.types])
+    .map((path) => path.replace('./dist/', ''))
+    .sort()
+
+  expect(listFiles(join(packageRoot, 'dist')).sort()).toEqual(expectedArtifacts)
 }
 
 function createIsolatedFixture(): string {
@@ -34,7 +64,8 @@ function createIsolatedFixture(): string {
 }
 
 beforeAll(() => {
-  execFileSync(process.execPath, [resolve(repositoryRoot, 'node_modules/rollup/dist/bin/rollup'), '-c'], {
+  rmSync(join(packageRoot, 'dist'), { recursive: true, force: true })
+  execFileSync(process.execPath, [resolve(packageRoot, 'node_modules/tsdown/dist/run.mjs')], {
     cwd: packageRoot,
     stdio: 'pipe',
   })
@@ -44,6 +75,12 @@ afterAll(() => {
   for (const fixture of fixtures) {
     rmSync(fixture, { recursive: true, force: true })
   }
+})
+
+describe('@posthog/ai build artifacts', () => {
+  it('emits exactly the files referenced by every public export', () => {
+    expectPublicBuildArtifacts()
+  })
 })
 
 describe('@posthog/ai/openai-agents package resolution', () => {

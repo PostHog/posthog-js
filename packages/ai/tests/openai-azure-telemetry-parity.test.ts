@@ -28,8 +28,8 @@ const tools = [
   },
 ]
 
-function providerFetch(): jest.Mock {
-  return jest.fn(async (input: string | URL | Request) => {
+function providerFetch(): vi.Mock {
+  return vi.fn(async (input: string | URL | Request) => {
     const pathname = new URL(input instanceof Request ? input.url : String(input)).pathname
     let body: Record<string, unknown>
     if (pathname.includes('/embeddings')) {
@@ -94,8 +94,8 @@ function providerFetch(): jest.Mock {
   })
 }
 
-function providerErrorFetch(): jest.Mock {
-  return jest.fn(
+function providerErrorFetch(): vi.Mock {
+  return vi.fn(
     async () =>
       new Response(
         JSON.stringify({
@@ -107,13 +107,13 @@ function providerErrorFetch(): jest.Mock {
 }
 
 function createPostHogMock() {
-  return { capture: jest.fn(), captureImmediate: jest.fn(), privacy_mode: false }
+  return { capture: vi.fn(), captureImmediate: vi.fn(), privacy_mode: false }
 }
 
 const providerCases = [
   {
     provider: 'openai',
-    createClient: (fetch: jest.Mock, posthog: ReturnType<typeof createPostHogMock>) =>
+    createClient: (fetch: vi.Mock, posthog: ReturnType<typeof createPostHogMock>) =>
       new PostHogOpenAI({
         apiKey: 'mock-key',
         baseURL: 'https://openai.test/v1',
@@ -123,7 +123,7 @@ const providerCases = [
   },
   {
     provider: 'azure',
-    createClient: (fetch: jest.Mock, posthog: ReturnType<typeof createPostHogMock>) =>
+    createClient: (fetch: vi.Mock, posthog: ReturnType<typeof createPostHogMock>) =>
       new PostHogAzureOpenAI({
         apiKey: 'mock-key',
         apiVersion: '2025-04-01-preview',

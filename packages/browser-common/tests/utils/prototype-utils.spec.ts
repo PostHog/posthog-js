@@ -1,5 +1,5 @@
 /**
- * @jest-environment jsdom
+ * @vitest-environment jsdom
  */
 
 const SAFARI_UA =
@@ -19,7 +19,7 @@ function setUserAgent(userAgent: string): void {
 }
 
 async function getFreshNativeMutationObserver(): Promise<typeof MutationObserver> {
-    jest.resetModules()
+    vi.resetModules()
     const { getNativeMutationObserverImplementation } = await import('../../src/utils/prototype-utils')
     return getNativeMutationObserverImplementation(window)
 }
@@ -35,7 +35,7 @@ describe('getNativeMutationObserverImplementation iframe fallback', () => {
         document.querySelectorAll('iframe').forEach((iframe) => iframe.remove())
         delete (window as any).Zone
         setUserAgent(originalUserAgent)
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
     })
 
     it.each([SAFARI_UA, CHROME_IOS_UA, WKWEBVIEW_UA])(
@@ -62,7 +62,7 @@ describe('getNativeMutationObserverImplementation iframe fallback', () => {
     })
 
     it('falls back to the window implementation when iframe creation fails', async () => {
-        jest.spyOn(document, 'createElement').mockImplementation(() => {
+        vi.spyOn(document, 'createElement').mockImplementation(() => {
             throw new Error('blocked')
         })
 

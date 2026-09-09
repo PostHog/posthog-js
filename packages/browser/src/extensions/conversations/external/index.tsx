@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { render, h } from 'preact'
 import { isNumber, isNull, stripUrlHash } from '@posthog/core'
 import {
@@ -210,7 +209,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         const token = this._config.token
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             const personTraits = this._getPersonTraits()
 
@@ -228,8 +227,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             }
 
             if (identity) {
-                payload.identity_distinct_id = identity.identity_distinct_id
-                payload.identity_hash = identity.identity_hash
+                Object.assign(payload, identity)
                 payload.distinct_id = identity.identity_distinct_id
             } else {
                 payload.widget_session_id = this._widgetSessionId
@@ -346,7 +344,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         const token = this._config.token
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             const identity = this._identityFields()
             const queryParams: Record<string, string> = {
@@ -354,8 +352,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             }
 
             if (identity) {
-                queryParams.identity_distinct_id = identity.identity_distinct_id
-                queryParams.identity_hash = identity.identity_hash
+                Object.assign(queryParams, identity)
             } else {
                 queryParams.widget_session_id = this._widgetSessionId
             }
@@ -413,12 +410,10 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
         logger.info('Marking messages as read', { ticketId: targetTicketId })
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             const identity = this._identityFields()
-            const data = identity
-                ? { identity_distinct_id: identity.identity_distinct_id, identity_hash: identity.identity_hash }
-                : { widget_session_id: this._widgetSessionId }
+            const data = identity || { widget_session_id: this._widgetSessionId }
 
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor(
@@ -550,7 +545,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             current_url: this._currentUrl(),
         }
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const data = await new Promise<RestoreFromTokenResponse>((resolve, reject) => {
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor('api', RESTORE_EXCHANGE_ENDPOINT),
@@ -1358,8 +1353,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
         }
 
         if (identity) {
-            queryParams.identity_distinct_id = identity.identity_distinct_id
-            queryParams.identity_hash = identity.identity_hash
+            Object.assign(queryParams, identity)
         } else {
             queryParams.widget_session_id = this._widgetSessionId
         }
@@ -1368,7 +1362,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             queryParams.status = options.status
         }
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor(
@@ -1417,7 +1411,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
             request_url: this._currentUrl() || '',
         }
 
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         return new Promise((resolve, reject) => {
             this._posthog._send_request({
                 url: this._posthog.requestRouter.endpointFor('api', RESTORE_REQUEST_ENDPOINT),
@@ -1493,13 +1487,38 @@ export class ConversationsManager implements ConversationsManagerInterface {
         return this._widgetSessionId
     }
 
-    private _identityFields(): { identity_distinct_id: string; identity_hash: string } | null {
+    private _identityFields(): Record<string, string> | null {
         const id = this._posthog.config.identity_distinct_id
         const hash = this._posthog.config.identity_hash
         if (!id || !hash) {
             return null
         }
-        return { identity_distinct_id: id, identity_hash: hash }
+
+        const fields: Record<string, string> = {
+            identity_distinct_id: id,
+            identity_hash: hash,
+        }
+
+        const claims = this._posthog.config.identity_claims
+        if (claims) {
+            Object.entries(claims).forEach(([field, claim]) => {
+                const isReservedField = field === 'distinct_id' || field === 'hash' || field.startsWith('hash_')
+                if (
+                    field &&
+                    !isReservedField &&
+                    claim &&
+                    typeof claim.value === 'string' &&
+                    claim.value.length > 0 &&
+                    typeof claim.hash === 'string' &&
+                    claim.hash.length > 0
+                ) {
+                    fields[`identity_${field}`] = claim.value
+                    fields[`identity_hash_${field}`] = claim.hash
+                }
+            })
+        }
+
+        return fields
     }
 
     setIdentity(): void {

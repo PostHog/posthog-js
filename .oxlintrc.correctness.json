@@ -1,0 +1,27 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": ["typescript", "oxc"],
+    "categories": {
+        "correctness": "error"
+    },
+    "rules": {
+        "no-empty-pattern": "off",
+        "no-import-assign": "off",
+        "no-unassigned-vars": "off",
+        "no-unreachable": "off",
+        "no-unsafe-optional-chaining": "off",
+        "no-unused-expressions": "off",
+        "no-unused-vars": "off",
+        "typescript/no-this-alias": "off"
+    },
+    "ignorePatterns": [
+        "packages/rrweb/**",
+        "packages/**/playground/**",
+        "packages/**/examples/**",
+        "**/node_modules/**",
+        "**/dist/**"
+    ],
+    "env": {
+        "builtin": true
+    }
+}

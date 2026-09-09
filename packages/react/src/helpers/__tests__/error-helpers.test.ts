@@ -3,7 +3,7 @@ import { setupReactErrorHandler } from '../error-helpers'
 
 describe('setupReactErrorHandler', () => {
     it('captures the React component stack', () => {
-        const captureException = jest.fn()
+        const captureException = vi.fn()
         const errorInfo: ErrorInfo = { componentStack: '\n    in CrashingComponent' }
         const handler = setupReactErrorHandler({ captureException } as any)
 
@@ -19,7 +19,7 @@ describe('setupReactErrorHandler', () => {
     })
 
     it('appends the React component stack after existing error causes', () => {
-        const captureException = jest.fn()
+        const captureException = vi.fn()
         const errorInfo: ErrorInfo = { componentStack: '\n    in CrashingComponent' }
         const handler = setupReactErrorHandler({ captureException } as any)
         const error = new Error('outer error') as Error & { cause?: unknown }

@@ -104,7 +104,6 @@ export abstract class EventReceiver<T extends EventTriggerable> {
      * off on the next page. Default: keep in memory, so the arming is page-scoped and an
      * exit-intent-style trigger cannot leak an armed item onto a later page load.
      */
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     protected _shouldPersistArmedActivation(_itemId: string): boolean {
         return false
     }
@@ -120,7 +119,6 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     }
 
     /** Persist the activation timestamp map. Overridden by receivers that track timestamps. */
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     protected _writeActivationTimestamps(_timestamps: Record<string, number>): void {}
 
     /** Forget the whole activation timestamp map. Overridden by receivers that track timestamps. */

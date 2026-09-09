@@ -1,14 +1,15 @@
 import type { PostHogConfig } from '../types'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import * as mockedGlobals from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-jest.mock('@posthog/browser-common/utils/globals', () => {
-    const orig = jest.requireActual('@posthog/browser-common/utils/globals')
-    const mockURLGetter = jest.fn()
-    const mockReferrerGetter = jest.fn()
+vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
+    const orig = await importOriginal<typeof import('@posthog/browser-common/utils/globals')>()
+    const mockURLGetter = vi.fn()
+    const mockReferrerGetter = vi.fn()
     const mockedCookieBox = { cookie: '' }
-    const mockedFetch = jest.fn()
+    const mockedFetch = vi.fn()
     return {
         ...orig,
         mockURLGetter,
@@ -47,37 +48,44 @@ jest.mock('@posthog/browser-common/utils/globals', () => {
             }
         },
         XMLHttpRequest: () => ({
-            open: jest.fn(),
-            send: jest.fn(),
-            setRequestHeader: jest.fn(),
+            open: vi.fn(),
+            send: vi.fn(),
+            setRequestHeader: vi.fn(),
         }),
         fetch: mockedFetch,
     }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockedCookieBox, mockedFetch, document } = require('@posthog/browser-common/utils/globals')
+const { mockURLGetter, mockedCookieBox, mockedFetch, document } = mockedGlobals as any
 
 const delay = (timeoutMs: number) => new Promise((resolve) => setTimeout(resolve, timeoutMs))
 
 describe('cookieless', () => {
     const eventName = 'custom_event'
+    const instances: Array<{ shutdown: (timeoutMs?: number) => Promise<void> }> = []
     const eventProperties = {
         event: 'prop',
     }
     const setup = async (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
-        const beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const beforeSendMock = vi.fn().mockImplementation((e) => e)
         const posthog = await createPosthogInstance(token, {
             ...config,
             before_send: beforeSendMock,
         })!
+        instances.push(posthog)
         return { posthog, beforeSendMock }
     }
 
     beforeEach(() => {
         mockURLGetter.mockImplementation(() => 'http://localhost')
         mockedCookieBox.cookie = ''
+        mockedFetch.mockReset()
         mockedFetch.mockResolvedValue({ status: 200, text: () => Promise.resolve('{"flags": {}}') })
+    })
+
+    afterEach(async () => {
+        await Promise.all(instances.splice(0).map((instance) => instance.shutdown(0)))
+        vi.useRealTimers()
     })
 
     describe('always mode', () => {
@@ -118,7 +126,7 @@ describe('cookieless', () => {
                 token
             )
 
-            console.error = jest.fn()
+            console.error = vi.fn()
             posthog.capture(eventName, eventProperties)
             posthog.capture(eventName, eventProperties)
 
@@ -169,7 +177,7 @@ describe('cookieless', () => {
             expect(posthog.has_opted_out_capturing()).toEqual(true)
 
             // Mock surveys to verify they get loaded
-            const mockSurveysLoadIfEnabled = jest.spyOn(posthog.surveys, 'loadIfEnabled')
+            const mockSurveysLoadIfEnabled = vi.spyOn(posthog.surveys, 'loadIfEnabled')
 
             // opt in
             posthog.opt_in_capturing()
@@ -315,7 +323,7 @@ describe('cookieless', () => {
                 cookieless_mode: 'on_reject',
             })
             const detachedSessionRecording = posthog.sessionRecording!
-            const detachedRemoteConfig = jest.spyOn(detachedSessionRecording, 'onRemoteConfig')
+            const detachedRemoteConfig = vi.spyOn(detachedSessionRecording, 'onRemoteConfig')
             posthog.opt_out_capturing()
             expect(posthog['_extensions']).not.toContain(detachedSessionRecording)
             posthog.register({ test: 'test' })
@@ -355,7 +363,7 @@ describe('cookieless', () => {
             }
             let identityAtDisposal: typeof identityBeforeReplacement | undefined
             const originalDispose = detachedSessionRecording.dispose.bind(detachedSessionRecording)
-            const disposeSessionRecording = jest
+            const disposeSessionRecording = vi
                 .spyOn(detachedSessionRecording, 'dispose')
                 .mockImplementation((options) => {
                     identityAtDisposal = {
@@ -395,7 +403,7 @@ describe('cookieless', () => {
             let identityAtDisposal: typeof identityBeforeOptOut | undefined
             const sessionRecording = posthog.sessionRecording!
             const originalDispose = sessionRecording.dispose.bind(sessionRecording)
-            const disposeSessionRecording = jest.spyOn(sessionRecording, 'dispose').mockImplementation((options) => {
+            const disposeSessionRecording = vi.spyOn(sessionRecording, 'dispose').mockImplementation((options) => {
                 identityAtDisposal = {
                     distinctId: posthog.get_distinct_id(),
                     sessionId: posthog.get_session_id(),
@@ -465,14 +473,14 @@ describe('cookieless', () => {
 
         it('should restart the request queue when opting in', async () => {
             // we're testing the interaction with the request queue, so we need to mock fetch rather than relying on before_send
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const { posthog } = await setup({
                 cookieless_mode: 'on_reject',
                 request_batching: true,
             })
             // Flags are loaded via RemoteConfig -> ensureFlagsLoaded -> reloadFeatureFlags,
             // which debounces for 5ms before calling the flags endpoint
-            jest.advanceTimersByTime(10)
+            vi.advanceTimersByTime(10)
             expect(mockedFetch).toBeCalledTimes(1) // flags
             expect(mockedFetch.mock.calls[0][0]).toContain('/flags/')
 
@@ -482,7 +490,7 @@ describe('cookieless', () => {
             expect(JSON.parse(mockedFetch.mock.calls[2][1].body).batch[0].event).toEqual('$pageview')
 
             posthog.capture('custom event')
-            jest.advanceTimersByTime(5000) // flush the batch queue (3s interval) without triggering 5-min remote config refresh
+            vi.advanceTimersByTime(5000) // flush the batch queue (3s interval) without triggering 5-min remote config refresh
             expect(mockedFetch).toBeCalledTimes(4) // flags + opt in + pageview + custom event
             expect(JSON.parse(mockedFetch.mock.calls[3][1].body).batch[0].event).toEqual('custom event')
         })
@@ -581,12 +589,12 @@ describe('cookieless', () => {
             // Regression: after opt_out_capturing() in on_reject mode the SDK switches to cookieless
             // capturing, but the RequestQueue was never enabled — so batched events were enqueued
             // but never flushed over the network.
-            jest.useFakeTimers()
+            vi.useFakeTimers()
             const { posthog } = await setup({
                 cookieless_mode: 'on_reject',
                 request_batching: true,
             })
-            jest.advanceTimersByTime(10)
+            vi.advanceTimersByTime(10)
             expect(mockedFetch).toBeCalledTimes(1) // flags only — queue is paused, no events yet
 
             posthog.opt_out_capturing()
@@ -598,7 +606,7 @@ describe('cookieless', () => {
             )
 
             posthog.capture('custom event')
-            jest.advanceTimersByTime(5000) // flush the batch queue
+            vi.advanceTimersByTime(5000) // flush the batch queue
             expect(mockedFetch).toBeCalledTimes(3) // flags + pageview + custom event
             expect(JSON.parse(mockedFetch.mock.calls[2][1].body).batch[0].event).toEqual('custom event')
             expect(JSON.parse(mockedFetch.mock.calls[2][1].body).batch[0].properties.distinct_id).toEqual(

@@ -147,23 +147,6 @@ export const getModelParams = (
   return modelParams
 }
 
-/**
- * Helper to format responses (non-streaming) for consumption
- */
-export const formatResponse = (response: any, provider: string, client?: FullAiCaptureGate): FormattedMessage[] => {
-  if (!response) {
-    return []
-  }
-  if (provider === 'anthropic') {
-    return formatResponseAnthropic(response)
-  } else if (provider === 'openai') {
-    return formatResponseOpenAI(response)
-  } else if (provider === 'gemini') {
-    return formatResponseGemini(response, client)
-  }
-  return []
-}
-
 export const formatResponseAnthropic = (response: any): FormattedMessage[] => {
   const output: FormattedMessage[] = []
   const content: FormattedContent = []
@@ -304,6 +287,29 @@ export const buildInlineDataBlock = (
   return { type: 'document', inline_data: { mime_type: mimeType, data } }
 }
 
+export const formatInlineDataBlock = (
+  inlineData: { mimeType?: string; mime_type?: string; data?: unknown },
+  client?: FullAiCaptureGate
+): FormattedAudioContent | FormattedImageContent | FormattedDocumentContent => {
+  const mimeType = inlineData.mimeType || inlineData.mime_type || 'application/octet-stream'
+  let data = inlineData.data
+
+  if (data instanceof Uint8Array) {
+    if (typeof Buffer !== 'undefined') {
+      data = Buffer.from(data).toString('base64')
+    } else {
+      let binary = ''
+      for (let i = 0; i < data.length; i++) {
+        binary += String.fromCharCode(data[i])
+      }
+      data = btoa(binary)
+    }
+  }
+
+  data = isFullAiCaptureEnabled(client) ? data : redactBase64DataUrl(data, mimeType)
+  return buildInlineDataBlock(mimeType, String(data ?? ''))
+}
+
 export const formatResponseGemini = (response: any, client?: FullAiCaptureGate): FormattedMessage[] => {
   const output: FormattedMessage[] = []
 
@@ -324,27 +330,7 @@ export const formatResponseGemini = (response: any, client?: FullAiCaptureGate):
               },
             })
           } else if (part.inlineData) {
-            // Handle inline data (images, audio, documents)
-            const mimeType = part.inlineData.mimeType || part.inlineData.mime_type || 'application/octet-stream'
-            let data = part.inlineData.data
-
-            // Handle binary data (Uint8Array/Buffer -> base64)
-            if (data instanceof Uint8Array) {
-              if (typeof Buffer !== 'undefined') {
-                data = Buffer.from(data).toString('base64')
-              } else {
-                let binary = ''
-                for (let i = 0; i < data.length; i++) {
-                  binary += String.fromCharCode(data[i])
-                }
-                data = btoa(binary)
-              }
-            }
-
-            // Sanitize base64 data for images and other large inline data
-            data = isFullAiCaptureEnabled(client) ? data : redactBase64DataUrl(data, mimeType)
-
-            content.push(buildInlineDataBlock(mimeType, data))
+            content.push(formatInlineDataBlock(part.inlineData, client))
           }
         }
 

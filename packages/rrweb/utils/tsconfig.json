@@ -3,6 +3,7 @@
   "include": ["src"],
   "exclude": ["vite.config.ts"],
   "compilerOptions": {
+    "isolatedDeclarations": true,
     "rootDir": "src",
     "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
   },

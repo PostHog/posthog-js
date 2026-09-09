@@ -2,28 +2,28 @@ import { PostHogMetrics } from '../posthog-metrics'
 import { PostHog } from '../posthog-core'
 
 const mockLogger = {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
 }
 
-jest.mock('@posthog/browser-common/utils/logger', () => ({
-    createLogger: jest.fn(() => mockLogger),
+vi.mock('@posthog/browser-common/utils/logger', () => ({
+    createLogger: vi.fn(() => mockLogger),
 }))
 
 describe('posthog-metrics', () => {
     let mockPostHog: PostHog
     let metrics: PostHogMetrics
 
-    const sentRequests = (): any[] => (mockPostHog._send_request as jest.Mock).mock.calls.map((c) => c[0])
+    const sentRequests = (): any[] => (mockPostHog._send_request as vi.Mock).mock.calls.map((c) => c[0])
 
     const respondWithStatus = (statusCode: number): void => {
-        ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) => opts.callback?.({ statusCode }))
+        ;(mockPostHog._send_request as vi.Mock).mockImplementation((opts: any) => opts.callback?.({ statusCode }))
     }
 
     beforeEach(() => {
-        jest.clearAllMocks()
-        jest.useFakeTimers()
+        vi.clearAllMocks()
+        vi.useFakeTimers()
 
         mockPostHog = {
             __loaded: true,
@@ -32,17 +32,17 @@ describe('posthog-metrics', () => {
                 metrics: { serviceName: 'checkout-web' },
             },
             requestRouter: {
-                endpointFor: jest.fn((_kind: string, path: string) => `https://us.i.posthog.com${path}`),
+                endpointFor: vi.fn((_kind: string, path: string) => `https://us.i.posthog.com${path}`),
             },
-            _send_request: jest.fn((opts: any) => opts.callback?.({ statusCode: 200 })),
-            is_capturing: jest.fn(() => true),
+            _send_request: vi.fn((opts: any) => opts.callback?.({ statusCode: 200 })),
+            is_capturing: vi.fn(() => true),
         } as unknown as PostHog
 
         metrics = new PostHogMetrics(mockPostHog)
     })
 
     afterEach(() => {
-        jest.useRealTimers()
+        vi.useRealTimers()
     })
 
     it('sends aggregated metrics to /i/v1/metrics with the project token', async () => {
@@ -68,7 +68,7 @@ describe('posthog-metrics', () => {
         metrics.gauge('active_connections', 42)
         expect(mockPostHog._send_request).not.toHaveBeenCalled()
 
-        jest.advanceTimersByTime(10000)
+        vi.advanceTimersByTime(10000)
         expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
     })
 
@@ -104,7 +104,7 @@ describe('posthog-metrics', () => {
     })
 
     it('captures nothing when the instance is not capturing', async () => {
-        ;(mockPostHog.is_capturing as jest.Mock).mockReturnValue(false)
+        ;(mockPostHog.is_capturing as vi.Mock).mockReturnValue(false)
         metrics.count('a', 1)
         await metrics.flush()
         expect(mockPostHog._send_request).not.toHaveBeenCalled()
@@ -125,7 +125,7 @@ describe('posthog-metrics', () => {
     it('drains synchronously over the given transport even while another flush is in flight', () => {
         // First request hangs: its callback is never invoked, so the core's
         // flush serializer keeps a pending promise (the pagehide race).
-        ;(mockPostHog._send_request as jest.Mock).mockImplementation(() => {})
+        ;(mockPostHog._send_request as vi.Mock).mockImplementation(() => {})
         metrics.count('a', 1)
         void metrics.flush()
 

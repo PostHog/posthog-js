@@ -565,7 +565,7 @@ describe('config', () => {
 
         it('does not treat initial methodless metadata as a GET request', () => {
             const posthogConfig = defaultConfig()
-            const maskCapturedNetworkRequestFn = jest.fn((data: CapturedNetworkRequest) =>
+            const maskCapturedNetworkRequestFn = vi.fn((data: CapturedNetworkRequest) =>
                 data.method === 'GET' ? data : undefined
             )
             posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
@@ -647,7 +647,7 @@ describe('config', () => {
 
         it('runs enforced cleaning before the user mask fn for initial entries', () => {
             const posthogConfig = defaultConfig()
-            const maskCapturedNetworkRequestFn = jest.fn((data: CapturedNetworkRequest) => data)
+            const maskCapturedNetworkRequestFn = vi.fn((data: CapturedNetworkRequest) => data)
             posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
             const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
 
@@ -689,7 +689,7 @@ describe('config', () => {
 
         it('does not preserve an initial PostHog ingestion request', () => {
             const posthogConfig = { ...defaultConfig(), api_host: 'https://example.com/ingest' }
-            const maskCapturedNetworkRequestFn = jest.fn((data: CapturedNetworkRequest) => data)
+            const maskCapturedNetworkRequestFn = vi.fn((data: CapturedNetworkRequest) => data)
             posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
             const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
 

@@ -4,13 +4,13 @@ import { PostHog } from '@/entrypoints/index.node'
 
 import { V1WiringHarness, v1Response, waitForFlushTimer } from '../utils/v1-wiring'
 
-jest.mock('../../version', () => ({ version: '1.2.3' }))
+vi.mock('../../version', () => ({ version: '1.2.3' }))
 
 // Regression coverage for the mixed-batch double-delivery risk (H1): with v1 and legacy $ai_*
 // events sharing a flush cycle, a failure on the legacy leg must not roll back or re-send the
 // events already accepted on the V1 leg. Route partitioning gives each transport its own queue.
 describe('capture v1 route isolation (Node SDK)', () => {
-  jest.useFakeTimers()
+  vi.useFakeTimers()
 
   const harness = new V1WiringHarness()
 
@@ -21,15 +21,15 @@ describe('capture v1 route isolation (Node SDK)', () => {
     (posthog.getPersistedProperty(PostHogPersistedProperty.Queue) || []).map((item: any) => item.message.event)
 
   beforeEach(() => {
-    jest.spyOn(console, 'warn').mockImplementation(() => {})
-    jest.spyOn(console, 'error').mockImplementation(() => {})
-    jest.spyOn(console, 'info').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(console, 'info').mockImplementation(() => {})
     harness.useDefaultRouting()
   })
 
   afterEach(async () => {
     await harness.cleanup()
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   it('keeps V1-accepted events from being re-sent when the legacy AI leg fails', async () => {

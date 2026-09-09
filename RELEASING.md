@@ -2,15 +2,23 @@
 
 Releases are managed with [Changesets](https://github.com/changesets/changesets).
 
+### Creating a changeset
+
+Never add changesets for modules under `packages/rrweb/`; they are built with `posthog-js`. For rrweb changes that require a release, add only a `posthog-js` changeset.
+
 Before submitting a PR with a publishable change, create a changeset by running:
 
 ```bash
 pnpm changeset
 ```
 
-The CLI will ask which packages changed, what version bump they need, and how the change should appear in the changelog.
+The CLI will ask which packages changed, what version bump they need (major/minor/patch), and how the change should appear in the changelog. It creates a Markdown file in `.changeset/`.
 
-When a PR containing a changeset is merged to `main`, the [`Release` workflow](https://github.com/PostHog/posthog-js/actions/workflows/release.yml) automatically:
+Keep each changeset description to one short, user-facing line, similar to a PR title. State the fix or feature, not implementation details, test results, or the investigation history. Put longer explanations in the PR description or documentation.
+
+### Publishing
+
+Changes to `.changeset/` on `main` trigger the [`Release` workflow](https://github.com/PostHog/posthog-js/actions/workflows/release.yml). It can also be started through workflow dispatch. The workflow:
 
 1. Waits for approval and creates the version-bump commit on `main`.
 2. If the version of the `posthog-js` browser package changed, builds and uploads its browser and toolbar assets to the US and EU S3 buckets.

@@ -1,5 +1,31 @@
 # posthog-ai
 
+## 8.10.2
+
+### Patch Changes
+
+- [#4820](https://github.com/PostHog/posthog-js/pull/4820) [`56e0a44`](https://github.com/PostHog/posthog-js/commit/56e0a44f0721d63172bd53394446c6707a6b8765) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates:
+  - Updated dependency [`@anthropic-ai/sdk@>=0.112.3 <0.123.0` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.112.3) (from `>=0.112.3 <0.121.0`, in `peerDependencies`) (2026-09-07)
+- Updated dependencies [[`74ca945`](https://github.com/PostHog/posthog-js/commit/74ca9458a166b0a5a9f707e74b1a2e6e2852c829)]:
+  - posthog-node@5.51.7
+  - @posthog/core@1.50.6
+
+## 8.10.1
+
+### Patch Changes
+
+- [#4736](https://github.com/PostHog/posthog-js/pull/4736) [`c16a7ce`](https://github.com/PostHog/posthog-js/commit/c16a7ce9997a37a48119645d43fddf51384cf9c5) Thanks [@bernatixer](https://github.com/bernatixer)! - Only terminal Responses API statuses become `$ai_stop_reason` (a queued or in-progress background run no longer records a lifecycle state as its stop reason), and the native OpenAI wrapper now names a truncated run by `incomplete_details.reason` (e.g. `max_output_tokens`) instead of the bare `incomplete`, matching the LangChain callback
+  (2026-09-03)
+- Updated dependencies [[`dbbb58e`](https://github.com/PostHog/posthog-js/commit/dbbb58e286db3762673f71995a8aeea89aa44123)]:
+  - @posthog/core@1.50.3
+
+## 8.10.0
+
+### Minor Changes
+
+- [#4687](https://github.com/PostHog/posthog-js/pull/4687) [`657b173`](https://github.com/PostHog/posthog-js/commit/657b17367d9e2e8884f44976fafc5305d8866b33) Thanks [@AhmadHammad21](https://github.com/AhmadHammad21)! - Add a Google ADK (`@google/adk`) observability adapter. `@posthog/ai/adk` exposes `PostHogADKPlugin`, an ADK `BasePlugin` that captures a full `$ai_generation` event (input, output, model, token usage, latency, finish reason, trace id, session id, distinct id and groups) for every model call an ADK agent makes, funnelling through the shared `captureAiGeneration` primitive so PostHog derives cost from the model and tokens.
+  (2026-09-02)
+
 ## 8.9.3
 
 ### Patch Changes

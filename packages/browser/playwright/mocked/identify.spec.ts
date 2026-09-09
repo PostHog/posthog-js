@@ -34,6 +34,28 @@ test.describe('Identify', () => {
         expect(isOptedOut).toEqual(true)
     })
 
+    test('omits the previous anonymous id when reuseAnonymousId is enabled', async ({ page }) => {
+        await page.resetCapturedEvents()
+
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            ph?.set_config({ reuseAnonymousId: true })
+            ph?.identify('reuse-id')
+        })
+
+        const capturedEvents = await page.capturedEvents()
+        const identifyEvent = capturedEvents.find((event) => event.event === '$identify')
+        expect(identifyEvent).toBeDefined()
+        expect(identifyEvent?.properties.distinct_id).toEqual('reuse-id')
+        expect(identifyEvent?.properties).not.toHaveProperty('$anon_distinct_id')
+
+        const distinctId = await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            return ph?.get_distinct_id()
+        })
+        expect(distinctId).toEqual('reuse-id')
+    })
+
     test('merges people as expected when reset is called', async ({ page }) => {
         await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog

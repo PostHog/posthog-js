@@ -14,8 +14,8 @@ function buildRecursivePromise(time: number, cb: () => void) {
 }
 
 describe('promise-queue', () => {
-  beforeAll(() => jest.useRealTimers())
-  afterAll(() => jest.useFakeTimers())
+  beforeAll(() => vi.useRealTimers())
+  afterAll(() => vi.useFakeTimers())
 
   it('should exit directly if the queue is empty', async () => {
     const queue = new PromiseQueue()
@@ -33,7 +33,7 @@ describe('promise-queue', () => {
 
   it('should wait even when promises create other promises', async () => {
     const queue = new PromiseQueue()
-    const addSpy = jest.spyOn(queue, 'add')
+    const addSpy = vi.spyOn(queue, 'add')
     queue.add(
       buildRecursivePromise(100, () => {
         queue.add(buildPromise(100))

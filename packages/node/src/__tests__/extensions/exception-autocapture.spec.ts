@@ -68,7 +68,7 @@ function captureCount(result: ChildResult): number {
 
 describe('exception autocapture', () => {
   afterEach(() => {
-    jest.restoreAllMocks()
+    vi.restoreAllMocks()
   })
   function checkException(
     exception: CoreErrorTracking.Exception,
@@ -104,7 +104,7 @@ describe('exception autocapture', () => {
   }
 
   it('should install an uncaught-exception listener outside strict mode', () => {
-    const onSpy = jest.spyOn(global.process, 'on').mockReturnValue(global.process)
+    const onSpy = vi.spyOn(global.process, 'on').mockReturnValue(global.process)
 
     addUncaughtExceptionListener(
       () => {},
@@ -116,9 +116,9 @@ describe('exception autocapture', () => {
   })
 
   it('should monitor uncaught exceptions without handling them in strict mode', () => {
-    const capture = jest.fn()
-    const onFatal = jest.fn()
-    const onSpy = jest.spyOn(global.process, 'on').mockReturnValue(global.process)
+    const capture = vi.fn()
+    const onFatal = vi.fn()
+    const onSpy = vi.spyOn(global.process, 'on').mockReturnValue(global.process)
     addUncaughtExceptionListener(capture, onFatal, 'strict')
     const handler = onSpy.mock.calls.find(([event]) => event === 'uncaughtExceptionMonitor')?.[1] as
       | NodeJS.UncaughtExceptionListener
@@ -140,7 +140,7 @@ describe('exception autocapture', () => {
   it.each(['throw', 'strict', 'warn-with-error-code'] as const)(
     'should not install an unhandled-rejection listener in %s mode',
     (mode) => {
-      const onSpy = jest.spyOn(global.process, 'on').mockReturnValue(global.process)
+      const onSpy = vi.spyOn(global.process, 'on').mockReturnValue(global.process)
 
       addUnhandledRejectionListener(() => {}, mode)
 
@@ -149,7 +149,7 @@ describe('exception autocapture', () => {
   )
 
   it.each(['warn', 'none'] as const)('should install an unhandled-rejection listener in %s mode', (mode) => {
-    const onSpy = jest.spyOn(global.process, 'on').mockReturnValue(global.process)
+    const onSpy = vi.spyOn(global.process, 'on').mockReturnValue(global.process)
 
     addUnhandledRejectionListener(() => {}, mode)
 
@@ -176,8 +176,8 @@ describe('exception autocapture', () => {
   })
 
   it('should tag promoted unhandled rejections from the Node uncaught-exception origin', () => {
-    const capture = jest.fn()
-    const onSpy = jest.spyOn(global.process, 'on').mockReturnValue(global.process)
+    const capture = vi.fn()
+    const onSpy = vi.spyOn(global.process, 'on').mockReturnValue(global.process)
     addUncaughtExceptionListener(capture, () => {})
     const handler = onSpy.mock.calls.find(([event]) => event === 'uncaughtException')?.[1] as
       | NodeJS.UncaughtExceptionListener
@@ -371,7 +371,7 @@ describe('exception autocapture', () => {
   })
 
   it('should rate limit when more than 10 of the same exception are caught', async () => {
-    jest.spyOn(ErrorTracking, 'buildEventMessage').mockResolvedValue({
+    vi.spyOn(ErrorTracking, 'buildEventMessage').mockResolvedValue({
       event: '$exception',
       distinctId: 'distinct-id',
       properties: { $exception_list: [{ type: 'Error' }] },
@@ -384,10 +384,11 @@ describe('exception autocapture', () => {
     })
 
     try {
-      const mockedCapture = jest.spyOn(ph, '_capturePreparedEvent').mockResolvedValue(undefined)
+      const mockedCapture = vi.spyOn(ph, '_capturePreparedEvent').mockResolvedValue(undefined)
 
       const captureExceptions = Array.from({ length: 20 }).map(() => ph['errorTracking']['onException']({}, {}))
       await Promise.all(captureExceptions)
+      await vi.advanceTimersByTimeAsync(0)
 
       // captures until rate limited
       expect(mockedCapture).toHaveBeenCalledTimes(9)
@@ -397,7 +398,7 @@ describe('exception autocapture', () => {
   })
 
   it('should honour the configured rate limiter bucket size', async () => {
-    jest.spyOn(ErrorTracking, 'buildEventMessage').mockResolvedValue({
+    vi.spyOn(ErrorTracking, 'buildEventMessage').mockResolvedValue({
       event: '$exception',
       distinctId: 'distinct-id',
       properties: { $exception_list: [{ type: 'Error' }] },
@@ -411,10 +412,11 @@ describe('exception autocapture', () => {
     })
 
     try {
-      const mockedCapture = jest.spyOn(ph, '_capturePreparedEvent').mockResolvedValue(undefined)
+      const mockedCapture = vi.spyOn(ph, '_capturePreparedEvent').mockResolvedValue(undefined)
 
       const captureExceptions = Array.from({ length: 20 }).map(() => ph['errorTracking']['onException']({}, {}))
       await Promise.all(captureExceptions)
+      await vi.advanceTimersByTimeAsync(0)
 
       // captures until rate limited (bucket of 3 leaves 2 through before the limiter kicks in)
       expect(mockedCapture).toHaveBeenCalledTimes(2)

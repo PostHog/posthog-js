@@ -341,7 +341,7 @@ export function shouldDeferStylesheetInlining(
  * returning 0 would wave a huge but partly-unreadable sheet past the budget.
  * See {@link countRuleList} for the nesting and `@import` descent rules.
  */
-export function safeCssRuleCount(sheet: CSSStyleSheet | null | undefined) {
+export function safeCssRuleCount(sheet: CSSStyleSheet | null | undefined): number {
   try {
     const rules = sheet && (sheet.rules || sheet.cssRules);
     if (!rules) {

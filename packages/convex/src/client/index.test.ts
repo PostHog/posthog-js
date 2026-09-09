@@ -1,4 +1,4 @@
-import { describe, expect, test, jest } from '@jest/globals'
+import { describe, expect, test, vi } from 'vitest'
 import { PostHog, normalizeError } from './index.js'
 import type { BeforeSendFn, IdentifyFn } from './index.js'
 import { LocalFeatureFlagEvaluator } from './feature-flags/index.js'
@@ -6,7 +6,7 @@ import { LocalFeatureFlagEvaluator } from './feature-flags/index.js'
 function mockSchedulerCtx() {
   return {
     scheduler: {
-      runAfter: jest.fn(),
+      runAfter: vi.fn(),
     },
   }
 }
@@ -73,7 +73,7 @@ describe('PostHog client', () => {
   test('reloadFeatureFlags forwards to the component refresh action with no args', async () => {
     const component = { lib: { refreshFlagDefinitions: 'refresh_ref' } }
     const posthog = new PostHog(component as never)
-    const ctx = { runAction: jest.fn(async () => ({ status: 'updated' })) }
+    const ctx = { runAction: vi.fn(async () => ({ status: 'updated' })) }
 
     await posthog.reloadFeatureFlags(ctx as never)
 
@@ -107,7 +107,7 @@ describe('PostHog client', () => {
     const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
     const posthog = new PostHog(component as never)
     const ctx = {
-      runQuery: jest.fn(async () => ({ localEvalConfigured: true, data: definitions, fetchedAt: Date.now() })),
+      runQuery: vi.fn(async () => ({ localEvalConfigured: true, data: definitions, fetchedAt: Date.now() })),
     }
 
     const payload = await posthog.getFeatureFlagPayload(ctx as never, { key: 'flag', matchValue: 'red' })
@@ -123,7 +123,7 @@ describe('local-eval configuration', () => {
     const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
     const posthog = new PostHog(component as never)
     const ctx = {
-      runQuery: jest.fn(async () => ({
+      runQuery: vi.fn(async () => ({
         localEvalConfigured: false,
         data: null,
         fetchedAt: null,
@@ -141,7 +141,7 @@ describe('local-eval configuration', () => {
     const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
     const posthog = new PostHog(component as never)
     const ctx = {
-      runQuery: jest.fn(async () => ({
+      runQuery: vi.fn(async () => ({
         localEvalConfigured: true,
         data: null,
         fetchedAt: null,
@@ -463,7 +463,7 @@ describe('beforeSend', () => {
   test('short-circuits chain when a function returns null', async () => {
     const component = { lib: { capture: 'capture_ref' } }
     const fn1: BeforeSendFn = () => null
-    const fn2: BeforeSendFn = jest.fn((event) => event)
+    const fn2: BeforeSendFn = vi.fn((event) => event)
     const posthog = new PostHog(component as never, {
       beforeSend: [fn1, fn2],
     })
@@ -481,7 +481,7 @@ describe('beforeSend', () => {
   test('fails closed when a beforeSend function throws', async () => {
     const component = { lib: { capture: 'capture_ref' } }
     const error = new Error('beforeSend failed')
-    const sentinel: BeforeSendFn = jest.fn((event: Parameters<BeforeSendFn>[0]) => event)
+    const sentinel: BeforeSendFn = vi.fn((event: Parameters<BeforeSendFn>[0]) => event)
     const posthog = new PostHog(component as never, {
       beforeSend: [
         (event) => ({ ...event, properties: { ...event.properties, transformed: true } }),
@@ -492,7 +492,7 @@ describe('beforeSend', () => {
       ],
     })
     const ctx = mockSchedulerCtx()
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     await expect(
       posthog.capture(ctx as never, {
@@ -656,7 +656,7 @@ describe('identify callback', () => {
 
   test('passes ctx to identify callback', async () => {
     const component = { lib: { capture: 'capture_ref' } }
-    const identify = jest.fn(async () => ({ distinctId: 'resolved' }))
+    const identify = vi.fn(async () => ({ distinctId: 'resolved' }))
     const posthog = new PostHog(component as never, {
       identify,
     })
@@ -729,7 +729,7 @@ describe('identify callback', () => {
   test('works with feature flag methods', async () => {
     // Spy on the evaluator's `getFeatureFlag` so we can assert that the distinctId resolved by
     // the identify callback ('auth-user') is the one actually forwarded to evaluation.
-    const evalSpy = jest.spyOn(LocalFeatureFlagEvaluator.prototype, 'getFeatureFlag').mockResolvedValue(true)
+    const evalSpy = vi.spyOn(LocalFeatureFlagEvaluator.prototype, 'getFeatureFlag').mockResolvedValue(true)
     try {
       const component = { lib: { getFlagDefinitions: 'getFlagDefinitions_ref' } }
       const posthog = new PostHog(component as never, {
@@ -741,7 +741,7 @@ describe('identify callback', () => {
         data: JSON.stringify({ flags: [], groupTypeMapping: {}, cohorts: {} }),
         fetchedAt: Date.now(),
       }
-      const runQuery = jest.fn(async () => definitions)
+      const runQuery = vi.fn(async () => definitions)
       const ctx = { runQuery }
 
       await posthog.getFeatureFlag(ctx as never, { key: 'my-flag' })

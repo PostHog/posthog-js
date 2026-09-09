@@ -66,7 +66,7 @@ describe('SegmentAnalytics', () => {
             skipLibCheck: true,
             strict: true,
             target: ts.ScriptTarget.ES2022,
-            types: ['jest', 'node'],
+            types: ['vitest/globals', 'node'],
         })
         const errors = ts
             .getPreEmitDiagnostics(program)

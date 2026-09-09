@@ -6,7 +6,7 @@ describe('PostHog Core', () => {
   let mocks: PostHogCoreTestClientMocks
 
   beforeEach(() => {
-    jest.setSystemTime(new Date('2022-01-01'))
+    vi.setSystemTime(new Date('2022-01-01'))
   })
 
   function createSut(maxQueueSize: number = 1000, flushAt: number = 20): void {
@@ -44,7 +44,7 @@ describe('PostHog Core', () => {
 
     it('should warn when queue is full and the oldest message is dropped', () => {
       createSut(2, 2)
-      const warnSpy = jest.spyOn((posthog as any)._logger, 'warn').mockImplementation(() => {})
+      const warnSpy = vi.spyOn((posthog as any)._logger, 'warn').mockImplementation(() => {})
 
       posthog.capture('type1', { foo: 'bar' })
       posthog.capture('type2', { foo: 'bar' })

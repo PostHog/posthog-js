@@ -5,13 +5,16 @@
         "access": "public"
     },
     "scripts": {
-        "dev": "vite build --watch",
-        "build": "pnpm turbo run prepublish",
-        "test": "vitest run",
+        "dev": "pnpm --filter=@posthog/rrweb-record run --parallel \"/^dev:/\"",
+        "dev:runtime": "vite build --watch",
+        "dev:declarations": "pnpm build:declarations --watch",
+        "build": "tsc -noEmit && vite build && pnpm build:declarations",
+        "build:declarations": "rolldown -c rolldown.dts.config.mts",
+        "test": "pnpm test:rrweb",
+        "test:rrweb": "vitest run",
         "test:watch": "vitest watch",
         "check-types": "tsc -noEmit",
-        "prepublish": "tsc -noEmit && vite build",
-        "lint": "pnpm eslint src/**/*.ts"
+        "lint": "oxlint src"
     },
     "repository": {
         "type": "git",
@@ -41,6 +44,8 @@
     ],
     "devDependencies": {
         "puppeteer": "^23.11.1",
+        "rolldown": "catalog:",
+        "rolldown-plugin-dts": "catalog:",
         "vite": "catalog:",
         "vite-plugin-dts": "catalog:",
         "vitest": "^1.4.0",

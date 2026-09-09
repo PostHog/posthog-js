@@ -4,6 +4,15 @@ import { assignableWindow, window } from '../../utils/globals'
 describe('exception-autocapture entrypoint', () => {
     const originalOnError = window?.onerror
     const originalOnUnhandledRejection = window?.onunhandledrejection
+    const errorWithThrowingMessage = () => {
+        const error = new Error('legacy error')
+        Object.defineProperty(error, 'message', {
+            get() {
+                throw new TypeError('property building failed')
+            },
+        })
+        return error
+    }
 
     afterEach(() => {
         if (window) {
@@ -19,7 +28,7 @@ describe('exception-autocapture entrypoint', () => {
     })
 
     it('captures errors for legacy clients', () => {
-        const capture = jest.fn()
+        const capture = vi.fn()
 
         assignableWindow.extendPostHogWithExceptionAutocapture({ capture })
         window?.onerror?.('message', 'source', 1, 2, new Error('legacy error'))
@@ -34,8 +43,8 @@ describe('exception-autocapture entrypoint', () => {
     })
 
     it('still calls the original error handler when legacy capture throws', () => {
-        const originalErrorHandler = jest.fn(() => true)
-        const capture = jest.fn(() => {
+        const originalErrorHandler = vi.fn(() => true)
+        const capture = vi.fn(() => {
             throw new Error('capture failed')
         })
         if (!window) {
@@ -49,8 +58,23 @@ describe('exception-autocapture entrypoint', () => {
         expect(originalErrorHandler).toHaveBeenCalledTimes(1)
     })
 
+    it('still calls the original error handler when legacy property building throws', () => {
+        const originalErrorHandler = vi.fn(() => true)
+        const error = errorWithThrowingMessage()
+        if (!window) {
+            throw new Error('window is required for this test')
+        }
+        window.onerror = originalErrorHandler
+
+        assignableWindow.extendPostHogWithExceptionAutocapture({ capture: vi.fn() })
+
+        expect(() => window.onerror?.('message', 'source', 1, 2, error)).not.toThrow()
+        expect(originalErrorHandler).toHaveBeenCalledTimes(1)
+        expect(originalErrorHandler.mock.calls[0][4]).toBe(error)
+    })
+
     it('does not capture errors matching legacy exclusion rules', () => {
-        const capture = jest.fn()
+        const capture = vi.fn()
 
         assignableWindow.extendPostHogWithExceptionAutocapture(
             { capture },
@@ -74,7 +98,7 @@ describe('exception-autocapture entrypoint', () => {
     })
 
     it('does not apply legacy error exclusion rules to unhandled rejections', () => {
-        const capture = jest.fn()
+        const capture = vi.fn()
 
         assignableWindow.extendPostHogWithExceptionAutocapture(
             { capture },
@@ -98,7 +122,7 @@ describe('exception-autocapture entrypoint', () => {
     })
 
     it('captures errors when a legacy exclusion rule is invalid', () => {
-        const capture = jest.fn()
+        const capture = vi.fn()
 
         expect(() =>
             assignableWindow.extendPostHogWithExceptionAutocapture(
@@ -116,7 +140,7 @@ describe('exception-autocapture entrypoint', () => {
     })
 
     it('captures unhandled rejections for legacy clients', () => {
-        const capture = jest.fn()
+        const capture = vi.fn()
 
         assignableWindow.extendPostHogWithExceptionAutocapture({ capture })
         const handled = window?.onunhandledrejection?.({

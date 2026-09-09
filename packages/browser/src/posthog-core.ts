@@ -16,8 +16,10 @@ import {
     EVENT_IDENTIFY,
     EVENT_PAGELEAVE,
     EVENT_PAGEVIEW,
+    FACEBOOK_CLICK_ID,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
+    PERSISTENCE_FACEBOOK_CLICK_ID,
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
     SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
@@ -182,6 +184,19 @@ const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
+const FBCLID_PATTERN = /^[A-Za-z0-9_-]{1,400}$/
+const FBC_PATTERN = /^fb\.[0-9]+\.[0-9]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/
+
+type FacebookClickIdUpdate = {
+    value: string
+    pending: boolean
+}
+
+type PersistedFacebookClickId = {
+    value: string
+    delivered: boolean
+}
+
 // Transport-level keys the browser SDK carries inside event properties (unlike other SDKs,
 // where they live outside `properties`). They are out of scope of the minimal
 // $feature_flag_called allowlist and must survive minimization for ingestion to work.
@@ -287,6 +302,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_conversations: false,
     disable_product_tours: false,
     disableDeviceModel: false,
+    reuseAnonymousId: false,
     disable_external_dependency_loading: false,
     strict_script_versioning: 'fallback',
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
@@ -456,6 +472,8 @@ export class PostHog implements PostHogInterface {
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
+    _isPageUnloading = false
+    private _isShutdown = false
     sessionRecording?: SessionRecording
     externalIntegrations?: ExternalIntegrations
     webPerformance = new DeprecatedWebPerformanceObserver()
@@ -514,12 +532,16 @@ export class PostHog implements PostHogInterface {
     }
 
     // memory, sessionStorage, and disable_persistence all drop durable identity: the distinct ID lives in
-    // memory for a single page, so each load mints a fresh one that identify() then merges onto the person,
-    // eventually pushing it past the distinct-ID display limit and hiding its events from person pages and the
-    // session tab. Warn once, when person processing is first requested, unless a stable ID is supplied.
+    // memory for a single page, so each load mints a fresh one that identify() then merges onto the person
+    // unless anonymous IDs are reused, eventually pushing it past the distinct-ID display limit and hiding
+    // its events from person pages and the session tab. Warn once, when person processing is first requested,
+    // unless a stable ID is supplied.
     // Cookieless mode registers a stable sentinel instead of a new uuid, so it is excluded.
     private _warnIfVolatileIdentityWithoutStableId(): void {
         if (this._hasWarnedAboutVolatileIdentity) {
+            return
+        }
+        if (this.config.reuseAnonymousId) {
             return
         }
         // The Segment integration owns identity and supplies its stable user/anonymous ID before events load.
@@ -549,16 +571,16 @@ export class PostHog implements PostHogInterface {
             lifetime =
                 this.config.persistence === 'memory' ? 'on every page load' : 'for every new browser tab or window'
             fix =
-                "Either set persistence to 'localStorage+cookie', or keep this persistence and pass a stable ID through bootstrap.distinctID."
+                "Either set persistence to 'localStorage+cookie', keep this persistence and pass a stable ID through bootstrap.distinctID, or enable reuseAnonymousId."
         } else {
             cause = 'persistence is disabled (disable_persistence is true)'
             lifetime = 'on every page load'
             fix =
-                'Either set disable_persistence to false, or keep persistence disabled and pass a stable ID through bootstrap.distinctID.'
+                'Either set disable_persistence to false, keep persistence disabled and pass a stable ID through bootstrap.distinctID, or enable reuseAnonymousId.'
         }
         this._hasWarnedAboutVolatileIdentity = true
         // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn(
             '[PostHog.js]',
             `${cause} but no bootstrap.distinctID was provided. ` +
@@ -779,13 +801,13 @@ export class PostHog implements PostHogInterface {
             if (normalizedToken !== this.config?.token) {
                 // A second init() with a different project token often means that someone is trying to send
                 // events to a second project without giving that instance a name.
-                // eslint-disable-next-line no-console
+                // oxlint-disable-next-line no-console
                 console.warn(
                     '[PostHog.js]',
                     `You have already initialized PostHog with a different project token! Re-initializing is a no-op, so events will keep going to the project this instance was initialized with. To capture into a second project, load PostHog once, then initialize a named instance after the SDK has loaded, e.g. posthog.init('${normalizedToken}', { ... }, 'project2')`
                 )
             } else {
-                // eslint-disable-next-line no-console
+                // oxlint-disable-next-line no-console
                 console.warn('[PostHog.js]', 'You have already initialized PostHog! Re-initializing is a no-op')
             }
             return this
@@ -929,7 +951,7 @@ export class PostHog implements PostHogInterface {
         this._hasStableInitialDistinctId = !!initialDistinctId && !isEmptyString(initialDistinctId)
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
-        // eslint-disable-next-line posthog-js/no-direct-undefined-check
+        // oxlint-disable-next-line posthog-js/no-direct-undefined-check
         if (config.bootstrap?.distinctID !== undefined) {
             const bootstrapDistinctId = config.bootstrap.distinctID
             const existingDistinctId = this.get_distinct_id()
@@ -1010,6 +1032,16 @@ export class PostHog implements PostHogInterface {
         addEventListener(window, 'onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this), {
             passive: false,
         })
+        // `pagehide` also fires when the browser freezes the page into the back-forward cache, and
+        // the same instance resumes on `pageshow`. Without this the page would stay marked as
+        // unloading for the rest of its life, and every later unbatched capture would take the
+        // beacon path on a fully active page.
+        addEventListener(window, 'pageshow', () => {
+            this._isPageUnloading = false
+            if (!this._isShutdown) {
+                this._retryQueue?.resume()
+            }
+        })
 
         // We want to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
@@ -1089,7 +1121,7 @@ export class PostHog implements PostHogInterface {
 
     private _initExtensions(startInCookielessMode: boolean): void {
         // we don't support IE11 anymore, so performance.now is safe
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const initStartTime = performance.now()
         const ext = { ...PostHog.__defaultExtensionClasses, ...this.config.__extensionClasses }
         const initTasks: Array<() => void> = []
@@ -1207,7 +1239,7 @@ export class PostHog implements PostHogInterface {
 
         // All tasks complete - record timing for both sync and deferred modes
         // we don't support IE11 anymore, so performance.now is safe
-        // eslint-disable-next-line compat/compat
+        // oxlint-disable-next-line compat/compat
         const taskInitTiming = Math.round(performance.now() - initStartTime)
         this.register_for_session({
             [SDK_DEBUG_EXTENSIONS_INIT_METHOD]: this.config.__preview_deferred_init_extensions
@@ -1323,6 +1355,8 @@ export class PostHog implements PostHogInterface {
     }
 
     _handle_unload(): void {
+        this._isPageUnloading = true
+
         // Optional-call the method, not just the receiver: after a deploy a cached older
         // lazy-loaded surveys chunk can yield an instance whose prototype lacks handlePageUnload,
         // and `this.surveys?.handlePageUnload()` would still throw "handlePageUnload is not a function".
@@ -1511,6 +1545,78 @@ export class PostHog implements PostHogInterface {
         this._execute_array([item])
     }
 
+    private _getPersistedFacebookClickId(): PersistedFacebookClickId | undefined {
+        const stored = this.persistence?.get_property(PERSISTENCE_FACEBOOK_CLICK_ID)
+        if (isString(stored) && FBC_PATTERN.test(stored)) {
+            return { value: stored, delivered: false }
+        }
+        if (isObject(stored) && isString(stored.value) && FBC_PATTERN.test(stored.value)) {
+            return { value: stored.value, delivered: stored.delivered === true }
+        }
+        return undefined
+    }
+
+    private _updateFacebookClickId(
+        fbclid: unknown,
+        providedFbc: unknown,
+        hasProvidedFbc: boolean,
+        unsetFbc: boolean
+    ): FacebookClickIdUpdate | undefined {
+        if (!this.persistence) {
+            return undefined
+        }
+
+        this.persistence.refreshKey(PERSISTENCE_FACEBOOK_CLICK_ID)
+        const stored = this._getPersistedFacebookClickId()
+
+        if (unsetFbc) {
+            this.persistence.unregister(PERSISTENCE_FACEBOOK_CLICK_ID)
+            return undefined
+        }
+
+        // Keep an explicitly supplied value as the local source of truth too, so a later event with
+        // the same fbclid cannot replace its original timestamp.
+        if (hasProvidedFbc) {
+            if (!isString(providedFbc) || !FBC_PATTERN.test(providedFbc)) {
+                this.persistence.unregister(PERSISTENCE_FACEBOOK_CLICK_ID)
+                return undefined
+            }
+            if (providedFbc !== stored?.value) {
+                this.persistence.register({
+                    [PERSISTENCE_FACEBOOK_CLICK_ID]: { value: providedFbc, delivered: false },
+                })
+            }
+            return { value: providedFbc, pending: providedFbc !== stored?.value || !stored.delivered }
+        }
+
+        if (isString(fbclid) && FBCLID_PATTERN.test(fbclid)) {
+            if (stored?.value.split('.')[3] === fbclid) {
+                return { value: stored.value, pending: !stored.delivered }
+            }
+
+            const fbc = `fb.1.${Date.now()}.${fbclid}`
+            this.persistence.register({
+                [PERSISTENCE_FACEBOOK_CLICK_ID]: { value: fbc, delivered: false },
+            })
+            return { value: fbc, pending: true }
+        }
+
+        return stored ? { value: stored.value, pending: !stored.delivered } : undefined
+    }
+
+    private _markFacebookClickIdDelivered(value: string): void {
+        if (!this.persistence) {
+            return
+        }
+        this.persistence.refreshKey(PERSISTENCE_FACEBOOK_CLICK_ID)
+        const stored = this._getPersistedFacebookClickId()
+        if (stored?.value === value && !stored.delivered) {
+            this.persistence.register({
+                [PERSISTENCE_FACEBOOK_CLICK_ID]: { value, delivered: true },
+            })
+        }
+    }
+
     /**
      * Captures an event with optional properties and configuration.
      *
@@ -1597,8 +1703,9 @@ export class PostHog implements PostHogInterface {
         // The initial campaign/referrer props need to be stored in the regular persistence, as they are there to mimic
         // the person-initial props. The non-initial versions are stored in the sessionPersistence, as they are sent
         // with every event and used by the session table to create session-initial props.
+        let campaignParams: Properties | undefined
         if (this.config.save_campaign_params) {
-            this.sessionPersistence.update_campaign_params()
+            campaignParams = this.sessionPersistence.update_campaign_params()
         }
         if (this.config.save_referrer) {
             this.sessionPersistence.update_referrer_info()
@@ -1644,6 +1751,27 @@ export class PostHog implements PostHogInterface {
         const setProperties = options?.$set
         if (setProperties && !shouldSendMinimalFlagCalledEvent) {
             data.$set = options?.$set
+        }
+
+        const propertySet = isObject(properties?.$set) ? properties.$set : undefined
+        const hasOptionFbc = !!options?.$set && FACEBOOK_CLICK_ID in options.$set
+        const hasPropertyFbc = !!propertySet && FACEBOOK_CLICK_ID in propertySet
+        const hasProvidedFbc = hasOptionFbc || hasPropertyFbc
+        const providedFbc = hasOptionFbc ? options?.$set?.[FACEBOOK_CLICK_ID] : propertySet?.[FACEBOOK_CLICK_ID]
+        const propertyUnset = isArray(properties?.$unset) ? properties.$unset : []
+        const optionUnset = options?.$unset || []
+        const unsetFbc =
+            propertyUnset.indexOf(FACEBOOK_CLICK_ID) !== -1 || optionUnset.indexOf(FACEBOOK_CLICK_ID) !== -1
+        const fbc = this._updateFacebookClickId(campaignParams?.fbclid, providedFbc, hasProvidedFbc, unsetFbc)
+        if (
+            fbc &&
+            data.properties.$process_person_profile === true &&
+            fbc.pending &&
+            !hasProvidedFbc &&
+            !shouldSendMinimalFlagCalledEvent
+        ) {
+            // An explicit person property supplied by the caller wins over the SDK-derived value.
+            data.$set = { [FACEBOOK_CLICK_ID]: fbc.value, ...data.$set }
         }
         const unsetProperties = options?.$unset
         if (unsetProperties) {
@@ -1727,6 +1855,11 @@ export class PostHog implements PostHogInterface {
             }
         }
 
+        const finalFbc =
+            data.$set?.[FACEBOOK_CLICK_ID] ??
+            (isObject(data.properties?.$set) ? data.properties.$set[FACEBOOK_CLICK_ID] : undefined)
+        const fbcToConfirm = fbc?.pending && finalFbc === fbc.value ? fbc.value : undefined
+
         this._internalEventEmitter.emit('eventCaptured', data)
 
         const url = options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
@@ -1738,12 +1871,39 @@ export class PostHog implements PostHogInterface {
             compression: 'best-available',
             timestampMode: isSessionRecording ? 'body' : 'capture-body',
             batchKey: options?._batchKey,
-            transport: options?.transport,
+            ...(options?.transport ? { transport: options.transport } : {}),
+            ...(fbcToConfirm
+                ? {
+                      fireCallbackOnDrop: true,
+                      callback: (response) => {
+                          if (response.statusCode >= 200 && response.statusCode < 300) {
+                              this._markFacebookClickIdDelivered(fbcToConfirm)
+                          }
+                      },
+                  }
+                : {}),
         }
 
-        if (this.config.request_batching && (!options || options?._batchKey) && !options?.send_instantly) {
+        // NB an options object without a `_batchKey` also skips the queue, so most calls that pass
+        // options are unbatched already and `send_instantly` changes nothing for them
+        if (
+            this.config.request_batching &&
+            (!options || options?._batchKey) &&
+            !options?.send_instantly &&
+            !fbcToConfirm
+        ) {
             this._requestQueue.enqueue(requestOptions)
         } else {
+            // Keep response-capable transports on active pages so failures can be retried.
+            // During unload, prefer sendBeacon unless a response or custom headers are required.
+            if (
+                !requestOptions.transport &&
+                !requestOptions.callback &&
+                isEmptyObject(this.config.request_headers ?? {}) &&
+                this._isPageUnloading
+            ) {
+                requestOptions.transport = 'sendBeacon'
+            }
             this._send_retriable_request(requestOptions)
         }
 
@@ -1937,6 +2097,15 @@ export class PostHog implements PostHogInterface {
         // reports document.referrer (the iframe's own origin) rather than the registered value.
         const persistenceProperties = this.persistence.properties()
         const sessionPersistenceProperties = this.sessionPersistence.properties()
+        const eventGroups = properties['$groups']
+        const persistenceGroups = persistenceProperties['$groups']
+        // An explicit empty object keeps its existing meaning: omit registered groups for this event.
+        if (isObject(eventGroups) && !isEmptyObject(eventGroups)) {
+            properties['$groups'] = {
+                ...(isObject(persistenceGroups) ? persistenceGroups : {}),
+                ...eventGroups,
+            }
+        }
         each(['$referrer', '$referring_domain'], (referrerKey) => {
             if (referrerKey in persistenceProperties) {
                 delete sessionPersistenceProperties[referrerKey]
@@ -2242,7 +2411,10 @@ export class PostHog implements PostHogInterface {
      *
      * @remarks
      * Returns the feature flag value which can be a boolean, string, or undefined.
-     * Supports multivariate flags that can return custom string values.
+     * Supports multivariate flags that can return custom string values. An evaluated boolean flag
+     * returns `true` or `false`; `undefined` means no current evaluation is available for the key.
+     * Globally inactive flags are omitted from the remote `/flags` response, so after that response
+     * loads they are unavailable rather than represented by a `false` result.
      *
      * {@label Feature flags}
      *
@@ -2301,6 +2473,10 @@ export class PostHog implements PostHogInterface {
     /**
      * Get a feature flag evaluation result including both the flag value and payload.
      *
+     * A result with `enabled: false` is a conclusive off evaluation. `undefined` means no current
+     * evaluation is available for the key. This includes globally inactive flags, which are omitted
+     * from the remote `/flags` response.
+     *
      * By default, this method emits the `$feature_flag_called` event.
      *
      * {@label Feature flags}
@@ -2337,7 +2513,9 @@ export class PostHog implements PostHogInterface {
     /**
      * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
      * the flags from the last load (no network request); call `reloadFeatureFlags()` first to refresh.
-     * Unlike `getFeatureFlag()`, it does not send a `$feature_flag_called` event.
+     * Conclusive off evaluations are included with `enabled: false`; keys omitted from the response,
+     * including globally inactive flags, are absent. Unlike `getFeatureFlag()`, this method does not
+     * send a `$feature_flag_called` event.
      *
      * @returns {FeatureFlagResult[]} All loaded flags, or an empty array if none are loaded.
      */
@@ -2349,9 +2527,11 @@ export class PostHog implements PostHogInterface {
      * Checks if a feature flag is enabled for the current user.
      *
      * @remarks
-     * Returns true if the flag is enabled, false if disabled, or undefined if not found
-     * (unless `defaultValue` is given, which is returned instead of undefined).
-     * This is a convenience method that treats any truthy value as enabled.
+     * Returns `true` or `false` when the flag has an evaluation value. A `false` result means the
+     * value evaluated off; it does not mean the SDK observed the flag's global active setting.
+     * Returns `undefined` when no current evaluation is available, unless `defaultValue` is given.
+     * Globally inactive flags are omitted from the remote `/flags` response and therefore have no
+     * value. This is a convenience method that treats any truthy value as enabled.
      *
      * {@label Feature flags}
      *
@@ -2837,7 +3017,7 @@ export class PostHog implements PostHogInterface {
     canRenderSurveyAsync(surveyId: string, forceReload = false): Promise<SurveyRenderReason> {
         return (
             this.surveys?.canRenderSurveyAsync(surveyId, forceReload) ??
-            // eslint-disable-next-line compat/compat
+            // oxlint-disable-next-line compat/compat
             Promise.resolve({ visible: false, disabledReason: SURVEYS_NOT_AVAILABLE })
         )
     }
@@ -2898,12 +3078,12 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
-     * @param {String} [new_distinct_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
+     * @param {String} [new_distinct_id] A non-empty string that uniquely identifies a user.
      * @param {Object} [userPropertiesToSet] Optional: An associative array of properties to store about the user. Note: For feature flag evaluations, if the same key is present in the userPropertiesToSetOnce,
      *  it will be overwritten by the value in userPropertiesToSet.
      * @param {Object} [userPropertiesToSetOnce] Optional: An associative array of properties to store about the user. If property is previously set, this does not override that value.
      */
-    identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void {
+    identify(new_distinct_id: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void {
         if (!this.__loaded || !this.persistence) {
             return logger.uninitializedWarning('posthog.identify')
         }
@@ -2969,6 +3149,10 @@ export class PostHog implements PostHogInterface {
             // send an $identify event any time the distinct_id is changing and the old ID is an anonymous ID
             // - logic on the server will determine whether or not to do anything with it.
             if (identityDidChange && isKnownAnonymous) {
+                const identifyProperties = this.config.reuseAnonymousId
+                    ? { distinct_id: new_distinct_id }
+                    : { distinct_id: new_distinct_id, $anon_distinct_id: previous_distinct_id }
+
                 this.persistence.set_property(USER_STATE, USER_STATE_IDENTIFIED)
 
                 // Update current user properties
@@ -2983,14 +3167,10 @@ export class PostHog implements PostHogInterface {
                     this.persistence._publishSuppressedCookieSnapshot()
                 }
 
-                this.capture(
-                    EVENT_IDENTIFY,
-                    {
-                        distinct_id: new_distinct_id,
-                        $anon_distinct_id: previous_distinct_id,
-                    },
-                    { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} }
-                )
+                this.capture(EVENT_IDENTIFY, identifyProperties, {
+                    $set: userPropertiesToSet || {},
+                    $set_once: userPropertiesToSetOnce || {},
+                })
 
                 this._cachedPersonProperties = getPersonPropertiesHash(
                     new_distinct_id,
@@ -2998,9 +3178,11 @@ export class PostHog implements PostHogInterface {
                     userPropertiesToSetOnce
                 )
 
-                // let the reload feature flag request know to send this previous distinct id
-                // for flag consistency
-                this.featureFlags?.setAnonymousDistinctId(previous_distinct_id)
+                // Forward the previous distinct id for default flag consistency, or clear
+                // any stale handoff when reuseAnonymousId opts out of anonymous merging.
+                this.featureFlags?.setAnonymousDistinctId(
+                    this.config.reuseAnonymousId ? undefined : previous_distinct_id
+                )
             } else if (shouldTransitionToIdentified) {
                 this.persistence.set_property(USER_STATE, USER_STATE_IDENTIFIED)
 
@@ -3215,9 +3397,9 @@ export class PostHog implements PostHogInterface {
         this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
 
         // Send $groupidentify when the group is new/changed OR when properties
-        // are provided. Skip only when the group already exists with the same
-        // key and no new properties are being set.
-        if (isNewGroup || groupPropertiesToSet) {
+        // are provided, but only when the event can be processed. The local group
+        // association remains useful for events and feature flags without person processing.
+        if ((isNewGroup || groupPropertiesToSet) && this._hasPersonProcessing()) {
             const groupIdentifyProperties: Properties = {
                 $group_type: groupType,
                 $group_key: groupKey,
@@ -3446,6 +3628,9 @@ export class PostHog implements PostHogInterface {
         // checkout (~5 min later).
         const recordingRemoteConfig = this.get_property(SESSION_RECORDING_REMOTE_CONFIG)
 
+        // must run while the pre-reset distinct_id and consent state still apply
+        this.sessionRecording?.flushBeforeIdentityReset()
+
         // Consent is user state, so reset() clears it along with the rest. But when capturing is
         // opted out by default that flips capturing back off, and nothing else surfaces it: events
         // are dropped with no error. Warn instead of failing silently.
@@ -3455,7 +3640,7 @@ export class PostHog implements PostHogInterface {
 
         if (!isConsentTransition && wasCapturing && !this.is_capturing()) {
             // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
-            // eslint-disable-next-line no-console
+            // oxlint-disable-next-line no-console
             console.warn('[PostHog.js]', RESET_CONSENT_WARN)
         }
 
@@ -3509,7 +3694,7 @@ export class PostHog implements PostHogInterface {
 
             if (bootstrap) {
                 // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
-                // eslint-disable-next-line posthog-js/no-direct-undefined-check
+                // oxlint-disable-next-line posthog-js/no-direct-undefined-check
                 if (bootstrap.distinctID !== undefined && !this._inCookielessMode()) {
                     this.persistence?.set_property(
                         USER_STATE,
@@ -3533,6 +3718,7 @@ export class PostHog implements PostHogInterface {
             // Clear HMAC identity verification fields
             delete this.config.identity_distinct_id
             delete this.config.identity_hash
+            delete this.config.identity_claims
             resetCompleted = true
         } finally {
             if (cookieSyncSuppressionStarted) {
@@ -3581,6 +3767,7 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        this._isShutdown = true
         this._getBrowserClientAdapter().dispose()
         this.sessionRecording?.dispose()
 
@@ -3607,6 +3794,8 @@ export class PostHog implements PostHogInterface {
      * (distinct_id + HMAC hash) instead of anonymous session identifiers.
      * The hash should be computed server-side as HMAC-SHA256 of the
      * distinct_id using the project's API secret.
+     * Any additional signed identity claims are cleared because they are
+     * bound to the previously configured distinct_id.
      *
      * @param distinctId - The verified user distinct_id
      * @param hash - HMAC-SHA256 of distinctId using the project API secret
@@ -3619,6 +3808,7 @@ export class PostHog implements PostHogInterface {
      * @public
      */
     setIdentity(distinctId: string, hash: string): void {
+        delete this.config.identity_claims
         this.config.identity_distinct_id = distinctId
         this.config.identity_hash = hash
         this.alias(distinctId)
@@ -3638,6 +3828,7 @@ export class PostHog implements PostHogInterface {
     clearIdentity(): void {
         delete this.config.identity_distinct_id
         delete this.config.identity_hash
+        delete this.config.identity_claims
         this.conversations?._onIdentityCleared()
     }
 
@@ -3874,6 +4065,10 @@ export class PostHog implements PostHogInterface {
             this.surveys?.loadIfEnabled()
             this._sync_opt_out_with_persistence()
             this.externalIntegrations?.startIfEnabledOrStop()
+
+            if (!oldConfig.segment && this.config.segment && this.persistence) {
+                setupSegmentIntegration(this, __NOOP, false)
+            }
         }
     }
 
@@ -4027,17 +4222,23 @@ export class PostHog implements PostHogInterface {
      * @returns The result of the capture, or undefined if exception capture is unavailable.
      */
     captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined {
-        if (!this.exceptions) return
+        try {
+            if (!this.exceptions) return
 
-        const syntheticException = new Error('PostHog syntheticException')
-        const errorToProperties = this.exceptions.buildProperties(error, {
-            handled: true,
-            syntheticException,
-        })
-        return this.exceptions.sendExceptionEvent({
-            ...errorToProperties,
-            ...additionalProperties,
-        })
+            const syntheticException = new Error('PostHog syntheticException')
+            const errorToProperties = this.exceptions.buildProperties(error, {
+                handled: true,
+                syntheticException,
+            })
+            return this.exceptions.sendExceptionEvent({
+                ...errorToProperties,
+                ...additionalProperties,
+            })
+        } catch {
+            // Exception capture must never throw into customer code. Do not log here because
+            // console.error may be instrumented and would re-enter exception autocapture.
+            return
+        }
     }
 
     /**

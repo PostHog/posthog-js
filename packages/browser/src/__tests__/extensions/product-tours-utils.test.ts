@@ -32,7 +32,7 @@ describe('getProductTourStylesheet', () => {
         {
             name: 'runs the stylesheet through prepare_external_dependency_stylesheet',
             setup: () => {
-                const prepareExternalDependencyStylesheet = jest.fn((stylesheet: HTMLStyleElement) => {
+                const prepareExternalDependencyStylesheet = vi.fn((stylesheet: HTMLStyleElement) => {
                     stylesheet.setAttribute('nonce', 'test-nonce')
                     return stylesheet
                 })
@@ -50,7 +50,7 @@ describe('getProductTourStylesheet', () => {
         {
             name: 'returns null when prepare_external_dependency_stylesheet returns null',
             setup: () => {
-                const prepareExternalDependencyStylesheet = jest.fn(() => null)
+                const prepareExternalDependencyStylesheet = vi.fn(() => null)
                 return {
                     posthog: {
                         config: { prepare_external_dependency_stylesheet: prepareExternalDependencyStylesheet },
@@ -65,7 +65,7 @@ describe('getProductTourStylesheet', () => {
     ])('$name', ({ setup, expectedHookCalls, expectedNonce, expectedStylesheet }) => {
         const { posthog, prepareExternalDependencyStylesheet } = setup() as {
             posthog?: PostHog
-            prepareExternalDependencyStylesheet?: jest.Mock
+            prepareExternalDependencyStylesheet?: vi.Mock
         }
 
         const stylesheet = getProductTourStylesheet(posthog)

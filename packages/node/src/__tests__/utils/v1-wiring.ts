@@ -47,12 +47,12 @@ export function routeByUrl(url: string): any {
  * clients for teardown, and exposes call inspectors so each suite only writes its own scenario.
  */
 export class V1WiringHarness {
-  readonly fetch: jest.SpyInstance
+  readonly fetch: vi.SpyInstance
   private readonly clients: PostHog[] = []
   private readonly originalCaptureMode = process.env.POSTHOG_CAPTURE_MODE
 
   constructor() {
-    this.fetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
+    this.fetch = vi.spyOn(globalThis, 'fetch').mockImplementation()
   }
 
   /** (Re)install the default per-URL routing. Call from `beforeEach` (after `clearAllMocks`). */
@@ -113,6 +113,6 @@ export class V1WiringHarness {
 /** Drains the enqueue flush timer plus its follow-up microtasks (fake timers must be enabled). */
 export const waitForFlushTimer = async (): Promise<void> => {
   await waitForPromises()
-  jest.runOnlyPendingTimers()
+  vi.runOnlyPendingTimers()
   await waitForPromises()
 }

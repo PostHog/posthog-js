@@ -29,16 +29,16 @@ describe('toJsonSafeValue', () => {
   })
 
   it('sanitizes toJSON results and falls back when toJSON throws', () => {
-    const serializableToJSON = jest.fn(() => ({ count: BigInt(2) }))
+    const serializableToJSON = vi.fn(() => ({ count: BigInt(2) }))
     const serializable = Object.create({ toJSON: serializableToJSON })
-    const throwingToJSON = jest.fn(() => {
+    const throwingToJSON = vi.fn(() => {
       throw new Error('cannot serialize')
     })
     const selfReturningValue: { toJSON: () => unknown } = {
       toJSON: () => selfReturningValue,
     }
-    const getTimeOverride = jest.fn(() => 0)
-    const toISOStringOverride = jest.fn(() => BigInt(2))
+    const getTimeOverride = vi.fn(() => 0)
+    const toISOStringOverride = vi.fn(() => BigInt(2))
     const date = new Date('2025-01-02T03:04:05.000Z')
     Object.defineProperties(date, {
       getTime: { value: getTimeOverride },
@@ -67,7 +67,7 @@ describe('toJsonSafeValue', () => {
   it('stops before traversing inherited enumerable properties', () => {
     const prototype = Object.fromEntries(Array.from({ length: 2_000 }, (_, index) => [`key-${index}`, index]))
     const target = Object.assign(Object.create(prototype), { own: 'kept' })
-    const getOwnPropertyDescriptor = jest.fn((object: object, key: string | symbol) =>
+    const getOwnPropertyDescriptor = vi.fn((object: object, key: string | symbol) =>
       Object.getOwnPropertyDescriptor(object, key)
     )
     const value = new Proxy(target, { getOwnPropertyDescriptor })

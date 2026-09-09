@@ -64,6 +64,24 @@ export function callSafely(fn: () => void): void {
   }
 }
 
+// Runs a list of cleanup handlers to completion. A handler can be missing (a
+// plugin observer that returned a non-function) or throw, and neither may stop
+// the rest from releasing their observers and listeners. Deliberately not
+// `callSafely` per handler: that rethrows anything but a SecurityError, which
+// is what used to escape teardown and abort the callers below.
+export function callAllSafely(fns: listenerHandler[]): void {
+  fns.forEach((fn) => {
+    if (typeof fn !== 'function') {
+      return;
+    }
+    try {
+      fn();
+    } catch (e) {
+      //
+    }
+  });
+}
+
 // https://github.com/rrweb-io/rrweb/pull/407
 const DEPARTED_MIRROR_ACCESS_WARNING =
   'Please stop import mirror directly. Instead of that,' +
@@ -99,7 +117,6 @@ if (typeof window !== 'undefined' && window.Proxy && window.Reflect) {
       if (prop === 'map') {
         console.error(DEPARTED_MIRROR_ACCESS_WARNING);
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       return Reflect.get(target, prop, receiver);
     },
   });
@@ -119,7 +136,6 @@ export function throttle<T>(
       previous = now;
     }
     const remaining = wait - (now - previous);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-this-alias
     const context = this;
     if (remaining <= 0 || remaining > wait) {
       if (timeout) {
@@ -340,13 +356,11 @@ export function legacy_isTouchEvent(
 
 export function polyfill(win = window) {
   if ('NodeList' in win && !win.NodeList.prototype.forEach) {
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     win.NodeList.prototype.forEach = Array.prototype
       .forEach as unknown as NodeList['forEach'];
   }
 
   if ('DOMTokenList' in win && !win.DOMTokenList.prototype.forEach) {
-    // eslint-disable-next-line @typescript-eslint/unbound-method
     win.DOMTokenList.prototype.forEach = Array.prototype
       .forEach as unknown as DOMTokenList['forEach'];
   }
@@ -603,5 +617,9 @@ export function shadowHostInDom(n: Node): boolean {
 export function inDom(n: Node): boolean {
   const doc = n.ownerDocument;
   if (!doc) return false;
-  return dom.contains(doc, n) || shadowHostInDom(n);
+  if (dom.contains(doc, n)) return true;
+  // The common light-DOM path above stays unchanged. Read live connectivity
+  // rather than walking shadow hosts (or retrying containment for detached nodes).
+  const connected = dom.isConnected(n);
+  return typeof connected === 'boolean' ? connected : shadowHostInDom(n);
 }

@@ -2,38 +2,39 @@ import { PostHog } from '../src/posthog-rn'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { setupFetch, waitForExpect, waitForNativePluginEvaluation } from './test-utils'
 
-jest.mock('../src/optional/OptionalPlugin', () => ({
+vi.mock('../src/optional/OptionalPlugin', () => ({
+  OptionalReactNativePluginVersion: undefined,
   OptionalReactNativePlugin: {
-    start: jest.fn(() => Promise.resolve()),
-    setup: jest.fn(() => Promise.resolve()),
-    startSession: jest.fn(() => Promise.resolve()),
-    endSession: jest.fn(() => Promise.resolve()),
-    isEnabled: jest.fn(() => Promise.resolve(false)),
-    identify: jest.fn(() => Promise.resolve()),
-    startRecording: jest.fn(() => Promise.resolve()),
-    stopRecording: jest.fn(() => Promise.resolve()),
-    addExceptionStep: jest.fn(() => Promise.resolve()),
-    registerPushNotificationToken: jest.fn(() => Promise.resolve()),
-    unregisterPushNotificationToken: jest.fn(() => Promise.resolve()),
-    setOptOut: jest.fn(() => Promise.resolve()),
-    capturePushNotificationOpened: jest.fn(() => Promise.resolve()),
-    setPushIdentityProvider: jest.fn(),
-    reset: jest.fn(() => Promise.resolve()),
+    start: vi.fn(() => Promise.resolve()),
+    setup: vi.fn(() => Promise.resolve()),
+    startSession: vi.fn(() => Promise.resolve()),
+    endSession: vi.fn(() => Promise.resolve()),
+    isEnabled: vi.fn(() => Promise.resolve(false)),
+    identify: vi.fn(() => Promise.resolve()),
+    startRecording: vi.fn(() => Promise.resolve()),
+    stopRecording: vi.fn(() => Promise.resolve()),
+    addExceptionStep: vi.fn(() => Promise.resolve()),
+    registerPushNotificationToken: vi.fn(() => Promise.resolve()),
+    unregisterPushNotificationToken: vi.fn(() => Promise.resolve()),
+    setOptOut: vi.fn(() => Promise.resolve()),
+    capturePushNotificationOpened: vi.fn(() => Promise.resolve()),
+    setPushIdentityProvider: vi.fn(),
+    reset: vi.fn(() => Promise.resolve()),
   },
 }))
 
 // Read lazily off globalThis: the mock factory's functions run while modules are still
 // importing, before this file's const bindings initialize.
 const mockPlatform = ((globalThis as any).__pushTestPlatform = { macos: false, web: false })
-jest.mock('../src/utils', () => ({
-  ...jest.requireActual('../src/utils'),
+vi.mock('../src/utils', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/utils')>()),
   isMacOS: () => (globalThis as any).__pushTestPlatform?.macos ?? false,
   isWeb: () => (globalThis as any).__pushTestPlatform?.web ?? false,
 }))
 
-jest.useRealTimers()
+vi.useRealTimers()
 
-const mockPlugin = OptionalReactNativePlugin as unknown as { [key: string]: jest.Mock }
+const mockPlugin = OptionalReactNativePlugin as unknown as { [key: string]: vi.Mock }
 
 const createPostHog = async (options?: { [key: string]: any }): Promise<PostHog> => {
   const posthog = new PostHog('test-token', { persistence: 'memory', flushInterval: 0, ...options })
@@ -60,7 +61,7 @@ describe('push notifications', () => {
   beforeEach(() => {
     // Restore any method deleted by an outdated-plugin test before clearing call state.
     Object.assign(mockPlugin, pluginMethods)
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     mockPlugin.isEnabled.mockImplementation(() => Promise.resolve(false))
     mockPlatform.macos = false
     mockPlatform.web = false
@@ -402,7 +403,7 @@ describe('push notifications', () => {
     })
 
     it('installs the JS identity provider before setup and flags it in the config', async () => {
-      const provider = jest.fn(async () => 'token')
+      const provider = vi.fn(async () => 'token')
       const posthog = await createPostHog({ pushIdentityProvider: provider })
 
       expect(mockPlugin.setPushIdentityProvider).toHaveBeenCalledWith(provider)
@@ -417,7 +418,7 @@ describe('push notifications', () => {
     it('keeps the provider marker off when the installed plugin predates it', async () => {
       delete (mockPlugin as any).setPushIdentityProvider
 
-      const posthog = await createPostHog({ pushIdentityProvider: jest.fn(async () => 'token') })
+      const posthog = await createPostHog({ pushIdentityProvider: vi.fn(async () => 'token') })
 
       expect(mockPlugin.setup.mock.calls[0][2].push.pushIdentityProviderEnabled).toBe(false)
 
@@ -427,7 +428,7 @@ describe('push notifications', () => {
     it('still installs the provider when replay brings native up for an opted-out user', async () => {
       // Push is off while opted out, but replay's setup() is the only one native will ever run,
       // so the provider must install there or every subscription after optIn() is unauthenticated.
-      const provider = jest.fn(async () => 'token')
+      const provider = vi.fn(async () => 'token')
       const posthog = await createPostHog({
         defaultOptIn: false,
         enableSessionReplay: true,
@@ -444,7 +445,7 @@ describe('push notifications', () => {
       const posthog = await createPostHog({
         capturePushNotificationSubscriptions: false,
         capturePushNotificationOpened: false,
-        pushIdentityProvider: jest.fn(async () => null),
+        pushIdentityProvider: vi.fn(async () => null),
       })
 
       expect(mockPlugin.setup).toHaveBeenCalledTimes(1)

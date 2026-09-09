@@ -43,8 +43,8 @@ describe('resolveConfig', () => {
         })
 
         it.each([
-            { name: 'defaults to symbol-set', option: undefined, env: undefined, expected: 'symbol-set' },
-            { name: 'reads POSTHOG_RELEASE_MODE', option: undefined, env: 'event', expected: 'event' },
+            { name: 'defaults to event', option: undefined, env: undefined, expected: 'event' },
+            { name: 'reads POSTHOG_RELEASE_MODE', option: undefined, env: 'symbol-set', expected: 'symbol-set' },
             { name: 'prefers the explicit option', option: 'symbol-set', env: 'event', expected: 'symbol-set' },
             {
                 name: 'takes the explicit option without an env var',

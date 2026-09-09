@@ -1,9 +1,12 @@
-const mockCaptureExceptionImmediate = jest.fn().mockResolvedValue(undefined)
-const mockPostHog = jest.fn().mockImplementation(() => ({
-    captureExceptionImmediate: mockCaptureExceptionImmediate,
-}))
+const { mockCaptureExceptionImmediate, mockPostHog } = vi.hoisted(() => {
+    const mockCaptureExceptionImmediate = vi.fn().mockResolvedValue(undefined)
+    return {
+        mockCaptureExceptionImmediate,
+        mockPostHog: vi.fn().mockImplementation(() => ({ captureExceptionImmediate: mockCaptureExceptionImmediate })),
+    }
+})
 
-jest.mock('posthog-node', () => ({
+vi.mock('posthog-node', () => ({
     PostHog: mockPostHog,
 }))
 
@@ -13,7 +16,7 @@ describe('Next.js onRequestError edge runtime', () => {
     const originalEnv = process.env
 
     beforeEach(() => {
-        jest.clearAllMocks()
+        vi.clearAllMocks()
         process.env = { ...originalEnv }
         process.env.NEXT_RUNTIME = 'edge'
         process.env.NEXT_PUBLIC_POSTHOG_KEY = 'phc_edge_test'

@@ -4,8 +4,8 @@ import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../../utils/globals'
 
 // need to fake the timer before jsdom inits
-jest.useFakeTimers()
-jest.setSystemTime(1000)
+vi.useFakeTimers()
+vi.setSystemTime(1000)
 
 const triggerMouseEvent = function (
     node: Node,
@@ -29,10 +29,10 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
     let lazyLoadedDeadClicksAutocapture: LazyLoadedDeadClicksAutocapture
 
     beforeEach(async () => {
-        jest.setSystemTime(1000)
+        vi.setSystemTime(1000)
 
         assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-        assignableWindow.__PosthogExtensions__.loadExternalDependency = jest
+        assignableWindow.__PosthogExtensions__.loadExternalDependency = vi
             .fn()
             .mockImplementation(() => (_ph: PostHog, _name: string, cb: (err?: Error) => void) => {
                 cb()
@@ -45,7 +45,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             persistence: {
                 props: {},
             },
-            capture: jest.fn(),
+            capture: vi.fn(),
         } as unknown as Partial<PostHog> as PostHog
 
         lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance)
@@ -92,12 +92,12 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
     })
 
     it('tracks last scroll', () => {
-        jest.setSystemTime(1000)
+        vi.setSystemTime(1000)
         triggerMouseEvent(document.body, 'click')
 
         expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].scrollDelayMs).not.toBeDefined()
 
-        jest.setSystemTime(1050)
+        vi.setSystemTime(1050)
         triggerMouseEvent(document.body, 'scroll')
 
         expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].scrollDelayMs).toBe(50)
@@ -116,13 +116,13 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
     describe('click ignore', () => {
         it('ignores clicks on same node within one second', () => {
-            jest.setSystemTime(1000)
+            vi.setSystemTime(1000)
             triggerMouseEvent(document.body, 'click')
 
-            jest.setSystemTime(1999)
+            vi.setSystemTime(1999)
             triggerMouseEvent(document.body, 'click')
 
-            jest.setSystemTime(2000)
+            vi.setSystemTime(2000)
             triggerMouseEvent(document.body, 'click')
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(2)
@@ -152,7 +152,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             anchor.setAttribute('href', '/some/file.pdf')
             document.body.append(anchor)
             triggerMouseEvent(anchor, 'click')
-            jest.setSystemTime(4000)
+            vi.setSystemTime(4000)
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
@@ -182,7 +182,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             document.body.append(anchor)
 
             triggerMouseEvent(icon, 'click')
-            jest.setSystemTime(4000)
+            vi.setSystemTime(4000)
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
@@ -293,7 +293,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
     describe('dead click detection', () => {
         beforeEach(() => {
-            jest.setSystemTime(0)
+            vi.setSystemTime(0)
         })
 
         it('click followed by scroll, not a dead click', () => {
@@ -347,7 +347,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             })
             // the visibilitychange fires 99ms after the click and is stamped onto the queued
             // candidate the moment it fires, so the click is treated as having done something
-            jest.setSystemTime(999)
+            vi.setSystemTime(999)
             lazyLoadedDeadClicksAutocapture['_onVisibilityChange']()
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
@@ -360,10 +360,10 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             // the tab becomes visible at t=200; 800ms later the user clicks the body to focus the
             // page. that click does nothing but is not dead, and the gap is wider than the old 100ms
             // window allowed — the before-the-click direction is recorded when the candidate is queued
-            jest.setSystemTime(200)
+            vi.setSystemTime(200)
             lazyLoadedDeadClicksAutocapture['_onVisibilityChange']()
 
-            jest.setSystemTime(1000)
+            vi.setSystemTime(1000)
             triggerMouseEvent(document.body, 'click')
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
@@ -375,10 +375,10 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         it('a stale visibility change well before the click is ignored, so the click keeps waiting', () => {
             // a visibility change 1500ms before the click is outside the wake-up window, so the
             // candidate records no visibility delay and the change neither suppresses nor marks it dead
-            jest.setSystemTime(500)
+            vi.setSystemTime(500)
             lazyLoadedDeadClicksAutocapture['_onVisibilityChange']()
 
-            jest.setSystemTime(2000)
+            vi.setSystemTime(2000)
             triggerMouseEvent(document.body, 'click')
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
@@ -402,7 +402,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             // candidate has no in-window visibility signal
             lazyLoadedDeadClicksAutocapture['_lastVisibilityChange'] = -5000
 
-            jest.setSystemTime(1000)
+            vi.setSystemTime(1000)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             // it is still captured (via the absolute timeout), but the visibility branch never marks
@@ -431,10 +431,10 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 timestamp: 1000,
             })
 
-            jest.setSystemTime(1001)
+            vi.setSystemTime(1001)
             lazyLoadedDeadClicksAutocapture['_onVisibilityChange']()
 
-            jest.setSystemTime(11000)
+            vi.setSystemTime(11000)
             lazyLoadedDeadClicksAutocapture['_onVisibilityChange']()
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
@@ -451,7 +451,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             })
             // the click opened a new window/popup: the tab stays visible, so the only trace is the
             // current window losing focus ~50ms later, stamped onto the candidate as the blur fires
-            jest.setSystemTime(950)
+            vi.setSystemTime(950)
             lazyLoadedDeadClicksAutocapture['_onFocusChange']()
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
@@ -470,10 +470,10 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 timestamp: 1000,
             })
 
-            jest.setSystemTime(1001)
+            vi.setSystemTime(1001)
             lazyLoadedDeadClicksAutocapture['_onFocusChange']()
 
-            jest.setSystemTime(11000)
+            vi.setSystemTime(11000)
             lazyLoadedDeadClicksAutocapture['_onFocusChange']()
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
@@ -484,10 +484,10 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         it('a stale focus change well before the click does not suppress or mark it dead', () => {
             // a window focus/blur 1500ms before the click is outside the window, so it records no delay
-            jest.setSystemTime(500)
+            vi.setSystemTime(500)
             lazyLoadedDeadClicksAutocapture['_onFocusChange']()
 
-            jest.setSystemTime(2000)
+            vi.setSystemTime(2000)
             triggerMouseEvent(document.body, 'click')
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
@@ -636,7 +636,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
 
-            jest.setSystemTime(3001 + 900)
+            vi.setSystemTime(3001 + 900)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
@@ -680,7 +680,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
 
-            jest.setSystemTime(25 + 900)
+            vi.setSystemTime(25 + 900)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
@@ -689,8 +689,8 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
     })
 
     it('can have alternative behaviour for onCapture', () => {
-        jest.setSystemTime(0)
-        const replacementCapture = jest.fn()
+        vi.setSystemTime(0)
+        const replacementCapture = vi.fn()
 
         lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
             __onCapture: replacementCapture,
@@ -704,7 +704,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
         lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
 
-        jest.setSystemTime(3001 + 900)
+        vi.setSystemTime(3001 + 900)
         lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
         expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)

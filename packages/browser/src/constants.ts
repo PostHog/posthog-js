@@ -11,6 +11,8 @@ export const DEVICE_ID = '$device_id'
 export const DEVICE_MODEL = '$device_model'
 export const ALIAS_ID_KEY = '__alias'
 export const CAMPAIGN_IDS_KEY = '__cmpns'
+export const FACEBOOK_CLICK_ID = '$fbc'
+export const PERSISTENCE_FACEBOOK_CLICK_ID = '$fbc_persistence'
 export const EVENT_TIMERS_KEY = '__timers'
 export const AUTOCAPTURE_DISABLED_SERVER_SIDE = '$autocapture_disabled_server_side'
 export const HEATMAPS_ENABLED_SERVER_SIDE = '$heatmaps_enabled_server_side'
@@ -23,6 +25,7 @@ export const PRODUCT_TOURS_ENABLED_SERVER_SIDE = '$product_tours_enabled_server_
 export const LOGS_CAPTURE_ENABLED_SERVER_SIDE = '$logs_capture_enabled_server_side'
 export const WEB_VITALS_ALLOWED_METRICS = '$web_vitals_allowed_metrics'
 export const SESSION_RECORDING_REMOTE_CONFIG = '$session_recording_remote_config'
+export const RECORDING_REMOTE_CONFIG_TTL_MS = 1000 * 60 * 60
 // @deprecated can be removed along with eager loaded replay
 export const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled_server_side'
 // @deprecated can be removed along with eager loaded replay

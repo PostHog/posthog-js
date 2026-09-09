@@ -26,8 +26,8 @@ describe('MultipleChoiceQuestion', () => {
         forceDisableHtml: false,
         appearance: mockAppearance,
         displayQuestionIndex: 1,
-        onSubmit: jest.fn(),
-        onPreviewSubmit: jest.fn(),
+        onSubmit: vi.fn(),
+        onPreviewSubmit: vi.fn(),
     }
 
     describe('SingleChoice', () => {
@@ -74,7 +74,7 @@ describe('MultipleChoiceQuestion', () => {
         })
 
         it('submits open-ended choice on Enter key', () => {
-            const onSubmit = jest.fn()
+            const onSubmit = vi.fn()
             const { getByText, container } = render(
                 <MultipleChoiceQuestion {...baseProps} onSubmit={onSubmit} question={singleChoiceQuestion} />
             )
@@ -117,7 +117,7 @@ describe('MultipleChoiceQuestion', () => {
         }
 
         it('submits the selected choice immediately and hides button', () => {
-            const onSubmitMock = jest.fn()
+            const onSubmitMock = vi.fn()
             const { getByLabelText, queryByText } = render(
                 <MultipleChoiceQuestion {...baseProps} onSubmit={onSubmitMock} question={singleChoiceSkipQuestion} />
             )
@@ -231,7 +231,7 @@ describe('MultipleChoiceQuestion', () => {
         })
 
         it('does not propagate keydown events from open choice input', () => {
-            const parentKeyDownHandler = jest.fn()
+            const parentKeyDownHandler = vi.fn()
             const { container } = render(
                 <div onKeyDown={parentKeyDownHandler}>
                     <MultipleChoiceQuestion {...baseProps} question={multipleChoiceQuestion} />
@@ -263,8 +263,8 @@ describe('OpenTextQuestion', () => {
     const baseProps = {
         forceDisableHtml: false,
         appearance: mockAppearance,
-        onSubmit: jest.fn(),
-        onPreviewSubmit: jest.fn(),
+        onSubmit: vi.fn(),
+        onPreviewSubmit: vi.fn(),
         displayQuestionIndex: 0,
     }
 
@@ -276,7 +276,7 @@ describe('OpenTextQuestion', () => {
     }
 
     it('does not propagate keydown events', () => {
-        const parentKeyDownHandler = jest.fn()
+        const parentKeyDownHandler = vi.fn()
 
         // Render the component within a div that has a keydown listener
         const { container } = render(
@@ -299,7 +299,7 @@ describe('OpenTextQuestion', () => {
     })
 
     it('does not submit on plain Enter (textarea inserts newline)', () => {
-        const onSubmit = jest.fn()
+        const onSubmit = vi.fn()
         const { container } = render(
             <OpenTextQuestion {...baseProps} onSubmit={onSubmit} question={{ ...openTextQuestion, optional: true }} />
         )
@@ -317,7 +317,7 @@ describe('OpenTextQuestion', () => {
         ['metaKey', { metaKey: true }],
         ['ctrlKey', { ctrlKey: true }],
     ])('submits on Enter+%s when input is valid', (_label, modifier) => {
-        const onSubmit = jest.fn()
+        const onSubmit = vi.fn()
         const { container } = render(
             <OpenTextQuestion {...baseProps} onSubmit={onSubmit} question={{ ...openTextQuestion, optional: true }} />
         )
@@ -333,7 +333,7 @@ describe('OpenTextQuestion', () => {
     })
 
     it('does not submit on Cmd/Ctrl+Enter when validation fails', () => {
-        const onSubmit = jest.fn()
+        const onSubmit = vi.fn()
         const { container } = render(
             <OpenTextQuestion {...baseProps} onSubmit={onSubmit} question={openTextQuestion} />
         )
@@ -386,8 +386,8 @@ describe('RatingQuestion', () => {
         forceDisableHtml: false,
         appearance: mockAppearance,
         displayQuestionIndex: 1,
-        onSubmit: jest.fn(),
-        onPreviewSubmit: jest.fn(),
+        onSubmit: vi.fn(),
+        onPreviewSubmit: vi.fn(),
     }
 
     const ratingQuestion: RatingSurveyQuestion = {
@@ -546,7 +546,7 @@ describe('RatingQuestion', () => {
         }
 
         it('submits rating immediately and hides button for number display', async () => {
-            const onSubmitMock = jest.fn()
+            const onSubmitMock = vi.fn()
             render(<RatingQuestion {...baseProps} onSubmit={onSubmitMock} question={ratingSkipQuestion} />)
             const button3 = getRatingButton(3)
 
@@ -559,7 +559,7 @@ describe('RatingQuestion', () => {
         })
 
         it('submits rating immediately and hides button for emoji display', async () => {
-            const onSubmitMock = jest.fn()
+            const onSubmitMock = vi.fn()
             render(<RatingQuestion {...baseProps} onSubmit={onSubmitMock} question={ratingEmojiSkipQuestion} />)
 
             // Click the emoji button that corresponds to rating value 1
@@ -575,7 +575,7 @@ describe('RatingQuestion', () => {
 
         it('shows submit button if skipSubmitButton is false for number display', () => {
             const question = { ...ratingSkipQuestion, skipSubmitButton: false }
-            const onSubmitMock = jest.fn()
+            const onSubmitMock = vi.fn()
             render(<RatingQuestion {...baseProps} onSubmit={onSubmitMock} question={question} />)
             const button3 = getRatingButton(3)
 
@@ -587,7 +587,7 @@ describe('RatingQuestion', () => {
 
         it('shows submit button if skipSubmitButton is false for emoji display', () => {
             const question = { ...ratingEmojiSkipQuestion, skipSubmitButton: false }
-            const onSubmitMock = jest.fn()
+            const onSubmitMock = vi.fn()
             render(<RatingQuestion {...baseProps} onSubmit={onSubmitMock} question={question} />)
 
             // Click the emoji button that corresponds to rating value 1

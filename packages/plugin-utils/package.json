@@ -1,6 +1,6 @@
 {
   "name": "@posthog/plugin-utils",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -29,11 +29,11 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "lint": "eslint src",
-    "lint:fix": "eslint src --fix",
+    "lint": "oxlint --report-unused-disable-directives-severity error src",
+    "lint:fix": "oxlint --report-unused-disable-directives-severity error src --fix",
     "build": "rslib build",
     "dev": "rslib build -w",
-    "test:unit": "jest",
+    "test:unit": "vitest run",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "dependencies": {
@@ -43,7 +43,7 @@
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
     "@types/cross-spawn": "^6.0.6",
-    "@types/jest": "catalog:",
-    "jest": "catalog:"
+    "@vitest/coverage-v8": "catalog:",
+    "vitest": "catalog:"
   }
 }

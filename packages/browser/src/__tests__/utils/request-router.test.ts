@@ -158,7 +158,7 @@ describe('request-router', () => {
                 '/static/1.370.0/recorder.js': '/recorder-1.370.0.js',
                 '/array/test-token/config.js': '/project-config.js',
             }
-            const rewriteRequestPath = jest.fn((url: URL) => {
+            const rewriteRequestPath = vi.fn((url: URL) => {
                 url.pathname = pathMap[url.pathname] ?? url.pathname
                 return url
             })
@@ -185,7 +185,7 @@ describe('request-router', () => {
 
         it('resolves relative API hosts before invoking the hook', () => {
             let inputPathname: string | undefined
-            const rewriteRequestPath = jest.fn((url: URL) => {
+            const rewriteRequestPath = vi.fn((url: URL) => {
                 inputPathname = url.pathname
                 url.pathname = '/custom-events/'
                 return url

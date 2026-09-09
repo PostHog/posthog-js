@@ -75,6 +75,25 @@ export function isTerminalResponse(response: { status?: string | null } | null |
 }
 
 /**
+ * Maps a Responses API outcome to a `$ai_stop_reason`. An incomplete run is
+ * named by what cut it short (`incomplete_details.reason`, e.g.
+ * `max_output_tokens`); the other terminal statuses stand for themselves.
+ * Non-terminal lifecycle statuses (`queued`, `in_progress`) are not stop
+ * reasons, so they yield undefined.
+ */
+export function responsesStopReason(
+  response: { status?: string | null; incomplete_details?: { reason?: string | null } | null } | null | undefined
+): string | undefined {
+  if (!response || !isTerminalResponse(response)) {
+    return undefined
+  }
+  if (response.status === 'incomplete' && response.incomplete_details?.reason) {
+    return response.incomplete_details.reason
+  }
+  return response.status ?? undefined
+}
+
+/**
  * Returns an isolated copy of a failed Responses API error for `$ai_error`, or
  * creates a fallback error when the provider omitted failure details.
  */

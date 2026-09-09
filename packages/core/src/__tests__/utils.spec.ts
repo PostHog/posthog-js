@@ -1,4 +1,12 @@
-import { assert, removeTrailingSlash, stripUrlHash, currentISOTime, currentTimestamp, raceWithTimeout } from '@/utils'
+import {
+  isUrl,
+  assert,
+  removeTrailingSlash,
+  stripUrlHash,
+  currentISOTime,
+  currentTimestamp,
+  raceWithTimeout,
+} from '@/utils'
 
 describe('utils', () => {
   describe('assert', () => {
@@ -9,6 +17,38 @@ describe('utils', () => {
     })
     it('should not throw on truthy value', () => {
       expect(() => assert('string', 'error')).not.toThrow('error')
+    })
+  })
+  describe('isUrl', () => {
+    it.each([
+      ['https://example.com/category?token=value#section', true],
+      ['HTTP://example.com/category', true],
+      [Object('https://example.com/category'), true],
+      [Object('Camera'), false],
+      ['//example.com/category', true],
+      ['/category?token=value', true],
+      ['./category', true],
+      ['../category', true],
+      ['  https://example.com/category  ', true],
+      ['/', true],
+      ['https://', true],
+      ['Camera', false],
+      ['Camera: Pro', false],
+      ['Books/Fiction', false],
+      ['Visit https://example.com', false],
+      ['mailto:hello@example.com', false],
+      ['#section', false],
+      ['?query=value', false],
+      ['', false],
+      ['   ', false],
+      [null, false],
+      [undefined, false],
+      [123, false],
+      [true, false],
+      [{ href: 'https://example.com' }, false],
+      [['https://example.com'], false],
+    ])('detects URL prefixes in %j: %s', (value, expected) => {
+      expect(isUrl(value)).toBe(expected)
     })
   })
   describe('removeTrailingSlash', () => {
@@ -38,23 +78,23 @@ describe('utils', () => {
   })
   describe('raceWithTimeout', () => {
     it('returns the promise value and clears the timeout when the promise resolves first', async () => {
-      const onTimeout = jest.fn()
+      const onTimeout = vi.fn()
 
       await expect(raceWithTimeout(Promise.resolve('done'), 1000, onTimeout)).resolves.toBe('done')
 
       expect(onTimeout).not.toHaveBeenCalled()
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
 
     it('resolves and invokes the callback when the timeout wins', async () => {
-      const onTimeout = jest.fn()
+      const onTimeout = vi.fn()
       const result = raceWithTimeout(new Promise<never>(() => {}), 1000, onTimeout)
 
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
 
       await expect(result).resolves.toBeUndefined()
       expect(onTimeout).toHaveBeenCalledTimes(1)
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
 
     it('rejects when the timeout callback throws', async () => {
@@ -64,20 +104,20 @@ describe('utils', () => {
       })
       const expectation = expect(result).rejects.toBe(error)
 
-      await jest.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(1000)
 
       await expectation
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
 
     it('preserves a promise rejection and clears the timeout', async () => {
       const error = new Error('failed')
-      const onTimeout = jest.fn()
+      const onTimeout = vi.fn()
 
       await expect(raceWithTimeout(Promise.reject(error), 1000, onTimeout)).rejects.toBe(error)
 
       expect(onTimeout).not.toHaveBeenCalled()
-      expect(jest.getTimerCount()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
     })
   })
   describe('currentTimestamp', () => {
@@ -87,7 +127,7 @@ describe('utils', () => {
   })
   describe('currentISOTime', () => {
     it('should get the iso time', () => {
-      jest.setSystemTime(new Date('2022-01-01'))
+      vi.setSystemTime(new Date('2022-01-01'))
       expect(currentISOTime()).toEqual('2022-01-01T00:00:00.000Z')
     })
   })

@@ -15,8 +15,8 @@ describe('get_current_url override for replay URL targeting', () => {
 
     const createMatcher = (getCurrentUrl?: (defaultUrl: string) => string) => {
         const instance = createMockPostHog({
-            register_for_session: jest.fn(),
-            get_property: jest.fn(() => undefined),
+            register_for_session: vi.fn(),
+            get_property: vi.fn(() => undefined),
             config: {
                 token: 'test-token',
                 api_host: 'https://test.com',
@@ -41,8 +41,8 @@ describe('get_current_url override for replay URL targeting', () => {
         const matcher = createMatcher(() => 'https://app/Jagex Launcher')
         configure(matcher, [{ url: '.*Jagex Launcher.*$', matching: 'regex' }])
 
-        const onActivate = jest.fn()
-        matcher.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'session-1')
+        const onActivate = vi.fn()
+        matcher.checkUrlTriggerConditions(vi.fn(), vi.fn(), onActivate, 'session-1')
 
         expect(onActivate).toHaveBeenCalledTimes(1)
         expect(onActivate).toHaveBeenCalledWith('url', 'https://app/Jagex Launcher')
@@ -55,8 +55,8 @@ describe('get_current_url override for replay URL targeting', () => {
         const matcher = createMatcher(() => 'https://generated-host.skin/game')
         configure(matcher, [{ url: '.*Jagex Launcher.*$', matching: 'regex' }])
 
-        const onActivate = jest.fn()
-        matcher.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'session-1')
+        const onActivate = vi.fn()
+        matcher.checkUrlTriggerConditions(vi.fn(), vi.fn(), onActivate, 'session-1')
 
         expect(onActivate).not.toHaveBeenCalled()
     })
@@ -67,8 +67,8 @@ describe('get_current_url override for replay URL targeting', () => {
         const matcher = createMatcher()
         configure(matcher, [{ url: '.*Jagex Launcher.*$', matching: 'regex' }])
 
-        const onActivate = jest.fn()
-        matcher.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'session-1')
+        const onActivate = vi.fn()
+        matcher.checkUrlTriggerConditions(vi.fn(), vi.fn(), onActivate, 'session-1')
 
         expect(onActivate).toHaveBeenCalledTimes(1)
     })
@@ -79,10 +79,10 @@ describe('get_current_url override for replay URL targeting', () => {
         const matcher = createMatcher(() => 'https://app/internal-admin')
         configure(matcher, [], [{ url: '.*internal-admin.*$', matching: 'regex' }])
 
-        const onPause = jest.fn(() => {
+        const onPause = vi.fn(() => {
             matcher.urlBlocked = true
         })
-        matcher.checkUrlBlocklist(onPause, jest.fn())
+        matcher.checkUrlBlocklist(onPause, vi.fn())
 
         expect(onPause).toHaveBeenCalledTimes(1)
     })
@@ -93,8 +93,8 @@ describe('get_current_url override for replay URL targeting', () => {
         const matcher = createMatcher(() => '')
         configure(matcher, [{ url: '.*Jagex Launcher.*$', matching: 'regex' }])
 
-        const onActivate = jest.fn()
-        matcher.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'session-1')
+        const onActivate = vi.fn()
+        matcher.checkUrlTriggerConditions(vi.fn(), vi.fn(), onActivate, 'session-1')
 
         expect(onActivate).toHaveBeenCalledTimes(1)
         expect(onActivate).toHaveBeenCalledWith('url', 'https://app/Jagex Launcher')
@@ -108,8 +108,8 @@ describe('get_current_url override for replay URL targeting', () => {
         })
         configure(matcher, [{ url: '.*Jagex Launcher.*$', matching: 'regex' }])
 
-        const onActivate = jest.fn()
-        expect(() => matcher.checkUrlTriggerConditions(jest.fn(), jest.fn(), onActivate, 'session-1')).not.toThrow()
+        const onActivate = vi.fn()
+        expect(() => matcher.checkUrlTriggerConditions(vi.fn(), vi.fn(), onActivate, 'session-1')).not.toThrow()
         expect(onActivate).toHaveBeenCalledTimes(1)
     })
 })

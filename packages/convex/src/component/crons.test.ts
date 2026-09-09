@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach, jest } from '@jest/globals'
+import { describe, expect, test, beforeEach, afterEach, vi } from 'vitest'
 import type { Crons } from 'convex/server'
 import { DEFAULT_INTERVAL_SECONDS, envFlagIsTrue, readPollingIntervalSeconds } from './lib.js'
 
@@ -7,7 +7,7 @@ describe('cron registration', () => {
 
   beforeEach(() => {
     originalPak = process.env.POSTHOG_PERSONAL_API_KEY
-    jest.resetModules()
+    vi.resetModules()
   })
 
   afterEach(() => {
@@ -37,10 +37,10 @@ describe('cron registration', () => {
 })
 
 describe('readPollingIntervalSeconds', () => {
-  let warnSpy: ReturnType<typeof jest.spyOn>
+  let warnSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
   afterEach(() => {

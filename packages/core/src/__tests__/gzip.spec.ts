@@ -124,7 +124,7 @@ describe('gzip', () => {
 
     it('does not read input using Blob.stream', async () => {
       const blobStream = Blob.prototype.stream
-      Blob.prototype.stream = jest.fn(() => {
+      Blob.prototype.stream = vi.fn(() => {
         throw new Error('Blob.stream should not be used')
       })
 
@@ -139,13 +139,13 @@ describe('gzip', () => {
     it('aborts the compression writer when writing input fails', async () => {
       const CompressionStream = globalThis.CompressionStream
       const writeError = new Error('write failed')
-      const abort = jest.fn(() => Promise.resolve())
+      const abort = vi.fn(() => Promise.resolve())
 
-      ;(globalThis as any).CompressionStream = jest.fn(() => ({
+      ;(globalThis as any).CompressionStream = vi.fn(() => ({
         writable: {
           getWriter: () => ({
             write: () => Promise.reject(writeError),
-            close: jest.fn(),
+            close: vi.fn(),
             abort,
           }),
         },
@@ -163,12 +163,12 @@ describe('gzip', () => {
     it('rejects malformed native gzip output when no stream error is thrown', async () => {
       const CompressionStream = globalThis.CompressionStream
 
-      ;(globalThis as any).CompressionStream = jest.fn(() => ({
+      ;(globalThis as any).CompressionStream = vi.fn(() => ({
         writable: {
           getWriter: () => ({
-            write: jest.fn(() => Promise.resolve()),
-            close: jest.fn(() => Promise.resolve()),
-            abort: jest.fn(() => Promise.resolve()),
+            write: vi.fn(() => Promise.resolve()),
+            close: vi.fn(() => Promise.resolve()),
+            abort: vi.fn(() => Promise.resolve()),
           }),
         },
         readable: new ReadableStream({

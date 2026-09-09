@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Error conversion should use cause when it is an error 1`] = `
+exports[`Error conversion > should use cause when it is an error 1`] = `
 {
   "$exception_level": "error",
   "$exception_list": [

@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
 import { gzipSync, strToU8 } from 'fflate'
 
 type SetupOptions = {
     gzipSupported: boolean
-    gzipCompress?: jest.Mock
+    gzipCompress?: vi.Mock
 }
 
 const createFullSnapshot = (data: Record<string, unknown> = {}) => ({
@@ -28,16 +27,16 @@ const createCustomSnapshot = () => ({
 })
 
 async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: SetupOptions) {
-    jest.resetModules()
+    vi.resetModules()
 
     const gzipCompressMock =
         gzipCompress ??
-        jest.fn(async (input: string) => {
+        vi.fn(async (input: string) => {
             return new Blob([gzipSync(strToU8(input))])
         })
 
-    jest.doMock('@posthog/core', () => {
-        const actual = jest.requireActual('@posthog/core')
+    vi.doMock('@posthog/core', async (importOriginal) => {
+        const actual = await importOriginal<typeof import('@posthog/core')>()
         return {
             ...actual,
             gzipCompress: gzipCompressMock,
@@ -47,102 +46,111 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
 
     const context: Record<string, any> = {}
 
-    jest.isolateModules(() => {
-        const {
-            LazyLoadedSessionRecording,
-        } = require('../../../extensions/replay/external/lazy-loaded-session-recorder')
-        const { assignableWindow } = require('../../../utils/globals')
-        const { PostHogPersistence } = require('../../../posthog-persistence')
-        const { SessionIdManager } = require('../../../sessionid')
-        const { RequestRouter } = require('../../../utils/request-router')
-        const { SimpleEventEmitter } = require('@posthog/browser-common/utils/simple-event-emitter')
-        const { createMockConfig, createMockPostHog } = require('../../helpers/posthog-instance')
-        const { SESSION_RECORDING_REMOTE_CONFIG, SESSION_RECORDING_IS_SAMPLED } = require('../../../constants')
+    const [
+        { LazyLoadedSessionRecording },
+        { assignableWindow },
+        { PostHogPersistence },
+        { SessionIdManager },
+        { RequestRouter },
+        { SimpleEventEmitter },
+        { createMockConfig, createMockPostHog },
+        { SESSION_RECORDING_REMOTE_CONFIG, SESSION_RECORDING_IS_SAMPLED },
+    ] = await Promise.all([
+        import('../../../extensions/replay/external/lazy-loaded-session-recorder'),
+        import('../../../utils/globals'),
+        import('../../../posthog-persistence'),
+        import('../../../sessionid'),
+        import('../../../utils/request-router'),
+        import('@posthog/browser-common/utils/simple-event-emitter'),
+        import('../../helpers/posthog-instance'),
+        import('../../../constants'),
+    ])
 
-        const config = createMockConfig({
-            api_host: 'https://test.com',
-            disable_session_recording: false,
-            enable_recording_console_log: false,
-            autocapture: false,
-            capture_pageview: false,
-            session_recording: {
-                maskAllInputs: false,
-                compress_events: true,
-            },
-            persistence: 'memory',
-        })
-
-        const persistence = new PostHogPersistence(config)
-        persistence.clear()
-        persistence.register({
-            [SESSION_RECORDING_REMOTE_CONFIG]: { endpoint: '/s/', enabled: true, sampleRate: 1 },
-            [SESSION_RECORDING_IS_SAMPLED]: 'sessionId',
-        })
-
-        const sessionManager = new SessionIdManager(
-            createMockPostHog({ config, persistence, register: jest.fn() }),
-            jest.fn(() => 'sessionId'),
-            jest.fn(() => 'windowId')
-        )
-
-        const simpleEventEmitter = new SimpleEventEmitter()
-        const posthog = {
-            get_property: (propertyKey: string) => persistence.props[propertyKey],
-            config,
-            capture: jest.fn(),
-            persistence,
-            sessionManager,
-            requestRouter: new RequestRouter({ config } as any),
-            consent: { isOptedOut: () => false },
-            register_for_session: jest.fn(),
-            _internalEventEmitter: simpleEventEmitter,
-            on: jest.fn((event, cb) => simpleEventEmitter.on(event, cb)),
-        }
-
-        let emit: (event: any) => void = () => {}
-        const stopRrweb = jest.fn()
-        assignableWindow.__PosthogExtensions__ = {
-            rrweb: {
-                record: jest.fn(({ emit: rrwebEmit }) => {
-                    emit = rrwebEmit
-                    return stopRrweb
-                }),
-                version: 'fake',
-                wasMaxDepthReached: jest.fn(() => false),
-                resetMaxDepthState: jest.fn(),
-            },
-            rrwebPlugins: {
-                getRecordConsolePlugin: undefined,
-                getRecordNetworkPlugin: undefined,
-            },
-        }
-        assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn()
-        assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = jest.fn()
-
-        const lazyLoadedSessionRecording = new LazyLoadedSessionRecording(posthog)
-        lazyLoadedSessionRecording.start()
-        // these tests exercise compression, not hold semantics — drop the fresh-start interaction hold
-        lazyLoadedSessionRecording['_holdFlushUntilInteraction'] = false
-
-        context.emit = emit
-        context.posthog = posthog
-        context.lazyLoadedSessionRecording = lazyLoadedSessionRecording
-        context.stopRrweb = stopRrweb
+    const config = createMockConfig({
+        api_host: 'https://test.com',
+        disable_session_recording: false,
+        enable_recording_console_log: false,
+        autocapture: false,
+        capture_pageview: false,
+        session_recording: {
+            maskAllInputs: false,
+            compress_events: true,
+        },
+        persistence: 'memory',
     })
+
+    const persistence = new PostHogPersistence(config)
+    persistence.clear()
+    persistence.register({
+        [SESSION_RECORDING_REMOTE_CONFIG]: { endpoint: '/s/', enabled: true, sampleRate: 1 },
+        [SESSION_RECORDING_IS_SAMPLED]: 'sessionId',
+    })
+
+    const sessionManager = new SessionIdManager(
+        createMockPostHog({ config, persistence, register: vi.fn() }),
+        vi.fn(() => 'sessionId'),
+        vi.fn(() => 'windowId')
+    )
+
+    const simpleEventEmitter = new SimpleEventEmitter()
+    const posthog = {
+        get_property: (propertyKey: string) => persistence.props[propertyKey],
+        config,
+        capture: vi.fn(),
+        persistence,
+        sessionManager,
+        requestRouter: new RequestRouter({ config } as any),
+        consent: { isOptedOut: () => false },
+        register_for_session: vi.fn(),
+        _internalEventEmitter: simpleEventEmitter,
+        on: vi.fn((event, cb) => simpleEventEmitter.on(event, cb)),
+    }
+
+    let emit: (event: any) => void = () => {}
+    const stopRrweb = vi.fn()
+    assignableWindow.__PosthogExtensions__ = {
+        rrweb: {
+            record: vi.fn(({ emit: rrwebEmit }) => {
+                emit = rrwebEmit
+                return stopRrweb
+            }),
+            version: 'fake',
+            wasMaxDepthReached: vi.fn(() => false),
+            resetMaxDepthState: vi.fn(),
+        },
+        rrwebPlugins: {
+            getRecordConsolePlugin: undefined,
+            getRecordNetworkPlugin: undefined,
+        },
+    }
+    assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = vi.fn()
+    assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = vi.fn()
+
+    const lazyLoadedSessionRecording = new LazyLoadedSessionRecording(posthog)
+    lazyLoadedSessionRecording.start()
+    // these tests exercise compression, not hold semantics — drop the fresh-start interaction hold
+    lazyLoadedSessionRecording['_holdFlushUntilInteraction'] = false
+
+    context.emit = emit
+    context.posthog = posthog
+    context.lazyLoadedSessionRecording = lazyLoadedSessionRecording
+    context.stopRrweb = stopRrweb
+    context.assignableWindow = assignableWindow
 
     return {
         gzipCompress: gzipCompressMock,
         emit: context.emit as (event: any) => void,
         posthog: context.posthog,
         lazyLoadedSessionRecording: context.lazyLoadedSessionRecording,
-        stopRrweb: context.stopRrweb as jest.Mock,
+        stopRrweb: context.stopRrweb as vi.Mock,
+        assignableWindow: context.assignableWindow,
     }
 }
 
 describe('LazyLoadedSessionRecording compression paths', () => {
     afterEach(() => {
-        jest.dontMock('@posthog/core')
-        jest.resetModules()
+        vi.doUnmock('@posthog/core')
+        vi.resetModules()
     })
 
     it.each([
@@ -165,7 +173,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         const compressionGate = new Promise<void>((resolve) => {
             releaseCompression = resolve
         })
-        const gzipCompress = jest.fn(async (input: string) => {
+        const gzipCompress = vi.fn(async (input: string) => {
             await compressionGate
             return new Blob([gzipSync(strToU8(input))])
         })
@@ -216,7 +224,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         const compressionGate = new Promise<void>((resolve) => {
             releaseCompression = resolve
         })
-        const gzipCompress = jest.fn(async (input: string) => {
+        const gzipCompress = vi.fn(async (input: string) => {
             await compressionGate
             return new Blob([gzipSync(strToU8(input))])
         })
@@ -250,7 +258,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         const compressionGate = new Promise<void>((resolve) => {
             releaseCompression = resolve
         })
-        const gzipCompress = jest.fn(async (input: string) => {
+        const gzipCompress = vi.fn(async (input: string) => {
             await compressionGate
             return new Blob([gzipSync(strToU8(input))])
         })
@@ -299,7 +307,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         const compressionGate = new Promise<void>((resolve) => {
             releaseCompression = resolve
         })
-        const gzipCompress = jest.fn(async (input: string) => {
+        const gzipCompress = vi.fn(async (input: string) => {
             await compressionGate
             return new Blob([gzipSync(strToU8(input))])
         })
@@ -385,10 +393,9 @@ describe('LazyLoadedSessionRecording compression paths', () => {
     })
 
     it('requests a full snapshot when an incremental ships for a rotated session without one', async () => {
-        const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+        const { emit, posthog, lazyLoadedSessionRecording, assignableWindow } = await setupLazyLoadedSessionRecording({
             gzipSupported: true,
         })
-        const { assignableWindow } = require('../../../utils/globals')
         const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot
 
         // the initial session ships its full snapshot as usual

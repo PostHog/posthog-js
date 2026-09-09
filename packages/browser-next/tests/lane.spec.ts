@@ -564,7 +564,7 @@ describe('Lane', () => {
             (error) => errors.push(error),
             () => {}
         )
-        const batchSize = jest.fn(() => {
+        const batchSize = vi.fn(() => {
             throw new Error('batch size failed')
         })
         const delivery: LaneDelivery<string> = {
@@ -656,7 +656,7 @@ describe('Lane', () => {
     })
 
     it('starts delivery when the configured interval elapses', async () => {
-        jest.useFakeTimers()
+        vi.useFakeTimers()
         try {
             const batches: string[][] = []
             const lane = createLane<string>()
@@ -669,18 +669,18 @@ describe('Lane', () => {
             })
             lane.enqueue('first')
 
-            await jest.advanceTimersByTimeAsync(99)
+            await vi.advanceTimersByTimeAsync(99)
             expect(batches).toEqual([])
-            await jest.advanceTimersByTimeAsync(1)
+            await vi.advanceTimersByTimeAsync(1)
             expect(batches).toEqual([['first']])
             await lane.dispose()
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
     it('measures interval delivery from admission across active work and late installation', async () => {
-        jest.useFakeTimers({ now: 0 })
+        vi.useFakeTimers({ now: 0 })
         try {
             let release: (() => void) | undefined
             const stalled = new Promise<void>((resolve) => {
@@ -701,18 +701,18 @@ describe('Lane', () => {
             })
             lane.enqueue('first')
             lane.enqueue('second')
-            await jest.advanceTimersByTimeAsync(150)
+            await vi.advanceTimersByTimeAsync(150)
             expect(batches).toEqual([['first']])
 
             release?.()
-            await jest.advanceTimersByTimeAsync(0)
+            await vi.advanceTimersByTimeAsync(0)
             expect(batches).toEqual([['first'], ['second']])
             await lane.dispose()
 
             const backlog: string[][] = []
             const late = createLane<string>()
             late.enqueue('waiting')
-            await jest.advanceTimersByTimeAsync(100)
+            await vi.advanceTimersByTimeAsync(100)
             late.attach({
                 flushAt: 2,
                 flushInterval: 100,
@@ -720,16 +720,16 @@ describe('Lane', () => {
                     backlog.push([...events])
                 },
             })
-            await jest.advanceTimersByTimeAsync(0)
+            await vi.advanceTimersByTimeAsync(0)
             expect(backlog).toEqual([['waiting']])
             await late.dispose()
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 
     it('waits a fresh interval before automatically redriving retained work', async () => {
-        jest.useFakeTimers({ now: 0 })
+        vi.useFakeTimers({ now: 0 })
         try {
             const batches: string[][] = []
             const lane = createLane<string>()
@@ -746,13 +746,13 @@ describe('Lane', () => {
             await Promise.resolve()
             expect(batches).toEqual([['retry']])
 
-            await jest.advanceTimersByTimeAsync(99)
+            await vi.advanceTimersByTimeAsync(99)
             expect(batches).toEqual([['retry']])
-            await jest.advanceTimersByTimeAsync(1)
+            await vi.advanceTimersByTimeAsync(1)
             expect(batches).toEqual([['retry'], ['retry']])
             await lane.dispose()
         } finally {
-            jest.useRealTimers()
+            vi.useRealTimers()
         }
     })
 

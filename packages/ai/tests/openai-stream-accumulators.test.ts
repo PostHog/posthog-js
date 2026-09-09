@@ -162,7 +162,7 @@ describe('OpenAI-compatible stream accumulators', () => {
       completionId: 'resp-1',
       serviceTier: 'flex',
       firstTokenTime: 150,
-      stopReason: 'incomplete',
+      stopReason: 'max_output_tokens',
       usage: {
         inputTokens: 9,
         outputTokens: 5,

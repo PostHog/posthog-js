@@ -50,7 +50,7 @@ describe('tracing headers', () => {
     const originalWindowFetch = window.fetch
 
     const sessionManager = {
-        checkAndGetSessionAndWindowId: jest.fn(() => ({ sessionId: 'session-id', windowId: 'window-id' })),
+        checkAndGetSessionAndWindowId: vi.fn(() => ({ sessionId: 'session-id', windowId: 'window-id' })),
     }
 
     const setWindowFetch = (fetchImpl: typeof fetch | undefined): void => {
@@ -75,7 +75,7 @@ describe('tracing headers', () => {
         restoreFetchPatch?.()
         restoreFetchPatch = undefined
         setWindowFetch(originalWindowFetch)
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
         sessionManager.checkAndGetSessionAndWindowId.mockClear()
     })
 
@@ -154,7 +154,7 @@ describe('tracing headers', () => {
 
     describe('fetch', () => {
         it('adds tracing headers without spreading init or mutating caller headers', async () => {
-            const originalFetch = jest.fn(() => Promise.resolve({} as Response)) as jest.MockedFunction<typeof fetch>
+            const originalFetch = vi.fn(() => Promise.resolve({} as Response)) as vi.MockedFunction<typeof fetch>
             setWindowFetch(originalFetch)
             restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
 
@@ -201,7 +201,7 @@ describe('tracing headers', () => {
         })
 
         it('delegates unchanged when the hostname does not match', async () => {
-            const originalFetch = jest.fn(() => Promise.resolve({} as Response)) as jest.MockedFunction<typeof fetch>
+            const originalFetch = vi.fn(() => Promise.resolve({} as Response)) as vi.MockedFunction<typeof fetch>
             setWindowFetch(originalFetch)
             restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
 
@@ -213,7 +213,7 @@ describe('tracing headers', () => {
         })
 
         it('uses the latest configured hostnames from a mutated hostname list without re-patching', async () => {
-            const originalFetch = jest.fn(() => Promise.resolve({} as Response)) as jest.MockedFunction<typeof fetch>
+            const originalFetch = vi.fn(() => Promise.resolve({} as Response)) as vi.MockedFunction<typeof fetch>
             setWindowFetch(originalFetch)
             const hostnames = ['example.com']
             restoreFetchPatch = patchFns._patchFetch(hostnames, 'distinct-id', sessionManager as any)
@@ -234,7 +234,7 @@ describe('tracing headers', () => {
         })
 
         it('uses the latest distinct ID from a provider without re-patching', async () => {
-            const originalFetch = jest.fn(() => Promise.resolve({} as Response)) as jest.MockedFunction<typeof fetch>
+            const originalFetch = vi.fn(() => Promise.resolve({} as Response)) as vi.MockedFunction<typeof fetch>
             setWindowFetch(originalFetch)
             let distinctId = 'first-distinct-id'
             restoreFetchPatch = patchFns._patchFetch(['example.com'], () => distinctId, sessionManager as any)
@@ -255,10 +255,10 @@ describe('tracing headers', () => {
 
         it('passes the cloned Request downstream when a Request input hostname does not match', async () => {
             let downstreamRequest: Request | undefined
-            const originalFetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+            const originalFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
                 downstreamRequest = new Request(input, init)
                 return {} as Response
-            }) as jest.MockedFunction<typeof fetch>
+            }) as vi.MockedFunction<typeof fetch>
             setWindowFetch(originalFetch)
             restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
 
@@ -286,7 +286,7 @@ describe('tracing headers', () => {
         })
 
         it('preserves Request input semantics and init overrides', async () => {
-            const originalFetch = jest.fn(() => Promise.resolve({} as Response)) as jest.MockedFunction<typeof fetch>
+            const originalFetch = vi.fn(() => Promise.resolve({} as Response)) as vi.MockedFunction<typeof fetch>
             setWindowFetch(originalFetch)
             restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
 
@@ -319,9 +319,9 @@ describe('tracing headers', () => {
 
         it('propagates synchronous downstream fetch errors without retrying', () => {
             const error = new Error('sync fetch failure')
-            const originalFetch = jest.fn(() => {
+            const originalFetch = vi.fn(() => {
                 throw error
-            }) as jest.MockedFunction<typeof fetch>
+            }) as vi.MockedFunction<typeof fetch>
             setWindowFetch(originalFetch)
             restoreFetchPatch = patchFns._patchFetch(['example.com'], 'distinct-id', sessionManager as any)
 
@@ -365,7 +365,7 @@ describe('tracing headers', () => {
                 absentHeaders: [['X-POSTHOG-DISTINCT-ID', 'distinct-id']],
             },
         ])('$name', ({ url, distinctId, expectedHeaders, absentHeaders }) => {
-            const setRequestHeaderSpy = jest
+            const setRequestHeaderSpy = vi
                 .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
                 .mockImplementation(() => {})
             restoreXHRPatch = patchFns._patchXHR(['example.com'], distinctId, sessionManager as any)

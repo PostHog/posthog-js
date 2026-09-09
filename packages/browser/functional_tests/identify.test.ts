@@ -1,7 +1,6 @@
 import '../src/__tests__/helpers/mock-logger'
 
 import { waitFor } from '@testing-library/dom'
-import 'regenerator-runtime/runtime'
 import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance'
 import { PostHog } from '../src/posthog-core'
 import { logger } from '@posthog/browser-common/utils/logger'
@@ -15,7 +14,11 @@ describe('FunctionalTests / Identify', () => {
 
     beforeEach(async () => {
         token = uuidv7()
-        posthog = await createPosthogInstance(token, { disable_surveys: true, before_send: (cr) => cr })
+        posthog = await createPosthogInstance(token, {
+            advanced_disable_flags: true,
+            disable_surveys: true,
+            before_send: (cr) => cr,
+        })
         anonymousId = posthog.get_distinct_id()
     })
 
@@ -35,7 +38,28 @@ describe('FunctionalTests / Identify', () => {
             )
         )
 
-        expect(jest.mocked(logger).error).toBeCalledTimes(0)
+        expect(vi.mocked(logger).error).toBeCalledTimes(0)
+    })
+
+    test('identify omits the previous anonymous id when reuseAnonymousId is enabled', async () => {
+        posthog.set_config({ reuseAnonymousId: true })
+
+        posthog.identify('test-id')
+
+        await waitFor(() => {
+            const identifyEvent = getRequests(token)['/e/'].find((request) => request.event === '$identify')
+            expect(identifyEvent).toEqual(
+                expect.objectContaining({
+                    properties: expect.objectContaining({
+                        distinct_id: 'test-id',
+                        token: posthog.config.token,
+                    }),
+                })
+            )
+            expect(identifyEvent.properties).not.toHaveProperty('$anon_distinct_id')
+        })
+
+        expect(vi.mocked(logger).error).toBeCalledTimes(0)
     })
 
     test('identify sends an engage request if identify called twice with the same distinct id and with $set/$set_once', async () => {

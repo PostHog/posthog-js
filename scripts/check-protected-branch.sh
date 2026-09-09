@@ -1,0 +1,14 @@
+#!/bin/sh
+
+# Skip protection if running in GitHub Actions
+if [ "$GITHUB_ACTIONS" = "true" ]; then
+    exit 0
+fi
+
+protected_branch='main'
+current_branch=$(git branch --show-current)
+
+if [ "$protected_branch" = "$current_branch" ]; then
+    echo "Pushing to $protected_branch is a sin! Instead, create a pull request and repent."
+    exit 1
+fi

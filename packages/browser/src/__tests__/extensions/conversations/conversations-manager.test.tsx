@@ -12,26 +12,26 @@ import { act, fireEvent, screen } from '@testing-library/preact'
 import Config from '../../../config'
 
 // Mock the persistence layer
-jest.mock('../../../extensions/conversations/external/persistence', () => {
+vi.mock('../../../extensions/conversations/external/persistence', () => {
     return {
-        ConversationsPersistence: jest.fn().mockImplementation(() => {
+        ConversationsPersistence: vi.fn().mockImplementation(() => {
             let storedTicketId: string | null = null
             return {
-                getOrCreateWidgetSessionId: jest.fn().mockReturnValue('test-widget-session-id'),
-                setWidgetSessionId: jest.fn(),
-                loadTicketId: jest.fn(() => storedTicketId),
-                saveTicketId: jest.fn((ticketId: string) => {
+                getOrCreateWidgetSessionId: vi.fn().mockReturnValue('test-widget-session-id'),
+                setWidgetSessionId: vi.fn(),
+                loadTicketId: vi.fn(() => storedTicketId),
+                saveTicketId: vi.fn((ticketId: string) => {
                     storedTicketId = ticketId
                 }),
-                clearTicketId: jest.fn(() => {
+                clearTicketId: vi.fn(() => {
                     storedTicketId = null
                 }),
-                loadWidgetState: jest.fn().mockReturnValue('closed'),
-                saveWidgetState: jest.fn(),
-                loadUserTraits: jest.fn().mockReturnValue(null),
-                saveUserTraits: jest.fn(),
-                clearWidgetSessionId: jest.fn(),
-                clearAll: jest.fn(() => {
+                loadWidgetState: vi.fn().mockReturnValue('closed'),
+                saveWidgetState: vi.fn(),
+                loadUserTraits: vi.fn().mockReturnValue(null),
+                saveUserTraits: vi.fn(),
+                clearWidgetSessionId: vi.fn(),
+                clearAll: vi.fn(() => {
                     storedTicketId = null
                 }),
             }
@@ -94,8 +94,8 @@ describe('ConversationsManager', () => {
         // Clear DOM and mocks
         document.body.innerHTML = ''
         localStorage.clear()
-        jest.clearAllMocks()
-        jest.useFakeTimers()
+        vi.clearAllMocks()
+        vi.useFakeTimers()
         window.history.replaceState({}, '', '/')
         mockRestoreResponse = {
             statusCode: 200,
@@ -107,7 +107,7 @@ describe('ConversationsManager', () => {
         }
 
         // Mock scrollIntoView which is not implemented in JSDOM
-        Element.prototype.scrollIntoView = jest.fn()
+        Element.prototype.scrollIntoView = vi.fn()
 
         // Setup mock config (widgetEnabled: true by default for most tests)
         mockConfig = {
@@ -126,7 +126,7 @@ describe('ConversationsManager', () => {
                 token: 'test-token',
                 api_host: 'https://test.posthog.com',
             },
-            _send_request: jest.fn((options) => {
+            _send_request: vi.fn((options) => {
                 // Call callback synchronously to avoid fake timer issues
                 const url = options.url as string
                 const method = options.method as string
@@ -160,30 +160,30 @@ describe('ConversationsManager', () => {
                 }
             }),
             requestRouter: {
-                endpointFor: jest.fn((type: string, path: string) => `https://test.posthog.com${path}`),
+                endpointFor: vi.fn((type: string, path: string) => `https://test.posthog.com${path}`),
             },
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
-            get_property: jest.fn().mockReturnValue(undefined),
-            get_session_id: jest.fn().mockReturnValue('test-session-id-123'),
-            get_session_replay_url: jest.fn().mockReturnValue('https://app.posthog.com/replay/test-session?t=100'),
+            get_distinct_id: vi.fn().mockReturnValue('test-distinct-id'),
+            get_property: vi.fn().mockReturnValue(undefined),
+            get_session_id: vi.fn().mockReturnValue('test-session-id-123'),
+            get_session_replay_url: vi.fn().mockReturnValue('https://app.posthog.com/replay/test-session?t=100'),
             persistence: {
                 props: {
                     $name: 'Test User',
                     $email: 'test@example.com',
                 },
-                get_property: jest.fn(),
-                register: jest.fn(),
-                unregister: jest.fn(),
-                isDisabled: jest.fn().mockReturnValue(false),
+                get_property: vi.fn(),
+                register: vi.fn(),
+                unregister: vi.fn(),
+                isDisabled: vi.fn().mockReturnValue(false),
             },
-            capture: jest.fn(),
-            on: jest.fn().mockReturnValue(jest.fn()), // Returns unsubscribe function
-            _isIdentified: jest.fn().mockReturnValue(false), // Default to anonymous user
+            capture: vi.fn(),
+            on: vi.fn().mockReturnValue(vi.fn()), // Returns unsubscribe function
+            _isIdentified: vi.fn().mockReturnValue(false), // Default to anonymous user
         } as unknown as PostHog
     })
 
     afterEach(() => {
-        jest.useRealTimers()
+        vi.useRealTimers()
         if (manager) {
             manager.destroy()
         }
@@ -193,14 +193,14 @@ describe('ConversationsManager', () => {
     const flushPromises = async () => {
         await act(async () => {
             await Promise.resolve()
-            jest.runAllTimers()
+            vi.runAllTimers()
         })
     }
 
     // Flush the async poll chain WITHOUT running timers. The poll loop schedules its
     // next tick only after the (floating) request promise resolves, so tests that send
     // and then advance timers in one function must drain microtasks in between.
-    // jest.runAllTimers() would loop forever here because the loop reschedules itself.
+    // vi.runAllTimers() would loop forever here because the loop reschedules itself.
     const flushMicrotasks = async () => {
         await act(async () => {
             for (let i = 0; i < 20; i++) {
@@ -458,7 +458,7 @@ describe('ConversationsManager', () => {
 
             // The re-attach watcher runs every second.
             act(() => {
-                jest.advanceTimersByTime(1000)
+                vi.advanceTimersByTime(1000)
             })
 
             if (expectInDocument) {
@@ -519,7 +519,7 @@ describe('ConversationsManager', () => {
             }
             manager = new ConversationsManager(configWithWidgetDisabled, mockPosthog)
 
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             act(() => {
                 manager.show()
@@ -539,14 +539,14 @@ describe('ConversationsManager', () => {
         beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
             await flushPromises()
-            jest.clearAllMocks()
+            vi.clearAllMocks()
         })
 
         it.each(['getMessages', 'markAsRead', 'getTickets', 'requestRestoreLink', 'restoreFromToken'] as const)(
             'does not re-log handled status-zero failures from %s',
             async (method) => {
                 const networkError = new TypeError('Failed to fetch')
-                ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                ;(mockPosthog._send_request as vi.Mock).mockImplementation((options) => {
                     options.callback({ statusCode: 0, error: networkError })
                 })
 
@@ -560,9 +560,9 @@ describe('ConversationsManager', () => {
 
                 const previousDebug = Config.DEBUG
                 Config.DEBUG = true
-                const infoSpy = jest.spyOn(console, 'log').mockImplementation()
-                const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-                const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+                const infoSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+                const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+                const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
                 try {
                     await expect(requests[method]()).rejects.toMatchObject({
@@ -602,14 +602,14 @@ describe('ConversationsManager', () => {
         ])(
             'logs restore retries once at warning severity for $failure failures',
             async ({ response, kind, message }) => {
-                ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                ;(mockPosthog._send_request as vi.Mock).mockImplementation((options) => {
                     options.callback(response)
                 })
 
                 const previousDebug = Config.DEBUG
                 Config.DEBUG = true
-                const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-                const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+                const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+                const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
                 try {
                     await expect(manager.restoreFromToken('restore-token')).rejects.toMatchObject({ kind, message })
@@ -630,14 +630,14 @@ describe('ConversationsManager', () => {
         )
 
         it('warns once for a bare status-zero polling response', async () => {
-            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+            ;(mockPosthog._send_request as vi.Mock).mockImplementation((options) => {
                 options.callback({ statusCode: 0 })
             })
 
             const previousDebug = Config.DEBUG
             Config.DEBUG = true
-            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
             try {
                 await expect(manager.getTickets()).rejects.toMatchObject({ kind: 'network' })
@@ -655,14 +655,14 @@ describe('ConversationsManager', () => {
         })
 
         it('warns once for a bare status-zero restore response', async () => {
-            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+            ;(mockPosthog._send_request as vi.Mock).mockImplementation((options) => {
                 options.callback({ statusCode: 0 })
             })
 
             const previousDebug = Config.DEBUG
             Config.DEBUG = true
-            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
             try {
                 await expect(manager.restoreFromToken('restore-token')).rejects.toMatchObject({ kind: 'network' })
@@ -682,13 +682,13 @@ describe('ConversationsManager', () => {
         })
 
         it.each([429, 500])('logs HTTP polling status %s only once', async (statusCode) => {
-            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+            ;(mockPosthog._send_request as vi.Mock).mockImplementation((options) => {
                 options.callback({ statusCode })
             })
 
             const previousDebug = Config.DEBUG
             Config.DEBUG = true
-            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
             try {
                 await (manager as any)._loadTickets()
@@ -710,7 +710,7 @@ describe('ConversationsManager', () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
             await flushPromises()
             // Clear mocks after initialization (which calls getTickets)
-            jest.clearAllMocks()
+            vi.clearAllMocks()
         })
 
         it('should send a message through the API', async () => {
@@ -732,14 +732,14 @@ describe('ConversationsManager', () => {
 
         it('should reject with a handled network error without relogging the transport failure', async () => {
             const networkError = new TypeError('Failed to fetch')
-            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+            ;(mockPosthog._send_request as vi.Mock).mockImplementation((options) => {
                 options.callback({ statusCode: 0, error: networkError })
             })
 
             const previousDebug = Config.DEBUG
             Config.DEBUG = true
-            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
             try {
                 await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({
@@ -756,14 +756,14 @@ describe('ConversationsManager', () => {
         })
 
         it('should keep send-message rate limits at warning severity', async () => {
-            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+            ;(mockPosthog._send_request as vi.Mock).mockImplementation((options) => {
                 options.callback({ statusCode: 429 })
             })
 
             const previousDebug = Config.DEBUG
             Config.DEBUG = true
-            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
             try {
                 await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({
@@ -783,14 +783,14 @@ describe('ConversationsManager', () => {
         })
 
         it('should log and reject with a handled HTTP error for a server failure', async () => {
-            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+            ;(mockPosthog._send_request as vi.Mock).mockImplementation((options) => {
                 options.callback({ statusCode: 500, json: { detail: 'Server unavailable' } })
             })
 
             const previousDebug = Config.DEBUG
             Config.DEBUG = true
-            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
             try {
                 await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({
@@ -839,7 +839,7 @@ describe('ConversationsManager', () => {
             await act(async () => {
                 await manager.sendMessage('First message')
             })
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             await act(async () => {
                 await manager.sendMessage('Second message')
@@ -878,14 +878,14 @@ describe('ConversationsManager', () => {
             await act(async () => {
                 await manager.sendMessage('First message')
             })
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             // Send second message to existing ticket
             await act(async () => {
                 await manager.sendMessage('Second message')
             })
 
-            const sendRequestCall = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
+            const sendRequestCall = (mockPosthog._send_request as vi.Mock).mock.calls[0][0]
             // session_id and replay_url should be included for debugging context
             expect(sendRequestCall.data.session_id).toBe('test-session-id-123')
             expect(sendRequestCall.data.session_context).toEqual({
@@ -899,7 +899,7 @@ describe('ConversationsManager', () => {
             await act(async () => {
                 await manager.sendMessage('First message')
             })
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             // Force new ticket
             await act(async () => {
@@ -922,13 +922,13 @@ describe('ConversationsManager', () => {
 
         it('should handle missing session ID gracefully', async () => {
             // Mock get_session_id to return empty string
-            ;(mockPosthog.get_session_id as jest.Mock).mockReturnValue('')
+            ;(mockPosthog.get_session_id as vi.Mock).mockReturnValue('')
 
             await act(async () => {
                 await manager.sendMessage('First message')
             })
 
-            const sendRequestCall = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
+            const sendRequestCall = (mockPosthog._send_request as vi.Mock).mock.calls[0][0]
             expect(sendRequestCall.data.session_id).toBeUndefined()
             // session_context should still be present (has current_url)
             expect(sendRequestCall.data.session_context).toBeDefined()
@@ -936,13 +936,13 @@ describe('ConversationsManager', () => {
 
         it('should handle missing session replay URL gracefully', async () => {
             // Mock get_session_replay_url to return empty string
-            ;(mockPosthog.get_session_replay_url as jest.Mock).mockReturnValue('')
+            ;(mockPosthog.get_session_replay_url as vi.Mock).mockReturnValue('')
 
             await act(async () => {
                 await manager.sendMessage('First message')
             })
 
-            const sendRequestCall = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
+            const sendRequestCall = (mockPosthog._send_request as vi.Mock).mock.calls[0][0]
             // session_id should still be present
             expect(sendRequestCall.data.session_id).toBe('test-session-id-123')
             // session_context should have current_url, replay_url is undefined when empty
@@ -965,7 +965,7 @@ describe('ConversationsManager', () => {
 
         it('should handle error during session context capture without failing message send', async () => {
             // Mock get_session_id to throw an error
-            ;(mockPosthog.get_session_id as jest.Mock).mockImplementation(() => {
+            ;(mockPosthog.get_session_id as vi.Mock).mockImplementation(() => {
                 throw new Error('Session ID error')
             })
 
@@ -985,7 +985,7 @@ describe('ConversationsManager', () => {
         })
 
         // Note: Error handling tests are skipped because they conflict with Jest fake timers
-        // The polling mechanism uses setTimeout which runs during jest.runAllTimers()
+        // The polling mechanism uses setTimeout which runs during vi.runAllTimers()
         // and causes unhandled rejections that crash the test runner.
         // Error handling is tested implicitly through the API implementation.
         it.skip('should handle send error gracefully', () => {
@@ -1006,13 +1006,13 @@ describe('ConversationsManager', () => {
                 await manager.sendMessage('Hello!')
             })
             await flushMicrotasks()
-            jest.clearAllMocks()
+            vi.clearAllMocks()
         })
 
         it('should poll for messages at regular intervals', async () => {
             // Widget is closed by default, so it polls at the slower 15s cadence
             act(() => {
-                jest.advanceTimersByTime(15000)
+                vi.advanceTimersByTime(15000)
             })
 
             // Should have made a getMessages request
@@ -1027,7 +1027,7 @@ describe('ConversationsManager', () => {
 
         it('should include widget_session_id in getMessages request', async () => {
             act(() => {
-                jest.advanceTimersByTime(15000)
+                vi.advanceTimersByTime(15000)
             })
 
             expect(mockPosthog._send_request).toHaveBeenCalledWith(
@@ -1039,10 +1039,10 @@ describe('ConversationsManager', () => {
 
         it('should not include distinct_id in getMessages request for security', async () => {
             act(() => {
-                jest.advanceTimersByTime(15000)
+                vi.advanceTimersByTime(15000)
             })
 
-            const calls = (mockPosthog._send_request as jest.Mock).mock.calls
+            const calls = (mockPosthog._send_request as vi.Mock).mock.calls
             const getMessagesCall = calls.find((call) => call[0].url.includes('/widget/messages/'))
             expect(getMessagesCall[0].url).not.toContain('distinct_id=')
         })
@@ -1051,7 +1051,7 @@ describe('ConversationsManager', () => {
             manager['_currentView'] = 'restore_request'
 
             act(() => {
-                jest.advanceTimersByTime(15000)
+                vi.advanceTimersByTime(15000)
             })
 
             expect(mockPosthog._send_request).not.toHaveBeenCalled()
@@ -1073,7 +1073,7 @@ describe('ConversationsManager', () => {
 
             beforeEach(() => {
                 nextStatusCode = 200
-                ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                ;(mockPosthog._send_request as vi.Mock).mockImplementation((options) => {
                     options.callback({
                         statusCode: nextStatusCode,
                         json: nextStatusCode === 200 ? createMockGetMessagesResponse() : null,
@@ -1150,17 +1150,17 @@ describe('ConversationsManager', () => {
 
     describe('polling backpressure', () => {
         const getRequestUrls = (): string[] =>
-            (mockPosthog._send_request as jest.Mock).mock.calls.map((call) => call[0].url as string)
+            (mockPosthog._send_request as vi.Mock).mock.calls.map((call) => call[0].url as string)
 
         it('does not poll when there are no conversations', async () => {
             // Default mock serves an empty ticket list, so the widget boots with
             // nothing to poll and the loop should pause itself.
             manager = new ConversationsManager(mockConfig, mockPosthog)
             await flushPromises()
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             act(() => {
-                jest.advanceTimersByTime(60000)
+                vi.advanceTimersByTime(60000)
             })
 
             expect(mockPosthog._send_request).not.toHaveBeenCalled()
@@ -1174,11 +1174,11 @@ describe('ConversationsManager', () => {
                 await manager.sendMessage('Hello!')
             })
             await flushMicrotasks()
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             // Loop was paused at boot (no tickets); sending must restart it.
             act(() => {
-                jest.advanceTimersByTime(15000)
+                vi.advanceTimersByTime(15000)
             })
 
             expect(getRequestUrls().some((url) => url.includes('/widget/messages/ticket-123'))).toBe(true)
@@ -1197,11 +1197,11 @@ describe('ConversationsManager', () => {
                 manager['_handleStateChange']('open')
             })
             await flushMicrotasks()
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             // 5s is enough while open, whereas a closed widget would need 15s.
             act(() => {
-                jest.advanceTimersByTime(5000)
+                vi.advanceTimersByTime(5000)
             })
 
             expect(getRequestUrls().some((url) => url.includes('/widget/messages/ticket-123'))).toBe(true)
@@ -1213,7 +1213,7 @@ describe('ConversationsManager', () => {
 
             manager['_currentTicketId'] = 'ticket-123'
             manager['_currentView'] = 'messages'
-            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+            ;(mockPosthog._send_request as vi.Mock).mockImplementation((options) => {
                 options.callback({ statusCode: 429, json: null })
             })
 
@@ -1233,7 +1233,7 @@ describe('ConversationsManager', () => {
             expect(manager['_nextPollDelayMs']()).toBe(20000)
 
             // A successful poll clears the backoff and returns to the normal cadence.
-            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+            ;(mockPosthog._send_request as vi.Mock).mockImplementation((options) => {
                 options.callback({ statusCode: 200, json: createMockGetMessagesResponse() })
             })
             await act(async () => {
@@ -1262,14 +1262,14 @@ describe('ConversationsManager', () => {
                 manager['_handleStateChange']('open')
             })
             await flushMicrotasks()
-            jest.clearAllMocks()
+            vi.clearAllMocks()
 
             // One open interval should produce exactly one poll, not several.
             act(() => {
-                jest.advanceTimersByTime(5000)
+                vi.advanceTimersByTime(5000)
             })
 
-            const getMessagesCalls = (mockPosthog._send_request as jest.Mock).mock.calls.filter((call) =>
+            const getMessagesCalls = (mockPosthog._send_request as vi.Mock).mock.calls.filter((call) =>
                 (call[0].url as string).includes('/widget/messages/ticket-123')
             )
             expect(getMessagesCalls).toHaveLength(1)
@@ -1285,7 +1285,7 @@ describe('ConversationsManager', () => {
             await flushMicrotasks()
 
             // Drive several 429s so the next poll is scheduled far out (backoff).
-            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+            ;(mockPosthog._send_request as vi.Mock).mockImplementation((options) => {
                 options.callback({ statusCode: 429, json: null })
             })
             for (let i = 0; i < 4; i++) {
@@ -1296,16 +1296,16 @@ describe('ConversationsManager', () => {
             expect(manager['_nextPollDelayMs']()).toBeGreaterThan(15000)
 
             // Server recovers; coming back online must poll now, not after the backoff.
-            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+            ;(mockPosthog._send_request as vi.Mock).mockImplementation((options) => {
                 options.callback({ statusCode: 200, json: createMockGetMessagesResponse() })
             })
-            jest.clearAllMocks()
+            vi.clearAllMocks()
             act(() => {
                 window.dispatchEvent(new Event('online'))
             })
             await flushMicrotasks()
 
-            const getMessagesCalls = (mockPosthog._send_request as jest.Mock).mock.calls.filter((call) =>
+            const getMessagesCalls = (mockPosthog._send_request as vi.Mock).mock.calls.filter((call) =>
                 (call[0].url as string).includes('/widget/messages/ticket-123')
             )
             expect(getMessagesCalls.length).toBeGreaterThanOrEqual(1)
@@ -1318,7 +1318,7 @@ describe('ConversationsManager', () => {
 
             manager['_currentTicketId'] = 'ticket-123'
             manager['_currentView'] = 'messages'
-            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+            ;(mockPosthog._send_request as vi.Mock).mockImplementation((options) => {
                 options.callback({ statusCode: 429, json: null })
             })
 
@@ -1371,7 +1371,7 @@ describe('ConversationsManager', () => {
         })
 
         it('should unsubscribe from identify listener on destroy', () => {
-            const mockUnsubscribe = jest.fn()
+            const mockUnsubscribe = vi.fn()
             manager['_unsubscribeIdentifyListener'] = mockUnsubscribe
 
             manager.destroy()
@@ -1420,11 +1420,11 @@ describe('ConversationsManager', () => {
                     await manager.sendMessage('Hello!')
                 })
                 await flushMicrotasks()
-                jest.clearAllMocks()
+                vi.clearAllMocks()
 
                 // Trigger poll (widget closed by default -> 15s cadence)
                 act(() => {
-                    jest.advanceTimersByTime(15000)
+                    vi.advanceTimersByTime(15000)
                 })
 
                 expect(mockPosthog._send_request).toHaveBeenCalledWith(
@@ -1439,7 +1439,7 @@ describe('ConversationsManager', () => {
                 )
 
                 // Verify widget_session_id is in URL
-                const callArgs = (mockPosthog._send_request as jest.Mock).mock.calls[0][0]
+                const callArgs = (mockPosthog._send_request as vi.Mock).mock.calls[0][0]
                 expect(callArgs.url).toContain('widget_session_id=')
             })
 
@@ -1485,7 +1485,7 @@ describe('ConversationsManager', () => {
                 })
                 expect(manager['_currentTicketId']).toBe('switched-ticket-999')
 
-                jest.clearAllMocks()
+                vi.clearAllMocks()
 
                 // Send another message - should go to the switched ticket
                 await act(async () => {
@@ -1611,7 +1611,7 @@ describe('ConversationsManager', () => {
         // Serve a fixed set of tickets for the tickets endpoint, keeping the other
         // endpoint responses from the default mock so message/greeting flows still work.
         const serveTickets = (tickets: unknown[]): void => {
-            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options: any) => {
+            ;(mockPosthog._send_request as vi.Mock).mockImplementation((options: any) => {
                 const url = options.url as string
                 const method = options.method as string
                 if (method === 'GET' && url.includes('/widget/tickets')) {
@@ -1625,7 +1625,7 @@ describe('ConversationsManager', () => {
         }
 
         // Flush pending microtasks without running the recurring polling timers
-        // (jest.runAllTimers would loop forever once _startPolling has set intervals).
+        // (vi.runAllTimers would loop forever once _startPolling has set intervals).
         const flushMicrotasks = async (): Promise<void> => {
             await act(async () => {
                 await Promise.resolve()

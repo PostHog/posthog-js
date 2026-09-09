@@ -25,9 +25,9 @@ describe(`Module-based loader in Node env`, () => {
         } as any
         // assignableWindow.__PosthogExtensions__ = {}
 
-        jest.useFakeTimers()
-        jest.spyOn(posthog, '_send_request').mockReturnValue()
-        jest.spyOn(window!.console, 'log').mockImplementation()
+        vi.useFakeTimers()
+        vi.spyOn(posthog, '_send_request').mockReturnValue()
+        vi.spyOn(window!.console, 'log').mockImplementation(() => {})
     })
 
     it('should load and capture the pageview event', () => {
@@ -46,7 +46,7 @@ describe(`Module-based loader in Node env`, () => {
             },
         })
 
-        jest.runOnlyPendingTimers()
+        vi.runOnlyPendingTimers()
 
         sinon.assert.calledOnce(posthog.capture as sinon.SinonSpy<any>)
         const captureArgs = (posthog.capture as sinon.SinonSpy<any>).args[0]
@@ -66,8 +66,8 @@ describe(`Module-based loader in Node env`, () => {
     })
 
     it(`always returns posthog from init`, () => {
-        console.error = jest.fn()
-        console.warn = jest.fn()
+        console.error = vi.fn()
+        console.warn = vi.fn()
 
         expect(posthog.init(`my-test`, { disable_surveys: true, disable_conversations: true }, 'sdk-1')).toBeInstanceOf(
             PostHog
@@ -103,7 +103,7 @@ describe(`Module-based loader in Node env`, () => {
     })
 
     it(`names the token mismatch when re-initializing with a different token`, () => {
-        console.warn = jest.fn()
+        console.warn = vi.fn()
 
         const instance = new PostHog()
         instance.init(`phc_first`, { disable_surveys: true, disable_conversations: true })
@@ -132,14 +132,14 @@ describe('Snippet loader', () => {
 
     afterEach(() => {
         assignableWindow.posthog = undefined as any
-        jest.restoreAllMocks()
+        vi.restoreAllMocks()
     })
 
     it('preserves the loaded instance and replays a shared queue once when array.js executes twice', () => {
-        jest.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
-        jest.spyOn(console, 'warn').mockImplementation()
+        vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+        vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-        const queuedCall = jest.fn()
+        const queuedCall = vi.fn()
         const snippetPostHog = [queuedCall] as any
         snippetPostHog.__SV = 1
         snippetPostHog.people = []
@@ -165,10 +165,10 @@ describe('Snippet loader', () => {
     })
 
     it('preserves primary and named instances when array.js executes twice', () => {
-        jest.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+        vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
 
-        const primaryQueuedCall = jest.fn()
-        const namedQueuedCall = jest.fn()
+        const primaryQueuedCall = vi.fn()
+        const namedQueuedCall = vi.fn()
         const snippetPostHog = [primaryQueuedCall] as any
         snippetPostHog.__SV = 1
         snippetPostHog.people = []
@@ -199,7 +199,7 @@ describe('Snippet loader', () => {
     })
 
     it('preserves named instances when the primary instance is not initialized', () => {
-        jest.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+        vi.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
 
         const snippetPostHog = [] as any
         snippetPostHog.__SV = 1
