@@ -56,6 +56,60 @@ function assertTheConfigIsAsExpected(snapshotEvents: CaptureResult[], expectedMa
 }
 
 test.describe('Session recording - masking', () => {
+    test('captures the new page URL when SPA navigation adds or updates JSON-LD', async ({ page, context }) => {
+        await start(
+            { ...startOptions({ maskAllInputs: true }, true), url: '/playground/cypress/index.html' },
+            page,
+            context
+        )
+        await waitForSessionRecordingToStart(page)
+        await page.locator('[data-cy-input]').fill('start recording')
+
+        const initialUrl = page.url()
+        const capturedJsonLd = async () =>
+            (await page.capturedEvents())
+                .filter((event) => event.event === '$snapshot')
+                .flatMap((event) => event.properties['$snapshot_data'])
+                .filter((event) => event.type === 5 && event.data.tag === '$json_ld')
+                .map((event) => ({ name: event.data.payload.name, href: event.data.href }))
+
+        await page.evaluate(() => {
+            const script = document.createElement('script')
+            script.id = 'spa-json-ld'
+            script.type = 'application/ld+json'
+            script.textContent = JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'Initial',
+            })
+            document.head.append(script)
+        })
+        const expected = [{ name: 'Initial', href: initialUrl }]
+        await expect.poll(capturedJsonLd).toEqual(expected)
+
+        for (const navigation of [
+            { method: 'pushState', name: 'Camera', path: '/catalog/camera?variant=standard#details' },
+            { method: 'replaceState', name: 'Lens', path: '/catalog/lens?variant=wide#specifications' },
+        ] as const) {
+            await page.evaluate(({ method, name, path }) => {
+                window.history[method]({}, '', path)
+                let script = document.getElementById('spa-json-ld')!
+                if (method === 'pushState') {
+                    script.remove()
+                    script = document.createElement('script')
+                    script.id = 'spa-json-ld'
+                    script.setAttribute('type', 'application/ld+json')
+                    document.head.append(script)
+                }
+                script.textContent = JSON.stringify({ '@context': 'https://schema.org', '@type': 'Product', name })
+            }, navigation)
+            const href = new URL(navigation.path, initialUrl).href
+            await expect(page).toHaveURL(href)
+            expected.push({ name: navigation.name, href })
+            await expect.poll(capturedJsonLd).toEqual(expected)
+        }
+    })
+
     test('emits only sanitized JSON-LD in recording bytes', async ({ page, context }) => {
         await page.addInitScript(() => {
             const appendJsonLd = (value: Record<string, unknown>, className = '') => {
