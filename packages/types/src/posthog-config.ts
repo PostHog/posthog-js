@@ -715,6 +715,8 @@ export interface SessionRecordingOptions {
      * It drops every `@id` when `maskAllElementAttributes`, `maskAttributeFn`, or an `attributeFilter` without `id` can hide `id` attributes from replay.
      * It also keeps the containing entity tree, even when it redacts all other fields.
      * The event tag is `$json_ld`. The payload is a JSON-LD object or array.
+     * The event includes the current page URL in `data.href`, subject to replay URL masking and hash capture settings.
+     * The URL is omitted when the masking callback rejects it or throws.
      * The recorder removes all script nodes from snapshots when this option is enabled.
      * The JSON-LD observer starts only when this option is true at recording start.
      * @see https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/extensions/replay/external/json-ld.ts
