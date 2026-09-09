@@ -167,15 +167,43 @@ jobs:
                   PACKAGE_NAME_SANITIZED=$(echo "$PACKAGE_NAME" | sed 's/@//g' | sed 's/\//-/g')
                   TITLE_PREFIX="chore(deps): Update ${PACKAGE_NAME} to "
                   PR_TITLE="${TITLE_PREFIX}${PACKAGE_VERSION}"
-                  EXISTING_BRANCH=$(gh pr list \
+                  EXISTING=$(gh pr list \
                       --repo PostHog/posthog \
                       --state open \
                       --limit 100 \
-                      --json title,headRefName,headRepositoryOwner \
-                      --jq ".[] | select(.title | startswith(\"${TITLE_PREFIX}\")) | select(.headRepositoryOwner.login == \"PostHog\") | .headRefName" | head -n 1)
+                      --json title,number,headRefName,headRepositoryOwner \
+                      --jq ".[] | select(.title | startswith(\"${TITLE_PREFIX}\")) | select(.headRepositoryOwner.login == \"PostHog\") | \"\(.number) \(.headRefName)\"" | head -n 1)
+                  EXISTING_PR="${EXISTING%% *}"
+                  EXISTING_BRANCH="${EXISTING#* }"
 
-                  if [ -n "$EXISTING_BRANCH" ]; then
+                  # Reusing the open upgrade PR's branch means force-pushing it. Trunk drops a
+                  # pull request from the merge queue the moment it is pushed to, and every pull
+                  # request behind it loses its in-flight run and starts again. On 2026-09-08 this
+                  # workflow did exactly that and took 37 other pull requests down with it.
+                  #
+                  # So when the open PR is already in the queue, leave it alone and open a
+                  # separate one for this version. It costs an extra PR and keeps the queue whole.
+                  # A failed lookup must not read as "not queued". `|| true` on the whole
+                  # pipeline would absorb a gh error the same way it absorbs grep's ordinary
+                  # no-match, and force-push the queued PR anyway. So the API call is checked
+                  # on its own, and an unreadable status falls through to the safe branch.
+                  QUEUED=""
+                  if [ -n "$EXISTING_PR" ]; then
+                      if TRUNK_STATUS=$(gh api "repos/PostHog/posthog/issues/${EXISTING_PR}/comments?per_page=100" \
+                          --jq '[.[] | select(.user.login == "trunk-io[bot]") | .body] | last // ""'); then
+                          QUEUED=$(printf '%s' "$TRUNK_STATUS" \
+                              | grep -oE "Running tests on this pull request|waiting to start tests" | head -n 1 || true)
+                      else
+                          echo "::warning::Could not read the queue status of PR #${EXISTING_PR}; treating it as queued."
+                          QUEUED="unknown"
+                      fi
+                  fi
+
+                  if [ -n "$EXISTING_BRANCH" ] && [ -z "$QUEUED" ]; then
                       BRANCH_NAME="$EXISTING_BRANCH"
+                  elif [ -n "$QUEUED" ]; then
+                      echo "::notice::PR #${EXISTING_PR} is in the merge queue; opening a separate PR instead of force-pushing its branch."
+                      BRANCH_NAME="${PACKAGE_NAME_SANITIZED}-upgrade-${PACKAGE_VERSION}"
                   else
                       BRANCH_NAME="${PACKAGE_NAME_SANITIZED}-upgrade"
                   fi
