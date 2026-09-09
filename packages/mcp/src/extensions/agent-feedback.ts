@@ -1,8 +1,8 @@
 import type {
-  AgentFeedbackOptions,
-  AgentFeedbackReport,
-  AgentFeedbackSentiment,
-  AgentFeedbackType,
+  CollectFeedbackOptions,
+  FeedbackReport,
+  FeedbackSentiment,
+  FeedbackType,
   CollectFeedbackConfig,
   CompatibleTextToolResult,
   CompatibleToolsListLike,
@@ -14,8 +14,8 @@ import { redactPii, sanitizeCapturedValue } from './mcp-payloads'
 
 export const SEND_FEEDBACK_TOOL_NAME = 'send_feedback' as const
 
-const FEEDBACK_TYPES: readonly AgentFeedbackType[] = ['missing_capability', 'issue', 'praise', 'other']
-const SENTIMENTS: readonly AgentFeedbackSentiment[] = ['positive', 'neutral', 'negative', 'mixed']
+const FEEDBACK_TYPES: readonly FeedbackType[] = ['missing_capability', 'issue', 'praise', 'other']
+const SENTIMENTS: readonly FeedbackSentiment[] = ['positive', 'neutral', 'negative', 'mixed']
 
 // Free-text fields are agent-narrated, like `$mcp_intent`; bound them the same way.
 const MAX_FEEDBACK_TEXT_LENGTH = 2048
@@ -97,12 +97,12 @@ const RESERVED_EXTRA_PROPERTY_KEYS = new Set([
   'llm_model',
 ])
 
-type AgentFeedbackToolDescriptor = CompatibleToolsListLike['tools'][number]
+type FeedbackToolDescriptor = CompatibleToolsListLike['tools'][number]
 
 /** `collectFeedback` normalized to its object form; `undefined` when the feature is off. */
-export function resolveAgentFeedbackOptions(
+export function resolveCollectFeedbackOptions(
   config: CollectFeedbackConfig | undefined
-): AgentFeedbackOptions | undefined {
+): CollectFeedbackOptions | undefined {
   if (!config) {
     return undefined
   }
@@ -114,8 +114,8 @@ export function resolveAgentFeedbackOptions(
  * default. Resolve through here everywhere (inject + detect) so a custom name
  * can't drift between call sites.
  */
-export function resolveAgentFeedbackToolName(config: CollectFeedbackConfig | undefined): string {
-  return resolveAgentFeedbackOptions(config)?.toolName ?? SEND_FEEDBACK_TOOL_NAME
+export function resolveFeedbackToolName(config: CollectFeedbackConfig | undefined): string {
+  return resolveCollectFeedbackOptions(config)?.toolName ?? SEND_FEEDBACK_TOOL_NAME
 }
 
 /**
@@ -124,7 +124,7 @@ export function resolveAgentFeedbackToolName(config: CollectFeedbackConfig | und
  * `extraRequired` entry that was never declared) so a bad setup fails at
  * configuration time instead of silently corrupting the advertised schema.
  */
-export function getAgentFeedbackToolDescriptor(options: AgentFeedbackOptions = {}): AgentFeedbackToolDescriptor {
+export function getFeedbackToolDescriptor(options: CollectFeedbackOptions = {}): FeedbackToolDescriptor {
   const extraProperties = options.extraProperties ?? {}
   const extraRequired = options.extraRequired ?? []
 
@@ -175,12 +175,12 @@ function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined
 }
 
-function parseFeedbackType(value: unknown): AgentFeedbackType {
-  return FEEDBACK_TYPES.includes(value as AgentFeedbackType) ? (value as AgentFeedbackType) : 'other'
+function parseFeedbackType(value: unknown): FeedbackType {
+  return FEEDBACK_TYPES.includes(value as FeedbackType) ? (value as FeedbackType) : 'other'
 }
 
-function parseSentiment(value: unknown): AgentFeedbackSentiment | undefined {
-  return SENTIMENTS.includes(value as AgentFeedbackSentiment) ? (value as AgentFeedbackSentiment) : undefined
+function parseSentiment(value: unknown): FeedbackSentiment | undefined {
+  return SENTIMENTS.includes(value as FeedbackSentiment) ? (value as FeedbackSentiment) : undefined
 }
 
 /**
@@ -189,10 +189,10 @@ function parseSentiment(value: unknown): AgentFeedbackSentiment | undefined {
  * undefined, and only **declared** extras are lifted into `extras` — anything
  * the agent invented reaches the handler via `raw` and is never captured.
  */
-export function parseAgentFeedbackReport(
+export function parseFeedbackReport(
   args: Record<string, unknown> | undefined,
-  options: AgentFeedbackOptions = {}
-): AgentFeedbackReport {
+  options: CollectFeedbackOptions = {}
+): FeedbackReport {
   const raw = args ?? {}
   const extras: JsonRecord = {}
   for (const key of Object.keys(options.extraProperties ?? {})) {
@@ -215,7 +215,7 @@ export function parseAgentFeedbackReport(
 }
 
 /** The report's free text, used as the event's `$mcp_intent`. */
-export function buildAgentFeedbackIntent(report: AgentFeedbackReport): string {
+export function buildFeedbackIntent(report: FeedbackReport): string {
   return [report.summary, report.details].filter(Boolean).join('\n\n')
 }
 
@@ -250,7 +250,7 @@ function captureExtraValue(value: unknown): unknown {
 }
 
 /** The `$mcp_feedback_*` event properties for one report, declared extras included. */
-export function buildAgentFeedbackEventProperties(report: AgentFeedbackReport): JsonRecord {
+export function buildFeedbackEventProperties(report: FeedbackReport): JsonRecord {
   const properties: JsonRecord = {
     [PostHogMCPAnalyticsProperty.FeedbackType]: report.feedbackType,
   }
@@ -293,7 +293,7 @@ export function buildAgentFeedbackEventProperties(report: AgentFeedbackReport): 
  * path); the `instrument()` path returns it automatically, or the string your
  * `onFeedback` handler returned instead.
  */
-export function agentFeedbackResult(): CompatibleTextToolResult {
+export function sendFeedbackResult(): CompatibleTextToolResult {
   return {
     content: [
       {
@@ -310,9 +310,9 @@ export function agentFeedbackResult(): CompatibleTextToolResult {
  * handler is logged and falls back to it — feedback capture must never break
  * the agent's turn.
  */
-export async function handleAgentFeedback(
-  report: AgentFeedbackReport,
-  options: AgentFeedbackOptions = {},
+export async function handleFeedback(
+  report: FeedbackReport,
+  options: CollectFeedbackOptions = {},
   logger: LoggerFn = log
 ): Promise<CompatibleTextToolResult> {
   logger(`Agent feedback reported (${report.feedbackType}): ${report.summary}`)
@@ -326,5 +326,5 @@ export async function handleAgentFeedback(
       logger(`Warning: onFeedback handler threw; returning the default acknowledgement - ${error}`)
     }
   }
-  return agentFeedbackResult()
+  return sendFeedbackResult()
 }

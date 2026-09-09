@@ -1,7 +1,7 @@
 import { type CallToolResult, CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { CallToolResult as V2CallToolResult } from '@modelcontextprotocol/server'
 import { z } from 'zod'
-import { agentFeedbackResult, instrument, PostHogMCP } from '../index'
+import { sendFeedbackResult, instrument, PostHogMCP } from '../index'
 import {
   DEFAULT_CONTEXT_PARAMETER_DESCRIPTION,
   PostHogMCPAnalyticsEvent,
@@ -9,7 +9,7 @@ import {
 } from '../extensions/constants'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { getServerTrackingData } from '../extensions/internal'
-import type { AgentFeedbackReport } from '../types'
+import type { FeedbackReport } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
@@ -167,11 +167,11 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       await new Promise((r) => setTimeout(r, 50))
       const event = capture
         .getEvents()
-        .find((e) => e.eventType === MCPAnalyticsEventType.mcpAgentFeedback && e.resourceName === SEND_FEEDBACK)
+        .find((e) => e.eventType === MCPAnalyticsEventType.mcpFeedback && e.resourceName === SEND_FEEDBACK)
       expect(event?.userIntent).toBe('No tool to delete multiple todos in one call.\n\nDeleted 20 todos one by one.')
       expect(event?.userIntentSource).toBe('context_parameter')
 
-      const payloads = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.AgentFeedback)
+      const payloads = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)
       expect(payloads).toHaveLength(1)
       const p = payloads[0].properties
       expect(p[PostHogMCPAnalyticsProperty.FeedbackType]).toBe('missing_capability')
@@ -197,7 +197,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       await callTool(client, SEND_FEEDBACK, { feedback_type: 'rant', summary: 'Something else.' })
 
       await new Promise((r) => setTimeout(r, 50))
-      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.AgentFeedback)[0].properties
+      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
       expect(p[PostHogMCPAnalyticsProperty.FeedbackType]).toBe('other')
 
       await capture.stop()
@@ -219,7 +219,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       })
 
       await new Promise((r) => setTimeout(r, 50))
-      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.AgentFeedback)[0].properties
+      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
       expect(p.$mcp_feedback_product_area).toBe('analytics')
       expect(p[PostHogMCPAnalyticsProperty.FeedbackTool]).toBe('query_todos')
       expect(p.$mcp_feedback_invented_field).toBeUndefined()
@@ -238,7 +238,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       })
 
       await new Promise((r) => setTimeout(r, 50))
-      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.AgentFeedback)[0].properties
+      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
       expect(p[PostHogMCPAnalyticsProperty.FeedbackSummary]).not.toContain('jane@example.com')
       expect(p[PostHogMCPAnalyticsProperty.FeedbackSummary]).toContain('[redacted]')
 
@@ -246,7 +246,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
     })
 
     it('invokes onFeedback with the parsed report and uses its returned reply', async () => {
-      const onFeedback = vi.fn(async (report: AgentFeedbackReport) => `Thanks for the ${report.feedbackType} report!`)
+      const onFeedback = vi.fn(async (report: FeedbackReport) => `Thanks for the ${report.feedbackType} report!`)
       instrument(server, fakePostHog(), {
         collectFeedback: { extraProperties: { product_area: { type: 'string' } }, onFeedback },
       })
@@ -282,7 +282,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       expect(result.content[0].text).toContain('recorded')
 
       await new Promise((r) => setTimeout(r, 50))
-      expect(capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.AgentFeedback)).toHaveLength(1)
+      expect(capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)).toHaveLength(1)
 
       await capture.stop()
     })
@@ -300,8 +300,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       const captured = capture
         .getEvents()
         .filter(
-          (e) =>
-            e.eventType === MCPAnalyticsEventType.mcpToolsCall || e.eventType === MCPAnalyticsEventType.mcpAgentFeedback
+          (e) => e.eventType === MCPAnalyticsEventType.mcpToolsCall || e.eventType === MCPAnalyticsEventType.mcpFeedback
         )
       expect(captured.map((e) => e.resourceName)).toEqual(['add_todo', SEND_FEEDBACK, 'list_todos'])
       expect(new Set(captured.map((e) => e.sessionId)).size).toBe(1)
@@ -365,7 +364,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       await new Promise((r) => setTimeout(r, 50))
       const event = capture
         .getEvents()
-        .find((e) => e.eventType === MCPAnalyticsEventType.mcpAgentFeedback && e.resourceName === 'agent-feedback')
+        .find((e) => e.eventType === MCPAnalyticsEventType.mcpFeedback && e.resourceName === 'agent-feedback')
       expect(event?.userIntent).toBe('A note.')
 
       await capture.stop()
@@ -421,20 +420,20 @@ describe('PostHogMCP (custom dispatcher path)', () => {
       product_area: 'exports',
     })
 
-    expect(prepared.isAgentFeedback).toBe(true)
+    expect(prepared.isFeedback).toBe(true)
     expect(prepared.isMissingCapability).toBe(false)
     expect(prepared.feedbackReport?.feedbackType).toBe('missing_capability')
     expect(prepared.feedbackReport?.summary).toBe('No bulk export.')
     expect(prepared.feedbackReport?.extras).toEqual({ product_area: 'exports' })
 
     const regular = posthog.prepareToolCall('my_tool', { value: 1 })
-    expect(regular.isAgentFeedback).toBe(false)
+    expect(regular.isFeedback).toBe(false)
     expect(regular.feedbackReport).toBeUndefined()
 
     await posthog.shutdown()
   })
 
-  it('captureAgentFeedback emits $mcp_feedback with the report properties and intent', async () => {
+  it('captureFeedback emits $mcp_feedback with the report properties and intent', async () => {
     const posthog = newClient({ collectFeedback: { toolName: 'agent-feedback' } })
 
     const prepared = posthog.prepareToolCall('agent-feedback', {
@@ -442,7 +441,7 @@ describe('PostHogMCP (custom dispatcher path)', () => {
       summary: 'Tool X misleads.',
       details: 'The schema hides a required field.',
     })
-    posthog.captureAgentFeedback({
+    posthog.captureFeedback({
       report: prepared.feedbackReport!,
       distinctId: 'user-123',
       sessionId: 'session-abc',
@@ -450,7 +449,7 @@ describe('PostHogMCP (custom dispatcher path)', () => {
     })
     await new Promise((r) => setTimeout(r, 0))
 
-    const payloads = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.AgentFeedback)
+    const payloads = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)
     expect(payloads).toHaveLength(1)
     const p = payloads[0].properties
     expect(payloads[0].distinct_id).toBe('user-123')
@@ -472,13 +471,13 @@ describe('PostHogMCP (custom dispatcher path)', () => {
  * majors' `CallToolResult`.
  */
 describe('results we hand back stay assignable to the SDK types', () => {
-  it('agentFeedbackResult() satisfies v1 CallToolResult', () => {
-    const result: CallToolResult = agentFeedbackResult()
+  it('sendFeedbackResult() satisfies v1 CallToolResult', () => {
+    const result: CallToolResult = sendFeedbackResult()
     expect(result.content).toHaveLength(1)
   })
 
-  it('agentFeedbackResult() satisfies v2 CallToolResult', () => {
-    const result: V2CallToolResult = agentFeedbackResult()
+  it('sendFeedbackResult() satisfies v2 CallToolResult', () => {
+    const result: V2CallToolResult = sendFeedbackResult()
     expect(result.content).toHaveLength(1)
   })
 })

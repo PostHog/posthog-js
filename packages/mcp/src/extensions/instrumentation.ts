@@ -45,11 +45,7 @@ import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getRequestHeaders } from './request-headers'
 import { getSessionId, getSessionInfo, isModernEraRequest, newSessionId } from './session'
 import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
-import {
-  getAgentFeedbackToolDescriptor,
-  resolveAgentFeedbackOptions,
-  resolveAgentFeedbackToolName,
-} from './agent-feedback'
+import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, resolveFeedbackToolName } from './agent-feedback'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
 
@@ -77,7 +73,7 @@ interface TraceToolCallParams {
   /**
    * Event type to capture. Defaults to a tool call; the `get_more_tools` virtual
    * tool passes `mcpMissingCapability` and `send_feedback` passes
-   * `mcpAgentFeedback`, so they record a capability gap / a feedback report
+   * `mcpFeedback`, so they record a capability gap / a feedback report
    * rather than a tool invocation.
    */
   eventType?: MCPAnalyticsEventType
@@ -127,7 +123,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   // the injected `context` parameter neither exists on them nor gets read.
   const isVirtualAnalyticsTool =
     resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability ||
-    resolvedEventType === MCPAnalyticsEventType.mcpAgentFeedback
+    resolvedEventType === MCPAnalyticsEventType.mcpFeedback
   const ownership = getActiveAnalyticsParameterOwnership(
     data,
     request.params?.name,
@@ -725,16 +721,16 @@ async function getTracedToolsList(
         }
       }
 
-      const feedbackOptions = resolveAgentFeedbackOptions(data.options.collectFeedback)
+      const feedbackOptions = resolveCollectFeedbackOptions(data.options.collectFeedback)
       if (feedbackOptions) {
-        const feedbackToolName = resolveAgentFeedbackToolName(data.options.collectFeedback)
+        const feedbackToolName = resolveFeedbackToolName(data.options.collectFeedback)
         const alreadyPresent = tools.some((tool) => tool?.name === feedbackToolName)
         if (alreadyPresent) {
           data.logger(
             `Warning: Cannot inject agent-feedback tool "${feedbackToolName}" because a real tool already uses that name. The real tool will not be intercepted.`
           )
         } else {
-          const virtualTool = getAgentFeedbackToolDescriptor(feedbackOptions)
+          const virtualTool = getFeedbackToolDescriptor(feedbackOptions)
           tools.push(virtualTool)
           cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, [virtualTool])
         }

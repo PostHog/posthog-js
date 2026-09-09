@@ -199,17 +199,17 @@ export interface MCPAnalyticsContextOptions {
   description?: string
 }
 
-export type AgentFeedbackType = 'missing_capability' | 'issue' | 'praise' | 'other'
-export type AgentFeedbackSentiment = 'positive' | 'neutral' | 'negative' | 'mixed'
+export type FeedbackType = 'missing_capability' | 'issue' | 'praise' | 'other'
+export type FeedbackSentiment = 'positive' | 'neutral' | 'negative' | 'mixed'
 
 /** The `collectFeedback` option: `true` for the defaults, or the object form. */
-export type CollectFeedbackConfig = boolean | AgentFeedbackOptions
+export type CollectFeedbackConfig = boolean | CollectFeedbackOptions
 
 /**
  * A host-declared input-schema fragment for one `send_feedback` extra property —
  * plain JSON Schema, the same shape the MCP `tools/list` wire format uses.
  */
-export interface AgentFeedbackExtraPropertySchema {
+export interface FeedbackExtraPropertySchema {
   type: string
   description?: string
   enum?: string[]
@@ -217,7 +217,7 @@ export interface AgentFeedbackExtraPropertySchema {
 }
 
 /** Object form of {@link CollectFeedbackConfig}. */
-export interface AgentFeedbackOptions {
+export interface CollectFeedbackOptions {
   /**
    * Rename the `send_feedback` virtual tool. Set once so the tool is advertised
    * and detected under the same name. Defaults to `send_feedback`.
@@ -232,26 +232,26 @@ export interface AgentFeedbackOptions {
    * the schema are never captured. A key that collides with a core field or an
    * SDK-injected argument throws at configuration time.
    */
-  extraProperties?: Record<string, AgentFeedbackExtraPropertySchema>
+  extraProperties?: Record<string, FeedbackExtraPropertySchema>
   /** Keys of `extraProperties` to advertise as required. */
   extraRequired?: string[]
   /**
    * Route each report to a real backend (`instrument()` path only — a custom
-   * dispatcher routes reports itself, see {@link PreparedToolCall.isAgentFeedback}).
+   * dispatcher routes reports itself, see {@link PreparedToolCall.isFeedback}).
    * Return a string to replace the default acknowledgement text. A throw is
    * logged and falls back to the default reply; the `$mcp_feedback` event is
    * captured either way.
    */
-  onFeedback?: (report: AgentFeedbackReport) => MaybePromise<string | void>
+  onFeedback?: (report: FeedbackReport) => MaybePromise<string | void>
 }
 
 /** One parsed `send_feedback` call, as handed to `onFeedback` and the dispatcher. */
-export interface AgentFeedbackReport {
+export interface FeedbackReport {
   /** Invalid or missing values fall back to `other`. */
-  feedbackType: AgentFeedbackType
+  feedbackType: FeedbackType
   /** One-sentence summary; empty string when the agent omitted it. */
   summary: string
-  sentiment?: AgentFeedbackSentiment
+  sentiment?: FeedbackSentiment
   frictionPoints?: string
   suggestedImprovement?: string
   details?: string
@@ -672,7 +672,7 @@ export interface PrepareToolListOptions {
    * Append the `send_feedback` virtual tool (configured on the `PostHogMCP`
    * constructor's `collectFeedback` option) so agents can send feedback.
    * Defaults to `false`. When the agent calls it, route the call to
-   * {@link PostHogMCP.captureAgentFeedback} and reply with `agentFeedbackResult()`.
+   * {@link PostHogMCP.captureFeedback} and reply with `sendFeedbackResult()`.
    */
   collectFeedback?: boolean
 }
@@ -707,13 +707,13 @@ export interface PreparedToolCall {
   /** True when `name` is the `get_more_tools` virtual tool. */
   isMissingCapability: boolean
   /** True when `name` is the `send_feedback` virtual tool. */
-  isAgentFeedback: boolean
+  isFeedback: boolean
   /**
-   * The parsed feedback report, set only when {@link PreparedToolCall.isAgentFeedback}
-   * is true. Pass it to {@link PostHogMCP.captureAgentFeedback} and to your own
-   * feedback backend, then reply with `agentFeedbackResult()` or a custom text.
+   * The parsed feedback report, set only when {@link PreparedToolCall.isFeedback}
+   * is true. Pass it to {@link PostHogMCP.captureFeedback} and to your own
+   * feedback backend, then reply with `sendFeedbackResult()` or a custom text.
    */
-  feedbackReport?: AgentFeedbackReport
+  feedbackReport?: FeedbackReport
 }
 
 /** Payload for {@link PostHogMCP.captureMissingCapability}. Emits `$mcp_missing_capability`. */
@@ -731,13 +731,13 @@ export interface MissingCapabilityCaptureData extends McpCaptureCommon {
   parameters?: unknown
 }
 
-/** Payload for {@link PostHogMCP.captureAgentFeedback}. Emits `$mcp_feedback`. */
-export interface AgentFeedbackCaptureData extends McpCaptureCommon {
+/** Payload for {@link PostHogMCP.captureFeedback}. Emits `$mcp_feedback`. */
+export interface FeedbackCaptureData extends McpCaptureCommon {
   /**
    * The parsed report (from {@link PreparedToolCall.feedbackReport}) →
    * `$mcp_feedback_*` properties, with the summary and details as `$mcp_intent`.
    */
-  report: AgentFeedbackReport
+  report: FeedbackReport
   /** The calling model id -> `$mcp_llm_model`. */
   llmModel?: string
   /** How the model id was obtained -> `$mcp_llm_model_source`. */

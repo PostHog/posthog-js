@@ -12,13 +12,13 @@ import type {
   ToolCallback,
 } from '../types'
 import {
-  buildAgentFeedbackEventProperties,
-  buildAgentFeedbackIntent,
-  getAgentFeedbackToolDescriptor,
-  handleAgentFeedback,
-  parseAgentFeedbackReport,
-  resolveAgentFeedbackOptions,
-  resolveAgentFeedbackToolName,
+  buildFeedbackEventProperties,
+  buildFeedbackIntent,
+  getFeedbackToolDescriptor,
+  handleFeedback,
+  parseFeedbackReport,
+  resolveCollectFeedbackOptions,
+  resolveFeedbackToolName,
 } from './agent-feedback'
 import {
   analyticsOwnsParameter,
@@ -264,26 +264,26 @@ async function handleToolCallRequest(
     })
   }
 
-  const feedbackOptions = resolveAgentFeedbackOptions(data.options.collectFeedback)
-  const isAgentFeedbackCandidate =
-    feedbackOptions !== undefined && toolName === resolveAgentFeedbackToolName(data.options.collectFeedback)
+  const feedbackOptions = resolveCollectFeedbackOptions(data.options.collectFeedback)
+  const isFeedbackCandidate =
+    feedbackOptions !== undefined && toolName === resolveFeedbackToolName(data.options.collectFeedback)
 
-  if (isAgentFeedbackCandidate && (await isToolAdvertised(server, toolName, extra, data.logger)) === false) {
-    const report = parseAgentFeedbackReport(request.params?.arguments, feedbackOptions)
+  if (isFeedbackCandidate && (await isToolAdvertised(server, toolName, extra, data.logger)) === false) {
+    const report = parseFeedbackReport(request.params?.arguments, feedbackOptions)
     return await captureToolCall({
       server,
       data,
       request,
       extra,
-      eventType: MCPAnalyticsEventType.mcpAgentFeedback,
-      explicitContextIntent: buildAgentFeedbackIntent(report),
-      extraEventProperties: buildAgentFeedbackEventProperties(report),
+      eventType: MCPAnalyticsEventType.mcpFeedback,
+      explicitContextIntent: buildFeedbackIntent(report),
+      extraEventProperties: buildFeedbackEventProperties(report),
       parameterOwnership: getVirtualToolParameterOwnership(
         data,
         toolName,
-        getAgentFeedbackToolDescriptor(feedbackOptions).inputSchema
+        getFeedbackToolDescriptor(feedbackOptions).inputSchema
       ),
-      execute: async () => handleAgentFeedback(report, feedbackOptions, data.logger),
+      execute: async () => handleFeedback(report, feedbackOptions, data.logger),
     })
   }
 

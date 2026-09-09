@@ -23,9 +23,9 @@ export const POSTHOG_MCP_LIB_NAME = 'posthog-node-mcp'
 // All PostHog-owned event names start with `$` per the PostHog convention.
 // Non-`$` names would be treated as customer-defined events and confuse the schema.
 export const PostHogMCPAnalyticsEvent = {
-  AgentFeedback: '$mcp_feedback',
   Custom: '$mcp_custom',
   Exception: '$exception',
+  Feedback: '$mcp_feedback',
   Identify: '$identify',
   Initialize: '$mcp_initialize',
   MissingCapability: '$mcp_missing_capability',

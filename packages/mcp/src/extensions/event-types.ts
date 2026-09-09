@@ -13,7 +13,7 @@
 export const MCPAnalyticsEventType = {
   identify: 'posthog:identify',
   custom: 'posthog:custom',
-  mcpAgentFeedback: 'mcp:feedback',
+  mcpFeedback: 'mcp:feedback',
   mcpMissingCapability: 'mcp:missing_capability',
   mcpInitialize: 'mcp:initialize',
   mcpPromptsGet: 'mcp:prompts/get',

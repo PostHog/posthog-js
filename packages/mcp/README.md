@@ -260,10 +260,10 @@ return { tools: posthog.prepareToolList(myTools, { collectFeedback: true }) }
 
 // tools/call dispatcher
 const prepared = posthog.prepareToolCall(name, rawArgs)
-if (prepared.isAgentFeedback) {
-  posthog.captureAgentFeedback({ report: prepared.feedbackReport!, ...identity })
+if (prepared.isFeedback) {
+  posthog.captureFeedback({ report: prepared.feedbackReport!, ...identity })
   await myFeedbackBackend.record(prepared.feedbackReport!)
-  return agentFeedbackResult() // or a custom text reply
+  return sendFeedbackResult() // or a custom text reply
 }
 ```
 

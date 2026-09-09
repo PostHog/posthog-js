@@ -14,7 +14,7 @@ import { applyMcpLibIdentity } from './extensions/lib-identity'
 import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
 import { instrumentLowLevelServer } from './extensions/instrument-lowlevel'
 import { instrumentHighLevelServer } from './extensions/instrument-highlevel'
-import { getAgentFeedbackToolDescriptor, resolveAgentFeedbackOptions } from './extensions/agent-feedback'
+import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions } from './extensions/agent-feedback'
 import type {
   CaptureEventData,
   HighLevelMCPServerLike,
@@ -69,9 +69,9 @@ function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOpti
 
     // Fail fast on a `collectFeedback` config error (reserved extra key,
     // undeclared extraRequired) instead of first surfacing it at tools/list time.
-    const feedbackOptions = resolveAgentFeedbackOptions(options.collectFeedback)
+    const feedbackOptions = resolveCollectFeedbackOptions(options.collectFeedback)
     if (feedbackOptions) {
-      getAgentFeedbackToolDescriptor(feedbackOptions)
+      getFeedbackToolDescriptor(feedbackOptions)
     }
 
     if (posthog) {
@@ -224,19 +224,19 @@ export {
 export { getRequestHeaders } from './extensions/request-headers'
 export { PostHogMCP, type PostHogMCPOptions } from './extensions/posthog-mcp'
 export { getMoreToolsResult } from './extensions/tools'
-export { agentFeedbackResult, SEND_FEEDBACK_TOOL_NAME } from './extensions/agent-feedback'
+export { sendFeedbackResult, SEND_FEEDBACK_TOOL_NAME } from './extensions/agent-feedback'
 export { setLogger } from './extensions/logger'
 // Re-export the posthog-node client so a single import works:
 //   import { PostHog, instrument } from "@posthog/mcp"
 // posthog-node stays a peer dependency, so this resolves the host app's installed copy.
 export { PostHog, type PostHogOptions } from 'posthog-node'
 export type {
-  AgentFeedbackCaptureData,
-  AgentFeedbackExtraPropertySchema,
-  AgentFeedbackOptions,
-  AgentFeedbackReport,
-  AgentFeedbackSentiment,
-  AgentFeedbackType,
+  FeedbackCaptureData,
+  FeedbackExtraPropertySchema,
+  CollectFeedbackOptions,
+  FeedbackReport,
+  FeedbackSentiment,
+  FeedbackType,
   BeforeSendFn,
   CaptureEventData,
   CollectFeedbackConfig,
