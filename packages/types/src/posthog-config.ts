@@ -2051,8 +2051,9 @@ export interface PostHogConfig {
      * flag changes without requiring a page reload. This is useful for SPAs and long-running tabs.
      *
      * **Each refresh is a billable feature flag request.** A page that stays open all day makes
-     * up to 288 requests per day per device on the default interval. Set this option to `0` to
-     * stop the background refreshes if that cost is not useful to you.
+     * up to 288 requests per day on the default interval, and every open tab and every named
+     * instance refreshes on its own timer, so they add up. Set this option to `0` to stop the
+     * background refreshes if that cost is not useful to you.
      *
      * **Tradeoffs:**
      * - **Shorter intervals**: Feature flag changes propagate faster, but increases network requests, cost, and server load.
