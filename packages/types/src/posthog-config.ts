@@ -164,22 +164,22 @@ export interface BootstrapConfig {
     /**
      * Distinct ID to use before the SDK has loaded persisted identity.
      */
-    distinctID?: string
+    distinctID?: string | null
 
     /**
      * Whether `distinctID` already identifies a known person profile.
      */
-    isIdentifiedID?: boolean
+    isIdentifiedID?: boolean | null
 
     /**
      * Feature flag values to use immediately until the SDK fetches fresh values.
      */
-    featureFlags?: Record<string, boolean | string>
+    featureFlags?: Record<string, boolean | string> | null
 
     /**
      * Feature flag payloads to use together with bootstrapped `featureFlags`.
      */
-    featureFlagPayloads?: Record<string, JsonType>
+    featureFlagPayloads?: Record<string, JsonType> | null
 
     /**
      * Optionally provide a sessionID, this is so that you can provide an existing sessionID here to continue a user's session across a domain or device. It MUST be:
@@ -188,7 +188,7 @@ export interface BootstrapConfig {
      * - the timestamp part must be <= the timestamp of the first event in the session
      * - the timestamp of the last event in the session must be < the timestamp part + 24 hours
      */
-    sessionID?: string
+    sessionID?: string | null
 }
 
 export interface ResetOptions {
