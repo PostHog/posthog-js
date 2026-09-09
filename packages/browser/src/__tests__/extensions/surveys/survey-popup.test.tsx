@@ -96,6 +96,25 @@ describe('SurveyPopup', () => {
         delete (HTMLFormElement.prototype as any).submit
     })
 
+    test.each([
+        { label: 'no appearance configured', appearance: undefined, expected: '' },
+        { label: 'null appearance', appearance: null, expected: '' },
+        { label: 'empty appearance', appearance: {}, expected: '' },
+        { label: 'cleared placeholder', appearance: { placeholder: '' }, expected: '' },
+        { label: 'custom placeholder', appearance: { placeholder: 'Tell us more...' }, expected: 'Tell us more...' },
+    ])('renders open text with $label', ({ appearance, expected }) => {
+        render(
+            <SurveyPopup
+                survey={{ ...mockSurvey, appearance }}
+                removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                isPopup={true}
+                posthog={mockPosthog as any}
+            />
+        )
+
+        expect((screen.getByRole('textbox') as HTMLTextAreaElement).placeholder).toBe(expected)
+    })
+
     // --- Existing Tests --- (Keep as is)
     test('calls onCloseConfirmationMessage when X button is clicked in the confirmation message', () => {
         render(
