@@ -1715,10 +1715,20 @@ export class PostHog extends PostHogCore {
    * or when the native plugin is missing or too old.
    */
   async stopSessionRecording(): Promise<boolean> {
-    // Drops a pending retry: the caller asked for no recording, so an earlier refused start
-    // must not start one on the next flags load.
-    this._manualRecordingStartPending = false
-    return this._stopSessionRecording()
+    let stopped = false
+    // Chained like startSessionRecording(), so an in-flight flags-driven retry settles before
+    // the stop: unchained, the retry's own write lands after this one and revives the pending
+    // start, or its startRecording() lands after the stop and leaves the recorder running.
+    this._sessionReplayEvalChain = this._sessionReplayEvalChain
+      .catch(() => {})
+      .then(async () => {
+        // Drops a pending retry: the caller asked for no recording, so an earlier refused start
+        // must not start one on the next flags load.
+        this._manualRecordingStartPending = false
+        stopped = await this._stopSessionRecording()
+      })
+    await this._sessionReplayEvalChain
+    return stopped
   }
 
   // Shared stop path, also called by the flags-driven evaluation.

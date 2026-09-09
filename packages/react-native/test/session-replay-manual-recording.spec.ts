@@ -162,6 +162,51 @@ describe('PostHog RN manual session recording controls', () => {
     expect(await posthog.isSessionReplayActive()).toBe(false)
   })
 
+  it('does not revive a refused start when the stop lands while a retry is in flight', async () => {
+    nativeAccepts = false
+    posthog = newPostHog()
+    await posthog.ready()
+
+    await posthog.startSessionRecording()
+
+    // Hold the retry inside the native start, so the stop below overlaps it.
+    let releaseRetry: () => void = () => {}
+    const held = new Promise<void>((resolve) => {
+      releaseRetry = resolve
+    })
+    let retryStarted: () => void = () => {}
+    const inFlight = new Promise<void>((resolve) => {
+      retryStarted = resolve
+    })
+    replay.startRecording.mockImplementation(async () => {
+      retryStarted()
+      await held
+      nativeRecording = nativeAccepts
+    })
+
+    void posthog.reloadFeatureFlagsAsync()
+    await inFlight
+
+    const stopping = posthog.stopSessionRecording()
+    // Long enough for an unserialized stop to run to completion ahead of the retry.
+    await wait(20)
+    releaseRetry()
+    expect(await stopping).toBe(true)
+
+    // Native accepts now, so a revived pending start would record the flow the app excluded.
+    nativeAccepts = true
+    replay.startRecording.mockImplementation(async () => {
+      nativeRecording = nativeAccepts
+    })
+    const attempts = replay.startRecording.mock.calls.length
+
+    await posthog.reloadFeatureFlagsAsync()
+    await wait(50)
+
+    expect(replay.startRecording).toHaveBeenCalledTimes(attempts)
+    expect(await posthog.isSessionReplayActive()).toBe(false)
+  })
+
   it('reports failure when the plugin is too old to control recording', async () => {
     const startRecording = replay.startRecording
     delete (replay as any).startRecording
