@@ -65,7 +65,8 @@ export const defaultSurveyAppearance = {
     ratingButtonColor: 'white',
     ratingButtonActiveColor: 'black',
     borderColor: '#c9c6c6',
-    placeholder: 'Start typing...',
+    // Deliberately no placeholder default: open text questions only show placeholder text when the
+    // survey's appearance sets one, so clearing the field in the survey editor clears it here too.
     whiteLabel: false,
     displayThankYouMessage: true,
     thankYouMessageHeader: 'Thank you for your feedback!',
