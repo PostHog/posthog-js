@@ -1,6 +1,5 @@
 import { getBabelOutputPlugin } from '@rollup/plugin-babel'
 import { dts } from 'rolldown-plugin-dts'
-import ts from 'typescript'
 import { minify as minifyWithTerser } from 'terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import { Features, transform as transformCss } from 'lightningcss'
@@ -461,46 +460,6 @@ const mainModuleTypesEntries = new Set([
 // below rewrites value references back to `NodeType.`. Only rrweb pulls in rrdom.
 const rewriteRrdomNodeTypeAlias = (file) => file === 'rrweb.es.ts'
 
-// TypeScript checks enum declaration names, even when consumers import them through an alias.
-// Rollup named rrweb's enum EventType$1 to distinguish it from PostHog's EventType constant.
-const preserveRrwebEventTypeName = {
-    name: 'preserve-rrweb-event-type-name',
-    renderChunk(code) {
-        const names = new Map([
-            ['EventType', 'EventType$1'],
-            ['EventType$1', 'PostHogEventType'],
-        ])
-        const source = ts.createSourceFile('rrweb-types.d.ts', code, ts.ScriptTarget.Latest, true)
-        const result = ts.transform(source, [
-            (context) => {
-                const visit = (node) => {
-                    if (ts.isExportSpecifier(node)) {
-                        const local = node.propertyName ?? node.name
-                        return names.has(local.text)
-                            ? ts.factory.updateExportSpecifier(
-                                  node,
-                                  node.isTypeOnly,
-                                  ts.factory.createIdentifier(names.get(local.text)),
-                                  node.name
-                              )
-                            : node
-                    }
-                    if (ts.isIdentifier(node) && names.has(node.text)) {
-                        return ts.factory.createIdentifier(names.get(node.text))
-                    }
-                    return ts.visitEachChild(node, visit, context)
-                }
-                return (node) => ts.visitNode(node, visit)
-            },
-        ])
-        try {
-            return ts.createPrinter().printFile(result.transformed[0])
-        } finally {
-            result.dispose()
-        }
-    },
-}
-
 // The former runtime TypeScript plugin also published dist/src declarations. Retain those paths.
 const unbundledDeclarations = {
     name: 'unbundled-declarations',
@@ -555,7 +514,6 @@ const typeTargets = entrypoints
             plugins: [
                 ...(index === 0 ? [unbundledDeclarations] : []),
                 ...dts({ dtsInput: true, emitDtsOnly: true }),
-                ...(file === 'rrweb-types.es.ts' ? [preserveRrwebEventTypeName] : []),
                 // dts preserves tsc-era paths ending in `.es`, but the output files
                 // omit that segment — fix references between the generated declarations.
                 ...(isExtensionBundles || isSlimModule

@@ -250,22 +250,20 @@ import DeadClicksAutocapture from 'posthog-js/dist/dead-clicks-autocapture'
 import initConversations from 'posthog-js/dist/conversations'
 import generateProductTours from 'posthog-js/dist/product-tours'
 import generateSurveys from 'posthog-js/dist/surveys'
-import { EventType } from 'posthog-js/dist/rrweb-types'
+import type { Replayer, ReplayPlugin, eventWithTime as ReplayerEvent } from 'posthog-js/dist/rrweb'
+import type { EventType, eventWithTime } from 'posthog-js/dist/rrweb-types'
 
-// Earlier bundles expose this enum under an alias; TypeScript compares its local name too.
-declare enum EventType$1 {
-    DomContentLoaded = 0,
-    Load = 1,
-    FullSnapshot = 2,
-    IncrementalSnapshot = 3,
-    Meta = 4,
-    Custom = 5,
-    Plugin = 6,
-}
-const legacyEventType: EventType$1 = EventType.IncrementalSnapshot
-const currentEventType: EventType = EventType$1.IncrementalSnapshot
-void legacyEventType
-void currentEventType
+declare const events: eventWithTime[]
+declare const ReplayerClass: typeof Replayer
+const plugin: ReplayPlugin = { handler(event: eventWithTime) { void event } }
+const replayer = new ReplayerClass(events, { plugins: [plugin] })
+replayer.addEvent(events[0])
+const replayEvent: ReplayerEvent = events[0]
+const publicEvent: eventWithTime = replayEvent
+const publicEventType: EventType = replayEvent.type
+const replayEventType: ReplayerEvent['type'] = publicEvent.type
+void publicEventType
+void replayEventType
 
 new DeadClicksAutocapture(posthog)
 initConversations({} as any, posthog)
