@@ -69,7 +69,9 @@ const MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES = 3
 
 /** Longest interval the automatic refresh backs off to while the page has no user interaction. */
 const MAX_IDLE_REFRESH_INTERVAL_MS = 60 * 60 * 1000
-const USER_INTERACTION_EVENTS = ['click', 'keydown', 'scroll']
+// Input-origin events only: a `scroll` event also fires for scrollTo/scrollTop/scrollIntoView,
+// so an auto-scrolling carousel on a signage page would keep cancelling the idle backoff.
+const USER_INTERACTION_EVENTS = ['click', 'keydown', 'wheel', 'touchstart', 'pointerdown']
 
 type FeatureFlagsState = {
     [PERSISTENCE_ACTIVE_FEATURE_FLAGS]?: string[]

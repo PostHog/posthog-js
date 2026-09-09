@@ -2064,8 +2064,9 @@ export interface PostHogConfig {
      * Hidden pages skip scheduled refreshes and reload due flags when they become visible.
      *
      * A visible page that gets no user interaction (a kiosk or a signage screen) doubles the
-     * interval after every refresh, up to one hour. The next click, key press, scroll, or return
-     * to visibility puts the page back on the configured interval.
+     * interval after every refresh, up to one hour. The next click, key press, wheel, touch, or
+     * return to visibility puts the page back on the configured interval. Scrolling driven by a
+     * script, such as an auto-playing carousel, does not count as an interaction.
      *
      * This option does not reload remote config.
      *

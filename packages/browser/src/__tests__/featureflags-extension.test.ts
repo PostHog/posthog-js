@@ -55,7 +55,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         featureFlags.dispose()
         expect(removeWindowListener).toHaveBeenCalledTimes(1)
         expect(removeWindowListener).toHaveBeenCalledWith('online', expect.any(Function))
-        expect(removeDocumentListener).toHaveBeenCalledTimes(4)
+        expect(removeDocumentListener).toHaveBeenCalledTimes(6)
         expect(removeDocumentListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function))
         expect(removeDocumentListener).toHaveBeenCalledWith('click', expect.any(Function), { capture: true })
     })
@@ -559,8 +559,24 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
             // The next scheduled refresh is four intervals away, the interaction brings it forward.
             vi.advanceTimersByTime(refreshIntervalMs)
-            document.dispatchEvent(new Event('scroll'))
+            document.dispatchEvent(new Event('wheel'))
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(3)
+        })
+
+        it('keeps backing off when only a scroll event fires', async () => {
+            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            vi.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+
+            // A carousel scrolling itself is not a user interaction, so the next refresh still
+            // needs two intervals.
+            document.dispatchEvent(new Event('scroll'))
+            vi.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            vi.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
         })
 
         it('does not reload flags on a user interaction before the interval elapses', async () => {
