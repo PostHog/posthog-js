@@ -98,7 +98,7 @@ export default defineConfig({
     minify: false,
   },
   plugins: [
-    dts({
+    process.argv.includes('--watch') && dts({
       insertTypesEntry: true,
       bundleTypes: true,
       afterBuild: (emittedFiles) => {

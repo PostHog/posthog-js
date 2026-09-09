@@ -166,6 +166,12 @@ importers:
       rimraf:
         specifier: ^6.1.3
         version: 6.1.3
+      rolldown:
+        specifier: 'catalog:'
+        version: 1.2.4
+      rolldown-plugin-dts:
+        specifier: 'catalog:'
+        version: 0.27.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(rolldown@1.2.4)(typescript@5.8.2)
       rollup:
         specifier: 'catalog:'
         version: 4.53.3
@@ -256,7 +262,7 @@ importers:
         version: link:../node
       tsdown:
         specifier: 'catalog:'
-        version: 0.22.14(@volar/typescript@2.4.28)(typescript@5.8.2)
+        version: 0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -942,7 +948,7 @@ importers:
         version: 19.2.7(react@19.2.7)
       tsdown:
         specifier: 0.22.14
-        version: 0.22.14(@volar/typescript@2.4.28)(typescript@5.8.2)
+        version: 0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@5.8.2)
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
@@ -1655,7 +1661,7 @@ importers:
         version: 26.1.0
       tsdown:
         specifier: 'catalog:'
-        version: 0.22.14(@volar/typescript@2.4.28)(typescript@5.8.2)
+        version: 0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -37845,7 +37851,7 @@ snapshots:
     optionalDependencies:
       typescript: 5.8.2
 
-  tsdown@0.22.14(@volar/typescript@2.4.28)(typescript@5.8.2):
+  tsdown@0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@5.8.2):
     dependencies:
       ansis: 4.3.1
       cac: 7.0.0

@@ -29,7 +29,8 @@
     },
     "scripts": {
         "dev": "vite build --watch",
-        "build": "tsc -noEmit && vite build",
+        "build": "tsc -noEmit && vite build && pnpm build:declarations",
+        "build:declarations": "rolldown -c rolldown.dts.config.mts",
         "check-types": "tsc -noEmit",
         "test": "pnpm test:rrweb",
         "test:rrweb": "vitest run",

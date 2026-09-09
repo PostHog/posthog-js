@@ -135,6 +135,21 @@ pnpm clean
 pnpm clean:dep
 ```
 
+### rrweb declaration builds
+
+All 16 rrweb workspace packages run semantic checking before Vite's JavaScript build and a separate Rolldown declaration build. `build:declarations` only emits types; it is not a substitute for `check-types` or the production build.
+
+The shared `packages/rrweb/rolldown.dts.config.mts` uses Oxc when a package opts into `isolatedDeclarations`. `rrweb`, `rrdom`, and `rrdom-nodejs` retain TypeScript generation because their annotation work is larger (including exported function properties and destructuring in `rrweb`). Keep this opt-in per package rather than enabling it in the shared TSConfig.
+
+Declaration entries remain self-contained, external package imports remain external, and each `.d.ts` has an identical `.d.cts` sibling. Watch mode uses Vite's declaration plugin except for `rrweb-record`, which runs a separate Rolldown declaration watcher. The alternate rrweb entrypoint config also retains Vite's declaration plugin.
+
+```sh
+pnpm turbo run build --filter='./packages/rrweb/**'
+pnpm test:rrweb-declarations
+```
+
+The declaration regression tests also run through `pnpm test:unit`. When changing an entrypoint, verify its package exports and both declaration formats, and check a `pnpm dev` source edit/rebuild. Keep the shared build configs in Turbo's cache inputs.
+
 ### Dead code audit (Knip)
 
 [Knip](https://knip.dev/) is an opt-in local audit, not a lint or CI gate. After `pnpm install --frozen-lockfile`, run it from the repository root; no SDK build is required:
