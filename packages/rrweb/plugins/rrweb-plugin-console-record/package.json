@@ -25,11 +25,11 @@
     ],
     "scripts": {
         "dev": "vite build --watch",
-        "test": "vitest run",
+        "test": "pnpm test:rrweb",
+        "test:rrweb": "vitest run",
         "test:watch": "vitest watch",
-        "build": "pnpm turbo run prepublish",
-        "check-types": "tsc -noEmit",
-        "prepublish": "tsc -noEmit && vite build"
+        "build": "tsc -noEmit && vite build",
+        "check-types": "tsc -noEmit"
     },
     "repository": {
         "type": "git",

@@ -101,8 +101,17 @@ pnpm dev
 # Run all tests across packages
 pnpm test
 
-# Run unit tests only
+# Run unit tests and their dedicated built-output checks (no rrweb browser tests)
 pnpm test:unit
+
+# Run dedicated built-output checks only
+pnpm test:built
+
+# Run rrweb tests (requires Puppeteer's Chrome; Linux CI also uses Xvfb)
+pnpm test:rrweb
+
+# Validate task ordering without compiling packages
+pnpm test:build-graph
 
 # Lint all packages
 pnpm lint
@@ -157,7 +166,9 @@ Common package scripts are listed below. Availability and build output directori
 - `lint:fix` - Fix linting issues
 - `build` - Transpile, minify and/or bundle source code (usually into `dist/` or `lib/`)
 - `dev` - Build and watch for changes
-- `test:unit` - Run unit tests
+- `test:unit` - Run unit tests; some packages still include built-output assertions
+- `test:built` - Run dedicated built-output assertions (if available)
+- `test:rrweb` - Run vendored rrweb suites, including real-browser and built-output tests
 - `test:functional` - Run functional/integration tests (if applicable)
 - `package` - Create a tarball of this package that can be installed inside an example or playground project
 
@@ -178,6 +189,14 @@ pnpm turbo --filter=posthog-react-native build
 # Lint a specific package
 pnpm turbo --filter=@posthog/react lint
 ```
+
+### Task dependency contracts
+
+Use root scripts or `pnpm turbo run <task> --filter=<package>` to bootstrap prerequisites. Package build, type-check, test, and reference-generation scripts are leaf commands: running them directly assumes their required dependency outputs already exist. rrweb uses the same `build -> ^build` graph as the SDKs; there is no separate `prepublish` task graph. Its explicit standalone `build-and-test` and watch wrappers bootstrap dependencies through Turbo.
+
+`pnpm test` schedules lint and test leaf tasks directly so package-level `test` convenience scripts do not run the same suites again. rrweb suites live under `test:rrweb`, outside the ordinary unit CI job. `pnpm test:unit` also schedules `test:built` to preserve built-output coverage; for a filtered equivalent, use `pnpm turbo run test:unit test:built --filter=<package>`.
+
+Browser-next separates its source suite (`test:unit`, requiring dependency builds only) from its mixed-module delivery check (`test:built`, requiring its own build). Its `check-types` task also requires its own build because it includes package-consumer fixtures. Other packages retain their existing production-build prerequisites until their artifact checks are separated and verified. `pnpm test:build-graph` guards these ordering and coverage contracts with Turbo dry runs.
 
 ## CI-aligned checks
 
