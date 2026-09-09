@@ -255,6 +255,15 @@ export interface RequestWithOptions {
      * - `query` adds numeric `sent_at` to POST requests or cache-busting `_` to GET requests.
      */
     timestampMode?: 'body' | 'capture-body' | 'query'
+    /**
+     * ISO dispatch time to put in the body, instead of the time the transport encodes it.
+     * The retry queue pins this on the first attempt so every retry of a request sends the
+     * same `sent_at`. A fresh `sent_at` per attempt makes the server apply a different clock
+     * skew correction to each attempt, so a retry of a request the server already ingested
+     * is stored a second time with the same event uuid but a later timestamp, which
+     * deduplication (uuid + event + timestamp + distinct_id) then misses.
+     */
+    sentAtOverride?: string
     fetchOptions?: {
         cache?: RequestInit['cache']
         next?: NextOptions

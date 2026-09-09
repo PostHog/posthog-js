@@ -64,6 +64,7 @@ describe('RetryQueue', () => {
                     url: '/e',
                     data: { event: 'foo', timestamp: now - 3000 },
                     retriesPerformedSoFar: 1,
+                    sentAtOverride: expect.any(String),
                 },
                 retryAt: expect.any(Number),
             },
@@ -72,6 +73,7 @@ describe('RetryQueue', () => {
                     url: '/e',
                     data: { event: 'bar', timestamp: now - 2000 },
                     retriesPerformedSoFar: 1,
+                    sentAtOverride: expect.any(String),
                 },
                 retryAt: expect.any(Number),
             },
@@ -80,6 +82,7 @@ describe('RetryQueue', () => {
                     url: '/e',
                     data: { event: 'baz', timestamp: now - 1000 },
                     retriesPerformedSoFar: 1,
+                    sentAtOverride: expect.any(String),
                 },
                 retryAt: expect.any(Number),
             },
@@ -88,6 +91,7 @@ describe('RetryQueue', () => {
                     url: '/e',
                     data: { event: 'fizz', timestamp: now },
                     retriesPerformedSoFar: 1,
+                    sentAtOverride: expect.any(String),
                 },
                 retryAt: expect.any(Number),
             },
@@ -106,6 +110,23 @@ describe('RetryQueue', () => {
             '/e?retry_count=1',
             '/e?retry_count=1',
         ])
+    })
+
+    it('keeps the sent_at of the first attempt on every retry', () => {
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 502 })
+        })
+
+        retryQueue.retriableRequest({ url: '/e', data: { event: 'foo' } })
+        const sentAtOverrideOfFirstAttempt = mockPosthog._send_request.mock.calls[0][0].sentAtOverride
+        expect(sentAtOverrideOfFirstAttempt).toEqual(new Date(now).toISOString())
+
+        fastForwardTimeAndRunTimer(3500)
+        fastForwardTimeAndRunTimer(7000)
+
+        const sentAtOverrides = mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.sentAtOverride)
+        expect(sentAtOverrides.length).toBeGreaterThan(1)
+        expect(new Set(sentAtOverrides)).toEqual(new Set([sentAtOverrideOfFirstAttempt]))
     })
 
     it('adds the retry_count to the url', () => {

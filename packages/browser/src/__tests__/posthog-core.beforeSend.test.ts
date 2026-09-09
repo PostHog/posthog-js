@@ -81,6 +81,7 @@ describe('posthog core - before send', () => {
             data: capturedData,
             method: 'POST',
             timestampMode: 'capture-body',
+            sentAtOverride: expect.any(String),
             url: 'https://us.i.posthog.com/e/',
         })
     })
@@ -151,6 +152,7 @@ describe('posthog core - before send', () => {
             data: capturedData[0],
             method: 'POST',
             timestampMode: 'capture-body',
+            sentAtOverride: expect.any(String),
             url: 'https://us.i.posthog.com/e/',
         })
     })
@@ -199,6 +201,7 @@ describe('posthog core - before send', () => {
             data: capturedData,
             method: 'POST',
             timestampMode: 'capture-body',
+            sentAtOverride: expect.any(String),
             url: 'https://us.i.posthog.com/e/',
         })
     })
@@ -222,6 +225,7 @@ describe('posthog core - before send', () => {
             data: capturedData,
             method: 'POST',
             timestampMode: 'capture-body',
+            sentAtOverride: expect.any(String),
             url: 'https://us.i.posthog.com/e/',
         })
         expect(mockLogger.warn).toHaveBeenCalledWith(

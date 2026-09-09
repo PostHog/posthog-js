@@ -83,6 +83,12 @@ export class RetryQueue {
             options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
 
+        // Pin the dispatch time on the first attempt and keep it for every retry, so the server can
+        // deduplicate a retry it already ingested - see the `sentAtOverride` doc in types.ts
+        if (isUndefined(options.sentAtOverride)) {
+            options.sentAtOverride = new Date().toISOString()
+        }
+
         this._instance._send_request({
             ...options,
             callback: (response) => {

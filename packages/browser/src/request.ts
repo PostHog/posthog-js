@@ -484,7 +484,10 @@ const buildRequestURL = (
     })
 }
 
-const addSentAtToCaptureBody = (data: NonNullable<RequestWithOptions['data']>): Record<string, any> => {
+const addSentAtToCaptureBody = (
+    data: NonNullable<RequestWithOptions['data']>,
+    sentAt = new Date().toISOString()
+): Record<string, any> => {
     const batch = (isArray(data) ? data : [data]).map((event) => ({
         ...event,
         // This is the typed canonical timestamp override, not an arbitrary event property.
@@ -498,7 +501,7 @@ const addSentAtToCaptureBody = (data: NonNullable<RequestWithOptions['data']>): 
     return {
         api_key: firstEvent?.properties?.token ?? firstEvent?.token,
         batch,
-        sent_at: new Date().toISOString(),
+        sent_at: sentAt,
     }
 }
 
@@ -545,9 +548,9 @@ export const request = (_options: RequestWithOptions) => {
 
     if (options.method === 'POST' && options.data) {
         if (options.timestampMode === 'capture-body') {
-            options.data = addSentAtToCaptureBody(options.data)
+            options.data = addSentAtToCaptureBody(options.data, options.sentAtOverride)
         } else if (options.timestampMode === 'body') {
-            options.data = addSentAtToBody(options.data)
+            options.data = addSentAtToBody(options.data, options.sentAtOverride)
         }
     }
 

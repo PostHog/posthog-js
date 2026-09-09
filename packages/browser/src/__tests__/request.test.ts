@@ -1377,6 +1377,27 @@ describe('request', () => {
         })
     })
 
+    describe('sent_at', () => {
+        beforeEach(() => {
+            transport = 'fetch'
+            mockedFetch.mockClear()
+            mockedFetch.mockImplementation(() => Promise.resolve({ status: 200, text: () => Promise.resolve('{}') }))
+        })
+
+        const sentFetchBody = () => JSON.parse(mockedFetch.mock.calls[0][1].body)
+
+        it.each(['capture-body', 'body'] as const)(
+            'sends the pinned sent_at of a retried request in %s mode',
+            (timestampMode) => {
+                const sentAtOverride = new Date(now - 60000).toISOString()
+
+                request(createRequest({ method: 'POST', data: { event: 'foo' }, timestampMode, sentAtOverride }))
+
+                expect(sentFetchBody().sent_at).toBe(sentAtOverride)
+            }
+        )
+    })
+
     describe('native async gzip retry flow', () => {
         let isolatedRequestModule: any
         let isolatedCompression: typeof Compression
