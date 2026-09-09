@@ -183,11 +183,20 @@ jobs:
                   #
                   # So when the open PR is already in the queue, leave it alone and open a
                   # separate one for this version. It costs an extra PR and keeps the queue whole.
+                  # A failed lookup must not read as "not queued". `|| true` on the whole
+                  # pipeline would absorb a gh error the same way it absorbs grep's ordinary
+                  # no-match, and force-push the queued PR anyway. So the API call is checked
+                  # on its own, and an unreadable status falls through to the safe branch.
                   QUEUED=""
                   if [ -n "$EXISTING_PR" ]; then
-                      QUEUED=$(gh api "repos/PostHog/posthog/issues/${EXISTING_PR}/comments?per_page=100" \
-                          --jq '[.[] | select(.user.login == "trunk-io[bot]") | .body] | last // ""' \
-                          | grep -oE "Running tests on this pull request|waiting to start tests" | head -n 1 || true)
+                      if TRUNK_STATUS=$(gh api "repos/PostHog/posthog/issues/${EXISTING_PR}/comments?per_page=100" \
+                          --jq '[.[] | select(.user.login == "trunk-io[bot]") | .body] | last // ""'); then
+                          QUEUED=$(printf '%s' "$TRUNK_STATUS" \
+                              | grep -oE "Running tests on this pull request|waiting to start tests" | head -n 1 || true)
+                      else
+                          echo "::warning::Could not read the queue status of PR #${EXISTING_PR}; treating it as queued."
+                          QUEUED="unknown"
+                      fi
                   fi
 
                   if [ -n "$EXISTING_BRANCH" ] && [ -z "$QUEUED" ]; then
