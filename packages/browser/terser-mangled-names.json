@@ -508,6 +508,7 @@
         "_masking",
         "_matchUTMConditions",
         "_matchUrlConditions",
+        "_matchedStatus",
         "_matchers",
         "_matchesSuppressionRule",
         "_matchesTestVariant",
