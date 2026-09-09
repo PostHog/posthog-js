@@ -12,6 +12,7 @@
                 ".babelrc",
                 "babel.config.js",
                 "rollup.config.mjs",
+                "oxc.config.mjs",
                 "rolldown.dts.config.mts",
                 "$TURBO_ROOT$/packages/rrweb/rolldown.dts.config.mts",
                 "$TURBO_ROOT$/packages/rrweb/vite.config.default.ts",

@@ -11,6 +11,7 @@ import { Features, transform as transformCss } from 'lightningcss'
 import fs from 'fs'
 import path from 'path'
 import crossBundlePropertyConfig from './terser-cross-bundle-properties.cjs'
+import { modernTransformOptions } from './oxc.config.mjs'
 
 const { crossBundlePrivateProperties, globallyReservedPrivateProperties } = crossBundlePropertyConfig
 const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
@@ -38,7 +39,7 @@ const finalTerser = (options) => ({
             }
             let code = file.code
             let sourceMap = file.map
-            if (outputOptions.format === 'iife' && sourceMap) {
+            if (outputOptions.format === 'iife' && sourceMap && file.fileName.includes('.es5.')) {
                 // Babel's output plugin places helpers before Rolldown's IIFE. Wrap the complete output so
                 // independently loaded bundles cannot overwrite each other's helpers on window.
                 code = `!function(){\n${code}\n}();`
@@ -115,57 +116,62 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
             }
         },
     },
-    // Transform the final Rolldown chunk after tree-shaking. Using bundled Babel helpers as an input
-    // plugin leaves side-effectful, unused helper definitions in Rolldown output.
-    (IS_ROLLDOWN ? getBabelOutputPlugin : babel)({
-        ...(IS_ROLLDOWN
-            ? { allowAllFormats: true, compact: true }
-            : { extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx'], babelHelpers: 'bundled' }),
-        ...(!IS_ROLLDOWN
-            ? {
-                  overrides: [
-                      {
-                          // This prebuilt rrweb module intentionally exceeds Babel's 500 KB compacting threshold.
-                          // Make the existing behavior explicit without hiding warnings for other unexpectedly large modules.
-                          test: /[\\/]packages[\\/]rrweb[\\/]rrweb[\\/]dist[\\/]rrweb\.js$/,
-                          compact: true,
-                      },
+    // Oxc cannot emit ES5. The Rollup ABI fallback also needs Babel's source-map names for its
+    // property-consistency check. For ES5 Rolldown output, transform after tree-shaking so unused
+    // Babel helpers do not remain as side effects.
+    ...(es5 || !IS_ROLLDOWN
+        ? [
+              (IS_ROLLDOWN ? getBabelOutputPlugin : babel)({
+                  ...(IS_ROLLDOWN
+                      ? { allowAllFormats: true, compact: true }
+                      : { extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx'], babelHelpers: 'bundled' }),
+                  ...(!IS_ROLLDOWN
+                      ? {
+                            overrides: [
+                                {
+                                    // This prebuilt rrweb module intentionally exceeds Babel's 500 KB compacting threshold.
+                                    // Make the existing behavior explicit without hiding warnings for other unexpectedly large modules.
+                                    test: /[\\/]packages[\\/]rrweb[\\/]rrweb[\\/]dist[\\/]rrweb\.js$/,
+                                    compact: true,
+                                },
+                            ],
+                        }
+                      : {}),
+                  plugins: [
+                      '@babel/plugin-transform-nullish-coalescing-operator',
+                      // Explicitly included so we transform 1 ** 2 to Math.pow(1, 2) for ES6 compatibility
+                      '@babel/plugin-transform-exponentiation-operator',
                   ],
-              }
-            : {}),
-        plugins: [
-            '@babel/plugin-transform-nullish-coalescing-operator',
-            // Explicitly included so we transform 1 ** 2 to Math.pow(1, 2) for ES6 compatibility
-            '@babel/plugin-transform-exponentiation-operator',
-        ],
-        presets: [
-            [
-                '@babel/preset-env',
-                {
-                    loose: true,
-                    ...(IS_ROLLDOWN ? { modules: false, exclude: ['transform-dynamic-import'] } : {}),
-                    targets: es5
-                        ? [
-                              '> 0.5%, last 2 versions, Firefox ESR, not dead',
-                              'chrome > 62',
-                              'firefox > 59',
-                              'ios_saf >= 6.1',
-                              'opera > 50',
-                              'safari > 12',
-                              'IE 11',
-                          ]
-                        : [
-                              '> 0.5%, last 2 versions, Firefox ESR, not dead',
-                              'chrome > 62',
-                              'firefox > 59',
-                              'ios_saf >= 10.3',
-                              'opera > 50',
-                              'safari > 12',
-                          ],
-                },
-            ],
-        ],
-    }),
+                  presets: [
+                      [
+                          '@babel/preset-env',
+                          {
+                              loose: true,
+                              ...(IS_ROLLDOWN ? { modules: false, exclude: ['transform-dynamic-import'] } : {}),
+                              targets: es5
+                                  ? [
+                                        '> 0.5%, last 2 versions, Firefox ESR, not dead',
+                                        'chrome > 62',
+                                        'firefox > 59',
+                                        'ios_saf >= 6.1',
+                                        'opera > 50',
+                                        'safari > 12',
+                                        'IE 11',
+                                    ]
+                                  : [
+                                        '> 0.5%, last 2 versions, Firefox ESR, not dead',
+                                        'chrome > 62',
+                                        'firefox > 59',
+                                        'ios_saf >= 10.3',
+                                        'opera > 50',
+                                        'safari > 12',
+                                    ],
+                          },
+                      ],
+                  ],
+              }),
+          ]
+        : []),
     (IS_ROLLDOWN ? finalTerser : terser)({
         nameCache,
         toplevel: true,
@@ -451,6 +457,7 @@ const entrypointTargets = runtimeEntrypoints.map((file) => {
         ...(IS_ROLLDOWN
             ? {
                   platform: 'browser',
+                  ...(!fileName.includes('es5') ? { transform: modernTransformOptions } : {}),
                   treeshake: {
                       // @posthog/core is a pure utility package without package.json sideEffects metadata.
                       // Declaring that here prevents unused barrel exports from being retained.
