@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.10.3
+
+### Patch Changes
+
+- [#4775](https://github.com/PostHog/posthog-js/pull/4775) [`2fad74b`](https://github.com/PostHog/posthog-js/commit/2fad74b1caff63d7736026f8e8a3e91319e04dd3) Thanks [@posthog](https://github.com/apps/posthog)! - Hold a stale prompt in the cache for a cooldown after a failed refetch, instead of going back to the network on every `prompts.get()` call. A rate-limited client now stays on cache until the limit clears. On a 429 the cooldown follows the server's `Retry-After` header.
+  (2026-09-09)
+
 ## 8.10.2
 
 ### Patch Changes
