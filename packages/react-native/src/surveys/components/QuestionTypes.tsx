@@ -12,12 +12,8 @@ import {
   VeryDissatisfiedEmoji,
   VerySatisfiedEmoji,
 } from '../icons'
-import {
-  defaultRatingLabelOpacity,
-  getContrastingTextColor,
-  getDisplayOrderChoices,
-  SurveyAppearanceTheme,
-} from '../surveys-utils'
+import { defaultRatingLabelOpacity, getContrastingTextColor, SurveyAppearanceTheme } from '../surveys-utils'
+import { getDisplayOrderChoices } from '../survey-shuffling'
 import {
   SurveyQuestion,
   SurveyRatingDisplay,

@@ -1,5 +1,26 @@
 # @posthog/types
 
+## 1.409.4
+
+### Patch Changes
+
+- [#4869](https://github.com/PostHog/posthog-js/pull/4869) [`891eefa`](https://github.com/PostHog/posthog-js/commit/891eefa06b73e2259845e625769161ae4a762fd7) Thanks [@robbie-c](https://github.com/robbie-c)! - Apply replay URL privacy settings to URL values in captured JSON-LD payloads.
+  (2026-09-09)
+
+## 1.409.3
+
+### Patch Changes
+
+- [#4864](https://github.com/PostHog/posthog-js/pull/4864) [`e8b2be1`](https://github.com/PostHog/posthog-js/commit/e8b2be1940539a3bf66fdffee978e9ee40a21d2d) Thanks [@robbie-c](https://github.com/robbie-c)! - Include the masked page URL with JSON-LD replay events.
+  (2026-09-09)
+
+## 1.409.2
+
+### Patch Changes
+
+- [#4791](https://github.com/PostHog/posthog-js/pull/4791) [`b2affdc`](https://github.com/PostHog/posthog-js/commit/b2affdcd8e29a14b0f155489ac79672af8b1e97d) Thanks [@posthog](https://github.com/apps/posthog)! - Prefer `sendBeacon` for unbatched events, such as `{ send_instantly: true }` captures, once PostHog's own `pagehide` handler (or `unload` fallback) marks the page as unloading. Captures from `beforeunload` or earlier `pagehide` listeners retain their normal transport. Preserve response-capable transports on active pages so failed requests can be retried, including when `fetch` is unavailable.
+  (2026-09-08)
+
 ## 1.409.1
 
 ### Patch Changes

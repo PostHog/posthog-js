@@ -17,6 +17,7 @@ import {
     getSurveySeenKey,
     getSurveyAbandonedKey,
     getSurveyStorageKey,
+    isCapturingEnabled,
     SURVEY_LOGGER as logger,
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
@@ -65,7 +66,8 @@ export const defaultSurveyAppearance = {
     ratingButtonColor: 'white',
     ratingButtonActiveColor: 'black',
     borderColor: '#c9c6c6',
-    placeholder: 'Start typing...',
+    // Deliberately no placeholder default: open text questions only show placeholder text when the
+    // survey's appearance sets one, so clearing the field in the survey editor clears it here too.
     whiteLabel: false,
     displayThankYouMessage: true,
     thankYouMessageHeader: 'Thank you for your feedback!',
@@ -432,6 +434,9 @@ export const sendSurveyEvent = ({
 }: SendSurveyEventArgs) => {
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
+        return
+    }
+    if (!isCapturingEnabled(posthog)) {
         return
     }
     setSurveySeenOnLocalStorage(survey)

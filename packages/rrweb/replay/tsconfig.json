@@ -4,6 +4,7 @@
     "src"
   ],
   "compilerOptions": {
+    "isolatedDeclarations": true,
     "rootDir": "src",
     "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
   },

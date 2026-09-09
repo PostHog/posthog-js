@@ -4874,10 +4874,6 @@
           "name": "position"
         },
         {
-          "type": "string",
-          "name": "placeholder"
-        },
-        {
           "type": "number",
           "name": "surveyPopupDelaySeconds"
         },
@@ -4896,6 +4892,10 @@
         {
           "type": "string",
           "name": "inputTextColor"
+        },
+        {
+          "type": "string",
+          "name": "placeholder"
         }
       ],
       "path": "dist/surveys/surveys-utils.d.ts"

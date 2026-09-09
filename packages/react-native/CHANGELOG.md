@@ -1,5 +1,49 @@
 # posthog-react-native
 
+## 4.68.4
+
+### Patch Changes
+
+- [#4725](https://github.com/PostHog/posthog-js/pull/4725) [`d5abece`](https://github.com/PostHog/posthog-js/commit/d5abece39d72e079a3233f26a1c54dbd569d53ee) Thanks [@bs1180](https://github.com/bs1180)! - fix(surveys): don't show the default "Start typing..." placeholder when the survey's placeholder text is empty
+  (2026-09-09)
+
+## 4.68.3
+
+### Patch Changes
+
+- [#4851](https://github.com/PostHog/posthog-js/pull/4851) [`250360d`](https://github.com/PostHog/posthog-js/commit/250360d3a02dbb4147579fa893a40edcd2938cb6) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Keep the keyboard open when touching survey content to select, paste, or scroll text.
+  (2026-09-09)
+
+## 4.68.2
+
+### Patch Changes
+
+- [#4798](https://github.com/PostHog/posthog-js/pull/4798) [`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd) Thanks [@posthog](https://github.com/apps/posthog)! - fix(error-tracking): collapse repeated frame cycles in parsed stack traces to reduce grouping differences caused by recursion depth, while preserving distinct throw locations
+  (2026-09-09)
+- Updated dependencies [[`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd)]:
+  - @posthog/core@1.51.1
+
+## 4.68.1
+
+### Patch Changes
+
+- [#4855](https://github.com/PostHog/posthog-js/pull/4855) [`a81418d`](https://github.com/PostHog/posthog-js/commit/a81418dc7ced44a2b3c2756b2720bae1ea3a5fd0) Thanks [@dvd233](https://github.com/dvd233)! - Fix Android native symbol uploads when another Expo plugin registers an app Gradle mod first.
+  (2026-09-09)
+
+## 4.68.0
+
+### Minor Changes
+
+- [#4822](https://github.com/PostHog/posthog-js/pull/4822) [`a6320d5`](https://github.com/PostHog/posthog-js/commit/a6320d57cbde8fb8f2e9e89f273c72856126f0c7) Thanks [@AyobamiH](https://github.com/AyobamiH)! - feat(react-native): support shuffled survey questions and answer options
+  (2026-09-08)
+
+## 4.67.3
+
+### Patch Changes
+
+- [#4799](https://github.com/PostHog/posthog-js/pull/4799) [`3161e0d`](https://github.com/PostHog/posthog-js/commit/3161e0d92f6da33217ea552fb635c08edee3f4dc) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve Expo static exports and their per-asset Chunk IDs when wrapping Expo's Metro serializer.
+  (2026-09-07)
+
 ## 4.67.2
 
 ### Patch Changes

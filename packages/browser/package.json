@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.428.2",
+    "version": "1.428.11",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -12,12 +12,19 @@
     "packageManager": "pnpm@10.12.4",
     "scripts": {
         "clean": "rimraf lib dist react/dist",
-        "start": "pnpm build-react && NODE_OPTIONS=\"--max-old-space-size=8192\" pnpm build-rollup -w",
-        "dev": "tsc -b && NODE_OPTIONS=\"--max-old-space-size=8192\" rollup -cw",
+        "start": "pnpm dev",
+        "dev": "tsc -b && NODE_OPTIONS=\"--max-old-space-size=8192\" pnpm --filter=posthog-js run --parallel \"/^dev:/\"",
+        "dev:compile": "tsc -b --watch",
+        "dev:runtime": "pnpm build:runtime:rolldown --watch",
+        "dev:runtime:rollup": "pnpm build:runtime:rollup --watch",
+        "dev:types": "pnpm build:types --watch",
         "build": "tsc -b && pnpm build:runtime && pnpm build:types",
-        "build:runtime": "BUNDLER=rolldown rolldown -c rollup.config.mjs && BUILD_ROLLUP_RUNTIME=1 rollup -c",
+        "build:runtime": "pnpm build:runtime:rolldown && pnpm build:runtime:rollup",
+        "build:runtime:rolldown": "BUNDLER=rolldown rolldown -c rollup.config.mjs",
+        "build:runtime:rollup": "BUILD_ROLLUP_RUNTIME=1 rollup -c",
         "build:types": "BUILD_TYPES_ONLY=1 rollup -c",
         "bundle-size:array": "node scripts/compare-array-bundle-size.mjs",
+        "benchmark:replay": "node scripts/benchmark-replay.mjs",
         "postbuild": "node scripts/strip-lib-package-json.js && node scripts/check-mangled-property-consistency.js && node scripts/check-sourcemap-ignore-list.js",
         "prepack": "node scripts/strip-sourcemap-sources-content.js",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",

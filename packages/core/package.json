@@ -1,6 +1,6 @@
 {
   "name": "@posthog/core",
-  "version": "1.51.0",
+  "version": "1.52.0",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -44,6 +44,7 @@
     "build": "rslib build",
     "dev": "rslib build -w",
     "test:unit": "vitest run",
+    "prepack": "node -e \"require('node:fs').copyFileSync('../../LICENSE', 'LICENSE')\"",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "exports": {

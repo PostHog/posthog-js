@@ -2,6 +2,7 @@ import { act, fireEvent, render, renderHook } from '@testing-library/preact'
 import { within } from '@testing-library/dom'
 import {
     SurveyManager,
+    FeedbackWidget,
     generateSurveys,
     renderFeedbackWidgetPreview,
     renderSurveysPreview,
@@ -102,6 +103,7 @@ describe('survey display logic', () => {
             getSurveys: vi.fn().mockImplementation((callback) => callback(mockSurveys)),
         },
         get_session_replay_url: vi.fn(),
+        is_capturing: vi.fn(() => true),
         capture: vi.fn().mockImplementation((eventName) => eventName),
         config: {
             disable_surveys_automatic_display: false,
@@ -163,6 +165,7 @@ describe('usePopupVisibility', () => {
     const mockPostHog = createMockPostHog({
         getActiveMatchingSurveys: vi.fn().mockImplementation((callback) => callback([mockSurvey])),
         get_session_replay_url: vi.fn(),
+        is_capturing: vi.fn(() => true),
         capture: vi.fn().mockImplementation((eventName) => eventName),
     })
 
@@ -322,6 +325,7 @@ describe('usePopupVisibility close animation path', () => {
     const mockPostHog = createMockPostHog({
         getActiveMatchingSurveys: vi.fn().mockImplementation((callback) => callback([mockSurvey])),
         get_session_replay_url: vi.fn(),
+        is_capturing: vi.fn(() => true),
         capture: vi.fn().mockImplementation((eventName) => eventName),
     })
     const removeSurvey = vi.fn()
@@ -516,6 +520,7 @@ describe('SurveyManager', () => {
         mockPostHog = createMockPostHog({
             getActiveMatchingSurveys: vi.fn(),
             get_session_replay_url: vi.fn(),
+            is_capturing: vi.fn(() => true),
             capture: vi.fn(),
             featureFlags: {
                 hasLoadedFlags: true,
@@ -863,6 +868,124 @@ describe('SurveyManager', () => {
                 schedule: SurveySchedule.Always,
             })
             expect(result.eligible).toBe(true)
+        })
+    })
+
+    describe('reports when capturing is opted out', () => {
+        it('is not eligible to display, and names the reason', () => {
+            mockPostHog.is_capturing = vi.fn(() => false)
+            const result = surveyManager.checkSurveyDisplayEligibility(mockSurveys[0])
+            expect(result.eligible).toBe(false)
+            expect(result.reason).toBe('PostHog is not capturing, so a survey response cannot be recorded')
+        })
+
+        it('stays eligible to display while capturing is on', () => {
+            mockPostHog.is_capturing = vi.fn(() => true)
+            expect(surveyManager.checkSurveyDisplayEligibility(mockSurveys[0]).eligible).toBe(true)
+        })
+
+        it('keeps the survey out of the display loop', () => {
+            mockPostHog.is_capturing = vi.fn(() => false)
+            const handlePopoverSurveyMock = vi
+                .spyOn(surveyManager as any, 'handlePopoverSurvey')
+                .mockImplementation(() => {})
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+
+            expect(handlePopoverSurveyMock).not.toHaveBeenCalled()
+        })
+
+        // A tab widget draws its own trigger, so it stays mounted until something removes it.
+        // Filtering it out of the display loop is not enough: the button stays on screen and opens
+        // a survey whose answer capture() then drops.
+        it('removes a tab widget that is already on screen', () => {
+            const widgetSurvey: Survey = {
+                ...mockSurveys[0],
+                id: 'tabWidgetSurvey',
+                type: SurveyType.Widget,
+                appearance: { widgetType: SurveyWidgetType.Tab },
+            }
+            const originalGetSurveys = mockPostHog.surveys.getSurveys
+            mockPostHog.surveys.getSurveys = vi.fn((callback: (surveys: Survey[]) => void) => callback([widgetSurvey]))
+            const container = getSurveyContainerClass(widgetSurvey, true)
+
+            try {
+                mockPostHog.is_capturing = vi.fn(() => true)
+                surveyManager.callSurveysAndEvaluateDisplayLogic()
+                expect(document.querySelector(container)).not.toBeNull()
+
+                mockPostHog.is_capturing = vi.fn(() => false)
+                surveyManager.callSurveysAndEvaluateDisplayLogic()
+                expect(document.querySelector(container)).toBeNull()
+            } finally {
+                mockPostHog.surveys.getSurveys = originalGetSurveys
+                document.querySelector(container)?.remove()
+            }
+        })
+
+        it('does not open a tab clicked after opt-out but before the next display poll', () => {
+            const isCapturing = vi.fn(() => true)
+            mockPostHog.is_capturing = isCapturing
+            const widgetSurvey: Survey = {
+                ...mockSurveys[0],
+                type: SurveyType.Widget,
+                appearance: { widgetType: SurveyWidgetType.Tab, widgetLabel: 'Feedback' },
+            }
+            const { container, getByRole } = render(
+                Preact.createElement(FeedbackWidget, { survey: widgetSurvey, posthog: mockPostHog as PostHog })
+            )
+            isCapturing.mockReturnValue(false)
+
+            fireEvent.click(getByRole('button', { name: 'Feedback' }))
+
+            expect(container.querySelector('.survey-form')).toBeNull()
+            isCapturing.mockReturnValue(true)
+            fireEvent.click(getByRole('button', { name: 'Feedback' }))
+            expect(container.querySelector('.survey-form')).not.toBeNull()
+        })
+
+        // Regression guard: the capture gate must stay out of the public discovery result. Custom
+        // integrations find API surveys through getActiveMatchingSurveys and record responses with
+        // their own backend, where PostHog's capture state says nothing about what can be recorded.
+        it('still returns the survey from getActiveMatchingSurveys', () => {
+            mockPostHog.is_capturing = vi.fn(() => false)
+            const callback = vi.fn()
+            surveyManager.getActiveMatchingSurveys(callback)
+            expect(callback).toHaveBeenCalledWith([mockSurveys[0]])
+        })
+
+        it('checkSurveyEligibility stays eligible so discovery is unaffected', () => {
+            mockPostHog.is_capturing = vi.fn(() => false)
+            expect(surveyManager.checkSurveyEligibility(mockSurveys[0]).eligible).toBe(true)
+        })
+
+        // The surveys bundle is loaded from the CDN and can run against an older cached core.
+        // `is_capturing` was only added in posthog-js 1.260.0, so simulate an older core that lacks
+        // it and assert we read its own consent gate instead of throwing on every display poll.
+        describe('on a core without is_capturing (version skew)', () => {
+            beforeEach(() => {
+                // @ts-expect-error deliberately removing the method to emulate an older core
+                mockPostHog.is_capturing = undefined
+            })
+
+            it('is not eligible to display when that core says the person opted out', () => {
+                mockPostHog.has_opted_out_capturing = vi.fn(() => true)
+                const result = surveyManager.checkSurveyDisplayEligibility(mockSurveys[0])
+                expect(result.eligible).toBe(false)
+                expect(result.reason).toBe('PostHog is not capturing, so a survey response cannot be recorded')
+            })
+
+            it('still displays the survey when that core says the person opted in', () => {
+                mockPostHog.has_opted_out_capturing = vi.fn(() => false)
+                const handlePopoverSurveyMock = vi
+                    .spyOn(surveyManager as any, 'handlePopoverSurvey')
+                    .mockImplementation(() => {})
+
+                expect(() => surveyManager.callSurveysAndEvaluateDisplayLogic()).not.toThrow()
+
+                expect(surveyManager.checkSurveyDisplayEligibility(mockSurveys[0]).eligible).toBe(true)
+                expect(handlePopoverSurveyMock).toHaveBeenCalled()
+            })
         })
     })
 
@@ -1440,6 +1563,7 @@ describe('SurveyManager', () => {
                 },
                 getActiveMatchingSurveys: vi.fn(),
                 get_session_replay_url: vi.fn(),
+                is_capturing: vi.fn(() => true),
                 capture: vi.fn(),
                 featureFlags: { isFeatureEnabled: vi.fn().mockReturnValue(true) },
             })
@@ -1505,6 +1629,7 @@ describe('SurveyManager', () => {
                 },
                 getActiveMatchingSurveys: vi.fn(),
                 get_session_replay_url: vi.fn(),
+                is_capturing: vi.fn(() => true),
                 capture: vi.fn(),
                 featureFlags: { isFeatureEnabled: vi.fn().mockReturnValue(true) },
             })
@@ -1575,6 +1700,7 @@ describe('SurveyManager', () => {
             mockPostHog = createMockPostHog({
                 getActiveMatchingSurveys: vi.fn(),
                 get_session_replay_url: vi.fn(),
+                is_capturing: vi.fn(() => true),
                 capture: vi.fn(),
                 featureFlags: {
                     isFeatureEnabled: vi.fn().mockReturnValue(true),
@@ -1961,6 +2087,7 @@ describe('SurveyManager', () => {
             mockPostHog = createMockPostHog({
                 getActiveMatchingSurveys: vi.fn(),
                 get_session_replay_url: vi.fn(),
+                is_capturing: vi.fn(() => true),
                 capture: vi.fn(),
                 featureFlags: {
                     isFeatureEnabled: vi.fn().mockReturnValue(true),
@@ -2279,6 +2406,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
         posthog = createMockPostHog({
             capture: vi.fn(),
             get_session_replay_url: vi.fn(),
+            is_capturing: vi.fn(() => true),
         })
 
         mockRemoveSurveyFromFocus = vi.fn()

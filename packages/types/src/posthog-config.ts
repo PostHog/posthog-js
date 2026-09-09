@@ -13,7 +13,7 @@ import type {
     NetworkRequest,
     SessionRecordingCanvasOptions,
 } from './session-recording'
-import type { SegmentAnalytics } from './segment'
+import type { SegmentAnalytics, SegmentIntegrationConfig } from './segment'
 import type { PostHog } from './posthog'
 
 export type AutocaptureCompatibleElement = 'a' | 'button' | 'form' | 'input' | 'select' | 'textarea' | 'label'
@@ -711,10 +711,16 @@ export interface SessionRecordingOptions {
      * JSON-LD inside a text mask or blocked element is never captured.
      * The recorder keeps properties on its universal safe list at every depth. This list includes `@type` values shaped like a Schema.org term, which means letters and digits only.
      * It drops property branches that are not on the allowlist.
+     * Retained strings starting with `http://`, `https://`, `//`, `/`, `./`, or `../` use replay URL masking, including query parameter and hash settings.
+     * This applies to nested entities and scalar arrays, but not to the fixed `@context`, normalized `@type`, or captured DOM IDs.
+     * Other strings, including bare relative paths and URLs embedded in text, are unchanged.
+     * A URL rejected by the masking callback is omitted. If the callback throws, the script is not captured.
      * It keeps an `@id` as a fragment only when replay also captures a DOM element with the same `id` value.
      * It drops every `@id` when `maskAllElementAttributes`, `maskAttributeFn`, or an `attributeFilter` without `id` can hide `id` attributes from replay.
      * It also keeps the containing entity tree, even when it redacts all other fields.
      * The event tag is `$json_ld`. The payload is a JSON-LD object or array.
+     * The event includes the current page URL in `data.href`, subject to replay URL masking and hash capture settings.
+     * The URL is omitted when the masking callback rejects it or throws.
      * The recorder removes all script nodes from snapshots when this option is enabled.
      * The JSON-LD observer starts only when this option is true at recording start.
      * @see https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/extensions/replay/external/json-ld.ts
@@ -2148,11 +2154,26 @@ export interface PostHogConfig {
     bootstrap: BootstrapConfig
 
     /**
-     * The segment analytics object.
+     * The Segment analytics object, or integration configuration.
+     *
+     * @example
+     * ```ts
+     * segment: {
+     *     analytics: window.analytics,
+     *     filterProperties: (properties) => {
+     *         for (const key in properties) {
+     *             if (key.startsWith('$sdk_debug_')) {
+     *                 delete properties[key]
+     *             }
+     *         }
+     *         return properties
+     *     }
+     * }
+     * ```
      *
      * @see https://posthog.com/docs/libraries/segment
      */
-    segment?: SegmentAnalytics
+    segment?: SegmentAnalytics | SegmentIntegrationConfig
 
     /**
      * Determines whether to capture heatmaps.

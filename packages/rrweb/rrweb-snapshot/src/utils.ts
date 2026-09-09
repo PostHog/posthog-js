@@ -23,6 +23,14 @@ import {
   recordStylesheetCost,
 } from './snapshot-cost';
 
+/**
+ * Sentinel that replaces the text content of every `<script>` node during
+ * serialization (see snapshot.ts). It keeps real script source out of the
+ * snapshot and marks the node as a script for rebuild. `rebuild.ts` reads this
+ * value back and must not render it, so the two sides share this one constant.
+ */
+export const SCRIPT_PLACEHOLDER = 'SCRIPT_PLACEHOLDER';
+
 export function isElement(n: Node): n is Element {
   return n.nodeType === n.ELEMENT_NODE;
 }
@@ -769,7 +777,7 @@ export class Mirror implements IMirror<Node> {
 
   // removes the node from idNodeMap
   // doesn't remove the node from nodeMetaMap
-  removeNodeFromMap(n: Node) {
+  removeNodeFromMap(n: Node): void {
     const id = this.getId(n);
     this.idNodeMap.delete(id);
 
@@ -800,13 +808,13 @@ export class Mirror implements IMirror<Node> {
     return this.nodeMetaMap.has(node);
   }
 
-  add(n: Node, meta: serializedNodeWithId) {
+  add(n: Node, meta: serializedNodeWithId): void {
     const id = meta.id;
     this.idNodeMap.set(id, n);
     this.nodeMetaMap.set(n, meta);
   }
 
-  replace(id: number, n: Node) {
+  replace(id: number, n: Node): void {
     const oldNode = this.getNode(id);
     if (oldNode) {
       const meta = this.nodeMetaMap.get(oldNode);
@@ -815,7 +823,7 @@ export class Mirror implements IMirror<Node> {
     this.idNodeMap.set(id, n);
   }
 
-  reset() {
+  reset(): void {
     this.idNodeMap = new Map();
     this.nodeMetaMap = new WeakMap();
   }
