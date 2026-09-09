@@ -4,6 +4,7 @@ import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '@posthog/core'
 import {
     getEventTarget,
+    isTextSelectionTarget,
     shouldCaptureDeadClick,
     shouldSkipDeadClick,
 } from '@posthog/browser-common/utils/autocapture-utils'
@@ -75,6 +76,17 @@ function priorLivenessDelay(
     return isNumber(lastSeenAt) ? livenessDelayInWindow(clickTimestamp - lastSeenAt, windowMs) : undefined
 }
 
+type ObservedDeadClick = DeadClickCandidate & { selectionChangedDuringGesture?: boolean }
+
+type MouseSelectionGesture = {
+    path: EventTarget[]
+    trusted: boolean
+    selectionChanged: boolean
+    selectionInitiallyRelated: boolean
+    clickTarget?: EventTarget
+    clickDetail?: number
+}
+
 // How dead-click detection works
 // ================================
 // A click (or swipe) is queued as a candidate, then re-examined ~1s later in `_checkClicks`. It is
@@ -94,8 +106,8 @@ function priorLivenessDelay(
 // These say "the click did something", so they only ever suppress; none can mark a click dead:
 //   - mutation:   a DOM mutation           < mutation_threshold_ms (default 2500)
 //   - scroll:     the page/an element scrolled < scroll_threshold_ms (default 100)
-//   - selection:  a selectionchange        < selection_change_threshold_ms (default 100) on either
-//                 side of the click
+//   - selection:  selecting/unselecting a range or moving an editable caret during the matching
+//                 mouse gesture, or < selection_change_threshold_ms (default 100) either side of the click
 //   - visibility: a visibilitychange (either direction — the tab going hidden because the click
 //                 opened a new tab, or becoming visible as the click woke/focused it)
 //                 < LIVENESS_SUPPRESSION_MS on either side of the click
@@ -117,10 +129,13 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _lastMutation: number | undefined
     private _lastScroll: number | undefined
     private _lastSelectionChanged: number | undefined
+    private _hadSelection = false
     private _lastVisibilityChange: number | undefined
     private _lastFocusChange: number | undefined
-    private _clicks: DeadClickCandidate[] = []
+    private _clicks: ObservedDeadClick[] = []
     private _checkClickTimer: number | undefined
+    private _mouseSelection: MouseSelectionGesture | undefined
+    private _mouseSelectionTimer: number | undefined
     private _touchStart: { x: number; y: number; timestamp: number } | undefined
     private _deadSwipesCaptured = 0
     private _hasUnobservableSurfaces: boolean | undefined
@@ -203,6 +218,13 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._mutationObserver?.disconnect()
         this._mutationObserver = undefined
         assignableWindow.removeEventListener('click', this._onClick)
+        assignableWindow.removeEventListener('mousedown', this._onMouseDown, { capture: true })
+        assignableWindow.removeEventListener('mouseup', this._onMouseUp, { capture: true })
+        assignableWindow.removeEventListener('mouseout', this._onMouseOut, { capture: true })
+        assignableWindow.removeEventListener('dragstart', this._clearMouseSelection, { capture: true })
+        assignableWindow.removeEventListener('pointercancel', this._clearMouseSelection, { capture: true })
+        assignableWindow.removeEventListener('blur', this._clearMouseSelection)
+        this._clearMouseSelection()
         assignableWindow.removeEventListener('scroll', this._onScroll, { capture: true })
         document?.removeEventListener('selectionchange', this._onSelectionChange)
         assignableWindow.removeEventListener('touchstart', this._onTouchStart, { capture: true })
@@ -222,10 +244,81 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
     private _startClickObserver() {
         addEventListener(assignableWindow, 'click', this._onClick)
+        addEventListener(assignableWindow, 'mousedown', this._onMouseDown, { capture: true })
+        addEventListener(assignableWindow, 'mouseup', this._onMouseUp, { capture: true })
+        addEventListener(assignableWindow, 'mouseout', this._onMouseOut, { capture: true })
+        addEventListener(assignableWindow, 'dragstart', this._clearMouseSelection, { capture: true })
+        addEventListener(assignableWindow, 'pointercancel', this._clearMouseSelection, { capture: true })
+        addEventListener(assignableWindow, 'blur', this._clearMouseSelection)
+    }
+
+    private _clearMouseSelection = (): void => {
+        clearTimeout(this._mouseSelectionTimer)
+        this._mouseSelectionTimer = undefined
+        this._mouseSelection = undefined
+    }
+
+    private _onMouseDown = (event: Event): void => {
+        this._clearMouseSelection()
+        if ((event as MouseEvent).button === 0) {
+            const gesture: MouseSelectionGesture = {
+                path: event.composedPath(),
+                trusted: event.isTrusted,
+                selectionChanged: false,
+                selectionInitiallyRelated: false,
+            }
+            const selection = document?.getSelection()
+            gesture.selectionInitiallyRelated =
+                selection?.type === 'Range' && this._selectionTouchesGesture(selection, gesture)
+            this._mouseSelection = gesture
+        }
+    }
+
+    private _onMouseOut = (event: Event): void => {
+        // A release outside the document may never reach our mouseup listener.
+        if (isNull((event as MouseEvent).relatedTarget)) {
+            this._clearMouseSelection()
+        }
+    }
+
+    private _onMouseUp = (event: Event): void => {
+        const gesture = this._mouseSelection
+        const mouseEvent = event as MouseEvent
+        if (!gesture || mouseEvent.button !== 0 || event.isTrusted !== gesture.trusted) {
+            return
+        }
+        const path = event.composedPath()
+        // Native clicks target the nearest common ancestor of the press and release targets.
+        // Composed paths preserve this relationship through accessible shadow boundaries.
+        for (const node of gesture.path) {
+            if (isElementNode(node as Node) && path.indexOf(node) !== -1) {
+                gesture.clickTarget = node
+                break
+            }
+        }
+        gesture.clickDetail = mouseEvent.detail
+        // Mouseup and its native click are dispatched together. If no click follows, discard
+        // the released gesture before a later activation can inherit its selection activity.
+        this._mouseSelectionTimer = assignableWindow.setTimeout(this._clearMouseSelection, 0)
     }
 
     private _onClick = (event: Event): void => {
-        const click = asCandidate(event as MouseEvent, { type: 'click' })
+        const mouseEvent = event as MouseEvent
+        const click: ObservedDeadClick | null = asCandidate(mouseEvent, { type: 'click' })
+        const gesture = this._mouseSelection
+        if (
+            click &&
+            gesture &&
+            mouseEvent.button === 0 &&
+            mouseEvent.detail > 0 &&
+            mouseEvent.detail === gesture.clickDetail &&
+            event.isTrusted === gesture.trusted &&
+            click.node === gesture.clickTarget
+        ) {
+            click.selectionChangedDuringGesture =
+                gesture.selectionChanged && this._config.selection_change_threshold_ms > 0
+            this._clearMouseSelection()
+        }
         if (!isNull(click) && !this._ignore(click)) {
             this._queueCandidate(click)
         }
@@ -282,13 +375,105 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _startSelectionChangedObserver() {
+        // A selection may already exist when the lazy-loaded detector starts.
+        this._hadSelection = document?.getSelection()?.type === 'Range'
         // Document selections fire selectionchange directly on document and the event does not bubble.
         addEventListener(document, 'selectionchange', this._onSelectionChange)
     }
 
-    private _onSelectionChange = (): void => {
+    private _selectionIsInGesture(node: Node | null | undefined, gesture: MouseSelectionGesture): boolean {
+        const target = gesture.path[0] as Node
+        while (node) {
+            if (gesture.path.indexOf(node) !== -1 || (isElementNode(target) && target.contains(node))) {
+                return true
+            }
+            // Firefox can expose selection endpoints behind a closed root while mouse events
+            // expose only its host. Compare both representations without traversing other content.
+            node = (node.getRootNode() as ShadowRoot).host
+        }
+        return false
+    }
+
+    private _selectionTouchesGesture(selection: Selection, gesture: MouseSelectionGesture): boolean {
+        const target = gesture.path[0] as Node
+        const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined
+        if (range && isElementNode(target) && range.startContainer.getRootNode() === target.getRootNode()) {
+            if (!range.collapsed) {
+                return range.intersectsNode(target)
+            }
+            // A shadow selection can be represented as a collapsed boundary immediately before
+            // its host. Resolve that boundary rather than associating its whole parent container.
+            const node = isElementNode(range.startContainer)
+                ? (range.startContainer.childNodes[range.startOffset] ?? range.startContainer)
+                : range.startContainer
+            return this._selectionIsInGesture(node, gesture)
+        }
+        return (
+            this._selectionIsInGesture(selection.focusNode, gesture) ||
+            this._selectionIsInGesture(selection.anchorNode, gesture)
+        )
+    }
+
+    private _onSelectionChange = (event: Event): void => {
+        const selection = document?.getSelection()
+        const hadSelection = this._hadSelection
+        // isCollapsed can be true for a range inside a shadow root; type reflects the actual selection.
+        this._hadSelection = selection?.type === 'Range'
+
+        const focusNode = selection?.focusNode
+        const focusElement = focusNode && (isElementNode(focusNode) ? focusNode : focusNode.parentElement)
+        // Selection endpoints may be retargeted outside an editor's shadow root.
+        const documentActiveElement = document?.activeElement
+        let activeElement = documentActiveElement
+        while (activeElement?.shadowRoot?.activeElement) {
+            activeElement = activeElement.shadowRoot.activeElement
+        }
+        const isEditing =
+            isTextSelectionTarget(getEventTarget(event)) ||
+            isTextSelectionTarget(focusElement ?? null) ||
+            isTextSelectionTarget(activeElement ?? null)
+        // A caret reported outside focused content may belong to a closed shadow root.
+        // Preserve that activity when its actual target cannot be inspected.
+        const hasRetargetedCaret =
+            selection?.type === 'Caret' &&
+            activeElement &&
+            !activeElement.shadowRoot &&
+            focusNode &&
+            focusNode !== documentActiveElement &&
+            focusNode.contains(documentActiveElement ?? null)
+
+        // Ordinary clicks can move an invisible caret on known non-editable content.
+        if (!hadSelection && !this._hadSelection && !isEditing && !hasRetargetedCaret) {
+            return
+        }
+
         const firedAt = Date.now()
         this._lastSelectionChanged = firedAt
+
+        const gesture = this._mouseSelection
+        // An opaque closed-root caret is only a possible editor. Keep its existing timed
+        // fallback, but do not extend that uncertainty across a long press on inert content.
+        if (gesture && (hadSelection || this._hadSelection || isEditing)) {
+            const eventTarget = getEventTarget(event)
+            let editor: Element | null | undefined
+            if (isTextSelectionTarget(eventTarget)) {
+                editor = eventTarget
+            } else if (selection?.type === 'Caret') {
+                if (isTextSelectionTarget(activeElement ?? null) || hasRetargetedCaret) {
+                    editor = activeElement
+                } else if (isEditing) {
+                    editor = focusElement
+                }
+            }
+            // Endpoint-less clearing must belong to the range present at press time; an
+            // unrelated range removed elsewhere in the document must not suppress this click.
+            const related = editor
+                ? this._selectionIsInGesture(editor, gesture)
+                : selection && (focusNode || selection.anchorNode)
+                  ? this._selectionTouchesGesture(selection, gesture)
+                  : hadSelection && !this._hadSelection && gesture.selectionInitiallyRelated
+            gesture.selectionChanged = gesture.selectionChanged || related
+        }
 
         // Keep the closest selection change after each candidate. A nearby change suppresses the
         // candidate; a later one retains the existing post-click timeout behavior.
@@ -308,6 +493,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _onVisibilityChange = (): void => {
+        if (document?.visibilityState === 'hidden') {
+            this._clearMouseSelection()
+        }
         // record both directions: a tab going _hidden_ right after a click (the click opened a new
         // tab) is as much a liveness signal as it becoming visible (the click that woke the tab).
         // stamp queued candidates now, before a hidden tab can suspend `_checkClicks`.
@@ -524,8 +712,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             const hadMutation =
                 isNumber(click.mutationDelayMs) && click.mutationDelayMs < this._config.mutation_threshold_ms
             const hadSelectionChange =
-                isNumber(click.selectionChangedDelayMs) &&
-                click.selectionChangedDelayMs < this._config.selection_change_threshold_ms
+                click.selectionChangedDuringGesture ||
+                (isNumber(click.selectionChangedDelayMs) &&
+                    click.selectionChangedDelayMs < this._config.selection_change_threshold_ms)
             // visibility/focus delays are only ever recorded when already inside the suppression
             // window (see `livenessDelayInWindow`), so their presence alone means "suppress"
             const hadVisibilityChange = isNumber(click.visibilityChangedDelayMs)
