@@ -31,6 +31,7 @@ import {
     SURVEY_LOGGER as logger,
     SURVEY_IN_PROGRESS_PREFIX,
     SURVEY_SEEN_PREFIX,
+    SURVEY_CAPTURING_DISABLED,
 } from './utils/survey-utils'
 
 const SURVEY_NOT_LOADED = 'SDK is not enabled or survey functionality is not yet loaded'
@@ -489,6 +490,9 @@ export class PostHogSurveys implements Extension {
     }
 
     private _checkSurveyRenderability(surveyId: string | Survey): { eligible: boolean; reason?: string } {
+        if (!this._configSource.isCapturing()) {
+            return { eligible: false, reason: SURVEY_CAPTURING_DISABLED }
+        }
         if (isNullish(this._surveyManager)) {
             return { eligible: false, reason: SURVEY_NOT_LOADED }
         }
@@ -535,6 +539,9 @@ export class PostHogSurveys implements Extension {
     }
 
     renderSurvey(surveyId: string | Survey, selector: string, properties?: Properties) {
+        if (!this._configSource.isCapturing()) {
+            return
+        }
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return
@@ -559,7 +566,7 @@ export class PostHogSurveys implements Extension {
             )
             const timeout = setTimeout(() => {
                 this._renderTimeouts.delete(timeout)
-                if (this._disposed) {
+                if (this._disposed || !this._configSource.isCapturing()) {
                     return
                 }
                 logger.info(
@@ -575,6 +582,9 @@ export class PostHogSurveys implements Extension {
     }
 
     displaySurvey(surveyId: string, options: DisplaySurveyOptions) {
+        if (!this._configSource.isCapturing()) {
+            return
+        }
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return
@@ -596,20 +606,6 @@ export class PostHogSurveys implements Extension {
         }
         if (options.displayType !== DisplaySurveyType.Popover && options.initialResponses) {
             logger.warn('initialResponses is only supported for popover surveys. prefill will not be applied.')
-        }
-        // Capturing is a prerequisite, not a display condition: `ignoreConditions` forces a survey
-        // past its targeting and display rules, but the SDK still captures the response, and
-        // `capture()` drops the `survey sent` event while capturing is opted out. Checked outside
-        // that branch so a forced display cannot show a survey whose answer would be thrown away.
-        const captureEligibility = this._surveyManager.checkSurveyCaptureEligibility()
-        if (!captureEligibility.eligible) {
-            // `critical` is the only level a production console shows. A caller that reaches this
-            // point has already decided to show the survey, so a silent return is the same dead end
-            // the dropped response used to be.
-            logger.critical(
-                `[displaySurvey] ${captureEligibility.reason}. Survey "${surveyId}" was not displayed. Check posthog.surveys.canRenderSurvey(surveyId) before you show a survey.`
-            )
-            return
         }
         if (options.ignoreConditions === false) {
             // Explicit display goes through eligibility only, not renderability: the event/action

@@ -653,8 +653,14 @@ describe('sendSurveyEvent', () => {
         localStorage.clear()
     })
 
-    it('reports the dropped response when capturing is opted out', () => {
+    it('leaves the draft and completion state untouched when capturing is opted out', () => {
         const mockCapture = vi.fn()
+        const dispatch = vi.spyOn(window, 'dispatchEvent')
+        localStorage.setItem(
+            `${SURVEY_IN_PROGRESS_PREFIX}${baseSurvey.id}`,
+            JSON.stringify({ responses: { $survey_response_q1: 'Great!' } })
+        )
+        const before = { ...localStorage }
         const critical = vi.spyOn(SURVEY_LOGGER, 'critical').mockImplementation(() => {})
         const mockPostHog = {
             capture: mockCapture,
@@ -670,8 +676,12 @@ describe('sendSurveyEvent', () => {
             posthog: mockPostHog,
         })
 
-        expect(critical).toHaveBeenCalledTimes(1)
-        expect(critical.mock.calls[0][0]).toContain('The response to survey "test-survey-id" was dropped')
+        expect(mockCapture).not.toHaveBeenCalled()
+        expect(mockPostHog.reloadFeatureFlags).not.toHaveBeenCalled()
+        expect(dispatch).not.toHaveBeenCalled()
+        expect({ ...localStorage }).toEqual(before)
+        expect(critical).not.toHaveBeenCalled()
+        dispatch.mockRestore()
         critical.mockRestore()
     })
 
@@ -716,8 +726,8 @@ describe('sendSurveyEvent', () => {
             })
         ).not.toThrow()
 
-        expect(critical).toHaveBeenCalledTimes(1)
-        expect(mockCapture).toHaveBeenCalled()
+        expect(critical).not.toHaveBeenCalled()
+        expect(mockCapture).not.toHaveBeenCalled()
         critical.mockRestore()
     })
 

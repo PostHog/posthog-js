@@ -2,6 +2,7 @@ import { act, fireEvent, render, renderHook } from '@testing-library/preact'
 import { within } from '@testing-library/dom'
 import {
     SurveyManager,
+    FeedbackWidget,
     generateSurveys,
     renderFeedbackWidgetPreview,
     renderSurveysPreview,
@@ -920,6 +921,27 @@ describe('SurveyManager', () => {
                 mockPostHog.surveys.getSurveys = originalGetSurveys
                 document.querySelector(container)?.remove()
             }
+        })
+
+        it('does not open a tab clicked after opt-out but before the next display poll', () => {
+            const isCapturing = vi.fn(() => true)
+            mockPostHog.is_capturing = isCapturing
+            const widgetSurvey: Survey = {
+                ...mockSurveys[0],
+                type: SurveyType.Widget,
+                appearance: { widgetType: SurveyWidgetType.Tab, widgetLabel: 'Feedback' },
+            }
+            const { container, getByRole } = render(
+                Preact.createElement(FeedbackWidget, { survey: widgetSurvey, posthog: mockPostHog as PostHog })
+            )
+            isCapturing.mockReturnValue(false)
+
+            fireEvent.click(getByRole('button', { name: 'Feedback' }))
+
+            expect(container.querySelector('.survey-form')).toBeNull()
+            isCapturing.mockReturnValue(true)
+            fireEvent.click(getByRole('button', { name: 'Feedback' }))
+            expect(container.querySelector('.survey-form')).not.toBeNull()
         })
 
         // Regression guard: the capture gate must stay out of the public discovery result. Custom

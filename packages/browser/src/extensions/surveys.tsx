@@ -315,6 +315,9 @@ export class SurveyManager {
         options?: DisplaySurveyPopoverOptions,
         { resumeDelayFromActivation = false }: { resumeDelayFromActivation?: boolean } = {}
     ): void => {
+        if (!isCapturingEnabled(this._posthog)) {
+            return
+        }
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(surveyParam)
         this._currentLanguage = surveyLanguage
         this._surveyPopupProps = null
@@ -605,6 +608,9 @@ export class SurveyManager {
     }
 
     public renderPopover = (survey: Survey): void => {
+        if (!isCapturingEnabled(this._posthog)) {
+            return
+        }
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         const { shadow } = retrieveSurveyShadow(translatedSurvey, this._posthog)
         this._renderedTargets.set(shadow, shadow.host)
@@ -620,6 +626,9 @@ export class SurveyManager {
     }
 
     public renderSurvey = (survey: Survey, selector: Element, properties?: Properties): void => {
+        if (!isCapturingEnabled(this._posthog)) {
+            return
+        }
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         let isSurveyCompleted = false
         if (this._posthog.config?.surveys?.prefillFromUrl) {
@@ -1715,6 +1724,7 @@ export function Questions({
         }
         return initialInProgressState?.responses || {}
     })
+    const [submissionBlocked, setSubmissionBlocked] = useState(false)
     const {
         previewPageIndex,
         onPopupSurveyDismissed,
@@ -1793,6 +1803,12 @@ export function Questions({
             logger.error('onNextButtonClick called without a PostHog instance.')
             return
         }
+
+        if (!isCapturingEnabled(posthog)) {
+            setSubmissionBlocked(true)
+            return
+        }
+        setSubmissionBlocked(false)
 
         if (!questionId) {
             logger.error('onNextButtonClick called without a questionId.')
@@ -1903,6 +1919,7 @@ export function Questions({
                 />
             )}
             <div className="survey-box" data-question-index={currentQuestionIndex}>
+                {submissionBlocked && <p role="alert">Your response could not be sent. Please try again later.</p>}
                 {getQuestionComponent({
                     question: currentQuestion,
                     forceDisableHtml,
@@ -1945,6 +1962,9 @@ export function FeedbackWidget({
     const resetTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
     const toggleSurvey = () => {
+        if (!showSurvey && posthog && !readOnly && !isCapturingEnabled(posthog)) {
+            return
+        }
         setShowSurvey(!showSurvey)
     }
 

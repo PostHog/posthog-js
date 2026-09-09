@@ -21,7 +21,6 @@ import {
     SURVEY_LOGGER as logger,
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
-    SURVEY_CAPTURING_DISABLED,
 } from '../../utils/survey-utils'
 import { isNullish, type SurveyResponses } from '@posthog/core'
 import {
@@ -437,12 +436,7 @@ export const sendSurveyEvent = ({
         return
     }
     if (!isCapturingEnabled(posthog)) {
-        // The eligibility check keeps a survey off screen here, but an inline `renderSurvey` call,
-        // or an opt-out during the survey, still reaches this point. `critical` is the only level
-        // a production console shows.
-        logger.critical(
-            `[survey sent] ${SURVEY_CAPTURING_DISABLED}. The response to survey "${survey.id}" was dropped. Check posthog.surveys.canRenderSurvey(surveyId) before you show a survey.`
-        )
+        return
     }
     setSurveySeenOnLocalStorage(survey)
     posthog.capture(SurveyEventName.SENT, {

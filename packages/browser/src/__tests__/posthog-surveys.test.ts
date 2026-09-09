@@ -234,14 +234,7 @@ describe('posthog-surveys', () => {
                 surveys.displaySurvey(survey.id, { ...DEFAULT_DISPLAY_SURVEY_OPTIONS, ignoreConditions: true })
 
                 expect(handlePopoverSurvey).not.toHaveBeenCalled()
-                // `critical` and not `warn`: a production console shows nothing below it, so a
-                // warning here would leave the caller with the same silence the PR set out to remove.
-                expect(mockLogger.critical).toHaveBeenCalledWith(
-                    expect.stringContaining('PostHog is not capturing, so a survey response cannot be recorded')
-                )
-                expect(mockLogger.critical).toHaveBeenCalledWith(
-                    expect.stringContaining(`Survey "${survey.id}" was not displayed`)
-                )
+                expect(mockLogger.critical).not.toHaveBeenCalled()
             })
 
             it('displays a survey with ignoreConditions while capturing is on', () => {
@@ -251,6 +244,37 @@ describe('posthog-surveys', () => {
                 surveys.displaySurvey(survey.id, { ...DEFAULT_DISPLAY_SURVEY_OPTIONS, ignoreConditions: true })
 
                 expect(handlePopoverSurvey).toHaveBeenCalled()
+            })
+
+            it.each([true, false])('supports an older surveys bundle when capturing is %s', (capturing) => {
+                mockPostHog.is_capturing = vi.fn(() => capturing)
+                Object.defineProperty(surveyManager, 'checkSurveyCaptureEligibility', { value: undefined })
+                const display = vi.spyOn(surveyManager, 'handlePopoverSurvey').mockImplementation(() => {})
+
+                surveys.displaySurvey(survey.id, { ...DEFAULT_DISPLAY_SURVEY_OPTIONS, ignoreConditions: true })
+
+                expect(display).toHaveBeenCalledTimes(capturing ? 1 : 0)
+            })
+
+            it('does not render directly while capturing is off', () => {
+                mockPostHog.is_capturing = vi.fn(() => false)
+                const render = vi.spyOn(surveyManager, 'renderSurvey').mockImplementation(() => {})
+
+                surveys.renderSurvey(survey, 'body')
+
+                expect(render).not.toHaveBeenCalled()
+            })
+
+            it('rechecks capturing after a direct render delay', () => {
+                const isCapturing = vi.fn(() => true)
+                mockPostHog.is_capturing = isCapturing
+                const render = vi.spyOn(surveyManager, 'renderSurvey').mockImplementation(() => {})
+                surveys.renderSurvey({ ...survey, appearance: { surveyPopupDelaySeconds: 1 } }, 'body')
+                isCapturing.mockReturnValue(false)
+
+                vi.advanceTimersByTime(1000)
+
+                expect(render).not.toHaveBeenCalled()
             })
         })
 
