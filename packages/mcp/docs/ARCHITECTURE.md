@@ -12,7 +12,7 @@ It documents the **current state** only. The reasoning behind architectural deci
 - `$session_id` ties one MCP connection to one PostHog session. `distinct_id` falls back through `identified user → session id → "anonymous"`.
 - Tool calls additionally emit a sibling `$exception` event whenever a tool errors (unless `enableExceptionAutocapture: false`).
 
-Resource bodies are not captured. Captured URLs redact usernames, passwords, and known credential query parameters, including signed URL credentials. This also applies when a failed read repeats the URL in its error message. Other query parameters and fragments can still contain application-specific sensitive data. Requests and responses keep their original addresses. Use `beforeSend` to remove any additional application-specific sensitive data.
+Resource bodies are not captured. Captured URLs redact usernames, passwords, and known credential query parameters, including signed URL credentials. URLs longer than 8,192 characters or with more than 128 query fields are redacted entirely to bound parsing work. This also applies when a failed read repeats the URL in its error message. Other query parameters and fragments can still contain application-specific sensitive data. Requests and responses keep their original addresses. Use `beforeSend` to remove any additional application-specific sensitive data.
 
 ---
 

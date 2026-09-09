@@ -68,6 +68,18 @@ describe('buildCapturedMcpParameters', () => {
 
 describe('URL credential redaction', () => {
   it.each([
+    ['URL at length limit', `https://example.com/${'a/'.repeat(4086)}`, false],
+    ['URL over length limit', `https://example.com/${'a/'.repeat(4086)}a`, true],
+    ['query at field limit', `https://example.com/?${Array(128).fill('page=1').join('&')}`, false],
+    ['query over field limit', `https://example.com/?${Array(129).fill('page=1').join('&')}`, true],
+    ['empty query fields over limit', `https://example.com/?${'&'.repeat(128)}token=fakesecret`, true],
+  ])('bounds parsing for %s', (_label, uri, oversized) => {
+    const expected = oversized ? '[redacted]' : uri
+    expect(sanitizeCapturedValue(uri)).toBe(expected)
+    expect(sanitizeCapturedValue(`Cannot read ${uri}`)).toBe(`Cannot read ${expected}`)
+  })
+
+  it.each([
     [
       'https://example.com/guide?token=fakesecret&token=fakeaccess&empty=',
       'https://example.com/guide?token=%5Bredacted%5D&token=%5Bredacted%5D&empty=',

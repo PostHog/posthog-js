@@ -17,6 +17,8 @@ const SENSITIVE_KEY_PATTERN =
   /^(authorization|cookie|set-cookie|x-api-key|api[-_]?key|api[-_]?token|access[-_]?token|refresh[-_]?token|token|password|secret|client[-_]?secret|private[-_]?key)$/i
 
 const URL_PATTERN = /\b[a-z][a-z0-9+.-]{0,63}:\/\/[^\s<>"']+/gi
+const MAX_URL_LENGTH = 8192
+const MAX_URL_QUERY_FIELDS = 128
 const SENSITIVE_QUERY_KEY_PATTERN =
   /^(auth|key|credential|signature|sig|AWSAccessKeyId|GoogleAccessId|Policy|Key-Pair-Id|X-Amz-(Credential|Signature|Security-Token)|X-Goog-(Credential|Signature))$/i
 
@@ -79,6 +81,10 @@ function shouldRedactKey(key: string): boolean {
   return SENSITIVE_KEY_PATTERN.test(key)
 }
 
+function shouldRedactQueryKey(key: string): boolean {
+  return shouldRedactKey(key) || SENSITIVE_QUERY_KEY_PATTERN.test(key)
+}
+
 function isBase64DataUrl(value: string): boolean {
   const prefix = BASE64_DATA_URL_PREFIX_PATTERN.exec(value)
   if (!prefix) {
@@ -96,8 +102,14 @@ function isBase64DataUrl(value: string): boolean {
 }
 
 function sanitizeUrl(value: string): string {
+  if (value.length > MAX_URL_LENGTH) {
+    return REDACTED_VALUE
+  }
   try {
     const url = new URL(value)
+    if (url.search.split('&', MAX_URL_QUERY_FIELDS + 1).length > MAX_URL_QUERY_FIELDS) {
+      return REDACTED_VALUE
+    }
     let changed = false
     if (url.username || url.password) {
       url.username = REDACTED_VALUE
@@ -106,7 +118,7 @@ function sanitizeUrl(value: string): string {
     }
     const query = new URLSearchParams()
     for (const [key, item] of url.searchParams) {
-      if (shouldRedactKey(key) || SENSITIVE_QUERY_KEY_PATTERN.test(key)) {
+      if (shouldRedactQueryKey(key)) {
         query.append(key, REDACTED_VALUE)
         changed = true
       } else {
