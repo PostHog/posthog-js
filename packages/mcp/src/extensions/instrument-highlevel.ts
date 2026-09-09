@@ -12,6 +12,15 @@ import type {
   ToolCallback,
 } from '../types'
 import {
+  buildAgentFeedbackEventProperties,
+  buildAgentFeedbackIntent,
+  getAgentFeedbackToolDescriptor,
+  handleAgentFeedback,
+  parseAgentFeedbackReport,
+  resolveAgentFeedbackOptions,
+  resolveAgentFeedbackToolName,
+} from './agent-feedback'
+import {
   analyticsOwnsParameter,
   getAnalyticsParameterOwnership,
   stripOwnedAnalyticsArguments,
@@ -252,6 +261,29 @@ async function handleToolCallRequest(
       explicitContextIntent: context,
       parameterOwnership: getVirtualToolParameterOwnership(data, toolName),
       execute: async () => handleReportMissing({ context }, data.logger),
+    })
+  }
+
+  const feedbackOptions = resolveAgentFeedbackOptions(data.options.collectFeedback)
+  const isAgentFeedbackCandidate =
+    feedbackOptions !== undefined && toolName === resolveAgentFeedbackToolName(data.options.collectFeedback)
+
+  if (isAgentFeedbackCandidate && (await isToolAdvertised(server, toolName, extra, data.logger)) === false) {
+    const report = parseAgentFeedbackReport(request.params?.arguments, feedbackOptions)
+    return await captureToolCall({
+      server,
+      data,
+      request,
+      extra,
+      eventType: MCPAnalyticsEventType.mcpAgentFeedback,
+      explicitContextIntent: buildAgentFeedbackIntent(report),
+      extraEventProperties: buildAgentFeedbackEventProperties(report),
+      parameterOwnership: getVirtualToolParameterOwnership(
+        data,
+        toolName,
+        getAgentFeedbackToolDescriptor(feedbackOptions).inputSchema
+      ),
+      execute: async () => handleAgentFeedback(report, feedbackOptions, data.logger),
     })
   }
 

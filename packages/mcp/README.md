@@ -213,6 +213,66 @@ A persistent single-process dispatcher can omit `originalTool` after it has prep
 Pass `requestMeta` whenever the request supplies `_meta`; this enables recognized client metadata
 without changing the arguments sent to the tool.
 
+### Collecting agent feedback (`send_feedback`)
+
+`collectFeedback` is **off** by default. Turn it on and the SDK advertises a `send_feedback` virtual
+tool: an honest, general feedback channel from the agent to your team. The tool description makes
+missing capabilities the priority category ("report a missing capability whenever no available tool
+fits your task, even if you can work around it") and also invites reports about a tool that failed
+or confused the agent, and praise. Every call emits one `$mcp_feedback` event — never a
+`$mcp_tool_call` — with `$mcp_feedback_type`, `$mcp_feedback_summary`, and the other
+`$mcp_feedback_*` properties; the summary and details double as `$mcp_intent`. The agent receives an
+acknowledgement that says exactly what happened: the report was recorded, no tools were added.
+
+```ts
+instrument(server, posthog, {
+  collectFeedback: {
+    // All fields optional; `collectFeedback: true` uses the defaults.
+    toolName: 'send_feedback',
+    extraProperties: {
+      product_area: { type: 'string', description: 'The product or feature the feedback is about.' },
+    },
+    extraRequired: ['product_area'],
+    onFeedback: async (report) => {
+      await myFeedbackBackend.record(report) // report.extras.product_area, report.raw, ...
+      return 'Thanks - your feedback reached the team.' // replaces the default acknowledgement
+    },
+  },
+})
+```
+
+Host-declared `extraProperties` are merged into the advertised schema and captured as
+`$mcp_feedback_<key>` (sanitized and bounded like every captured value). Arguments the agent invents
+beyond the schema are never captured — they reach `onFeedback` via `report.raw` only. A key that
+collides with a core field fails at configuration time. Free-text fields go through the same PII
+redaction as `$mcp_intent`.
+
+On the custom-dispatcher path, configure the tool on the `PostHogMCP` constructor and route reports
+yourself (`onFeedback` does not apply there):
+
+```ts
+const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN, {
+  collectFeedback: { toolName: 'send_feedback' },
+})
+
+// tools/list handler
+return { tools: posthog.prepareToolList(myTools, { collectFeedback: true }) }
+
+// tools/call dispatcher
+const prepared = posthog.prepareToolCall(name, rawArgs)
+if (prepared.isAgentFeedback) {
+  posthog.captureAgentFeedback({ report: prepared.feedbackReport!, ...identity })
+  await myFeedbackBackend.record(prepared.feedbackReport!)
+  return agentFeedbackResult() // or a custom text reply
+}
+```
+
+`send_feedback` covers what `reportMissing` covers — a capability gap is
+`feedback_type: "missing_capability"` — so new integrations should enable only `collectFeedback`.
+`reportMissing` and its `$mcp_missing_capability` event stay unchanged for existing users; enabling
+both advertises both tools. Like `get_more_tools`, a real tool that already uses the configured name
+wins: the SDK warns, skips injection, and delegates calls to the real handler.
+
 ### If you switched to `instrument(server.server)`
 
 Before v2 support landed, the compatibility gate rejected high-level v2 servers, and the usual

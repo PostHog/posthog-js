@@ -101,6 +101,20 @@ export interface MCPAnalyticsOptions {
   /** Enable the `get_more_tools` virtual tool so agents can report missing functionality. */
   reportMissing?: boolean
   /**
+   * Inject the `send_feedback` virtual tool so agents can send feedback about
+   * this server to its developers — a missing capability (the priority
+   * category), a tool that failed or confused them, or praise. Calls to it emit
+   * `$mcp_feedback` (never a `$mcp_tool_call`). Off by default.
+   *
+   * `true` uses the defaults; the object form renames the tool, replaces its
+   * description, declares host-specific `extraProperties`, or wires an
+   * `onFeedback` handler that routes reports to a real backend.
+   *
+   * Covers what `reportMissing` covers (as `feedback_type: "missing_capability"`),
+   * so new integrations should enable only one of the two.
+   */
+  collectFeedback?: CollectFeedbackConfig
+  /**
    * Rename the `get_more_tools` virtual tool (the `reportMissing` feature).
    * Defaults to `get_more_tools`. Set once here so the tool is advertised and
    * detected under the same name.
@@ -183,6 +197,71 @@ export interface MCPAnalyticsOptions {
 
 export interface MCPAnalyticsContextOptions {
   description?: string
+}
+
+export type AgentFeedbackType = 'missing_capability' | 'issue' | 'praise' | 'other'
+export type AgentFeedbackSentiment = 'positive' | 'neutral' | 'negative' | 'mixed'
+
+/** The `collectFeedback` option: `true` for the defaults, or the object form. */
+export type CollectFeedbackConfig = boolean | AgentFeedbackOptions
+
+/**
+ * A host-declared input-schema fragment for one `send_feedback` extra property —
+ * plain JSON Schema, the same shape the MCP `tools/list` wire format uses.
+ */
+export interface AgentFeedbackExtraPropertySchema {
+  type: string
+  description?: string
+  enum?: string[]
+  [key: string]: unknown
+}
+
+/** Object form of {@link CollectFeedbackConfig}. */
+export interface AgentFeedbackOptions {
+  /**
+   * Rename the `send_feedback` virtual tool. Set once so the tool is advertised
+   * and detected under the same name. Defaults to `send_feedback`.
+   */
+  toolName?: string
+  /** Replace the default tool description. */
+  description?: string
+  /**
+   * Host-specific fields merged into the tool's advertised input schema. Each
+   * declared key is captured as a `$mcp_feedback_<key>` event property (through
+   * the standard sanitize/truncate pipeline); arguments the agent invents beyond
+   * the schema are never captured. A key that collides with a core field or an
+   * SDK-injected argument throws at configuration time.
+   */
+  extraProperties?: Record<string, AgentFeedbackExtraPropertySchema>
+  /** Keys of `extraProperties` to advertise as required. */
+  extraRequired?: string[]
+  /**
+   * Route each report to a real backend (`instrument()` path only — a custom
+   * dispatcher routes reports itself, see {@link PreparedToolCall.isAgentFeedback}).
+   * Return a string to replace the default acknowledgement text. A throw is
+   * logged and falls back to the default reply; the `$mcp_feedback` event is
+   * captured either way.
+   */
+  onFeedback?: (report: AgentFeedbackReport) => MaybePromise<string | void>
+}
+
+/** One parsed `send_feedback` call, as handed to `onFeedback` and the dispatcher. */
+export interface AgentFeedbackReport {
+  /** Invalid or missing values fall back to `other`. */
+  feedbackType: AgentFeedbackType
+  /** One-sentence summary; empty string when the agent omitted it. */
+  summary: string
+  sentiment?: AgentFeedbackSentiment
+  frictionPoints?: string
+  suggestedImprovement?: string
+  details?: string
+  /** The existing tool the feedback is about (`tool_name` argument). */
+  toolName?: string
+  taskCompleted?: boolean
+  /** Values of the declared `extraProperties` fields. */
+  extras: JsonRecord
+  /** The full raw arguments, for the handler only — never captured. */
+  raw: JsonRecord
 }
 
 export interface MCPAnalyticsModelOptions {
@@ -589,6 +668,13 @@ export interface PrepareToolListOptions {
    * {@link PostHogMCP.captureMissingCapability} and reply with `getMoreToolsResult()`.
    */
   reportMissing?: boolean
+  /**
+   * Append the `send_feedback` virtual tool (configured on the `PostHogMCP`
+   * constructor's `collectFeedback` option) so agents can send feedback.
+   * Defaults to `false`. When the agent calls it, route the call to
+   * {@link PostHogMCP.captureAgentFeedback} and reply with `agentFeedbackResult()`.
+   */
+  collectFeedback?: boolean
 }
 
 /** Options for {@link PostHogMCP.prepareToolCall}. */
@@ -620,6 +706,14 @@ export interface PreparedToolCall {
   args?: Record<string, unknown>
   /** True when `name` is the `get_more_tools` virtual tool. */
   isMissingCapability: boolean
+  /** True when `name` is the `send_feedback` virtual tool. */
+  isAgentFeedback: boolean
+  /**
+   * The parsed feedback report, set only when {@link PreparedToolCall.isAgentFeedback}
+   * is true. Pass it to {@link PostHogMCP.captureAgentFeedback} and to your own
+   * feedback backend, then reply with `agentFeedbackResult()` or a custom text.
+   */
+  feedbackReport?: AgentFeedbackReport
 }
 
 /** Payload for {@link PostHogMCP.captureMissingCapability}. Emits `$mcp_missing_capability`. */
@@ -629,6 +723,21 @@ export interface MissingCapabilityCaptureData extends McpCaptureCommon {
    * on the `get_more_tools` call) → `$mcp_intent`.
    */
   context?: string
+  /** The calling model id -> `$mcp_llm_model`. */
+  llmModel?: string
+  /** How the model id was obtained -> `$mcp_llm_model_source`. */
+  llmModelSource?: MCPAnalyticsModelSource
+  /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
+  parameters?: unknown
+}
+
+/** Payload for {@link PostHogMCP.captureAgentFeedback}. Emits `$mcp_feedback`. */
+export interface AgentFeedbackCaptureData extends McpCaptureCommon {
+  /**
+   * The parsed report (from {@link PreparedToolCall.feedbackReport}) →
+   * `$mcp_feedback_*` properties, with the summary and details as `$mcp_intent`.
+   */
+  report: AgentFeedbackReport
   /** The calling model id -> `$mcp_llm_model`. */
   llmModel?: string
   /** How the model id was obtained -> `$mcp_llm_model_source`. */

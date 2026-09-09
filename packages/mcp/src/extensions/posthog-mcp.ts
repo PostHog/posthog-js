@@ -1,6 +1,9 @@
 import { PostHog, type PostHogOptions } from 'posthog-node'
 
 import type {
+  AgentFeedbackCaptureData,
+  AgentFeedbackOptions,
+  CollectFeedbackConfig,
   InitializeCaptureData,
   JsonRecord,
   MCPAnalyticsOptions,
@@ -13,6 +16,13 @@ import type {
   ToolCallCaptureData,
   ToolsListCaptureData,
 } from '../types'
+import {
+  buildAgentFeedbackEventProperties,
+  buildAgentFeedbackIntent,
+  getAgentFeedbackToolDescriptor,
+  parseAgentFeedbackReport,
+  SEND_FEEDBACK_TOOL_NAME,
+} from './agent-feedback'
 import { analyticsOwnsParameter, stripOwnedAnalyticsArguments } from './analytics-parameters'
 import {
   addContextParameterToTools,
@@ -47,6 +57,15 @@ export interface PostHogMCPOptions extends PostHogOptions {
    * can't drift. Defaults to `get_more_tools`.
    */
   missingCapabilityToolName?: string
+  /**
+   * Configuration for the `send_feedback` virtual tool injected by
+   * {@link PostHogMCP.prepareToolList} (when its `collectFeedback` toggle is on)
+   * and detected by {@link PostHogMCP.prepareToolCall}. Set once here so
+   * injection and detection can't drift. `onFeedback` is ignored on this path —
+   * the host dispatcher routes reports itself via
+   * {@link PreparedToolCall.feedbackReport}.
+   */
+  collectFeedback?: CollectFeedbackConfig
   /**
    * Capture the calling model from recognized client metadata, with an injected
    * `llm_model` argument as fallback. Off by default.
@@ -93,15 +112,22 @@ export interface PostHogMCPOptions extends PostHogOptions {
 export class PostHogMCP extends PostHog {
   readonly #sink = new McpEventSink(this)
 
-  // The get_more_tools name lives here (not on the per-call options) so that
+  // The virtual-tool config lives here (not on the per-call options) so that
   // prepareToolList (inject) and prepareToolCall (detect) always agree.
   readonly #missingCapabilityToolName: string
+  readonly #agentFeedbackOptions: AgentFeedbackOptions
+  readonly #agentFeedbackToolName: string
   readonly #captureModel: MCPAnalyticsOptions['captureModel']
   readonly #modelParameterOwnership = new Map<string, boolean>()
 
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
     super(apiKey, options)
     this.#missingCapabilityToolName = options.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
+    this.#agentFeedbackOptions = typeof options.collectFeedback === 'object' ? options.collectFeedback : {}
+    this.#agentFeedbackToolName = this.#agentFeedbackOptions.toolName ?? SEND_FEEDBACK_TOOL_NAME
+    // Fail fast on a config error (reserved extra key, undeclared extraRequired)
+    // instead of first surfacing it when a tools/list is served.
+    getAgentFeedbackToolDescriptor(this.#agentFeedbackOptions)
     this.#captureModel = options.captureModel
     applyMcpLibIdentity(this)
   }
@@ -160,8 +186,9 @@ export class PostHogMCP extends PostHog {
    * Decorate your `tools/list` response with PostHog's analytics affordances:
    * injects the `context` argument into every tool (so agents state their intent,
    * captured as `$mcp_intent`), injects `llm_model` when the constructor's
-   * `captureModel` option is enabled, and appends `get_more_tools` when
-   * `reportMissing` is on. Returns a new array; your tools are untouched.
+   * `captureModel` option is enabled, appends `get_more_tools` when
+   * `reportMissing` is on, and appends `send_feedback` when `collectFeedback` is
+   * on. Returns a new array; your tools are untouched.
    *
    * The appended `get_more_tools` descriptor carries only the base MCP tool fields
    * (name, description, input schema) — not any framework-specific fields your
@@ -186,6 +213,10 @@ export class PostHogMCP extends PostHog {
 
     if (options.reportMissing && !prepared.some((tool) => tool?.name === this.#missingCapabilityToolName)) {
       prepared = [...prepared, getReportMissingToolDescriptor(this.#missingCapabilityToolName) as TTool]
+    }
+
+    if (options.collectFeedback && !prepared.some((tool) => tool?.name === this.#agentFeedbackToolName)) {
+      prepared = [...prepared, getAgentFeedbackToolDescriptor(this.#agentFeedbackOptions) as TTool]
     }
 
     if (isCaptureModelEnabled(this.#captureModel)) {
@@ -256,6 +287,7 @@ export class PostHogMCP extends PostHog {
       ? resolveModel({ params: { arguments: args, _meta: options.requestMeta } }, ownsModel)
       : undefined
     const strippedArgs = stripContext(args)
+    const isAgentFeedback = name === this.#agentFeedbackToolName
     return {
       intent,
       intentSource: intent ? 'context_parameter' : undefined,
@@ -269,6 +301,8 @@ export class PostHogMCP extends PostHog {
           }) as Record<string, unknown> | undefined)
         : strippedArgs,
       isMissingCapability: name === this.#missingCapabilityToolName,
+      isAgentFeedback,
+      feedbackReport: isAgentFeedback ? parseAgentFeedbackReport(args, this.#agentFeedbackOptions) : undefined,
     }
   }
 
@@ -282,6 +316,23 @@ export class PostHogMCP extends PostHog {
     event.resourceName = this.#missingCapabilityToolName
     event.parameters = data.parameters
     applyIntent(event, data.context, 'context_parameter')
+    setEventModel(event, data.llmModel, data.llmModelSource)
+    this.#emit(event)
+  }
+
+  /**
+   * Capture a `send_feedback` call as an agent-feedback report. Emits
+   * `$mcp_feedback` with the report's `$mcp_feedback_*` properties and its
+   * summary/details as `$mcp_intent`. Reply to the agent with
+   * `agentFeedbackResult()` (or a custom text) after routing the report to your
+   * own feedback backend.
+   */
+  captureAgentFeedback(data: AgentFeedbackCaptureData): void {
+    const event = baseEvent(MCPAnalyticsEventType.mcpAgentFeedback, data)
+    event.resourceName = this.#agentFeedbackToolName
+    event.parameters = data.parameters
+    event.properties = { ...buildAgentFeedbackEventProperties(data.report), ...event.properties }
+    applyIntent(event, buildAgentFeedbackIntent(data.report), 'context_parameter')
     setEventModel(event, data.llmModel, data.llmModelSource)
     this.#emit(event)
   }

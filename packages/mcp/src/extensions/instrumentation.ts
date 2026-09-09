@@ -7,6 +7,7 @@ import type {
   AnalyticsParameterOwnership,
   CompatibleRequestHandlerExtra,
   CompatibleToolsListLike,
+  JsonRecord,
   MCPAnalyticsData,
   MCPRequestLike,
   MCPServerLike,
@@ -44,6 +45,11 @@ import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getRequestHeaders } from './request-headers'
 import { getSessionId, getSessionInfo, isModernEraRequest, newSessionId } from './session'
 import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
+import {
+  getAgentFeedbackToolDescriptor,
+  resolveAgentFeedbackOptions,
+  resolveAgentFeedbackToolName,
+} from './agent-feedback'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
 
@@ -70,16 +76,22 @@ interface TraceToolCallParams {
   parameterOwnership?: AnalyticsParameterOwnership
   /**
    * Event type to capture. Defaults to a tool call; the `get_more_tools` virtual
-   * tool passes `mcpMissingCapability` so it records a capability gap rather than
-   * a tool invocation.
+   * tool passes `mcpMissingCapability` and `send_feedback` passes
+   * `mcpAgentFeedback`, so they record a capability gap / a feedback report
+   * rather than a tool invocation.
    */
   eventType?: MCPAnalyticsEventType
   /**
    * When set, used verbatim as the captured intent (source `context_parameter`)
-   * instead of running `resolveToolCallIntent`. Used by the `get_more_tools`
-   * virtual tool, which carries its intent in the `context` argument.
+   * instead of running `resolveToolCallIntent`. Used by the virtual tools, which
+   * carry their intent in their own arguments.
    */
   explicitContextIntent?: string
+  /**
+   * Extra event properties spread onto the captured event, after the host's
+   * `eventProperties`. Used by `send_feedback` for its `$mcp_feedback_*` fields.
+   */
+  extraEventProperties?: JsonRecord
   /**
    * Optional accessor for an error the executor captured out-of-band. The
    * high-level SDK turns thrown tool errors into `isError: true` results before
@@ -107,21 +119,27 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     parameterOwnership,
     eventType,
     explicitContextIntent,
+    extraEventProperties,
     takeCapturedError,
   } = params
   const resolvedEventType = eventType ?? MCPAnalyticsEventType.mcpToolsCall
+  // The SDK's own virtual tools carry their intent in their own arguments, so
+  // the injected `context` parameter neither exists on them nor gets read.
+  const isVirtualAnalyticsTool =
+    resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability ||
+    resolvedEventType === MCPAnalyticsEventType.mcpAgentFeedback
   const ownership = getActiveAnalyticsParameterOwnership(
     data,
     request.params?.name,
     parameterOwnership,
-    resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
+    isVirtualAnalyticsTool
   )
   // Reading the argument and removing it are separate questions: deleting one the
   // application declared costs the customer their call, so the strip below still
   // requires positive ownership, while reading it when ownership is unresolved
   // costs at worst a mislabelled property. ADR-0011.
   const canCaptureContextIntent =
-    resolvedEventType !== MCPAnalyticsEventType.mcpMissingCapability &&
+    !isVirtualAnalyticsTool &&
     isContextEnabled(data.options.context) &&
     (ownership.context || !ownership.contextOwnershipKnown)
   const conversation = resolveConversationId(ownership.conversationId, request.params?.arguments)
@@ -144,6 +162,9 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   )
   if (preparedEvent && explicitContextIntent) {
     setExplicitContextIntent(preparedEvent.event, explicitContextIntent)
+  }
+  if (preparedEvent && extraEventProperties) {
+    preparedEvent.event.properties = { ...preparedEvent.event.properties, ...extraEventProperties }
   }
 
   let result: unknown
@@ -178,13 +199,13 @@ function getActiveAnalyticsParameterOwnership(
   data: MCPAnalyticsData,
   toolName: string | undefined,
   override: AnalyticsParameterOwnership | undefined,
-  isMissingCapabilityTool: boolean
+  isVirtualAnalyticsTool: boolean
 ): ActiveAnalyticsParameterOwnership {
   const listed = toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined
   const ownership = override ?? listed
   return {
     contextOwnershipKnown: ownership !== undefined,
-    context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
+    context: !isVirtualAnalyticsTool && isContextEnabled(data.options.context) && ownership?.context === true,
     conversationId: data.options.enableConversationId === true && ownership?.conversationId === true,
     llmModel: isCaptureModelEnabled(data.options.captureModel) && ownership?.llmModel === true,
     // Deliberately read off `listed`, never the override: only the advertised
@@ -508,14 +529,14 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
 }
 
 /**
- * Ownership for the `get_more_tools` virtual tool, resolved without the
- * `tools/list` cache.
+ * Ownership for an SDK-owned virtual tool (`get_more_tools`, `send_feedback`),
+ * resolved from its own descriptor rather than the `tools/list` cache.
  *
- * The missing-capability branch is only entered when the application does not
- * advertise a tool by this name, so the descriptor is the SDK's own and what it
- * declares is known statically. An instance that never served a listing — a
- * per-request `McpServer`/`Server`, the topology in ADR-0011 — would otherwise
- * read every injected parameter as not-ours and neither capture nor strip it.
+ * A virtual-tool branch is only entered when the application does not advertise
+ * a tool by this name, so the descriptor is the SDK's own and what it declares
+ * is known statically. An instance that never served a listing — a per-request
+ * `McpServer`/`Server`, the topology in ADR-0011 — would otherwise read every
+ * injected parameter as not-ours and neither capture nor strip it.
  *
  * `conversation_id` still comes from the cache on purpose: resolving it here too
  * would start minting a handle, and appending its prompt-back block, on
@@ -524,10 +545,11 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
  */
 export function getVirtualToolParameterOwnership(
   data: MCPAnalyticsData,
-  toolName: string
+  toolName: string,
+  virtualToolInputSchema: unknown = getReportMissingToolDescriptor(toolName).inputSchema
 ): AnalyticsParameterOwnership {
   return {
-    ...getAnalyticsParameterOwnership(getReportMissingToolDescriptor(toolName).inputSchema),
+    ...getAnalyticsParameterOwnership(virtualToolInputSchema),
     conversationId: data.toolAnalyticsParameterOwnership.get(toolName)?.conversationId === true,
   }
 }
@@ -699,6 +721,21 @@ async function getTracedToolsList(
           tools.push(virtualTool)
           // Cached separately because the virtual tool is added after the listing
           // was cached, and its calls need ownership like any other tool's.
+          cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, [virtualTool])
+        }
+      }
+
+      const feedbackOptions = resolveAgentFeedbackOptions(data.options.collectFeedback)
+      if (feedbackOptions) {
+        const feedbackToolName = resolveAgentFeedbackToolName(data.options.collectFeedback)
+        const alreadyPresent = tools.some((tool) => tool?.name === feedbackToolName)
+        if (alreadyPresent) {
+          data.logger(
+            `Warning: Cannot inject agent-feedback tool "${feedbackToolName}" because a real tool already uses that name. The real tool will not be intercepted.`
+          )
+        } else {
+          const virtualTool = getAgentFeedbackToolDescriptor(feedbackOptions)
+          tools.push(virtualTool)
           cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, [virtualTool])
         }
       }
