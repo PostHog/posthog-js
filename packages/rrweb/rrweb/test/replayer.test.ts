@@ -39,6 +39,7 @@ import documentReplacementEvents from './events/document-replacement';
 import hoverInIframeShadowDom from './events/iframe-shadowdom-hover';
 import customElementDefineClass from './events/custom-element-define-class';
 import svgXlinkHrefEvents from './events/svg-xlink-href';
+import inputAutocompleteMutationEvents from './events/input-autocomplete-mutation';
 import readdNodeSubtreeSwapEvents from './events/readd-node-subtree-swap';
 import {
   EventType,
@@ -1041,6 +1042,26 @@ describe('replayer', function () {
         .getAttributeNS('http://www.w3.org/1999/xlink', 'href');
     `);
     expect(href).toBe('#icon-b');
+  });
+
+  it('keeps autocomplete="off" on inputs when a mutation changes the attribute', async () => {
+    await page.evaluate(
+      `events = ${JSON.stringify(inputAutocompleteMutationEvents)}`,
+    );
+    await page.evaluate(`
+      const { Replayer } = rrweb;
+      const replayer = new Replayer(events);
+      replayer.play();
+    `);
+    await page.waitForTimeout(200);
+
+    const autocompletes = await page.evaluate(`
+      [
+        replayer.iframe.contentDocument.querySelector('input').getAttribute('autocomplete'),
+        replayer.iframe.contentDocument.querySelector('textarea').getAttribute('autocomplete'),
+      ]
+    `);
+    expect(autocompletes).toEqual(['off', 'off']);
   });
 
   it('should destroy the replayer after calling destroy()', async () => {
