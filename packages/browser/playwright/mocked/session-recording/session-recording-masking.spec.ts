@@ -170,12 +170,14 @@ test.describe('Session recording - masking', () => {
             )
         await expect.poll(getEventBytes).toContain('ALLOWED_DYNAMIC_PRODUCT')
         const eventBytes = await getEventBytes()
-        const jsonLdEventBytes = JSON.stringify(
-            (await page.capturedEvents())
-                .filter((event) => event.event === '$snapshot')
-                .flatMap((event) => event.properties['$snapshot_data'])
-                .filter((event) => event.type === 5 && event.data.tag === '$json_ld')
-        )
+        const jsonLdEvents = (await page.capturedEvents())
+            .filter((event) => event.event === '$snapshot')
+            .flatMap((event) => event.properties['$snapshot_data'])
+            .filter((event) => event.type === 5 && event.data.tag === '$json_ld')
+        const jsonLdEventBytes = JSON.stringify(jsonLdEvents)
+        for (const event of jsonLdEvents) {
+            expect(event.data.href).toBe(page.url())
+        }
         expect(eventBytes).toContain('ALLOWED_PRODUCT_ID')
         expect(eventBytes).toContain('ALLOWED_INITIAL_PRODUCT')
         expect(eventBytes).toContain('ALLOWED_DYNAMIC_PRODUCT')
