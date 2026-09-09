@@ -21,6 +21,96 @@ describe('JSON-LD replay capture', () => {
 
     addJsonLdContractTests(jsonLdContract, sanitizeJsonLd)
 
+    it.each([
+        'https://example.com/category?token=secret',
+        'HTTP://example.com/category',
+        '//example.com/category',
+        '/category?token=secret',
+        './category',
+        '../category',
+        '  https://example.com/category  ',
+    ])('masks URL values in retained fields: %s', (url) => {
+        const maskUrl = vi.fn(() => 'masked')
+        const result = sanitizeJsonLd(
+            JSON.stringify({ '@context': 'https://schema.org', '@type': 'Product', category: url }),
+            undefined,
+            maskUrl
+        )
+
+        expect(result?.[0]).toEqual({ '@context': 'https://schema.org', '@type': 'Product', category: 'masked' })
+        expect(maskUrl).toHaveBeenCalledTimes(1)
+        expect(maskUrl).toHaveBeenCalledWith(url.trim())
+    })
+
+    it('masks nested scalar arrays without passing schema identifiers or ordinary text to the callback', () => {
+        const maskUrl = vi.fn((url: string) => (url.includes('/drop') ? undefined : 'masked'))
+        const result = sanitizeJsonLd(
+            JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'https://schema.org/Product',
+                '@id': 'https://example.com/product#product-id',
+                name: 'Camera: Pro',
+                category: ['Books/Fiction', 'Visit https://example.com', '', 0, false, null, '/drop', '/keep'],
+                url: 'https://example.com/not-allowlisted',
+                offers: [{ '@type': 'Offer', availability: 'https://schema.org/InStock', price: 10 }],
+                '@graph': [{ '@type': 'Product', name: '/drop' }],
+            }),
+            (id) => id === 'product-id',
+            maskUrl
+        )
+
+        expect(result?.[0]).toEqual({
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            '@id': 'product-id',
+            name: 'Camera: Pro',
+            category: ['Books/Fiction', 'Visit https://example.com', '', 0, false, null, 'masked'],
+            offers: [{ '@type': 'Offer', availability: 'masked', price: 10 }],
+            '@graph': [{ '@type': 'Product' }],
+        })
+        expect(maskUrl.mock.calls.map(([url]) => url)).toEqual([
+            '/drop',
+            '/keep',
+            'https://schema.org/InStock',
+            '/drop',
+        ])
+    })
+
+    it.each(['throws', 'exceeds output limit'])('drops a script when URL masking %s', (failure) => {
+        expect(
+            sanitizeJsonLd(
+                JSON.stringify({ '@context': 'https://schema.org', '@type': 'Product', category: '/category' }),
+                undefined,
+                () => {
+                    if (failure === 'throws') {
+                        throw new Error('mask failed')
+                    }
+                    return 'x'.repeat(20_001)
+                }
+            )
+        ).toBeNull()
+    })
+
+    it('deduplicates script updates after URL masking', async () => {
+        const value = { '@context': 'https://schema.org', '@type': 'Product', category: '/category?token=first' }
+        const script = jsonLdScript(value)
+        document.body.append(script)
+        const emit = vi.fn(() => true)
+        const capture = startJsonLdCapture(document, MutationObserver, {
+            emit,
+            maskUrl: (url) => url.split('?')[0],
+        })
+        try {
+            capture.scan()
+            script.textContent = JSON.stringify({ ...value, category: '/category?token=second' })
+            await deliverMutations()
+            expect(emit).toHaveBeenCalledTimes(1)
+            expect(emit).toHaveBeenCalledWith({ ...value, category: '/category' })
+        } finally {
+            capture.stop()
+        }
+    })
+
     it('keeps @id only when the fragment resolves to a recorded element', () => {
         document.body.innerHTML = `
             <div id="product-id"></div>

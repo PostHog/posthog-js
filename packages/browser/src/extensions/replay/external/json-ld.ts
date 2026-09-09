@@ -5,6 +5,7 @@ type JsonLdPropertyRule = true | readonly string[]
 type JsonLdEntityRules = Record<string, JsonLdPropertyRule>
 type JsonLdRuleGroup = readonly [readonly string[], JsonLdEntityRules]
 type IsCapturedDomId = (id: string) => boolean
+type MaskJsonLdUrl = (url: string) => string | undefined
 
 const MAX_JSON_LD_LENGTH = 100_000
 const MAX_JSON_LD_OUTPUT_LENGTH = 20_000
@@ -144,8 +145,17 @@ function isScalar(value: unknown): value is JsonLdScalar {
     return isNull(value) || type === 'string' || type === 'number' || type === 'boolean'
 }
 
-function sanitizeScalar(value: unknown): JsonLdScalar | JsonLdScalar[] | undefined {
-    return isScalar(value) || (isArray(value) && value.every(isScalar)) ? value : undefined
+function maskScalarUrl(value: JsonLdScalar, maskUrl?: MaskJsonLdUrl): JsonLdScalar | undefined {
+    return maskUrl && typeof value === 'string' && /^(https?:\/\/|\/|\.\.?\/)/i.test(value.trim())
+        ? maskUrl(value.trim()) || undefined
+        : value
+}
+
+function sanitizeScalar(value: unknown, maskUrl?: MaskJsonLdUrl): JsonLdScalar | JsonLdScalar[] | undefined {
+    if (isArray(value) && value.every(isScalar)) {
+        return value.map((item) => maskScalarUrl(item, maskUrl)).filter((item) => !isUndefined(item))
+    }
+    return isScalar(value) ? maskScalarUrl(value, maskUrl) : undefined
 }
 
 function sanitizeId(value: unknown, isCapturedDomId: IsCapturedDomId): string | undefined {
@@ -200,17 +210,18 @@ function getEntityTypes(value: unknown): string[] {
     return types
 }
 
-type SanitizationBudget = {
+type SanitizationContext = {
+    maskUrl?: MaskJsonLdUrl
     remainingNodes: number
     exceeded: boolean
 }
 
-function takeNode(budget: SanitizationBudget): boolean {
-    if (!budget.remainingNodes) {
-        budget.exceeded = true
+function takeNode(context: SanitizationContext): boolean {
+    if (!context.remainingNodes) {
+        context.exceeded = true
         return false
     }
-    budget.remainingNodes--
+    context.remainingNodes--
     return true
 }
 
@@ -226,26 +237,26 @@ function setOwnProperty(result: Record<string, unknown>, property: string, value
 function sanitizeEntityValue(
     value: unknown,
     isCapturedDomId: IsCapturedDomId,
-    budget: SanitizationBudget,
+    context: SanitizationContext,
     allowedTypes?: readonly string[]
 ): unknown | undefined {
     if (isArray(value)) {
         const items = value
-            .map((item) => sanitizeEntityValue(item, isCapturedDomId, budget, allowedTypes))
+            .map((item) => sanitizeEntityValue(item, isCapturedDomId, context, allowedTypes))
             .filter((item) => !isUndefined(item))
         return items.length ? items : undefined
     }
 
-    return sanitizeEntity(value, isCapturedDomId, budget, allowedTypes) || undefined
+    return sanitizeEntity(value, isCapturedDomId, context, allowedTypes) || undefined
 }
 
 function sanitizeEntity(
     value: unknown,
     isCapturedDomId: IsCapturedDomId,
-    budget: SanitizationBudget,
+    context: SanitizationContext,
     allowedTypes?: readonly string[]
 ): Record<string, unknown> | null {
-    if (!isObject(value) || !takeNode(budget)) {
+    if (!isObject(value) || !takeNode(context)) {
         return null
     }
     const typeValue = getOwnProperty(value, '@type')
@@ -265,7 +276,7 @@ function sanitizeEntity(
                     : undefined
                 : property === '@id'
                   ? sanitizeId(getOwnProperty(value, property), isCapturedDomId)
-                  : sanitizeScalar(getOwnProperty(value, property))
+                  : sanitizeScalar(getOwnProperty(value, property), context.maskUrl)
         if (!isUndefined(propertyValue)) {
             setOwnProperty(result, property, propertyValue)
         }
@@ -277,12 +288,12 @@ function sanitizeEntity(
             const propertyValue = getOwnProperty(value, property)
             const rule = rules[property]
             if (rule === true) {
-                const scalar = sanitizeScalar(propertyValue)
+                const scalar = sanitizeScalar(propertyValue, context.maskUrl)
                 if (!isUndefined(scalar)) {
                     setOwnProperty(result, property, scalar)
                 }
             } else {
-                const nestedValue = sanitizeEntityValue(propertyValue, isCapturedDomId, budget, rule)
+                const nestedValue = sanitizeEntityValue(propertyValue, isCapturedDomId, context, rule)
                 if (!isUndefined(nestedValue)) {
                     setOwnProperty(result, property, nestedValue)
                 }
@@ -290,7 +301,7 @@ function sanitizeEntity(
         }
     }
 
-    const graph = sanitizeEntityValue(getOwnProperty(value, '@graph'), isCapturedDomId, budget)
+    const graph = sanitizeEntityValue(getOwnProperty(value, '@graph'), isCapturedDomId, context)
     if (!isUndefined(graph)) {
         setOwnProperty(result, '@graph', graph)
     }
@@ -301,23 +312,24 @@ function sanitizeEntity(
 function sanitizeRoot(
     value: unknown,
     isCapturedDomId: IsCapturedDomId,
-    budget: SanitizationBudget
+    context: SanitizationContext
 ): Record<string, unknown> | null {
     if (!isObject(value)) {
         return null
     }
-    const context = getOwnProperty(value, '@context')
-    if (typeof context !== 'string' || !/^https?:\/\/schema\.org\/?$/.test(context)) {
+    const schemaContext = getOwnProperty(value, '@context')
+    if (typeof schemaContext !== 'string' || !/^https?:\/\/schema\.org\/?$/.test(schemaContext)) {
         return null
     }
 
-    const entity = sanitizeEntity(value, isCapturedDomId, budget)
+    const entity = sanitizeEntity(value, isCapturedDomId, context)
     return entity ? { '@context': SCHEMA_CONTEXT, ...entity } : null
 }
 
 export function sanitizeJsonLd(
     text: string,
-    isCapturedDomId: IsCapturedDomId = NO_CAPTURED_DOM_IDS
+    isCapturedDomId: IsCapturedDomId = NO_CAPTURED_DOM_IDS,
+    maskUrl?: MaskJsonLdUrl
 ): [unknown, string] | null {
     if (!text || text.length > MAX_JSON_LD_LENGTH) {
         return null
@@ -325,15 +337,16 @@ export function sanitizeJsonLd(
 
     try {
         const value: unknown = JSON.parse(text)
-        const budget: SanitizationBudget = {
+        const context: SanitizationContext = {
+            maskUrl,
             remainingNodes: MAX_JSON_LD_NODES,
             exceeded: false,
         }
         const sanitized = isArray(value)
-            ? value.map((root) => sanitizeRoot(root, isCapturedDomId, budget))
-            : sanitizeRoot(value, isCapturedDomId, budget)
+            ? value.map((root) => sanitizeRoot(root, isCapturedDomId, context))
+            : sanitizeRoot(value, isCapturedDomId, context)
         if (
-            budget.exceeded ||
+            context.exceeded ||
             isNull(sanitized) ||
             (isArray(sanitized) && (!sanitized.length || sanitized.some(isNull)))
         ) {
@@ -355,6 +368,7 @@ function isJsonLdScript(node: Node): node is HTMLScriptElement {
 }
 
 type JsonLdPrivacyOptions = {
+    maskUrl?: MaskJsonLdUrl
     attributeFilter?: string[]
     blockClass?: string | RegExp
     blockSelector?: string | null
@@ -463,7 +477,7 @@ export function startJsonLdCapture(
             ) {
                 return
             }
-            const sanitized = sanitizeJsonLd(script.text, hasCapturedDomId)
+            const sanitized = sanitizeJsonLd(script.text, hasCapturedDomId, options.maskUrl)
             if (!sanitized) {
                 lastJsonByScript.delete(script)
                 return

@@ -3830,6 +3830,53 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
+        it.each(['maskCapturedNetworkRequestFn', 'maskNetworkRequestFn'] as const)(
+            'applies replay URL privacy settings to JSON-LD payloads through %s',
+            async (maskOption) => {
+                const script = document.createElement('script')
+                script.type = 'application/ld+json'
+                script.textContent = JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    category: 'https://example.com/category?gclid=secret&token=private#fragment',
+                    offers: [{ '@type': 'Offer', availability: '/unavailable' }],
+                })
+                document.body.appendChild(script)
+                posthog.config.session_recording.captureJsonLd = true
+                posthog.config.mask_personal_data_properties = true
+                posthog.config.disable_capture_url_hashes = true
+                const maskUrl = vi.fn((url: string) =>
+                    url === '/unavailable' ? undefined : url.replace('token=private', 'token=redacted')
+                )
+                if (maskOption === 'maskCapturedNetworkRequestFn') {
+                    posthog.config.session_recording.maskCapturedNetworkRequestFn = (request) => {
+                        const name = maskUrl(request.name)
+                        return name ? { ...request, name } : null
+                    }
+                } else {
+                    posthog.config.session_recording.maskNetworkRequestFn = (request) => {
+                        const url = maskUrl(request.url)
+                        return url ? { ...request, url } : null
+                    }
+                }
+                try {
+                    sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                    _emit(createMetaSnapshot())
+                    await Promise.resolve()
+
+                    expect(maskUrl).toHaveBeenCalledWith('https://example.com/category?gclid=<masked>&token=private')
+                    expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
+                        '@context': 'https://schema.org',
+                        '@type': 'Product',
+                        category: 'https://example.com/category?gclid=<masked>&token=redacted',
+                        offers: [{ '@type': 'Offer' }],
+                    })
+                } finally {
+                    script.remove()
+                }
+            }
+        )
+
         it('emits sanitized JSON-LD only while capture is enabled', async () => {
             const target = document.createElement('div')
             target.id = 'product-123'

@@ -3008,6 +3008,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             !this._jsonLdCapture
         ) {
             this._jsonLdCapture = startJsonLdCapture(document, window.MutationObserver, {
+                maskUrl: (url) => this._maskReplayUrl(url),
                 attributeFilter: sessionRecordingOptions.attributeFilter,
                 blockClass: sessionRecordingOptions.blockClass,
                 blockSelector: sessionRecordingOptions.blockSelector,
