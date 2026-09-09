@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.409.3
+
+### Patch Changes
+
+- [#4864](https://github.com/PostHog/posthog-js/pull/4864) [`e8b2be1`](https://github.com/PostHog/posthog-js/commit/e8b2be1940539a3bf66fdffee978e9ee40a21d2d) Thanks [@robbie-c](https://github.com/robbie-c)! - Include the masked page URL with JSON-LD replay events.
+  (2026-09-09)
+
 ## 1.409.2
 
 ### Patch Changes
