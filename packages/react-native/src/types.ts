@@ -12,6 +12,37 @@ export type PostHogNavigationRef = {
   current?: PostHogNavigationRef | any | undefined
 }
 
+export type PostHogRageClickConfig = {
+  /**
+   * Enable or disable rage click (rage tap) detection.
+   *
+   * When enabled the native SDK emits a `$rageclick` event whenever a user
+   * taps the same area repeatedly in quick succession.
+   *
+   * @default true
+   */
+  enabled?: boolean
+  /**
+   * Number of consecutive taps required to trigger a rage click.
+   *
+   * @default 3
+   */
+  minimumTapCount?: number
+  /**
+   * Maximum pixel distance between consecutive taps for them to still
+   * count toward a rage click.
+   *
+   * @default 30
+   */
+  thresholdPoints?: number
+  /**
+   * Maximum time in seconds allowed between consecutive taps.
+   *
+   * @default 1.0
+   */
+  timeoutInterval?: number
+}
+
 export type PostHogAutocaptureOptions = {
   /**
    * Enable autocapture of touch events.
