@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4857](https://github.com/PostHog/posthog-js/issues/4857) | Valid Android React Native push-open capture gap; automatic warm-start handling is absent in the current plugin. | react-native, feature/mobile, team/client-libraries |  | no | 2026-09-09T02:28:28.988Z |
 | PostHog/posthog-js | [issue 4856](https://github.com/PostHog/posthog-js/issues/4856) | Valid publisher-intent and licensing-provenance question; it needs an authoritative maintainer/legal response rather than a speculative code fix. | team/client-libraries |  | no | 2026-09-09T01:07:15.889Z |
 | PostHog/posthog-js | [issue 4852](https://github.com/PostHog/posthog-js/issues/4852) | Confirmed React Native Expo config-plugin bug: an earlier appBuildGradle mod can cause Android native-symbol setup to silently omit the PostHog Gradle plugin. | react-native, Android, feature/error-tracking, team/error-tracking |  | no | 2026-09-08T22:21:27.919Z |
 | PostHog/posthog-js | [issue 3766](https://github.com/PostHog/posthog-js/issues/3766) | Valid Session Replay maintenance tracker for contributing general rrweb fork divergences upstream. | enhancement, feature/replay, needs-to-be-contributed-back, team/client-libraries |  | no | 2026-09-08T14:16:02.865Z |
