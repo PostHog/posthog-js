@@ -149,8 +149,8 @@ describe('Slim runtime bundles', () => {
 
 describe('Slim module declarations', () => {
     it('share nominal types between extension bundles and both slim entrypoints', () => {
-        expect(extensionBundlesDts).toContain("from './module.slim'")
-        expect(moduleSlimDts).toContain("from './module.slim.no-external'")
+        expect(extensionBundlesDts).toMatch(/from ['"]\.\/module\.slim['"]/)
+        expect(moduleSlimDts).toMatch(/from ['"]\.\/module\.slim\.no-external['"]/)
         expect(moduleSlimDts).not.toContain('declare class PostHog')
 
         const fixtureDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-slim-types-'))
@@ -211,7 +211,7 @@ describe('Published entrypoint declarations', () => {
         }
     })
 
-    it('includes declarations for every source entrypoint', () => {
+    it('emits exactly one public declaration per source entrypoint without shared chunks', () => {
         const distDirectory = path.resolve(__dirname, '../../../dist')
         const sourceDirectory = path.resolve(__dirname, '../../entrypoints')
         const declarations = fs
@@ -219,9 +219,12 @@ describe('Published entrypoint declarations', () => {
             .filter((file) => file.endsWith('.ts'))
             .map((file) => file.replace(/(?:\.(?:cjs|es|iife))?\.ts$/, '.d.ts'))
 
-        for (const declaration of declarations) {
-            expect(fs.existsSync(path.join(distDirectory, declaration))).toBe(true)
-        }
+        expect(
+            fs
+                .readdirSync(distDirectory)
+                .filter((file) => file.endsWith('.d.ts'))
+                .sort()
+        ).toEqual(declarations.sort())
     })
 
     it('resolves extension declarations from their public package paths', () => {
@@ -247,6 +250,22 @@ import DeadClicksAutocapture from 'posthog-js/dist/dead-clicks-autocapture'
 import initConversations from 'posthog-js/dist/conversations'
 import generateProductTours from 'posthog-js/dist/product-tours'
 import generateSurveys from 'posthog-js/dist/surveys'
+import { EventType } from 'posthog-js/dist/rrweb-types'
+
+// Earlier bundles expose this enum under an alias; TypeScript compares its local name too.
+declare enum EventType$1 {
+    DomContentLoaded = 0,
+    Load = 1,
+    FullSnapshot = 2,
+    IncrementalSnapshot = 3,
+    Meta = 4,
+    Custom = 5,
+    Plugin = 6,
+}
+const legacyEventType: EventType$1 = EventType.IncrementalSnapshot
+const currentEventType: EventType = EventType$1.IncrementalSnapshot
+void legacyEventType
+void currentEventType
 
 new DeadClicksAutocapture(posthog)
 initConversations({} as any, posthog)

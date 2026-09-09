@@ -1,6 +1,6 @@
 import { getBabelOutputPlugin } from '@rollup/plugin-babel'
-import json from '@rollup/plugin-json'
-import { dts } from 'rollup-plugin-dts'
+import { dts } from 'rolldown-plugin-dts'
+import ts from 'typescript'
 import { minify as minifyWithTerser } from 'terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import { Features, transform as transformCss } from 'lightningcss'
@@ -432,7 +432,7 @@ const entrypointTargets = entrypoints.map((file) => {
     }
 })
 
-// Entries whose .d.ts must inline upstream types (respectExternal: true) so
+// Entries whose .d.ts must inline upstream types so
 // consumers don't need a runtime dep on the re-exported package to resolve them.
 const inlineExternalTypesEntries = new Set([
     'extension-bundles.es.ts',
@@ -460,6 +460,46 @@ const mainModuleTypesEntries = new Set([
 // rrdom's dts drops the local `RRNodeType` alias declaration; the renderChunk
 // below rewrites value references back to `NodeType.`. Only rrweb pulls in rrdom.
 const rewriteRrdomNodeTypeAlias = (file) => file === 'rrweb.es.ts'
+
+// TypeScript checks enum declaration names, even when consumers import them through an alias.
+// Rollup named rrweb's enum EventType$1 to distinguish it from PostHog's EventType constant.
+const preserveRrwebEventTypeName = {
+    name: 'preserve-rrweb-event-type-name',
+    renderChunk(code) {
+        const names = new Map([
+            ['EventType', 'EventType$1'],
+            ['EventType$1', 'PostHogEventType'],
+        ])
+        const source = ts.createSourceFile('rrweb-types.d.ts', code, ts.ScriptTarget.Latest, true)
+        const result = ts.transform(source, [
+            (context) => {
+                const visit = (node) => {
+                    if (ts.isExportSpecifier(node)) {
+                        const local = node.propertyName ?? node.name
+                        return names.has(local.text)
+                            ? ts.factory.updateExportSpecifier(
+                                  node,
+                                  node.isTypeOnly,
+                                  ts.factory.createIdentifier(names.get(local.text)),
+                                  node.name
+                              )
+                            : node
+                    }
+                    if (ts.isIdentifier(node) && names.has(node.text)) {
+                        return ts.factory.createIdentifier(names.get(node.text))
+                    }
+                    return ts.visitEachChild(node, visit, context)
+                }
+                return (node) => ts.visitNode(node, visit)
+            },
+        ])
+        try {
+            return ts.createPrinter().printFile(result.transformed[0])
+        } finally {
+            result.dispose()
+        }
+    },
+}
 
 // The former runtime TypeScript plugin also published dist/src declarations. Retain those paths.
 const unbundledDeclarations = {
@@ -491,7 +531,7 @@ const typeTargets = entrypoints
         const referencesMainModuleTypes = mainModuleTypesEntries.has(file)
         const inlineExternalTypes = inlineExternalTypesEntries.has(file)
         const rewriteRrdomAlias = rewriteRrdomNodeTypeAlias(file)
-        /** @type {import('rollup').RollupOptions} */
+        /** @type {import('rolldown').RolldownOptions} */
         return {
             input: source,
             // extension-bundles types must reference module.slim rather than inlining
@@ -500,22 +540,22 @@ const typeTargets = entrypoints
             // reason, module.slim must use a source-level re-export from
             // module.slim.no-external and keep that module external here, so dts preserves
             // the reference instead of inlining a second declaration graph.
-            ...(isExtensionBundles ? { external: [/module\.slim/] } : {}),
-            ...(isSlimModule ? { external: [/module\.slim\.no-external/] } : {}),
-            ...(referencesMainModuleTypes ? { external: [/posthog-core$/] } : {}),
+            external: (id) =>
+                (isExtensionBundles && /module\.slim/.test(id)) ||
+                (isSlimModule && /module\.slim\.no-external/.test(id)) ||
+                (referencesMainModuleTypes && /posthog-core$/.test(id)) ||
+                (!inlineExternalTypes && !id.startsWith('.') && !path.isAbsolute(id)),
             output: [
                 {
                     dir: path.resolve('./dist'),
+                    format: 'es',
                     entryFileNames: file.replace(/(?:\.(?:cjs|es|iife))?\.ts$/, '.d.ts'),
                 },
             ],
             plugins: [
                 ...(index === 0 ? [unbundledDeclarations] : []),
-                json(),
-                dts({
-                    exclude: [],
-                    ...(inlineExternalTypes ? { respectExternal: true } : {}),
-                }),
+                ...dts({ dtsInput: true, emitDtsOnly: true }),
+                ...(file === 'rrweb-types.es.ts' ? [preserveRrwebEventTypeName] : []),
                 // dts preserves tsc-era paths ending in `.es`, but the output files
                 // omit that segment — fix references between the generated declarations.
                 ...(isExtensionBundles || isSlimModule

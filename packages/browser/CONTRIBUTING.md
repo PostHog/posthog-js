@@ -6,7 +6,7 @@ For repository-wide setup, see the root [CONTRIBUTING.md](../../CONTRIBUTING.md)
 
 ## Development
 
-After the initial build, run `pnpm dev` (or `pnpm start`) in this package to watch source changes. This runs TypeScript emission, Rolldown runtime bundling and Rollup declaration bundling in parallel, using the same bundler configurations as production.
+After the initial build, run `pnpm dev` (or `pnpm start`) in this package to watch source changes. This runs TypeScript emission, Rolldown runtime bundling and Rolldown declaration bundling in parallel, using the same bundler configuration as production. Declaration bundling consumes the existing `lib/src/**/*.d.ts` files with `dtsInput: true`; TypeScript remains responsible for semantic checking and declaration generation. The build also preserves the unbundled declarations under `dist/src`.
 
 React bindings are built separately: run `pnpm --filter=@posthog/react dev` from the repository root when working on them.
 
@@ -28,7 +28,7 @@ Run `pnpm bundle-size:array` from the repository root for a fast comparison of t
 pnpm bundle-size:array main
 ```
 
-The script bundles both versions with the same esbuild settings and reports minified, gzip, and Brotli changes. It is intended for quick percentage comparisons; the production Rollup build will have different absolute sizes.
+The script bundles both versions with the same esbuild settings and reports minified, gzip, and Brotli changes. It is intended for quick percentage comparisons; the production Rolldown build will have different absolute sizes.
 
 ### Running TestCafe E2E tests with BrowserStack
 

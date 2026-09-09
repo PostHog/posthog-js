@@ -357,9 +357,6 @@ importers:
       '@rollup/plugin-babel':
         specifier: ^6.0.4
         version: 6.0.4(@babel/core@7.28.5)(@types/babel__core@7.20.5)(rollup@4.53.3)
-      '@rollup/plugin-json':
-        specifier: ^6.1.0
-        version: 6.1.0(rollup@4.53.3)
       '@sentry/types':
         specifier: 8.7.0
         version: 8.7.0
@@ -441,12 +438,9 @@ importers:
       rolldown:
         specifier: 'catalog:'
         version: 1.2.4
-      rollup:
+      rolldown-plugin-dts:
         specifier: 'catalog:'
-        version: 4.53.3
-      rollup-plugin-dts:
-        specifier: ^6.2.3
-        version: 6.2.3(rollup@4.53.3)(typescript@5.8.2)
+        version: 0.27.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(rolldown@1.2.4)(typescript@5.8.2)
       rollup-plugin-visualizer:
         specifier: ^6.0.3
         version: 6.0.3(rolldown@1.2.4)(rollup@4.53.3)
