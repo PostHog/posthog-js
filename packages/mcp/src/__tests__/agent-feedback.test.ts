@@ -191,6 +191,90 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       await capture.stop()
     })
 
+    it('captures a call that violates the required fields (nothing validates the virtual tool server-side)', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), { collectFeedback: true })
+
+      // No feedback_type, no summary: the tool is not registered with the MCP
+      // SDK, so no schema validation runs — the SDK must still capture and reply.
+      const result = await callTool(client, SEND_FEEDBACK, { details: 'Only details.' })
+      expect(result.content[0].text).toContain('recorded')
+
+      await new Promise((r) => setTimeout(r, 50))
+      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
+      expect(p[PostHogMCPAnalyticsProperty.FeedbackType]).toBe('other')
+      expect(p[PostHogMCPAnalyticsProperty.FeedbackSummary]).toBeUndefined()
+      expect(p[PostHogMCPAnalyticsProperty.FeedbackDetails]).toBe('Only details.')
+      // Intent falls back to the details when the summary is missing.
+      expect(p[PostHogMCPAnalyticsProperty.Intent]).toBe('Only details.')
+
+      await capture.stop()
+    })
+
+    it('treats a non-string summary as missing', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), { collectFeedback: true })
+
+      await callTool(client, SEND_FEEDBACK, { feedback_type: 'praise', summary: 42 })
+
+      await new Promise((r) => setTimeout(r, 50))
+      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
+      expect(p[PostHogMCPAnalyticsProperty.FeedbackType]).toBe('praise')
+      expect(p[PostHogMCPAnalyticsProperty.FeedbackSummary]).toBeUndefined()
+
+      await capture.stop()
+    })
+
+    it('captures a call that omits a required extra, without the property', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), {
+        collectFeedback: {
+          extraProperties: { product_area: { type: 'string' } },
+          extraRequired: ['product_area'],
+        },
+      })
+
+      const result = await callTool(client, SEND_FEEDBACK, { feedback_type: 'issue', summary: 'A tool failed.' })
+      expect(result.content[0].text).toContain('recorded')
+
+      await new Promise((r) => setTimeout(r, 50))
+      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
+      expect(p.$mcp_feedback_product_area).toBeUndefined()
+
+      await capture.stop()
+    })
+
+    it('captures non-string scalar extras as-is and bounds over-long text fields', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), {
+        collectFeedback: {
+          extraProperties: { retry_count: { type: 'number' }, from_cache: { type: 'boolean' } },
+        },
+      })
+
+      const longSummary = 'a'.repeat(5000)
+      await callTool(client, SEND_FEEDBACK, {
+        feedback_type: 'issue',
+        summary: longSummary,
+        retry_count: 3,
+        from_cache: false,
+      })
+
+      await new Promise((r) => setTimeout(r, 50))
+      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
+      expect(p.$mcp_feedback_retry_count).toBe(3)
+      expect(p.$mcp_feedback_from_cache).toBe(false)
+      const summary = p[PostHogMCPAnalyticsProperty.FeedbackSummary] as string
+      expect(summary.length).toBe(2048 + '...'.length)
+      expect(summary.endsWith('...')).toBe(true)
+
+      await capture.stop()
+    })
+
     it('falls back to feedback_type "other" on an invalid value', async () => {
       const capture = new EventCapture()
       await capture.start()
@@ -428,10 +512,27 @@ describe('PostHogMCP (custom dispatcher path)', () => {
   }
 
   it('throws at construction on a collectFeedback config error', () => {
-    expect(() => newClient({ collectFeedback: { extraProperties: { context: { type: 'string' } } } })).toThrow(
-      /collides/
-    )
     expect(() => newClient({ collectFeedback: { extraRequired: ['nope'] } })).toThrow(/not declared/)
+    // Every reserved key: core fields, prefixed-property collisions, SDK-injected arguments.
+    for (const reserved of [
+      'feedback_type',
+      'summary',
+      'details',
+      'friction_points',
+      'suggested_improvement',
+      'tool_name',
+      'sentiment',
+      'task_completed',
+      'type',
+      'tool',
+      'context',
+      'conversation_id',
+      'llm_model',
+    ]) {
+      expect(() => newClient({ collectFeedback: { extraProperties: { [reserved]: { type: 'string' } } } })).toThrow(
+        /collides/
+      )
+    }
   })
 
   it('prepareToolList appends send_feedback only when the collectFeedback toggle is on', async () => {
@@ -488,12 +589,16 @@ describe('PostHogMCP (custom dispatcher path)', () => {
   })
 
   it('captureFeedback emits $mcp_feedback with the report properties and intent', async () => {
-    const posthog = newClient({ collectFeedback: { toolName: 'agent-feedback' } })
+    const posthog = newClient({
+      collectFeedback: { toolName: 'agent-feedback', extraProperties: { product_area: { type: 'string' } } },
+    })
 
     const prepared = posthog.prepareToolCall('agent-feedback', {
       feedback_type: 'issue',
       summary: 'Tool X misleads.',
       details: 'The schema hides a required field.',
+      product_area: 'analytics',
+      invented_field: 'never captured',
     })
     posthog.captureFeedback({
       report: prepared.feedbackReport!,
@@ -514,6 +619,9 @@ describe('PostHogMCP (custom dispatcher path)', () => {
     expect(p[PostHogMCPAnalyticsProperty.Intent]).toBe('Tool X misleads.\n\nThe schema hides a required field.')
     expect(p[PostHogMCPAnalyticsProperty.SessionId]).toBe('session-abc')
     expect(p.custom_flag).toBe(true)
+    expect(p.$mcp_feedback_product_area).toBe('analytics')
+    expect(p.$mcp_feedback_invented_field).toBeUndefined()
+    expect(p[PostHogMCPAnalyticsProperty.Parameters]).toBeUndefined()
 
     await posthog.shutdown()
   })
