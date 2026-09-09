@@ -365,8 +365,12 @@ export type DeadClicksAutoCaptureConfig = {
     scroll_threshold_ms?: number
 
     /**
-     * We'll not consider a click to be a dead click if a selection changes within
+     * We'll not consider a click to be a dead click if it selects/unselects text or moves a caret
+     * in editable content during its mouse gesture, regardless of how long the button is held.
+     * Selection changes outside a matching gesture suppress the click when they occur within
      * `selection_change_threshold_ms` milliseconds immediately before or after it.
+     * When a closed shadow root hides whether a caret belongs to editable content, only the timed window applies.
+     * A value of 0 disables selection-based suppression.
      *
      * @default 100
      */

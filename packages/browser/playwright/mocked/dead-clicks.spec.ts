@@ -236,8 +236,271 @@ test.describe('Dead clicks', () => {
         expect(deadClicks.length).toBe(0)
     })
 
+    for (const { tag, label, mode, holdMs } of (
+        [
+            { tag: 'input', label: 'input', mode: undefined },
+            { tag: 'textarea', label: 'textarea', mode: undefined },
+            { tag: 'div', label: 'contenteditable text', mode: undefined },
+            { tag: 'div', label: 'shadow-root contenteditable text', mode: 'open' },
+            { tag: 'div', label: 'closed-shadow-root contenteditable text', mode: 'closed' },
+        ] as const
+    ).flatMap((editor) => [30, 150, 2670].map((holdMs) => ({ ...editor, holdMs })))) {
+        test(`classifies caret placement in ${label} with a ${holdMs}ms press`, async ({ page, context }) => {
+            await start(startOptions, page, context)
+            await page.waitForFunction(() => {
+                const win = window as any
+                return !!win.posthog?.deadClicksAutocapture?.lazyLoadedDeadClicksAutocapture
+            })
+            const editor = await page.evaluateHandle(
+                ({ tag, mode }) => {
+                    const editor = document.createElement(tag)
+                    editor.id = 'text-editor'
+                    editor.style.cssText = 'position: fixed; top: 20px; left: 20px; width: 400px; padding: 24px;'
+                    if (tag === 'div') {
+                        editor.setAttribute('contenteditable', 'true')
+                        const text = document.createElement('span')
+                        text.textContent = 'Place a caret here'
+                        editor.appendChild(text)
+                    } else {
+                        const input = editor as HTMLInputElement | HTMLTextAreaElement
+                        input.value = 'Place a caret here'
+                        input.setSelectionRange(0, 0)
+                    }
+                    if (mode) {
+                        const host = document.createElement('div')
+                        host.attachShadow({ mode }).appendChild(editor)
+                        document.body.appendChild(host)
+                    } else {
+                        document.body.appendChild(editor)
+                    }
+                    return editor
+                },
+                { tag, mode }
+            )
+            await page.waitForTimeout(1100)
+            await page.resetCapturedEvents()
+
+            const point = await editor.evaluate((element) => {
+                const rect = element.getBoundingClientRect()
+                return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+            })
+            await page.mouse.move(point.x, point.y)
+            await page.mouse.down()
+            expect(
+                await editor.evaluate(
+                    (element) => element === (element.getRootNode() as Document | ShadowRoot).activeElement
+                )
+            ).toBe(true)
+            expect(
+                await editor.evaluate((element) => {
+                    if (element.tagName === 'DIV') {
+                        return window.getSelection()?.type === 'Caret'
+                    }
+                    const input = element as HTMLInputElement | HTMLTextAreaElement
+                    return (
+                        input.selectionStart !== null &&
+                        input.selectionStart > 0 &&
+                        input.selectionStart === input.selectionEnd
+                    )
+                })
+            ).toBe(true)
+            const exposesCaretOwner = await editor.evaluate((element) =>
+                element.contains(window.getSelection()?.focusNode ?? null)
+            )
+            await page.waitForTimeout(holdMs)
+            await page.mouse.up()
+            await page.waitForTimeout(3500)
+
+            const deadClicks = (await page.capturedEvents()).filter((event) => event.event === '$dead_click')
+            // An opaque closed-root caret is indistinguishable from an inert focused host.
+            // Preserve its timed fallback instead of extending that ambiguity across a hold.
+            const opaqueLongPress = mode === 'closed' && holdMs > 100 && !exposesCaretOwner
+            expect(deadClicks).toHaveLength(opaqueLongPress ? 1 : 0)
+        })
+    }
+
+    for (const { clickLocation, focusable, holdMs = 30 } of [
+        { clickLocation: 'text', focusable: false },
+        { clickLocation: 'padding', focusable: false },
+        { clickLocation: 'text', focusable: true },
+        { clickLocation: 'padding', focusable: true },
+        { clickLocation: 'text', focusable: false, holdMs: 2670 },
+        { clickLocation: 'padding', focusable: true, holdMs: 2670 },
+    ]) {
+        test(`captures a dead click on inert selectable ${clickLocation}${focusable ? ' in a focusable container' : ''} with a ${holdMs}ms press`, async ({
+            page,
+            context,
+        }) => {
+            await start(startOptions, page, context)
+            await page.waitForFunction(() => {
+                const win = window as any
+                return !!win.posthog?.deadClicksAutocapture?.lazyLoadedDeadClicksAutocapture
+            })
+
+            await page.evaluate(
+                ({ location, focusable }) => {
+                    const element = document.createElement('div')
+                    element.id = 'inert-selectable'
+                    element.textContent = 'Inert selectable text'
+                    if (focusable) {
+                        element.tabIndex = 0
+                    }
+                    element.style.cssText =
+                        'position: fixed; top: 20px; left: 20px; width: 400px; padding: 24px; background: white;'
+                    document.body.appendChild(element)
+                    window.getSelection()?.removeAllRanges()
+                    if (location === 'padding') {
+                        const input = document.createElement('input')
+                        input.value = 'Focused editor'
+                        document.body.appendChild(input)
+                        input.focus()
+                        input.setSelectionRange(0, 0)
+                    }
+                },
+                { location: clickLocation, focusable }
+            )
+
+            // Let setup mutations and focus changes fall outside the click's observation window.
+            await page.waitForTimeout(1100)
+            await page.resetCapturedEvents()
+            expect(await page.evaluate(() => window.getSelection()?.isCollapsed)).toBe(true)
+
+            const point = await page.locator('#inert-selectable').evaluate((element, location) => {
+                if (location === 'padding') {
+                    const rect = element.getBoundingClientRect()
+                    return { x: rect.right - 5, y: rect.bottom - 5 }
+                }
+                const range = document.createRange()
+                range.setStart(element.firstChild!, 0)
+                range.setEnd(element.firstChild!, 1)
+                const rect = range.getBoundingClientRect()
+                return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+            }, clickLocation)
+
+            await page.mouse.click(point.x, point.y, { delay: holdMs })
+            expect(await page.evaluate(() => window.getSelection()?.isCollapsed)).toBe(true)
+            await page.waitForTimeout(3500)
+
+            const deadClicks = (await page.capturedEvents()).filter((event) => event.event === '$dead_click')
+            expect(deadClicks).toHaveLength(1)
+        })
+    }
+
+    for (const mode of [undefined, 'open', 'closed'] as const) {
+        for (const holdMs of [30, 150, 2670]) {
+            test(`does not capture dead clicks when selecting and unselecting ${mode ?? 'light'}-root text with a ${holdMs}ms press`, async ({
+                page,
+                context,
+            }) => {
+                await start(startOptions, page, context)
+                await page.waitForFunction(() => {
+                    const win = window as any
+                    return !!win.posthog?.deadClicksAutocapture?.lazyLoadedDeadClicksAutocapture
+                })
+                const text = await page.evaluateHandle((mode) => {
+                    const host = document.createElement('div')
+                    host.style.cssText =
+                        'position: fixed; top: 20px; left: 20px; width: 400px; padding: 24px; background: white;'
+                    const text = document.createElement('span')
+                    text.textContent = 'Shadow selection text'
+                    ;(mode ? host.attachShadow({ mode }) : host).appendChild(text)
+                    document.body.appendChild(host)
+                    return text
+                }, mode)
+                await page.waitForTimeout(1100)
+                await page.resetCapturedEvents()
+
+                const point = await text.evaluate((element) => {
+                    const range = document.createRange()
+                    range.setStart(element.firstChild!, 1)
+                    range.setEnd(element.firstChild!, 2)
+                    const rect = range.getBoundingClientRect()
+                    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+                })
+                await page.mouse.dblclick(point.x, point.y, { delay: 30 })
+                await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe('Shadow')
+                await page.waitForTimeout(3500)
+                expect((await page.capturedEvents()).filter((event) => event.event === '$dead_click')).toHaveLength(0)
+
+                await page.resetCapturedEvents()
+                const outsideSelection = await text.evaluate((element) => {
+                    const node = element.firstChild!
+                    const range = document.createRange()
+                    range.setStart(node, node.textContent!.length - 1)
+                    range.setEnd(node, node.textContent!.length)
+                    const rect = range.getBoundingClientRect()
+                    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+                })
+                await page.mouse.move(outsideSelection.x, outsideSelection.y)
+                await page.mouse.down()
+                await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe('')
+                await page.waitForTimeout(holdMs)
+                await page.mouse.up()
+                await page.waitForTimeout(3500)
+                expect((await page.capturedEvents()).filter((event) => event.event === '$dead_click')).toHaveLength(0)
+            })
+        }
+    }
+
+    for (const scenario of ['closed inert host', 'unrelated range removal', 'nested text clearing']) {
+        test(`keeps gesture selection scoped for ${scenario}`, async ({ page, context }) => {
+            await start(startOptions, page, context)
+            await page.waitForFunction(() => {
+                const win = window as any
+                return !!win.posthog?.deadClicksAutocapture?.lazyLoadedDeadClicksAutocapture
+            })
+            await page.evaluate((scenario) => {
+                const target = document.createElement('div')
+                target.id = 'gesture-target'
+                target.style.cssText =
+                    'position: fixed; left: 20px; top: 20px; width: 400px; padding: 24px; background: white;'
+                const span = document.createElement('span')
+                span.textContent = 'Nested selectable text'
+                if (scenario === 'closed inert host') {
+                    target.tabIndex = 0
+                    target.attachShadow({ mode: 'closed' }).appendChild(span)
+                } else {
+                    target.appendChild(span)
+                }
+                document.body.appendChild(target)
+                const selection = window.getSelection()!
+                selection.removeAllRanges()
+                if (scenario !== 'closed inert host') {
+                    const other = document.createElement('span')
+                    other.textContent = 'Unrelated selected text'
+                    document.body.appendChild(other)
+                    const range = document.createRange()
+                    range.selectNodeContents(scenario === 'unrelated range removal' ? other : span)
+                    selection.addRange(range)
+                }
+                if (scenario === 'unrelated range removal') {
+                    target.onmousedown = (event) => event.preventDefault()
+                }
+            }, scenario)
+            await page.waitForTimeout(1100)
+            await page.resetCapturedEvents()
+            const box = await page.locator('#gesture-target').boundingBox()
+            expect(box).not.toBeNull()
+            await page.mouse.move(box!.x + box!.width - 8, box!.y + box!.height / 2)
+            await page.mouse.down()
+            if (scenario === 'unrelated range removal') {
+                await page.evaluate(() => window.getSelection()!.removeAllRanges())
+            }
+            await page.waitForTimeout(150)
+            await page.mouse.up()
+            await page.waitForTimeout(3500)
+            expect((await page.capturedEvents()).filter((event) => event.event === '$dead_click')).toHaveLength(
+                scenario === 'nested text clearing' ? 0 : 1
+            )
+        })
+    }
+
     test('does not capture dead click for selected text', async ({ page, context }) => {
         await start(startOptions, page, context)
+        await page.waitForFunction(() => {
+            const win = window as any
+            return !!win.posthog?.deadClicksAutocapture?.lazyLoadedDeadClicksAutocapture
+        })
 
         await page.resetCapturedEvents()
 
@@ -267,6 +530,10 @@ test.describe('Dead clicks', () => {
 
     test('does not capture a dead click when a click unselects text', async ({ page, context }) => {
         await start(startOptions, page, context)
+        await page.waitForFunction(() => {
+            const win = window as any
+            return !!win.posthog?.deadClicksAutocapture?.lazyLoadedDeadClicksAutocapture
+        })
 
         const text = page.locator('[data-cy-dead-click-text]')
         await text.evaluate((element) => {
