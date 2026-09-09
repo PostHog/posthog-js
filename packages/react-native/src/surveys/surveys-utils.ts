@@ -50,12 +50,22 @@ export const defaultRatingLabelOpacity = 0.7
 export const closeButtonSize = 40
 
 // textColor and inputTextColor are optional overrides (auto-calculated if not provided)
+// placeholder is optional too: open text questions only show placeholder text when the survey's
+// appearance sets one, so clearing the field in the survey editor clears it here too.
 export type SurveyAppearanceTheme = Omit<
   Required<SurveyAppearance>,
-  'widgetSelector' | 'widgetType' | 'widgetColor' | 'widgetLabel' | 'shuffleQuestions' | 'textColor' | 'inputTextColor'
+  | 'widgetSelector'
+  | 'widgetType'
+  | 'widgetColor'
+  | 'widgetLabel'
+  | 'shuffleQuestions'
+  | 'textColor'
+  | 'inputTextColor'
+  | 'placeholder'
 > & {
   textColor?: string
   inputTextColor?: string
+  placeholder?: string
 }
 export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   backgroundColor: defaultBackgroundColor,
@@ -65,7 +75,6 @@ export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   ratingButtonActiveColor: 'black',
   inputBackground: 'white',
   borderColor: '#c9c6c6',
-  placeholder: 'Start typing...',
   displayThankYouMessage: true,
   thankYouMessageHeader: 'Thank you for your feedback!',
   position: SurveyPosition.Center,
