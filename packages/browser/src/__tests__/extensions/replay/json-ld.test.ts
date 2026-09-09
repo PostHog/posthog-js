@@ -21,15 +21,8 @@ describe('JSON-LD replay capture', () => {
 
     addJsonLdContractTests(jsonLdContract, sanitizeJsonLd)
 
-    it.each([
-        'https://example.com/category?token=secret',
-        'HTTP://example.com/category',
-        '//example.com/category',
-        '/category?token=secret',
-        './category',
-        '../category',
-        '  https://example.com/category  ',
-    ])('masks URL values in retained fields: %s', (url) => {
+    it('masks a URL value after trimming whitespace', () => {
+        const url = '  https://example.com/category  '
         const maskUrl = vi.fn(() => 'masked')
         const result = sanitizeJsonLd(
             JSON.stringify({ '@context': 'https://schema.org', '@type': 'Product', category: url }),

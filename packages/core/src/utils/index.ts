@@ -60,6 +60,11 @@ function isEmpty(truthyValue: string): boolean {
   return false
 }
 
+/** Detects HTTP(S) URLs and explicit relative paths by prefix; does not validate URL syntax. */
+export function isUrl(value: unknown): value is string {
+  return typeof value === 'string' && /^(https?:\/\/|\/|\.\.?\/)/i.test(value.trim())
+}
+
 export function removeTrailingSlash(url: string): string {
   return url?.replace(/\/+$/, '')
 }

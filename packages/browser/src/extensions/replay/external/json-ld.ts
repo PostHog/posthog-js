@@ -1,4 +1,4 @@
-import { hasOwnProperty, isArray, isNull, isObject, isUndefined } from '@posthog/core'
+import { hasOwnProperty, isArray, isNull, isObject, isUndefined, isUrl } from '@posthog/core'
 
 type JsonLdScalar = string | number | boolean | null
 type JsonLdPropertyRule = true | readonly string[]
@@ -146,9 +146,7 @@ function isScalar(value: unknown): value is JsonLdScalar {
 }
 
 function maskScalarUrl(value: JsonLdScalar, maskUrl?: MaskJsonLdUrl): JsonLdScalar | undefined {
-    return maskUrl && typeof value === 'string' && /^(https?:\/\/|\/|\.\.?\/)/i.test(value.trim())
-        ? maskUrl(value.trim()) || undefined
-        : value
+    return maskUrl && isUrl(value) ? maskUrl(value.trim()) || undefined : value
 }
 
 function sanitizeScalar(value: unknown, maskUrl?: MaskJsonLdUrl): JsonLdScalar | JsonLdScalar[] | undefined {
