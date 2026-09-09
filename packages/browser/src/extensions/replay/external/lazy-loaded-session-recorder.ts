@@ -17,6 +17,7 @@ import {
     BUFFERING,
     DISABLED,
     EventTriggerMatching,
+    HELD,
     LinkedFlagMatching,
     PAUSED,
     SAMPLED,
@@ -118,8 +119,8 @@ const MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = ONE_HOUR
 // visible freeze - no rendering, scrolling, or cursor movement - and worth a warning.
 const SLOW_FULL_SNAPSHOT_THRESHOLD_MS = 500
 
-// why a flush is held. `status` still reads "active" for a held epoch, so the reason is
-// reported on captured events and logged, or a held recording looks like a shipping one.
+// why a flush is held. `status` reads "held" while one of these is set, and the reason
+// itself is reported on captured events and logged.
 type FlushHoldReason = 'no_interaction_since_recording_started' | 'no_interaction_since_session_rotated'
 
 function roundOrUndefined(value: number | undefined): number | undefined {
@@ -1006,7 +1007,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private get _fullSnapshotIntervalMillis(): number {
-        if (this._strategy?.hasPendingTriggers(this.sessionId) && !['sampled', 'active'].includes(this.status)) {
+        if (
+            this._strategy?.hasPendingTriggers(this.sessionId) &&
+            !['sampled', 'active'].includes(this._matchedStatus)
+        ) {
             const configuredInterval = this._instance.config.session_recording?.trigger_pending_buffer_interval_millis
             return isNumber(configuredInterval) &&
                 Number.isFinite(configuredInterval) &&
@@ -1045,7 +1049,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (triggerType === 'event') {
             this._releaseHoldAndFlush()
         }
-        if (this._urlTriggerMatching.urlBlocked || !['sampled', 'active'].includes(this.status)) {
+        if (this._urlTriggerMatching.urlBlocked || !['sampled', 'active'].includes(this._matchedStatus)) {
             return
         }
         this._scheduleFullSnapshot()
@@ -1376,7 +1380,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
         }
 
-        if (this.status === ACTIVE) {
+        if (this._matchedStatus === ACTIVE) {
             this._reportStarted(startReason || 'recording_initialized')
         }
     }
@@ -1720,7 +1724,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $window_id: targetWindowId,
         }
 
-        if (this.status === DISABLED) {
+        if (this._matchedStatus === DISABLED) {
             this._clearBuffer()
             return
         }
@@ -2092,7 +2096,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._captureProcessedEvent(event, eventToSend, size, targetSessionId, targetWindowId)
     }
 
-    get status(): SessionRecordingStatus {
+    // every recording decision reads this one, so the held status `status` reports cannot
+    // change behavior: a hold is enforced by _holdFlushUntilInteraction, and a held epoch
+    // must gate exactly like the active or sampled status it holds
+    private get _matchedStatus(): SessionRecordingStatus {
         if (!this._strategy) {
             return DISABLED
         }
@@ -2109,6 +2116,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         return this._strategy.getStatus(context)
+    }
+
+    // a held epoch uploads nothing until the user interacts, so it must not read as a
+    // shipping recording: support reads this status, in the page and on captured events
+    get status(): SessionRecordingStatus {
+        const status = this._matchedStatus
+        return this._flushHoldReason && (status === ACTIVE || status === SAMPLED) ? HELD : status
     }
 
     log(message: string, level: 'log' | 'warn' | 'error' = 'log') {
@@ -2345,7 +2359,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._strategy?.ensureSamplingDecision(this.sessionId)
 
         const isBelowMinimumDuration = this._isBelowMinimumDuration()
-        const status = this.status
+        const status = this._matchedStatus
 
         // run on every flush, not just the buffering branch: when the session goes active this
         // clears the saved reason, so a later session that buffers for the same condition still logs
@@ -2571,7 +2585,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _onBeforeUnload = (): void => {
         // If still buffering (waiting for triggers), discard the buffer
-        if (this.status === BUFFERING) {
+        if (this._matchedStatus === BUFFERING) {
             this._clearBuffer()
             return
         }
@@ -2731,7 +2745,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 // a trigger-pending buffer ships on activation, so it needs the heal as
                 // much as a live recording; only sampled-out and disabled states skip it
                 const bufferCanShip =
-                    ['sampled', 'active'].includes(this.status) || this._strategy?.hasPendingTriggers(this.sessionId)
+                    ['sampled', 'active'].includes(this._matchedStatus) ||
+                    this._strategy?.hasPendingTriggers(this.sessionId)
                 // a snapshot from _releaseHoldAndFlush above has already cleared the
                 // counter by the time this check runs, so we never take two in one tick
                 if (this._eventsDroppedWhileIdle > 0 && bufferCanShip) {
@@ -2754,8 +2769,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         return {
             $recording_status: this.status,
-            // "active" does not mean "uploading": a held epoch keeps its buffer until the user
-            // interacts, and only this property tells a held session from a shipping one
+            // the status above reads "held" while this is set; this names which hold it is
             $sdk_debug_replay_flush_hold_reason: this._flushHoldReason,
             $sdk_debug_replay_internal_buffer_length: this._buffer.data.length,
             $sdk_debug_replay_internal_buffer_size: this._buffer.size,
