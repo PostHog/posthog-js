@@ -6,7 +6,7 @@ For repository-wide setup, see the root [CONTRIBUTING.md](../../CONTRIBUTING.md)
 
 ## Development
 
-After the initial build, run `pnpm dev` (or `pnpm start`) in this package to watch source changes. This runs TypeScript emission, Rolldown runtime bundling, the intentional Rollup runtime fallback, and Rollup declaration bundling in parallel, using the same bundler configurations as production.
+After the initial build, run `pnpm dev` (or `pnpm start`) in this package to watch source changes. This runs TypeScript emission, Rolldown runtime bundling and Rollup declaration bundling in parallel, using the same bundler configurations as production.
 
 React bindings are built separately: run `pnpm --filter=@posthog/react dev` from the repository root when working on them.
 

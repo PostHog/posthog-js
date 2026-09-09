@@ -74,7 +74,7 @@ The `/src/extensions/` directory contains modular features:
 ### Build System
 
 - **TypeScript** compilation to `lib/` directory
-- **Rolldown** runtime bundling, with **Rollup** retained for cross-bundle runtime entries and declarations
+- **Rolldown** runtime bundling, with **Rollup** retained only for declarations
 - **Preact** for UI components (surveys, toolbar)
 - **Lightning CSS** for CSS processing, nesting transforms, and minification
 - **Terser** for minification with property mangling

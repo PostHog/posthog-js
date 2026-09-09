@@ -135,6 +135,18 @@ describe('Web vitals bundles', () => {
     })
 })
 
+describe('Slim runtime bundles', () => {
+    it('does not retain request transport or compression code in the extension bundle', () => {
+        const map = JSON.parse(
+            fs.readFileSync(path.resolve(__dirname, '../../../dist/extension-bundles.js.map'), 'utf-8')
+        )
+        expect(map.sources.some((source: string) => /fflate|\/gzip\.mjs$|\/encode-utils\.mjs$/.test(source))).toBe(
+            false
+        )
+        expect(map.names).not.toContain('AVAILABLE_TRANSPORTS')
+    })
+})
+
 describe('Slim module declarations', () => {
     it('share nominal types between extension bundles and both slim entrypoints', () => {
         expect(extensionBundlesDts).toContain("from './module.slim'")
@@ -188,6 +200,17 @@ void extensionClasses
 })
 
 describe('Published entrypoint declarations', () => {
+    it('preserves the unbundled declarations previously emitted by the runtime build', () => {
+        const libDirectory = path.resolve(__dirname, '../../../lib/src')
+        const declarations = fs.readdirSync(libDirectory, { recursive: true }).filter((file) => file.endsWith('.d.ts'))
+        expect(declarations.length).toBeGreaterThan(0)
+        for (const declaration of declarations) {
+            expect(fs.readFileSync(path.resolve(__dirname, '../../../dist/src', declaration), 'utf-8')).toBe(
+                fs.readFileSync(path.join(libDirectory, declaration), 'utf-8')
+            )
+        }
+    })
+
     it('includes declarations for every source entrypoint', () => {
         const distDirectory = path.resolve(__dirname, '../../../dist')
         const sourceDirectory = path.resolve(__dirname, '../../entrypoints')
