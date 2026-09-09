@@ -18,6 +18,7 @@
         "_addToBuffer",
         "_additionalReloadRequested",
         "_admitNewSeries",
+        "_allowStaleRemoteConfig",
         "_applyDisplayOverrides",
         "_applyRefill",
         "_applyTicketStatusUpdate",
