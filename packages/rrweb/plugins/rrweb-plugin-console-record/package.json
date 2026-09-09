@@ -28,9 +28,9 @@
         "test": "pnpm test:rrweb",
         "test:rrweb": "vitest run",
         "test:watch": "vitest watch",
-        "build": "tsc -noEmit && vite build && pnpm build:declarations",
+        "build": "pnpm check-types && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
-        "check-types": "tsc -noEmit"
+        "check-types": "tsc --noEmit"
     },
     "repository": {
         "type": "git",
