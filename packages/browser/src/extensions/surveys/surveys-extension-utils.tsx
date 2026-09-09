@@ -17,6 +17,7 @@ import {
     getSurveySeenKey,
     getSurveyAbandonedKey,
     getSurveyStorageKey,
+    isCapturingEnabled,
     SURVEY_LOGGER as logger,
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
@@ -433,6 +434,9 @@ export const sendSurveyEvent = ({
 }: SendSurveyEventArgs) => {
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
+        return
+    }
+    if (!isCapturingEnabled(posthog)) {
         return
     }
     setSurveySeenOnLocalStorage(survey)
