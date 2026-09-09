@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.429.1
+
+### Patch Changes
+
+- [#4861](https://github.com/PostHog/posthog-js/pull/4861) [`61b92f9`](https://github.com/PostHog/posthog-js/commit/61b92f9f0c6ab739fb4e196127afa89f0f9c683d) Thanks [@pauldambra](https://github.com/pauldambra)! - Disable browser autofill on input and textarea fields during session replay.
+  (2026-09-09)
+
 ## 1.429.0
 
 ### Minor Changes
