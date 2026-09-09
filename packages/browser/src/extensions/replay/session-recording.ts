@@ -1,6 +1,7 @@
 import {
     COOKIELESS_ALWAYS,
     SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
+    SDK_DEBUG_REPLAY_STALE_CONFIG,
     RECORDING_REMOTE_CONFIG_TTL_MS,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_SAMPLE_RATE,
@@ -303,7 +304,7 @@ export class SessionRecording implements Extension {
         if (!response || !('sessionRecording' in response)) {
             if (this._recordingStatus === AWAITING_CONFIG) {
                 this._recordingStatus = MISSING_CONFIG
-                logger.warn('config refresh failed, recording will not start until page reload')
+                logger.warn('config refresh failed, starting from the persisted config instead')
             }
             this.startIfEnabledOrStop()
             return
@@ -382,13 +383,22 @@ export class SessionRecording implements Extension {
         }
 
         if (!this._isRemoteConfigFresh()) {
-            if (this._recordingStatus === MISSING_CONFIG || this._recordingStatus === AWAITING_CONFIG) {
+            if (this._recordingStatus === AWAITING_CONFIG) {
                 return
             }
-            this._recordingStatus = AWAITING_CONFIG
-            logger.info('persisted remote config is stale, requesting fresh config before starting')
-            new RemoteConfigLoader(this._instance).load()
-            return
+            if (this._recordingStatus !== MISSING_CONFIG) {
+                this._recordingStatus = AWAITING_CONFIG
+                logger.info('persisted remote config is stale, requesting fresh config before starting')
+                new RemoteConfigLoader(this._instance).load()
+                return
+            }
+            // The refresh already failed. Recording under a stale config is a smaller loss than
+            // recording nothing until the next page load, so start and flag the session.
+            logger.warn('could not refresh remote config, starting under the stale persisted config')
+            this._lazyLoadedSessionRecording.allowStaleRemoteConfig?.()
+            this._instance.register_for_session({
+                [SDK_DEBUG_REPLAY_STALE_CONFIG]: true,
+            })
         }
 
         this._recordingStatus = LAZY_LOADING

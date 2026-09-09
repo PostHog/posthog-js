@@ -3,7 +3,11 @@
 import '@testing-library/jest-dom'
 
 import { PostHogPersistence } from '../../../posthog-persistence'
-import { SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED, SESSION_RECORDING_REMOTE_CONFIG } from '../../../constants'
+import {
+    SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
+    SDK_DEBUG_REPLAY_STALE_CONFIG,
+    SESSION_RECORDING_REMOTE_CONFIG,
+} from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE } from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
@@ -608,7 +612,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('awaiting_config')
         })
 
-        it('transitions to missing_config when config refresh fails', () => {
+        it('records under the stale config when the refresh fails', () => {
             posthog.persistence?.register({
                 [SESSION_RECORDING_REMOTE_CONFIG]: {
                     enabled: true,
@@ -621,13 +625,15 @@ describe('SessionRecording', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({}))
             expect(sessionRecording.status).toBe('awaiting_config')
 
-            // Second failure: refresh came back empty, now missing
+            // Second failure: the refresh came back empty, so the stale config is used rather
+            // than leaving the page unable to record at all
             sessionRecording.onRemoteConfig(makeFlagsResponse({}))
-            expect(sessionRecording.status).toBe('missing_config')
-
-            // Third failure: stays missing
-            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
-            expect(sessionRecording.status).toBe('missing_config')
+            expect(sessionRecording.status).toBe('active')
+            expect(registerForSessionMock).toHaveBeenCalledWith({
+                [SDK_DEBUG_REPLAY_STALE_CONFIG]: true,
+            })
+            // the stale config must survive, otherwise nothing is left to record under
+            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBeTruthy()
         })
 
         it('discards buffer on beforeunload if status is buffering', () => {
