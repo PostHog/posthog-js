@@ -141,9 +141,7 @@ describe('PostHog RN manual session recording controls', () => {
     nativeAccepts = true
     await posthog.reloadFeatureFlagsAsync()
 
-    await waitForExpect(2000, () =>
-      expect(replay.startRecording.mock.calls.length).toBeGreaterThan(attempts)
-    )
+    await waitForExpect(2000, () => expect(replay.startRecording.mock.calls.length).toBeGreaterThan(attempts))
     await waitForExpect(2000, async () => expect(await posthog.isSessionReplayActive()).toBe(true))
   })
 

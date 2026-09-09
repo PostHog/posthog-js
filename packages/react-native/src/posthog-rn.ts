@@ -111,10 +111,8 @@ export interface PostHogOptions extends PostHogCoreOptions {
    *
    * This option is read once, at setup. To record only some sessions, either gate recording
    * from your project settings (sampling, a linked flag, or event triggers), or leave this
-   * option off and drive the recorder from your app with
-   * {@link PostHog.startSessionRecording | startSessionRecording()} and
-   * {@link PostHog.stopSessionRecording | stopSessionRecording()}. Both report whether the
-   * native recorder changed state.
+   * option off and drive the recorder from your app with `startSessionRecording()` and
+   * `stopSessionRecording()`. Both report whether the native recorder changed state.
    *
    * @default false
    */
@@ -1594,8 +1592,8 @@ export class PostHog extends PostHogCore {
    *
    * @example
    * ```js
-   * // Record only some sessions: keep `enableSessionReplay` off at setup, then start
-   * // recording where you want it and check the result.
+   * // Record only some sessions
+   * // Keep `enableSessionReplay` off at setup, then start recording where you want it.
    * const started = await posthog.startSessionRecording()
    * if (!started) {
    *   // Recording is not running. PostHog retries on the next feature flags load.

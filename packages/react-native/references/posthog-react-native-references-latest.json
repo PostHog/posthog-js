@@ -1303,7 +1303,12 @@
             {
               "id": "start_a_new_session_recording",
               "name": "Start a new session recording",
-              "code": "\n\n// Start a new session recording\nawait posthog.startSessionRecording(false)\n\n\n\n"
+              "code": "\n\n// Start a new session recording\nawait posthog.startSessionRecording(false)\n\n\n"
+            },
+            {
+              "id": "record_only_some_sessions",
+              "name": "Record only some sessions",
+              "code": "\n\n// Record only some sessions\n// Keep `enableSessionReplay` off at setup, then start recording where you want it.\nconst started = await posthog.startSessionRecording()\nif (!started) {\n  // Recording is not running. PostHog retries on the next feature flags load.\n}\n\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -1316,8 +1321,8 @@
             }
           ],
           "returnType": {
-            "id": "Promise<void>",
-            "name": "Promise<void>"
+            "id": "Promise<boolean>",
+            "name": "Promise<boolean>"
           },
           "path": "dist/posthog-rn.d.ts"
         },
@@ -1338,8 +1343,8 @@
           "releaseTag": "public",
           "params": [],
           "returnType": {
-            "id": "Promise<void>",
-            "name": "Promise<void>"
+            "id": "Promise<boolean>",
+            "name": "Promise<boolean>"
           },
           "path": "dist/posthog-rn.d.ts"
         },
@@ -3819,7 +3824,7 @@
           "name": "enablePersistSessionIdAcrossRestart"
         },
         {
-          "description": "Enable Recording of Session Replays for Android and iOS Requires Record user sessions to be enabled in the PostHog Project Settings\nfalse",
+          "description": "Enable Recording of Session Replays for Android and iOS Requires Record user sessions to be enabled in the PostHog Project Settings\nThis option is read once, at setup. To record only some sessions, either gate recording from your project settings (sampling, a linked flag, or event triggers), or leave this option off and drive the recorder from your app with `startSessionRecording()` and `stopSessionRecording()`. Both report whether the native recorder changed state.\nfalse",
           "type": "boolean",
           "name": "enableSessionReplay"
         },
