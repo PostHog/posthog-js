@@ -32,15 +32,6 @@ pnpm bundle-size:array main
 
 The script bundles both versions with the same esbuild settings and reports minified, gzip, and Brotli changes. It is intended for quick percentage comparisons; the production Rollup build will have different absolute sizes.
 
-For transformer or bundler changes, compare actual production artifacts instead of the esbuild proxy. Save `dist/` after a baseline build, rebuild with the change, then run from this package:
-
-```bash
-node scripts/compare-runtime-bundles.mjs /path/to/baseline/dist
-pnpm test:built
-```
-
-The comparison reports raw, gzip, and Brotli sizes for every runtime bundle and checks artifact filenames, declaration bytes, ESM export names, and external import paths. The built tests check ES5/ES6 syntax, transformer selection, helper isolation, and transformation semantics. These do not replace real-browser and old-core/new-extension compatibility tests.
-
 ### Running TestCafe E2E tests with BrowserStack
 
 Testing on IE11 requires a bit more setup. TestCafe tests use the playground application to test the locally built `array.full.js` bundle. They also verify that the events emitted during the testing of playground are loaded into the PostHog app. By default this uses `https://us.i.posthog.com` and the project with ID `11213`. See the TestCafe tests to override these if needed. PostHog internal users can ask `@benjackwhite` or `@hazzadous` for access. You will need to set `POSTHOG_PERSONAL_API_KEY` and `POSTHOG_PROJECT_API_KEY`.

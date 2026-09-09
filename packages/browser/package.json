@@ -36,7 +36,6 @@
         "check-react": "[ -d 'react/dist' ] || { echo '@posthog/react has not been built'; exit 1; }",
         "test": "pnpm test:unit && pnpm test:functional",
         "test:unit": "vitest run src",
-        "test:built": "node --test scripts/runtime-transforms.test.mjs",
         "test:unit:surveys": "vitest run survey",
         "test:unit:tours": "vitest run tours",
         "test:functional": "POSTHOG_FUNCTIONAL_TESTS=1 vitest run functional_tests",
