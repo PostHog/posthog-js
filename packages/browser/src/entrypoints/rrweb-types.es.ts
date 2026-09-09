@@ -7,9 +7,10 @@ import type {
     eventWithoutTime as RrwebEventWithoutTime,
     eventWithTime as RrwebEventWithTime,
 } from '@posthog/rrweb-types'
+import type { customEventData } from '../extensions/replay/types/rrweb-types'
 
-// Importing internal event types also bundles their EventType, breaking compatibility with the replayer's enum.
-type WithJsonLdUrl<T> = T extends RrwebCustomEvent ? T & { data: { href?: string } } : T
+// Sharing only event data avoids bundling the internal EventType and renaming rrweb's enum.
+type WithJsonLdUrl<T> = T extends RrwebCustomEvent ? T & { data: Pick<customEventData, 'href'> } : T
 
 export type customEvent<T = unknown> = WithJsonLdUrl<RrwebCustomEvent<T>>
 export type eventWithoutTime = WithJsonLdUrl<RrwebEventWithoutTime>
