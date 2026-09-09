@@ -2,6 +2,7 @@ import { gzipSync, strToU8 } from 'fflate'
 
 type SetupOptions = {
     gzipSupported: boolean
+    captureJsonLd?: boolean
     gzipCompress?: vi.Mock
 }
 
@@ -26,7 +27,7 @@ const createCustomSnapshot = () => ({
     timestamp: 124,
 })
 
-async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: SetupOptions) {
+async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress, captureJsonLd = false }: SetupOptions) {
     vi.resetModules()
 
     const gzipCompressMock =
@@ -75,6 +76,7 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
         session_recording: {
             maskAllInputs: false,
             compress_events: true,
+            captureJsonLd,
         },
         persistence: 'memory',
     })
@@ -152,6 +154,62 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         vi.doUnmock('@posthog/core')
         vi.resetModules()
     })
+
+    it.each(['sync', 'async', 'unload'] as const)(
+        'keeps fresh JSON-LD with its snapshot across a size flush using %s compression',
+        async (mode) => {
+            let releaseCompression = () => {}
+            const gate = new Promise<void>((resolve) => {
+                releaseCompression = resolve
+            })
+            const gzipCompress = vi.fn(async (input: string) => {
+                await gate
+                return new Blob([gzipSync(strToU8(input))])
+            })
+            const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+                gzipSupported: mode !== 'sync',
+                gzipCompress,
+                captureJsonLd: true,
+            })
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            const payload = { '@context': 'https://schema.org', '@type': 'Product', name: 'x'.repeat(2000) }
+            script.textContent = JSON.stringify(payload)
+            document.head.append(script)
+            try {
+                const { RECORDING_MAX_EVENT_SIZE } =
+                    await import('../../../extensions/replay/external/lazy-loaded-session-recorder')
+                emit({
+                    ...createCustomSnapshot(),
+                    data: { tag: 'padding', payload: 'x'.repeat(Math.floor(RECORDING_MAX_EVENT_SIZE) - 1000) },
+                })
+                emit(createFullSnapshot({ content: 'paired snapshot' }))
+                script.remove()
+                if (mode === 'unload') {
+                    lazyLoadedSessionRecording['_onBeforeUnload']()
+                } else if (mode === 'async') {
+                    lazyLoadedSessionRecording['_flushBuffer']()
+                }
+                releaseCompression()
+                await lazyLoadedSessionRecording['_compressionQueue']
+                lazyLoadedSessionRecording['_flushBuffer']()
+                const requests = posthog.capture.mock.calls.filter(([event]: [string]) => event === '$snapshot')
+                const pairedRequest = requests.find(([, properties]: any[]) =>
+                    properties.$snapshot_data.some((event: any) => event.type === 2)
+                )
+                expect(pairedRequest[1].$snapshot_data).toEqual([
+                    expect.objectContaining({ type: 2 }),
+                    { type: 5, timestamp: 123, data: { tag: '$json_ld', payload, href: 'http://localhost/' } },
+                ])
+                const events = requests.flatMap(([, properties]: any[]) => properties.$snapshot_data)
+                expect(events.filter((event: any) => event.data?.tag === '$json_ld')).toHaveLength(1)
+            } finally {
+                releaseCompression()
+                lazyLoadedSessionRecording.stop()
+                script.remove()
+            }
+        }
+    )
 
     it.each([
         {

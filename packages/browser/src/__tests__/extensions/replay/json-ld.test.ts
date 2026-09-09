@@ -339,6 +339,16 @@ describe('JSON-LD replay capture', () => {
         capture.stop()
     })
 
+    it('drops a deferred mutation capture when the observer stops', async () => {
+        const emit = vi.fn(() => true)
+        const capture = startJsonLdCapture(document, MutationObserver, { emit })
+        document.body.append(jsonLdScript({ '@context': 'https://schema.org', '@type': 'Product' }))
+        await Promise.resolve()
+        capture.stop()
+        await deliverMutations()
+        expect(emit).not.toHaveBeenCalled()
+    })
+
     it('does not deduplicate an event that the recorder rejects', () => {
         let acceptsEvents = false
         const emit = vi.fn(() => acceptsEvents)

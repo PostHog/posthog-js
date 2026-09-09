@@ -1,3 +1,4 @@
+import { JSON_LD_EVENT_TAG } from './json-ld'
 import type { eventWithTime, pluginEvent } from '../types/rrweb-types'
 
 import { isArray, isNull, isObject, isUndefined } from '@posthog/core'
@@ -178,7 +179,23 @@ export const SEVEN_MEGABYTES = 1024 * 1024 * 7 * 0.9 // ~7mb (with some wiggle r
 // uses a pretty high size limit to avoid splitting too much
 export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_MEGABYTES): SnapshotBuffer[] {
     if (buffer.size >= sizeLimit && buffer.data.length > 1) {
-        const half = Math.floor(buffer.data.length / 2)
+        let half = Math.floor(buffer.data.length / 2)
+        while (half > 0 && buffer.data[half].type === 5 && buffer.data[half].data.tag === JSON_LD_EVENT_TAG) {
+            half--
+        }
+        if (!half) {
+            half = 1
+            while (
+                half < buffer.data.length &&
+                buffer.data[half].type === 5 &&
+                buffer.data[half].data.tag === JSON_LD_EVENT_TAG
+            ) {
+                half++
+            }
+            if (half === buffer.data.length) {
+                return [buffer]
+            }
+        }
         const firstHalfSizes = buffer.sizes.slice(0, half)
         const secondHalfSizes = buffer.sizes.slice(half)
         return [

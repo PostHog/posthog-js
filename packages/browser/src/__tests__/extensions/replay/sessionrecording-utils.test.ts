@@ -266,6 +266,24 @@ describe(`SessionRecording utility functions`, () => {
     })
 
     describe('splitBuffer', () => {
+        it.each([0, 1, 2, 3])('keeps full snapshots and JSON-LD together with %s preceding events', (prefixCount) => {
+            const full = { type: 2, data: {}, timestamp: 10 }
+            const jsonLd = { type: 5, data: { tag: '$json_ld', payload: {} }, timestamp: 10 }
+            const data = [...Array(prefixCount).fill({ type: 3 }), full, jsonLd, jsonLd, { type: 3 }, { type: 3 }]
+            const sizes = data.map(() => SEVEN_MEGABYTES * 0.6)
+            const size = sizes.reduce((sum, value) => sum + value, 0)
+            const chunks = splitBuffer({ data, sizes, size, sessionId: 'session', windowId: 'window' })
+            expect(chunks.flatMap((chunk) => chunk.data)).toEqual(data)
+            const pairedChunk = chunks.find((chunk) => chunk.data.includes(full))!
+            expect(pairedChunk.data.slice(pairedChunk.data.indexOf(full), pairedChunk.data.indexOf(full) + 3)).toEqual([
+                full,
+                jsonLd,
+                jsonLd,
+            ])
+            expect(chunks.reduce((sum, chunk) => sum + chunk.size, 0)).toBe(size)
+            expect(chunks.flatMap((chunk) => chunk.sizes)).toEqual(sizes)
+        })
+
         it('should return the same buffer if size is less than SEVEN_MEGABYTES', () => {
             const perEventSize = (5 * 1024 * 1024) / 100
             const buffer = {

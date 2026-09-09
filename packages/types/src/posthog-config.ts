@@ -715,6 +715,8 @@ export interface SessionRecordingOptions {
      * It drops every `@id` when `maskAllElementAttributes`, `maskAttributeFn`, or an `attributeFilter` without `id` can hide `id` attributes from replay.
      * It also keeps the containing entity tree, even when it redacts all other fields.
      * The event tag is `$json_ld`. The payload is a JSON-LD object or array.
+     * New JSON-LD captured during a full snapshot shares its request and timestamp.
+     * Unchanged JSON-LD is not resent for later full snapshots. Changes between snapshots still emit separate custom events.
      * The event includes the current page URL in `data.href`, subject to replay URL masking and hash capture settings.
      * The URL is omitted when the masking callback rejects it or throws.
      * The recorder removes all script nodes from snapshots when this option is enabled.

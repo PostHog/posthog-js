@@ -506,6 +506,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _stopRrweb: listenerHandler | undefined = undefined
     private _jsonLdCapture: ReturnType<typeof startJsonLdCapture> | undefined
     private _jsonLdCaptureReady = false
+    private _jsonLdBySnapshot = new WeakMap<eventWithTime, eventWithTime[]>()
     private _lastActivityTimestamp: number = Date.now()
     private _sessionStartTimestamp: number
     private _isActivatingTrigger: boolean = false
@@ -936,6 +937,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             !this._urlTriggerMatching.urlBlocked &&
             this._isIdle !== true
         )
+    }
+
+    private _jsonLdHref(): string | undefined {
+        try {
+            return window ? this._maskReplayUrl(window.location.href) : undefined
+        } catch {
+            // A masking callback failure must not expose the original URL or interrupt recording.
+            return undefined
+        }
     }
 
     private _tryAddJsonLdEvent(jsonLd: unknown): boolean {
@@ -1727,7 +1737,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._ensureFullSnapshotForSession(event, targetSessionId)
 
-        this._captureSnapshotBuffered(properties)
+        this._captureSnapshotBuffered(properties, this._jsonLdBySnapshot.get(event))
     }
 
     // snapshot cost tracking is telemetry: an error in it must be visible in debug
@@ -2060,8 +2070,27 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         const jsonLdCaptureWasReady = this._jsonLdCaptureReady
         this._jsonLdCaptureReady = true
-        if (jsonLdRemovedFromPendingBuffer) {
-            this._scheduleJsonLdScan(true)
+        if (event.type === EventType.FullSnapshot && this._canCaptureJsonLd()) {
+            const jsonLdEvents: eventWithTime[] = []
+            const generation = this._compressionQueueGeneration
+            this._jsonLdCapture?.scan(!!jsonLdRemovedFromPendingBuffer, (payload) => {
+                const href = this._jsonLdHref()
+                if (generation !== this._compressionQueueGeneration || !this._canCaptureJsonLd()) {
+                    return false
+                }
+                jsonLdEvents.push({
+                    type: EventType.Custom,
+                    timestamp: event.timestamp,
+                    data: { tag: JSON_LD_EVENT_TAG, payload, href },
+                })
+                return true
+            })
+            if (generation !== this._compressionQueueGeneration) {
+                return
+            }
+            if (jsonLdEvents.length) {
+                this._jsonLdBySnapshot.set(event, jsonLdEvents)
+            }
         } else if (!jsonLdCaptureWasReady) {
             this._scheduleJsonLdScan()
         }
@@ -2069,13 +2098,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const compressionEnabled = this._instance.config.session_recording.compress_events ?? true
 
         if (event.type === EventType.Custom && event.data.tag === JSON_LD_EVENT_TAG) {
-            let href: string | undefined
-            try {
-                href = window ? this._maskReplayUrl(window.location.href) : undefined
-            } catch {
-                // A masking callback failure must not expose the original URL or interrupt recording.
-            }
-            event.data.href = href
+            event.data.href = this._jsonLdHref()
         }
 
         if (
@@ -2456,8 +2479,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return true
     }
 
-    private _captureSnapshotBuffered(properties: Properties) {
-        const additionalBytes = 2 + (this._buffer?.data.length || 0) // 2 bytes for the array brackets and 1 byte for each comma
+    private _captureSnapshotBuffered(properties: Properties, jsonLdEvents?: eventWithTime[]) {
+        const jsonLdSizes = jsonLdEvents?.map(estimateSize)
+        const totalBytes = properties.$snapshot_bytes + (jsonLdSizes?.reduce((sum, size) => sum + size, 0) || 0)
+        const additionalBytes = 2 + (this._buffer?.data.length || 0) + (jsonLdEvents?.length || 0) // 2 bytes for the array brackets and 1 byte for each comma
 
         // Extract target session ID from properties to ensure we flush when session changes
         // This is critical for lifecycle events ($session_ending, $session_starting) which may
@@ -2473,7 +2498,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // 'unknown' still captures so its buffer must respect the size cap or it grows unbounded
             (this._isIdle !== true &&
                 !this._holdFlushUntilInteraction &&
-                this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
+                this._buffer.size + totalBytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
             const sessionBeforeFlush = this._sessionId
             this._buffer = this._flushBuffer()
@@ -2496,8 +2521,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // and stop collecting; a release takes a fresh full snapshot to resume playable
         if (
             this._holdFlushUntilInteraction &&
-            (this._heldBufferOverflowed ||
-                this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
+            (this._heldBufferOverflowed || this._buffer.size + totalBytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
             if (!this._heldBufferOverflowed) {
                 this._heldBufferOverflowed = true
@@ -2506,9 +2530,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
-        this._buffer.size += properties.$snapshot_bytes
+        this._buffer.size += totalBytes
         this._buffer.data.push(properties.$snapshot_data)
         this._buffer.sizes.push(properties.$snapshot_bytes)
+        if (jsonLdEvents && jsonLdSizes) {
+            this._buffer.data.push(...jsonLdEvents)
+            this._buffer.sizes.push(...jsonLdSizes)
+        }
 
         // Schedule the flush unless confirmed idle or held — a held epoch can't ship anyway
         // (scheduling would just churn a no-op timer every cycle) and every release path
@@ -2979,38 +3007,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 requestFullSnapshot: () => this._tryTakeFullSnapshot(),
             })
 
-        const activePlugins = this._gatherRRWebPlugins()
-        this._stopRrweb = rrwebRecord({
-            emit: (event) => {
-                this.onRRwebEmit(event)
-            },
-            plugins: activePlugins,
-            errorHandler: (error, context) => {
-                // A host API patch shares its callback boundary with the native
-                // operation. Preserve the application's exception semantics when
-                // rrweb cannot reliably distinguish where that error originated.
-                if (context !== 'rrweb') {
-                    return false
-                }
-                if (!this._hasLoggedRecorderCallbackError) {
-                    this._hasLoggedRecorderCallbackError = true
-                    logger.error('rrweb internal error - recording will continue but may be incomplete', error)
-                }
-                return true
-            },
-            ...sessionRecordingOptions,
-        })
-
-        if (!this._stopRrweb) {
-            this._rrwebError = true
-            logger.error(
-                'rrweb failed to start - Loss of recording data is possible. Check the browser console for rrweb errors.'
-            )
-            return
-        }
-
-        this._rrwebError = false
-
         if (
             userSessionRecordingOptions?.captureJsonLd === true &&
             document &&
@@ -3038,6 +3034,39 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._jsonLdCapture.scan()
             }
         }
+
+        const activePlugins = this._gatherRRWebPlugins()
+        this._stopRrweb = rrwebRecord({
+            emit: (event) => {
+                this.onRRwebEmit(event)
+            },
+            plugins: activePlugins,
+            errorHandler: (error, context) => {
+                // A host API patch shares its callback boundary with the native
+                // operation. Preserve the application's exception semantics when
+                // rrweb cannot reliably distinguish where that error originated.
+                if (context !== 'rrweb') {
+                    return false
+                }
+                if (!this._hasLoggedRecorderCallbackError) {
+                    this._hasLoggedRecorderCallbackError = true
+                    logger.error('rrweb internal error - recording will continue but may be incomplete', error)
+                }
+                return true
+            },
+            ...sessionRecordingOptions,
+        })
+
+        if (!this._stopRrweb) {
+            this._stopRecordingProducers()
+            this._rrwebError = true
+            logger.error(
+                'rrweb failed to start - Loss of recording data is possible. Check the browser console for rrweb errors.'
+            )
+            return
+        }
+
+        this._rrwebError = false
 
         // We reset the last activity timestamp, resetting the idle timer
         this._lastActivityTimestamp = Date.now()

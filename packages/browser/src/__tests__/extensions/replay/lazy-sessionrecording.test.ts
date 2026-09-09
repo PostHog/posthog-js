@@ -5029,11 +5029,13 @@ describe('Lazy SessionRecording', () => {
                     name: 'Allowed page product',
                 })
                 await Promise.resolve()
-                expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
-                    '@context': 'https://schema.org',
-                    '@type': 'Product',
-                    name: 'Allowed page product',
-                })
+                await vi.waitFor(() =>
+                    expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
+                        '@context': 'https://schema.org',
+                        '@type': 'Product',
+                        name: 'Allowed page product',
+                    })
+                )
             } finally {
                 script.remove()
             }
