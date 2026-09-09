@@ -1,5 +1,19 @@
 # @posthog/core
 
+## 1.51.2
+
+### Patch Changes
+
+- [#4859](https://github.com/PostHog/posthog-js/pull/4859) [`c356c81`](https://github.com/PostHog/posthog-js/commit/c356c819e2dd632fad6db5fcea09050a565d3749) Thanks [@marandaneto](https://github.com/marandaneto)! - Include the root license and attribution notices in the published core package.
+  (2026-09-09)
+
+## 1.51.1
+
+### Patch Changes
+
+- [#4798](https://github.com/PostHog/posthog-js/pull/4798) [`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd) Thanks [@posthog](https://github.com/apps/posthog)! - fix(error-tracking): collapse repeated frame cycles in parsed stack traces to reduce grouping differences caused by recursion depth, while preserving distinct throw locations
+  (2026-09-09)
+
 ## 1.51.0
 
 ### Minor Changes

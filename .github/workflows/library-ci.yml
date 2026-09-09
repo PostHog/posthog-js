@@ -35,6 +35,9 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup
 
+      - name: Check task graph
+        run: pnpm test:build-graph
+
       - name: Run unit tests
         run: |
           set -o pipefail
@@ -46,6 +49,10 @@ jobs:
           fi
 
       - run: pnpm test:docs-scripts
+
+      - name: Test development watchers
+        timeout-minutes: 10
+        run: pnpm test:dev-watch
 
   edge-runtime:
     name: Node edge runtime tests
@@ -353,7 +360,7 @@ jobs:
 
       - name: Run rrweb tests
         if: steps.changed.outputs.rrweb-changed == 'true'
-        run: xvfb-run --server-args="-screen 0 1920x1080x24" pnpm turbo run test --filter='./packages/rrweb/**'
+        run: xvfb-run --server-args="-screen 0 1920x1080x24" pnpm turbo run lint test:rrweb --filter='./packages/rrweb/**'
 
       - name: Upload diff images on failure
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

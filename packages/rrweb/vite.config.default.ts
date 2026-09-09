@@ -111,7 +111,7 @@ export default function (
         fileName,
         outputDir: outDir = 'dist',
         plugins = [],
-        generateDeclarations = true,
+        generateDeclarations = process.argv.includes('--watch'),
         external = [],
     } = options || {}
 

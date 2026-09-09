@@ -101,8 +101,17 @@ pnpm dev
 # Run all tests across packages
 pnpm test
 
-# Run unit tests only
+# Run unit tests and their dedicated built-output checks (no rrweb browser tests)
 pnpm test:unit
+
+# Run dedicated built-output checks only
+pnpm test:built
+
+# Run rrweb tests (requires Puppeteer's Chrome; Linux CI also uses Xvfb)
+pnpm test:rrweb
+
+# Validate task ordering without compiling packages
+pnpm test:build-graph
 
 # Lint all packages
 pnpm lint
@@ -126,6 +135,43 @@ pnpm clean
 pnpm clean:dep
 ```
 
+### rrweb declaration builds
+
+All 16 rrweb workspace packages run semantic checking before Vite's JavaScript build and a separate Rolldown declaration build. `build:declarations` only emits types; it is not a substitute for `check-types` or the production build.
+
+The shared `packages/rrweb/rolldown.dts.config.mts` uses Oxc when a package opts into `isolatedDeclarations`. `rrweb`, `rrdom`, and `rrdom-nodejs` retain TypeScript generation because their annotation work is larger (including exported function properties and destructuring in `rrweb`). Keep this opt-in per package rather than enabling it in the shared TSConfig.
+
+Declaration entries remain self-contained, external package imports remain external, and each `.d.ts` has an identical `.d.cts` sibling. Watch mode uses Vite's declaration plugin except for `rrweb-record`, which runs a separate Rolldown declaration watcher. The alternate rrweb entrypoint config also retains Vite's declaration plugin.
+
+```sh
+pnpm turbo run build --filter='./packages/rrweb/**'
+pnpm test:rrweb-declarations
+```
+
+The declaration regression tests also run through `pnpm test:unit`. When changing an entrypoint, verify its package exports and both declaration formats, and check a `pnpm dev` source edit/rebuild. Keep the shared build configs in Turbo's cache inputs.
+
+### Dead code audit (Knip)
+
+[Knip](https://knip.dev/) is an opt-in local audit, not a lint or CI gate. After `pnpm install --frozen-lockfile`, run it from the repository root; no SDK build is required:
+
+```bash
+# Full audit, including dependencies
+pnpm knip
+
+# Focus on unused files, exports, and types
+pnpm knip --include files,exports,types
+
+# Focus on a workspace (Knip also follows related workspaces)
+pnpm knip --workspace packages/browser
+
+# Save machine-readable findings without pnpm's script banner
+pnpm --silent knip --reporter json > /tmp/knip.json
+```
+
+Knip exits non-zero when it finds issues. Findings are review candidates, not proof that code can be deleted. The config excludes independent examples/playgrounds, preserves public SDK subpaths and dynamically discovered browser bundles, and ignores exports still used within their own file. Keep `knip.jsonc` in sync when adding public entry points that plugins cannot discover; do not enable `includeEntryExports` for published SDKs.
+
+Before removing anything, check public/deep imports, dynamic loading, shared build configuration, test fixtures, and native tooling. Dependency reports still need particular care: shared Babel/Vite configuration and CLI binaries resolved at runtime can make required dependencies look unused. An unused re-export does not imply that its underlying implementation is dead. Do not run `--fix` or `--allow-remove-files` indiscriminately. Verify any cleanup with the affected packages' tests/builds and measure bundle size separately rather than assuming source deletion reduces shipped bytes.
+
 ### Package Scripts
 
 Common package scripts are listed below. Availability and build output directories vary; check the package's `package.json` before running them:
@@ -135,7 +181,9 @@ Common package scripts are listed below. Availability and build output directori
 - `lint:fix` - Fix linting issues
 - `build` - Transpile, minify and/or bundle source code (usually into `dist/` or `lib/`)
 - `dev` - Build and watch for changes
-- `test:unit` - Run unit tests
+- `test:unit` - Run unit tests; some packages still include built-output assertions
+- `test:built` - Run dedicated built-output assertions (if available)
+- `test:rrweb` - Run vendored rrweb suites, including real-browser and built-output tests
 - `test:functional` - Run functional/integration tests (if applicable)
 - `package` - Create a tarball of this package that can be installed inside an example or playground project
 
@@ -156,6 +204,14 @@ pnpm turbo --filter=posthog-react-native build
 # Lint a specific package
 pnpm turbo --filter=@posthog/react lint
 ```
+
+### Task dependency contracts
+
+Use root scripts or `pnpm turbo run <task> --filter=<package>` to bootstrap prerequisites. Package build, type-check, test, and reference-generation scripts are leaf commands: running them directly assumes their required dependency outputs already exist. rrweb uses the same `build -> ^build` graph as the SDKs; there is no separate `prepublish` task graph. Its explicit standalone `build-and-test` and watch wrappers bootstrap dependencies through Turbo.
+
+`pnpm test` schedules lint and test leaf tasks directly so package-level `test` convenience scripts do not run the same suites again. rrweb suites live under `test:rrweb`, outside the ordinary unit CI job. `pnpm test:unit` also schedules `test:built` to preserve built-output coverage; for a filtered equivalent, use `pnpm turbo run test:unit test:built --filter=<package>`.
+
+Browser-next separates its source suite (`test:unit`, requiring dependency builds only) from its mixed-module delivery check (`test:built`, requiring its own build). Its `check-types` task also requires its own build because it includes package-consumer fixtures. Other packages retain their existing production-build prerequisites until their artifact checks are separated and verified. `pnpm test:build-graph` guards these ordering and coverage contracts with Turbo dry runs.
 
 ## CI-aligned checks
 
