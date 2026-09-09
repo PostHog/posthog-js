@@ -6,7 +6,7 @@ import { RRDocument } from './document-nodejs';
  * Note: The performance api is available through the global object from nodejs v16.0.0.
  * https://github.com/nodejs/node/pull/37970
  */
-export function polyfillPerformance() {
+export function polyfillPerformance(): void {
   if (typeof window !== 'undefined' || 'performance' in global) return;
   const performance = require('perf_hooks').performance;
   ((global as Window & typeof globalThis).performance as unknown) = performance;
@@ -15,7 +15,7 @@ export function polyfillPerformance() {
 /**
  * Polyfill requestAnimationFrame and cancelAnimationFrame for nodejs.
  */
-export function polyfillRAF() {
+export function polyfillRAF(): void {
   if (typeof window !== 'undefined' || 'requestAnimationFrame' in global)
     return;
 
@@ -62,7 +62,7 @@ export function polyfillRAF() {
  * The implementation of Event so far is empty because rrweb doesn't strongly depend on it in nodejs mode.
  * Note: The Event class is available through the global object from nodejs v15.0.0.
  */
-export function polyfillEvent() {
+export function polyfillEvent(): void {
   if (typeof Event !== 'undefined') return;
   (global.Event as unknown) = function () {
     //
@@ -72,7 +72,7 @@ export function polyfillEvent() {
 /**
  * Polyfill Node type with BaseRRNode for nodejs.
  */
-export function polyfillNode() {
+export function polyfillNode(): void {
   if (typeof Node !== 'undefined') return;
   (global.Node as unknown) = BaseRRNode;
 }
@@ -80,7 +80,7 @@ export function polyfillNode() {
 /**
  *  Polyfill document object with RRDocument for nodejs.
  */
-export function polyfillDocument() {
+export function polyfillDocument(): void {
   if (typeof document !== 'undefined') return;
   const rrdom = new RRDocument();
   (() => {
