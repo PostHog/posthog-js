@@ -48,6 +48,12 @@ jobs:
             exit 1
           fi
 
+      - name: Test installed rrweb consumers
+        timeout-minutes: 10
+        run: |
+          pnpm test:rrweb-package-exports
+          pnpm test:rrweb-consumers
+
       - run: pnpm test:docs-scripts
 
       - name: Test development watchers

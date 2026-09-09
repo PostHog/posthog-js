@@ -16,6 +16,7 @@
                 "$TURBO_ROOT$/packages/rrweb/rolldown.dts.config.mts",
                 "$TURBO_ROOT$/packages/rrweb/vite.config.default.ts",
                 "$TURBO_ROOT$/packages/rrweb/vite.config.utils.ts",
+                "$TURBO_ROOT$/tooling/rrweb-build/**",
                 "scripts/check-mangled-property-consistency.js",
                 "scripts/check-sourcemap-ignore-list.js",
                 "terser-cross-bundle-properties.cjs",
