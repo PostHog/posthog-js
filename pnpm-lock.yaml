@@ -1389,10 +1389,10 @@ importers:
       '@posthog/rrweb-snapshot':
         specifier: workspace:*
         version: link:../rrweb-snapshot
-    devDependencies:
       '@posthog/rrweb-types':
         specifier: workspace:*
         version: link:../types
+    devDependencies:
       '@types/jsdom':
         specifier: ^20.0.0
         version: 20.0.1
@@ -1551,6 +1551,9 @@ importers:
 
   packages/rrweb/rrweb-snapshot:
     dependencies:
+      '@posthog/rrweb-types':
+        specifier: workspace:*
+        version: link:../types
       '@types/postcss-safe-parser':
         specifier: ^5.0.4
         version: 5.0.4
@@ -1561,9 +1564,6 @@ importers:
         specifier: ^7.0.1
         version: 7.0.1(postcss@8.5.24)
     devDependencies:
-      '@posthog/rrweb-types':
-        specifier: workspace:*
-        version: link:../types
       '@posthog/rrweb-utils':
         specifier: workspace:*
         version: link:../utils
