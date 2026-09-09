@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.68.4
+
+### Patch Changes
+
+- [#4725](https://github.com/PostHog/posthog-js/pull/4725) [`d5abece`](https://github.com/PostHog/posthog-js/commit/d5abece39d72e079a3233f26a1c54dbd569d53ee) Thanks [@bs1180](https://github.com/bs1180)! - fix(surveys): don't show the default "Start typing..." placeholder when the survey's placeholder text is empty
+  (2026-09-09)
+
 ## 4.68.3
 
 ### Patch Changes
