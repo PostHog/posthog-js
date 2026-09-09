@@ -2068,13 +2068,30 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const compressionGeneration = this._compressionQueueGeneration
         const jsonLdEvents: eventWithTime[] | undefined =
             event.type === EventType.FullSnapshot && this._canCaptureJsonLd() ? [] : undefined
+        const isJsonLdEvent = event.type === EventType.Custom && event.data.tag === JSON_LD_EVENT_TAG
+        let jsonLdHref: string | undefined
+        if (jsonLdEvents || isJsonLdEvent) {
+            try {
+                jsonLdHref = window ? this._maskReplayUrl(window.location.href) : undefined
+            } catch {
+                // A masking callback failure must not expose the original URL or interrupt the snapshot.
+            }
+            if (isJsonLdEvent) {
+                event.data.href = jsonLdHref
+            }
+        }
         // Buffer flushes can run page callbacks, so read JSON-LD before buffering the snapshot.
         if (jsonLdEvents) {
             jsonLdCapture?.scan(true, (jsonLd) => {
                 jsonLdEvents.push({
                     type: EventType.Custom,
                     timestamp: event.timestamp,
-                    data: { tag: JSON_LD_EVENT_TAG, payload: jsonLd, fullSnapshotTimestamp: event.timestamp },
+                    data: {
+                        tag: JSON_LD_EVENT_TAG,
+                        payload: jsonLd,
+                        fullSnapshotTimestamp: event.timestamp,
+                        href: jsonLdHref,
+                    },
                 })
                 return true
             })

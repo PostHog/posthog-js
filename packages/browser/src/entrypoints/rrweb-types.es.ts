@@ -9,11 +9,11 @@ import type {
 } from '@posthog/rrweb-types'
 import type { customEvent as PostHogCustomEvent } from '../extensions/replay/types/rrweb-types'
 
-type WithSnapshotReference<T> = T extends RrwebCustomEvent
-    ? T & { data: Pick<PostHogCustomEvent['data'], 'fullSnapshotTimestamp'> }
+type WithJsonLdMetadata<T> = T extends RrwebCustomEvent
+    ? T & { data: Pick<PostHogCustomEvent['data'], 'fullSnapshotTimestamp' | 'href'> }
     : T
 
-export type customEvent<T = unknown> = WithSnapshotReference<RrwebCustomEvent<T>>
-export type eventWithoutTime = WithSnapshotReference<RrwebEventWithoutTime>
+export type customEvent<T = unknown> = WithJsonLdMetadata<RrwebCustomEvent<T>>
+export type eventWithoutTime = WithJsonLdMetadata<RrwebEventWithoutTime>
 export type event = eventWithoutTime
-export type eventWithTime = WithSnapshotReference<RrwebEventWithTime>
+export type eventWithTime = WithJsonLdMetadata<RrwebEventWithTime>

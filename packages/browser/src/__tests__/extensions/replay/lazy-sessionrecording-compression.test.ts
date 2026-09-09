@@ -260,7 +260,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
                         {
                             type: 5,
                             timestamp: 123,
-                            data: { tag: '$json_ld', payload, fullSnapshotTimestamp: 123 },
+                            data: { tag: '$json_ld', payload, fullSnapshotTimestamp: 123, href: 'http://localhost/' },
                         },
                     ],
                 }),

@@ -718,6 +718,8 @@ export interface SessionRecordingOptions {
      * Each full snapshot also captures the current JSON-LD, subject to the capture size limit.
      * These events include `data.fullSnapshotTimestamp`, which matches the full snapshot timestamp in the same session and window.
      * JSON-LD events from later page mutations do not include this field.
+     * Both forms include the current page URL in `data.href`, subject to replay URL masking and hash capture settings.
+     * The URL is omitted when the masking callback rejects it or throws.
      * The recorder removes all script nodes from snapshots when this option is enabled.
      * The JSON-LD observer starts only when this option is true at recording start.
      * @see https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/extensions/replay/external/json-ld.ts

@@ -185,6 +185,9 @@ test.describe('Session recording - masking', () => {
                 }))
             )
         const jsonLdEvents = replayEvents.filter(({ event }) => event.type === 5 && event.data.tag === '$json_ld')
+        for (const { event } of jsonLdEvents) {
+            expect(event.data.href).toBe(page.url())
+        }
         const jsonLdEventBytes = JSON.stringify(jsonLdEvents.map(({ event }) => event))
         const pairedEvents = jsonLdEvents.filter(({ event }) => isNumber(event.data.fullSnapshotTimestamp))
         expect(pairedEvents.length).toBeGreaterThan(0)

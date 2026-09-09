@@ -4028,6 +4028,7 @@ describe('Lazy SessionRecording', () => {
                             tag: '$json_ld',
                             payload: { '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' },
                             fullSnapshotTimestamp,
+                            href: 'http://localhost/',
                         },
                     })
                 } finally {
@@ -4035,6 +4036,66 @@ describe('Lazy SessionRecording', () => {
                 }
             } finally {
                 _addCustomEvent.mockReset()
+                script.remove()
+            }
+        })
+
+        it.each(['snapshot', 'mutation'] as const)(
+            'includes the masked current URL in a JSON-LD %s capture',
+            (capture) => {
+                const script = document.createElement('script')
+                script.type = 'application/ld+json'
+                const payload = { '@context': 'https://schema.org', '@type': 'Product' }
+                script.textContent = JSON.stringify(payload)
+                document.body.appendChild(script)
+                posthog.config.session_recording.captureJsonLd = true
+                posthog.config.disable_capture_url_hashes = true
+                posthog.config.mask_personal_data_properties = true
+                posthog.config.custom_personal_data_properties = ['secret']
+                const maskUrl = vi.fn(({ name }) => ({ name: name.replace('/private', '/public') }))
+                posthog.config.session_recording.maskCapturedNetworkRequestFn = maskUrl
+                try {
+                    sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                    fakeNavigateTo('https://example.com/private?secret=hidden#fragment')
+                    if (capture === 'snapshot') {
+                        _emit(createFullSnapshot())
+                    } else {
+                        _emit(createCustomSnapshot({}, payload, '$json_ld'))
+                    }
+                    const events = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data
+                    const jsonLd = events.find(
+                        (event: eventWithTime) => event.type === 5 && event.data.tag === '$json_ld'
+                    )
+                    expect(jsonLd.data.href).toBe('https://example.com/public?secret=<masked>')
+                    expect(maskUrl).toHaveBeenCalledWith({ name: 'https://example.com/private?secret=<masked>' })
+                    expect(jsonLd.data.payload).toEqual(payload)
+                } finally {
+                    script.remove()
+                }
+            }
+        )
+
+        it.each(['reject', 'throw'] as const)('omits the JSON-LD URL when masking callbacks %s', (behavior) => {
+            const script = document.createElement('script')
+            script.type = 'application/ld+json'
+            script.textContent = JSON.stringify({ '@context': 'https://schema.org', '@type': 'Product' })
+            document.body.appendChild(script)
+            posthog.config.session_recording.captureJsonLd = true
+            try {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                posthog.config.session_recording.maskCapturedNetworkRequestFn = () => {
+                    if (behavior === 'throw') {
+                        throw new Error('masking failed')
+                    }
+                    return undefined
+                }
+                _emit(createFullSnapshot())
+                const events = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data
+                expect(events.some((event: eventWithTime) => event.type === 2)).toBe(true)
+                const jsonLd = events.find((event: eventWithTime) => event.type === 5 && event.data.tag === '$json_ld')
+                expect(jsonLd).toBeDefined()
+                expect(jsonLd.data.href).toBeUndefined()
+            } finally {
                 script.remove()
             }
         })
@@ -4066,14 +4127,31 @@ describe('Lazy SessionRecording', () => {
                     {
                         type: EventType.Custom,
                         timestamp: firstTimestamp,
-                        data: { tag: '$json_ld', payload, fullSnapshotTimestamp: firstTimestamp },
+                        data: {
+                            tag: '$json_ld',
+                            payload,
+                            fullSnapshotTimestamp: firstTimestamp,
+                            href: 'http://localhost/',
+                        },
                     },
                     {
                         type: EventType.Custom,
                         timestamp: firstTimestamp + 1,
-                        data: { tag: '$json_ld', payload, fullSnapshotTimestamp: firstTimestamp + 1 },
+                        data: {
+                            tag: '$json_ld',
+                            payload,
+                            fullSnapshotTimestamp: firstTimestamp + 1,
+                            href: 'http://localhost/',
+                        },
                     },
-                    createCustomSnapshot({}, { ...payload, name: 'Updated camera' }, '$json_ld'),
+                    {
+                        ...createCustomSnapshot({}, { ...payload, name: 'Updated camera' }, '$json_ld'),
+                        data: {
+                            tag: '$json_ld',
+                            payload: { ...payload, name: 'Updated camera' },
+                            href: 'http://localhost/',
+                        },
+                    },
                 ])
             } finally {
                 _addCustomEvent.mockReset()
@@ -4115,6 +4193,7 @@ describe('Lazy SessionRecording', () => {
                               lazyRecorder['_buffer'].data.length
                     ;(posthog.capture as Mock).mockClear().mockImplementationOnce(() => {
                         script.textContent = JSON.stringify({ ...payload, name: 'After flush' })
+                        fakeNavigateTo('https://example.com/after-flush')
                         if (action === 'rotate') {
                             sessionIdGeneratorMock.mockReturnValue('nextSessionId')
                             sessionManager.resetSessionId()
@@ -4136,7 +4215,12 @@ describe('Lazy SessionRecording', () => {
                                   {
                                       type: EventType.Custom,
                                       timestamp: timestamp + 1,
-                                      data: { tag: '$json_ld', payload, fullSnapshotTimestamp: timestamp + 1 },
+                                      data: {
+                                          tag: '$json_ld',
+                                          payload,
+                                          fullSnapshotTimestamp: timestamp + 1,
+                                          href: 'http://localhost/',
+                                      },
                                   },
                               ]
                             : []
@@ -4177,7 +4261,7 @@ describe('Lazy SessionRecording', () => {
                 expect(events[snapshotIndex + 1]).toEqual({
                     type: EventType.Custom,
                     timestamp,
-                    data: { tag: '$json_ld', payload, fullSnapshotTimestamp: timestamp },
+                    data: { tag: '$json_ld', payload, fullSnapshotTimestamp: timestamp, href: 'http://localhost/' },
                 })
             } finally {
                 target.remove()
