@@ -139,7 +139,7 @@ pnpm clean:dep
 
 All 16 rrweb workspace packages run semantic checking before Vite's JavaScript build and a separate Rolldown declaration build. `build:declarations` only emits types; it is not a substitute for `check-types` or the production build.
 
-The shared `packages/rrweb/rolldown.dts.config.mts` uses Oxc when a package opts into `isolatedDeclarations`. `rrweb`, `rrdom`, and `rrdom-nodejs` retain TypeScript generation because their annotation work is larger (including exported function properties and destructuring in `rrweb`). Keep this opt-in per package rather than enabling it in the shared TSConfig.
+The shared `packages/rrweb/rolldown.dts.config.mts` explicitly uses Oxc for all 16 packages, each of which enables `isolatedDeclarations` in its TSConfig. Exported declarations must have sufficient type annotations for isolated generation. Keep semantic checking enabled: Oxc does not replace TypeScript's type checker.
 
 Declaration entries remain self-contained, external package imports remain external, and each `.d.ts` has an identical `.d.cts` sibling. Watch mode uses Vite's declaration plugin except for `rrweb-record`, which runs a separate Rolldown declaration watcher. The alternate rrweb entrypoint config also retains Vite's declaration plugin.
 
