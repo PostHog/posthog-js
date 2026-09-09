@@ -711,6 +711,10 @@ export interface SessionRecordingOptions {
      * JSON-LD inside a text mask or blocked element is never captured.
      * The recorder keeps properties on its universal safe list at every depth. This list includes `@type` values shaped like a Schema.org term, which means letters and digits only.
      * It drops property branches that are not on the allowlist.
+     * Retained strings starting with `http://`, `https://`, `//`, `/`, `./`, or `../` use replay URL masking, including query parameter and hash settings.
+     * This applies to nested entities and scalar arrays, but not to the fixed `@context`, normalized `@type`, or captured DOM IDs.
+     * Other strings, including bare relative paths and URLs embedded in text, are unchanged.
+     * A URL rejected by the masking callback is omitted. If the callback throws, the script is not captured.
      * It keeps an `@id` as a fragment only when replay also captures a DOM element with the same `id` value.
      * It drops every `@id` when `maskAllElementAttributes`, `maskAttributeFn`, or an `attributeFilter` without `id` can hide `id` attributes from replay.
      * It also keeps the containing entity tree, even when it redacts all other fields.
