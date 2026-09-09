@@ -392,15 +392,21 @@ export class PostHogFeatureFlags implements Extension {
         if (this._hadUserInteraction && this._dueRefreshIntervalMs === this._refreshIntervalMs) {
             return
         }
-        this._hadUserInteraction = true
-        this._dueRefreshIntervalMs = this._refreshIntervalMs
-        this._refreshIfDue()
+        this._resumeConfiguredInterval()
     }
 
     private _onVisibilityChange = (): void => {
         if (document?.visibilityState === 'visible') {
-            this._onUserInteraction()
+            // Deliberately not through _onUserInteraction: refreshes fall due while the page is
+            // hidden, and an interaction from before it was hidden would skip the due check here.
+            this._resumeConfiguredInterval()
         }
+    }
+
+    private _resumeConfiguredInterval(): void {
+        this._hadUserInteraction = true
+        this._dueRefreshIntervalMs = this._refreshIntervalMs
+        this._refreshIfDue()
     }
 
     private _syncAutomaticRefresh(): void {

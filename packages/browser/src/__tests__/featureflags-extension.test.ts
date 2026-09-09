@@ -488,6 +488,23 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
         })
 
+        it('reloads due flags on return to visibility after an earlier interaction', async () => {
+            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            vi.advanceTimersByTime(refreshIntervalMs / 2)
+            document.dispatchEvent(new Event('click'))
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+
+            setVisibilityState('hidden')
+            vi.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+
+            setVisibilityState('visible')
+            document.dispatchEvent(new Event('visibilitychange'))
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+        })
+
         it('does not reload flags when the page becomes visible before the interval elapses', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
             const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
