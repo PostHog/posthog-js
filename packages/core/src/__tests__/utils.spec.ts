@@ -23,6 +23,8 @@ describe('utils', () => {
     it.each([
       ['https://example.com/category?token=value#section', true],
       ['HTTP://example.com/category', true],
+      [Object('https://example.com/category'), true],
+      [Object('Camera'), false],
       ['//example.com/category', true],
       ['/category?token=value', true],
       ['./category', true],
