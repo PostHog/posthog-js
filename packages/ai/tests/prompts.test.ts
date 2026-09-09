@@ -323,6 +323,147 @@ describe('Prompts', () => {
       )
     })
 
+    it('should not refetch during the cooldown after a failed refetch', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockPromptResponse),
+        })
+        .mockRejectedValue(new Error('Network error'))
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
+      vi.advanceTimersByTime(61 * 1000)
+
+      // Fails, opens the cooldown.
+      expect((await prompts.get('test-prompt', { cacheTtlSeconds: 60 })).source).toBe('stale_cache')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      // Every later call inside the cooldown is served from cache, not from the network.
+      for (let call = 0; call < 5; call++) {
+        vi.advanceTimersByTime(1000)
+        expect((await prompts.get('test-prompt', { cacheTtlSeconds: 60 })).source).toBe('stale_cache')
+      }
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('should refetch once the cooldown expires', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockPromptResponse),
+        })
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockPromptResponse),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
+      vi.advanceTimersByTime(61 * 1000)
+      await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      vi.advanceTimersByTime(61 * 1000)
+      expect((await prompts.get('test-prompt', { cacheTtlSeconds: 60 })).source).toBe('api')
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+    })
+
+    it('should hold the cooldown for the Retry-After the server sends on a 429', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockPromptResponse),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: { get: (header: string) => (header === 'Retry-After' ? '600' : null) },
+        })
+        .mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockPromptResponse),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
+      vi.advanceTimersByTime(61 * 1000)
+      await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      // Past the default cooldown, but still inside the one the server asked for.
+      vi.advanceTimersByTime(120 * 1000)
+      expect((await prompts.get('test-prompt', { cacheTtlSeconds: 60 })).source).toBe('stale_cache')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      vi.advanceTimersByTime(500 * 1000)
+      expect((await prompts.get('test-prompt', { cacheTtlSeconds: 60 })).source).toBe('api')
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+    })
+
+    it('should preserve the longer cooldown when overlapping refetches fail', async () => {
+      let resolveRateLimited!: (response: Response) => void
+      let rejectNetworkError!: (error: Error) => void
+      mockFetch
+        .mockResolvedValueOnce(new Response(JSON.stringify(mockPromptResponse)))
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveRateLimited = resolve
+            })
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((_, reject) => {
+              rejectNetworkError = reject
+            })
+        )
+        .mockResolvedValueOnce(new Response(JSON.stringify(mockPromptResponse)))
+
+      const prompts = new Prompts({
+        personalApiKey: 'phx_test_key',
+        projectApiKey: 'phc_test_key',
+        defaultCacheTtlSeconds: 1,
+      })
+      await prompts.get('test-prompt')
+      vi.advanceTimersByTime(1001)
+
+      const rateLimited = prompts.get('test-prompt')
+      const networkError = prompts.get('test-prompt')
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+
+      resolveRateLimited(new Response(null, { status: 429, headers: new Headers({ 'Retry-After': '600' }) }))
+      expect((await rateLimited).source).toBe('stale_cache')
+      rejectNetworkError(new Error('Network error'))
+      expect((await networkError).source).toBe('stale_cache')
+
+      vi.advanceTimersByTime(61 * 1000)
+      expect((await prompts.get('test-prompt')).source).toBe('stale_cache')
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+
+      vi.advanceTimersByTime(539 * 1000 - 1)
+      expect((await prompts.get('test-prompt')).source).toBe('stale_cache')
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+
+      vi.advanceTimersByTime(1)
+      expect((await prompts.get('test-prompt')).source).toBe('api')
+      expect(mockFetch).toHaveBeenCalledTimes(4)
+      expect((await prompts.get('test-prompt')).source).toBe('cache')
+      expect(mockFetch).toHaveBeenCalledTimes(4)
+    })
+
     it('should use fallback when no cache and fetch fails with warning', async () => {
       mockFetch.mockRejectedValueOnce(new Error('Network error'))
 

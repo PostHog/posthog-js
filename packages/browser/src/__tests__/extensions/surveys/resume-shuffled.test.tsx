@@ -12,6 +12,7 @@ vi.mock('../../../extensions/surveys/surveys-extension-utils', async (importOrig
 const mockPosthog = {
     capture: vi.fn(),
     get_session_replay_url: vi.fn().mockReturnValue('http://example.com/replay'),
+    is_capturing: vi.fn(() => true),
     reloadFeatureFlags: vi.fn(),
 } as any
 
