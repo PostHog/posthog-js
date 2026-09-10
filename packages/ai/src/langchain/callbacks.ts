@@ -716,8 +716,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     const gen = output.generations?.[output.generations.length - 1]?.[0] as any
     const fromResponsesAdapter = gen?.message?.response_metadata?.service_tier
     const fromCompletionsAdapter = gen?.generationInfo?.service_tier
-    const fromPythonAdapter = (output.llmOutput as any)?.service_tier
-    const tier = fromResponsesAdapter ?? fromCompletionsAdapter ?? fromPythonAdapter
+    const tier = fromResponsesAdapter ?? fromCompletionsAdapter
     return tier == null ? undefined : String(tier)
   }
 
