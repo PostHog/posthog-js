@@ -215,35 +215,31 @@ function splitTrailingPunctuation(value: string): { address: string; suffix: str
 }
 
 /**
- * Splits a fragment into the text in front of its field list and the fields
- * themselves. `#/callback?token=…` has to keep `/callback?` out of the fields:
- * parsed as one, the whole thing is a single key named `/callback?token` and no
- * credential ever matches. A fragment with no `=` is not a field list at all —
- * it is all text.
+ * Splits a fragment at its first `?`. `tail` is null when there is none.
  *
- * That leading text only counts when it comes before every field. In
- * `#k=v&next=https://x/?p=1` the `?` sits inside a field's value, and treating
- * what precedes it as a route would hand the fields back unread.
- *
- * `fields` is returned verbatim so an untouched field list can be put back the
- * way it arrived.
+ * Nothing is assumed about either part. Shape alone cannot tell a router's route
+ * from a field list — `#/docs/id=1?token=…` puts an `=` in the route, and
+ * `#/token=…&next=https://x/?page=1` puts a `/` and a `?` in a field list — so
+ * each part is read as fields when it holds an `=` and as text otherwise.
  */
-function splitFragmentFields(hash: string): { text: string; fields: string } {
+function splitFragmentParts(hash: string): { head: string; tail: string | null } {
   const fragment = hash.slice(1)
-  const routeEnd = fragment.indexOf('?')
-  const fieldStart = fragment.indexOf('=')
-  if (fieldStart < 0) {
-    return { text: fragment, fields: '' }
+  const separator = fragment.indexOf('?')
+  if (separator < 0) {
+    return { head: fragment, tail: null }
   }
-  // A route is a path followed by `?`. Recognizing it by the `?` alone misses
-  // `#/docs/id=1?token=…`, whose route carries an `=`: read as fields that is a
-  // single key `/docs/id` with the token buried in its value. A leading `/` is
-  // the other half of the tell.
-  if (routeEnd >= 0 && (fragment.startsWith('/') || routeEnd < fieldStart)) {
-    const text = fragment.slice(0, routeEnd + 1)
-    return { text, fields: fragment.slice(text.length) }
+  return { head: fragment.slice(0, separator), tail: fragment.slice(separator + 1) }
+}
+
+/** One fragment part, and whether its last field was rewritten. */
+function sanitizeFragmentPart(part: string, allowNestedUrls: boolean): { value: string; lastFieldChanged: boolean } {
+  if (!part.includes('=')) {
+    return { value: sanitizeFragmentText(part, allowNestedUrls), lastFieldChanged: false }
   }
-  return { text: '', fields: fragment }
+  const fields = sanitizeUrlFields(part, allowNestedUrls)
+  // Verbatim unless something was actually rewritten: only the part that changed
+  // should change encoding.
+  return { value: fields.changed ? fields.serialized : part, lastFieldChanged: fields.lastFieldChanged }
 }
 
 /**
@@ -341,8 +337,8 @@ function sanitizeSingleUrl(value: string, mode: UrlSanitizeMode): string {
 
   const query = url.search.slice(1)
   const hasFragment = url.hash !== ''
-  const fragment = splitFragmentFields(url.hash)
-  if (exceedsUrlFieldLimit(query) || exceedsUrlFieldLimit(fragment.fields)) {
+  const fragment = splitFragmentParts(url.hash)
+  if (exceedsUrlFieldLimit(query) || exceedsUrlFieldLimit(fragment.head) || exceedsUrlFieldLimit(fragment.tail ?? '')) {
     return REDACTED_VALUE + suffix
   }
 
@@ -357,12 +353,11 @@ function sanitizeSingleUrl(value: string, mode: UrlSanitizeMode): string {
     url.search = sanitizedQuery.serialized
     changed = true
   }
-  const sanitizedText = sanitizeFragmentText(fragment.text, mode.allowNestedUrls)
-  const sanitizedFragment = sanitizeUrlFields(fragment.fields, mode.allowNestedUrls)
-  if (sanitizedText !== fragment.text || sanitizedFragment.changed) {
-    // An untouched field list goes back verbatim rather than re-serialized: only
-    // the part that was actually rewritten should change encoding.
-    url.hash = sanitizedText + (sanitizedFragment.changed ? sanitizedFragment.serialized : fragment.fields)
+  const sanitizedHead = sanitizeFragmentPart(fragment.head, mode.allowNestedUrls)
+  const sanitizedTail = fragment.tail === null ? null : sanitizeFragmentPart(fragment.tail, mode.allowNestedUrls)
+  const sanitizedHash = sanitizedTail === null ? sanitizedHead.value : `${sanitizedHead.value}?${sanitizedTail.value}`
+  if (sanitizedHash !== url.hash.slice(1)) {
+    url.hash = sanitizedHash
     changed = true
   }
 
@@ -371,8 +366,8 @@ function sanitizeSingleUrl(value: string, mode: UrlSanitizeMode): string {
   // last field of the URL's trailing part was rewritten the punctuation goes
   // with it; losing a comma from the surrounding prose is the accepted cost of
   // not shipping `!!!`.
-  const tail = hasFragment ? sanitizedFragment : sanitizedQuery
-  return (changed ? url.toString() : address) + (tail.lastFieldChanged ? '' : suffix)
+  const trailingFields = hasFragment ? (sanitizedTail ?? sanitizedHead) : sanitizedQuery
+  return (changed ? url.toString() : address) + (trailingFields.lastFieldChanged ? '' : suffix)
 }
 
 /**

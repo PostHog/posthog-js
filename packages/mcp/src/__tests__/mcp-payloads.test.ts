@@ -110,21 +110,27 @@ describe('URL credential redaction', () => {
       'https://app.example.com/cb#access_token=%5Bredacted%5D&token_type=%5Bredacted%5D',
     ],
     ['https://example.com/x?a=1;token=fakesecret', 'https://example.com/x?a=1&token=%5Bredacted%5D'],
-    // A single-page-app route lives in the fragment ahead of its own `?`. Parsed
-    // as fields the whole thing is one key named `/callback?token`, so the route
-    // is kept verbatim and only what follows the `?` is read as fields.
+    // The head has no `=`, so it is text and survives; the tail is a field list.
+    // Read as one, the whole fragment would be a single key `/callback?token`.
     ['https://example.com/#/callback?token=fakesecret', 'https://example.com/#/callback?token=%5Bredacted%5D'],
     // A fragment field list can be written with a leading slash, so `/` counts as
     // a segment separator in a key name. Re-serializing percent-encodes it.
     ['https://example.com/#/token=fakesecret', 'https://example.com/#%2Ftoken=%5Bredacted%5D'],
-    // A route can carry an `=` of its own. Read as fields this would be one key
-    // named `/docs/id`, with the token inside its value and nothing to match.
+    // The head holds an `=` and is read as fields (`/docs/id` = `1`, benign); the
+    // tail is its own field list. Reading the whole fragment as one would make it
+    // a single key named `/docs/id` with the token buried in its value.
     ['https://example.com/#/docs/id=1?token=fakesecret', 'https://example.com/#/docs/id=1?token=%5Bredacted%5D'],
-    // ...but only when the route precedes every field. Here the `?` sits inside
-    // the `next` value, so the fragment is all fields.
+    // Neither part of a fragment is assumed to be a route: each side of the first
+    // `?` is read as fields when it holds an `=` and as text otherwise. Here the
+    // head is a field list whose `next` value happens to contain a `/` and the
+    // tail is a field list of its own, so only the head is re-serialized.
     [
       'https://example.com/#access_token=fakesecret&next=https://other.test/?page=1',
-      'https://example.com/#access_token=%5Bredacted%5D&next=https%3A%2F%2Fother.test%2F%3Fpage%3D1',
+      'https://example.com/#access_token=%5Bredacted%5D&next=https%3A%2F%2Fother.test%2F?page=1',
+    ],
+    [
+      'https://example.com/#/token=fakesecret&next=https://other.test/?page=1',
+      'https://example.com/#%2Ftoken=%5Bredacted%5D&next=https%3A%2F%2Fother.test%2F?page=1',
     ],
     [
       'https://example.com/x?jwt=fakejwt&sessionid=fakesession&code=fakecode&country_code=BR',
@@ -282,7 +288,7 @@ describe('URL credential redaction', () => {
     ['a prose word joined to a URL with no credentials', 'Note:https://example.com/doc'],
     ['an app route in the fragment with a benign query', 'https://example.com/#/docs?page=2'],
     ['an app route in the fragment with no query at all', 'https://example.com/#/callback'],
-    ['an app route whose own segment holds an `=`', 'https://example.com/#/docs/id=1'],
+    ['a fragment field list whose key and value are both benign', 'https://example.com/#/docs/id=1'],
     [
       'markdown links running together with no credentials',
       '[a](https://public.test/#intro)[b](https://private.test/doc)',
