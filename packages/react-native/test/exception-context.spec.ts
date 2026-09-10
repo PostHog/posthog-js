@@ -106,6 +106,16 @@ describe('getExceptionContext', () => {
     expect(getExceptionContext()).toEqual({})
   })
 
+  it('omits boxed OTA strings', () => {
+    modules.updates = {
+      isEnabled: true,
+      updateId: Object('update-id'),
+      runtimeVersion: Object('1.2.3'),
+      channel: Object('production'),
+    }
+    expect(getExceptionContext()).toEqual({ $app_state: 'active' })
+  })
+
   it.each([-1, 1.1, NaN, Infinity, '0.5', null, undefined])('omits invalid battery level %s', (batteryLevel) => {
     modules.deviceInfo = { getPowerStateSync: () => ({ batteryLevel }) }
     expect(getExceptionContext()).toEqual({ $app_state: 'active' })

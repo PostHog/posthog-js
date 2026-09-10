@@ -1,10 +1,10 @@
-import { trySafe, type PostHogEventProperties } from '@posthog/core'
+import { isEmptyString, trySafe, type PostHogEventProperties } from '@posthog/core'
 import { AppState, Platform } from 'react-native'
 import { OptionalExpoUpdates } from '../optional/OptionalExpoUpdates'
 import { OptionalReactNativeDeviceInfo } from '../optional/OptionalReactNativeDeviceInfo'
 
 const knownString = (value: unknown): value is string =>
-  typeof value === 'string' && value.trim().length > 0 && value !== 'unknown'
+  typeof value === 'string' && !isEmptyString(value) && value !== 'unknown'
 
 /** Capture-time, exception-only context, separate from the static customAppProperties. */
 export const getExceptionContext = (): PostHogEventProperties => {
