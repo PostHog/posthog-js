@@ -1,7 +1,6 @@
 name: 'Recover posthog-js S3 release'
 
-permissions:
-    contents: read
+permissions: {}
 
 on:
     workflow_call:
@@ -47,6 +46,8 @@ on:
 
 jobs:
     validate:
+        permissions:
+            contents: read
         name: Validate recovery inputs
         runs-on: ubuntu-latest
         outputs:

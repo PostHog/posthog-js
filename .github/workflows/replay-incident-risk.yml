@@ -10,8 +10,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
   affected:
+    permissions:
+      contents: read
     uses: ./.github/workflows/check-affected.yml
     with:
       package-name: posthog-js

@@ -23,14 +23,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
+permissions: {}
 
 env:
   EXAMPLE_DIR: examples/example-rn-native-plugin
 
 jobs:
   build-android:
+    permissions:
+      contents: read
     name: Build example for Android
     runs-on: ubuntu-latest
     steps:
@@ -94,6 +95,8 @@ jobs:
         working-directory: ${{ env.EXAMPLE_DIR }}/android
 
   build-ios-static-lib:
+    permissions:
+      contents: read
     name: Build example for iOS (CocoaPods)
     runs-on: macos-14-xlarge
     steps:
@@ -149,6 +152,8 @@ jobs:
         working-directory: ${{ env.EXAMPLE_DIR }}/ios
 
   build-ios-hybrid-spm:
+    permissions:
+      contents: read
     name: Build example for iOS (CocoaPods plugin + SwiftPM posthog-ios)
     # Exercises the hybrid opt-in path: `posthog.useSpm` in
     # Podfile.properties.json routes posthog-ios through the React Native
@@ -216,6 +221,8 @@ jobs:
         working-directory: ${{ env.EXAMPLE_DIR }}/ios
 
   build-ios-full-spm:
+    permissions:
+      contents: read
     name: Build example for iOS (React Native full SwiftPM)
     runs-on: macos-26
     env:
@@ -287,6 +294,8 @@ jobs:
         working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
 
   build-macos:
+    permissions:
+      contents: read
     name: Build example for macOS (CocoaPods)
     runs-on: macos-14-xlarge
     steps:

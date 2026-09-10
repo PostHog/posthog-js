@@ -315,6 +315,8 @@ Follow [RELEASING.md](./RELEASING.md) for changeset requirements and writing gui
 
 ### CI credentials and restricted PRs
 
+Set workflow-level `permissions: {}` and grant `GITHUB_TOKEN` permissions explicitly on each job, including reusable-workflow callers. Build-only jobs should use `contents: read`; jobs that do not use the GitHub API or checkout should use `permissions: {}`. Grant write permissions and `id-token: write` only to jobs that need them. These settings do not restrict GitHub App tokens or other secrets, and every step in a privileged job shares its token permissions.
+
 Fork and Dependabot PRs may not have repository secrets, and their default `GITHUB_TOKEN` can be read-only. A same-repository PR is not proof that credentials are available.
 
 - `integration.yml` checks `POSTHOG_API_HOST`, `POSTHOG_PROJECT_ID`, `POSTHOG_PROJECT_API_KEY`, and `POSTHOG_PERSONAL_API_KEY` before checkout, dependency installation, builds, or live tests.

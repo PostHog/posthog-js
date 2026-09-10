@@ -1,5 +1,7 @@
 name: Auto update changeset
 on: pull_request
+permissions: {}
+
 jobs:
   changeset:
     runs-on: ubuntu-latest
