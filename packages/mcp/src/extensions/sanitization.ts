@@ -41,12 +41,14 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
 
   // The intent comes straight from an agent-narrated `context` string, so it can
   // contain a secret the LLM read aloud or personal data it narrated about the
-  // user. Redact it like any other captured value, then strip structured PII
-  // (emails, phone numbers, IPs, cards, SSNs) rather than shipping it raw as
-  // `$mcp_intent`. PII redaction is scoped to the intent only — structured tool
-  // parameters and responses often hold the same shapes as legitimate data.
+  // user. Structured PII (emails, phone numbers, IPs, cards, SSNs) is stripped
+  // from the raw narration FIRST, then the generic captured-value pass runs:
+  // rewriting a URL percent-encodes the characters PII patterns anchor on, so
+  // an email inside a query parameter would survive as `alice%40example.com`.
+  // PII redaction is scoped to the intent only — structured tool parameters and
+  // responses often hold the same shapes as legitimate data.
   if (result.userIntent != null) {
-    result.userIntent = redactPii(sanitizeCapturedValue(result.userIntent) as string)
+    result.userIntent = sanitizeCapturedValue(redactPii(result.userIntent)) as string
   }
 
   if (result.llmModel != null) {

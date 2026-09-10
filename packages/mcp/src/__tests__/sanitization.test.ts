@@ -480,6 +480,21 @@ describe('sanitizeEvent - intent PII redaction', () => {
     expect(result.userIntent).toBe('Rotating token [redacted] for user [redacted].')
   })
 
+  it('redacts PII carried inside a URL the intent narrates', () => {
+    // PII has to be stripped before the URL rewrite: rewriting percent-encodes
+    // the `@` the email pattern anchors on, and `alice%40example.com` would ship.
+    const event = makeEvent({
+      userIntent: 'Open https://example.com/?email=alice@example.com&token=fakesecret',
+    })
+
+    const intent = sanitizeEvent(event).userIntent as string
+
+    expect(intent).not.toContain('alice@example.com')
+    expect(intent).not.toContain('fakesecret')
+    // The host is not PII and stays, so the intent is still readable.
+    expect(intent).toContain('example.com')
+  })
+
   it('does not redact the same PII shapes from structured parameters or responses', () => {
     const event = makeEvent({
       userIntent: 'Enriching the profile for dave@example.com from the CRM.',
