@@ -37,7 +37,7 @@ class PosthogReactNativePluginModule(
   }
 
   override fun onActivityResult(
-    activity: Activity?,
+    activity: Activity,
     requestCode: Int,
     resultCode: Int,
     data: Intent?,
@@ -45,7 +45,7 @@ class PosthogReactNativePluginModule(
 
   // A tap delivered while the process is alive never reaches onActivityCreated, so the native
   // integration cannot see it. Deduplicated by message id against the cold-start path.
-  override fun onNewIntent(intent: Intent?) {
+  override fun onNewIntent(intent: Intent) {
     PostHogAndroid.capturePushNotificationOpened(intent)
   }
 
