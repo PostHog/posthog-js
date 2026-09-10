@@ -114,6 +114,9 @@ describe('URL credential redaction', () => {
     // as fields the whole thing is one key named `/callback?token`, so the route
     // is kept verbatim and only what follows the `?` is read as fields.
     ['https://example.com/#/callback?token=fakesecret', 'https://example.com/#/callback?token=%5Bredacted%5D'],
+    // A route can carry an `=` of its own. Read as fields this would be one key
+    // named `/docs/id`, with the token inside its value and nothing to match.
+    ['https://example.com/#/docs/id=1?token=fakesecret', 'https://example.com/#/docs/id=1?token=%5Bredacted%5D'],
     // ...but only when the route precedes every field. Here the `?` sits inside
     // the `next` value, so the fragment is all fields.
     [
@@ -262,6 +265,7 @@ describe('URL credential redaction', () => {
     ['a prose word joined to a URL with no credentials', 'Note:https://example.com/doc'],
     ['an app route in the fragment with a benign query', 'https://example.com/#/docs?page=2'],
     ['an app route in the fragment with no query at all', 'https://example.com/#/callback'],
+    ['an app route whose own segment holds an `=`', 'https://example.com/#/docs/id=1'],
     [
       'markdown links running together with no credentials',
       '[a](https://public.test/#intro)[b](https://private.test/doc)',

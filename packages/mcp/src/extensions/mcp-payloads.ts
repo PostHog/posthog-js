@@ -230,12 +230,20 @@ function splitTrailingPunctuation(value: string): { address: string; suffix: str
  */
 function splitFragmentFields(hash: string): { text: string; fields: string } {
   const fragment = hash.slice(1)
-  if (!fragment.includes('=')) {
+  const routeEnd = fragment.indexOf('?')
+  const fieldStart = fragment.indexOf('=')
+  if (fieldStart < 0) {
     return { text: fragment, fields: '' }
   }
-  const routeEnd = fragment.indexOf('?')
-  const text = routeEnd >= 0 && routeEnd < fragment.indexOf('=') ? fragment.slice(0, routeEnd + 1) : ''
-  return { text, fields: fragment.slice(text.length) }
+  // A route is a path followed by `?`. Recognizing it by the `?` alone misses
+  // `#/docs/id=1?token=…`, whose route carries an `=`: read as fields that is a
+  // single key `/docs/id` with the token buried in its value. A leading `/` is
+  // the other half of the tell.
+  if (routeEnd >= 0 && (fragment.startsWith('/') || routeEnd < fieldStart)) {
+    const text = fragment.slice(0, routeEnd + 1)
+    return { text, fields: fragment.slice(text.length) }
+  }
+  return { text: '', fields: fragment }
 }
 
 /**
