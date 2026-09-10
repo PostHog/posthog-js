@@ -4,7 +4,7 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { ErrorProperties, Event, McpEvent } from '../types'
-import { redactPii, sanitizeCapturedValue } from './mcp-payloads'
+import { sanitizeCapturedValue, sanitizeIntent } from './mcp-payloads'
 
 type SanitizedRecord = Record<string, unknown>
 
@@ -41,14 +41,13 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
 
   // The intent comes straight from an agent-narrated `context` string, so it can
   // contain a secret the LLM read aloud or personal data it narrated about the
-  // user. Structured PII (emails, phone numbers, IPs, cards, SSNs) is stripped
-  // from the raw narration FIRST, then the generic captured-value pass runs:
-  // rewriting a URL percent-encodes the characters PII patterns anchor on, so
-  // an email inside a query parameter would survive as `alice%40example.com`.
-  // PII redaction is scoped to the intent only — structured tool parameters and
-  // responses often hold the same shapes as legitimate data.
+  // user. `sanitizeIntent` adds structured PII redaction (emails, phone numbers,
+  // IPs, cards, SSNs) to the passes every captured value gets, in the one order
+  // that works — see its doc comment. PII redaction is scoped to the intent only:
+  // structured tool parameters and responses often hold the same shapes as
+  // legitimate data.
   if (result.userIntent != null) {
-    result.userIntent = sanitizeCapturedValue(redactPii(result.userIntent)) as string
+    result.userIntent = sanitizeIntent(result.userIntent)
   }
 
   if (result.llmModel != null) {

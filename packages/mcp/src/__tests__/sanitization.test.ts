@@ -495,6 +495,17 @@ describe('sanitizeEvent - intent PII redaction', () => {
     expect(intent).toContain('example.com')
   })
 
+  it('stubs a base64 blob narrated as the intent rather than PII-splicing it apart', () => {
+    // A Luhn-valid run inside the blob is enough for the card pass to splice
+    // `[redacted]` into it; the base64 detector would then reject it and the
+    // whole blob would be captured. The size gate has to read the raw value.
+    const blob = `${'AAAA/'.repeat(2_052)}4111111111111111/AAA`
+
+    expect(sanitizeEvent(makeEvent({ userIntent: blob })).userIntent).toBe(
+      '[binary data redacted - not supported by PostHog MCP analytics]'
+    )
+  })
+
   it('does not redact the same PII shapes from structured parameters or responses', () => {
     const event = makeEvent({
       userIntent: 'Enriching the profile for dave@example.com from the CRM.',

@@ -346,20 +346,44 @@ function sanitizeUrlsInString(text: string, mode: UrlSanitizeMode): string {
   )
 }
 
-function sanitizeString(value: string): string {
-  if (
+/** Whether a string is large enough, and shaped enough like base64, to be a blob. */
+function isBinaryBlob(value: string): boolean {
+  return (
     value.length >= SIZE_GATE &&
     (BASE64_PATTERN.test(value) ||
       isBase64DataUrl(value) ||
       (BASE64URL_SPECIFIC_CHAR_PATTERN.test(value) && BASE64URL_PATTERN.test(value)))
-  ) {
-    return BINARY_REDACTED_VALUE
-  }
-  // PostHog tokens first: rewriting a URL percent-encodes the characters around a
-  // token sitting in a query value, which erases the `\b` boundary the token
-  // pattern needs and would leak it.
+  )
+}
+
+/**
+ * The passes that rewrite text: PostHog tokens, then URLs.
+ *
+ * Tokens first, because rewriting a URL percent-encodes the characters around a
+ * token sitting in a query value, which erases the `\b` boundary the token
+ * pattern needs and would leak it.
+ */
+function sanitizeText(value: string): string {
   const withoutTokens = value.replace(POSTHOG_TOKEN_PATTERN, REDACTED_VALUE)
   return sanitizeUrlsInString(withoutTokens, { allowNestedUrls: true, stripPunctuation: true })
+}
+
+function sanitizeString(value: string): string {
+  return isBinaryBlob(value) ? BINARY_REDACTED_VALUE : sanitizeText(value)
+}
+
+/**
+ * Sanitizes the agent-narrated intent: structured PII on top of the passes every
+ * captured string gets.
+ *
+ * The order is load-bearing at both ends. The binary gate reads the value as it
+ * arrived, because splicing `[redacted]` into a blob — a Luhn-valid run inside
+ * base64 is enough — stops it looking like base64 and would ship it whole. PII
+ * then goes before the URL pass, because the URL rewrite percent-encodes the `@`
+ * that the email pattern anchors on.
+ */
+export function sanitizeIntent(value: string): string {
+  return isBinaryBlob(value) ? BINARY_REDACTED_VALUE : sanitizeText(redactPii(value))
 }
 
 function passesLuhn(digits: string): boolean {
