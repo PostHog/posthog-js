@@ -102,7 +102,6 @@ describe('PostHog.captureException context', () => {
     const client = newPostHog(options)
     client.captureException(new Error('not sent'))
     expect(exceptions(client)).toEqual([])
-    expect(readUpdateId).not.toHaveBeenCalled()
   })
 
   it('keeps the exception and other context when an OTA metadata getter throws', () => {

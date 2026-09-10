@@ -1886,9 +1886,7 @@ export class PostHog extends PostHogCore {
       syntheticException: new Error('Synthetic Error'),
     }
 
-    if (!this.isDisabled && !this.optedOut) {
-      additionalProperties = { ...getExceptionContext(), ...additionalProperties }
-    }
+    additionalProperties = { ...getExceptionContext(), ...additionalProperties }
 
     // Attach the rolling exception-steps buffer (no-op if the caller already provided their own).
     additionalProperties = this._errorTracking.attachExceptionSteps(additionalProperties)
