@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.52.1
+
+### Patch Changes
+
+- [#4880](https://github.com/PostHog/posthog-js/pull/4880) [`412c97c`](https://github.com/PostHog/posthog-js/commit/412c97ccf43b525e5a12606ba049eab14c440ed0) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix recording package exports, native ESM loading, and strict TypeScript 4.7 consumer compatibility.
+  (2026-09-10)
+
 ## 1.52.0
 
 ### Minor Changes
