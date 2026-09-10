@@ -10,6 +10,7 @@ describe('uncaught exception subscriptions', () => {
   let errorUtils: { getGlobalHandler: () => Handler; setGlobalHandler: ReturnType<typeof vi.fn> }
 
   beforeEach(() => {
+    vi.useFakeTimers()
     previous = vi.fn()
     current = previous
     errorUtils = {
@@ -22,6 +23,7 @@ describe('uncaught exception subscriptions', () => {
   })
 
   afterEach(() => {
+    vi.clearAllTimers()
     vi.unstubAllGlobals()
   })
 
@@ -153,6 +155,92 @@ describe('uncaught exception subscriptions', () => {
     expect(secondClient.captureException).toHaveBeenCalledTimes(1)
     second.shutdown()
     expect(current).toBe(previous)
+  })
+
+  it('waits for fatal persistence before forwarding and clears its deadline', async () => {
+    let persist!: () => void
+    trackUncaughtExceptions(
+      () =>
+        new Promise<void>((resolve) => {
+          persist = resolve
+        })
+    )
+    const error = new Error('fatal')
+    current(error, true)
+    expect(previous).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(100)
+    expect(previous).not.toHaveBeenCalled()
+    persist()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(previous.mock.calls).toEqual([[error, true]])
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('bounds all subscribers by one two-second deadline and never forwards twice', async () => {
+    let persist!: () => void
+    trackUncaughtExceptions(
+      () =>
+        new Promise<void>((resolve) => {
+          persist = resolve
+        })
+    )
+    trackUncaughtExceptions(() => new Promise<void>(() => {}))
+    const error = new Error('fatal')
+    current(error, true)
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(previous).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(previous.mock.calls).toEqual([[error, true]])
+    persist()
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(previous).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("does not let a rejected subscriber skip another instance's persistence", async () => {
+    let persist!: () => void
+    trackUncaughtExceptions(() => Promise.reject(new Error('storage failed')))
+    trackUncaughtExceptions(
+      () =>
+        new Promise<void>((resolve) => {
+          persist = resolve
+        })
+    )
+    current(new Error('fatal'), true)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(previous).not.toHaveBeenCalled()
+    persist()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(previous).toHaveBeenCalledTimes(1)
+  })
+
+  it('forwards promptly after rejected persistence without an unhandled rejection', async () => {
+    trackUncaughtExceptions(() => Promise.reject(new Error('storage failed')))
+    current(new Error('fatal'), true)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(previous).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('forwards non-fatal errors synchronously even if a subscriber returns a rejected promise', async () => {
+    trackUncaughtExceptions(() => Promise.reject(new Error('storage failed')))
+    const error = new Error('non-fatal')
+    current(error, false)
+    expect(previous.mock.calls).toEqual([[error, false]])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(previous).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('preserves errors thrown by the previous handler after async persistence', async () => {
+    const previousError = new Error('native handler failed')
+    previous.mockImplementation(() => {
+      throw previousError
+    })
+    trackUncaughtExceptions(() => Promise.resolve())
+    current(new Error('fatal'), true)
+    await expect(vi.advanceTimersByTimeAsync(0)).rejects.toBe(previousError)
+    expect(previous).toHaveBeenCalledTimes(1)
   })
 
   it('reports missing ErrorUtils without preventing a later installation', () => {

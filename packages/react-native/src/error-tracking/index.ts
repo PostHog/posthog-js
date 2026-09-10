@@ -82,7 +82,8 @@ export class ErrorTracking {
   constructor(
     private instance: PostHog,
     options: ErrorTrackingOptions = {},
-    logger: Logger
+    logger: Logger,
+    private readonly persistFatalException?: () => Promise<void>
   ) {
     this.logger = logger.createLogger('[ErrorTracking]')
     this.options = this.resolveOptions(options)
@@ -283,9 +284,11 @@ export class ErrorTracking {
       this.instance.captureException(error, additionalProperties, hint)
 
       if (isFatal) {
+        const persisted = this.persistFatalException?.()
         void this.instance.flush().catch(() => {
           this.logger.critical('Failed to flush events')
         })
+        return persisted
       }
     }
     try {
