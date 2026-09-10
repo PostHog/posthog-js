@@ -4,7 +4,7 @@ import { act, cleanup, render, renderHook } from '@testing-library/react'
 import { renderToString } from 'react-dom/server'
 import { useNavigationTracker } from '../src/hooks/useNavigationTracker'
 import { PostHogProvider } from '../src/PostHogProvider'
-import type { PostHog } from '../src/posthog-rn'
+import { PostHog } from '../src/posthog-rn'
 
 const mock = vi.hoisted(() => ({ state: undefined as any, navigation: undefined as any }))
 vi.mock('../src/optional/OptionalReactNativeNavigation', () => ({
@@ -17,15 +17,18 @@ vi.mock('../src/optional/OptionalReactNativeNavigation', () => ({
 let client: PostHog
 beforeEach(() => {
   vi.useFakeTimers()
-  client = { screen: vi.fn(), debug: vi.fn() } as unknown as PostHog
+  client = new PostHog('test-token', { disabled: true, persistence: 'memory' })
+  vi.spyOn(client, 'screen').mockResolvedValue(undefined)
   mock.state = { index: 0, routes: [{ name: 'Home' }] }
   mock.navigation = {
     isReady: vi.fn(() => true),
     getCurrentRoute: vi.fn(() => mock.state.routes[mock.state.index]),
   }
 })
-afterEach(() => {
+afterEach(async () => {
   cleanup()
+  await client.shutdown()
+  vi.restoreAllMocks()
   vi.useRealTimers()
 })
 
