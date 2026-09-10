@@ -52,6 +52,14 @@ pnpm android # or pnpm ios
 
 If changes are still not picked up, remove `node_modules` before reinstalling.
 
+## Test Expo update context on exceptions
+
+The example includes `expo-updates`, but OTA updates are disabled by default. Configure `updates.url` and `runtimeVersion` for your own project, regenerate the native projects, and build in release mode. Set a channel if you also want to test `$expo_channel`.
+
+In the **Error Tracking** tab, press **Capture error manually** and inspect the captured `$exception`. When Updates is enabled, known values are attached as `$expo_update_id`, `$expo_runtime_version`, `$expo_channel`, and `$expo_is_embedded_launch`.
+
+Expo update fields are omitted in development builds or when Updates is disabled. `$app_state` is captured independently of Updates.
+
 ## Build release mode locally
 
 ```bash
