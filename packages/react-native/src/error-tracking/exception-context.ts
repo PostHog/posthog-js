@@ -9,13 +9,13 @@ const knownString = (value: unknown): value is string =>
 /** Capture-time, exception-only context, separate from the static customAppProperties. */
 export const getExceptionContext = (): PostHogEventProperties => {
   const properties: PostHogEventProperties = {}
-  if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
-    return properties
-  }
-
   const appState = trySafe(() => AppState.currentState)
   if (appState === 'active' || appState === 'background' || appState === 'inactive') {
     properties.$app_state = appState
+  }
+
+  if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
+    return properties
   }
 
   if (!(typeof __DEV__ !== 'undefined' && __DEV__) && trySafe(() => OptionalExpoUpdates?.isEnabled) === true) {

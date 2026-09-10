@@ -168,7 +168,7 @@
             {
               "id": "with_additional_properties",
               "name": "With additional properties",
-              "code": "\n\n// With additional properties\nposthog.captureException(error, {\n  customProperty: 'value',\n  anotherProperty: ['I', 'can be a list'],\n  ...\n})\n\nOn iOS and Android, exceptions also include capture-time  (active, background or inactive). When available, optional  (>= 0.25.0) adds , ,  and  for enabled updates outside development mode. Optional  adds  (0–1),  (including full) and . Unknown values are omitted. These exception-only fields are separate from the static app metadata controlled by , including the existing  and . Override these fields with , or remove them using .\n\n\n\n"
+              "code": "\n\n// With additional properties\nposthog.captureException(error, {\n  customProperty: 'value',\n  anotherProperty: ['I', 'can be a list'],\n  ...\n})\n\nExceptions also include capture-time  (active, background or inactive) on any platform where React Native AppState provides a known value. On iOS and Android, optional  (>= 0.25.0) adds , ,  and  for enabled updates outside development mode. On those platforms, optional  adds  (0–1),  (including full) and . Unknown values are omitted. These exception-only fields are separate from the static app metadata controlled by , including the existing  and . Override these fields with , or remove them using .\n\n\n\n"
             }
           ],
           "releaseTag": "public",

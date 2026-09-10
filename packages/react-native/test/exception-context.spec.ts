@@ -35,10 +35,22 @@ describe('getExceptionContext', () => {
     expect(getExceptionContext()).toEqual({ $app_state: 'active' })
   })
 
-  it.each(['web', 'macos', 'windows'])('does not read native context on %s', (platform) => {
+  it.each(['web', 'macos', 'windows'])('captures app state without reading native context on %s', (platform) => {
     Platform.OS = platform as typeof Platform.OS
-    modules.updates = new Proxy({}, { get: fail })
-    modules.deviceInfo = new Proxy({}, { get: fail })
+    const readNative = vi.fn(fail)
+    modules.updates = new Proxy({}, { get: readNative })
+    modules.deviceInfo = new Proxy({}, { get: readNative })
+
+    for (const appState of ['active', 'background', 'inactive'] as const) {
+      AppState.currentState = appState
+      expect(getExceptionContext()).toEqual({ $app_state: appState })
+    }
+    expect(readNative).not.toHaveBeenCalled()
+  })
+
+  it.each(['web', 'macos', 'windows'])('omits unknown app state on %s', (platform) => {
+    Platform.OS = platform as typeof Platform.OS
+    AppState.currentState = 'unknown'
     expect(getExceptionContext()).toEqual({})
   })
 

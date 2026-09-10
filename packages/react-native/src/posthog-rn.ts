@@ -1863,11 +1863,12 @@ export class PostHog extends PostHogCore {
    * })
    * ```
    *
-   * On iOS and Android, exceptions also include capture-time `$app_state` (active, background or
-   * inactive). When available, optional `expo-updates` (>= 0.25.0) adds `$expo_update_id`,
-   * `$expo_runtime_version`, `$expo_channel` and `$expo_is_embedded_launch` for enabled updates
-   * outside development mode. Optional `react-native-device-info` adds `$battery_level` (0–1),
-   * `$battery_charging` (including full) and `$low_power_mode`. Unknown values are omitted.
+   * Exceptions also include capture-time `$app_state` (active, background or inactive) on any
+   * platform where React Native AppState provides a known value. On iOS and Android, optional
+   * `expo-updates` (>= 0.25.0) adds `$expo_update_id`, `$expo_runtime_version`, `$expo_channel`
+   * and `$expo_is_embedded_launch` for enabled updates outside development mode. On those platforms,
+   * optional `react-native-device-info` adds `$battery_level` (0–1), `$battery_charging` (including full)
+   * and `$low_power_mode`. Unknown values are omitted.
    * These exception-only fields are separate from the static app metadata controlled by
    * `customAppProperties`, including the existing `$app_version` and `$app_build`.
    * Override these fields with `additionalProperties`, or remove them using `before_send`.
