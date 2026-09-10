@@ -34,7 +34,10 @@ const reasonOn = async (page: Page, eventName: string) => {
 }
 
 test.describe('Session recording - disabled reason', () => {
-    test('names the client config switch that stopSessionRecording flips', async ({ page, context }) => {
+    test('names the disabled reason for the client config switch that stopSessionRecording flips', async ({
+        page,
+        context,
+    }) => {
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/*recorder.js*'],
             action: async () => {
@@ -53,7 +56,10 @@ test.describe('Session recording - disabled reason', () => {
         })
     })
 
-    test('names a client config that disables recording from the start', async ({ page, context }) => {
+    test('names the disabled reason for a client config that disables recording from the start', async ({
+        page,
+        context,
+    }) => {
         await startWith({ endpoint: '/ses/' }, { disable_session_recording: true }, page, context)
 
         expect(await reasonOn(page, 'never_recording')).toEqual({
@@ -62,7 +68,7 @@ test.describe('Session recording - disabled reason', () => {
         })
     })
 
-    test('names a remote disable', async ({ page, context }) => {
+    test('names the disabled reason for a remote disable', async ({ page, context }) => {
         await startWith(false, {}, page, context)
 
         expect(await reasonOn(page, 'remotely_disabled')).toEqual({
@@ -71,7 +77,7 @@ test.describe('Session recording - disabled reason', () => {
         })
     })
 
-    test('drops the reason once recording starts', async ({ page, context }) => {
+    test('drops the disabled reason once recording starts', async ({ page, context }) => {
         await startWith({ endpoint: '/ses/' }, { disable_session_recording: true }, page, context)
         expect(await reasonOn(page, 'never_started')).toEqual({
             status: 'disabled',
