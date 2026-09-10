@@ -26,7 +26,7 @@ import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
   handleListToolsRequest,
-  captureResourceRequest,
+  traceResourceRequest,
   patchRequestHandlers,
   captureToolCall,
   getVirtualToolParameterOwnership,
@@ -292,24 +292,11 @@ export function instrumentHighLevelServer(server: HighLevelMCPServerLike, logger
         handleListToolsRequest(trackedServer, originalHandler, request, extra, logger),
       'tools/call': (trackedServer, originalHandler, request, extra) =>
         handleToolCallRequest(server, trackedServer, originalHandler, request, extra, logger),
-      'resources/list': (trackedServer, originalHandler, request, extra) =>
-        captureResourceRequest({
-          server: trackedServer,
-          originalHandler,
-          request,
-          extra,
-          eventType: MCPAnalyticsEventType.mcpResourcesList,
-          logger,
-        }),
-      'resources/read': (trackedServer, originalHandler, request, extra) =>
-        captureResourceRequest({
-          server: trackedServer,
-          originalHandler,
-          request,
-          extra,
-          eventType: MCPAnalyticsEventType.mcpResourcesRead,
-          logger,
-        }),
+      'resources/list': traceResourceRequest(MCPAnalyticsEventType.mcpResourcesList, logger),
+      // Both listings publish `$mcp_resources_list`; the captured
+      // `request.method` is what tells a static listing from a templated one.
+      'resources/templates/list': traceResourceRequest(MCPAnalyticsEventType.mcpResourcesList, logger),
+      'resources/read': traceResourceRequest(MCPAnalyticsEventType.mcpResourcesRead, logger),
     }
     patchRequestHandlers(lowLevelServer, handlers)
 

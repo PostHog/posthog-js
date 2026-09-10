@@ -446,6 +446,19 @@ describe('sanitizeEvent - exception values', () => {
   })
 })
 
+describe('sanitizeEvent - resource name', () => {
+  // `$identify` names its request the same way a read does, so gating redaction
+  // on the read event type used to publish the raw address alongside the person.
+  it.each(['mcp:resources/read', 'identify', '$exception'])(
+    'redacts credentials from a %s resource name',
+    (eventType) => {
+      const event = makeEvent({ eventType, resourceName: 'https://fakeuser:fakepass@example.com/guide' })
+
+      expect(sanitizeEvent(event).resourceName).toBe('https://%5Bredacted%5D@example.com/guide')
+    }
+  )
+})
+
 describe('sanitizeEvent - intent PII redaction', () => {
   it('redacts structured PII from the agent-narrated intent', () => {
     const event = makeEvent({

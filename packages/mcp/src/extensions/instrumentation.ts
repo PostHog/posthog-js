@@ -395,17 +395,65 @@ function publishFailedToolEvent(
   }
 }
 
+type ResourceEventType = typeof MCPAnalyticsEventType.mcpResourcesList | typeof MCPAnalyticsEventType.mcpResourcesRead
+
 interface TraceRequestParams {
   server: MCPServerLike
   originalHandler: MCPRequestHandler
   request: MCPRequestLike
   extra: CompatibleRequestHandlerExtra | undefined
-  eventType: typeof MCPAnalyticsEventType.mcpResourcesList | typeof MCPAnalyticsEventType.mcpResourcesRead
+  eventType: ResourceEventType
   logger: LoggerFn
 }
 
+/** One resource request's outcome: either the handler threw, or it returned. */
+type ResourceOutcome = { error: unknown } | { result: unknown }
+
+/**
+ * Stamps a resource request's outcome onto its prepared event and publishes it.
+ *
+ * A listing's result is captured as the event response; a read's is not. What
+ * `resources/list` and `resources/templates/list` return is discovery metadata —
+ * names, uris, mime types, the next cursor — which answers "what did this client
+ * actually see?", while a read returns the resource body itself, which analytics
+ * has no business holding.
+ */
+function publishResourceEvent(
+  server: MCPServerLike,
+  preparedEvent: PreparedToolEvent | null,
+  startTime: Date,
+  params: TraceRequestParams,
+  outcome: ResourceOutcome
+): void {
+  if (!preparedEvent) {
+    return
+  }
+  const { event, requestAttribution } = preparedEvent
+  if ('error' in outcome) {
+    event.isError = true
+    event.error = captureException(outcome.error)
+  } else {
+    event.isError = false
+    if (params.eventType === MCPAnalyticsEventType.mcpResourcesList) {
+      event.response = outcome.result
+    }
+  }
+  event.duration = Date.now() - startTime.getTime()
+  try {
+    captureEvent(server, event, params.logger, requestAttribution)
+  } catch (error) {
+    params.logger(`Warning: PostHog MCP analytics failed to publish ${params.request.method} analytics - ${error}`)
+  }
+}
+
+/** Builds the handler patch that captures one resource method, for either adapter. */
+export function traceResourceRequest(eventType: ResourceEventType, logger: LoggerFn): HandlerPatch {
+  return (server, originalHandler, request, extra) =>
+    captureResourceRequest({ server, originalHandler, request, extra, eventType, logger })
+}
+
 /** Captures a non-tool MCP request without changing its result or error semantics. */
-export async function captureResourceRequest(params: TraceRequestParams): Promise<unknown> {
+async function captureResourceRequest(params: TraceRequestParams): Promise<unknown> {
   const { server, originalHandler, request, extra, eventType, logger } = params
   const data = getServerTrackingData(server)
   if (!data) {
@@ -440,28 +488,11 @@ export async function captureResourceRequest(params: TraceRequestParams): Promis
   try {
     result = await originalHandler(request, extra)
   } catch (error) {
-    if (preparedEvent) {
-      preparedEvent.event.isError = true
-      preparedEvent.event.error = captureException(error)
-      preparedEvent.event.duration = Date.now() - startTime.getTime()
-      try {
-        captureEvent(server, preparedEvent.event, logger, preparedEvent.requestAttribution)
-      } catch (captureError) {
-        logger(`Warning: PostHog MCP analytics failed to publish ${request.method} analytics - ${captureError}`)
-      }
-    }
+    publishResourceEvent(server, preparedEvent, startTime, params, { error })
     throw error
   }
 
-  if (preparedEvent) {
-    preparedEvent.event.isError = false
-    preparedEvent.event.duration = Date.now() - startTime.getTime()
-    try {
-      captureEvent(server, preparedEvent.event, logger, preparedEvent.requestAttribution)
-    } catch (error) {
-      logger(`Warning: PostHog MCP analytics failed to publish ${request.method} analytics - ${error}`)
-    }
-  }
+  publishResourceEvent(server, preparedEvent, startTime, params, { result })
   return result
 }
 

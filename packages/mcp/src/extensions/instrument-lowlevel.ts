@@ -11,7 +11,7 @@ import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
   handleListToolsRequest,
-  captureResourceRequest,
+  traceResourceRequest,
   patchRequestHandlers,
   registerFallbackRequestHandler,
   captureToolCall,
@@ -28,9 +28,10 @@ type MCPRequest = Parameters<MCPRequestHandler>[0]
 type MCPRequestExtra = Parameters<MCPRequestHandler>[1]
 
 /**
- * Instruments a low-level `Server`: wraps `initialize`, `tools/list`, and
- * `tools/call`. The tool-call lifecycle is delegated to {@link captureToolCall},
- * shared with the high-level wrapper.
+ * Instruments a low-level `Server`: wraps `initialize`, `tools/list`,
+ * `tools/call`, `resources/list`, `resources/templates/list`, and
+ * `resources/read`. The tool-call lifecycle is delegated to
+ * {@link captureToolCall}, shared with the high-level wrapper.
  */
 export function instrumentLowLevelServer(server: MCPServerLike, logger: LoggerFn): void {
   try {
@@ -43,24 +44,11 @@ export function instrumentLowLevelServer(server: MCPServerLike, logger: LoggerFn
       'tools/list': (server, originalHandler, request, extra) =>
         handleListToolsRequest(server, originalHandler, request, extra, logger),
       'tools/call': traceToolCall,
-      'resources/list': (server, originalHandler, request, extra) =>
-        captureResourceRequest({
-          server,
-          originalHandler,
-          request,
-          extra,
-          eventType: MCPAnalyticsEventType.mcpResourcesList,
-          logger,
-        }),
-      'resources/read': (server, originalHandler, request, extra) =>
-        captureResourceRequest({
-          server,
-          originalHandler,
-          request,
-          extra,
-          eventType: MCPAnalyticsEventType.mcpResourcesRead,
-          logger,
-        }),
+      'resources/list': traceResourceRequest(MCPAnalyticsEventType.mcpResourcesList, logger),
+      // Both listings publish `$mcp_resources_list`; the captured
+      // `request.method` is what tells a static listing from a templated one.
+      'resources/templates/list': traceResourceRequest(MCPAnalyticsEventType.mcpResourcesList, logger),
+      'resources/read': traceResourceRequest(MCPAnalyticsEventType.mcpResourcesRead, logger),
     }
     patchRequestHandlers(server, handlers)
 

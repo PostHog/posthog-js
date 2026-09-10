@@ -34,7 +34,15 @@ interface V2Schemas {
 type V2Handler = (request: unknown, ctx: unknown) => unknown
 
 /** Spec methods v2 accepts in the two-argument form; everything else needs schemas. */
-const SPEC_METHODS = new Set(['initialize', 'ping', 'resources/list', 'resources/read', 'tools/list', 'tools/call'])
+const SPEC_METHODS = new Set([
+  'initialize',
+  'ping',
+  'resources/list',
+  'resources/templates/list',
+  'resources/read',
+  'tools/list',
+  'tools/call',
+])
 
 class V2ServerDouble {
   _requestHandlers = new Map<string, (request: MCPRequestLike, extra?: CompatibleRequestHandlerExtra) => Promise<any>>()
@@ -264,6 +272,69 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
       ]) {
         expect(JSON.stringify(eventCapture.getCaptures())).not.toContain(secret)
       }
+    }
+  )
+
+  it('names an $identify published from a resources/read by its uri', async () => {
+    const server = makeServer()
+    instrument(server, fakePostHog(), { identify: () => ({ distinctId: 'user-1' }) })
+    server.setRequestHandler('resources/read', (async () => ({ contents: [] })) as any)
+
+    await dispatch(server, { method: 'resources/read', params: { uri: 'https://fakeuser:fakepass@example.com/guide' } })
+    await vi.waitFor(() => expect(eventCapture.findCapturesByEvent('$identify')).toHaveLength(1))
+
+    // A read addresses its subject by `uri`, never by `name`, and the credentials
+    // in that address are redacted on the identify event like anywhere else.
+    expect(eventCapture.findCapturesByEvent('$identify')[0].properties.$mcp_resource_name).toBe(
+      'https://%5Bredacted%5D@example.com/guide'
+    )
+  })
+
+  /**
+   * Both listing methods publish `$mcp_resources_list`; the captured
+   * `request.method` is what separates a static listing from a templated one.
+   * An empty listing is not an error the way an empty `tools/list` is — a
+   * template-only server legitimately advertises no static resources.
+   */
+  it.each([
+    ['resources/list', { resources: [{ name: 'Guide', uri: 'file:///guide.md', mimeType: 'text/markdown' }] }],
+    ['resources/templates/list', { resourceTemplates: [{ name: 'user', uriTemplate: 'users://{id}' }] }],
+    ['resources/list', { resources: [] }],
+  ] as const)('captures the listing %s returned as the event response', async (method, listing) => {
+    const server = makeServer()
+    instrument(server, fakePostHog())
+    server.setRequestHandler(method, (async () => listing) as any)
+
+    await expect(dispatch(server, { method, params: {} })).resolves.toEqual(listing)
+    await vi.waitFor(() => expect(eventCapture.findCapturesByEvent('$mcp_resources_list')).toHaveLength(1))
+
+    const props = eventCapture.findCapturesByEvent('$mcp_resources_list')[0].properties
+    expect(props.$mcp_parameters.request.method).toBe(method)
+    expect(props.$mcp_response).toEqual(listing)
+    expect(props.$mcp_is_error).toBe(false)
+    expect(props.$mcp_duration_ms).toBeGreaterThanOrEqual(0)
+    expect(props.$mcp_resource_name).toBeUndefined()
+    expect(eventCapture.findCapturesByEvent('$exception')).toHaveLength(0)
+  })
+
+  it.each(['resources/list', 'resources/templates/list'] as const)(
+    'captures a failing %s without a response',
+    async (method) => {
+      const server = makeServer()
+      instrument(server, fakePostHog())
+      const error = new Error(`Cannot list ${method}`)
+      server.setRequestHandler(method, (async () => {
+        throw error
+      }) as any)
+
+      await expect(dispatch(server, { method, params: {} })).rejects.toBe(error)
+      await vi.waitFor(() => expect(eventCapture.findCapturesByEvent('$mcp_resources_list')).toHaveLength(1))
+
+      const props = eventCapture.findCapturesByEvent('$mcp_resources_list')[0].properties
+      expect(props.$mcp_is_error).toBe(true)
+      expect(props.$mcp_response).toBeUndefined()
+      expect(props.$mcp_duration_ms).toBeGreaterThanOrEqual(0)
+      expect(eventCapture.findCapturesByEvent('$exception')).toHaveLength(1)
     }
   )
 
