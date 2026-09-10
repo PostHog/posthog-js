@@ -13,11 +13,10 @@ import {
   SurveyQuestionBranchingType,
 } from '@posthog/core'
 import {
-  buildSurveyResponseProperties,
+  buildSurveyResponseEventProperties,
   getSurveyInteractionProperty,
-  getSurveyResponseKey,
+  recordSurveyAnswer,
   SURVEY_LANGUAGE_PROPERTY,
-  surveyHasResponses,
 } from '@posthog/core/surveys'
 import { LinkQuestion, MultipleChoiceQuestion, OpenTextQuestion, RatingQuestion } from './QuestionTypes'
 import { PostHog } from '../../posthog-rn'
@@ -25,21 +24,12 @@ import { usePostHog } from '../../hooks/usePostHog'
 
 // Events receive the configured survey, not its shuffled display copies. Supply
 // positional indices here so legacy response properties do not depend on rendering.
-const buildConfiguredSurveyResponseProperties = (
-  responses: SurveyResponses,
-  survey: Survey,
-  snapshots?: Record<string, string>
-) =>
-  buildSurveyResponseProperties(
-    responses,
-    {
-      questions: survey.questions.map((question, originalQuestionIndex) => ({
-        ...question,
-        originalQuestionIndex,
-      })),
-    },
-    snapshots
-  )
+const withOriginalQuestionIndices = (survey: Survey) => ({
+  questions: survey.questions.map((question, originalQuestionIndex) => ({
+    ...question,
+    originalQuestionIndex,
+  })),
+})
 
 export const sendSurveyShownEvent = (survey: Survey, posthog: PostHog, surveyLanguage?: string | null): void => {
   posthog.capture('survey shown', {
@@ -64,9 +54,15 @@ export const sendSurveyEvent = (
     $survey_id: survey.id,
     ...maybeAdd('$survey_iteration', survey.current_iteration),
     ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
-    ...(surveyLanguage ? { [SURVEY_LANGUAGE_PROPERTY]: surveyLanguage } : {}),
-    ...(progress ? { $survey_submission_id: progress.submissionId, $survey_completed: completed } : {}),
-    ...buildConfiguredSurveyResponseProperties(responses, survey, progress?.questionSnapshots),
+    ...buildSurveyResponseEventProperties({
+      event: 'sent',
+      survey: withOriginalQuestionIndices(survey),
+      responses,
+      submissionId: progress?.submissionId,
+      completed: progress ? completed : undefined,
+      surveyLanguage,
+      questionSnapshots: progress?.questionSnapshots,
+    }),
     $set: {
       [getSurveyInteractionProperty(survey, 'responded')]: true,
     },
@@ -85,10 +81,14 @@ export const dismissedSurveyEvent = (
     $survey_id: survey.id,
     ...maybeAdd('$survey_iteration', survey.current_iteration),
     ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
-    ...(surveyLanguage ? { [SURVEY_LANGUAGE_PROPERTY]: surveyLanguage } : {}),
-    $survey_partially_completed: surveyHasResponses(responses),
-    ...(progress ? { $survey_submission_id: progress.submissionId } : {}),
-    ...buildConfiguredSurveyResponseProperties(responses, survey, progress?.questionSnapshots),
+    ...buildSurveyResponseEventProperties({
+      event: 'dismissed',
+      survey: withOriginalQuestionIndices(survey),
+      responses,
+      submissionId: progress?.submissionId,
+      surveyLanguage,
+      questionSnapshots: progress?.questionSnapshots,
+    }),
     $set: {
       [getSurveyInteractionProperty(survey, 'dismissed')]: true,
     },
@@ -155,27 +155,22 @@ export function Questions({
     questionId: string
   }): void => {
     if (completedRef.current || progressRef.current !== progress || !canCaptureSurvey(posthog)) return
-    const responseKey = getSurveyResponseKey(questionId)
-    const allResponses = { ...progress.responses, [responseKey]: res }
+    const answer = recordSurveyAnswer(progress, questionId, res, surveyQuestions[currentQuestionIndex])
     const nextStep = nextQuestion(survey, progress, originalQuestionIndex, res)
     const completed = nextStep === SurveyQuestionBranchingType.End
     const nextProgress: SurveyProgress = {
       ...progress,
-      responses: allResponses,
+      ...answer,
       questionIndex: completed ? currentQuestionIndex : nextStep,
-      questionSnapshots: {
-        ...progress.questionSnapshots,
-        [questionId]: surveyQuestions[currentQuestionIndex].question,
-      },
       surveyLanguage,
     }
     if (onProgressChange(nextProgress, completed) === false) return
     progressRef.current = nextProgress
     completedRef.current = completed
     setProgress(nextProgress)
-    onResponsesChange(allResponses)
+    onResponsesChange(answer.responses)
     if (survey.enable_partial_responses || completed) {
-      sendSurveyEvent(allResponses, survey, posthog, surveyLanguage, nextProgress, completed)
+      sendSurveyEvent(answer.responses, survey, posthog, surveyLanguage, nextProgress, completed)
     }
     if (completed) onSubmit()
   }
