@@ -2,7 +2,11 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { ListResourceTemplatesRequestSchema, ListResourcesRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import {
+  ListResourceTemplatesRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { instrument } from '../index'
 import { EventCapture, fakePostHog } from './test-utils'
@@ -18,12 +22,18 @@ import { EventCapture, fakePostHog } from './test-utils'
  *
  * A listing's result is captured as `$mcp_response` — names, uris, and uri
  * templates are discovery metadata, not the resource bodies a read returns.
+ *
+ * Reads are here for one reason the doubles cannot show: a resource URI is often
+ * authority-less (`resource:guide?token=x`), which the SDK accepts and which the
+ * sanitizer has to redact just like an `https://` address.
  */
 
 const PassthroughResultSchema = z.object({}).passthrough()
 
 const GUIDE = { name: 'guide', uri: 'file:///guide.md' }
 const USER_TEMPLATE = { name: 'user', uriTemplate: 'users://{id}' }
+const SECRET_URI = 'resource:guide?token=fakesecret'
+const REDACTED_URI = 'resource:guide?token=%5Bredacted%5D'
 
 function setupHighLevelServer(): McpServer {
   const server = new McpServer({ name: 'resource test', version: '1.0.0' })
@@ -33,6 +43,7 @@ function setupHighLevelServer(): McpServer {
     new ResourceTemplate(USER_TEMPLATE.uriTemplate, { list: undefined }),
     async (uri) => ({ contents: [{ uri: uri.href, text: 'user' }] })
   )
+  server.resource('secret', SECRET_URI, async (uri) => ({ contents: [{ uri: uri.href, text: 'ok' }] }))
   instrument(server, fakePostHog())
   return server
 }
@@ -42,6 +53,9 @@ function setupLowLevelServer(): Server {
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: [GUIDE] }))
   server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({
     resourceTemplates: [USER_TEMPLATE],
+  }))
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => ({
+    contents: [{ uri: request.params.uri, text: 'ok' }],
   }))
   instrument(server, fakePostHog())
   return server
@@ -63,7 +77,7 @@ async function connect(server: McpServer | Server) {
 describe.each([
   ['high-level McpServer', setupHighLevelServer],
   ['low-level Server', setupLowLevelServer],
-])('%s resource listings', (_label, setup) => {
+])('%s resource capture', (_label, setup) => {
   let eventCapture: EventCapture
 
   beforeEach(async () => {
@@ -91,6 +105,21 @@ describe.each([
       expect(props.$mcp_is_error).toBe(false)
       expect(props.$mcp_duration_ms).toBeGreaterThanOrEqual(0)
       expect(props.$mcp_resource_name).toBeUndefined()
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('redacts a credential in an authority-less resource uri', async () => {
+    const { client, cleanup } = await connect(setup())
+    try {
+      await client.request({ method: 'resources/read', params: { uri: SECRET_URI } }, PassthroughResultSchema)
+      await vi.waitFor(() => expect(eventCapture.findCapturesByEvent('$mcp_resource_read')).toHaveLength(1))
+
+      const props = eventCapture.findCapturesByEvent('$mcp_resource_read')[0].properties
+      expect(props.$mcp_resource_name).toBe(REDACTED_URI)
+      expect(props.$mcp_parameters.request.params.uri).toBe(REDACTED_URI)
+      expect(JSON.stringify(eventCapture.getCaptures())).not.toContain('fakesecret')
     } finally {
       await cleanup()
     }

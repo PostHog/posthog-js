@@ -25,7 +25,18 @@ const SENSITIVE_KEY_PATTERN =
 // excluding it truncated `https://example.com/o'reilly?token=x` at the path and
 // shipped the token in the clear. Only the characters that are never valid
 // unencoded in a URI are excluded.
-const URL_PATTERN = /[a-z][a-z0-9+.-]{0,63}:\/\/[^\s<>"]+/gi
+//
+// The authority is optional too. An MCP resource URI frequently has none
+// (`resource:guide?token=x`, `file:/guide.md`), and requiring `//` let those
+// through untouched; `[^\s<>"]+` absorbs a `//host` when there is one. The cost
+// is over-matching ordinary prose (`Error:foo`, `at12:30`, `C:\path`), which is
+// harmless: a match with nothing to redact is returned byte-for-byte, so the
+// text around it is never rewritten.
+const URL_PATTERN = /[a-z][a-z0-9+.-]{0,63}:[^\s<>"]+/gi
+/** The same pattern without `g`, for asking whether a value holds a URL at all. */
+const URL_PATTERN_ONCE = new RegExp(URL_PATTERN.source, 'i')
+/** A match that opens with a real authority, i.e. one the pattern matched before it went authority-less. */
+const URL_AUTHORITY_PATTERN = /^[a-z][a-z0-9+.-]{0,63}:\/\//i
 // The terminal class above also absorbs the prose punctuation that follows a URL
 // in a sentence, `'` included now that a URL can contain one. See
 // `splitTrailingPunctuation`.
@@ -143,7 +154,7 @@ function sanitizeUrlFieldValue(key: string, value: string, allowNestedUrls: bool
   if (shouldRedactQueryKey(key)) {
     return REDACTED_VALUE
   }
-  if (!value.includes('://')) {
+  if (!URL_PATTERN_ONCE.test(value)) {
     return value
   }
   // One level of nesting is the whole budget. Past it a URL-bearing value is
@@ -205,7 +216,12 @@ function splitTrailingPunctuation(value: string): { address: string; suffix: str
  */
 function sanitizeUrl(value: string, mode: UrlSanitizeMode): string {
   if (value.length > MAX_URL_LENGTH) {
-    return REDACTED_VALUE
+    // Too long to parse, so a credential inside it cannot be located. A match
+    // with an authority is an address and is dropped whole. An authority-less
+    // match this long is almost never a URI — it is a data URI or some other
+    // unspaced blob the authority-less pattern swept up — and destroying those
+    // costs more payload fidelity than the theoretical leak is worth.
+    return URL_AUTHORITY_PATTERN.test(value) ? REDACTED_VALUE : value
   }
   const { address, suffix } = mode.stripPunctuation ? splitTrailingPunctuation(value) : { address: value, suffix: '' }
   let url: URL

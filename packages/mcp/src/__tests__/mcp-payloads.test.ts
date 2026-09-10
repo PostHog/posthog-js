@@ -179,6 +179,10 @@ describe('URL credential redaction', () => {
       'https://example.com/guide?token=phx_EXAMPLEONLYFAKEVALUE00000000000',
       'https://example.com/guide?token=[redacted]',
     ],
+    // An MCP resource URI often has no authority, so requiring `//` let these
+    // through untouched. `new URL()` gives `file:` its empty authority back.
+    ['resource:guide?token=fakesecret', 'resource:guide?token=%5Bredacted%5D'],
+    ['file:/guide.md?token=fakesecret', 'file:///guide.md?token=%5Bredacted%5D'],
   ])('sanitizes %s', (value, expected) => {
     expect(sanitizeCapturedValue(value)).toBe(expected)
     expect(sanitizeCapturedValue(expected)).toBe(expected)
@@ -192,6 +196,17 @@ describe('URL credential redaction', () => {
     ['a `;`-separated query with no sensitive key', 'https://example.com/x?a=1;b=2'],
     ['a path containing an apostrophe', "https://example.com/o'reilly"],
     ['a whole-string URL whose trailing `.` is part of the path', 'https://example.com/x?a=b.'],
+    // Matching an optional authority sweeps up prose. That costs nothing: a
+    // match with nothing to redact comes back byte-for-byte.
+    ['a scheme-shaped word in a sentence', 'Error: see resource:guide.'],
+    ['a time that follows a word without a space', 'Meet at12:30 today'],
+    ['an authority-less URI with no query', 'resource:guide'],
+    ['a Windows path', 'C:\\Users\\bob\\file.txt'],
+    ['a log line with a level prefix and a timestamp', 'ERROR:root:started 2026-09-10T13:40:25.574Z'],
+    // Over `MAX_URL_LENGTH` an authority-less match is left alone rather than
+    // dropped: at that size it is a data URI or another unspaced blob, not an
+    // address, and the surrounding payload is worth more than the guess.
+    ['a data URI past the length bound', `data:application/octet-stream;base64,${'AAAA%ZZ'.repeat(1_500)}`],
   ])('leaves %s byte-for-byte', (_label, value) => {
     expect(sanitizeCapturedValue(value)).toBe(value)
   })
