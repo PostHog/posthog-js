@@ -293,6 +293,118 @@ describe('PostHog RN session replay event triggers', () => {
     expect(replay.startRecording).not.toHaveBeenCalled()
   })
 
+  it('defers a manual request until any trigger and the linked flag permit recording', async () => {
+    currentSessionRecording = { eventTriggers: ['checkout', '$screen'], linkedFlag: 'replay-flag', endpoint: '/s/' }
+    currentFlags = { 'replay-flag': false }
+    await warmup()
+
+    posthog = new PostHog('test-token', {
+      customStorage: mockStorage,
+      enableSessionReplay: false,
+      flushInterval: 0,
+    })
+    await posthog.ready()
+    await posthog.startSessionRecording()
+    expect(replay.start).not.toHaveBeenCalled()
+    expect(replay.startRecording).not.toHaveBeenCalled()
+
+    posthog.capture('other')
+    await wait(50)
+    expect(replay.start).not.toHaveBeenCalled()
+    await posthog.screen('Checkout')
+    await wait(50)
+    expect(replay.start).not.toHaveBeenCalled()
+
+    currentFlags = { 'replay-flag': true }
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+  })
+
+  it('stop cancels a queued deferred manual request with automatic replay disabled', async () => {
+    currentSessionRecording = { eventTriggers: ['checkout'], endpoint: '/s/' }
+    await warmup()
+    posthog = new PostHog('test-token', {
+      customStorage: mockStorage,
+      enableSessionReplay: false,
+      flushInterval: 0,
+    })
+    await posthog.ready()
+    await Promise.all([posthog.startSessionRecording(), posthog.stopSessionRecording()])
+    posthog.capture('checkout')
+    await posthog.reloadFeatureFlagsAsync()
+    await wait(50)
+    expect(replay.start).not.toHaveBeenCalled()
+    expect(replay.startRecording).not.toHaveBeenCalled()
+
+    await posthog.startSessionRecording()
+    expect(replay.start).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not restart explicitly stopped recording on another matching event in the same session', async () => {
+    currentSessionRecording = { eventTriggers: ['checkout'], endpoint: '/s/' }
+    await warmup()
+    posthog = newPostHog()
+    await posthog.ready()
+    await wait(50)
+    posthog.capture('checkout')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+
+    await posthog.stopSessionRecording()
+    posthog.capture('checkout')
+    await wait(50)
+    expect(replay.stopRecording).toHaveBeenCalledTimes(1)
+    expect(replay.startRecording).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { name: 'with event triggers', eventTriggers: ['checkout'] },
+    { name: 'without event triggers', eventTriggers: [] },
+  ])('keeps a stopped manual recording disabled after rotation ($name)', async ({ eventTriggers }) => {
+    currentSessionRecording = { eventTriggers, endpoint: '/s/' }
+    await warmup()
+    posthog = new PostHog('test-token', {
+      customStorage: mockStorage,
+      enableSessionReplay: false,
+      flushInterval: 0,
+    })
+    await posthog.ready()
+    await posthog.startSessionRecording()
+    posthog.capture('checkout')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    const starts = replay.startRecording.mock.calls.length
+    const previousSession = posthog.getSessionId()
+
+    await posthog.stopSessionRecording()
+    await wait(50)
+    const stops = replay.stopRecording.mock.calls.length
+    expect(stops).toBeGreaterThan(0)
+    posthog.resetSessionId()
+    expect(posthog.getSessionId()).not.toBe(previousSession)
+    await waitForExpect(2000, () => expect(replay.stopRecording.mock.calls.length).toBeGreaterThan(stops))
+    posthog.capture('checkout')
+    await wait(50)
+    expect(replay.start).toHaveBeenCalledTimes(1)
+    expect(replay.startRecording).toHaveBeenCalledTimes(starts)
+  })
+
+  it('manual start of a new session waits for a new matching event', async () => {
+    currentSessionRecording = { eventTriggers: ['checkout'], endpoint: '/s/' }
+    await warmup()
+    posthog = newPostHog()
+    await posthog.ready()
+    await wait(50)
+    posthog.capture('checkout')
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+    const previousSession = posthog.getSessionId()
+
+    await posthog.startSessionRecording(false)
+    expect(posthog.getSessionId()).not.toBe(previousSession)
+    expect(replay.stopRecording).toHaveBeenCalledTimes(1)
+    expect(replay.startRecording).not.toHaveBeenCalled()
+    posthog.capture('checkout')
+    await waitForExpect(2000, () => expect(replay.startRecording).toHaveBeenCalledTimes(1))
+  })
+
   it('pins the persisted-property key (renaming it would orphan activation across app upgrades)', () => {
     // This literal is the on-disk storage key for trigger activation. Changing it silently strands
     // every existing user's persisted activation on upgrade, so the value is part of the contract.
