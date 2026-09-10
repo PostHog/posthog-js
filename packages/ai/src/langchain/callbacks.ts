@@ -714,12 +714,12 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
 
   // Each langchain adapter reports the served tier in a different place.
   private _extractServedServiceTier(output: LLMResult): string | undefined {
-    const gen = output.generations?.[output.generations.length - 1]?.[0]
-    const servedTier =
-      (gen as any)?.message?.response_metadata?.service_tier ??
+    const gen = output.generations?.[output.generations.length - 1]?.[0] as any
+    const tier =
+      gen?.message?.response_metadata?.service_tier ??
       gen?.generationInfo?.service_tier ??
-      (output.llmOutput as Record<string, any> | undefined)?.service_tier
-    return servedTier != null ? String(servedTier) : undefined
+      (output.llmOutput as any)?.service_tier
+    return tier == null ? undefined : String(tier)
   }
 
   private _extractStopReason(output: LLMResult): string | undefined {
