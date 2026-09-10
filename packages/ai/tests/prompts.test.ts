@@ -1361,6 +1361,15 @@ describe('Prompts', () => {
       expect(consoleWarnSpy).toHaveBeenCalledTimes(1)
     })
 
+    it('throws on a malformed row instead of skipping it', async () => {
+      const malformed = { ...labeledRow('prompt-a'), prompt: 42 }
+      mockFetch.mockResolvedValueOnce(listResponse([malformed, labeledRow('prompt-b')]))
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+
+      await expect(prompts.getAll({ label: 'production' })).rejects.toThrow(/Invalid response format/)
+    })
+
     it('refuses a pagination link off the configured host', async () => {
       mockFetch.mockResolvedValueOnce(listResponse([labeledRow('prompt-a')], 'https://attacker.example.com/collect'))
 

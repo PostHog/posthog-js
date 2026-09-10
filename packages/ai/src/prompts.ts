@@ -273,9 +273,11 @@ export class Prompts {
     const skipped: string[] = []
 
     for (const row of rows) {
-      if (!isPromptApiResponse(row) || !rowResolvesLabel(row, label)) {
-        const name = typeof row === 'object' && row !== null ? (row as Record<string, unknown>).name : undefined
-        skipped.push(typeof name === 'string' ? name : '?')
+      if (!isPromptApiResponse(row)) {
+        throw new Error(`[PostHog Prompts] Invalid response format for prompts with label "${label}"`)
+      }
+      if (!rowResolvesLabel(row, label)) {
+        skipped.push(row.name)
         continue
       }
 
