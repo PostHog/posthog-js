@@ -712,15 +712,9 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     return sanitizeLangChain(messageDict, this.client) as Record<string, any>
   }
 
+  // Each langchain adapter reports the served tier in a different place.
   private _extractServedServiceTier(output: LLMResult): string | undefined {
-    if (!output.generations || !Array.isArray(output.generations)) {
-      return undefined
-    }
-    // The Responses adapter stores the tier on the message's response_metadata (streaming and
-    // not), the Completions adapter in generationInfo on the final streamed chunk; llmOutput is
-    // where the Python adapter puts it, kept as a fallback.
-    const lastGeneration = output.generations[output.generations.length - 1]
-    const gen = Array.isArray(lastGeneration) ? lastGeneration[0] : undefined
+    const gen = output.generations?.[output.generations.length - 1]?.[0]
     const servedTier =
       (gen as any)?.message?.response_metadata?.service_tier ??
       gen?.generationInfo?.service_tier ??
