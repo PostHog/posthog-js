@@ -252,6 +252,15 @@ describe('URL credential redaction', () => {
       'https://example.com/?q=see%2Chttps%3A%2F%2F%255Bredacted%255D%40x.test%2Fdoc',
     ],
     ['https://host/x?token=foo%20https://secret.test/private', 'https://host/x?token=%5Bredacted%5D'],
+    // A URL has one query delimiter, one fragment delimiter, and one between the
+    // fragment's head and tail. Any other `?` is text inside a value, so the
+    // second one here belongs to the token rather than opening a new field.
+    ['https://example.com/?token=prefix?https://secret.example/private', 'https://example.com/?token=%5Bredacted%5D'],
+    // The fragment's own delimiter still counts, so this address is adjacent.
+    [
+      'https://example.com/?a=1#b?https://fakeuser:fakepass@x.test/doc',
+      'https://example.com/?a=1#b?https://%5Bredacted%5D@x.test/doc',
+    ],
     // Value position exists only inside the fields. Before the first `?`/`#` an
     // `=` is a path character, so these two are adjacent addresses, not fields.
     ['https://host/a=b/c,https://fakeuser:fakepass@x.test/doc', 'https://host/a=b/c,https://%5Bredacted%5D@x.test/doc'],

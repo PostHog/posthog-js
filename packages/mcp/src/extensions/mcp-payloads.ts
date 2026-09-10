@@ -41,8 +41,8 @@ const URL_AUTHORITY_SEARCH = /[a-z][a-z0-9+.-]{0,63}:\/\//i
 const URL_AUTHORITY_PATTERN = new RegExp(`^${URL_AUTHORITY_SEARCH.source}`, 'i')
 /** Every authority start in a value, in order. */
 const URL_AUTHORITY_SEARCH_ALL = new RegExp(URL_AUTHORITY_SEARCH.source, 'gi')
-/** The characters that say what an authority is sitting in. */
-const URL_STRUCTURE_CHARACTERS = '=&;?#'
+/** The field separators. `?` and `#` are structural only as delimiters — see {@link isStructural}. */
+const URL_FIELD_CHARACTERS = '=&;'
 // The terminal class above also absorbs the prose punctuation that follows a URL
 // in a sentence, `'` included now that a URL can contain one. See
 // `splitTrailingPunctuation`.
@@ -287,9 +287,10 @@ function sanitizeFragmentText(text: string, allowNestedUrls: boolean): string {
  *
  * An authority is in *value position* — left alone, because the field pass
  * already gives it the nested pass — when a field name's `=` is the nearest
- * structural character behind it. That only counts inside the fields region:
- * before the first `?`/`#` an `=` is a path character, so
- * `…/redirect=https://user:pw@host` is two addresses rather than one field.
+ * structural character behind it. Structural means a field separator (`=`, `&`,
+ * `;`) or one of the URL's three delimiters; see {@link isDelimiter}. Before any
+ * delimiter no `=` has been seen, so `…/redirect=https://user:pw@host` is two
+ * addresses rather than one field.
  *
  * Decided in one forward walk, not a backward scan per authority. The scan was
  * quadratic on a value that opens its fields once and then runs thousands of
@@ -298,23 +299,48 @@ function sanitizeFragmentText(text: string, allowNestedUrls: boolean): string {
 function findEmbeddedAuthorityIndexes(value: string): number[] {
   const starts = [...value.matchAll(URL_AUTHORITY_SEARCH_ALL)].map((match) => match.index)
   const indexes: number[] = []
+  const delimiters = { query: false, fragment: false, fragmentQuery: false }
   let pending = 0
   let inFields = false
   let lastStructural = ''
   for (let cursor = 0; cursor < value.length && pending < starts.length; cursor++) {
     if (starts[pending] === cursor) {
-      if (cursor > 0 && !(inFields && lastStructural === '=')) {
+      if (cursor > 0 && lastStructural !== '=') {
         indexes.push(cursor)
       }
       pending++
     }
     const character = value[cursor]
-    if (URL_STRUCTURE_CHARACTERS.includes(character)) {
+    if (isDelimiter(character, delimiters)) {
       lastStructural = character
-      inFields = inFields || character === '?' || character === '#'
+      inFields = true
+    } else if (inFields && URL_FIELD_CHARACTERS.includes(character)) {
+      lastStructural = character
     }
   }
   return indexes
+}
+
+/**
+ * Whether this `?` or `#` is one of a URL's three delimiters, consuming it if so.
+ *
+ * A URL has exactly one query delimiter, one fragment delimiter, and — matching
+ * how the fragment is split — one delimiter between the fragment's own head and
+ * tail. Every other `?` or `#` is ordinary text inside a value, and reading one
+ * as structural would cut `?token=prefix?https://secret/…` in half at a `?` that
+ * belongs to the token.
+ */
+function isDelimiter(character: string, seen: { query: boolean; fragment: boolean; fragmentQuery: boolean }): boolean {
+  if (character === '#') {
+    return seen.fragment ? false : (seen.fragment = true)
+  }
+  if (character !== '?') {
+    return false
+  }
+  if (seen.fragment) {
+    return seen.fragmentQuery ? false : (seen.fragmentQuery = true)
+  }
+  return seen.query ? false : (seen.query = true)
 }
 
 /**
