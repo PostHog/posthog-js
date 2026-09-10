@@ -46,6 +46,11 @@ jobs:
             name: IE11
 
     steps:
+      - name: Audit runner egress
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Skip TestCafe tests
         if: ${{ github.event.pull_request.head.repo.full_name != github.repository || needs.affected.outputs.is-affected != 'true' }}
         run: echo "Skipping ${{ matrix.name }} TestCafe tests because the browser package is unaffected or required secrets are unavailable for fork PRs."
