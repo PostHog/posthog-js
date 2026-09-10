@@ -1,4 +1,5 @@
 import { FetchLike } from '../types'
+import { isString } from './type-utils'
 
 export * from './bot-detection'
 export * from './browser-utils'
@@ -58,6 +59,11 @@ function isEmpty(truthyValue: string): boolean {
     return true
   }
   return false
+}
+
+/** Detects HTTP(S) URLs and explicit relative paths by prefix; does not validate URL syntax. */
+export function isUrl(value: unknown): value is string {
+  return isString(value) && /^(https?:\/\/|\/|\.\.?\/)/i.test(value.trim())
 }
 
 export function removeTrailingSlash(url: string): string {

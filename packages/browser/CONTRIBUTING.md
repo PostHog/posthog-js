@@ -4,13 +4,22 @@ This guide covers package-specific development for `posthog-js` in `packages/bro
 
 For repository-wide setup, see the root [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
+## Development
+
+After the initial build, run `pnpm dev` (or `pnpm start`) in this package to watch source changes. This runs TypeScript emission, Rolldown runtime bundling and Rolldown declaration bundling in parallel, using the same bundler configuration as production. Declaration bundling consumes the existing `lib/src/**/*.d.ts` files with `dtsInput: true`; TypeScript remains responsible for semantic checking and declaration generation. The build also preserves the unbundled declarations under `dist/src`.
+
+Modern Rolldown bundles use its built-in Oxc transformer with an ES2015 syntax ceiling and the existing minimum browser versions. Babel remains for `array.full.es5.js` (Oxc cannot emit ES5) and the three slim/extension entries: replacing their transformer currently loses source-map names required by the private-property ABI check. TestCafe also still uses Babel. Terser remains the minifier for every runtime bundle.
+
+React bindings are built separately: run `pnpm --filter=@posthog/react dev` from the repository root when working on them.
+
+To test watch mode on Linux or macOS, run `pnpm turbo --filter=posthog-js build` followed by `pnpm test:dev-watch` from the repository root. The test temporarily edits browser and record entry points, verifies runtime and declaration rebuilds, then restores the source files and stops the watchers. Run it in an idle checkout without other builds or watchers. CI runs it after the unit tests.
+
 ## Testing
 
 > [!NOTE]
 > Run `pnpm build` at least once before running tests.
 
 - Unit tests: run `pnpm test`.
-- Cypress: run `pnpm start` to have a test server running and separately `pnpm cypress` to launch Cypress test engine.
 - Playwright: run e.g. `pnpm exec playwright test --ui --project webkit --project firefox` to run with UI and in webkit and firefox.
 
 ### Comparing `array.js` bundle size
@@ -21,7 +30,7 @@ Run `pnpm bundle-size:array` from the repository root for a fast comparison of t
 pnpm bundle-size:array main
 ```
 
-The script bundles both versions with the same esbuild settings and reports minified, gzip, and Brotli changes. It is intended for quick percentage comparisons; the production Rollup build will have different absolute sizes.
+The script bundles both versions with the same esbuild settings and reports minified, gzip, and Brotli changes. It is intended for quick percentage comparisons; the production Rolldown build will have different absolute sizes.
 
 ### Running TestCafe E2E tests with BrowserStack
 
@@ -31,7 +40,7 @@ You'll also need a [BrowserStack](https://www.browserstack.com/) account. If you
 
 After all this, run:
 
-1. Optional: rebuild `array.js` on changes: `nodemon -w src/ --exec bash -c "pnpm build-rollup"`.
+1. Optional: rebuild browser bundles on changes: `pnpm dev`.
 2. Export BrowserStack credentials: `export BROWSERSTACK_USERNAME=xxx BROWSERSTACK_ACCESS_KEY=xxx`.
 3. Run tests: `npx testcafe "browserstack:ie" testcafe/e2e.spec.js`.
 

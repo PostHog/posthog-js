@@ -1,6 +1,7 @@
 import {
   snapshot,
   type MaskInputOptions,
+  type Mirror,
   slimDOMDefaults,
   createMirror,
   takeDeferredStylesheetLinks,
@@ -16,6 +17,7 @@ import {
 } from './observer';
 import {
   on,
+  callAllSafely,
   callSafely,
   getWindowWidth,
   getWindowHeight,
@@ -1116,7 +1118,7 @@ function record<T = eventWithTime>(
         // abort the teardown below and leak observers and listeners
       }
       deferredStylesheetInlining = undefined;
-      handlers.forEach((h) => callSafely(h));
+      callAllSafely(handlers);
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();
       iframeManager.destroy();
@@ -1133,7 +1135,16 @@ function record<T = eventWithTime>(
   }
 }
 
-record.addCustomEvent = <T>(tag: string, payload: T) => {
+// Describe the callable API's attached properties without emitting a runtime namespace.
+// oxlint-disable-next-line typescript/no-namespace
+declare namespace record {
+  var addCustomEvent: <T>(tag: string, payload: T) => void;
+  var freezePage: () => void;
+  var takeFullSnapshot: (isCheckout?: boolean) => void;
+  var mirror: Mirror;
+}
+
+record.addCustomEvent = (<T>(tag: string, payload: T) => {
   if (!recording) {
     throw new Error('please add custom event after start recording');
   }
@@ -1144,18 +1155,18 @@ record.addCustomEvent = <T>(tag: string, payload: T) => {
       payload,
     },
   });
-};
+}) satisfies typeof record.addCustomEvent;
 
-record.freezePage = () => {
+record.freezePage = (() => {
   mutationBuffers.forEach((buf) => buf.freeze());
-};
+}) satisfies typeof record.freezePage;
 
-record.takeFullSnapshot = (isCheckout?: boolean) => {
+record.takeFullSnapshot = ((isCheckout?: boolean) => {
   if (!recording) {
     throw new Error('please take full snapshot after start recording');
   }
   takeFullSnapshot(isCheckout);
-};
+}) satisfies typeof record.takeFullSnapshot;
 
 record.mirror = mirror;
 

@@ -327,7 +327,11 @@ export class PostHog extends PostHogCore {
     this._isInitialized = false
     this._persistence = options?.persistence ?? 'file'
     this._disableSurveys = options?.disableSurveys ?? false
-    this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger)
+    this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger, async () => {
+      // captureException can enqueue through wrap() after asynchronous storage initialization.
+      await this._initPromise
+      await this._eventsStorage.waitForPersist()
+    })
     this._setDefaultPersonProperties = options?.setDefaultPersonProperties ?? true
     this._overrideDisplayLanguage = options?.overrideDisplayLanguage?.trim() || null
     this._requestHeaders = options?.requestHeaders ?? {}
@@ -618,7 +622,7 @@ export class PostHog extends PostHogCore {
    * SLA so a hung storage backend can't run past it.
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
-    this._errorTracking.clearExceptionSteps()
+    this._errorTracking.shutdown()
     const start = Date.now()
     const logsBudgetMs = Math.min(shutdownTimeoutMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
     try {
@@ -1463,7 +1467,9 @@ export class PostHog extends PostHogCore {
    *
    * @remarks
    * This function requires a name. You may also pass in an optional properties object.
-   * Screen name is automatically registered for the session and will be included in subsequent events.
+   * Once initialized, the screen name is registered immediately for subsequent events, including exceptions.
+   * During initialization, screen registration and event capture retain their call order.
+   * Exceptions use the last recorded screen, not a destination that has not yet been tracked.
    *
    * {@label Capture}
    *
@@ -1489,8 +1495,10 @@ export class PostHog extends PostHogCore {
    * @param options - Optional capture options
    */
   async screen(name: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): Promise<void> {
-    await this._initPromise
-    // Screen name is good to know for all other subsequent events
+    // Keep queued captures in order during initialization, without yielding once the client is ready.
+    if (!this._isInitialized) {
+      await this._initPromise
+    }
     this.registerForSession({
       $screen_name: name,
     })

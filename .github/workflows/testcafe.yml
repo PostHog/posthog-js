@@ -8,8 +8,7 @@ env:
   BROWSERSTACK_USE_AUTOMATE: "true"
   BROWSERSTACK_PROJECT_NAME: "PostHog JS SDK"
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -17,6 +16,8 @@ concurrency:
 
 jobs:
   affected:
+    permissions:
+      contents: read
     uses: ./.github/workflows/check-affected.yml
     with:
       package-name: posthog-js
@@ -28,6 +29,8 @@ jobs:
         .github/actions/setup/action.yaml
 
   browsers:
+    permissions:
+      contents: read
     name: Test on ${{ matrix.name }}
     needs: affected
     runs-on: ubuntu-22.04
@@ -46,28 +49,46 @@ jobs:
             name: IE11
 
     steps:
-      - name: Skip fork PR
-        if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
-        run: echo "Skipping ${{ matrix.name }} TestCafe tests for fork PRs because required BrowserStack/PostHog secrets are unavailable."
+      - name: Skip TestCafe tests
+        if: ${{ github.event.pull_request.head.repo.full_name != github.repository || needs.affected.outputs.is-affected != 'true' }}
+        run: echo "Skipping ${{ matrix.name }} TestCafe tests because the browser package is unaffected or required secrets are unavailable for fork PRs."
+
+      - name: Check TestCafe credentials
+        id: credentials
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
+        shell: bash
+        run: |
+          missing=()
+          for name in BROWSERSTACK_USERNAME BROWSERSTACK_ACCESS_KEY POSTHOG_PROJECT_API_KEY POSTHOG_PERSONAL_API_KEY; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            echo "::notice::Skipping TestCafe tests; missing required environment variables: ${missing[*]}"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
+        if: steps.credentials.outputs.available == 'true'
 
       - uses: ./.github/actions/setup
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
+        if: steps.credentials.outputs.available == 'true'
         with:
           build: false
 
       - name: Build packages
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
+        if: steps.credentials.outputs.available == 'true'
         run: pnpm build
 
       - name: Serve static files
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
+        if: steps.credentials.outputs.available == 'true'
         run: python -m http.server 8080 &
 
       - name: Run ${{ matrix.name }} test
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
+        if: steps.credentials.outputs.available == 'true'
         timeout-minutes: 10
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -105,7 +126,7 @@ jobs:
         working-directory: packages/browser
 
       - name: Check ${{ matrix.name }} events
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
+        if: steps.credentials.outputs.available == 'true'
         timeout-minutes: 30
         run: pnpm check-testcafe-results
         working-directory: packages/browser

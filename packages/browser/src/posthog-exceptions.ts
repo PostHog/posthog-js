@@ -14,9 +14,10 @@ const logger = createLogger('[Error tracking]')
 // exception came from an extension (see _isExtensionException).
 const MASKED_URL_PREFIX = 'webkit-masked-url:'
 
-// Safari's masked URL is ambiguous, so require a value that identifies the reported extension
-// failure before filtering a stack made entirely of masked frames.
-const MASKED_EXTENSION_EXCEPTION_VALUE = 'isolatedAPI.contexts.topHostname'
+const MASKED_EXTENSION_EXCEPTION_VALUE = [
+    { value: 'isolatedAPI.contexts.topHostname', exact: false },
+    { value: 'No response from target', exact: true },
+]
 
 // Browser extensions serve their content scripts from these schemes. `safari-extension:` and
 // `safari-web-extension:` are synthesised by the stack parser (see extractSafariExtensionDetails)
@@ -308,17 +309,22 @@ export class PostHogExceptions implements Extension {
 
         // Safari also masks blob, eval'd, and injected application code, so a masked URL alone does
         // not prove the exception came from an extension. For an all-masked stack, require a known
-        // extension-only value and no remaining page frame. Ignore masked frames when checking for
-        // page code because the Sentry integration may forward them with `in_app: true`.
+        // extension-only signature and no remaining page frame. Ignore masked frames when checking
+        // for page code because the Sentry integration may forward them with `in_app: true`.
         const onlyMaskedExtensionFrames = extensionFrames.every(
             ({ filename }) => !!filename && filename.startsWith(MASKED_URL_PREFIX)
         )
         if (onlyMaskedExtensionFrames) {
-            const hasKnownExtensionValue = exceptionList.some(
-                ({ value }) => isString(value) && value.includes(MASKED_EXTENSION_EXCEPTION_VALUE)
+            const hasKnownExtensionSignature = exceptionList.some(
+                ({ type, value }) =>
+                    type === 'NoResponse' ||
+                    (isString(value) &&
+                        MASKED_EXTENSION_EXCEPTION_VALUE.some(({ value: signature, exact }) =>
+                            exact ? value === signature : value.includes(signature)
+                        ))
             )
             return (
-                hasKnownExtensionValue &&
+                hasKnownExtensionSignature &&
                 !frames.some(({ in_app, filename }) => in_app && !filename?.startsWith(MASKED_URL_PREFIX))
             )
         }

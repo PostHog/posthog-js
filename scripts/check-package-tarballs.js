@@ -107,6 +107,15 @@ for (const tarball of tarballs) {
         }
 
         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+        if (packageJson.name === '@posthog/core') {
+            const licensePath = path.join(packageRoot, 'LICENSE')
+            if (!fs.existsSync(licensePath)) {
+                errors.add(`${tarball}: missing LICENSE`)
+            } else if (!fs.readFileSync(licensePath).equals(fs.readFileSync(path.join(repoRoot, 'LICENSE')))) {
+                errors.add(`${tarball}: LICENSE does not match the root LICENSE`)
+            }
+        }
+
         const packageTargets = new Set()
         collectPackageTargets(packageJson.exports, packageTargets)
         collectPackageTargets(packageJson.bin, packageTargets)
