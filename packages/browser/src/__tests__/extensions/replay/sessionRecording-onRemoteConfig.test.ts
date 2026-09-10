@@ -758,6 +758,26 @@ describe('SessionRecording', () => {
             expect(reportedReasons()).toEqual([])
         })
 
+        it('does not read a corrupt persisted config as a project disable', () => {
+            // a legacy or external write can leave a value replay cannot parse. the other read paths
+            // for this key already ignore it, and it says nothing about what the project chose
+            posthog.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: '{not json' })
+
+            sessionRecording.onRemoteConfig({ ok: false, error: 'failed' } as unknown as RemoteConfigResult)
+
+            expect(reportedReasons()).toEqual([['remote_config_not_received']])
+        })
+
+        it('names a remote disable stored as serialized JSON', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: JSON.stringify({ enabled: false, endpoint: '/s/' }),
+            })
+
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(reportedReasons()).toEqual([['remote_config_disabled']])
+        })
+
         it('drops a reason the session carried over from a previous page load', () => {
             // a same-tab reload keeps the PostHog session and restores its properties, but builds a
             // brand new recorder. the reason stored before the reload must not stay on a session

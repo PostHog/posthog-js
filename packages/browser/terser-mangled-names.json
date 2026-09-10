@@ -622,6 +622,7 @@
         "_persistRemoteConfig",
         "_persistSessionRegisteredPropKeys",
         "_persistedCaptureHint",
+        "_persistedRemoteConfig",
         "_persistence",
         "_persistentStore",
         "_personProcessingSetOncePropertiesSent",

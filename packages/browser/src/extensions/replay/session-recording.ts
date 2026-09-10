@@ -22,7 +22,7 @@ import {
 } from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
 
-import { isArray, isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
+import { isArray, isNullish, isNumber, isObject, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
@@ -153,13 +153,35 @@ export class SessionRecording implements Extension {
         if (this._instance.consent.isOptedOut()) {
             reasons.push('consent_opted_out')
         }
-        const remoteConfig = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+        const remoteConfig = this._persistedRemoteConfig
         if (remoteConfig && !remoteConfig.enabled) {
             reasons.push('remote_config_disabled')
         } else if (!remoteConfig && this._remoteConfigLoadFailed) {
             reasons.push('remote_config_not_received')
         }
         return reasons
+    }
+
+    /**
+     * Usually an object the SDK wrote, but a legacy or external write can leave a serialized string
+     * or a value that is not a config at all, so resolve it the way the sibling read paths
+     * (`_isRemoteConfigFresh`, and the recorder's own `_remoteConfig`) already do. A value we cannot
+     * read says nothing about what the project chose, and must not be reported as a server disable.
+     * `_isRemoteConfigFresh` warns about a corrupt value on the same start path, so this read stays
+     * quiet instead of repeating that once per report.
+     */
+    private get _persistedRemoteConfig(): SessionRecordingPersistedConfig | undefined {
+        const persistedConfig: any = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+        if (!persistedConfig) {
+            return undefined
+        }
+        let config: SessionRecordingPersistedConfig
+        try {
+            config = isObject(persistedConfig) ? persistedConfig : JSON.parse(persistedConfig)
+        } catch {
+            return undefined
+        }
+        return isObject(config) ? config : undefined
     }
 
     private get _isRecordingEnabled() {
