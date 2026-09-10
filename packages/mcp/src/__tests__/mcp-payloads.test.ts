@@ -114,6 +114,9 @@ describe('URL credential redaction', () => {
     // as fields the whole thing is one key named `/callback?token`, so the route
     // is kept verbatim and only what follows the `?` is read as fields.
     ['https://example.com/#/callback?token=fakesecret', 'https://example.com/#/callback?token=%5Bredacted%5D'],
+    // A fragment field list can be written with a leading slash, so `/` counts as
+    // a segment separator in a key name. Re-serializing percent-encodes it.
+    ['https://example.com/#/token=fakesecret', 'https://example.com/#%2Ftoken=%5Bredacted%5D'],
     // A route can carry an `=` of its own. Read as fields this would be one key
     // named `/docs/id`, with the token inside its value and nothing to match.
     ['https://example.com/#/docs/id=1?token=fakesecret', 'https://example.com/#/docs/id=1?token=%5Bredacted%5D'],

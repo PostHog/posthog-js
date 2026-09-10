@@ -51,13 +51,15 @@ const URL_TRAILING_PUNCTUATION = ".,;:!?)]}'"
 const URL_FIELD_SEPARATOR_PATTERN = /[;&]/g
 const MAX_URL_LENGTH = 8192
 const MAX_URL_QUERY_FIELDS = 128
-// A query key is sensitive when any `-`/`_`/`.`-delimited segment names a
+// A query key is sensitive when any `-`/`_`/`.`/`/`-delimited segment names a
 // credential, so compound names (`private_token`, `oauth_signature`,
 // `subscription-key`, `X-Amz-Security-Token`, `Key-Pair-Id`) are covered without
-// enumerating every vendor's spelling. Over-redacting a benign `sort_key` is the
-// accepted trade for an analytics payload.
+// enumerating every vendor's spelling. `/` is a separator too, because a
+// fragment's field list can be written `#/token=…` and the leading slash would
+// otherwise hide the name. Over-redacting a benign `sort_key` — or `sort/key` —
+// is the accepted trade for an analytics payload.
 const SENSITIVE_QUERY_KEY_SEGMENT_PATTERN =
-  /(^|[-_.])(auth|token|secret|password|passwd|pwd|credential|signature|sig|key|hmac|sas|bearer|jwt|session|sessionid)([-_.]|$)/i
+  /(^|[-_./])(auth|token|secret|password|passwd|pwd|credential|signature|sig|key|hmac|sas|bearer|jwt|session|sessionid)([-_./]|$)/i
 // `code` — the OAuth authorization code — is matched only as a whole key: as a
 // segment it would eat `country_code`, `zip_code`, and `lang_code`.
 const SENSITIVE_QUERY_KEY_EXACT_PATTERN = /^(code|AWSAccessKeyId|GoogleAccessId|Policy)$/i
