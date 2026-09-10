@@ -215,13 +215,13 @@ function splitTrailingPunctuation(value: string): { address: string; suffix: str
  * level deep.
  */
 function sanitizeUrl(value: string, mode: UrlSanitizeMode): string {
-  if (value.length > MAX_URL_LENGTH) {
-    // Too long to parse, so a credential inside it cannot be located. A match
-    // with an authority is an address and is dropped whole. An authority-less
-    // match this long is almost never a URI — it is a data URI or some other
-    // unspaced blob the authority-less pattern swept up — and destroying those
-    // costs more payload fidelity than the theoretical leak is worth.
-    return URL_AUTHORITY_PATTERN.test(value) ? REDACTED_VALUE : value
+  // The length bound caps the work an attacker-shaped address can force, so it
+  // only applies to a match that has an authority. A long authority-less match
+  // is usually a data URI; it is parsed like any other, which is linear in
+  // `new URL()` and still capped by the field bound below, and comes back
+  // byte-for-byte when it holds nothing to redact.
+  if (value.length > MAX_URL_LENGTH && URL_AUTHORITY_PATTERN.test(value)) {
+    return REDACTED_VALUE
   }
   const { address, suffix } = mode.stripPunctuation ? splitTrailingPunctuation(value) : { address: value, suffix: '' }
   let url: URL

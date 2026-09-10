@@ -183,6 +183,8 @@ describe('URL credential redaction', () => {
     // through untouched. `new URL()` gives `file:` its empty authority back.
     ['resource:guide?token=fakesecret', 'resource:guide?token=%5Bredacted%5D'],
     ['file:/guide.md?token=fakesecret', 'file:///guide.md?token=%5Bredacted%5D'],
+    // Past the length bound too: it only caps a match with an authority.
+    [`resource:${'a'.repeat(9_000)}?token=fakesecret`, `resource:${'a'.repeat(9_000)}?token=%5Bredacted%5D`],
   ])('sanitizes %s', (value, expected) => {
     expect(sanitizeCapturedValue(value)).toBe(expected)
     expect(sanitizeCapturedValue(expected)).toBe(expected)
@@ -203,9 +205,9 @@ describe('URL credential redaction', () => {
     ['an authority-less URI with no query', 'resource:guide'],
     ['a Windows path', 'C:\\Users\\bob\\file.txt'],
     ['a log line with a level prefix and a timestamp', 'ERROR:root:started 2026-09-10T13:40:25.574Z'],
-    // Over `MAX_URL_LENGTH` an authority-less match is left alone rather than
-    // dropped: at that size it is a data URI or another unspaced blob, not an
-    // address, and the surrounding payload is worth more than the guess.
+    // The length bound caps authority-bearing addresses only, so a long
+    // authority-less match is still parsed — and a data URI holds nothing to
+    // redact, so it comes back byte-for-byte instead of being dropped.
     ['a data URI past the length bound', `data:application/octet-stream;base64,${'AAAA%ZZ'.repeat(1_500)}`],
   ])('leaves %s byte-for-byte', (_label, value) => {
     expect(sanitizeCapturedValue(value)).toBe(value)
