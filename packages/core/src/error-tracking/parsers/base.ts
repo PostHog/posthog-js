@@ -23,7 +23,18 @@ const URL_SCHEME = /^([a-z][a-z0-9.+-]+):/i
 // Chromium serves them from `chrome-extension://`, and Android in-app browsers serve their native
 // bridge from schemes such as `iabjs://`. Listing every injector's scheme never keeps up with the
 // next one, so accept the schemes an app is served over and reject the rest.
-const APP_URL_SCHEMES = ['http', 'https', 'file', 'blob', 'app', 'capacitor', 'ionic', 'webpack', 'webpack-internal']
+const APP_URL_SCHEMES = [
+  'http',
+  'https',
+  'file',
+  'blob',
+  'app',
+  'capacitor',
+  'ionic',
+  'webpack',
+  'webpack-internal',
+  'ng',
+]
 
 // Is this filename a script the app itself loaded? A filename with no scheme is one: React Native
 // names its own bundle `index.android.bundle`, and a bundler can report a bare path.

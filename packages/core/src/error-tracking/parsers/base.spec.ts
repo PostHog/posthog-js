@@ -1,9 +1,7 @@
 import { createFrame } from './base'
 import { createDefaultStackParser } from './index'
 
-describe('createFrame', () => {
-  const platform = 'web:javascript'
-
+describe.each(['web:javascript', 'hermes'] as const)('createFrame (%s)', (platform) => {
   it('marks ordinary browser frames as in_app', () => {
     const frame = createFrame(platform, 'https://example.com/app.js', 'doThing', 1, 2)
     expect(frame.in_app).toBe(true)
@@ -15,6 +13,9 @@ describe('createFrame', () => {
     ['a Chromium extension content script', 'chrome-extension://abcdef/content.js'],
     ['a Firefox extension content script', 'moz-extension://abcdef/content.js'],
     ['a Safari extension, which the parser prefixes with a bare scheme', 'safari-extension:abcdef/content.js'],
+    ['a Safari web extension', 'safari-web-extension:abcdef/content.js'],
+    ['an extension with a mixed-case scheme', 'CHROME-Extension://abcdef/content.js'],
+    ['an unknown container scheme', 'other-bridge://injected.js'],
     ['an inline data URL', 'data:text/javascript,void 0'],
   ])('does not mark a frame the container injected as in_app: %s', (_name, filename) => {
     const frame = createFrame(platform, filename, 'doThing', 1, 2)
@@ -26,10 +27,16 @@ describe('createFrame', () => {
     ['a Cordova or Electron app served from disk', 'file:///android_asset/www/app.js'],
     ['a worker the page created from a blob', 'blob:https://example.com/6b0b0e6a'],
     ['a Capacitor webview', 'capacitor://localhost/app.js'],
+    ['an Ionic webview', 'ionic://localhost/app.js'],
+    ['a script with a mixed-case scheme', 'HTTPS://example.com/app.js'],
+    ['a webpack source frame', 'webpack:///./src/App.js'],
+    ['an Angular JIT component', 'ng:///CheckoutComponent.js'],
     ['a custom app scheme, as an Electron or React Native shell serves', 'app://checkout.js'],
     ['a bundler-rewritten dev frame', 'webpack-internal:///./src/App.js'],
     ['a React Native release bundle, which has no scheme', 'index.android.bundle'],
     ['an absolute path with no scheme', '/data/user/0/com.example/files/index.bundle'],
+    ['a Windows path with backslashes', 'C:\\app\\index.bundle'],
+    ['a Windows path with forward slashes', 'C:/app/index.bundle'],
   ])("still marks the app's own code as in_app: %s", (_name, filename) => {
     const frame = createFrame(platform, filename, 'doThing', 1, 2)
     expect(frame.in_app).toBe(true)
@@ -98,6 +105,38 @@ describe('createDefaultStackParser in_app classification', () => {
     expect(frames.map((f) => [f.function, f.in_app])).toEqual([
       ['sendJsBlockingTimeMessage', false],
       ['sendDataToNative', false],
+    ])
+  })
+
+  it.each([
+    '    at CheckoutComponent_Template (ng:///CheckoutComponent.js:10:5)',
+    'CheckoutComponent_Template@ng:///CheckoutComponent.js:10:5',
+  ])('keeps Angular JIT application frames as in_app: %s', (stackLine) => {
+    const frames = parse(`Error: template failed\n${stackLine}`)
+    expect(frames).toEqual([
+      expect.objectContaining({
+        filename: 'ng:///CheckoutComponent.js',
+        function: 'CheckoutComponent_Template',
+        lineno: 10,
+        colno: 5,
+        in_app: true,
+      }),
+    ])
+  })
+
+  it.each([
+    'webkit-masked-url://hidden/',
+    '<anonymous>',
+    'iabjs://navigation_performance_logger_android',
+    'chrome-extension://abcdef/content.js',
+    'moz-extension://abcdef/content.js',
+  ])('retains injected frames without demoting the calling app frame: %s', (filename) => {
+    const frames = parse(
+      `Error: boom\n    at injected (${filename}:1:2)\n    at checkout (https://example.com/app.js:10:5)`
+    )
+    expect(frames.map((frame) => [frame.filename, frame.in_app])).toEqual([
+      ['https://example.com/app.js', true],
+      [filename, false],
     ])
   })
 
