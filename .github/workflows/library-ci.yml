@@ -10,11 +10,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   affected:
+    permissions:
+      contents: read
     uses: ./.github/workflows/check-affected.yml
     with:
       package-name: posthog-js
@@ -27,6 +28,8 @@ jobs:
         .github/actions/setup/action.yaml
 
   unit:
+    permissions:
+      contents: read
     name: Unit tests
     runs-on: ubuntu-22.04
     steps:
@@ -61,6 +64,8 @@ jobs:
         run: pnpm test:dev-watch
 
   edge-runtime:
+    permissions:
+      contents: read
     name: Node edge runtime tests
     runs-on: ubuntu-22.04
     steps:
@@ -73,6 +78,8 @@ jobs:
         run: pnpm --filter=posthog-node test:edge-compat
 
   integration:
+    permissions:
+      contents: read
     name: Playwright E2E tests
     needs: affected
     if: needs.affected.outputs.is-affected == 'true'
@@ -296,6 +303,8 @@ jobs:
           retention-days: 30
 
   functional:
+    permissions:
+      contents: read
     name: Functional tests
     runs-on: ubuntu-22.04
     steps:
@@ -377,6 +386,8 @@ jobs:
           if-no-files-found: ignore
 
   lint:
+    permissions:
+      contents: read
     name: Lint packages
     runs-on: ubuntu-22.04
     steps:
@@ -389,6 +400,8 @@ jobs:
         run: pnpm lint
 
   lint-playground:
+    permissions:
+      contents: read
     name: Lint playground
     runs-on: ubuntu-22.04
     steps:
@@ -401,6 +414,8 @@ jobs:
         run: pnpm lint:playground
 
   package:
+    permissions:
+      contents: read
     name: Package tarballs
     runs-on: ubuntu-22.04
     steps:
@@ -468,6 +483,8 @@ jobs:
           POSTHOG_CLI_PATH: /usr/bin/true
 
   write-mangled-property-names:
+    permissions:
+      contents: read
     name: Write mangled property names
     runs-on: ubuntu-22.04
     steps:
