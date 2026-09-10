@@ -29,8 +29,16 @@ import type {
 /** Same tagged outcome shape as `SendLogsBatchOutcome` — one policy for all three signals. */
 export type SendTracesBatchOutcome =
   | { kind: 'ok' }
-  | { kind: 'retry-later'; error: unknown }
-  | { kind: 'too-large' }
+  | { kind: 'retry-later'; error: unknown; retryAfterMs?: number }
+  | {
+      kind: 'too-large'
+      /**
+       * True when the SDK measured the body itself rather than the endpoint
+       * refusing it, so the caller can split this drain without lowering the
+       * batch size it keeps between them.
+       */
+      measuredLocally?: boolean
+    }
   | { kind: 'fatal'; error: unknown }
 
 /** The minimal host surface `PostHogTraces` depends on; `PostHogCoreStateless` satisfies it structurally. */

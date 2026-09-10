@@ -294,9 +294,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * failed span export leaves the spans queued rather than rejecting, since
    * callers already treat `flush()` as safe to leave unwrapped.
    */
-  private _flushEventsAndSpans(): Promise<void> {
+  private _flushEventsAndSpans(skipThrottledSpans = false): Promise<void> {
     const events = this.flushWithPendingPromises()
-    if (!this._traces) {
+    if (!this._traces || (skipThrottledSpans && this._traces.throttled)) {
       return events
     }
     // Settled, not `all`: `all` rejects the moment the event flush does, and a
@@ -310,8 +310,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     })
   }
 
+  protected override flushAutomatic(): Promise<void> {
+    // The events timer must not drag spans through a `Retry-After` window the
+    // traces queue is honouring; its own timer picks them up when it closes.
+    return this._flushKeepingRuntimeAlive(true)
+  }
+
   override async flush(): Promise<void> {
-    const flushPromise = this._flushEventsAndSpans()
+    return this._flushKeepingRuntimeAlive(false)
+  }
+
+  private _flushKeepingRuntimeAlive(skipThrottledSpans: boolean): Promise<void> {
+    const flushPromise = this._flushEventsAndSpans(skipThrottledSpans)
     const waitUntil = this.options.waitUntil
     // Only register when no debounce promise is already keeping runtime alive
     if (waitUntil && !this._waitUntilCycle) {

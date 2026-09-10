@@ -555,6 +555,59 @@ describe('PostHog traces', () => {
     })
   })
 
+  describe('Retry-After', () => {
+    const refuseTraces = (retryAfterSeconds: number): void => {
+      mockedFetch.mockImplementation(async (url: any) =>
+        String(url).includes('/i/v1/traces')
+          ? ({
+              status: 429,
+              headers: {
+                get: (name: string) => (name.toLowerCase() === 'retry-after' ? `${retryAfterSeconds}` : null),
+              },
+              text: async () => '',
+              json: async () => ({}),
+            } as any)
+          : ({ status: 200, headers: { get: () => null }, text: async () => '', json: async () => ({}) } as any)
+      )
+    }
+
+    it('does not drain spans on the events flush while the window is open', async () => {
+      const client = createClient({ flushAt: 1, flushInterval: 1000 })
+      refuseTraces(300)
+
+      client.startSpan('refused').end()
+      await flushTraces()
+      const afterRefusal = traceRequests().length
+      expect(afterRefusal).toBeGreaterThan(0)
+
+      // Events keep arriving, so the events timer keeps firing. Spans must not
+      // ride along on it while the endpoint has asked the traces queue to wait.
+      client.startSpan('queued-during-window').end()
+      for (let i = 0; i < 5; i++) {
+        client.capture({ distinctId: 'user', event: 'tick' })
+        await vi.advanceTimersByTimeAsync(1000)
+        await waitForPromises()
+      }
+
+      expect(traceRequests()).toHaveLength(afterRefusal)
+      await client.shutdown()
+    })
+
+    it('still drains spans on an explicit flush', async () => {
+      const client = createClient({ flushAt: 100, flushInterval: 60_000 })
+      refuseTraces(300)
+
+      client.startSpan('refused').end()
+      await flushTraces()
+      const afterRefusal = traceRequests().length
+
+      await client.flush()
+
+      expect(traceRequests().length).toBeGreaterThan(afterRefusal)
+      await client.shutdown()
+    })
+  })
+
   describe('beforeSpanSend', () => {
     it('scrubs attributes before they leave the process', async () => {
       const client = createClient({
