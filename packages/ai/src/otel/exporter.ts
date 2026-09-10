@@ -1,22 +1,18 @@
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base'
 
+import { EXPORT_SUCCESS, OtlpFetchTraceExporter, type ExportResult } from './otlpFetchExporter'
 import { redactSpan } from './redact'
 import { isAISpan } from './spans'
+import { resolveOtlpTarget, type PostHogOtlpOptions } from './target'
 import { warnIfPostHogAiGatewayOtelAttributes } from '../gatewayWarning'
 
-const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
-// OpenTelemetry's ExportResultCode.SUCCESS is 0. Keep this local so loading the
-// published subpath does not require the exporter package's transitive dependencies.
-const EXPORT_SUCCESS = 0
-
-function normalizeToken(value?: unknown): string {
-  return typeof value === 'string' ? value.trim() : ''
-}
-
-function normalizeHost(value?: unknown): string {
-  const normalizedValue = typeof value === 'string' ? value.trim() : ''
-  return normalizedValue || DEFAULT_OTEL_HOST
+// Intentionally reports success: missing or blank tokens disable exporting as a
+// compatibility no-op. Reporting failure would make OpenTelemetry treat every
+// span as an export error.
+const NOOP_EXPORTER: SpanExporter = {
+  export: (_spans, resultCallback) => resultCallback({ code: EXPORT_SUCCESS }),
+  forceFlush: () => Promise.resolve(),
+  shutdown: () => Promise.resolve(),
 }
 
 /**
@@ -37,7 +33,7 @@ function normalizeHost(value?: unknown): string {
  * new PostHogTraceExporter({ projectToken: 'phc_...', host: 'https://eu.i.posthog.com' })
  * ```
  */
-export type PostHogTraceExporterOptions = { projectToken: string; host?: string }
+export type PostHogTraceExporterOptions = PostHogOtlpOptions
 
 /**
  * An OpenTelemetry `TraceExporter` that sends AI traces to PostHog's OTLP
@@ -67,36 +63,20 @@ export type PostHogTraceExporterOptions = { projectToken: string; host?: string 
  * })
  * ```
  */
-export class PostHogTraceExporter extends OTLPTraceExporter {
-  private readonly disabled: boolean
+export class PostHogTraceExporter implements SpanExporter {
+  private readonly inner: SpanExporter
 
   constructor(options: PostHogTraceExporterOptions) {
-    const token = normalizeToken(options.projectToken)
-    const disabled = !token
-    const host = token ? new URL(normalizeHost(options.host)).origin : DEFAULT_OTEL_HOST
-    super({
-      url: `${host}/i/v0/ai/otel`,
-      headers: token
-        ? {
-            Authorization: `Bearer ${token}`,
-          }
-        : {},
-    })
-
-    this.disabled = disabled
-    if (this.disabled) {
+    const target = resolveOtlpTarget(options)
+    if (!target) {
       console.warn('[PostHogTraceExporter] projectToken is missing or blank; the exporter will be disabled.')
-    }
-  }
-
-  override export(spans: ReadableSpan[], resultCallback: (result: { code: number; error?: Error }) => void): void {
-    if (this.disabled) {
-      // Intentionally report success: missing or blank tokens disable exporting as a compatibility no-op.
-      // Reporting failure would make OpenTelemetry treat every span as an export error.
-      resultCallback({ code: EXPORT_SUCCESS })
+      this.inner = NOOP_EXPORTER
       return
     }
+    this.inner = new OtlpFetchTraceExporter(target)
+  }
 
+  export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
     const aiSpans = spans.filter(isAISpan)
     if (aiSpans.length === 0) {
       resultCallback({ code: EXPORT_SUCCESS })
@@ -105,6 +85,14 @@ export class PostHogTraceExporter extends OTLPTraceExporter {
     for (const span of aiSpans) {
       warnIfPostHogAiGatewayOtelAttributes(span.attributes)
     }
-    super.export(aiSpans.map(redactSpan), resultCallback)
+    this.inner.export(aiSpans.map(redactSpan), resultCallback)
+  }
+
+  forceFlush(): Promise<void> {
+    return this.inner.forceFlush?.() ?? Promise.resolve()
+  }
+
+  shutdown(): Promise<void> {
+    return this.inner.shutdown()
   }
 }

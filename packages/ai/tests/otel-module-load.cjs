@@ -48,8 +48,12 @@ try {
   // Reproduce a strict package-manager layout: only @posthog/ai's declared
   // OpenTelemetry peers are available at its level. Their dependencies remain
   // nested inside their own package layouts.
+  //
+  // This is also the regression guard for the Cloudflare Workers bug: the
+  // subpath used to pull in @opentelemetry/exporter-trace-otlp-http, whose
+  // browser build needs XMLHttpRequest or sendBeacon. Reintroducing that
+  // dependency, or anything that depends on @opentelemetry/core, fails here.
   linkDependency('@opentelemetry/api')
-  linkDependency('@opentelemetry/exporter-trace-otlp-http')
   linkDependency('@opentelemetry/sdk-trace-base')
 
   const assertCoreIsNotDirectlyResolvable = `

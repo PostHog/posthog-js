@@ -1,11 +1,11 @@
 import type { SpanProcessor, ReadableSpan, Span } from '@opentelemetry/sdk-trace-base'
 import type { Context } from '@opentelemetry/api'
 import { PostHogSpanProcessor } from '../src/otel'
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
+import { OtlpFetchTraceExporter } from '../src/otel/otlpFetchExporter'
 
-vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
-  OTLPTraceExporter: vi.fn(),
+vi.mock('../src/otel/otlpFetchExporter', () => ({
+  OtlpFetchTraceExporter: vi.fn(),
 }))
 
 vi.mock('@opentelemetry/sdk-trace-base', () => ({
@@ -67,7 +67,7 @@ describe('PostHogSpanProcessor', () => {
   ])('configures the OTLP exporter correctly with $name', ({ projectToken, host, expectedUrl, expectedToken }) => {
     new PostHogSpanProcessor({ projectToken, host })
 
-    expect(OTLPTraceExporter).toHaveBeenCalledWith({
+    expect(OtlpFetchTraceExporter).toHaveBeenCalledWith({
       url: expectedUrl,
       headers: { Authorization: `Bearer ${expectedToken}` },
     })
@@ -87,7 +87,7 @@ describe('PostHogSpanProcessor', () => {
     await expect(processor.shutdown()).resolves.toBeUndefined()
     await expect(processor.forceFlush()).resolves.toBeUndefined()
 
-    expect(OTLPTraceExporter).not.toHaveBeenCalled()
+    expect(OtlpFetchTraceExporter).not.toHaveBeenCalled()
     expect(BatchSpanProcessor).not.toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalledWith(
       '[PostHogSpanProcessor] projectToken is missing or blank; the processor will be disabled.'

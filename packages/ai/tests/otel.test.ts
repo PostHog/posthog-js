@@ -1,13 +1,13 @@
 import { PostHogTraceExporter } from '../src/otel'
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
+import { OtlpFetchTraceExporter } from '../src/otel/otlpFetchExporter'
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
 
-vi.mock('@opentelemetry/exporter-trace-otlp-http', () => {
+vi.mock('../src/otel/otlpFetchExporter', () => {
   const MockExporter = vi.fn()
   MockExporter.prototype.export = vi.fn()
   MockExporter.prototype.shutdown = vi.fn().mockResolvedValue(undefined)
   MockExporter.prototype.forceFlush = vi.fn().mockResolvedValue(undefined)
-  return { OTLPTraceExporter: MockExporter }
+  return { OtlpFetchTraceExporter: MockExporter, EXPORT_SUCCESS: 0, EXPORT_FAILED: 1 }
 })
 
 const DEFAULT_TOKEN = 'phc_test'
@@ -16,16 +16,16 @@ function makeSpan(name: string, attributes: Record<string, unknown> = {}): Reada
   return { name, attributes } as unknown as ReadableSpan
 }
 
-function getSuperExport(): vi.Mock {
-  return OTLPTraceExporter.prototype.export as vi.Mock
+function getInnerExport(): vi.Mock {
+  return OtlpFetchTraceExporter.prototype.export as vi.Mock
 }
 
-function getSuperShutdown(): vi.Mock {
-  return OTLPTraceExporter.prototype.shutdown as vi.Mock
+function getInnerShutdown(): vi.Mock {
+  return OtlpFetchTraceExporter.prototype.shutdown as vi.Mock
 }
 
-function getSuperForceFlush(): vi.Mock {
-  return OTLPTraceExporter.prototype.forceFlush as vi.Mock
+function getInnerForceFlush(): vi.Mock {
+  return OtlpFetchTraceExporter.prototype.forceFlush as vi.Mock
 }
 
 describe('PostHogTraceExporter', () => {
@@ -72,11 +72,9 @@ describe('PostHogTraceExporter', () => {
   ])('configures the OTLP exporter correctly with $name', ({ projectToken, host, expectedUrl, expectedToken }) => {
     new PostHogTraceExporter({ projectToken, host })
 
-    expect(OTLPTraceExporter).toHaveBeenCalledWith({
+    expect(OtlpFetchTraceExporter).toHaveBeenCalledWith({
       url: expectedUrl,
-      headers: {
-        Authorization: `Bearer ${expectedToken}`,
-      },
+      headers: { Authorization: `Bearer ${expectedToken}` },
     })
   })
 
@@ -91,7 +89,7 @@ describe('PostHogTraceExporter', () => {
 
     exporter.export([makeSpan('gen_ai.chat')], callback)
 
-    expect(getSuperExport()).not.toHaveBeenCalled()
+    expect(getInnerExport()).not.toHaveBeenCalled()
     expect(callback).toHaveBeenCalledWith({ code: 0 })
     expect(warnSpy).toHaveBeenCalledWith(
       '[PostHogTraceExporter] projectToken is missing or blank; the exporter will be disabled.'
@@ -110,16 +108,16 @@ describe('PostHogTraceExporter', () => {
     warnSpy.mockRestore()
   })
 
-  it('inherits shutdown from OTLPTraceExporter', async () => {
+  it('delegates shutdown to the fetch exporter', async () => {
     const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
     await exporter.shutdown()
-    expect(getSuperShutdown()).toHaveBeenCalled()
+    expect(getInnerShutdown()).toHaveBeenCalled()
   })
 
-  it('inherits forceFlush from OTLPTraceExporter', async () => {
+  it('delegates forceFlush to the fetch exporter', async () => {
     const exporter = new PostHogTraceExporter({ projectToken: DEFAULT_TOKEN })
     await exporter.forceFlush()
-    expect(getSuperForceFlush()).toHaveBeenCalled()
+    expect(getInnerForceFlush()).toHaveBeenCalled()
   })
 })
 
@@ -134,7 +132,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
 
     exporter.export([makeSpan('gen_ai.chat'), makeSpan('http.request'), makeSpan('llm.completion')], callback)
 
-    expect(getSuperExport()).toHaveBeenCalledWith(
+    expect(getInnerExport()).toHaveBeenCalledWith(
       [expect.objectContaining({ name: 'gen_ai.chat' }), expect.objectContaining({ name: 'llm.completion' })],
       callback
     )
@@ -146,7 +144,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
 
     exporter.export([makeSpan('http.request'), makeSpan('db.query')], callback)
 
-    expect(getSuperExport()).not.toHaveBeenCalled()
+    expect(getInnerExport()).not.toHaveBeenCalled()
     expect(callback).toHaveBeenCalledWith({ code: 0 })
   })
 
@@ -156,7 +154,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
 
     exporter.export([makeSpan('some.operation', { 'gen_ai.model': 'gpt-4' }), makeSpan('other.operation')], callback)
 
-    expect(getSuperExport()).toHaveBeenCalledWith([expect.objectContaining({ name: 'some.operation' })], callback)
+    expect(getInnerExport()).toHaveBeenCalledWith([expect.objectContaining({ name: 'some.operation' })], callback)
   })
 
   it('redacts multimodal content before exporting', () => {
@@ -165,7 +163,7 @@ describe('PostHogTraceExporter AI span filtering', () => {
 
     exporter.export([makeSpan('gen_ai.chat', { 'gen_ai.prompt': 'data:image/png;base64,iVBORw0KGgo' })], callback)
 
-    const exported = getSuperExport().mock.calls[0][0] as ReadableSpan[]
+    const exported = getInnerExport().mock.calls[0][0] as ReadableSpan[]
     expect(exported[0].attributes['gen_ai.prompt']).toBe('[base64 image/png redacted]')
   })
 })
