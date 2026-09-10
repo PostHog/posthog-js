@@ -16,7 +16,7 @@ import {
     META_EVENT_TYPE,
 } from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
-import { Property, RemoteConfig, RemoteConfigResult } from '../../../types'
+import { Properties, Property, RemoteConfig, RemoteConfigResult } from '../../../types'
 import { assignableWindow } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import { EventType, type eventWithTime, IncrementalSource } from '../../../extensions/replay/types/rrweb-types'
@@ -151,6 +151,7 @@ function createHarness(sessionIdleTimeoutSeconds = 30 * 60) {
     )
     const emitter = new SimpleEventEmitter()
     const capture = vi.fn()
+    const sessionRegisteredProps: Properties = {}
     const posthog = {
         get_property: (key: string): Property | undefined => persistence.props[key],
         config,
@@ -160,7 +161,13 @@ function createHarness(sessionIdleTimeoutSeconds = 30 * 60) {
         sessionManager,
         requestRouter: new RequestRouter({ config } as any),
         consent: { isOptedOut: () => false } as unknown as ConsentManager,
-        register_for_session() {},
+        register_for_session(properties: Properties) {
+            Object.assign(sessionRegisteredProps, properties)
+        },
+        unregister_for_session(property: string) {
+            delete sessionRegisteredProps[property]
+        },
+        getSessionProperty: (property_key: string): Property | undefined => sessionRegisteredProps[property_key],
         _internalEventEmitter: emitter,
         on: vi.fn().mockImplementation((event, cb) => emitter.on(event, cb)),
     } as Partial<PostHog> as PostHog

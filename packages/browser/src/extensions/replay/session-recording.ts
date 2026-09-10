@@ -22,7 +22,7 @@ import {
 } from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
 
-import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
+import { isArray, isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
@@ -71,6 +71,7 @@ export class SessionRecording implements Extension {
     }
 
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
+    private _syncDisabledReasonOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
     private _sessionRecordingDisposed = false
     private _remoteConfigLoadFailed = false
@@ -113,10 +114,17 @@ export class SessionRecording implements Extension {
 
     initialize() {
         this.startIfEnabledOrStop()
+        // the core drops every session-registered property when the session rotates, so a reason
+        // that still holds has to be written again against the new session
+        this._syncDisabledReasonOnSessionListener = this._instance.sessionManager?.onSessionId(
+            this._syncDisabledReasonProperty
+        )
     }
 
     dispose({ discardBufferedEvents = false }: { discardBufferedEvents?: boolean } = {}): void {
         this._sessionRecordingDisposed = true
+        this._syncDisabledReasonOnSessionListener?.()
+        this._syncDisabledReasonOnSessionListener = undefined
         document?.removeEventListener?.('visibilitychange', this._onVisibilityChange)
         if (discardBufferedEvents) {
             this._discardRecording(true)
@@ -159,19 +167,39 @@ export class SessionRecording implements Extension {
         return enabledServerSide && !this._recordingDisabledReasons.length
     }
 
-    private _lastReportedDisabledReason = ''
+    private _disabledReasons: ReplayDisabledReason[] = []
+    private _lastLoggedDisabledReason = ''
 
     private _reportDisabledReasons(reasons: ReplayDisabledReason[]): void {
+        this._disabledReasons = reasons
+        this._syncDisabledReasonProperty()
+
         const reason = reasons.join(', ')
-        // only report on change, so a repeated start attempt doesn't rewrite the same diagnostics
-        if (reason === this._lastReportedDisabledReason) {
-            return
-        }
-        this._lastReportedDisabledReason = reason
-        if (reasons.length) {
-            this._instance.register_for_session({ [SDK_DEBUG_REPLAY_DISABLED_REASON]: reasons })
+        // log on change only, so a repeated start attempt doesn't repeat the same line
+        if (reasons.length && reason !== this._lastLoggedDisabledReason) {
             logger.info(`not started: ${reason}`)
-        } else {
+        }
+        this._lastLoggedDisabledReason = reason
+    }
+
+    /**
+     * The reason is registered for the session, but the recorder holding it is not session scoped.
+     * A same-tab reload hands a fresh recorder a session that still carries the reason stored before
+     * the reload, and a session rotation drops every session property from under a live recorder.
+     * So compare the reasons that hold now against what the session actually carries, never against
+     * what this recorder last wrote: otherwise a session that is recording can keep reporting itself
+     * disabled, and a session that stays disabled can go quiet for the rest of its life.
+     */
+    private _syncDisabledReasonProperty = (): void => {
+        const registered = this._instance.getSessionProperty(SDK_DEBUG_REPLAY_DISABLED_REASON)
+        const registeredReason = isArray(registered) ? registered.join(', ') : undefined
+        if (this._disabledReasons.length) {
+            if (registeredReason !== this._disabledReasons.join(', ')) {
+                this._instance.register_for_session({
+                    [SDK_DEBUG_REPLAY_DISABLED_REASON]: this._disabledReasons,
+                })
+            }
+        } else if (!isUndefined(registered)) {
             this._instance.unregister_for_session(SDK_DEBUG_REPLAY_DISABLED_REASON)
         }
     }

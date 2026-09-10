@@ -31,6 +31,7 @@ import {
     NetworkRecordOptions,
     PerformanceCaptureConfig,
     PostHogConfig,
+    Properties,
     Property,
     RemoteConfig,
     RemoteConfigResult,
@@ -325,6 +326,7 @@ describe('Lazy SessionRecording', () => {
         )
 
         simpleEventEmitter = new SimpleEventEmitter()
+        const sessionRegisteredProps: Properties = {}
         // TODO we really need to make this a real posthog instance :cry:
         posthog = {
             get_property: (property_key: string): Property | undefined => {
@@ -346,7 +348,13 @@ describe('Lazy SessionRecording', () => {
                     return false
                 },
             } as unknown as ConsentManager,
-            register_for_session() {},
+            register_for_session(properties: Properties) {
+                Object.assign(sessionRegisteredProps, properties)
+            },
+            unregister_for_session(property: string) {
+                delete sessionRegisteredProps[property]
+            },
+            getSessionProperty: (property_key: string): Property | undefined => sessionRegisteredProps[property_key],
             _internalEventEmitter: simpleEventEmitter,
             on: vi.fn().mockImplementation((event, cb) => {
                 const unsubscribe = simpleEventEmitter.on(event, cb)
