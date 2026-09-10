@@ -6,5 +6,5 @@
   "quoteProps": "preserve",
   "printWidth": 120,
   "sortPackageJson": false,
-  "ignorePatterns": []
+  "ignorePatterns": ["references/*.json"]
 }
