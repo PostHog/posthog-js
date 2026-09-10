@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.11.0
+
+### Minor Changes
+
+- [#4903](https://github.com/PostHog/posthog-js/pull/4903) [`825d830`](https://github.com/PostHog/posthog-js/commit/825d8301f13a1bc8984458d030853c7799746267) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - `prompts.getAll({ label: 'production' })` fetches every prompt that carries a label in one request and stores them in the prompt cache, so later `get(name, { label })` calls are cache hits. Apps with many prompts no longer need one request per prompt per cache cycle. Against a PostHog server that does not support labels on the prompt list endpoint yet, the call fails with a clear error instead of caching wrong versions.
+  (2026-09-10)
+
 ## 8.10.4
 
 ### Patch Changes
