@@ -3,14 +3,15 @@ on:
     schedule:
         - cron: '30 9 * * 1-5'
 
-permissions:
-    contents: read
-    actions: write
-    issues: write
-    pull-requests: write
+permissions: {}
 
 jobs:
     stale:
+        permissions:
+            contents: read
+            actions: write
+            issues: write
+            pull-requests: write
         runs-on: ubuntu-24.04
         steps:
             - name: Check if holiday period
