@@ -2818,9 +2818,10 @@ describe('PostHogTraces', () => {
     })
 
     it('does not let a host out-pacing the window stall the retry budget', async () => {
-      // flush() more often than the window is long. If each refusal slid the
-      // deadline forward, the window would never elapse, the head batch would
-      // never retire, and every span behind it would be dropped at the cap.
+      // flush() more often than the window is long. Each refusal slides the
+      // deadline, up to five minutes from where the window was installed; the
+      // in-window sends are uncharged, so each window costs one charge and eight
+      // of them retire the head batch rather than letting it hold the queue.
       mockInstance._sendTracesBatch.mockResolvedValue({
         kind: 'retry-later',
         error: new Error('429'),
@@ -2828,7 +2829,7 @@ describe('PostHogTraces', () => {
       })
       const traces = createTraces({ flushIntervalMs: 10_000, maxQueueSize: 5, maxExportBatchSize: 2 })
 
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 500; i++) {
         traces.startSpan(`span-${i}`).end()
         await traces.flush()
         await vi.advanceTimersByTimeAsync(5_000)
@@ -2868,6 +2869,31 @@ describe('PostHogTraces', () => {
 
       expect((traces as any)._queue).toHaveLength(1)
       expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Dropping'))
+    })
+
+    it('does not charge a caller-driven flush inside a window a later refusal extended', async () => {
+      // The charge point is set from the window as it stood at the first
+      // refusal. An in-window refusal then extends the window past it, and a
+      // flush between the two deadlines is still inside the endpoint's wait.
+      mockInstance._sendTracesBatch.mockResolvedValue({
+        kind: 'retry-later',
+        error: new Error('429'),
+        retryAfterMs: 60_000,
+      })
+      const traces = createTraces({ flushIntervalMs: 10_000 })
+      traces.startSpan('first').end()
+
+      await traces.flush()
+      expect((traces as any)._headBatchFailures).toBe(1)
+
+      await vi.advanceTimersByTimeAsync(50_000)
+      await traces.flush()
+      await vi.advanceTimersByTimeAsync(10_000)
+      const sends = mockInstance._sendTracesBatch.mock.calls.length
+      await traces.flush()
+
+      expect(mockInstance._sendTracesBatch.mock.calls.length).toBe(sends + 1)
+      expect((traces as any)._headBatchFailures).toBe(1)
     })
 
     it('charges once per window however many attempts share it', async () => {

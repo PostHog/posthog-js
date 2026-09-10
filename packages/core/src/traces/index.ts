@@ -889,8 +889,10 @@ export class PostHogTraces {
         }
 
         // Read before the send, so the budget below charges this attempt against
-        // the window it was actually made under.
-        const chargeable = clockNow() >= this._headBatchChargeableAt
+        // the window it was actually made under. A send inside an open
+        // `Retry-After` window is caller-driven and exempt from the wait; a later
+        // refusal can extend that window past the charge point, so both are read.
+        const chargeable = clockNow() >= this._headBatchChargeableAt && !this._retryAfter.isOpen()
 
         const outcome = await this._instance._sendTracesBatch(
           buildOtlpTracesPayload(spans, resourceAttributes, scopeName, scopeVersion, this._logger)
