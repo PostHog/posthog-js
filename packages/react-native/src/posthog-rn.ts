@@ -1465,7 +1465,9 @@ export class PostHog extends PostHogCore {
    *
    * @remarks
    * This function requires a name. You may also pass in an optional properties object.
-   * Screen name is automatically registered for the session and will be included in subsequent events.
+   * Once initialized, the screen name is registered immediately for subsequent events, including exceptions.
+   * During initialization, screen registration and event capture retain their call order.
+   * Exceptions use the last recorded screen, not a destination that has not yet been tracked.
    *
    * {@label Capture}
    *
@@ -1491,8 +1493,10 @@ export class PostHog extends PostHogCore {
    * @param options - Optional capture options
    */
   async screen(name: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): Promise<void> {
-    await this._initPromise
-    // Screen name is good to know for all other subsequent events
+    // Keep queued captures in order during initialization, without yielding once the client is ready.
+    if (!this._isInitialized) {
+      await this._initPromise
+    }
     this.registerForSession({
       $screen_name: name,
     })
