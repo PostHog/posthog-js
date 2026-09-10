@@ -673,11 +673,13 @@ describe('request', () => {
             errorSpy.mockRestore()
         })
 
-        it('contains a throw from a third-party abort listener instead of letting it escape our timer', async () => {
-            // A host app or a third-party fetch wrapper can attach an `abort` listener to the signal
-            // we pass, and `controller.abort(...)` dispatches to it synchronously inside our timeout
-            // callback. A wrapper that lets the listener's throw propagate back out of `abort(...)`
-            // would otherwise surface it as an uncaught error with a posthog-js frame on top.
+        it('contains a throw from a patched abort() instead of letting it escape our timer', async () => {
+            // A third-party fetch wrapper can replace `AbortController.prototype.abort` and throw
+            // out of it, which lands inside our timeout callback and would otherwise surface as an
+            // uncaught error with a posthog-js frame on top. (An `abort` listener attached natively
+            // to the signal we pass cannot produce this: `dispatchEvent` reports a listener's
+            // exception to the global error handler instead of propagating it out of `abort()`, so
+            // no guard of ours can contain that one.)
             const listenerError = new Error('signal is aborted without reason')
             listenerError.name = 'AbortError'
             const abortSpy = vi.spyOn(globalThis.AbortController.prototype, 'abort').mockImplementation(() => {
@@ -704,9 +706,9 @@ describe('request', () => {
             abortSpy.mockRestore()
         })
 
-        it('reports only once when a throwing abort listener is followed by the fetch rejection', async () => {
-            // The abort can take effect and still throw, so the fetch rejects afterwards too. The
-            // request queue must see one failure, not two.
+        it('reports only once when a throwing patched abort() is followed by the fetch rejection', async () => {
+            // The abort can take effect and the patched `abort()` still throw, so the fetch rejects
+            // afterwards too. The request queue must see one failure, not two.
             const listenerError = new Error('signal is aborted without reason')
             listenerError.name = 'AbortError'
             const originalAbort = globalThis.AbortController.prototype.abort
@@ -739,7 +741,7 @@ describe('request', () => {
             abortSpy.mockRestore()
         })
 
-        it('reports only once when a throwing abort listener leaves the fetch alive to succeed', async () => {
+        it('reports only once when a throwing patched abort() leaves the fetch alive to succeed', async () => {
             // A patched `abort()` can throw *before* it aborts the signal, which leaves the fetch
             // running after our timeout has already reported a failure. The late response must be
             // dropped: the request queue has queued a retry for that failure, and a success

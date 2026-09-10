@@ -330,10 +330,14 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
                 try {
                     controller.abort(timeoutAbortReason(options.timeout))
                 } catch (error) {
-                    // `abort()` dispatches synchronously, so a listener the host app or a
-                    // third-party fetch wrapper attached to the signal we passed runs inside this
-                    // timer. A throw from such a listener would escape as an uncaught error
-                    // attributed to posthog-js, so route it through the same
+                    // Reachable only when `abort()` itself throws, i.e. when a third-party script
+                    // has patched or polyfilled `AbortController.prototype.abort`. A listener the
+                    // host app or a fetch wrapper attached natively to the signal we passed cannot
+                    // get here: `abort()` fires the `abort` event through `dispatchEvent`, which
+                    // *reports* a listener's exception to the global error handler and returns
+                    // normally, so that throw still surfaces as an uncaught error with our timer
+                    // frames on the stack and no guard here can contain it. A patched `abort()`
+                    // that throws would otherwise escape this timer, so route it through the same
                     // `{ statusCode: 0, error }` path as every other transport failure and let the
                     // request queue retry.
                     handleError(error)
@@ -343,9 +347,10 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
     }
 
     // One request reports one outcome. Both our timeout callback and the fetch can produce a
-    // result - an abort listener that throws inside the timer, and then either the fetch rejecting
-    // or, when that throw happened before the abort took effect, the still-live fetch delivering a
-    // real response - so whichever settles first reports and every later result is dropped.
+    // result - a patched `abort()` that throws inside the timer, and then either the fetch
+    // rejecting or, when that throw happened before the abort took effect, the still-live fetch
+    // delivering a real response - so whichever settles first reports and later results are
+    // dropped.
     let settled = false
 
     const handleError = (error: any) => {
