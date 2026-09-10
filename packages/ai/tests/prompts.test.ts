@@ -1363,6 +1363,17 @@ describe('Prompts', () => {
       expect(consoleWarnSpy).toHaveBeenCalledTimes(1)
     })
 
+    it('preserves a prompt named __proto__ as an own entry', async () => {
+      mockFetch.mockResolvedValueOnce(listResponse([labeledRow('__proto__')]))
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+      const results = await prompts.getAll({ label: 'production' })
+
+      expect(Object.keys(results)).toEqual(['__proto__'])
+      expect(results['__proto__'].prompt).toBe('Prompt for __proto__')
+      expect(JSON.parse(JSON.stringify(results))['__proto__']).toBeDefined()
+    })
+
     it('throws on a malformed row instead of skipping it', async () => {
       const malformed = { ...labeledRow('prompt-a'), prompt: 42 }
       mockFetch.mockResolvedValueOnce(listResponse([malformed, labeledRow('prompt-b')]))

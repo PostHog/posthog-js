@@ -301,7 +301,11 @@ export class Prompts {
     }
 
     const now = Date.now()
-    const results: Record<string, PromptRemoteResult> = {}
+    // Collected in a Map first: prompt names like __proto__ are valid, and
+    // assigning them into a plain object would change its prototype instead of
+    // adding an entry. Object.fromEntries defines own properties, so the
+    // returned object carries every name safely.
+    const results = new Map<string, PromptRemoteResult>()
     for (const row of resolvedRows) {
       const config = extractConfig((row as unknown as Record<string, unknown>).config)
       this.getOrCreatePromptCache(row.name).set(label, {
@@ -312,14 +316,14 @@ export class Prompts {
         config,
         fetchedAt: now,
       })
-      results[row.name] = {
+      results.set(row.name, {
         source: 'api',
         prompt: row.prompt,
         name: row.name,
         version: row.version,
         label,
         config: cloneConfig(config),
-      }
+      })
     }
 
     if (skipped.length > 0) {
@@ -328,7 +332,7 @@ export class Prompts {
       )
     }
 
-    return results
+    return Object.fromEntries(results)
   }
 
   /**
