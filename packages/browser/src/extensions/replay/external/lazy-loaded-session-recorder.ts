@@ -31,6 +31,7 @@ import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     splitBuffer,
     truncateLargeConsoleLogs,
+    UNSTRINGIFIABLE_EVENT_SIZE,
 } from './sessionrecording-utils'
 export { SEVEN_MEGABYTES, splitBuffer } from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
@@ -1713,6 +1714,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         targetSessionId: string,
         targetWindowId: string
     ) {
+        // the request encoder stringifies the whole batch, and the request queue merges every
+        // queued recording chunk into one request, so buffering an event that cannot be
+        // stringified would take every chunk queued alongside it down too. Drop only this event.
+        if (size === UNSTRINGIFIABLE_EVENT_SIZE) {
+            logger.error('could not stringify event - dropping it to keep the rest of the recording')
+            return
+        }
+
         const properties = {
             $snapshot_bytes: size,
             $snapshot_data: eventToSend,

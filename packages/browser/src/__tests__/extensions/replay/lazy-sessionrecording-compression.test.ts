@@ -333,7 +333,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         expect(posthog.capture).toHaveBeenCalledTimes(1)
     })
 
-    it('ships the whole queue on unload when one event is too large to stringify', async () => {
+    it('drops only the event that is too large to stringify, so the rest of the queue still ships on unload', async () => {
         const gzipCompress = vi.fn(async (input: string) => {
             // hold the async path open so both events are still queued at unload
             await new Promise(() => {})
@@ -359,15 +359,20 @@ describe('LazyLoadedSessionRecording compression paths', () => {
             emit(createIncrementalSnapshot(456))
 
             expect(() => lazyLoadedSessionRecording['_onBeforeUnload']()).not.toThrow()
+
+            // the request queue merges every recording chunk into one request and the encoder
+            // stringifies it whole, so whatever reached capture must survive that same stringify
+            const captured = posthog.capture.mock.calls.map(([, properties]: any[]) => properties.$snapshot_data)
+            expect(() => JSON.stringify(captured)).not.toThrow()
         } finally {
             stringifySpy.mockRestore()
         }
 
-        // the oversized event ships uncompressed, and it does not cost the event after it or the final flush
+        // the oversized event is dropped, and it does not cost the event after it or the final flush
         expect(posthog.capture).toHaveBeenCalledWith(
             '$snapshot',
             expect.objectContaining({
-                $snapshot_data: [expect.objectContaining({ type: 2 }), expect.objectContaining({ type: 3 })],
+                $snapshot_data: [expect.objectContaining({ type: 3 })],
             }),
             expect.any(Object)
         )
