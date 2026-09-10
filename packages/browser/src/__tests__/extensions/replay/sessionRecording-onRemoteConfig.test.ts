@@ -3,7 +3,11 @@
 import '@testing-library/jest-dom'
 
 import { PostHogPersistence } from '../../../posthog-persistence'
-import { SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED, SESSION_RECORDING_REMOTE_CONFIG } from '../../../constants'
+import {
+    SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
+    SDK_DEBUG_REPLAY_DISABLED_REASON,
+    SESSION_RECORDING_REMOTE_CONFIG,
+} from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE } from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
@@ -659,6 +663,90 @@ describe('SessionRecording', () => {
             // Should have cleared buffer, not flushed it
             expect(clearBufferSpy).toHaveBeenCalled()
             expect(flushBufferSpy).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('disabled reason', () => {
+        const reportedReasons = () =>
+            registerForSessionMock.mock.calls
+                .map(([properties]) => properties[SDK_DEBUG_REPLAY_DISABLED_REASON])
+                .filter((reasons) => !!reasons)
+
+        beforeEach(() => {
+            posthog.unregister_for_session = vi.fn()
+        })
+
+        it('stays silent while the first remote config is still in flight', () => {
+            sessionRecording.initialize()
+
+            expect(reportedReasons()).toEqual([])
+            expect(posthog.unregister_for_session).not.toHaveBeenCalled()
+        })
+
+        it('names a remote config that never arrived', () => {
+            sessionRecording.onRemoteConfig({ ok: false, error: 'failed' } as unknown as RemoteConfigResult)
+
+            expect(reportedReasons()).toEqual([['remote_config_not_received']])
+        })
+
+        it('names a remote disable', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: false }))
+
+            expect(reportedReasons()).toEqual([['remote_config_disabled']])
+        })
+
+        it('names the client config switch that stopSessionRecording flips', () => {
+            posthog.config.disable_session_recording = true
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(reportedReasons()).toEqual([['client_config_disabled']])
+        })
+
+        it('names a consent opt-out', () => {
+            vi.spyOn(posthog.consent, 'isOptedOut').mockReturnValue(true)
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(reportedReasons()).toEqual([['consent_opted_out']])
+        })
+
+        it('names every cause when more than one applies', () => {
+            posthog.config.disable_session_recording = true
+            vi.spyOn(posthog.consent, 'isOptedOut').mockReturnValue(true)
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: false }))
+
+            expect(reportedReasons()).toEqual([
+                ['client_config_disabled', 'consent_opted_out', 'remote_config_disabled'],
+            ])
+        })
+
+        it('reports each cause once while it holds', () => {
+            posthog.config.disable_session_recording = true
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(reportedReasons()).toEqual([['client_config_disabled']])
+        })
+
+        it('removes the reason once recording starts', () => {
+            posthog.config.disable_session_recording = true
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            posthog.config.disable_session_recording = false
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(reportedReasons()).toEqual([['client_config_disabled']])
+            expect(posthog.unregister_for_session).toHaveBeenCalledWith(SDK_DEBUG_REPLAY_DISABLED_REASON)
+            expect(sessionRecording.started).toBe(true)
+        })
+
+        it('reports nothing when recording starts', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(reportedReasons()).toEqual([])
         })
     })
 })
