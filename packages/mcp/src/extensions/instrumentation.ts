@@ -45,7 +45,7 @@ import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getRequestHeaders } from './request-headers'
 import { getSessionId, getSessionInfo, isModernEraRequest, newSessionId } from './session'
 import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
-import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, resolveFeedbackToolName } from './agent-feedback'
+import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, SEND_FEEDBACK_TOOL_NAME } from './agent-feedback'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
 
@@ -549,11 +549,15 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
  * would start minting a handle, and appending its prompt-back block, on
  * instances that today mint none. That changes session anchoring (ADR-0004)
  * rather than closing this gap.
+ *
+ * `virtualToolInputSchema` is required (not defaulted to one specific virtual
+ * tool's descriptor) so every call site names the tool it means; each caller
+ * passes its own descriptor's `inputSchema`.
  */
 export function getVirtualToolParameterOwnership(
   data: MCPAnalyticsData,
   toolName: string,
-  virtualToolInputSchema: unknown = getReportMissingToolDescriptor(toolName).inputSchema
+  virtualToolInputSchema: unknown
 ): AnalyticsParameterOwnership {
   return {
     ...getAnalyticsParameterOwnership(virtualToolInputSchema),
@@ -734,7 +738,7 @@ async function getTracedToolsList(
 
       const feedbackOptions = resolveCollectFeedbackOptions(data.options.collectFeedback)
       if (feedbackOptions) {
-        const feedbackToolName = resolveFeedbackToolName(data.options.collectFeedback)
+        const feedbackToolName = feedbackOptions.toolName ?? SEND_FEEDBACK_TOOL_NAME
         const alreadyPresent = tools.some((tool) => tool?.name === feedbackToolName)
         if (alreadyPresent) {
           data.logger(

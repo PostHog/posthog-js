@@ -223,6 +223,11 @@ function truncateFeedbackText(value: string, maxLength: number): string {
   return value.length > maxLength ? value.slice(0, maxLength) + TRUNCATION_SUFFIX : value
 }
 
+/** Strips structured PII, then bounds the length. Shared by every free-text capture below. */
+function redactAndBoundText(text: string): string {
+  return truncateFeedbackText(redactPii(text), MAX_FEEDBACK_TEXT_LENGTH)
+}
+
 /**
  * Agent-narrated free text can contain a secret the LLM read aloud or personal
  * data it narrated, so it gets the `$mcp_intent` treatment: sanitize, strip
@@ -230,7 +235,7 @@ function truncateFeedbackText(value: string, maxLength: number): string {
  * process `event.properties`, so this happens here.
  */
 function captureFreeText(value: string): string {
-  return truncateFeedbackText(redactPii(sanitizeCapturedValue(value) as string), MAX_FEEDBACK_TEXT_LENGTH)
+  return redactAndBoundText(sanitizeCapturedValue(value) as string)
 }
 
 /**
@@ -241,13 +246,13 @@ function captureFreeText(value: string): string {
 function captureExtraValue(value: unknown): unknown {
   const sanitized = sanitizeCapturedValue(value)
   if (typeof sanitized === 'string') {
-    return truncateFeedbackText(redactPii(sanitized), MAX_FEEDBACK_TEXT_LENGTH)
+    return redactAndBoundText(sanitized)
   }
   if (sanitized == null || typeof sanitized === 'number' || typeof sanitized === 'boolean') {
     return sanitized
   }
   try {
-    return truncateFeedbackText(redactPii(JSON.stringify(sanitized)), MAX_FEEDBACK_TEXT_LENGTH)
+    return redactAndBoundText(JSON.stringify(sanitized))
   } catch {
     return undefined
   }

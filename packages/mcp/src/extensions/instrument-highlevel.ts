@@ -18,7 +18,7 @@ import {
   handleFeedback,
   parseFeedbackReport,
   resolveCollectFeedbackOptions,
-  resolveFeedbackToolName,
+  SEND_FEEDBACK_TOOL_NAME,
 } from './agent-feedback'
 import {
   analyticsOwnsParameter,
@@ -31,7 +31,7 @@ import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import type { LoggerFn } from './logger'
 import { createWrappedTool, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
-import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
+import { getReportMissingToolDescriptor, handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
   handleListToolsRequest,
@@ -259,14 +259,18 @@ async function handleToolCallRequest(
       extra,
       eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
-      parameterOwnership: getVirtualToolParameterOwnership(data, toolName),
+      parameterOwnership: getVirtualToolParameterOwnership(
+        data,
+        toolName,
+        getReportMissingToolDescriptor(toolName).inputSchema
+      ),
       execute: async () => handleReportMissing({ context }, data.logger),
     })
   }
 
   const feedbackOptions = resolveCollectFeedbackOptions(data.options.collectFeedback)
   const isFeedbackCandidate =
-    feedbackOptions !== undefined && toolName === resolveFeedbackToolName(data.options.collectFeedback)
+    feedbackOptions !== undefined && toolName === (feedbackOptions.toolName ?? SEND_FEEDBACK_TOOL_NAME)
 
   if (isFeedbackCandidate && (await isToolAdvertised(server, toolName, extra, data.logger)) === false) {
     const report = parseFeedbackReport(request.params?.arguments, feedbackOptions)

@@ -21,6 +21,7 @@ import {
   buildFeedbackIntent,
   getFeedbackToolDescriptor,
   parseFeedbackReport,
+  resolveCollectFeedbackOptions,
   SEND_FEEDBACK_TOOL_NAME,
 } from './agent-feedback'
 import { analyticsOwnsParameter, stripOwnedAnalyticsArguments } from './analytics-parameters'
@@ -117,26 +118,26 @@ export class PostHogMCP extends PostHog {
   // The virtual-tool config lives here (not on the per-call options) so that
   // prepareToolList (inject) and prepareToolCall (detect) always agree.
   readonly #missingCapabilityToolName: string
-  readonly #collectFeedbackEnabled: boolean
-  readonly #feedbackOptions: CollectFeedbackOptions
-  readonly #feedbackToolName: string
+  // `undefined` is the enable switch's off state: without it, prepareToolCall
+  // must never claim a call named like the virtual tool — the host may have a
+  // real tool by that name, and flagging it would shadow the real handler.
+  readonly #feedbackOptions: CollectFeedbackOptions | undefined
   readonly #captureModel: MCPAnalyticsOptions['captureModel']
   readonly #modelParameterOwnership = new Map<string, boolean>()
 
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
     super(apiKey, options)
     this.#missingCapabilityToolName = options.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
-    // The constructor option is the enable switch: without it, prepareToolCall
-    // must never claim a call named like the virtual tool — the host may have a
-    // real tool by that name, and flagging it would shadow the real handler.
-    this.#collectFeedbackEnabled = Boolean(options.collectFeedback)
-    this.#feedbackOptions = typeof options.collectFeedback === 'object' ? options.collectFeedback : {}
-    this.#feedbackToolName = this.#feedbackOptions.toolName ?? SEND_FEEDBACK_TOOL_NAME
+    this.#feedbackOptions = resolveCollectFeedbackOptions(options.collectFeedback)
     // Fail fast on a config error (reserved extra key, undeclared extraRequired)
     // instead of first surfacing it when a tools/list is served.
     getFeedbackToolDescriptor(this.#feedbackOptions)
     this.#captureModel = options.captureModel
     applyMcpLibIdentity(this)
+  }
+
+  get #feedbackToolName(): string {
+    return this.#feedbackOptions?.toolName ?? SEND_FEEDBACK_TOOL_NAME
   }
 
   /** Capture a tool invocation. Emits `$mcp_tool_call` (+ an `$exception` sibling on error). */
@@ -224,7 +225,7 @@ export class PostHogMCP extends PostHog {
 
     if (
       options.collectFeedback &&
-      this.#collectFeedbackEnabled &&
+      this.#feedbackOptions !== undefined &&
       !prepared.some((tool) => tool?.name === this.#feedbackToolName)
     ) {
       prepared = [...prepared, getFeedbackToolDescriptor(this.#feedbackOptions) as TTool]
@@ -298,7 +299,7 @@ export class PostHogMCP extends PostHog {
       ? resolveModel({ params: { arguments: args, _meta: options.requestMeta } }, ownsModel)
       : undefined
     const strippedArgs = stripContext(args)
-    const isFeedback = this.#collectFeedbackEnabled && name === this.#feedbackToolName
+    const isFeedback = this.#feedbackOptions !== undefined && name === this.#feedbackToolName
     return {
       intent,
       intentSource: intent ? 'context_parameter' : undefined,
