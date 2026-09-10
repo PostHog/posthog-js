@@ -28,6 +28,12 @@ export function monotonicNow(): number | undefined {
   return typeof perf?.now === 'function' ? perf.now() : undefined
 }
 
+/** A root span's start read on both clocks: the basis its local descendants are placed on. */
+export interface ClockAnchor {
+  wall: number
+  mono: number
+}
+
 export interface SpanInit {
   traceId: string
   spanId: string
@@ -44,6 +50,8 @@ export interface SpanInit {
   startTime: number
   /** True when the caller supplied an explicit `startTime`. */
   backdated: boolean
+  /** Inherited from a local parent; replaces `startTime` unless the span is backdated. */
+  clockAnchor?: ClockAnchor
   /** Keys the SDK attached itself. Exempt from the attribute cap and never evicted. */
   autoAttributeKeys: string[]
   maxAttributes: number
@@ -62,6 +70,7 @@ export class PostHogSpan implements Span {
   private readonly _startTime: number
   // Absent on backdated spans and on platforms with no monotonic source.
   private readonly _startMono?: number
+  private readonly _clockAnchor?: ClockAnchor
 
   private _name: string
   private _kind: SpanKind
@@ -106,8 +115,14 @@ export class PostHogSpan implements Span {
     for (const key of Object.keys(init.attributes)) {
       this._writeAttribute(key, init.attributes[key])
     }
-    this._startTime = init.startTime
     this._startMono = init.backdated ? undefined : monotonicNow()
+    this._startTime =
+      init.clockAnchor && this._startMono !== undefined
+        ? init.clockAnchor.wall + (this._startMono - init.clockAnchor.mono)
+        : init.startTime
+    if (this._startMono !== undefined) {
+      this._clockAnchor = init.clockAnchor ?? { wall: this._startTime, mono: this._startMono }
+    }
   }
 
   /**
@@ -259,13 +274,20 @@ export class PostHogSpan implements Span {
   }
 
   /** Context a child span inherits when this handle is its parent. */
-  childContext(): { traceId: string; parentSpanId: string; traceState?: string; traceFlags: string } {
+  childContext(): {
+    traceId: string
+    parentSpanId: string
+    traceState?: string
+    traceFlags: string
+    clockAnchor?: ClockAnchor
+  } {
     return {
       traceId: this._traceId,
       parentSpanId: this._spanId,
       traceState: this._traceState,
       // A child of a continued trace keeps propagating the caller's decision.
       traceFlags: this._traceFlags,
+      clockAnchor: this._clockAnchor,
     }
   }
 
