@@ -109,7 +109,11 @@ describe('URL credential redaction', () => {
       'https://app.example.com/cb#access_token=fakeaccess&token_type=bearer',
       'https://app.example.com/cb#access_token=%5Bredacted%5D&token_type=%5Bredacted%5D',
     ],
-    ['https://example.com/x?a=1;token=fakesecret', 'https://example.com/x?a=1&token=%5Bredacted%5D'],
+    // `;` is never split on: doing so cuts a credential's own value in two and
+    // republishes the tail as a bare key. A value carrying one is dropped whole
+    // instead, whenever any `;`-separated piece of it names a credential.
+    ['https://example.com/guide?password=prefix;remainingsecret', 'https://example.com/guide?password=%5Bredacted%5D'],
+    ['https://example.com/x?a=1;token=fakesecret', 'https://example.com/x?a=%5Bredacted%5D'],
     // The head has no `=`, so it is text and survives; the tail is a field list.
     // Read as one, the whole fragment would be a single key `/callback?token`.
     ['https://example.com/#/callback?token=fakesecret', 'https://example.com/#/callback?token=%5Bredacted%5D'],
@@ -318,7 +322,7 @@ describe('URL credential redaction', () => {
     ['a sentence whose URL carries no credentials', 'Failed (https://example.com/x?a=b).'],
     ['a path ending in balanced parentheses', 'https://en.wikipedia.org/wiki/Foo_(bar)'],
     ['a local file URL', 'file:///guide.md'],
-    ['a `;`-separated query with no sensitive key', 'https://example.com/x?a=1;b=2'],
+    ['a `;`-separated value with no sensitive piece', 'https://example.com/x?a=1;b=2'],
     ['a path containing an apostrophe', "https://example.com/o'reilly"],
     ['a whole-string URL whose trailing `.` is part of the path', 'https://example.com/x?a=b.'],
     // Matching an optional authority sweeps up prose. That costs nothing: a

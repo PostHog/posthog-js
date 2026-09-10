@@ -43,12 +43,12 @@ const URL_AUTHORITY_PATTERN = new RegExp(`^${URL_AUTHORITY_SEARCH.source}`, 'i')
 const URL_AUTHORITY_SEARCH_ALL = new RegExp(URL_AUTHORITY_SEARCH.source, 'gi')
 /** The field separators. `?` and `#` are structural only as delimiters — see {@link isStructural}. */
 const URL_FIELD_CHARACTERS = '=&;'
+/** The legacy field separator. Never split on, only checked; see {@link sanitizeUrlFieldValue}. */
+const LEGACY_FIELD_SEPARATOR = ';'
 // The terminal class above also absorbs the prose punctuation that follows a URL
 // in a sentence, `'` included now that a URL can contain one. See
 // `splitTrailingPunctuation`.
 const URL_TRAILING_PUNCTUATION = ".,;:!?)]}'"
-// `&` and its legacy alternative `;` both separate fields.
-const URL_FIELD_SEPARATOR_PATTERN = /[;&]/g
 const MAX_URL_LENGTH = 8192
 const MAX_URL_QUERY_FIELDS = 128
 // A query key is sensitive when any `-`/`_`/`.`/`/`-delimited segment names a
@@ -146,7 +146,7 @@ function isBase64DataUrl(value: string): boolean {
 }
 
 function exceedsUrlFieldLimit(fields: string): boolean {
-  return fields.split(URL_FIELD_SEPARATOR_PATTERN, MAX_URL_QUERY_FIELDS + 1).length > MAX_URL_QUERY_FIELDS
+  return fields.split('&', MAX_URL_QUERY_FIELDS + 1).length > MAX_URL_QUERY_FIELDS
 }
 
 /** How much of the sanitizer one call is allowed to apply. */
@@ -157,9 +157,22 @@ interface UrlSanitizeMode {
   stripPunctuation: boolean
 }
 
+/** Whether any `;`-separated piece of `value` names a credential. */
+function hasLegacySensitiveField(value: string): boolean {
+  return value.split(LEGACY_FIELD_SEPARATOR).some((piece) => shouldRedactQueryKey(piece.split('=', 1)[0]))
+}
+
 /** The sanitized value of one query or fragment field. */
 function sanitizeUrlFieldValue(key: string, value: string, allowNestedUrls: boolean): string {
   if (shouldRedactQueryKey(key)) {
+    return REDACTED_VALUE
+  }
+  // `;` once separated fields the way `&` does, so a value carrying one may hold
+  // a credential field inside it. Splitting on it is not an option — that cuts a
+  // credential's own value in two and publishes the tail as a bare key
+  // (`?password=prefix;rest`) — so instead the whole value goes when any piece
+  // of it names a credential.
+  if (value.includes(LEGACY_FIELD_SEPARATOR) && hasLegacySensitiveField(value)) {
     return REDACTED_VALUE
   }
   if (!URL_PATTERN_ONCE.test(value)) {
@@ -188,7 +201,7 @@ function sanitizeUrlFields(
   const sanitized = new URLSearchParams()
   let changed = false
   let lastFieldSensitive = false
-  for (const [key, value] of new URLSearchParams(fields.replace(URL_FIELD_SEPARATOR_PATTERN, '&'))) {
+  for (const [key, value] of new URLSearchParams(fields)) {
     const sanitizedValue = sanitizeUrlFieldValue(key, value, allowNestedUrls)
     // `changed` is compared, not inferred from the key: the PostHog-token pass
     // runs first, so a value can already read `[redacted]`, and calling that a
