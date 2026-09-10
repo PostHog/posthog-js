@@ -1331,14 +1331,16 @@ describe('Prompts', () => {
     })
 
     it('throws when the server ignores the label', async () => {
-      // An old server ignores ?label= and returns latest versions; none of the
-      // rows resolve the label, and caching them would serve wrong versions.
-      const row = { ...labeledRow('prompt-a'), all_labels: [] }
-      mockFetch.mockResolvedValueOnce(listResponse([row]))
+      // An old server ignores ?label= and returns latest versions of every
+      // prompt, including prompts without the label. Even when some labels
+      // happen to point at latest, a partial result would hide the rest.
+      const looksResolved = labeledRow('prompt-a')
+      const unlabeled = { ...labeledRow('prompt-b'), all_labels: [] }
+      mockFetch.mockResolvedValueOnce(listResponse([looksResolved, unlabeled]))
 
       const prompts = new Prompts({ posthog: createMockPostHog() })
 
-      await expect(prompts.getAll({ label: 'production' })).rejects.toThrow(/none resolve label/)
+      await expect(prompts.getAll({ label: 'production' })).rejects.toThrow(/does not carry label/)
 
       // Nothing was cached: a labeled get() goes to the network.
       mockFetch.mockResolvedValueOnce({

@@ -93,24 +93,29 @@ function isSameOrigin(url: string, host: string): boolean {
 }
 
 /**
- * Check that the server resolved this list row through the requested label.
+ * Classify how a list row relates to the requested label, via its all_labels
+ * field.
  *
- * An older server ignores the label param on the list endpoint and returns the
- * latest version of every prompt. A row that was resolved through a label
- * carries a matching name and version entry in its all_labels field.
+ * 'resolved': the row is the version the label points to.
+ * 'moved': the prompt carries the label, but on another version. Happens when
+ * the label moves between the query and the response.
+ * 'absent': the prompt does not carry the label at any version. A server that
+ * filters by label never returns such a row, so this means the server ignored
+ * the label param (an older PostHog release) and served latest versions.
  */
-function rowResolvesLabel(row: PromptApiResponse, label: string): boolean {
+function rowLabelState(row: PromptApiResponse, label: string): 'resolved' | 'moved' | 'absent' {
   const allLabels = (row as unknown as Record<string, unknown>).all_labels
   if (!Array.isArray(allLabels)) {
-    return false
+    return 'absent'
   }
-  return allLabels.some(
-    (entry) =>
-      typeof entry === 'object' &&
-      entry !== null &&
-      (entry as Record<string, unknown>).name === label &&
-      (entry as Record<string, unknown>).version === row.version
+  const entry = allLabels.find(
+    (candidate) =>
+      typeof candidate === 'object' && candidate !== null && (candidate as Record<string, unknown>).name === label
   )
+  if (entry === undefined) {
+    return 'absent'
+  }
+  return (entry as Record<string, unknown>).version === row.version ? 'resolved' : 'moved'
 }
 
 export interface PromptsWithPostHogOptions {
@@ -268,19 +273,36 @@ export class Prompts {
     const label = options.label
     const rows = await this.fetchPromptListFromApi(label)
 
-    const now = Date.now()
-    const results: Record<string, PromptRemoteResult> = {}
+    // Validate every row before caching any, so a rejected batch leaves the
+    // cache untouched.
+    const resolvedRows: PromptApiResponse[] = []
     const skipped: string[] = []
-
     for (const row of rows) {
       if (!isPromptApiResponse(row)) {
         throw new Error(`[PostHog Prompts] Invalid response format for prompts with label "${label}"`)
       }
-      if (!rowResolvesLabel(row, label)) {
+      const labelState = rowLabelState(row, label)
+      if (labelState === 'absent') {
+        // Even one unlabeled row proves the server did not filter, and then
+        // rows that look resolved are only labels that happen to point at the
+        // latest version. A partial result here would hide the rest, so fail
+        // loudly instead.
+        throw new Error(
+          `[PostHog Prompts] The server returned a prompt that does not carry label "${label}". ` +
+            'It may not support fetching prompts by label on the list endpoint yet. ' +
+            'Upgrade PostHog, or fetch prompts one by one with get().'
+        )
+      }
+      if (labelState === 'moved') {
         skipped.push(row.name)
         continue
       }
+      resolvedRows.push(row)
+    }
 
+    const now = Date.now()
+    const results: Record<string, PromptRemoteResult> = {}
+    for (const row of resolvedRows) {
       const config = extractConfig((row as unknown as Record<string, unknown>).config)
       this.getOrCreatePromptCache(row.name).set(label, {
         prompt: row.prompt,
@@ -298,18 +320,6 @@ export class Prompts {
         label,
         config: cloneConfig(config),
       }
-    }
-
-    if (rows.length > 0 && Object.keys(results).length === 0) {
-      // Nothing resolved the label, so the server most likely ignored the
-      // label param and served latest versions. Caching those under the label
-      // would be the silent wrong-version failure labels exist to prevent, so
-      // fail loudly instead.
-      throw new Error(
-        `[PostHog Prompts] The server returned prompts, but none resolve label "${label}". ` +
-          'It may not support fetching prompts by label on the list endpoint yet. ' +
-          'Upgrade PostHog, or fetch prompts one by one with get().'
-      )
     }
 
     if (skipped.length > 0) {
