@@ -127,6 +127,14 @@ describe('URL credential redaction', () => {
       'https://fakeuser:fakepass@en.wikipedia.org/wiki/Foo_(bar).',
       'https://%5Bredacted%5D@en.wikipedia.org/wiki/Foo_(bar).',
     ],
+    // `'` is a valid URI sub-delimiter: excluding it from the pattern's terminal
+    // class truncated the match at the path and shipped the secret in the clear.
+    // `new URL()` leaves it unencoded in a path, so the rewritten URL keeps it.
+    ["https://example.com/o'reilly?token=fakesecret", "https://example.com/o'reilly?token=%5Bredacted%5D"],
+    ["https://fakeuser:fake'pass@example.com/doc", 'https://%5Bredacted%5D@example.com/doc'],
+    // A URL single-quoted in prose still gets its closing quote split off and
+    // re-appended, the way a trailing comma or period is.
+    ["Read 'https://example.com/x?sig=fakesignature' first.", "Read 'https://example.com/x?sig=%5Bredacted%5D' first."],
     // A retained value that is itself a URL is sanitized one level deep, then
     // re-serialized by `URLSearchParams` — hence the double-encoded `%255B`.
     [
@@ -144,6 +152,7 @@ describe('URL credential redaction', () => {
     ['a path ending in balanced parentheses', 'https://en.wikipedia.org/wiki/Foo_(bar)'],
     ['a local file URL', 'file:///guide.md'],
     ['a `;`-separated query with no sensitive key', 'https://example.com/x?a=1;b=2'],
+    ['a path containing an apostrophe', "https://example.com/o'reilly"],
   ])('leaves %s byte-for-byte', (_label, value) => {
     expect(sanitizeCapturedValue(value)).toBe(value)
   })

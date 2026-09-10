@@ -20,10 +20,16 @@ const SENSITIVE_KEY_PATTERN =
 // `resource_https://user:pw@host` has no boundary to anchor to and would keep its
 // credentials. Leftmost matching makes `foo.https://x` match from `f` with scheme
 // `foo.https`, which redacts the same URL and is therefore harmless.
-const URL_PATTERN = /[a-z][a-z0-9+.-]{0,63}:\/\/[^\s<>"']+/gi
+//
+// `'` is a valid URI sub-delimiter, so the terminal class must not stop at one:
+// excluding it truncated `https://example.com/o'reilly?token=x` at the path and
+// shipped the token in the clear. Only the characters that are never valid
+// unencoded in a URI are excluded.
+const URL_PATTERN = /[a-z][a-z0-9+.-]{0,63}:\/\/[^\s<>"]+/gi
 // The terminal class above also absorbs the prose punctuation that follows a URL
-// in a sentence. See `splitTrailingPunctuation`.
-const URL_TRAILING_PUNCTUATION = '.,;:!?)]}'
+// in a sentence, `'` included now that a URL can contain one. See
+// `splitTrailingPunctuation`.
+const URL_TRAILING_PUNCTUATION = ".,;:!?)]}'"
 // `;` is a legacy field separator; normalizing it to `&` lets one split cover both.
 const URL_FIELD_SEPARATOR_PATTERN = /;/g
 const MAX_URL_LENGTH = 8192
