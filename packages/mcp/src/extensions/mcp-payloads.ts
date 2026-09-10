@@ -130,28 +130,54 @@ function exceedsUrlFieldLimit(fields: string): boolean {
   return fields.split('&', MAX_URL_QUERY_FIELDS + 1).length > MAX_URL_QUERY_FIELDS
 }
 
+/** How much of the sanitizer one call is allowed to apply. */
+interface UrlSanitizeMode {
+  /** Sanitize a URL found inside a retained field value. Off past depth 1. */
+  allowNestedUrls: boolean
+  /** Split prose punctuation off the end. Off when the match is a whole string. */
+  stripPunctuation: boolean
+}
+
+/** The sanitized value of one query or fragment field. */
+function sanitizeUrlFieldValue(key: string, value: string, allowNestedUrls: boolean): string {
+  if (shouldRedactQueryKey(key)) {
+    return REDACTED_VALUE
+  }
+  if (!value.includes('://')) {
+    return value
+  }
+  // One level of nesting is the whole budget. Past it a URL-bearing value is
+  // dropped rather than trusted: nothing deeper would sanitize it, so a gateway
+  // address wrapping a gateway address would otherwise ship its credentials.
+  return allowNestedUrls
+    ? sanitizeUrlsInString(value, { allowNestedUrls: false, stripPunctuation: true })
+    : REDACTED_VALUE
+}
+
 /**
  * Redacts the values of credential-named fields in one `&`-separated field list
  * — a query string or a fragment. `serialized` is only meaningful when `changed`
  * is true, so an untouched part keeps its original encoding instead of being
- * re-serialized.
+ * re-serialized. `lastFieldChanged` is what decides whether restored prose
+ * punctuation belongs to the prose or to a credential; see {@link sanitizeUrl}.
  */
-function sanitizeUrlFields(fields: string, allowNestedUrls: boolean): { changed: boolean; serialized: string } {
+function sanitizeUrlFields(
+  fields: string,
+  allowNestedUrls: boolean
+): { changed: boolean; lastFieldChanged: boolean; serialized: string } {
   const sanitized = new URLSearchParams()
   let changed = false
+  let lastFieldChanged = false
   for (const [key, value] of new URLSearchParams(fields)) {
-    if (shouldRedactQueryKey(key)) {
-      sanitized.append(key, REDACTED_VALUE)
-      changed = true
-    } else if (allowNestedUrls && value.includes('://')) {
-      const nested = value.replace(URL_PATTERN, (match) => sanitizeUrl(match, false))
-      changed ||= nested !== value
-      sanitized.append(key, nested)
-    } else {
-      sanitized.append(key, value)
-    }
+    const sanitizedValue = sanitizeUrlFieldValue(key, value, allowNestedUrls)
+    // Compared, not inferred from the key being sensitive: the PostHog-token
+    // pass runs first, so a value can already read `[redacted]`, and calling
+    // that a change would re-serialize the query only to percent-encode it.
+    lastFieldChanged = sanitizedValue !== value
+    changed ||= lastFieldChanged
+    sanitized.append(key, sanitizedValue)
   }
-  return { changed, serialized: sanitized.toString() }
+  return { changed, lastFieldChanged, serialized: sanitized.toString() }
 }
 
 /**
@@ -175,13 +201,13 @@ function splitTrailingPunctuation(value: string): { address: string; suffix: str
  * Redacts the credentials embedded in one URL-shaped match: the userinfo, plus
  * the values of credential-named query and fragment fields. A retained value that
  * is itself a URL — a gateway's `?url=` passthrough — gets the same pass one
- * level deep, which `allowNestedUrls` turns off for that inner call.
+ * level deep.
  */
-function sanitizeUrl(value: string, allowNestedUrls: boolean): string {
+function sanitizeUrl(value: string, mode: UrlSanitizeMode): string {
   if (value.length > MAX_URL_LENGTH) {
     return REDACTED_VALUE
   }
-  const { address, suffix } = splitTrailingPunctuation(value)
+  const { address, suffix } = mode.stripPunctuation ? splitTrailingPunctuation(value) : { address: value, suffix: '' }
   let url: URL
   try {
     url = new URL(address)
@@ -190,6 +216,7 @@ function sanitizeUrl(value: string, allowNestedUrls: boolean): string {
   }
 
   const query = url.search.slice(1).replace(URL_FIELD_SEPARATOR_PATTERN, '&')
+  const hasFragment = url.hash !== ''
   // A fragment with no `=` is prose rather than a field list (`#section-2`), and
   // stays byte-for-byte.
   const fragment = url.hash.includes('=') ? url.hash.slice(1).replace(URL_FIELD_SEPARATOR_PATTERN, '&') : ''
@@ -203,17 +230,37 @@ function sanitizeUrl(value: string, allowNestedUrls: boolean): string {
     url.password = ''
     changed = true
   }
-  const sanitizedQuery = sanitizeUrlFields(query, allowNestedUrls)
+  const sanitizedQuery = sanitizeUrlFields(query, mode.allowNestedUrls)
   if (sanitizedQuery.changed) {
     url.search = sanitizedQuery.serialized
     changed = true
   }
-  const sanitizedFragment = sanitizeUrlFields(fragment, allowNestedUrls)
+  const sanitizedFragment = sanitizeUrlFields(fragment, mode.allowNestedUrls)
   if (sanitizedFragment.changed) {
     url.hash = sanitizedFragment.serialized
     changed = true
   }
-  return (changed ? url.toString() : address) + suffix
+
+  // The punctuation split off the end may be the tail of the very credential
+  // just replaced (`?password=fakepass!!!`) rather than the sentence's. When the
+  // last field of the URL's trailing part was rewritten the punctuation goes
+  // with it; losing a comma from the surrounding prose is the accepted cost of
+  // not shipping `!!!`.
+  const tail = hasFragment ? sanitizedFragment : sanitizedQuery
+  return (changed ? url.toString() : address) + (tail.lastFieldChanged ? '' : suffix)
+}
+
+/**
+ * Replaces every URL-shaped match in `text`.
+ *
+ * A match that IS the whole string is an address rather than prose — a captured
+ * `$mcp_resource_name`, a `params.uri`, a nested `?url=` value — so nothing is
+ * split off its end: a trailing `!` there belongs to the URL.
+ */
+function sanitizeUrlsInString(text: string, mode: UrlSanitizeMode): string {
+  return text.replace(URL_PATTERN, (match) =>
+    sanitizeUrl(match, { ...mode, stripPunctuation: mode.stripPunctuation && match.length !== text.length })
+  )
 }
 
 function sanitizeString(value: string): string {
@@ -225,7 +272,11 @@ function sanitizeString(value: string): string {
   ) {
     return BINARY_REDACTED_VALUE
   }
-  return value.replace(URL_PATTERN, (match) => sanitizeUrl(match, true)).replace(POSTHOG_TOKEN_PATTERN, REDACTED_VALUE)
+  // PostHog tokens first: rewriting a URL percent-encodes the characters around a
+  // token sitting in a query value, which erases the `\b` boundary the token
+  // pattern needs and would leak it.
+  const withoutTokens = value.replace(POSTHOG_TOKEN_PATTERN, REDACTED_VALUE)
+  return sanitizeUrlsInString(withoutTokens, { allowNestedUrls: true, stripPunctuation: true })
 }
 
 function passesLuhn(digits: string): boolean {

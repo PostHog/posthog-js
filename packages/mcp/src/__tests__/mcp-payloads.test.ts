@@ -118,11 +118,31 @@ describe('URL credential redaction', () => {
       'https://gitlab.example.com/api?private_token=fakesecret&oauth_signature=fakesignature&id_token=fakeaccess&subscription-key=fakekey&sort_key=name',
       'https://gitlab.example.com/api?private_token=%5Bredacted%5D&oauth_signature=%5Bredacted%5D&id_token=%5Bredacted%5D&subscription-key=%5Bredacted%5D&sort_key=%5Bredacted%5D',
     ],
+    // The punctuation split off the end goes with a rewritten trailing
+    // credential rather than back onto the prose: it may be the credential's own
+    // tail (`?password=fakepass!!!`), and there is no way to tell from here.
     [
       'See https://example.com/x?sig=fakesignature, then retry.',
-      'See https://example.com/x?sig=%5Bredacted%5D, then retry.',
+      'See https://example.com/x?sig=%5Bredacted%5D then retry.',
     ],
-    ['Failed (https://example.com/x?sig=fakesignature).', 'Failed (https://example.com/x?sig=%5Bredacted%5D).'],
+    ['Failed (https://example.com/x?sig=fakesignature).', 'Failed (https://example.com/x?sig=%5Bredacted%5D'],
+    [
+      'See https://example.com/x?password=fakepass!, then retry.',
+      'See https://example.com/x?password=%5Bredacted%5D then retry.',
+    ],
+    // The rewritten field is not the last one, so the comma is the prose's.
+    [
+      'See https://example.com/x?sig=fakesignature&page=2, then retry.',
+      'See https://example.com/x?sig=%5Bredacted%5D&page=2, then retry.',
+    ],
+    // The URL's trailing part is a prose fragment, which is never rewritten.
+    [
+      'See https://example.com/x?sig=fakesignature#intro, then retry.',
+      'See https://example.com/x?sig=%5Bredacted%5D#intro, then retry.',
+    ],
+    // A match that is the whole string is an address, not prose, so nothing is
+    // split off its end and the `!!!` is read as part of the credential.
+    ['https://example.com/login?password=fakepass!!!', 'https://example.com/login?password=%5Bredacted%5D'],
     [
       'https://fakeuser:fakepass@en.wikipedia.org/wiki/Foo_(bar).',
       'https://%5Bredacted%5D@en.wikipedia.org/wiki/Foo_(bar).',
@@ -134,12 +154,30 @@ describe('URL credential redaction', () => {
     ["https://fakeuser:fake'pass@example.com/doc", 'https://%5Bredacted%5D@example.com/doc'],
     // A URL single-quoted in prose still gets its closing quote split off and
     // re-appended, the way a trailing comma or period is.
-    ["Read 'https://example.com/x?sig=fakesignature' first.", "Read 'https://example.com/x?sig=%5Bredacted%5D' first."],
+    ["Read 'https://example.com/x?sig=fakesignature' first.", "Read 'https://example.com/x?sig=%5Bredacted%5D first."],
     // A retained value that is itself a URL is sanitized one level deep, then
     // re-serialized by `URLSearchParams` — hence the double-encoded `%255B`.
     [
       'https://gateway.example.com/fetch?url=https://svc:fakepass@internal.example.com/doc%3Ftoken%3Dfakesecret',
       'https://gateway.example.com/fetch?url=https%3A%2F%2F%255Bredacted%255D%40internal.example.com%2Fdoc%3Ftoken%3D%255Bredacted%255D',
+    ],
+    // One level is the budget: the second gateway hop's value is dropped whole
+    // rather than trusted, so the innermost token cannot survive.
+    [
+      'https://gateway.example.com/fetch?url=https%3A%2F%2Fgateway2.example.com%2Ffetch%3Furl%3Dhttps%253A%252F%252Finternal.test%252Fdoc%253Ftoken%253Dfakesecret',
+      'https://gateway.example.com/fetch?url=https%3A%2F%2Fgateway2.example.com%2Ffetch%3Furl%3D%255Bredacted%255D',
+    ],
+    // PostHog tokens are redacted before URLs are rewritten: rewriting first
+    // percent-encodes the `/` in front of the token and erases the `\b` boundary
+    // its pattern needs. An already-redacted value is not a change, so a field
+    // the token pass handled keeps the encoding it arrived with.
+    [
+      'https://example.com/?ref=/phx_EXAMPLEONLYFAKEVALUE00000000000&token=fakesecret',
+      'https://example.com/?ref=%2F%5Bredacted%5D&token=%5Bredacted%5D',
+    ],
+    [
+      'https://example.com/guide?token=phx_EXAMPLEONLYFAKEVALUE00000000000',
+      'https://example.com/guide?token=[redacted]',
     ],
   ])('sanitizes %s', (value, expected) => {
     expect(sanitizeCapturedValue(value)).toBe(expected)
@@ -153,6 +191,7 @@ describe('URL credential redaction', () => {
     ['a local file URL', 'file:///guide.md'],
     ['a `;`-separated query with no sensitive key', 'https://example.com/x?a=1;b=2'],
     ['a path containing an apostrophe', "https://example.com/o'reilly"],
+    ['a whole-string URL whose trailing `.` is part of the path', 'https://example.com/x?a=b.'],
   ])('leaves %s byte-for-byte', (_label, value) => {
     expect(sanitizeCapturedValue(value)).toBe(value)
   })

@@ -429,17 +429,21 @@ function publishResourceEvent(
     return
   }
   const { event, requestAttribution } = preparedEvent
-  if ('error' in outcome) {
-    event.isError = true
-    event.error = captureException(outcome.error)
-  } else {
-    event.isError = false
-    if (params.eventType === MCPAnalyticsEventType.mcpResourcesList) {
-      event.response = outcome.result
-    }
-  }
-  event.duration = Date.now() - startTime.getTime()
+  // Stamping is inside the `try` with the publish: `captureException` reads the
+  // thrown value's own `stack`, which an application error is free to define as
+  // a throwing getter. Outside, that would replace the resource error the caller
+  // is waiting on with ours.
   try {
+    if ('error' in outcome) {
+      event.isError = true
+      event.error = captureException(outcome.error)
+    } else {
+      event.isError = false
+      if (params.eventType === MCPAnalyticsEventType.mcpResourcesList) {
+        event.response = outcome.result
+      }
+    }
+    event.duration = Date.now() - startTime.getTime()
     captureEvent(server, event, params.logger, requestAttribution)
   } catch (error) {
     params.logger(`Warning: PostHog MCP analytics failed to publish ${params.request.method} analytics - ${error}`)

@@ -212,12 +212,12 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
     ],
     [
       'https://example.com/guide?token=phx_EXAMPLEONLYFAKEVALUE00000000000',
-      'https://example.com/guide?token=%5Bredacted%5D',
+      'https://example.com/guide?token=[redacted]',
       false,
     ],
     [
       'https://example.com/guide?token=phx_EXAMPLEONLYFAKEVALUE00000000000',
-      'https://example.com/guide?token=%5Bredacted%5D',
+      'https://example.com/guide?token=[redacted]',
       true,
     ],
   ] as const)(
@@ -274,6 +274,33 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
       }
     }
   )
+
+  it('surfaces the resource error even when capturing it throws', async () => {
+    const server = makeServer()
+    const warnings: string[] = []
+    instrument(server, fakePostHog(), { logger: (message: string) => warnings.push(message) })
+
+    // `captureException` reads the thrown value's own `stack`. An application is
+    // free to define that as a throwing getter, and analytics must not turn its
+    // own failure into the error the caller sees.
+    const error = new Error('Cannot read the guide')
+    Object.defineProperty(error, 'stack', {
+      get() {
+        throw new Error('stack getter exploded')
+      },
+    })
+    server.setRequestHandler('resources/read', (async () => {
+      throw error
+    }) as any)
+
+    await expect(dispatch(server, { method: 'resources/read', params: { uri: 'file:///guide.md' } })).rejects.toBe(
+      error
+    )
+    await vi.waitFor(() =>
+      expect(warnings.some((message) => message.includes('failed to publish resources/read analytics'))).toBe(true)
+    )
+    expect(eventCapture.findCapturesByEvent('$mcp_resource_read')).toHaveLength(0)
+  })
 
   it('names an $identify published from a resources/read by its uri', async () => {
     const server = makeServer()
