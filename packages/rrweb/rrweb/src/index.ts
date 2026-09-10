@@ -17,6 +17,8 @@ export {
   type eventWithTime,
 } from '@posthog/rrweb-types';
 
+export { getObserverInitFailures } from './record/observer';
+
 export {
   wasMaxDepthReached,
   resetMaxDepthState,

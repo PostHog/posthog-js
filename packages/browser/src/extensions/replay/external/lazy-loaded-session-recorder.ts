@@ -2798,6 +2798,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_oversized_mutations_dropped: this._oversizedMutationsDropped,
             $sdk_debug_replay_oversized_mutation_bytes_dropped: this._oversizedMutationBytesDropped,
             $sdk_debug_replay_rrweb_error: this._rrwebError,
+            // observers that failed to start: the recorder's error handler swallows those
+            // errors, so without this a frame that records almost nothing still reports
+            // every other health signal as good
+            $sdk_debug_replay_observer_init_failures: getRRWeb()?.getObserverInitFailures?.(),
             [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
         }
