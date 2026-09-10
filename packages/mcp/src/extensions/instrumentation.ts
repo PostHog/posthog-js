@@ -45,7 +45,7 @@ import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getRequestHeaders } from './request-headers'
 import { getSessionId, getSessionInfo, isModernEraRequest, newSessionId } from './session'
 import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
-import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, SEND_FEEDBACK_TOOL_NAME } from './agent-feedback'
+import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, SEND_FEEDBACK_TOOL_NAME } from './feedback'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
 

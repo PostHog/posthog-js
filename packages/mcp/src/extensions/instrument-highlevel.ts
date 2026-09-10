@@ -19,7 +19,7 @@ import {
   parseFeedbackReport,
   resolveCollectFeedbackOptions,
   SEND_FEEDBACK_TOOL_NAME,
-} from './agent-feedback'
+} from './feedback'
 import {
   analyticsOwnsParameter,
   getAnalyticsParameterOwnership,

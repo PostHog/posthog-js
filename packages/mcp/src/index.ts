@@ -14,7 +14,7 @@ import { applyMcpLibIdentity } from './extensions/lib-identity'
 import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
 import { instrumentLowLevelServer } from './extensions/instrument-lowlevel'
 import { instrumentHighLevelServer } from './extensions/instrument-highlevel'
-import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions } from './extensions/agent-feedback'
+import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions } from './extensions/feedback'
 import type {
   CaptureEventData,
   HighLevelMCPServerLike,
@@ -224,7 +224,7 @@ export {
 export { getRequestHeaders } from './extensions/request-headers'
 export { PostHogMCP, type PostHogMCPOptions } from './extensions/posthog-mcp'
 export { getMoreToolsResult } from './extensions/tools'
-export { sendFeedbackResult, SEND_FEEDBACK_TOOL_NAME } from './extensions/agent-feedback'
+export { sendFeedbackResult, SEND_FEEDBACK_TOOL_NAME } from './extensions/feedback'
 export { setLogger } from './extensions/logger'
 // Re-export the posthog-node client so a single import works:
 //   import { PostHog, instrument } from "@posthog/mcp"

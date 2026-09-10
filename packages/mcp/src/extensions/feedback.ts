@@ -22,7 +22,7 @@ const MAX_FEEDBACK_TEXT_LENGTH = 2048
 const MAX_FEEDBACK_TOOL_NAME_LENGTH = 256
 const TRUNCATION_SUFFIX = '...'
 
-const DEFAULT_AGENT_FEEDBACK_DESCRIPTION =
+const DEFAULT_FEEDBACK_DESCRIPTION =
   'Send feedback about this server to its developers. Most important: report a missing capability whenever no ' +
   'available tool fits your task, even if you can work around it (feedback_type "missing_capability"). Also ' +
   'welcome: a tool that failed or confused you, an unhelpful error, or something that worked well. This records ' +
@@ -140,7 +140,7 @@ export function getFeedbackToolDescriptor(options: CollectFeedbackOptions = {}):
 
   return {
     name: options.toolName ?? SEND_FEEDBACK_TOOL_NAME,
-    description: options.description ?? DEFAULT_AGENT_FEEDBACK_DESCRIPTION,
+    description: options.description ?? DEFAULT_FEEDBACK_DESCRIPTION,
     inputSchema: {
       type: 'object',
       properties: {

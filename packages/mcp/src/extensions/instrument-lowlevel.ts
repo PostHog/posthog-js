@@ -12,7 +12,7 @@ import {
   parseFeedbackReport,
   resolveCollectFeedbackOptions,
   SEND_FEEDBACK_TOOL_NAME,
-} from './agent-feedback'
+} from './feedback'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import type { LoggerFn } from './logger'

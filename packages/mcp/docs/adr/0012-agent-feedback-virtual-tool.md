@@ -21,7 +21,7 @@ Add a **new** `send_feedback` virtual tool behind a **new** `collectFeedback` op
 
 ## Consequences
 
-- Free-text feedback fields are agent-narrated, so they get the `$mcp_intent` treatment (sanitize, structured-PII redaction, length bound) before capture; `event.properties` bypasses the event-level pipeline, so this happens at build time in `agent-feedback.ts`.
+- Free-text feedback fields are agent-narrated, so they get the `$mcp_intent` treatment (sanitize, structured-PII redaction, length bound) before capture; `event.properties` bypasses the event-level pipeline, so this happens at build time in `feedback.ts`.
 - `send_feedback` covers what `reportMissing` covers. New integrations should enable only `collectFeedback`; consumers of `$mcp_missing_capability` see only `get_more_tools` reports and must additionally read `$mcp_feedback` with `$mcp_feedback_type = "missing_capability"` once servers adopt the new tool.
 - Dashboards must treat `$mcp_feedback` separately from `$mcp_tool_call`, the same rule ADR-0002 set for `$mcp_missing_capability`.
 - A later revisit of `get_more_tools` (or its deprecation) is deliberately out of scope here.

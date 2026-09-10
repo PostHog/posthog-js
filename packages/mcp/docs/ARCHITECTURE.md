@@ -383,7 +383,7 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 | Client identity from request `_meta` (2026-07-28)                     | `src/extensions/client-identity.ts`                                   |
 | Injected-argument ownership tracking                                  | `src/extensions/analytics-parameters.ts`                              |
 | `get_more_tools` virtual tool                                         | `src/extensions/tools.ts`                                             |
-| `send_feedback` virtual tool                                          | `src/extensions/agent-feedback.ts`                                    |
+| `send_feedback` virtual tool                                          | `src/extensions/feedback.ts`                                          |
 | Auto-redaction & binary stubbing                                      | `src/extensions/sanitization.ts`, `src/extensions/mcp-payloads.ts`    |
 | Size / depth / breadth caps                                           | `src/extensions/truncation.ts`                                        |
 | `context` JSON-Schema injection                                       | `src/extensions/context-parameters.ts`                                |
