@@ -402,6 +402,26 @@ describe('posthog core', () => {
             )
         })
 
+        it('treats any recordings batch key as a session recording on a custom endpoint', () => {
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+
+            posthog.capture(
+                'event-name',
+                { foo: 'bar', length: 0 },
+                {
+                    _url: 'https://app.posthog.com/custom/',
+                    _batchKey: 'recordings:session-1',
+                }
+            )
+
+            expect(posthog._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: 'https://app.posthog.com/custom/',
+                    timestampMode: 'body',
+                })
+            )
+        })
+
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
             posthog._onRemoteConfig({ ok: true, config: { analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig })
