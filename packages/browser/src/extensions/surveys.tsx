@@ -807,15 +807,12 @@ export class SurveyManager {
         return enabled
     }
 
-    // PostHog creates an internal targeting flag for almost every survey, so
-    // advanced_disable_feature_flags stops every survey from displaying. logger.critical is the
-    // only level that reaches the console without debug mode, where this misconfiguration shows up.
     private _warnIfFeatureFlagsDisabled(flagKey: string): void {
         if (this._loggedFeatureFlagsDisabledWarning || !this._posthog.config?.advanced_disable_feature_flags) {
             return
         }
         this._loggedFeatureFlagsDisabledWarning = true
-        logger.critical(
+        logger.warn(
             `Survey feature flag "${flagKey}" evaluated to false because advanced_disable_feature_flags is set. ` +
                 'PostHog creates an internal targeting flag for almost every survey, so no survey can display while flags are disabled. ' +
                 'To keep surveys working, replace advanced_disable_feature_flags with advanced_only_evaluate_survey_feature_flags, ' +
