@@ -495,6 +495,15 @@ describe('sanitizeEvent - intent PII redaction', () => {
     expect(intent).toContain('example.com')
   })
 
+  it('redacts a PostHog token whose shape a PII pattern would otherwise split', () => {
+    // The phone pattern matches the `-415-555-0142-` run inside this token. Run
+    // before the credential pass it would replace just that, leaving the two
+    // halves of the token behind.
+    const event = makeEvent({ userIntent: 'Rotating phx_AAAAAAAA-415-555-0142-AAAAAAAAAAAAAAAAAAAA' })
+
+    expect(sanitizeEvent(event).userIntent).toBe('Rotating [redacted]')
+  })
+
   it('stubs a base64 blob narrated as the intent rather than PII-splicing it apart', () => {
     // A Luhn-valid run inside the blob is enough for the card pass to splice
     // `[redacted]` into it; the base64 detector would then reject it and the
