@@ -333,13 +333,20 @@ describe('URL credential redaction', () => {
     // would recurse once per `#`. Depth is capped at two, so the third level is
     // dropped whole.
     ['a fragment nested once per `#`', `${'resource:x#'.repeat(10_000)}intro`, 'resource:x#resource:x#[redacted]'],
+    // Fields opened once, then thousands of addresses: deciding value position by
+    // scanning backwards made every one of them walk to the same `?`.
+    [
+      'addresses run together after a query opens',
+      `https://a.test/?${'https://b.test/x,'.repeat(4_000)}`,
+      `https://a.test/?${'https://b.test/x,'.repeat(4_000)}`,
+    ],
     // Addresses run together: one pass over every piece, not one frame each.
     [
       'addresses run together without whitespace',
       `${'https://a.test/x,'.repeat(10_000)}https://fakeuser:fakepass@b.test/doc`,
       `${'https://a.test/x,'.repeat(10_000)}https://%5Bredacted%5D@b.test/doc`,
     ],
-  ])('sanitizes %s without recursing per occurrence', (_label, value, expected) => {
+  ])('sanitizes %s in one pass over the value', (_label, value, expected) => {
     const start = Date.now()
     expect(sanitizeCapturedValue(value)).toBe(expected)
     expect(Date.now() - start).toBeLessThan(1000)
