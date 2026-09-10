@@ -1,0 +1,88 @@
+name: Public API label
+
+# Flags PRs that change the public API so the API shape gets agreed before the
+# implementation is reviewed. `check:public-api` in library-ci.yml forces PRs to
+# commit the regenerated latest references, so a change to them is the signal.
+#
+# pull_request_target gives fork PRs a write token for the label and comment.
+# This job must never check out or run PR code: it only reads the generated
+# reference JSON through the API and compares it with jq.
+on:
+    pull_request_target:
+        types: [opened, synchronize, reopened]
+        paths:
+            - 'packages/*/references/*-references-latest.json'
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+    cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+    label-public-api-changes:
+        name: Label public API changes
+        runs-on: ubuntu-22.04
+        # Release and generate-references bots update these files on purpose.
+        if: ${{ !endsWith(github.event.pull_request.user.login, '[bot]') }}
+        permissions:
+            contents: read
+            pull-requests: write
+        steps:
+            - name: Compare the public API with the merge base
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  REPO: ${{ github.repository }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  BASE_SHA: ${{ github.event.pull_request.base.sha }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+                  # Drop doc-only fields so JSDoc edits don't count. `example` stays:
+                  # for type aliases it holds the type body, not a code sample.
+                  API_SHAPE: >-
+                      del(.info, .categories)
+                      | walk(if type == "object" then del(.description, .details, .examples, .path, .title, .category, .showDocs) else . end)
+                      | walk(if type == "object" and (.properties | type) == "array" then .properties |= sort_by(.name) else . end)
+              run: |
+                  set -euo pipefail
+
+                  api_shape() {
+                      gh api -H 'Accept: application/vnd.github.raw' "repos/$REPO/contents/$1?ref=$2" 2>/dev/null \
+                          | jq -S "$API_SHAPE" || echo null
+                  }
+
+                  # Compare against the merge base, not the tip of main, so API that
+                  # landed on main after the branch was cut doesn't count.
+                  MERGE_BASE=$(gh api "repos/$REPO/compare/$BASE_SHA...$HEAD_SHA" --jq .merge_base_commit.sha)
+
+                  CHANGED=()
+                  for path in \
+                      packages/browser/references/posthog-js-references-latest.json \
+                      packages/node/references/posthog-node-references-latest.json \
+                      packages/react-native/references/posthog-react-native-references-latest.json
+                  do
+                      if [[ "$(api_shape "$path" "$MERGE_BASE")" != "$(api_shape "$path" "$HEAD_SHA")" ]]; then
+                          CHANGED+=("$(cut -d/ -f2 <<< "$path")")
+                      fi
+                  done
+
+                  if [[ ${#CHANGED[@]} -eq 0 ]]; then
+                      echo "No public API change (doc-only or no reference changes)."
+                      exit 0
+                  fi
+
+                  echo "Public API changed in: ${CHANGED[*]}"
+                  gh api "repos/$REPO/issues/$PR_NUMBER/labels" -f 'labels[]=public-api' > /dev/null
+
+                  MARKER='<!-- public-api-label -->'
+                  if [[ "$IS_FORK" != 'true' ]] \
+                      || gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate --jq '.[].body' | grep -qF "$MARKER"; then
+                      exit 0
+                  fi
+
+                  # shellcheck disable=SC2016 # literal backticks for markdown
+                  PACKAGES=$(printf '`%s` ' "${CHANGED[@]}")
+                  gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$MARKER
+                  Thanks for the contribution! 👋 This PR changes the public API of ${PACKAGES% }.
+
+                  Public API is hard to change once it ships, so a maintainer will confirm the API shape on the linked issue before we review the implementation. We'll follow up there. It's worth holding off on further API changes until then."
