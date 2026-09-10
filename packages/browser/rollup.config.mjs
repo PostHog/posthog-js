@@ -1,12 +1,7 @@
-import babel, { getBabelOutputPlugin } from '@rollup/plugin-babel'
-import json from '@rollup/plugin-json'
-import resolve from '@rollup/plugin-node-resolve'
-import typescript from '@rollup/plugin-typescript'
-import { dts } from 'rollup-plugin-dts'
-import terser from '@rollup/plugin-terser'
+import { getBabelOutputPlugin } from '@rollup/plugin-babel'
+import { dts } from 'rolldown-plugin-dts'
 import { minify as minifyWithTerser } from 'terser'
 import { visualizer } from 'rollup-plugin-visualizer'
-import commonjs from '@rollup/plugin-commonjs'
 import { Features, transform as transformCss } from 'lightningcss'
 import fs from 'fs'
 import path from 'path'
@@ -15,16 +10,14 @@ import { modernTransformOptions } from './oxc.config.mjs'
 
 const { crossBundlePrivateProperties, globallyReservedPrivateProperties } = crossBundlePropertyConfig
 const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
-const IS_ROLLDOWN = process.env.BUNDLER === 'rolldown'
 const BUILD_TYPES_ONLY = process.env.BUILD_TYPES_ONLY === '1'
-const BUILD_ROLLUP_RUNTIME = process.env.BUILD_ROLLUP_RUNTIME === '1'
 const nameCachePath = './terser-mangled-names.json'
 const nameCache = {}
 
 // Shared across all entries so mangled property names are consistent between
 // module.slim.js and extension-bundles.js — see #3313.
 // Only property names (props) are shared; top-level variable names (vars) are
-// reset per-entry by the plugin below since each module has its own scope.
+// reset by finalTerser before minifying each chunk since each module has its own scope.
 
 // Rolldown renders chunks after renderChunk hooks, which would reformat @rollup/plugin-terser's output.
 // Minify the final chunk instead and feed the existing map into Terser so source maps stay chained.
@@ -75,21 +68,7 @@ const finalTerser = (options) => ({
     },
 })
 
-const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
-    {
-        name: 'reset-vars-name-cache',
-        buildStart() {
-            nameCache.vars = { props: {} }
-        },
-    },
-    ...(!IS_ROLLDOWN
-        ? [
-              json(),
-              resolve({ browser: true }),
-              typescript({ sourceMap: true, outDir: './dist', module: 'es2015' }),
-              commonjs(),
-          ]
-        : []),
+const plugins = (es5, noExternal, preserveCrossBundleProperties, useBabel) => [
     {
         name: 'lightningcss',
         transform(code, id) {
@@ -112,31 +91,17 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
             return {
                 code: `export default ${JSON.stringify(result.code.toString())}`,
                 map: { mappings: '' },
-                ...(IS_ROLLDOWN ? { moduleType: 'js' } : {}),
+                moduleType: 'js',
             }
         },
     },
-    // Oxc cannot emit ES5. The Rollup ABI fallback also needs Babel's source-map names for its
-    // property-consistency check. For ES5 Rolldown output, transform after tree-shaking so unused
-    // Babel helpers do not remain as side effects.
-    ...(es5 || !IS_ROLLDOWN
+    // Oxc cannot emit ES5, and the slim/extension ABI checks need Babel's source-map names.
+    // Transform after tree-shaking so unused Babel helpers do not remain as side effects.
+    ...(useBabel
         ? [
-              (IS_ROLLDOWN ? getBabelOutputPlugin : babel)({
-                  ...(IS_ROLLDOWN
-                      ? { allowAllFormats: true, compact: true }
-                      : { extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx'], babelHelpers: 'bundled' }),
-                  ...(!IS_ROLLDOWN
-                      ? {
-                            overrides: [
-                                {
-                                    // This prebuilt rrweb module intentionally exceeds Babel's 500 KB compacting threshold.
-                                    // Make the existing behavior explicit without hiding warnings for other unexpectedly large modules.
-                                    test: /[\\/]packages[\\/]rrweb[\\/]rrweb[\\/]dist[\\/]rrweb\.js$/,
-                                    compact: true,
-                                },
-                            ],
-                        }
-                      : {}),
+              getBabelOutputPlugin({
+                  allowAllFormats: true,
+                  compact: true,
                   plugins: [
                       '@babel/plugin-transform-nullish-coalescing-operator',
                       // Explicitly included so we transform 1 ** 2 to Math.pow(1, 2) for ES6 compatibility
@@ -147,7 +112,8 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
                           '@babel/preset-env',
                           {
                               loose: true,
-                              ...(IS_ROLLDOWN ? { modules: false, exclude: ['transform-dynamic-import'] } : {}),
+                              modules: false,
+                              exclude: ['transform-dynamic-import'],
                               targets: es5
                                   ? [
                                         '> 0.5%, last 2 versions, Firefox ESR, not dead',
@@ -172,7 +138,7 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
               }),
           ]
         : []),
-    (IS_ROLLDOWN ? finalTerser : terser)({
+    finalTerser({
         nameCache,
         toplevel: true,
         compress: {
@@ -371,12 +337,6 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
                     return k.substring(1)
                 })
             )
-            // The Rollup fallback runs in a second process, so retain names collected by Rolldown.
-            if (BUILD_ROLLUP_RUNTIME && fs.existsSync(nameCachePath)) {
-                for (const name of JSON.parse(fs.readFileSync(nameCachePath, 'utf8')).names) {
-                    names.add(name)
-                }
-            }
             const sortedNames = [...names].sort()
             // save the props section to a file
             fs.writeFileSync(
@@ -414,16 +374,7 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
 const entryFilter = process.env.ENTRY
 const allEntrypoints = fs.readdirSync('./src/entrypoints')
 const entrypoints = entryFilter ? allEntrypoints.filter((file) => file.startsWith(entryFilter)) : allEntrypoints
-// These artifacts share a Terser property-name cache and form a private cross-bundle ABI. Keeping
-// them in one Rollup process also avoids Rolldown retaining request compression code in extensions.
-const rollupRuntimeEntries = new Set(['extension-bundles.es.ts', 'module.slim.es.ts', 'module.slim.no-external.es.ts'])
-const runtimeEntrypoints = BUILD_ROLLUP_RUNTIME
-    ? entrypoints.filter((file) => rollupRuntimeEntries.has(file))
-    : IS_ROLLDOWN
-      ? entrypoints.filter((file) => !rollupRuntimeEntries.has(file))
-      : entrypoints
-
-const entrypointTargets = runtimeEntrypoints.map((file) => {
+const entrypointTargets = entrypoints.map((file) => {
     const fileParts = file.split('.')
     // pop the extension
     fileParts.pop()
@@ -439,10 +390,13 @@ const entrypointTargets = runtimeEntrypoints.map((file) => {
     const fileName = fileParts.join('.')
 
     const preserveCrossBundleProperties = ['extension-bundles', 'module.slim'].includes(fileName)
+    const useBabel =
+        fileName.includes('es5') || ['extension-bundles', 'module.slim', 'module.slim.no-external'].includes(fileName)
     const pluginsForThisFile = plugins(
         fileName.includes('es5'),
         fileName.includes('no-external'),
-        preserveCrossBundleProperties
+        preserveCrossBundleProperties,
+        useBabel
     )
 
     // we're allowed to console log in this file :)
@@ -451,20 +405,16 @@ const entrypointTargets = runtimeEntrypoints.map((file) => {
 
     const outputExtensions = format === 'es' && fileName === 'module' ? ['js', 'mjs'] : ['js']
 
-    /** @type {import('rollup').RollupOptions} */
+    /** @type {import('rolldown').RolldownOptions} */
     return {
         input: `src/entrypoints/${file}`,
-        ...(IS_ROLLDOWN
-            ? {
-                  platform: 'browser',
-                  ...(!fileName.includes('es5') ? { transform: modernTransformOptions } : {}),
-                  treeshake: {
-                      // @posthog/core is a pure utility package without package.json sideEffects metadata.
-                      // Declaring that here prevents unused barrel exports from being retained.
-                      moduleSideEffects: [{ test: /\/packages\/core\/dist\//, sideEffects: false }],
-                  },
-              }
-            : {}),
+        platform: 'browser',
+        ...(!useBabel ? { transform: modernTransformOptions } : {}),
+        treeshake: {
+            // @posthog/core is a pure utility package without package.json sideEffects metadata.
+            // Declaring that here prevents unused barrel exports from being retained.
+            moduleSideEffects: [{ test: /\/packages\/core\/dist\//, sideEffects: false }],
+        },
         output: outputExtensions.map((extension) => ({
             file: `dist/${fileName}.${extension}`,
             sourcemap: true,
@@ -490,7 +440,7 @@ const entrypointTargets = runtimeEntrypoints.map((file) => {
     }
 })
 
-// Entries whose .d.ts must inline upstream types (respectExternal: true) so
+// Entries whose .d.ts must inline upstream types so
 // consumers don't need a runtime dep on the re-exported package to resolve them.
 const inlineExternalTypesEntries = new Set([
     'extension-bundles.es.ts',
@@ -519,16 +469,37 @@ const mainModuleTypesEntries = new Set([
 // below rewrites value references back to `NodeType.`. Only rrweb pulls in rrdom.
 const rewriteRrdomNodeTypeAlias = (file) => file === 'rrweb.es.ts'
 
+// The former runtime TypeScript plugin also published dist/src declarations. Retain those paths.
+const unbundledDeclarations = {
+    name: 'unbundled-declarations',
+    buildStart() {
+        const directory = path.resolve('./lib/src')
+        this.addWatchFile(directory)
+        for (const file of fs.readdirSync(directory, { recursive: true })) {
+            if (!file.endsWith('.d.ts')) {
+                continue
+            }
+            const source = path.join(directory, file)
+            this.addWatchFile(source)
+            this.emitFile({
+                type: 'asset',
+                fileName: `src/${file.split(path.sep).join('/')}`,
+                source: fs.readFileSync(source),
+            })
+        }
+    },
+}
+
 const typeTargets = entrypoints
     .filter((file) => file.endsWith('.ts'))
-    .map((file) => {
+    .map((file, index) => {
         const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
         const isExtensionBundles = file === 'extension-bundles.es.ts'
         const isSlimModule = file === 'module.slim.es.ts'
         const referencesMainModuleTypes = mainModuleTypesEntries.has(file)
         const inlineExternalTypes = inlineExternalTypesEntries.has(file)
         const rewriteRrdomAlias = rewriteRrdomNodeTypeAlias(file)
-        /** @type {import('rollup').RollupOptions} */
+        /** @type {import('rolldown').RolldownOptions} */
         return {
             input: source,
             // extension-bundles types must reference module.slim rather than inlining
@@ -537,21 +508,21 @@ const typeTargets = entrypoints
             // reason, module.slim must use a source-level re-export from
             // module.slim.no-external and keep that module external here, so dts preserves
             // the reference instead of inlining a second declaration graph.
-            ...(isExtensionBundles ? { external: [/module\.slim/] } : {}),
-            ...(isSlimModule ? { external: [/module\.slim\.no-external/] } : {}),
-            ...(referencesMainModuleTypes ? { external: [/posthog-core$/] } : {}),
+            external: (id) =>
+                (isExtensionBundles && /module\.slim/.test(id)) ||
+                (isSlimModule && /module\.slim\.no-external/.test(id)) ||
+                (referencesMainModuleTypes && /posthog-core$/.test(id)) ||
+                (!inlineExternalTypes && !id.startsWith('.') && !path.isAbsolute(id)),
             output: [
                 {
                     dir: path.resolve('./dist'),
+                    format: 'es',
                     entryFileNames: file.replace(/(?:\.(?:cjs|es|iife))?\.ts$/, '.d.ts'),
                 },
             ],
             plugins: [
-                json(),
-                dts({
-                    exclude: [],
-                    ...(inlineExternalTypes ? { respectExternal: true } : {}),
-                }),
+                ...(index === 0 ? [unbundledDeclarations] : []),
+                ...dts({ dtsInput: true, emitDtsOnly: true }),
                 // dts preserves tsc-era paths ending in `.es`, but the output files
                 // omit that segment — fix references between the generated declarations.
                 ...(isExtensionBundles || isSlimModule
@@ -596,8 +567,4 @@ const typeTargets = entrypoints
         }
     })
 
-export default BUILD_TYPES_ONLY
-    ? typeTargets
-    : IS_ROLLDOWN || BUILD_ROLLUP_RUNTIME
-      ? entrypointTargets
-      : [...entrypointTargets, ...typeTargets]
+export default BUILD_TYPES_ONLY ? typeTargets : entrypointTargets
