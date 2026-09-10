@@ -67,101 +67,128 @@ test('pnpm hooks do not weaken the seven-day workspace policy', () => {
     }
 })
 
-test('native example CI does not bypass its workspace policy', async () => {
+test('native example CI preserves standalone installs with an explicit seven-day cooldown', async () => {
     const workflow = await readFile(path.join(root, '.github/workflows/react-native-plugin-native-ci.yml'), 'utf8')
-    assert.doesNotMatch(workflow, /run: pnpm install[^\n]*--ignore-workspace/)
-})
-
-test('pnpm rejects a six-day-old version and resolves an eight-day-old version', { timeout: 30000 }, async (t) => {
-    const directory = await mkdtemp(path.join(tmpdir(), 'posthog-cooldown-'))
-    t.after(() => rm(directory, { recursive: true, force: true }))
-    const packageName = 'posthog-cooldown-test'
-    const server = createServer((request, response) => {
-        if (request.url !== `/${packageName}`) {
-            response.writeHead(404).end()
-            return
-        }
-        const url = `http://127.0.0.1:${server.address().port}`
-        response.setHeader('Content-Type', 'application/json')
-        response.end(
-            JSON.stringify({
-                name: packageName,
-                'dist-tags': { latest: '1.0.1' },
-                versions: Object.fromEntries(
-                    ['1.0.0', '1.0.1'].map((version) => [
-                        version,
-                        {
-                            name: packageName,
-                            version,
-                            dist: { tarball: `${url}/${packageName}/-/${packageName}-${version}.tgz` },
-                        },
-                    ])
-                ),
-                time: {
-                    '1.0.0': new Date(Date.now() - 8 * 86400000).toISOString(),
-                    '1.0.1': new Date(Date.now() - 6 * 86400000).toISOString(),
-                },
-            })
-        )
-    })
-    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
-    t.after(() => new Promise((resolve) => server.close(resolve)))
-    const registry = `http://127.0.0.1:${server.address().port}`
-    const userConfig = path.join(directory, '.npmrc')
-    await writeFile(userConfig, '')
-    const pnpmScript = process.env.npm_execpath
-    const command = pnpmScript?.includes('pnpm') ? process.execPath : 'pnpm'
-    const prefix = pnpmScript?.includes('pnpm') ? [pnpmScript] : []
-
-    async function install(name, version) {
-        const cwd = path.join(directory, name)
-        await mkdir(cwd)
-        await writeFile(
-            path.join(cwd, 'package.json'),
-            JSON.stringify({ private: true, dependencies: { [packageName]: version } })
-        )
-        await writeFile(path.join(cwd, 'pnpm-workspace.yaml'), 'packages: []\nminimumReleaseAge: 10080\n')
-        const result = await new Promise((resolve, reject) => {
-            const child = spawn(
-                command,
-                [...prefix, 'install', '--lockfile-only', '--ignore-scripts', '--registry', registry],
-                {
-                    cwd,
-                    env: {
-                        PATH: process.env.PATH,
-                        HOME: directory,
-                        CI: 'true',
-                        npm_config_userconfig: userConfig,
-                        npm_config_store_dir: path.join(directory, 'store'),
-                        npm_config_cache_dir: path.join(directory, 'cache'),
-                        npm_config_state_dir: path.join(directory, 'state'),
-                        npm_config_update_notifier: 'false',
-                        COREPACK_ENABLE_NETWORK: '0',
-                    },
-                    stdio: ['ignore', 'pipe', 'pipe'],
-                }
-            )
-            let output = ''
-            child.stdout.on('data', (data) => {
-                output += data
-            })
-            child.stderr.on('data', (data) => {
-                output += data
-            })
-            child.on('error', reject)
-            child.on('close', (status) => resolve({ status, output }))
-            t.after(() => child.kill())
-        })
-        return { ...result, cwd }
+    const installs = Array.from(
+        workflow.matchAll(/run: (pnpm install[^\n]*)\n\s+working-directory: \$\{\{ env\.EXAMPLE_DIR \}\}/g),
+        (match) => match[1]
+    )
+    assert.ok(installs.length > 0)
+    for (const command of installs) {
+        assert.match(command, /--ignore-workspace(?:\s|$)/)
+        assert.match(command, /--config\.minimum-release-age=10080(?:\s|$)/)
+        assert.match(command, /--config\.node-linker=hoisted(?:\s|$)/)
+        assert.match(command, /--frozen-lockfile(?:\s|$)/)
     }
-
-    const rejected = await install('exact', '1.0.1')
-    assert.notEqual(rejected.status, 0, rejected.output)
-    assert.match(rejected.output, /release|published|ERR_PNPM_NO_MATCHING_VERSION/i)
-
-    const accepted = await install('range', '^1.0.0')
-    assert.equal(accepted.status, 0, accepted.output)
-    const lockfile = await readFile(path.join(accepted.cwd, 'pnpm-lock.yaml'), 'utf8')
-    assert.match(lockfile, /version: 1\.0\.0/)
-    assert.doesNotMatch(lockfile, /version: 1\.0\.1/)
 })
+
+for (const mode of [
+    { name: 'workspace', args: [] },
+    { name: 'standalone', args: ['--ignore-workspace', '--config.minimum-release-age=10080'] },
+]) {
+    test(
+        `pnpm ${mode.name} rejects a six-day-old version and resolves an eight-day-old version`,
+        { timeout: 30000 },
+        async (t) => {
+            const directory = await mkdtemp(path.join(tmpdir(), 'posthog-cooldown-'))
+            t.after(() => rm(directory, { recursive: true, force: true }))
+            const packageName = 'posthog-cooldown-test'
+            const server = createServer((request, response) => {
+                if (request.url !== `/${packageName}`) {
+                    response.writeHead(404).end()
+                    return
+                }
+                const url = `http://127.0.0.1:${server.address().port}`
+                response.setHeader('Content-Type', 'application/json')
+                response.end(
+                    JSON.stringify({
+                        name: packageName,
+                        'dist-tags': { latest: '1.0.1' },
+                        versions: Object.fromEntries(
+                            ['1.0.0', '1.0.1'].map((version) => [
+                                version,
+                                {
+                                    name: packageName,
+                                    version,
+                                    dist: { tarball: `${url}/${packageName}/-/${packageName}-${version}.tgz` },
+                                },
+                            ])
+                        ),
+                        time: {
+                            '1.0.0': new Date(Date.now() - 8 * 86400000).toISOString(),
+                            '1.0.1': new Date(Date.now() - 6 * 86400000).toISOString(),
+                        },
+                    })
+                )
+            })
+            await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+            t.after(() => new Promise((resolve) => server.close(resolve)))
+            const registry = `http://127.0.0.1:${server.address().port}`
+            const userConfig = path.join(directory, '.npmrc')
+            await writeFile(userConfig, '')
+            const pnpmScript = process.env.npm_execpath
+            const command = pnpmScript?.includes('pnpm') ? process.execPath : 'pnpm'
+            const prefix = pnpmScript?.includes('pnpm') ? [pnpmScript] : []
+
+            async function install(name, version) {
+                const cwd = path.join(directory, name)
+                await mkdir(cwd)
+                await writeFile(
+                    path.join(cwd, 'package.json'),
+                    JSON.stringify({ private: true, dependencies: { [packageName]: version } })
+                )
+                await writeFile(path.join(cwd, 'pnpm-workspace.yaml'), 'packages: []\nminimumReleaseAge: 10080\n')
+                const result = await new Promise((resolve, reject) => {
+                    const child = spawn(
+                        command,
+                        [
+                            ...prefix,
+                            'install',
+                            ...mode.args,
+                            '--lockfile-only',
+                            '--ignore-scripts',
+                            '--registry',
+                            registry,
+                        ],
+                        {
+                            cwd,
+                            env: {
+                                PATH: process.env.PATH,
+                                HOME: directory,
+                                CI: 'true',
+                                npm_config_userconfig: userConfig,
+                                npm_config_store_dir: path.join(directory, 'store'),
+                                npm_config_cache_dir: path.join(directory, 'cache'),
+                                npm_config_state_dir: path.join(directory, 'state'),
+                                npm_config_update_notifier: 'false',
+                                COREPACK_ENABLE_NETWORK: '0',
+                            },
+                            stdio: ['ignore', 'pipe', 'pipe'],
+                        }
+                    )
+                    let output = ''
+                    child.stdout.on('data', (data) => {
+                        output += data
+                    })
+                    child.stderr.on('data', (data) => {
+                        output += data
+                    })
+                    child.on('error', reject)
+                    child.on('close', (status) => resolve({ status, output }))
+                    t.after(() => child.kill())
+                })
+                return { ...result, cwd }
+            }
+
+            const rejected = await install('exact', '1.0.1')
+            assert.notEqual(rejected.status, 0, rejected.output)
+            assert.match(rejected.output, /release|published|ERR_PNPM_NO_MATCHING_VERSION/i)
+
+            const accepted = await install('range', '^1.0.0')
+            assert.equal(accepted.status, 0, accepted.output)
+            const lockfile = await readFile(path.join(accepted.cwd, 'pnpm-lock.yaml'), 'utf8')
+            assert.match(lockfile, /version: 1\.0\.0/)
+            assert.doesNotMatch(lockfile, /version: 1\.0\.1/)
+        }
+    )
+}

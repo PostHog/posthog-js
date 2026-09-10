@@ -75,7 +75,15 @@ jobs:
 
       - name: Install example dependencies
         if: steps.is-affected.outputs.is-affected == 'true'
-        run: pnpm install --frozen-lockfile --config.node-linker=hoisted
+        # --ignore-workspace: the example is excluded from the pnpm workspace,
+        # so install it as a standalone project (resolves the link: dep to the
+        # in-repo plugin). --config.node-linker=hoisted forces the flat layout
+        # (pnpm 11 ignores node-linker in .npmrc for --ignore-workspace installs),
+        # required for React Native's Android Gradle autolinking and iOS pods.
+        # --frozen-lockfile keeps native builds reproducible; the committed
+        # example lockfile must be kept in sync with its package.json.
+        # The cooldown is explicit because --ignore-workspace skips the YAML policy.
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted --config.minimum-release-age=10080
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Build example and test plugin for Android
@@ -112,7 +120,15 @@ jobs:
 
       - name: Install example dependencies
         if: steps.is-affected.outputs.is-affected == 'true'
-        run: pnpm install --frozen-lockfile --config.node-linker=hoisted
+        # --ignore-workspace: the example is excluded from the pnpm workspace,
+        # so install it as a standalone project (resolves the link: dep to the
+        # in-repo plugin). --config.node-linker=hoisted forces the flat layout
+        # (pnpm 11 ignores node-linker in .npmrc for --ignore-workspace installs),
+        # required for React Native's Android Gradle autolinking and iOS pods.
+        # --frozen-lockfile keeps native builds reproducible; the committed
+        # example lockfile must be kept in sync with its package.json.
+        # The cooldown is explicit because --ignore-workspace skips the YAML policy.
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted --config.minimum-release-age=10080
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Install CocoaPods
@@ -159,7 +175,15 @@ jobs:
 
       - name: Install example dependencies
         if: steps.is-affected.outputs.is-affected == 'true'
-        run: pnpm install --frozen-lockfile --config.node-linker=hoisted
+        # --ignore-workspace: the example is excluded from the pnpm workspace,
+        # so install it as a standalone project (resolves the link: dep to the
+        # in-repo plugin). --config.node-linker=hoisted forces the flat layout
+        # (pnpm 11 ignores node-linker in .npmrc for --ignore-workspace installs),
+        # required for React Native's Android Gradle autolinking and iOS pods.
+        # --frozen-lockfile keeps native builds reproducible; the committed
+        # example lockfile must be kept in sync with its package.json.
+        # The cooldown is explicit because --ignore-workspace skips the YAML policy.
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted --config.minimum-release-age=10080
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Opt example into SPM resolution
@@ -289,7 +313,15 @@ jobs:
 
       - name: Install example dependencies
         if: steps.is-affected.outputs.is-affected == 'true'
-        run: pnpm install --frozen-lockfile --config.node-linker=hoisted
+        # --ignore-workspace: the example is excluded from the pnpm workspace,
+        # so install it as a standalone project (resolves the link: dep to the
+        # in-repo plugin). --config.node-linker=hoisted forces the flat layout
+        # (pnpm 11 ignores node-linker in .npmrc for --ignore-workspace installs),
+        # required for React Native's macOS autolinking and pods.
+        # --frozen-lockfile keeps native builds reproducible; the committed
+        # example lockfile must be kept in sync with its package.json.
+        # The cooldown is explicit because --ignore-workspace skips the YAML policy.
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted --config.minimum-release-age=10080
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Install CocoaPods
