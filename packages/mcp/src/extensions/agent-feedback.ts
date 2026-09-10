@@ -110,15 +110,6 @@ export function resolveCollectFeedbackOptions(
 }
 
 /**
- * The configured name of the `send_feedback` virtual tool, falling back to the
- * default. Resolve through here everywhere (inject + detect) so a custom name
- * can't drift between call sites.
- */
-export function resolveFeedbackToolName(config: CollectFeedbackConfig | undefined): string {
-  return resolveCollectFeedbackOptions(config)?.toolName ?? SEND_FEEDBACK_TOOL_NAME
-}
-
-/**
  * The advertised descriptor: the core feedback schema plus the host's declared
  * `extraProperties`. Throws on a config error (a reserved extra key, or an
  * `extraRequired` entry that was never declared) so a bad setup fails at
