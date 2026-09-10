@@ -114,6 +114,24 @@ describe('URL credential redaction', () => {
     // instead, whenever any `;`-separated piece of it names a credential.
     ['https://example.com/guide?password=prefix;remainingsecret', 'https://example.com/guide?password=%5Bredacted%5D'],
     ['https://example.com/x?a=1;token=fakesecret', 'https://example.com/x?a=%5Bredacted%5D'],
+    // A legacy `;` pair parses into one key, so `;` separates name segments too.
+    ['https://example.com/?download;token=fakesecret', 'https://example.com/?download%3Btoken=%5Bredacted%5D'],
+    // A `?` or `;` right after a field name may sit inside that field's value, so
+    // an address after one stays attached and the field rules — which can see
+    // the whole credential — decide, rather than being cut off as adjacent.
+    [
+      'https://example.com/#password=prefix?https://private.example/remainingsecret',
+      'https://example.com/#password=%5Bredacted%5D?[redacted]',
+    ],
+    [
+      'https://example.com/?password=prefix;https://private.example/remainingsecret',
+      'https://example.com/?password=%5Bredacted%5D',
+    ],
+    // Attached, then sanitized as the tail's own text once the head proves benign.
+    [
+      'https://example.com/#/docs/id=1?https://fakeuser:fakepass@x.test/doc',
+      'https://example.com/#/docs/id=1?https://%5Bredacted%5D@x.test/doc',
+    ],
     // The head has no `=`, so it is text and survives; the tail is a field list.
     // Read as one, the whole fragment would be a single key `/callback?token`.
     ['https://example.com/#/callback?token=fakesecret', 'https://example.com/#/callback?token=%5Bredacted%5D'],

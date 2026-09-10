@@ -42,7 +42,7 @@ const URL_AUTHORITY_PATTERN = new RegExp(`^${URL_AUTHORITY_SEARCH.source}`, 'i')
 /** Every authority start in a value, in order. */
 const URL_AUTHORITY_SEARCH_ALL = new RegExp(URL_AUTHORITY_SEARCH.source, 'gi')
 /** The field separators. `?` and `#` are structural only as delimiters — see {@link isStructural}. */
-const URL_FIELD_CHARACTERS = '=&;'
+const URL_FIELD_CHARACTERS = '=&'
 /** The legacy field separator. Never split on, only checked; see {@link sanitizeUrlFieldValue}. */
 const LEGACY_FIELD_SEPARATOR = ';'
 // The terminal class above also absorbs the prose punctuation that follows a URL
@@ -51,15 +51,16 @@ const LEGACY_FIELD_SEPARATOR = ';'
 const URL_TRAILING_PUNCTUATION = ".,;:!?)]}'"
 const MAX_URL_LENGTH = 8192
 const MAX_URL_QUERY_FIELDS = 128
-// A query key is sensitive when any `-`/`_`/`.`/`/`-delimited segment names a
-// credential, so compound names (`private_token`, `oauth_signature`,
+// A query key is sensitive when any `-`/`_`/`.`/`/`/`;`-delimited segment names
+// a credential, so compound names (`private_token`, `oauth_signature`,
 // `subscription-key`, `X-Amz-Security-Token`, `Key-Pair-Id`) are covered without
-// enumerating every vendor's spelling. `/` is a separator too, because a
-// fragment's field list can be written `#/token=…` and the leading slash would
-// otherwise hide the name. Over-redacting a benign `sort_key` — or `sort/key` —
+// enumerating every vendor's spelling. `/` is a separator because a fragment's
+// field list can be written `#/token=…`, and `;` because a legacy `;`-separated
+// pair parses into a single key (`download;token`) — either would otherwise hide
+// the name. Over-redacting a benign `sort_key` — or `sort/key`, or `sort;key` —
 // is the accepted trade for an analytics payload.
 const SENSITIVE_QUERY_KEY_SEGMENT_PATTERN =
-  /(^|[-_./])(auth|token|secret|password|passwd|pwd|credential|signature|sig|key|hmac|sas|bearer|jwt|session|sessionid)([-_./]|$)/i
+  /(^|[-_./;])(auth|token|secret|password|passwd|pwd|credential|signature|sig|key|hmac|sas|bearer|jwt|session|sessionid)([-_./;]|$)/i
 // `code` — the OAuth authorization code — is matched only as a whole key: as a
 // segment it would eat `country_code`, `zip_code`, and `lang_code`.
 const SENSITIVE_QUERY_KEY_EXACT_PATTERN = /^(code|AWSAccessKeyId|GoogleAccessId|Policy)$/i
@@ -328,7 +329,7 @@ function findEmbeddedAuthorityIndexes(value: string): number[] {
       pending++
     }
     const character = value[cursor]
-    if (isDelimiter(character, delimiters)) {
+    if (isDelimiter(character, delimiters, lastStructural)) {
       lastStructural = character
       inFields = true
     } else if (inFields && URL_FIELD_CHARACTERS.includes(character)) {
@@ -347,7 +348,11 @@ function findEmbeddedAuthorityIndexes(value: string): number[] {
  * as structural would cut `?token=prefix?https://secret/…` in half at a `?` that
  * belongs to the token.
  */
-function isDelimiter(character: string, seen: { query: boolean; fragment: boolean; fragmentQuery: boolean }): boolean {
+function isDelimiter(
+  character: string,
+  seen: { query: boolean; fragment: boolean; fragmentQuery: boolean },
+  lastStructural: string
+): boolean {
   if (character === '#') {
     return seen.fragment ? false : (seen.fragment = true)
   }
@@ -355,6 +360,13 @@ function isDelimiter(character: string, seen: { query: boolean; fragment: boolea
     return false
   }
   if (seen.fragment) {
+    // Inside a fragment, a `?` right after a field name may belong to that
+    // field's value rather than open the tail. Leaving it unstructural keeps a
+    // following address attached, so the fragment split and its fail-closed tail
+    // rule get to decide — they can see the whole credential, this cannot.
+    if (lastStructural === '=') {
+      return false
+    }
     return seen.fragmentQuery ? false : (seen.fragmentQuery = true)
   }
   return seen.query ? false : (seen.query = true)
