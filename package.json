@@ -40,8 +40,7 @@
         "bump": "pnpm changeset version",
         "generate-references": "pnpm turbo --filter=posthog-js --filter=posthog-node --filter=posthog-react-native generate-references",
         "generate-references:versioned": "GENERATE_VERSIONED_REFERENCES=1 pnpm turbo --filter=posthog-js --filter=posthog-node --filter=posthog-react-native generate-references",
-        "check:public-api": "node scripts/check-public-api.js",
-        "check:pull-request-target": "node scripts/check-pull-request-target.mjs && node --test scripts/__tests__/check-pull-request-target.test.mjs"
+        "check:public-api": "node scripts/check-public-api.js"
     },
     "devDependencies": {
         "@changesets/changelog-github": "^0.5.2",
