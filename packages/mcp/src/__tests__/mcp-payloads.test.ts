@@ -216,6 +216,20 @@ describe('URL credential redaction', () => {
       '[a](https://public.test/#intro)[b](https://user:password@private.test/doc)',
       '[a](https://public.test/#intro)[b](https://%5Bredacted%5D@private.test/doc)',
     ],
+    // An address parked in another's query is cut out too: `URLSearchParams`
+    // would otherwise absorb it into a field KEY, and keys are never sanitized.
+    [
+      '[a](https://public.test/?download)[b](https://alice:fakepass@private.test/doc)',
+      '[a](https://public.test/?download)[b](https://%5Bredacted%5D@private.test/doc)',
+    ],
+    [
+      'https://example.com/?q=see,https://fakeuser:fakepass@x.test/doc',
+      'https://example.com/?q=see,https://%5Bredacted%5D@x.test/doc',
+    ],
+    [
+      'https://example.com/?https://fakeuser:fakepass@x.test/doc',
+      'https://example.com/?https://%5Bredacted%5D@x.test/doc',
+    ],
     // The text in front of a fragment's fields is text too, so a whole address
     // parked there is sanitized rather than preserved as a route.
     [

@@ -41,8 +41,6 @@ const URL_AUTHORITY_SEARCH = /[a-z][a-z0-9+.-]{0,63}:\/\//i
 const URL_AUTHORITY_PATTERN = new RegExp(`^${URL_AUTHORITY_SEARCH.source}`, 'i')
 /** Every authority start in a value, in order. */
 const URL_AUTHORITY_SEARCH_ALL = new RegExp(URL_AUTHORITY_SEARCH.source, 'gi')
-/** Where a value's own query or fragment begins; an authority past it is field data, not an address. */
-const URL_FIELDS_START_PATTERN = /[?#]/
 // The terminal class above also absorbs the prose punctuation that follows a URL
 // in a sentence, `'` included now that a URL can contain one. See
 // `splitTrailingPunctuation`.
@@ -265,18 +263,17 @@ function sanitizeFragmentText(text: string, allowNestedUrls: boolean): string {
 }
 
 /**
- * Every offset inside `value` where a further address starts. Only an authority
- * ahead of the value's own query or fragment counts; see {@link sanitizeUrl}.
+ * Every offset inside `value` where an adjacent address starts; see
+ * {@link sanitizeUrl}.
+ *
+ * An authority directly after `=` is in value position — a gateway's
+ * `?url=https://…` — and stays with its field, which the field pass hands to the
+ * nested pass. Anywhere else it is an address sitting next to another one.
  */
 function findEmbeddedAuthorityIndexes(value: string): number[] {
-  const fields = URL_FIELDS_START_PATTERN.exec(value)
-  const boundary = fields ? fields.index : value.length
   const indexes: number[] = []
   for (const match of value.matchAll(URL_AUTHORITY_SEARCH_ALL)) {
-    if (match.index >= boundary) {
-      break
-    }
-    if (match.index > 0) {
+    if (match.index > 0 && value[match.index - 1] !== '=') {
       indexes.push(match.index)
     }
   }
@@ -290,13 +287,18 @@ function findEmbeddedAuthorityIndexes(value: string): number[] {
  * level deep.
  *
  * One match can hold more than one address: a prose word in front of it
- * (`Failed URL:https://…`, `a:b:https://…`) or several run together
- * (`…/doc,https://…`). Either way the later address begins inside what would
- * parse as the earlier one's path, so its userinfo is never seen. The match is
- * cut at every such offset and each piece sanitized on its own — one pass, no
- * recursion, because by construction no piece can need cutting again: the cuts
- * all precede the value's own `?`/`#`, so only the final piece has field data,
- * and every authority inside that piece sits in it.
+ * (`Failed URL:https://…`, `a:b:https://…`), several run together
+ * (`…/doc,https://…`), or one parked in another's query or fragment
+ * (`…/?download)[b](https://…`). The later address always begins inside what
+ * would parse as the earlier one's path, query key, or fragment — none of which
+ * is examined for userinfo — so it is cut out and sanitized on its own.
+ *
+ * The exception is an authority directly after `=`: that one is a field's value,
+ * and the field pass already gives it the nested pass. Cutting there would take
+ * a gateway's `?url=https://…` out of the field it belongs to.
+ *
+ * One pass, no recursion: after the cuts, every authority left inside a piece is
+ * either at its start or in value position, so no piece can need cutting again.
  *
  * Every piece but the last is sanitized without the punctuation split: it is
  * followed by an address rather than by prose, so its last character is a
