@@ -342,15 +342,17 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
         }
     }
 
-    // `handleError` can be reached twice - once from an abort listener that throws inside our
-    // timeout callback, and again when the fetch itself rejects - so only the first one reports.
-    let errorHandled = false
+    // One request reports one outcome. Both our timeout callback and the fetch can produce a
+    // result - an abort listener that throws inside the timer, and then either the fetch rejecting
+    // or, when that throw happened before the abort took effect, the still-live fetch delivering a
+    // real response - so whichever settles first reports and every later result is dropped.
+    let settled = false
 
     const handleError = (error: any) => {
-        if (errorHandled) {
+        if (settled) {
             return
         }
-        errorHandled = true
+        settled = true
         // Detect our own timeout via the `timedOut` flag rather than by comparing `error`
         // against the reason we passed to `controller.abort(...)`. Not every browser propagates
         // the abort reason to the fetch rejection - some reject with a generic native
@@ -393,6 +395,13 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
         })
             .then((response) => {
                 return response.text().then((responseText) => {
+                    if (settled) {
+                        // Our timeout callback already reported a failure for this request, so the
+                        // request queue has seen `{ statusCode: 0 }` and queued a retry. Reporting
+                        // this response too would give one request two contradictory outcomes.
+                        return
+                    }
+
                     const res: RequestResponse = {
                         statusCode: response.status,
                         text: responseText,
@@ -406,6 +415,7 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
                         }
                     }
 
+                    settled = true
                     options.callback?.(res)
                 })
             })

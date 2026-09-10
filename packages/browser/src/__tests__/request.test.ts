@@ -739,6 +739,39 @@ describe('request', () => {
             abortSpy.mockRestore()
         })
 
+        it('reports only once when a throwing abort listener leaves the fetch alive to succeed', async () => {
+            // A patched `abort()` can throw *before* it aborts the signal, which leaves the fetch
+            // running after our timeout has already reported a failure. The late response must be
+            // dropped: the request queue has queued a retry for that failure, and a success
+            // callback on top of it would give one request two contradictory outcomes.
+            const listenerError = new Error('signal is aborted without reason')
+            listenerError.name = 'AbortError'
+            const abortSpy = vi.spyOn(globalThis.AbortController.prototype, 'abort').mockImplementation(() => {
+                throw listenerError
+            })
+            let resolveFetch: (response: any) => void = () => {}
+            mockedFetch.mockImplementation(() => new Promise((resolve) => (resolveFetch = resolve)))
+
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+
+            const callback = vi.fn()
+            request(createRequest({ callback, timeout: 8000 }))
+
+            vi.advanceTimersByTime(8000)
+            await flushPromises()
+
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: listenerError })
+
+            resolveFetch({ status: 200, text: () => Promise.resolve('{ "a": 1 }') })
+            await flushPromises()
+
+            expect(callback).toHaveBeenCalledTimes(1)
+
+            warnSpy.mockRestore()
+            abortSpy.mockRestore()
+        })
+
         it.each([
             ['Failed to fetch', 'Failed to fetch'],
             ['Firefox NetworkError', 'NetworkError when attempting to fetch resource.'],
