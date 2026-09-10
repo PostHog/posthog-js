@@ -322,6 +322,17 @@ function sanitizeUrl(value: string, mode: UrlSanitizeMode): string {
   if (sanitizedFragment.changed) {
     url.hash = fragment.route + sanitizedFragment.serialized
     changed = true
+  } else if (hasFragment && fragment.fields === '') {
+    // A fragment with no `=` is not a field list — but it is still text, and text
+    // can carry an address. Two markdown links running together put the second
+    // one inside the first one's fragment (`#intro)[b](https://user:pw@host)`),
+    // where skipping it would publish the credentials.
+    const text = url.hash.slice(1)
+    const sanitizedText = sanitizeUrlsInString(text, { allowNestedUrls: false, stripPunctuation: true })
+    if (sanitizedText !== text) {
+      url.hash = sanitizedText
+      changed = true
+    }
   }
 
   // The punctuation split off the end may be the tail of the very credential

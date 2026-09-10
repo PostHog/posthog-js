@@ -203,6 +203,13 @@ describe('URL credential redaction', () => {
       'https://example.com/doc,https://fakeuser:fakepass@other.example.com/doc',
       'https://example.com/doc,https://%5Bredacted%5D@other.example.com/doc',
     ],
+    // Two markdown links running together put the second address inside the
+    // first one's fragment, which has no `=` and so is not a field list — but it
+    // is still text, and text gets the URL pass.
+    [
+      '[a](https://public.test/#intro)[b](https://user:password@private.test/doc)',
+      '[a](https://public.test/#intro)[b](https://%5Bredacted%5D@private.test/doc)',
+    ],
     // The closing paren goes with the redacted trailing field, by the same rule
     // that drops a sentence's comma after one — it could be the credential's own
     // tail, and nothing here can tell markdown from prose.
@@ -245,6 +252,10 @@ describe('URL credential redaction', () => {
     ['a prose word joined to a URL with no credentials', 'Note:https://example.com/doc'],
     ['an app route in the fragment with a benign query', 'https://example.com/#/docs?page=2'],
     ['an app route in the fragment with no query at all', 'https://example.com/#/callback'],
+    [
+      'markdown links running together with no credentials',
+      '[a](https://public.test/#intro)[b](https://private.test/doc)',
+    ],
     // The length bound caps authority-bearing addresses only, so a long
     // authority-less match is still parsed — and a data URI holds nothing to
     // redact, so it comes back byte-for-byte instead of being dropped.
