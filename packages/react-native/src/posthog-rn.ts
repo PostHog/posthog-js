@@ -1839,6 +1839,15 @@ export class PostHog extends PostHogCore {
   /**
    * Capture a caught exception manually
    *
+   * Exceptions also include capture-time `$app_state` (active, background, inactive or extension) on any
+   * platform where React Native AppState provides a known value. On iOS and Android, optional
+   * `expo-updates` (>= 0.25.0) adds `$expo_update_id`, `$expo_runtime_version`, `$expo_channel`
+   * and `$expo_is_embedded_launch` for enabled updates outside development mode. Unknown values
+   * are omitted.
+   * These exception-only fields are separate from the static app metadata controlled by
+   * `customAppProperties`, including the existing `$app_version` and `$app_build`.
+   * Override these fields with `additionalProperties`, or remove them using `before_send`.
+   *
    * {@label Error tracking}
    *
    * @public
@@ -1862,15 +1871,6 @@ export class PostHog extends PostHogCore {
    *   ...
    * })
    * ```
-   *
-   * Exceptions also include capture-time `$app_state` (active, background or inactive) on any
-   * platform where React Native AppState provides a known value. On iOS and Android, optional
-   * `expo-updates` (>= 0.25.0) adds `$expo_update_id`, `$expo_runtime_version`, `$expo_channel`
-   * and `$expo_is_embedded_launch` for enabled updates outside development mode. Unknown values
-   * are omitted.
-   * These exception-only fields are separate from the static app metadata controlled by
-   * `customAppProperties`, including the existing `$app_version` and `$app_build`.
-   * Override these fields with `additionalProperties`, or remove them using `before_send`.
    *
    * @param {Error} error The error to capture
    * @param {Object} [additionalProperties] Any additional properties to add to the error event

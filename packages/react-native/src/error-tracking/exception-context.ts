@@ -9,7 +9,7 @@ const knownString = (value: unknown): value is string =>
 export const getExceptionContext = (): PostHogEventProperties => {
   const properties: PostHogEventProperties = {}
   const appState = trySafe(() => AppState.currentState)
-  if (appState === 'active' || appState === 'background' || appState === 'inactive') {
+  if (appState === 'active' || appState === 'background' || appState === 'inactive' || appState === 'extension') {
     properties.$app_state = appState
   }
 

@@ -29,6 +29,11 @@ describe('getExceptionContext', () => {
     expect(getExceptionContext()).toEqual({ $app_state: 'active' })
   })
 
+  it.each(['active', 'background', 'inactive', 'extension'] as const)('preserves known app state %s', (appState) => {
+    AppState.currentState = appState
+    expect(getExceptionContext()).toEqual({ $app_state: appState })
+  })
+
   it.each(['web', 'macos', 'windows'])('captures app state without reading native context on %s', (platform) => {
     Platform.OS = platform as typeof Platform.OS
     const readNative = vi.fn(fail)

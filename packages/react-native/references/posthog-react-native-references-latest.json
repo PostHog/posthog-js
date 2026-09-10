@@ -154,7 +154,7 @@
         },
         {
           "category": "Error tracking",
-          "description": "Capture a caught exception manually",
+          "description": "Capture a caught exception manually\nExceptions also include capture-time `$app_state` (active, background, inactive or extension) on any platform where React Native AppState provides a known value. On iOS and Android, optional `expo-updates` (= 0.25.0) adds `$expo_update_id`, `$expo_runtime_version`, `$expo_channel` and `$expo_is_embedded_launch` for enabled updates outside development mode. Unknown values are omitted. These exception-only fields are separate from the static app metadata controlled by `customAppProperties`, including the existing `$app_version` and `$app_build`. Override these fields with `additionalProperties`, or remove them using `before_send`.",
           "details": null,
           "id": "captureException",
           "showDocs": true,
@@ -168,7 +168,7 @@
             {
               "id": "with_additional_properties",
               "name": "With additional properties",
-              "code": "\n\n// With additional properties\nposthog.captureException(error, {\n  customProperty: 'value',\n  anotherProperty: ['I', 'can be a list'],\n  ...\n})\n\nExceptions also include capture-time  (active, background or inactive) on any platform where React Native AppState provides a known value. On iOS and Android, optional  (>= 0.25.0) adds , ,  and  for enabled updates outside development mode. Unknown values are omitted. These exception-only fields are separate from the static app metadata controlled by , including the existing  and . Override these fields with , or remove them using .\n\n\n\n"
+              "code": "\n\n// With additional properties\nposthog.captureException(error, {\n  customProperty: 'value',\n  anotherProperty: ['I', 'can be a list'],\n  ...\n})\n\n\n\n"
             }
           ],
           "releaseTag": "public",
