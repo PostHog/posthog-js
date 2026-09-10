@@ -69,6 +69,7 @@ export class ErrorTracking {
   private _exceptionStepsConfig: CoreErrorTracking.ResolvedExceptionStepsConfig
   private _exceptionStepsBuffer: CoreErrorTracking.ExceptionStepsBuffer
   private _nativeForwardingEnabled: boolean = false
+  private _unsubscribeUncaughtExceptions?: () => void
 
   /**
    * Controls whether autocaptured exceptions are actually sent.
@@ -200,6 +201,13 @@ export class ErrorTracking {
     this._exceptionStepsBuffer.clear()
   }
 
+  shutdown(): void {
+    this._autocaptureEnabled = false
+    this._unsubscribeUncaughtExceptions?.()
+    this._unsubscribeUncaughtExceptions = undefined
+    this.clearExceptionSteps()
+  }
+
   /**
    * Called when remote config is loaded.
    * If errorTracking.autocaptureExceptions is explicitly false, autocapture is disabled.
@@ -281,7 +289,7 @@ export class ErrorTracking {
       }
     }
     try {
-      trackUncaughtExceptions(onUncaughtException)
+      this._unsubscribeUncaughtExceptions = trackUncaughtExceptions(onUncaughtException)
     } catch (err) {
       this.logger.warn('Failed to track uncaught exceptions: ', err)
     }
