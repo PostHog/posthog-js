@@ -1,7 +1,5 @@
-/// <reference types="vite/client" />
-import dts from 'vite-plugin-dts'
+import { dts, defineConfig, type LibraryOptions, type LibraryFormats, type Plugin } from '../../tooling/rrweb-build/index'
 import { copyFileSync } from 'node:fs'
-import { defineConfig, LibraryOptions, LibraryFormats, Plugin } from 'vite'
 import { build, Format } from 'esbuild'
 import { resolve } from 'path'
 import { umdWrapper } from 'esbuild-plugin-umd-wrapper'

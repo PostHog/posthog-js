@@ -8,6 +8,8 @@ For repository-wide setup, see the root [CONTRIBUTING.md](../../CONTRIBUTING.md)
 
 After the initial build, run `pnpm dev` (or `pnpm start`) in this package to watch source changes. This runs TypeScript emission, Rolldown runtime bundling and Rolldown declaration bundling in parallel, using the same bundler configuration as production. Declaration bundling consumes the existing `lib/src/**/*.d.ts` files with `dtsInput: true`; TypeScript remains responsible for semantic checking and declaration generation. The build also preserves the unbundled declarations under `dist/src`.
 
+Modern Rolldown bundles use its built-in Oxc transformer with an ES2015 syntax ceiling and the existing minimum browser versions. Babel remains for `array.full.es5.js` (Oxc cannot emit ES5) and the three slim/extension entries: replacing their transformer currently loses source-map names required by the private-property ABI check. TestCafe also still uses Babel. Terser remains the minifier for every runtime bundle.
+
 React bindings are built separately: run `pnpm --filter=@posthog/react dev` from the repository root when working on them.
 
 To test watch mode on Linux or macOS, run `pnpm turbo --filter=posthog-js build` followed by `pnpm test:dev-watch` from the repository root. The test temporarily edits browser and record entry points, verifies runtime and declaration rebuilds, then restores the source files and stops the watchers. Run it in an idle checkout without other builds or watchers. CI runs it after the unit tests.

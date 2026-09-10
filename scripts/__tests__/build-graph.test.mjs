@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { globSync, readFileSync } from 'node:fs'
+import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { test } from 'node:test'
 
@@ -83,6 +84,69 @@ test('the browser compliance image builds the SDK and its prerequisites through 
         assert.ok(dependencies.has(`${pkg}#build`), pkg)
     }
     assert.ok(executable(tasks).every((task) => task.task === 'build'))
+})
+
+test('shared rrweb tooling hashes without Git metadata or installed dependency directories', () => {
+    const fixture = mkdtempSync(resolve(tmpdir(), 'rrweb-tooling-inputs-'))
+    try {
+        mkdirSync(resolve(fixture, 'packages/consumer'), { recursive: true })
+        mkdirSync(resolve(fixture, 'tooling/rrweb-build/node_modules'), { recursive: true })
+        mkdirSync(resolve(fixture, 'installed-vite'))
+        symlinkSync(
+            resolve(fixture, 'installed-vite'),
+            resolve(fixture, 'tooling/rrweb-build/node_modules/vite'),
+            'dir'
+        )
+        writeFileSync(
+            resolve(fixture, 'package.json'),
+            JSON.stringify({ name: 'tooling-input-fixture', private: true, packageManager: rootPackage.packageManager })
+        )
+        writeFileSync(resolve(fixture, 'pnpm-workspace.yaml'), "packages:\n  - 'packages/*'\n")
+        writeFileSync(
+            resolve(fixture, 'pnpm-lock.yaml'),
+            "lockfileVersion: '9.0'\nimporters:\n  .: {}\n  packages/consumer: {}\n"
+        )
+        writeFileSync(
+            resolve(fixture, 'packages/consumer/package.json'),
+            JSON.stringify({ name: 'consumer', scripts: { build: 'echo build' } })
+        )
+        writeFileSync(
+            resolve(fixture, 'turbo.json'),
+            JSON.stringify({ tasks: { build: { inputs: turbo.tasks.build.inputs } } })
+        )
+        const files = ['index.ts', 'vite.mjs', 'package.json']
+        for (const file of files) {
+            writeFileSync(
+                resolve(fixture, 'tooling/rrweb-build', file),
+                readFileSync(resolve(root, 'tooling/rrweb-build', file))
+            )
+        }
+        const task = () => {
+            return JSON.parse(
+                execFileSync(
+                    resolve(root, 'node_modules/.bin/turbo'),
+                    ['run', 'build', '--filter=consumer', '--dry=json'],
+                    {
+                        cwd: fixture,
+                        encoding: 'utf8',
+                        stdio: ['ignore', 'pipe', 'pipe'],
+                        timeout: 20_000,
+                    }
+                )
+            ).tasks[0]
+        }
+        const initial = task()
+        assert.ok(!Object.keys(initial.inputs).some((file) => file.includes('node_modules')))
+        for (const file of files) {
+            const target = resolve(fixture, 'tooling/rrweb-build', file)
+            const original = readFileSync(target, 'utf8')
+            writeFileSync(target, original + '\n')
+            assert.notEqual(task().hash, initial.hash, `${file} must invalidate the build cache`)
+            writeFileSync(target, original)
+        }
+    } finally {
+        rmSync(fixture, { recursive: true, force: true })
+    }
 })
 
 test('type checks use dependency builds without scheduling a second compilation graph', () => {

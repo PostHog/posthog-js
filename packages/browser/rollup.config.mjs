@@ -6,6 +6,7 @@ import { Features, transform as transformCss } from 'lightningcss'
 import fs from 'fs'
 import path from 'path'
 import crossBundlePropertyConfig from './terser-cross-bundle-properties.cjs'
+import { modernTransformOptions } from './oxc.config.mjs'
 
 const { crossBundlePrivateProperties, globallyReservedPrivateProperties } = crossBundlePropertyConfig
 const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
@@ -31,7 +32,7 @@ const finalTerser = (options) => ({
             }
             let code = file.code
             let sourceMap = file.map
-            if (outputOptions.format === 'iife' && sourceMap) {
+            if (outputOptions.format === 'iife' && sourceMap && file.fileName.includes('.es5.')) {
                 // Babel's output plugin places helpers before Rolldown's IIFE. Wrap the complete output so
                 // independently loaded bundles cannot overwrite each other's helpers on window.
                 code = `!function(){\n${code}\n}();`
@@ -67,7 +68,7 @@ const finalTerser = (options) => ({
     },
 })
 
-const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
+const plugins = (es5, noExternal, preserveCrossBundleProperties, useBabel) => [
     {
         name: 'lightningcss',
         transform(code, id) {
@@ -94,45 +95,49 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
             }
         },
     },
-    // Transform the final Rolldown chunk after tree-shaking. Using bundled Babel helpers as an input
-    // plugin leaves side-effectful, unused helper definitions in Rolldown output.
-    getBabelOutputPlugin({
-        allowAllFormats: true,
-        compact: true,
-        plugins: [
-            '@babel/plugin-transform-nullish-coalescing-operator',
-            // Explicitly included so we transform 1 ** 2 to Math.pow(1, 2) for ES6 compatibility
-            '@babel/plugin-transform-exponentiation-operator',
-        ],
-        presets: [
-            [
-                '@babel/preset-env',
-                {
-                    loose: true,
-                    modules: false,
-                    exclude: ['transform-dynamic-import'],
-                    targets: es5
-                        ? [
-                              '> 0.5%, last 2 versions, Firefox ESR, not dead',
-                              'chrome > 62',
-                              'firefox > 59',
-                              'ios_saf >= 6.1',
-                              'opera > 50',
-                              'safari > 12',
-                              'IE 11',
-                          ]
-                        : [
-                              '> 0.5%, last 2 versions, Firefox ESR, not dead',
-                              'chrome > 62',
-                              'firefox > 59',
-                              'ios_saf >= 10.3',
-                              'opera > 50',
-                              'safari > 12',
-                          ],
-                },
-            ],
-        ],
-    }),
+    // Oxc cannot emit ES5, and the slim/extension ABI checks need Babel's source-map names.
+    // Transform after tree-shaking so unused Babel helpers do not remain as side effects.
+    ...(useBabel
+        ? [
+              getBabelOutputPlugin({
+                  allowAllFormats: true,
+                  compact: true,
+                  plugins: [
+                      '@babel/plugin-transform-nullish-coalescing-operator',
+                      // Explicitly included so we transform 1 ** 2 to Math.pow(1, 2) for ES6 compatibility
+                      '@babel/plugin-transform-exponentiation-operator',
+                  ],
+                  presets: [
+                      [
+                          '@babel/preset-env',
+                          {
+                              loose: true,
+                              modules: false,
+                              exclude: ['transform-dynamic-import'],
+                              targets: es5
+                                  ? [
+                                        '> 0.5%, last 2 versions, Firefox ESR, not dead',
+                                        'chrome > 62',
+                                        'firefox > 59',
+                                        'ios_saf >= 6.1',
+                                        'opera > 50',
+                                        'safari > 12',
+                                        'IE 11',
+                                    ]
+                                  : [
+                                        '> 0.5%, last 2 versions, Firefox ESR, not dead',
+                                        'chrome > 62',
+                                        'firefox > 59',
+                                        'ios_saf >= 10.3',
+                                        'opera > 50',
+                                        'safari > 12',
+                                    ],
+                          },
+                      ],
+                  ],
+              }),
+          ]
+        : []),
     finalTerser({
         nameCache,
         toplevel: true,
@@ -385,10 +390,13 @@ const entrypointTargets = entrypoints.map((file) => {
     const fileName = fileParts.join('.')
 
     const preserveCrossBundleProperties = ['extension-bundles', 'module.slim'].includes(fileName)
+    const useBabel =
+        fileName.includes('es5') || ['extension-bundles', 'module.slim', 'module.slim.no-external'].includes(fileName)
     const pluginsForThisFile = plugins(
         fileName.includes('es5'),
         fileName.includes('no-external'),
-        preserveCrossBundleProperties
+        preserveCrossBundleProperties,
+        useBabel
     )
 
     // we're allowed to console log in this file :)
@@ -401,6 +409,7 @@ const entrypointTargets = entrypoints.map((file) => {
     return {
         input: `src/entrypoints/${file}`,
         platform: 'browser',
+        ...(!useBabel ? { transform: modernTransformOptions } : {}),
         treeshake: {
             // @posthog/core is a pure utility package without package.json sideEffects metadata.
             // Declaring that here prevents unused barrel exports from being retained.
