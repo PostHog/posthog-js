@@ -28,8 +28,8 @@ export interface FeatureFlagsConfigSource {
 
 const snapshot = (config: PostHogConfig, remoteRequestsDisabled: boolean): FeatureFlagsConfig => ({
     bootstrap: {
-        featureFlags: config.bootstrap?.featureFlags,
-        featureFlagPayloads: config.bootstrap?.featureFlagPayloads,
+        featureFlags: config.bootstrap?.featureFlags ?? undefined,
+        featureFlagPayloads: config.bootstrap?.featureFlagPayloads ?? undefined,
     },
     remoteRequestsDisabled,
     featureFlagsDisabled: !!config.advanced_disable_feature_flags,
