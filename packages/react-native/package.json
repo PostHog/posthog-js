@@ -69,7 +69,7 @@
     "expo-device": "^4.0.0",
     "expo-file-system": "^13.0.0",
     "expo-localization": "^11.0.0",
-    "expo-updates": "0.25.0",
+    "expo-updates": "^0.25.0",
     "@testing-library/react": "catalog:",
     "metro": "0.83.1",
     "@expo/config-plugins": "10.1.2",
