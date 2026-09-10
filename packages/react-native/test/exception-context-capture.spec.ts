@@ -1,18 +1,17 @@
 import { PostHog, PostHogOptions, PostHogPersistedProperty } from '../src'
 import { AppState } from 'react-native'
 
+const readUpdateId = vi.hoisted(() => vi.fn())
 const updates = vi.hoisted(() => ({
   isEnabled: true,
-  updateId: 'ota-id',
+  get updateId() {
+    return readUpdateId()
+  },
   runtimeVersion: 'runtime',
   channel: 'production',
   isEmbeddedLaunch: false,
 }))
 vi.mock('../src/optional/OptionalExpoUpdates', () => ({ OptionalExpoUpdates: updates }))
-const getPowerStateSync = vi.hoisted(() => vi.fn())
-vi.mock('../src/optional/OptionalReactNativeDeviceInfo', () => ({
-  OptionalReactNativeDeviceInfo: { getPowerStateSync },
-}))
 
 vi.useRealTimers()
 const clients: PostHog[] = []
@@ -35,8 +34,7 @@ const exceptions = (client: PostHog): any[] =>
 
 beforeEach(() => {
   AppState.currentState = 'active'
-  updates.updateId = 'ota-id'
-  getPowerStateSync.mockReset().mockReturnValue({ batteryLevel: 0.5, batteryState: 'charging', lowPowerMode: true })
+  readUpdateId.mockReset().mockReturnValue('ota-id')
   global.fetch = vi.fn(async () => ({ status: 200, json: async () => ({}) })) as any
 })
 afterEach(async () => {
@@ -48,7 +46,7 @@ afterEach(async () => {
 describe('PostHog.captureException context', () => {
   it('survives the real first JS exception path alongside existing app and exception metadata', () => {
     const client = newPostHog()
-    expect(getPowerStateSync).not.toHaveBeenCalled()
+    expect(readUpdateId).not.toHaveBeenCalled()
     client.captureException(new Error('boom'))
     expect(exceptions(client)[0].properties).toMatchObject({
       $app_version: 'mock',
@@ -58,12 +56,9 @@ describe('PostHog.captureException context', () => {
       $expo_runtime_version: 'runtime',
       $expo_channel: 'production',
       $expo_is_embedded_launch: false,
-      $battery_level: 0.5,
-      $battery_charging: true,
-      $low_power_mode: true,
       $exception_list: [expect.objectContaining({ value: 'boom' })],
     })
-    updates.updateId = 'next-id'
+    readUpdateId.mockReturnValue('next-id')
     AppState.currentState = 'background'
     client.captureException(new Error('next'))
     expect(exceptions(client)[1].properties).toMatchObject({ $expo_update_id: 'next-id', $app_state: 'background' })
@@ -75,7 +70,7 @@ describe('PostHog.captureException context', () => {
 
   it('preserves caller overrides, custom static app properties and exception steps', () => {
     const client = newPostHog({ customAppProperties: { $app_version: 'custom-version', $app_build: 'custom-build' } })
-    const properties = { $expo_update_id: 'caller-id', $app_state: null, $battery_level: 0.75, custom: true }
+    const properties = { $expo_update_id: 'caller-id', $app_state: null, custom: true }
     client.addExceptionStep('before error')
     client.captureException(new Error('boom'), properties)
     expect(exceptions(client)[0].properties).toMatchObject({
@@ -107,20 +102,21 @@ describe('PostHog.captureException context', () => {
     const client = newPostHog(options)
     client.captureException(new Error('not sent'))
     expect(exceptions(client)).toEqual([])
-    expect(getPowerStateSync).not.toHaveBeenCalled()
+    expect(readUpdateId).not.toHaveBeenCalled()
   })
 
-  it('keeps the exception and OTA metadata when power collection throws', () => {
-    getPowerStateSync.mockImplementation(() => {
+  it('keeps the exception and other context when an OTA metadata getter throws', () => {
+    readUpdateId.mockImplementation(() => {
       throw new Error('unlinked')
     })
     const client = newPostHog()
     client.captureException(new Error('original exception'))
     expect(exceptions(client)[0].properties).toMatchObject({
-      $expo_update_id: 'ota-id',
+      $app_state: 'active',
+      $expo_channel: 'production',
       $exception_list: [expect.objectContaining({ value: 'original exception' })],
     })
-    expect(exceptions(client)[0].properties).not.toHaveProperty('$battery_level')
+    expect(exceptions(client)[0].properties).not.toHaveProperty('$expo_update_id')
   })
 
   it('respects runtime consent changes', async () => {

@@ -1,7 +1,6 @@
 import { isEmptyString, trySafe, type PostHogEventProperties } from '@posthog/core'
 import { AppState, Platform } from 'react-native'
 import { OptionalExpoUpdates } from '../optional/OptionalExpoUpdates'
-import { OptionalReactNativeDeviceInfo } from '../optional/OptionalReactNativeDeviceInfo'
 
 const knownString = (value: unknown): value is string =>
   typeof value === 'string' && !isEmptyString(value) && value !== 'unknown'
@@ -28,19 +27,6 @@ export const getExceptionContext = (): PostHogEventProperties => {
     if (knownString(channel)) properties.$expo_channel = channel
     if (typeof isEmbeddedLaunch === 'boolean') properties.$expo_is_embedded_launch = isEmbeddedLaunch
   }
-
-  // One synchronous snapshot per exception; no monitoring, polling or async work on the error path.
-  const powerState = trySafe(() => OptionalReactNativeDeviceInfo?.getPowerStateSync?.())
-  const batteryLevel = trySafe(() => powerState?.batteryLevel)
-  const batteryState = trySafe(() => powerState?.batteryState)
-  const lowPowerMode = trySafe(() => powerState?.lowPowerMode)
-  if (typeof batteryLevel === 'number' && Number.isFinite(batteryLevel) && batteryLevel >= 0 && batteryLevel <= 1) {
-    properties.$battery_level = batteryLevel
-  }
-  if (batteryState === 'charging' || batteryState === 'full' || batteryState === 'unplugged') {
-    properties.$battery_charging = batteryState !== 'unplugged'
-  }
-  if (typeof lowPowerMode === 'boolean') properties.$low_power_mode = lowPowerMode
 
   return properties
 }

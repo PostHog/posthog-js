@@ -2,4 +2,4 @@
 'posthog-react-native': minor
 ---
 
-Add optional Expo update metadata and device conditions to React Native JavaScript exceptions.
+Add optional Expo update metadata and app state to React Native JavaScript exceptions.
