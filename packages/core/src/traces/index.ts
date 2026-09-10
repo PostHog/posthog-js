@@ -276,7 +276,7 @@ export class PostHogTraces {
         maxAttributeValueLength: this._config.maxAttributeValueLength,
         startTime,
         backdated: startTime !== now,
-        clockAnchor: parent?.clockAnchor,
+        clockAnchor: toEpochMs(options?.startTime) === undefined ? parent?.clockAnchor : undefined,
       },
       (record, autoKeys) => this._onSpanEnd(record, autoKeys),
       this._logger

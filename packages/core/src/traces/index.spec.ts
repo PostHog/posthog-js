@@ -263,6 +263,17 @@ describe('PostHogTraces', () => {
         '1700000000200000000',
       ])
     })
+
+    it('keeps an explicit startTime that equals the current time', async () => {
+      const traces = createTraces()
+      setClocks(1_700_000_001_000, 100)
+      const parent = traces.startSpan('parent')
+      setClocks(1_700_000_000_500, 110)
+      traces.startSpan('child', { parent, startTime: Date.now() }).end()
+      await traces.flush()
+
+      expect(sentSpans()[0].startTimeUnixNano).toBe('1700000000500000000')
+    })
   })
 
   describe('trace continuation', () => {
