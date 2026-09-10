@@ -84,16 +84,6 @@ function _useNavigationTracker(
       return
     }
 
-    // Follow the focused child, not the last mounted tab or stack route.
-    // Partial navigation state can omit index, in which case the first route is focused.
-    while (currentRoute.state?.routes?.length) {
-      const state = currentRoute.state
-      const route = state.routes[state.index ?? 0]
-      if (!route) {
-        return
-      }
-      currentRoute = route
-    }
     const { name, params } = currentRoute
 
     const currentRouteName = options?.routeToName?.(name, params) || name || 'Unknown'

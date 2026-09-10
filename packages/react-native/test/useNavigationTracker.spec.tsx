@@ -43,38 +43,28 @@ describe('useNavigationTracker', () => {
     expect(client.screen).toHaveBeenCalledTimes(2)
   })
 
-  it('selects the focused nested leaf rather than the last mounted sibling and preserves mapping', () => {
+  it('maps the focused leaf returned by getCurrentRoute rather than the subscribed parent route', () => {
     const params = { id: 'private-id' }
+    const focusedRoute = { name: 'users/[id]', params }
     mock.state.routes = [
       {
         name: 'Root',
         state: {
           index: 0,
           routes: [
-            { name: 'Tabs', state: { index: 1, routes: [{ name: 'Home' }, { name: 'users/[id]', params }] } },
+            { name: 'Tabs', state: { index: 1, routes: [{ name: 'Home' }, focusedRoute] } },
             { name: 'Inactive' },
           ],
         },
       },
     ]
+    mock.navigation.getCurrentRoute.mockReturnValue(focusedRoute)
     const routeToName = vi.fn(() => 'Redacted screen')
     const routeToProperties = vi.fn(() => ({ safe: true }))
     renderHook(() => useNavigationTracker({ routeToName, routeToProperties }, undefined, client))
     expect(routeToName).toHaveBeenCalledWith('users/[id]', params)
     expect(routeToProperties).toHaveBeenCalledWith('Redacted screen', params)
     expect(client.screen).toHaveBeenCalledWith('Redacted screen', { safe: true })
-  })
-
-  it('uses index zero for partial nested state without an index', () => {
-    mock.state.routes = [{ name: 'Root', state: { routes: [{ name: 'First' }, { name: 'Last' }] } }]
-    renderHook(() => useNavigationTracker(undefined, undefined, client))
-    expect(client.screen).toHaveBeenCalledWith('First', undefined)
-  })
-
-  it('does not guess a nested screen when the focused index is invalid', () => {
-    mock.state.routes = [{ name: 'Root', state: { index: 5, routes: [{ name: 'Not focused' }] } }]
-    renderHook(() => useNavigationTracker(undefined, undefined, client))
-    expect(client.screen).not.toHaveBeenCalled()
   })
 
   it('does not capture screens during server rendering', () => {
