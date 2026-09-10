@@ -240,7 +240,10 @@ export interface CollectFeedbackOptions {
    * dispatcher routes reports itself, see {@link PreparedToolCall.isFeedback}).
    * Return a string to replace the default acknowledgement text. A throw is
    * logged and falls back to the default reply; the `$mcp_feedback` event is
-   * captured either way.
+   * captured either way. The returned string is captured as `$mcp_response`
+   * through the generic sanitize pipeline only — unlike `$mcp_feedback_summary`
+   * / `details`, it does not get structured-PII redaction, so avoid echoing
+   * the agent's raw report text back in it.
    */
   onFeedback?: (report: FeedbackReport) => MaybePromise<string | void>
 }

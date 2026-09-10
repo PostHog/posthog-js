@@ -247,6 +247,10 @@ beyond the schema are never captured — they reach `onFeedback` via `report.raw
 collides with a core field fails at configuration time. Free-text fields go through the same PII
 redaction as `$mcp_intent`.
 
+`onFeedback`'s returned string replaces the acknowledgement and is captured as `$mcp_response`
+through the generic sanitize pipeline only — it does not get the structured-PII redaction applied to
+`$mcp_feedback_summary`/`details`, so don't echo the agent's raw report text back in it.
+
 On the custom-dispatcher path, configure the tool on the `PostHogMCP` constructor and route reports
 yourself (`onFeedback` does not apply there):
 
