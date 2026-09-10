@@ -114,6 +114,12 @@ describe('URL credential redaction', () => {
     // as fields the whole thing is one key named `/callback?token`, so the route
     // is kept verbatim and only what follows the `?` is read as fields.
     ['https://example.com/#/callback?token=fakesecret', 'https://example.com/#/callback?token=%5Bredacted%5D'],
+    // ...but only when the route precedes every field. Here the `?` sits inside
+    // the `next` value, so the fragment is all fields.
+    [
+      'https://example.com/#access_token=fakesecret&next=https://other.test/?page=1',
+      'https://example.com/#access_token=%5Bredacted%5D&next=https%3A%2F%2Fother.test%2F%3Fpage%3D1',
+    ],
     [
       'https://example.com/x?jwt=fakejwt&sessionid=fakesession&code=fakecode&country_code=BR',
       'https://example.com/x?jwt=%5Bredacted%5D&sessionid=%5Bredacted%5D&code=%5Bredacted%5D&country_code=BR',

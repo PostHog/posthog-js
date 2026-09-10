@@ -228,8 +228,11 @@ function splitFragmentFields(hash: string): { route: string; fields: string } {
     return { route: '', fields: '' }
   }
   const fragment = hash.slice(1)
+  // A route only counts when it comes before every field. `#/callback?k=v` is a
+  // route; in `#k=v&next=https://x/?p=1` the `?` sits inside a field's value, and
+  // treating what precedes it as a route would hand the fields back unread.
   const routeEnd = fragment.indexOf('?')
-  const route = routeEnd < 0 ? '' : fragment.slice(0, routeEnd + 1)
+  const route = routeEnd >= 0 && routeEnd < fragment.indexOf('=') ? fragment.slice(0, routeEnd + 1) : ''
   return { route, fields: fragment.slice(route.length).replace(URL_FIELD_SEPARATOR_PATTERN, '&') }
 }
 
