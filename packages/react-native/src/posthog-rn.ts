@@ -325,7 +325,11 @@ export class PostHog extends PostHogCore {
     this._isInitialized = false
     this._persistence = options?.persistence ?? 'file'
     this._disableSurveys = options?.disableSurveys ?? false
-    this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger)
+    this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger, async () => {
+      // captureException can enqueue through wrap() after asynchronous storage initialization.
+      await this._initPromise
+      await this._eventsStorage.waitForPersist()
+    })
     this._setDefaultPersonProperties = options?.setDefaultPersonProperties ?? true
     this._overrideDisplayLanguage = options?.overrideDisplayLanguage?.trim() || null
     this._requestHeaders = options?.requestHeaders ?? {}
