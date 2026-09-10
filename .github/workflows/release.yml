@@ -1236,7 +1236,20 @@ jobs:
               env:
                   BUCKET: ${{ matrix.region.bucket }}
                   VERSION: ${{ needs.check-browser-version.outputs.committed-version }}
-              run: node tooling/release/src/cli.ts upload-s3 "$BUCKET" "$VERSION"
+              run: |
+                  set -o pipefail
+                  upload_log=$(mktemp)
+                  trap 'rm -f "$upload_log"' EXIT
+
+                  if node tooling/release/src/cli.ts upload-s3 "$BUCKET" "$VERSION" 2>&1 | tee "$upload_log"; then
+                      exit 0
+                  else
+                      status=$?
+                      if grep -qF 'Refusing to overwrite existing immutable release assets:' "$upload_log"; then
+                          echo "::warning::This run attempted a release because npm did not list posthog-js@$VERSION. npm may be lagging. If npm now lists this version, re-run 'Check posthog-js version for S3' and its dependent jobs."
+                      fi
+                      exit "$status"
+                  fi
 
             - name: Resolve release failure metadata
               id: release-failure-metadata
