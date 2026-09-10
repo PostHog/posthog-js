@@ -76,7 +76,7 @@ describe('batched event timestamps across retries', () => {
         vi.useRealTimers()
     })
 
-    it.each([0, 503])('preserves capture time across a delayed retry after status %s', (status) => {
+    it.each([0, 503])('preserves capture time across multiple delayed retries after status %s', (status) => {
         const first = posthog.capture('first click', { target: 'alpha' })!
         vi.advanceTimersByTime(1000)
         const second = posthog.capture('second click', { target: 'beta' })!
@@ -86,19 +86,29 @@ describe('batched event timestamps across retries', () => {
         expect(network.requests).toHaveLength(1)
         expect(posthog._retryQueue?.length).toBe(1)
 
-        network.status = 200
         vi.setSystemTime(RETRY_TIME)
         vi.advanceTimersByTime(3000)
 
         expect(network.requests).toHaveLength(2)
-        expect(posthog._retryQueue?.length).toBe(0)
+        expect(posthog._retryQueue?.length).toBe(1)
         expect(network.requests[1].url).toContain('retry_count=1')
+
+        network.status = 200
+        vi.setSystemTime(new Date(RETRY_TIME.getTime() + 60_000))
+        vi.advanceTimersByTime(3000)
+
+        expect(network.requests).toHaveLength(3)
+        expect(posthog._retryQueue?.length).toBe(0)
+        expect(network.requests[2].url).toContain('retry_count=2')
         const bodies = network.requests.map(({ body }) => JSON.parse(body) as CaptureBody)
-        expect(bodies[1].batch).toEqual(bodies[0].batch)
-        expect(bodies[1].sent_at).not.toEqual(bodies[0].sent_at)
+        expect(bodies.map((body) => body.sent_at)).toEqual(
+            network.requests.map(({ receivedAt }) => new Date(receivedAt).toISOString())
+        )
+        expect(new Set(bodies.map((body) => body.sent_at)).size).toBe(3)
         expect(first.uuid).not.toEqual(second.uuid)
 
         for (const [index, body] of bodies.entries()) {
+            expect(body.batch).toEqual(bodies[0].batch)
             expect(body.batch.map((event) => event.timestamp)).toEqual([
                 START.toISOString(),
                 new Date(START.getTime() + 1000).toISOString(),
