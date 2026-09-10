@@ -7,6 +7,7 @@ name: Public API label
 # pull_request_target gives fork PRs a write token for the label and comment.
 # This job must never check out or run PR code: it only reads the generated
 # reference JSON through the API and compares it with jq.
+# scripts/check-pull-request-target.mjs enforces this in CI.
 on:
     pull_request_target:
         types: [opened, synchronize, reopened]
@@ -23,6 +24,7 @@ jobs:
     label-public-api-changes:
         name: Label public API changes
         runs-on: ubuntu-22.04
+        timeout-minutes: 5
         # Release and generate-references bots update these files on purpose.
         if: ${{ !endsWith(github.event.pull_request.user.login, '[bot]') }}
         permissions:

@@ -398,6 +398,8 @@ jobs:
           build: false
       - name: Lint all packages
         run: pnpm lint
+      - name: Check pull_request_target workflows
+        run: pnpm check:pull-request-target
 
   lint-playground:
     permissions:
