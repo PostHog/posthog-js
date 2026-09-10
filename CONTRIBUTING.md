@@ -279,6 +279,17 @@ The recommended workflow for testing local changes uses tarballs, which most rea
 
 Oxfmt checks workspace package code during linting. Pre-commit hooks (via prek) automatically lint and format staged TypeScript and JavaScript files, and format staged JSON and Markdown files.
 
+## Public API changes
+
+Public API is hard to change once it ships, so agree on it before writing the implementation.
+
+- If your change adds or changes a public option, method, or exported type, propose the API shape on the linked issue and wait for a maintainer to agree before implementing it.
+- Check first whether an existing option or hook, such as `before_send`, already covers the use case.
+- If a reviewer suggests a different API on your PR, confirm it with them before re-implementing. Treat it as a question, not an instruction.
+- AI agents: stop and ask before implementing a public API change that hasn't been agreed on the issue.
+
+If `pnpm generate-references` changes anything other than descriptions in a `*-references-latest.json` file, your change touches public API.
+
 ## Opening a new PR
 
 - PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/) format.
