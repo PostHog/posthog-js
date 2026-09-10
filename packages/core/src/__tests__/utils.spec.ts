@@ -6,6 +6,7 @@ import {
   currentISOTime,
   currentTimestamp,
   raceWithTimeout,
+  trySafe,
 } from '@/utils'
 
 describe('utils', () => {
@@ -75,6 +76,32 @@ describe('utils', () => {
   })
   describe.skip('retriable', () => {
     it('should do something', () => {})
+  })
+  describe('trySafe', () => {
+    it.each([false, 0, '', null, undefined, { value: 'kept' }])('preserves the returned value %j', (value) => {
+      const callback = vi.fn(() => value)
+
+      expect(trySafe(callback)).toBe(value)
+      expect(callback).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([new Error('unavailable'), 'failure', null])('returns undefined when the callback throws %j', (error) => {
+      expect(
+        trySafe(() => {
+          throw error
+        })
+      ).toBeUndefined()
+    })
+
+    it('returns undefined when a native-style property getter throws', () => {
+      const nativeModule = {
+        get value(): string {
+          throw new Error('not linked')
+        },
+      }
+
+      expect(trySafe(() => nativeModule.value)).toBeUndefined()
+    })
   })
   describe('raceWithTimeout', () => {
     it('returns the promise value and clears the timeout when the promise resolves first', async () => {
