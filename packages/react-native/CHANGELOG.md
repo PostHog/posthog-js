@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.68.7
+
+### Patch Changes
+
+- [#4900](https://github.com/PostHog/posthog-js/pull/4900) [`c02532f`](https://github.com/PostHog/posthog-js/commit/c02532f2c4cdb7d2c876405adbc290cb374c0bad) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix stale screen names on React Native exceptions and missed screen tracking on tab changes.
+  (2026-09-10)
+
 ## 4.68.6
 
 ### Patch Changes
