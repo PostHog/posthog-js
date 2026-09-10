@@ -96,7 +96,7 @@
     "expo-device": ">= 4.0.0",
     "expo-file-system": ">= 13.0.0",
     "expo-localization": ">= 11.0.0",
-    "expo-updates": "*",
+    "expo-updates": ">= 0.25.0",
     "@posthog/react-native-plugin": ">= 2.4.3",
     "posthog-react-native-session-replay": ">= 1.6.0",
     "react-native-device-info": ">= 10.0.0",
