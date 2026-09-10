@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.68.6
+
+### Patch Changes
+
+- [#4896](https://github.com/PostHog/posthog-js/pull/4896) [`d9a2142`](https://github.com/PostHog/posthog-js/commit/d9a2142c0635895ee1c85676f2d50048cf289fb3) Thanks [@marandaneto](https://github.com/marandaneto)! - Give fatal JavaScript exceptions up to two seconds to persist before forwarding to React Native's fatal handler.
+  (2026-09-10)
+
 ## 4.68.5
 
 ### Patch Changes
