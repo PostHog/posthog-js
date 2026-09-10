@@ -158,6 +158,7 @@ export class SurveyManager {
     // re-apply the same display overrides, rather than reusing the overridden survey from the
     // original render (which would go stale if the underlying survey definition changes).
     private _displayOptions: DisplaySurveyPopoverOptions | undefined
+    private _loggedFeatureFlagsDisabledWarning: boolean = false
 
     constructor(posthog: PostHog) {
         this._posthog = posthog
@@ -799,7 +800,24 @@ export class SurveyManager {
             const flagVariantValue = featureFlags?.getFeatureFlag(flagKey, { send_event: false })
             flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
         }
-        return isFeatureEnabled && flagVariantCheck
+        const enabled = isFeatureEnabled && flagVariantCheck
+        if (!enabled) {
+            this._warnIfFeatureFlagsDisabled(flagKey)
+        }
+        return enabled
+    }
+
+    private _warnIfFeatureFlagsDisabled(flagKey: string): void {
+        if (this._loggedFeatureFlagsDisabledWarning || !this._posthog.config?.advanced_disable_feature_flags) {
+            return
+        }
+        this._loggedFeatureFlagsDisabledWarning = true
+        logger.warn(
+            `Survey feature flag "${flagKey}" evaluated to false because advanced_disable_feature_flags is set. ` +
+                'PostHog creates an internal targeting flag for almost every survey, so no survey can display while flags are disabled. ' +
+                'To keep surveys working, replace advanced_disable_feature_flags with advanced_only_evaluate_survey_feature_flags, ' +
+                'which evaluates survey flags only.'
+        )
     }
 
     private _isSurveyConditionMatched(survey: Survey): boolean {
@@ -841,6 +859,7 @@ export class SurveyManager {
             isSurveyIterationBased(survey) &&
             !this._featureFlags?.hasLoadedFlags
         ) {
+            this._warnIfFeatureFlagsDisabled(survey.internal_targeting_flag_key)
             return {
                 satisfied: false,
                 reason: 'Feature flags have not loaded yet; deferring internal targeting flag check',

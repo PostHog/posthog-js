@@ -1942,6 +1942,11 @@ export interface PostHogConfig {
      * (e.g. /flags?v=2&config=true) without evaluating any feature flags.  Most folks use this
      * to save money on feature flag evaluation (by bootstrapping feature flags on the server side).
      *
+     * This also stops surveys from displaying. PostHog creates an internal targeting flag for
+     * almost every survey, and every flag evaluates to false while flags are disabled. If you use
+     * surveys, set `advanced_only_evaluate_survey_feature_flags` instead, which evaluates survey
+     * flags only.
+     *
      * @default false
      */
     advanced_disable_feature_flags: boolean
