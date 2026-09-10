@@ -35,8 +35,10 @@ const SENSITIVE_KEY_PATTERN =
 const URL_PATTERN = /[a-z][a-z0-9+.-]{0,63}:[^\s<>"]+/gi
 /** The same pattern without `g`, for asking whether a value holds a URL at all. */
 const URL_PATTERN_ONCE = new RegExp(URL_PATTERN.source, 'i')
-/** A match that opens with a real authority, i.e. one the pattern matched before it went authority-less. */
-const URL_AUTHORITY_PATTERN = /^[a-z][a-z0-9+.-]{0,63}:\/\//i
+/** Finds the first scheme that brings a real authority, i.e. what the pattern required before it went authority-less. */
+const URL_AUTHORITY_SEARCH = /[a-z][a-z0-9+.-]{0,63}:\/\//i
+/** The same, anchored: does this match *open* with an authority? */
+const URL_AUTHORITY_PATTERN = new RegExp(`^${URL_AUTHORITY_SEARCH.source}`, 'i')
 // The terminal class above also absorbs the prose punctuation that follows a URL
 // in a sentence, `'` included now that a URL can contain one. See
 // `splitTrailingPunctuation`.
@@ -223,6 +225,16 @@ function sanitizeUrl(value: string, mode: UrlSanitizeMode): string {
   if (value.length > MAX_URL_LENGTH && URL_AUTHORITY_PATTERN.test(value)) {
     return REDACTED_VALUE
   }
+
+  // A colon-suffixed prose word in front of a real URL (`Failed URL:https://…`)
+  // is absorbed by the authority-less pattern, which would then read the whole
+  // run as scheme `URL` with the address as its path — and never see the
+  // userinfo. The address starts where the authority does.
+  const authority = URL_AUTHORITY_SEARCH.exec(value)
+  if (authority && authority.index > 0) {
+    return value.slice(0, authority.index) + sanitizeUrl(value.slice(authority.index), mode)
+  }
+
   const { address, suffix } = mode.stripPunctuation ? splitTrailingPunctuation(value) : { address: value, suffix: '' }
   let url: URL
   try {

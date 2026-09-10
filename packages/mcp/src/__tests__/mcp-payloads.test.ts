@@ -183,6 +183,13 @@ describe('URL credential redaction', () => {
     // through untouched. `new URL()` gives `file:` its empty authority back.
     ['resource:guide?token=fakesecret', 'resource:guide?token=%5Bredacted%5D'],
     ['file:/guide.md?token=fakesecret', 'file:///guide.md?token=%5Bredacted%5D'],
+    // A colon-suffixed prose word in front of a real URL is swept into the same
+    // match; parsing that as scheme `URL` would hide the userinfo, so the
+    // address is taken to start where the authority does.
+    ['Failed URL:https://fakeuser:fakepass@example.com/doc', 'Failed URL:https://%5Bredacted%5D@example.com/doc'],
+    ['URL:https://example.com/x?token=fakesecret', 'URL:https://example.com/x?token=%5Bredacted%5D'],
+    // No authority anywhere, so the whole run is one opaque-path URI.
+    ['see:resource:guide?token=fakesecret', 'see:resource:guide?token=%5Bredacted%5D'],
     // Past the length bound too: it only caps a match with an authority.
     [`resource:${'a'.repeat(9_000)}?token=fakesecret`, `resource:${'a'.repeat(9_000)}?token=%5Bredacted%5D`],
   ])('sanitizes %s', (value, expected) => {
@@ -205,6 +212,7 @@ describe('URL credential redaction', () => {
     ['an authority-less URI with no query', 'resource:guide'],
     ['a Windows path', 'C:\\Users\\bob\\file.txt'],
     ['a log line with a level prefix and a timestamp', 'ERROR:root:started 2026-09-10T13:40:25.574Z'],
+    ['a prose word joined to a URL with no credentials', 'Note:https://example.com/doc'],
     // The length bound caps authority-bearing addresses only, so a long
     // authority-less match is still parsed — and a data URI holds nothing to
     // redact, so it comes back byte-for-byte instead of being dropped.
