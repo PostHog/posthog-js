@@ -183,15 +183,26 @@ describe('URL credential redaction', () => {
     // through untouched. `new URL()` gives `file:` its empty authority back.
     ['resource:guide?token=fakesecret', 'resource:guide?token=%5Bredacted%5D'],
     ['file:/guide.md?token=fakesecret', 'file:///guide.md?token=%5Bredacted%5D'],
-    // A colon-suffixed prose word in front of a real URL is swept into the same
-    // match; parsing that as scheme `URL` would hide the userinfo, so the
-    // address is taken to start where the authority does.
+    // One match can hold two addresses — a prose word in front of one, or two run
+    // together — and the second's userinfo would otherwise sit in what parses as
+    // the first one's path. The match is split where the second address begins.
     ['Failed URL:https://fakeuser:fakepass@example.com/doc', 'Failed URL:https://%5Bredacted%5D@example.com/doc'],
     ['URL:https://example.com/x?token=fakesecret', 'URL:https://example.com/x?token=%5Bredacted%5D'],
     ['a:b:https://fakeuser:fakepass@example.com/doc', 'a:b:https://%5Bredacted%5D@example.com/doc'],
-    // Only scheme-shaped words count as that prose prefix. Everything below has
-    // a `?`, `=` or `+` before the authority, so it is an outer URI carrying a
-    // URL — parsed whole, which is what redacts its own credential.
+    [
+      'https://example.com/doc,https://fakeuser:fakepass@other.example.com/doc',
+      'https://example.com/doc,https://%5Bredacted%5D@other.example.com/doc',
+    ],
+    // The closing paren goes with the redacted trailing field, by the same rule
+    // that drops a sentence's comma after one — it could be the credential's own
+    // tail, and nothing here can tell markdown from prose.
+    [
+      '[a](https://example.com/a)[b](https://example.com/b?token=fakesecret)',
+      '[a](https://example.com/a)[b](https://example.com/b?token=%5Bredacted%5D',
+    ],
+    // An authority *after* the value's own `?`/`#` is field data, not a second
+    // address: these are outer URIs carrying a URL, and parsing them whole is
+    // what redacts their own credential.
     [
       'file:/guide?password=fakepass&url=https://example.com',
       'file:///guide?password=%5Bredacted%5D&url=https%3A%2F%2Fexample.com',

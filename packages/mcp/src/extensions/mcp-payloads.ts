@@ -39,8 +39,10 @@ const URL_PATTERN_ONCE = new RegExp(URL_PATTERN.source, 'i')
 const URL_AUTHORITY_SEARCH = /[a-z][a-z0-9+.-]{0,63}:\/\//i
 /** The same, anchored: does this match *open* with an authority? */
 const URL_AUTHORITY_PATTERN = new RegExp(`^${URL_AUTHORITY_SEARCH.source}`, 'i')
-/** A run of scheme-shaped words, each closed by a colon — `URL:`, `a:b:`. Nothing else counts as prose. */
-const PROSE_PREFIX_PATTERN = /^(?:[a-z][a-z0-9+.-]{0,63}:)+$/i
+/** Every authority start in a value, in order. */
+const URL_AUTHORITY_SEARCH_ALL = new RegExp(URL_AUTHORITY_SEARCH.source, 'gi')
+/** Where a value's own query or fragment begins; an authority past it is field data, not an address. */
+const URL_FIELDS_START_PATTERN = /[?#]/
 // The terminal class above also absorbs the prose punctuation that follows a URL
 // in a sentence, `'` included now that a URL can contain one. See
 // `splitTrailingPunctuation`.
@@ -213,6 +215,24 @@ function splitTrailingPunctuation(value: string): { address: string; suffix: str
 }
 
 /**
+ * Where a second address starts inside `value`, or -1. Only an authority ahead
+ * of the value's own query or fragment counts; see {@link sanitizeUrl}.
+ */
+function findEmbeddedAuthorityIndex(value: string): number {
+  const fields = URL_FIELDS_START_PATTERN.exec(value)
+  const boundary = fields ? fields.index : value.length
+  for (const match of value.matchAll(URL_AUTHORITY_SEARCH_ALL)) {
+    if (match.index >= boundary) {
+      break
+    }
+    if (match.index > 0) {
+      return match.index
+    }
+  }
+  return -1
+}
+
+/**
  * Redacts the credentials embedded in one URL-shaped match: the userinfo, plus
  * the values of credential-named query and fragment fields. A retained value that
  * is itself a URL — a gateway's `?url=` passthrough — gets the same pass one
@@ -228,19 +248,26 @@ function sanitizeUrl(value: string, mode: UrlSanitizeMode): string {
     return REDACTED_VALUE
   }
 
-  // A colon-suffixed prose word in front of a real URL (`Failed URL:https://…`)
-  // is absorbed by the authority-less pattern, which would then read the whole
-  // run as scheme `URL` with the address as its path — and never see the
-  // userinfo. The address starts where the authority does.
+  // One match can hold more than one address: a prose word in front of it
+  // (`Failed URL:https://…`, `a:b:https://…`) or two addresses run together
+  // (`…/doc,https://…`). Either way the second address begins inside what would
+  // parse as the first one's path, so its userinfo is never seen. Split the
+  // match where that address begins and sanitize each part on its own.
   //
-  // Only a run of scheme-shaped words counts as that prefix. Anything else in
-  // front of the authority (`?`, `/`, `=`, `+`) means this is an outer URI that
-  // merely carries a URL — `file:/guide?password=…&url=https://…` — and handing
-  // its query back verbatim as "prose" would leak the credential. Parsed whole,
-  // the query pass redacts it and the nested pass handles the inner address.
-  const authority = URL_AUTHORITY_SEARCH.exec(value)
-  if (authority && authority.index > 0 && PROSE_PREFIX_PATTERN.test(value.slice(0, authority.index))) {
-    return value.slice(0, authority.index) + sanitizeUrl(value.slice(authority.index), mode)
+  // Only before the value's own `?`/`#`: an authority past that belongs to a
+  // query or fragment value — a gateway's `?url=https://…` — where the field
+  // pass already redacts it or hands it to the nested pass.
+  //
+  // The left part is sanitized without the punctuation split: it is followed by
+  // an address rather than by prose, so its last character is a separator, not a
+  // sentence's. (It matters — stripping the `:` off `URL:` would leave `URL`,
+  // which `new URL()` rejects, and the prose word would become `[redacted]`.)
+  const embedded = findEmbeddedAuthorityIndex(value)
+  if (embedded > 0) {
+    return (
+      sanitizeUrl(value.slice(0, embedded), { ...mode, stripPunctuation: false }) +
+      sanitizeUrl(value.slice(embedded), mode)
+    )
   }
 
   const { address, suffix } = mode.stripPunctuation ? splitTrailingPunctuation(value) : { address: value, suffix: '' }
