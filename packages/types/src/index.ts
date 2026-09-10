@@ -86,7 +86,15 @@ export type {
 } from './posthog-config'
 
 // Segment integration types
-export type { SegmentUser, SegmentAnalytics, SegmentPlugin, SegmentContext, SegmentFunction } from './segment'
+export type {
+    SegmentUser,
+    SegmentAnalytics,
+    SegmentPlugin,
+    SegmentContext,
+    SegmentFunction,
+    SegmentEnrichmentFilterFn,
+    SegmentIntegrationConfig,
+} from './segment'
 
 // Survey types
 export type { SurveyRenderReason } from './survey'

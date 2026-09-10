@@ -1,6 +1,7 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router/react-navigation'
 import { useFonts } from 'expo-font'
-import { Stack, usePathname } from 'expo-router'
+import { Stack, usePathname, useSegments } from 'expo-router'
+import { useEffect } from 'react'
 import { StatusBar } from 'expo-status-bar'
 import 'react-native-reanimated'
 
@@ -21,8 +22,18 @@ export default function RootLayout() {
     const autoPresentSurveys = pathname !== '/surveys'
 
     const [loaded] = useFonts({
+        // oxlint-disable-next-line typescript/no-require-imports -- Metro loads font assets through static require calls.
         SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     })
+
+    // Segments retain route templates such as [id], unlike a pathname containing user identifiers.
+    const segments = useSegments()
+    const screenName = segments.join('/') || 'index'
+    useEffect(() => {
+        if (loaded) {
+            void posthog.screen(screenName)
+        }
+    }, [loaded, screenName])
 
     if (!loaded) {
         // Async font loading only occurs in development.

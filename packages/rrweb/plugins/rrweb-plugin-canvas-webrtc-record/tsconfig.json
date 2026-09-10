@@ -7,6 +7,8 @@
     "vite.config.ts"
   ],
   "compilerOptions": {
+    "isolatedDeclarations": true,
+    "types": ["node"],
     "rootDir": "src",
     "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
   },

@@ -8,5 +8,5 @@ export default config(
   },
   'rrweb',
   // { outputDir: 'dist/alt' },
-  { outputDir: 'dist' },
+  { outputDir: 'dist', generateDeclarations: true },
 );

@@ -166,6 +166,12 @@ importers:
       rimraf:
         specifier: ^6.1.3
         version: 6.1.3
+      rolldown:
+        specifier: 'catalog:'
+        version: 1.2.4
+      rolldown-plugin-dts:
+        specifier: 'catalog:'
+        version: 0.27.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(rolldown@1.2.4)(typescript@5.8.2)
       rollup:
         specifier: 'catalog:'
         version: 4.53.3
@@ -256,7 +262,7 @@ importers:
         version: link:../node
       tsdown:
         specifier: 'catalog:'
-        version: 0.22.14(@volar/typescript@2.4.28)(typescript@5.8.2)
+        version: 0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -351,21 +357,6 @@ importers:
       '@rollup/plugin-babel':
         specifier: ^6.0.4
         version: 6.0.4(@babel/core@7.28.5)(@types/babel__core@7.20.5)(rollup@4.53.3)
-      '@rollup/plugin-commonjs':
-        specifier: ^28.0.6
-        version: 28.0.6(rollup@4.53.3)
-      '@rollup/plugin-json':
-        specifier: ^6.1.0
-        version: 6.1.0(rollup@4.53.3)
-      '@rollup/plugin-node-resolve':
-        specifier: ^16.0.3
-        version: 16.0.3(rollup@4.53.3)
-      '@rollup/plugin-terser':
-        specifier: ^0.4.4
-        version: 0.4.4(rollup@4.53.3)
-      '@rollup/plugin-typescript':
-        specifier: ^12.3.0
-        version: 12.3.0(rollup@4.53.3)(tslib@2.8.1)(typescript@5.8.2)
       '@sentry/types':
         specifier: 8.7.0
         version: 8.7.0
@@ -447,12 +438,9 @@ importers:
       rolldown:
         specifier: 'catalog:'
         version: 1.2.4
-      rollup:
+      rolldown-plugin-dts:
         specifier: 'catalog:'
-        version: 4.53.3
-      rollup-plugin-dts:
-        specifier: ^6.2.3
-        version: 6.2.3(rollup@4.53.3)(typescript@5.8.2)
+        version: 0.27.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(rolldown@1.2.4)(typescript@5.8.2)
       rollup-plugin-visualizer:
         specifier: ^6.0.3
         version: 6.0.3(rolldown@1.2.4)(rollup@4.53.3)
@@ -945,7 +933,7 @@ importers:
         version: 19.2.7(react@19.2.7)
       tsdown:
         specifier: 0.22.14
-        version: 0.22.14(@volar/typescript@2.4.28)(typescript@5.8.2)
+        version: 0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@5.8.2)
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
@@ -1187,10 +1175,16 @@ importers:
 
   packages/rrweb/plugins/rrweb-plugin-canvas-webrtc-record:
     dependencies:
+      '@types/node':
+        specifier: ^16.18.126
+        version: 16.18.126
       simple-peer-light:
         specifier: ^9.10.0
         version: 9.10.0
     devDependencies:
+      '@posthog-tooling/rrweb-build':
+        specifier: workspace:*
+        version: link:../../../../tooling/rrweb-build
       '@posthog/rrweb':
         specifier: workspace:*
         version: link:../../rrweb
@@ -1200,12 +1194,6 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
-      vite:
-        specifier: 'catalog:'
-        version: 8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0)
-      vite-plugin-dts:
-        specifier: 'catalog:'
-        version: 5.0.3(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(esbuild@0.28.1)(rolldown@1.2.4)(rollup@4.62.3)(typescript@5.8.2)(vite@8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0))(webpack@5.108.1(esbuild@0.28.1)(lightningcss@1.33.0))
 
   packages/rrweb/plugins/rrweb-plugin-canvas-webrtc-replay:
     dependencies:
@@ -1386,10 +1374,10 @@ importers:
       '@posthog/rrweb-snapshot':
         specifier: workspace:*
         version: link:../rrweb-snapshot
-    devDependencies:
       '@posthog/rrweb-types':
         specifier: workspace:*
         version: link:../types
+    devDependencies:
       '@types/jsdom':
         specifier: ^20.0.0
         version: 20.0.1
@@ -1420,6 +1408,9 @@ importers:
       '@posthog/rrweb-types':
         specifier: workspace:*
         version: link:../types
+      '@types/nwsapi':
+        specifier: ^2.2.2
+        version: 2.2.7
       cssom:
         specifier: ^0.5.0
         version: 0.5.0
@@ -1439,9 +1430,6 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.9
-      '@types/nwsapi':
-        specifier: ^2.2.2
-        version: 2.2.7
       compare-versions:
         specifier: ^4.1.3
         version: 4.1.4
@@ -1548,6 +1536,9 @@ importers:
 
   packages/rrweb/rrweb-snapshot:
     dependencies:
+      '@posthog/rrweb-types':
+        specifier: workspace:*
+        version: link:../types
       '@types/postcss-safe-parser':
         specifier: ^5.0.4
         version: 5.0.4
@@ -1558,9 +1549,6 @@ importers:
         specifier: ^7.0.1
         version: 7.0.1(postcss@8.5.24)
     devDependencies:
-      '@posthog/rrweb-types':
-        specifier: workspace:*
-        version: link:../types
       '@posthog/rrweb-utils':
         specifier: workspace:*
         version: link:../utils
@@ -1658,7 +1646,7 @@ importers:
         version: 26.1.0
       tsdown:
         specifier: 'catalog:'
-        version: 0.22.14(@volar/typescript@2.4.28)(typescript@5.8.2)
+        version: 0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -1747,6 +1735,15 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
+
+  tooling/rrweb-build:
+    dependencies:
+      vite:
+        specifier: 'catalog:'
+        version: 8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0)
+      vite-plugin-dts:
+        specifier: 'catalog:'
+        version: 5.0.3(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(esbuild@0.28.1)(rolldown@1.2.4)(rollup@4.62.3)(typescript@5.8.2)(vite@8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0))(webpack@5.108.1(esbuild@0.28.1)(lightningcss@1.33.0))
 
   tooling/tsconfig-base: {}
 
@@ -6922,15 +6919,6 @@ packages:
       rollup:
         optional: true
 
-  '@rollup/plugin-terser@0.4.4':
-    resolution: {integrity: sha512-XHeJC5Bgvs8LfukDwWZp7yeqin6ns8RTl2B9avbejt6tZqsqvVoWI7ZTQrcNsfKEDWBTnTxM8nMDkO2IFFbd0A==}
-    engines: {node: '>=14.0.0'}
-    peerDependencies:
-      rollup: ^2.0.0||^3.0.0||^4.0.0
-    peerDependenciesMeta:
-      rollup:
-        optional: true
-
   '@rollup/plugin-terser@1.0.0':
     resolution: {integrity: sha512-FnCxhTBx6bMOYQrar6C8h3scPt8/JwIzw3+AJ2K++6guogH5fYaIFia+zZuhqv0eo1RN7W1Pz630SyvLbDjhtQ==}
     engines: {node: '>=20.0.0'}
@@ -7929,6 +7917,9 @@ packages:
 
   '@types/node@12.20.55':
     resolution: {integrity: sha512-J8xLz7q2OFulZ2cyGTLE1TbbZcjpno7FaN6zdJNrgAdrJ+DZzh/uFR6YrTb4C+nXakvud8Q4+rbhoIWlYQbUFQ==}
+
+  '@types/node@16.18.126':
+    resolution: {integrity: sha512-OTcgaiwfGFBKacvfwuHzzn1KLxH/er8mluiy8/uM3sGXHaRe73RrSIj01jow9t4kJEW633Ov+cOexXeiApTyAw==}
 
   '@types/node@20.19.9':
     resolution: {integrity: sha512-cuVNgarYWZqxRJDQHEB58GEONhOK79QVR/qYx4S7kcUObQvUwvFnYxJuuHUKm2aieN9X3yZB4LZsuYNU1Qphsw==}
@@ -15129,9 +15120,6 @@ packages:
   radix3@1.1.2:
     resolution: {integrity: sha512-b484I/7b8rDEdSDKckSSBA8knMpcdsXudlE/LNL639wFoHKwLbEkQFZHWEYwDC0wa0FKUcCY+GAF73Z7wxNVFA==}
 
-  randombytes@2.1.0:
-    resolution: {integrity: sha512-vYl3iOX+4CKUWuxGi9Ukhie6fsqXqS9FE2Zaic4tNFD2N2QQaXOMFbuKK4QmDHC0JO6B1Zp41J0LpT0oR68amQ==}
-
   range-parser@1.2.1:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
     engines: {node: '>= 0.6'}
@@ -15835,9 +15823,6 @@ packages:
   serialize-error@6.0.0:
     resolution: {integrity: sha512-3vmBkMZLQO+BR4RPHcyRGdE09XCF6cvxzk2N2qn8Er3F91cy8Qt7VvEbZBOpaL53qsBbe2cFOefU6tRY6WDelA==}
     engines: {node: '>=10'}
-
-  serialize-javascript@6.0.1:
-    resolution: {integrity: sha512-owoXEFjWRllis8/M1Q+Cw5k8ZH40e3zhp/ovX+Xr/vi1qj6QesbyXXViFbpNvWvPNAD62SutwEXavefrLJWj7w==}
 
   serialize-javascript@7.0.7:
     resolution: {integrity: sha512-YAy8Od6KV+uuwUuU50np8fGB/Aues6Y0nAhA9y/hId74PlKUcme4pXcBD46NWKr1Q4osN/iseZ17YqO1XfmI8g==}
@@ -25227,14 +25212,6 @@ snapshots:
     optionalDependencies:
       rollup: 4.62.3
 
-  '@rollup/plugin-terser@0.4.4(rollup@4.53.3)':
-    dependencies:
-      serialize-javascript: 6.0.1
-      smob: 1.4.1
-      terser: 5.48.0
-    optionalDependencies:
-      rollup: 4.53.3
-
   '@rollup/plugin-terser@1.0.0(rollup@4.62.3)':
     dependencies:
       serialize-javascript: 7.0.7
@@ -26468,6 +26445,8 @@ snapshots:
       '@types/node': 22.20.1
 
   '@types/node@12.20.55': {}
+
+  '@types/node@16.18.126': {}
 
   '@types/node@20.19.9':
     dependencies:
@@ -35676,10 +35655,6 @@ snapshots:
 
   radix3@1.1.2: {}
 
-  randombytes@2.1.0:
-    dependencies:
-      safe-buffer: 5.2.1
-
   range-parser@1.2.1: {}
 
   range-parser@1.3.0: {}
@@ -36608,10 +36583,6 @@ snapshots:
   serialize-error@6.0.0:
     dependencies:
       type-fest: 0.12.0
-
-  serialize-javascript@6.0.1:
-    dependencies:
-      randombytes: 2.1.0
 
   serialize-javascript@7.0.7: {}
 
@@ -37848,7 +37819,7 @@ snapshots:
     optionalDependencies:
       typescript: 5.8.2
 
-  tsdown@0.22.14(@volar/typescript@2.4.28)(typescript@5.8.2):
+  tsdown@0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@5.8.2):
     dependencies:
       ansis: 4.3.1
       cac: 7.0.0

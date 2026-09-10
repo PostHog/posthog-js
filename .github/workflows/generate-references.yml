@@ -12,8 +12,12 @@ on:
         required: true
         type: string
 
+permissions: {}
+
 jobs:
   generate-references:
+    permissions:
+      contents: read
     name: Generate SDK references
     runs-on: ubuntu-22.04
 

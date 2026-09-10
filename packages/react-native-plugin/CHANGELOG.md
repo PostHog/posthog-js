@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.6.0
+
+### Minor Changes
+
+- [#4858](https://github.com/PostHog/posthog-js/pull/4858) [`233f501`](https://github.com/PostHog/posthog-js/commit/233f501c039ca254dee1112596cff9c1026dde62) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Capture `$push_notification_opened` on Android when a notification is tapped while the app is already running, not just on a cold start.
+  (2026-09-10)
+
 ## 2.5.2
 
 ### Patch Changes

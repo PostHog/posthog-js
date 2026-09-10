@@ -19,13 +19,14 @@ on:
       - '.github/workflows/sdk-compliance-tests-browser.yml'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  packages: read
-  pull-requests: write
+permissions: {}
 
 jobs:
   test-browser-sdk:
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: write
     uses: PostHog/posthog-sdk-test-harness/.github/workflows/test-sdk-action.yml@03d972e49be84402c491324320b0a0f38c2ddc53
     with:
       adapter-dockerfile: compliance/browser/Dockerfile

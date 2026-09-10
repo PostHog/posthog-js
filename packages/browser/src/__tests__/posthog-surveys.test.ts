@@ -4,6 +4,7 @@ vi.mock('@posthog/browser-common/utils/logger', async (importOriginal) => ({
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        critical: vi.fn(),
     }),
 }))
 vi.useFakeTimers()
@@ -16,7 +17,7 @@ import { BrowserSurveys } from '../browser-surveys'
 import { Survey, SurveySchedule, SurveyType } from '../posthog-surveys-types'
 import { FlagsResponse } from '../types'
 import { assignableWindow } from '../utils/globals'
-import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
+import { DEFAULT_DISPLAY_SURVEY_OPTIONS, SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { createMockPostHog } from './helpers/posthog-instance'
 import { createSurveysClient } from './helpers/surveys-client'
 
@@ -191,6 +192,89 @@ describe('posthog-surveys', () => {
                 const result = surveys.canRenderSurvey(survey.id)
                 expect(result.visible).toBeTruthy()
                 expect(result.disabledReason).toBeUndefined()
+            })
+
+            // The public entry point is what an integrator calls before it shows a survey, so the
+            // capture gate has to reach this far. `_checkSurveyRenderability` and
+            // `_checkSurveyEligibility` sit next to each other, and only the first applies the gate.
+            it('reports the capture state through the public entry point', () => {
+                mockPostHog.get_property.mockReturnValue([survey])
+                mockPostHog.is_capturing = vi.fn(() => false)
+                surveys['_surveyManager'] = new SurveyManager(mockPostHog as PostHog)
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+
+                const result = surveys.canRenderSurvey(survey.id)
+
+                expect(result.visible).toBe(false)
+                expect(result.disabledReason).toBe('PostHog is not capturing, so a survey response cannot be recorded')
+            })
+        })
+
+        describe('displaySurvey', () => {
+            let surveyManager: SurveyManager
+
+            beforeEach(() => {
+                mockPostHog.get_property.mockReturnValue([survey])
+                surveyManager = new SurveyManager(mockPostHog as PostHog)
+                surveys['_surveyManager'] = surveyManager
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+            })
+
+            // Regression guard: `ignoreConditions` bypasses the survey's display conditions, not the
+            // capture prerequisite. Forcing a survey on while capturing is opted out would show a
+            // confirmation for an answer `capture()` throws away.
+            it('does not display an opted-out survey, even with ignoreConditions', () => {
+                mockPostHog.is_capturing = vi.fn(() => false)
+                const handlePopoverSurvey = vi.spyOn(surveyManager, 'handlePopoverSurvey')
+
+                surveys.displaySurvey(survey.id, { ...DEFAULT_DISPLAY_SURVEY_OPTIONS, ignoreConditions: true })
+
+                expect(handlePopoverSurvey).not.toHaveBeenCalled()
+                expect(mockLogger.critical).not.toHaveBeenCalled()
+            })
+
+            it('displays a survey with ignoreConditions while capturing is on', () => {
+                mockPostHog.is_capturing = vi.fn(() => true)
+                const handlePopoverSurvey = vi.spyOn(surveyManager, 'handlePopoverSurvey').mockImplementation(() => {})
+
+                surveys.displaySurvey(survey.id, { ...DEFAULT_DISPLAY_SURVEY_OPTIONS, ignoreConditions: true })
+
+                expect(handlePopoverSurvey).toHaveBeenCalled()
+            })
+
+            it.each([true, false])('supports an older surveys bundle when capturing is %s', (capturing) => {
+                mockPostHog.is_capturing = vi.fn(() => capturing)
+                Object.defineProperty(surveyManager, 'checkSurveyCaptureEligibility', { value: undefined })
+                const display = vi.spyOn(surveyManager, 'handlePopoverSurvey').mockImplementation(() => {})
+
+                surveys.displaySurvey(survey.id, { ...DEFAULT_DISPLAY_SURVEY_OPTIONS, ignoreConditions: true })
+
+                expect(display).toHaveBeenCalledTimes(capturing ? 1 : 0)
+            })
+
+            it('does not render directly while capturing is off', () => {
+                mockPostHog.is_capturing = vi.fn(() => false)
+                const render = vi.spyOn(surveyManager, 'renderSurvey').mockImplementation(() => {})
+
+                surveys.renderSurvey(survey, 'body')
+
+                expect(render).not.toHaveBeenCalled()
+            })
+
+            it('rechecks capturing after a direct render delay', () => {
+                const isCapturing = vi.fn(() => true)
+                mockPostHog.is_capturing = isCapturing
+                const render = vi.spyOn(surveyManager, 'renderSurvey').mockImplementation(() => {})
+                surveys.renderSurvey({ ...survey, appearance: { surveyPopupDelaySeconds: 1 } }, 'body')
+                isCapturing.mockReturnValue(false)
+
+                vi.advanceTimersByTime(1000)
+
+                expect(render).not.toHaveBeenCalled()
             })
         })
 

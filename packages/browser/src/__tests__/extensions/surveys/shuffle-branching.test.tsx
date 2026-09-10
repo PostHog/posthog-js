@@ -28,6 +28,7 @@ const mockedUuidv7 = uuid.uuidv7 as vi.Mock
 const mockPosthog = {
     capture: vi.fn(),
     get_session_replay_url: vi.fn().mockReturnValue('http://example.com/replay'),
+    is_capturing: vi.fn(() => true),
     reloadFeatureFlags: vi.fn(),
 }
 

@@ -17,7 +17,8 @@ export class IframeManager {
   private iframes: WeakMap<HTMLIFrameElement, true> = new WeakMap();
   private crossOriginIframeMap: WeakMap<MessageEventSource, HTMLIFrameElement> =
     new WeakMap();
-  public crossOriginIframeMirror = new CrossOriginIframeMirror(genId);
+  public crossOriginIframeMirror: CrossOriginIframeMirror =
+    new CrossOriginIframeMirror(genId);
   public crossOriginIframeStyleMirror: CrossOriginIframeMirror;
   public crossOriginIframeRootIdMap: WeakMap<HTMLIFrameElement, number> =
     new WeakMap();
@@ -76,7 +77,7 @@ export class IframeManager {
     }
   }
 
-  public addIframe(iframeEl: HTMLIFrameElement) {
+  public addIframe(iframeEl: HTMLIFrameElement): void {
     this.iframes.set(iframeEl, true);
     if (iframeEl.contentWindow)
       this.crossOriginIframeMap.set(iframeEl.contentWindow, iframeEl);
@@ -85,7 +86,7 @@ export class IframeManager {
   public registerLoadListenerDisposer(
     iframeEl: HTMLIFrameElement,
     disposer: () => void,
-  ) {
+  ): void {
     let bucket = this.loadListenerDisposers.get(iframeEl);
     if (!bucket) {
       bucket = new Set();
@@ -106,7 +107,7 @@ export class IframeManager {
   }
 
   // Drops the id mapping for a moved iframe; element-keyed state survives.
-  public forgetIframeId(iframeId: number) {
+  public forgetIframeId(iframeId: number): void {
     this.attachedIframes.delete(iframeId);
     this.iframeElementsById.delete(iframeId);
   }
@@ -127,15 +128,15 @@ export class IframeManager {
     this.pageHideHandlers.delete(iframeEl);
   }
 
-  public addLoadListener(cb: (iframeEl: HTMLIFrameElement) => unknown) {
+  public addLoadListener(cb: (iframeEl: HTMLIFrameElement) => unknown): void {
     this.loadListener = cb;
   }
 
-  public addPageHideListener(cb: (iframeEl: HTMLIFrameElement) => unknown) {
+  public addPageHideListener(cb: (iframeEl: HTMLIFrameElement) => unknown): void {
     this.pageHideListener = cb;
   }
 
-  public removeLoadListener() {
+  public removeLoadListener(): void {
     this.loadListener = undefined;
   }
 
@@ -151,7 +152,7 @@ export class IframeManager {
   public attachIframe(
     iframeEl: HTMLIFrameElement,
     childSn: serializedNodeWithId,
-  ) {
+  ): void {
     const iframeId = this.trackIframeContent(iframeEl, childSn);
     // Accumulate every contentDocument across loads (blank → src → blank).
     if (iframeEl.contentDocument) {
@@ -452,7 +453,7 @@ export class IframeManager {
     }
   }
 
-  public removeIframeById(iframeId: number) {
+  public removeIframeById(iframeId: number): void {
     const entry = this.attachedIframes.get(iframeId);
     // attachedIframes / mirror may both be empty for iframes removed
     // before first load; iframeElementsById covers that case.
@@ -515,7 +516,7 @@ export class IframeManager {
 
   // Catches iframes removed inside a removed subtree (only the
   // ancestor's id appears in m.removes).
-  public cleanupDetachedIframes() {
+  public cleanupDetachedIframes(): void {
     if (this.attachedIframes.size === 0) return;
     const orphaned: number[] = [];
     this.attachedIframes.forEach((_entry, iframeId) => {
@@ -526,7 +527,7 @@ export class IframeManager {
     orphaned.forEach((iframeId) => this.removeIframeById(iframeId));
   }
 
-  public reattachIframes() {
+  public reattachIframes(): void {
     this.attachedIframes.forEach(({ content }, iframeId) => {
       // Verify the iframe ID is still in the mirror (still being tracked by rrweb)
       // If removed, the mirror would have been cleaned up via removeNodeFromMap()
@@ -551,7 +552,7 @@ export class IframeManager {
     });
   }
 
-  public destroy() {
+  public destroy(): void {
     if (this.recordCrossOriginIframes) {
       removeEventListenerSafely(window, 'message', this.messageHandler);
     }

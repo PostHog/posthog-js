@@ -8,8 +8,7 @@ env:
   BROWSERSTACK_USE_AUTOMATE: "true"
   BROWSERSTACK_PROJECT_NAME: "PostHog JS SDK"
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -17,6 +16,8 @@ concurrency:
 
 jobs:
   affected:
+    permissions:
+      contents: read
     uses: ./.github/workflows/check-affected.yml
     with:
       package-name: posthog-js
@@ -28,6 +29,8 @@ jobs:
         .github/actions/setup/action.yaml
 
   browsers:
+    permissions:
+      contents: read
     name: Test on ${{ matrix.name }}
     needs: affected
     runs-on: ubuntu-22.04
