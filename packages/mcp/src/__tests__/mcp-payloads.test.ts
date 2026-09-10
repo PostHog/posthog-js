@@ -110,6 +110,10 @@ describe('URL credential redaction', () => {
       'https://app.example.com/cb#access_token=%5Bredacted%5D&token_type=%5Bredacted%5D',
     ],
     ['https://example.com/x?a=1;token=fakesecret', 'https://example.com/x?a=1&token=%5Bredacted%5D'],
+    // A single-page-app route lives in the fragment ahead of its own `?`. Parsed
+    // as fields the whole thing is one key named `/callback?token`, so the route
+    // is kept verbatim and only what follows the `?` is read as fields.
+    ['https://example.com/#/callback?token=fakesecret', 'https://example.com/#/callback?token=%5Bredacted%5D'],
     [
       'https://example.com/x?jwt=fakejwt&sessionid=fakesession&code=fakecode&country_code=BR',
       'https://example.com/x?jwt=%5Bredacted%5D&sessionid=%5Bredacted%5D&code=%5Bredacted%5D&country_code=BR',
@@ -233,6 +237,8 @@ describe('URL credential redaction', () => {
     ['a Windows path', 'C:\\Users\\bob\\file.txt'],
     ['a log line with a level prefix and a timestamp', 'ERROR:root:started 2026-09-10T13:40:25.574Z'],
     ['a prose word joined to a URL with no credentials', 'Note:https://example.com/doc'],
+    ['an app route in the fragment with a benign query', 'https://example.com/#/docs?page=2'],
+    ['an app route in the fragment with no query at all', 'https://example.com/#/callback'],
     // The length bound caps authority-bearing addresses only, so a long
     // authority-less match is still parsed — and a data URI holds nothing to
     // redact, so it comes back byte-for-byte instead of being dropped.

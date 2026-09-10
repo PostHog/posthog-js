@@ -215,6 +215,25 @@ function splitTrailingPunctuation(value: string): { address: string; suffix: str
 }
 
 /**
+ * Splits a fragment into the route a client-side router owns and the field list
+ * after it. `#/callback?token=…` has to keep `/callback?` verbatim: parsed as
+ * fields, the whole thing is a single key named `/callback?token` and no
+ * credential ever matches.
+ *
+ * A fragment with no `=` is prose rather than a field list (`#section-2`) and
+ * has no fields at all, so it stays byte-for-byte.
+ */
+function splitFragmentFields(hash: string): { route: string; fields: string } {
+  if (!hash.includes('=')) {
+    return { route: '', fields: '' }
+  }
+  const fragment = hash.slice(1)
+  const routeEnd = fragment.indexOf('?')
+  const route = routeEnd < 0 ? '' : fragment.slice(0, routeEnd + 1)
+  return { route, fields: fragment.slice(route.length).replace(URL_FIELD_SEPARATOR_PATTERN, '&') }
+}
+
+/**
  * Where a second address starts inside `value`, or -1. Only an authority ahead
  * of the value's own query or fragment counts; see {@link sanitizeUrl}.
  */
@@ -280,10 +299,8 @@ function sanitizeUrl(value: string, mode: UrlSanitizeMode): string {
 
   const query = url.search.slice(1).replace(URL_FIELD_SEPARATOR_PATTERN, '&')
   const hasFragment = url.hash !== ''
-  // A fragment with no `=` is prose rather than a field list (`#section-2`), and
-  // stays byte-for-byte.
-  const fragment = url.hash.includes('=') ? url.hash.slice(1).replace(URL_FIELD_SEPARATOR_PATTERN, '&') : ''
-  if (exceedsUrlFieldLimit(query) || exceedsUrlFieldLimit(fragment)) {
+  const fragment = splitFragmentFields(url.hash)
+  if (exceedsUrlFieldLimit(query) || exceedsUrlFieldLimit(fragment.fields)) {
     return REDACTED_VALUE + suffix
   }
 
@@ -298,9 +315,9 @@ function sanitizeUrl(value: string, mode: UrlSanitizeMode): string {
     url.search = sanitizedQuery.serialized
     changed = true
   }
-  const sanitizedFragment = sanitizeUrlFields(fragment, mode.allowNestedUrls)
+  const sanitizedFragment = sanitizeUrlFields(fragment.fields, mode.allowNestedUrls)
   if (sanitizedFragment.changed) {
-    url.hash = sanitizedFragment.serialized
+    url.hash = fragment.route + sanitizedFragment.serialized
     changed = true
   }
 
