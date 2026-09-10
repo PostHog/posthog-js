@@ -732,6 +732,7 @@ export default class MutationBuffer {
       }
       case 'attributes': {
         const target = m.target as Element;
+        const tagNameLower = toLowerCase(target.tagName);
         const sourceAttributeName = m.attributeName as string;
         const attributeNamespace = m.attributeNamespace ?? null;
         let attributeName = getSerializedAttributeName(
@@ -765,7 +766,7 @@ export default class MutationBuffer {
 
         let item = this.attributeMap.get(m.target);
         const isIframeSrc =
-          target.tagName === 'IFRAME' && attributeName === 'src';
+          tagNameLower === 'iframe' && attributeName === 'src';
         if (
           isIframeSrc &&
           !this.keepIframeSrcFn(value as string) &&
@@ -773,33 +774,33 @@ export default class MutationBuffer {
         ) {
           return;
         }
-        if (!item) {
-          item = {
-            node: m.target,
-            attributes: {},
-            styleDiff: {},
-            _unchangedStyles: {},
-          };
-          this.attributes.push(item);
-          this.attributeMap.set(m.target, item);
-        }
 
         // Keep this property on inputs that used to be password inputs
         // This is used to ensure we do not unmask value when using e.g. a "Show password" type button
         if (
           attributeName === 'type' &&
-          target.tagName === 'INPUT' &&
+          tagNameLower === 'input' &&
           (m.oldValue || '').toLowerCase() === 'password'
         ) {
           target.setAttribute('data-rr-is-password', 'true');
         }
 
-        if (!ignoreAttribute(target.tagName, attributeName, value)) {
+        if (!ignoreAttribute(tagNameLower, attributeName, value)) {
+          if (!item) {
+            item = {
+              node: m.target,
+              attributes: {},
+              styleDiff: {},
+              _unchangedStyles: {},
+            };
+            this.attributes.push(item);
+            this.attributeMap.set(m.target, item);
+          }
           // Transform with the source name before representing an inaccessible
           // iframe's source under the final rr_src key.
           const transformedValue = transformAttribute(
             this.doc,
-            toLowerCase(target.tagName),
+            tagNameLower,
             toLowerCase(attributeName),
             value,
             target,
@@ -850,7 +851,7 @@ export default class MutationBuffer {
                 item.styleDiff[pname] = false; // delete
               }
             }
-          } else if (attributeName === 'open' && target.tagName === 'DIALOG') {
+          } else if (attributeName === 'open' && tagNameLower === 'dialog') {
             if (target.matches('dialog:modal')) {
               item.attributes['rr_open_mode'] = 'modal';
             } else {
