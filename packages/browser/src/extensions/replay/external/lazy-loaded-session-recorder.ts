@@ -2523,7 +2523,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._instance.capture('$snapshot', properties, {
             _url: this._instance.requestRouter.endpointFor('api', this._endpoint),
             _noTruncate: true,
-            _batchKey: `${SESSION_RECORDING_BATCH_KEY}:${properties.$session_id}`,
+            _batchKey: SESSION_RECORDING_BATCH_KEY,
             skip_client_rate_limiting: true,
         })
     }

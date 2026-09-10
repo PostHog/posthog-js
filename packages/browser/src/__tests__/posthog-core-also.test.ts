@@ -402,24 +402,15 @@ describe('posthog core', () => {
             )
         })
 
-        it('treats any recordings batch key as a session recording on a custom endpoint', () => {
+        it.each([
+            ['recordings', 'session-1'],
+            [undefined, undefined],
+        ])('groups requests with batchKey %s by session id', (batchKey, batchGroup) => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
 
-            posthog.capture(
-                'event-name',
-                { foo: 'bar', length: 0 },
-                {
-                    _url: 'https://app.posthog.com/custom/',
-                    _batchKey: 'recordings:session-1',
-                }
-            )
+            posthog.capture('$snapshot', { $session_id: 'session-1' }, batchKey ? { _batchKey: batchKey } : undefined)
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    url: 'https://app.posthog.com/custom/',
-                    timestampMode: 'body',
-                })
-            )
+            expect(vi.mocked(posthog._send_request).mock.calls[0][0].batchGroup).toEqual(batchGroup)
         })
 
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {

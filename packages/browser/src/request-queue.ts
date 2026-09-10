@@ -85,7 +85,7 @@ export class RequestQueue {
         const requests: Record<string, QueuedRequestWithOptions> = {}
         each(this._queue, (request: QueuedRequestWithOptions) => {
             const req = request
-            const key = (req ? req.batchKey : null) || req.url
+            const key = ((req ? req.batchKey : null) || req.url) + (req.batchGroup ? `:${req.batchGroup}` : '')
             if (isUndefined(requests[key])) {
                 // TODO: What about this -it seems to batch data into an array - do we always want that?
                 requests[key] = { ...req, data: [] }

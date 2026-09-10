@@ -1861,7 +1861,7 @@ export class PostHog implements PostHogInterface {
         this._internalEventEmitter.emit('eventCaptured', data)
 
         const url = options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
-        const isSessionRecording = options?._batchKey?.startsWith('recordings') || /\/s\/(?:\?|$)/.test(url)
+        const isSessionRecording = options?._batchKey === 'recordings' || /\/s\/(?:\?|$)/.test(url)
         const requestOptions: QueuedRequestWithOptions = {
             method: 'POST',
             url,
@@ -1869,6 +1869,7 @@ export class PostHog implements PostHogInterface {
             compression: 'best-available',
             timestampMode: isSessionRecording ? 'body' : 'capture-body',
             batchKey: options?._batchKey,
+            ...(isSessionRecording && data.properties?.$session_id ? { batchGroup: data.properties.$session_id } : {}),
             ...(options?.transport ? { transport: options.transport } : {}),
             ...(fbcToConfirm
                 ? {
