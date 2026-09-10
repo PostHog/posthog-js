@@ -70,6 +70,7 @@ export interface MCPRequestParamsLike {
   _meta?: JsonRecord
   arguments?: JsonRecord
   name?: string
+  uri?: string
   [key: string]: unknown
 }
 

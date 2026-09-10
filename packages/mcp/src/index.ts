@@ -25,9 +25,9 @@ import type {
 } from './types'
 
 /**
- * Instruments an MCP server so PostHog auto-captures tool calls, tool listings, initialize
- * requests, identity, and exceptions. Returns a handle whose `capture()` method records
- * custom events, so you don't pass the server around after wiring it up.
+ * Instruments an MCP server so PostHog auto-captures tool calls, tool and resource listings,
+ * resource reads, initialize requests, identity, and exceptions. Returns a handle whose
+ * `capture()` method records custom events, so you don't pass the server around after wiring it up.
  *
  * **Idempotent per server instance.** Per-server tracking state lives in a module-level
  * `WeakMap<MCPServerLike, MCPAnalyticsData>` (`internal.ts`); a second `instrument()` call
