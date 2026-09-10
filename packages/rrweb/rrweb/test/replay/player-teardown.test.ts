@@ -83,3 +83,34 @@ describe('an incremental event that arrives after teardown', () => {
     expect(getNode).not.toHaveBeenCalled();
   });
 });
+
+describe('an action that clears the timer', () => {
+  const runFrame = (timer: Timer) =>
+    (timer as unknown as { rafCheck: () => void }).rafCheck();
+
+  it('leaves the timer inactive when the action returns normally', () => {
+    const timer = new Timer([], { speed: 1 });
+
+    timer.start();
+    timer.addAction({ delay: 0, doAction: () => timer.clear() });
+    runFrame(timer);
+
+    expect(timer.isActive()).toBe(false);
+  });
+
+  it('leaves the timer inactive when the action then throws', () => {
+    const timer = new Timer([], { speed: 1 });
+
+    timer.start();
+    timer.addAction({
+      delay: 0,
+      doAction: () => {
+        timer.clear();
+        throw new Error("can't access dead object");
+      },
+    });
+    runFrame(timer);
+
+    expect(timer.isActive()).toBe(false);
+  });
+});

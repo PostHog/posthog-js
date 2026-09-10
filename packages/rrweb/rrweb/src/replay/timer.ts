@@ -72,6 +72,12 @@ export class Timer {
         break;
       }
     }
+    if (this.raf === null) {
+      // an action cleared the timer, e.g. a host handler calling pause() or
+      // destroy() while the queue drained: a cleared timer must not report
+      // itself active again, or a later addAction would restart playback
+      return;
+    }
     if (this.actions.length > 0) {
       this.raf = requestAnimationFrame(this.rafCheck.bind(this));
     } else {
