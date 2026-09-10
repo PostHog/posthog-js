@@ -6,5 +6,5 @@
   "quoteProps": "preserve",
   "printWidth": 120,
   "sortPackageJson": false,
-  "ignorePatterns": ["src/version.ts"]
+  "ignorePatterns": ["src/version.ts", "references/*.json"]
 }
