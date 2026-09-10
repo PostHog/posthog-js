@@ -327,12 +327,30 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
                 // `{ statusCode: 0, error }` callback, logs, stack traces). An explicit reason makes
                 // our own request timeouts identifiable. We keep `name === 'AbortError'` so existing
                 // timeout handling (e.g. feature flag timeout detection) keeps working.
-                controller.abort(timeoutAbortReason(options.timeout))
+                try {
+                    controller.abort(timeoutAbortReason(options.timeout))
+                } catch (error) {
+                    // `abort()` dispatches synchronously, so a listener the host app or a
+                    // third-party fetch wrapper attached to the signal we passed runs inside this
+                    // timer. A throw from such a listener would escape as an uncaught error
+                    // attributed to posthog-js, so route it through the same
+                    // `{ statusCode: 0, error }` path as every other transport failure and let the
+                    // request queue retry.
+                    handleError(error)
+                }
             }, options.timeout),
         }
     }
 
+    // `handleError` can be reached twice - once from an abort listener that throws inside our
+    // timeout callback, and again when the fetch itself rejects - so only the first one reports.
+    let errorHandled = false
+
     const handleError = (error: any) => {
+        if (errorHandled) {
+            return
+        }
+        errorHandled = true
         // Detect our own timeout via the `timedOut` flag rather than by comparing `error`
         // against the reason we passed to `controller.abort(...)`. Not every browser propagates
         // the abort reason to the fetch rejection - some reject with a generic native
