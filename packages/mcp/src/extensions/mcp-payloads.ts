@@ -177,26 +177,30 @@ function sanitizeUrlFieldValue(key: string, value: string, allowNestedUrls: bool
  * Redacts the values of credential-named fields in one `&`-separated field list
  * — a query string or a fragment. `serialized` is only meaningful when `changed`
  * is true, so an untouched part keeps its original encoding instead of being
- * re-serialized. `lastFieldChanged` is what decides whether restored prose
- * punctuation belongs to the prose or to a credential; see {@link sanitizeUrl}.
+ * re-serialized. `lastFieldSensitive` says whether whatever follows the list
+ * could be more of a credential, which is what decides both the fragment tail
+ * and restored prose punctuation; see {@link sanitizeUrl}.
  */
 function sanitizeUrlFields(
   fields: string,
   allowNestedUrls: boolean
-): { changed: boolean; lastFieldChanged: boolean; serialized: string } {
+): { changed: boolean; lastFieldSensitive: boolean; serialized: string } {
   const sanitized = new URLSearchParams()
   let changed = false
-  let lastFieldChanged = false
+  let lastFieldSensitive = false
   for (const [key, value] of new URLSearchParams(fields.replace(URL_FIELD_SEPARATOR_PATTERN, '&'))) {
     const sanitizedValue = sanitizeUrlFieldValue(key, value, allowNestedUrls)
-    // Compared, not inferred from the key being sensitive: the PostHog-token
-    // pass runs first, so a value can already read `[redacted]`, and calling
-    // that a change would re-serialize the query only to percent-encode it.
-    lastFieldChanged = sanitizedValue !== value
-    changed ||= lastFieldChanged
+    // `changed` is compared, not inferred from the key: the PostHog-token pass
+    // runs first, so a value can already read `[redacted]`, and calling that a
+    // change would re-serialize the field only to percent-encode it.
+    changed ||= sanitizedValue !== value
+    // Sensitivity is the separate question — whether what follows this field
+    // could be more of a credential — and an already-redacted value is still a
+    // credential's field.
+    lastFieldSensitive = shouldRedactQueryKey(key) || sanitizedValue !== value
     sanitized.append(key, sanitizedValue)
   }
-  return { changed, lastFieldChanged, serialized: sanitized.toString() }
+  return { changed, lastFieldSensitive, serialized: sanitized.toString() }
 }
 
 /**
@@ -220,21 +224,21 @@ function splitTrailingPunctuation(value: string): { address: string; suffix: str
  * A fragment's tail, given how its head came out.
  *
  * A `?` inside a credential looks exactly like the one between a route and its
- * fields. So when the head's last field was rewritten, everything after that `?`
- * may be the rest of the value just replaced — `#password=prefix?rest` — and the
+ * fields. So when the head's last field is a credential's, everything after that
+ * `?` may be the rest of its value — `#password=prefix?rest` — and the
  * tail goes whole rather than being read on its own terms. An empty tail has
  * nothing to hide and stays empty. Either way it counts as a rewritten trailing
  * field, so prose punctuation after the URL goes with it for the same reason.
  */
 function sanitizeFragmentTail(
   tail: string,
-  headLastFieldChanged: boolean,
+  headLastFieldSensitive: boolean,
   allowNestedUrls: boolean
-): { value: string; lastFieldChanged: boolean } {
-  if (!headLastFieldChanged) {
+): { value: string; lastFieldSensitive: boolean } {
+  if (!headLastFieldSensitive) {
     return sanitizeFragmentPart(tail, allowNestedUrls)
   }
-  return { value: tail === '' ? '' : REDACTED_VALUE, lastFieldChanged: true }
+  return { value: tail === '' ? '' : REDACTED_VALUE, lastFieldSensitive: true }
 }
 
 /**
@@ -255,14 +259,14 @@ function splitFragmentParts(hash: string): { head: string; tail: string | null }
 }
 
 /** One fragment part, and whether its last field was rewritten. */
-function sanitizeFragmentPart(part: string, allowNestedUrls: boolean): { value: string; lastFieldChanged: boolean } {
+function sanitizeFragmentPart(part: string, allowNestedUrls: boolean): { value: string; lastFieldSensitive: boolean } {
   if (!part.includes('=')) {
-    return { value: sanitizeFragmentText(part, allowNestedUrls), lastFieldChanged: false }
+    return { value: sanitizeFragmentText(part, allowNestedUrls), lastFieldSensitive: false }
   }
   const fields = sanitizeUrlFields(part, allowNestedUrls)
   // Verbatim unless something was actually rewritten: only the part that changed
   // should change encoding.
-  return { value: fields.changed ? fields.serialized : part, lastFieldChanged: fields.lastFieldChanged }
+  return { value: fields.changed ? fields.serialized : part, lastFieldSensitive: fields.lastFieldSensitive }
 }
 
 /**
@@ -425,7 +429,7 @@ function sanitizeSingleUrl(value: string, mode: UrlSanitizeMode): string {
   const sanitizedTail =
     fragment.tail === null
       ? null
-      : sanitizeFragmentTail(fragment.tail, sanitizedHead.lastFieldChanged, mode.allowNestedUrls)
+      : sanitizeFragmentTail(fragment.tail, sanitizedHead.lastFieldSensitive, mode.allowNestedUrls)
   const sanitizedHash = sanitizedTail === null ? sanitizedHead.value : `${sanitizedHead.value}?${sanitizedTail.value}`
   if (sanitizedHash !== url.hash.slice(1)) {
     url.hash = sanitizedHash
@@ -434,11 +438,11 @@ function sanitizeSingleUrl(value: string, mode: UrlSanitizeMode): string {
 
   // The punctuation split off the end may be the tail of the very credential
   // just replaced (`?password=fakepass!!!`) rather than the sentence's. When the
-  // last field of the URL's trailing part was rewritten the punctuation goes
+  // last field of the URL's trailing part is a credential's the punctuation goes
   // with it; losing a comma from the surrounding prose is the accepted cost of
   // not shipping `!!!`.
   const trailingFields = hasFragment ? (sanitizedTail ?? sanitizedHead) : sanitizedQuery
-  return (changed ? url.toString() : address) + (trailingFields.lastFieldChanged ? '' : suffix)
+  return (changed ? url.toString() : address) + (trailingFields.lastFieldSensitive ? '' : suffix)
 }
 
 /**

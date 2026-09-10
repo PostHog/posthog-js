@@ -122,6 +122,13 @@ describe('URL credential redaction', () => {
     // brackets literal in a fragment.
     ['https://example.com/#password=prefix?fakesecret', 'https://example.com/#password=%5Bredacted%5D?[redacted]'],
     ['https://example.com/#password=prefix?token=x&page=1', 'https://example.com/#password=%5Bredacted%5D?[redacted]'],
+    // The PostHog-token pass already replaced this value, so nothing *changed* in
+    // the head — but the field is still a credential's, so the tail fails closed
+    // all the same. The head keeps its literal brackets, being untouched.
+    [
+      'https://example.com/#password=phx_EXAMPLEONLYFAKEVALUE00000000000?private-suffix',
+      'https://example.com/#password=[redacted]?[redacted]',
+    ],
     // An empty tail has nothing to hide, so it stays empty rather than becoming a
     // second `[redacted]`.
     ['https://example.com/#password=fakepass?', 'https://example.com/#password=%5Bredacted%5D?'],
