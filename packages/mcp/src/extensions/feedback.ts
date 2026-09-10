@@ -1,5 +1,6 @@
 import type {
   CollectFeedbackOptions,
+  FeedbackExtraPropertySchema,
   FeedbackReport,
   FeedbackSentiment,
   FeedbackType,
@@ -85,8 +86,9 @@ const CORE_FEEDBACK_SCHEMA_PROPERTIES = {
  * Extra-property names a host may not declare: the core fields themselves, the
  * names whose `$mcp_feedback_<key>` property would collide with a core property
  * (`type` → `$mcp_feedback_type`, `tool` → `$mcp_feedback_tool`), and the
- * SDK-injected analytics arguments, which are stripped before dispatch and so
- * would never reach the report.
+ * SDK-injected analytics arguments — the report is parsed from the raw
+ * arguments before those are stripped, so an extra by the same name would
+ * capture an SDK-owned value.
  */
 const RESERVED_EXTRA_PROPERTY_KEYS = new Set([
   ...Object.keys(CORE_FEEDBACK_SCHEMA_PROPERTIES),
@@ -175,10 +177,25 @@ function parseSentiment(value: unknown): FeedbackSentiment | undefined {
 }
 
 /**
+ * True when the value conforms to the declared fragment's `type` and `enum` —
+ * the same advisory-schema enforcement the core fields get, so `extras` only
+ * ever holds schema-conforming values and a misbehaving agent shows up as
+ * absence rather than as an unexpected shape in the host's handler.
+ */
+function matchesExtraSchema(value: unknown, schema: FeedbackExtraPropertySchema): boolean {
+  const type = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value
+  if (schema.type !== type && !(schema.type === 'integer' && typeof value === 'number')) {
+    return false
+  }
+  return !Array.isArray(schema.enum) || schema.enum.includes(value as string)
+}
+
+/**
  * Parses the raw `send_feedback` arguments into a typed report. Never throws:
  * an invalid `feedback_type` falls back to `other`, missing fields stay
- * undefined, and only **declared** extras are lifted into `extras` — anything
- * the agent invented reaches the handler via `raw` and is never captured.
+ * undefined, and only **declared** extras whose values match their declared
+ * `type`/`enum` are lifted into `extras` — mismatches and anything the agent
+ * invented reach the handler via `raw` only and are never captured.
  */
 export function parseFeedbackReport(
   args: Record<string, unknown> | undefined,
@@ -186,8 +203,8 @@ export function parseFeedbackReport(
 ): FeedbackReport {
   const raw = args ?? {}
   const extras: JsonRecord = {}
-  for (const key of Object.keys(options.extraProperties ?? {})) {
-    if (raw[key] !== undefined) {
+  for (const [key, schema] of Object.entries(options.extraProperties ?? {})) {
+    if (raw[key] !== undefined && matchesExtraSchema(raw[key], schema)) {
       extras[key] = raw[key]
     }
   }
@@ -270,8 +287,10 @@ export function buildFeedbackEventProperties(report: FeedbackReport): JsonRecord
     properties[PostHogMCPAnalyticsProperty.FeedbackDetails] = captureFreeText(report.details)
   }
   if (report.toolName) {
+    // Nominally an identifier, but the schema can't stop an agent from writing
+    // prose into it — so it gets the same PII redaction as the other free text.
     properties[PostHogMCPAnalyticsProperty.FeedbackTool] = truncateFeedbackText(
-      sanitizeCapturedValue(report.toolName) as string,
+      redactPii(sanitizeCapturedValue(report.toolName) as string),
       MAX_FEEDBACK_TOOL_NAME_LENGTH
     )
   }

@@ -53,6 +53,17 @@ import type {
  */
 function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOptions = {}): McpAnalytics {
   const logger = createLogger(options?.logger)
+
+  // Fail fast on a `collectFeedback` config error (reserved extra key,
+  // undeclared extraRequired). Above the graceful-degradation try so it throws
+  // out of instrument() like PostHogMCP's constructor does — inside the catch it
+  // would silently disable ALL analytics for the server, not just feedback.
+  // `options?.` — untyped JavaScript can pass null options (see logger-isolation.test.ts).
+  const feedbackOptions = resolveCollectFeedbackOptions(options?.collectFeedback)
+  if (feedbackOptions) {
+    getFeedbackToolDescriptor(feedbackOptions)
+  }
+
   try {
     if (!posthog) {
       logger('Warning: No PostHog client passed to instrument(). Events will not be sent anywhere.')
@@ -65,13 +76,6 @@ function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOpti
     if (existingData) {
       existingData.logger('instrument() - Server already instrumented, skipping initialization')
       return createAnalyticsHandle(lowLevelServer)
-    }
-
-    // Fail fast on a `collectFeedback` config error (reserved extra key,
-    // undeclared extraRequired) instead of first surfacing it at tools/list time.
-    const feedbackOptions = resolveCollectFeedbackOptions(options.collectFeedback)
-    if (feedbackOptions) {
-      getFeedbackToolDescriptor(feedbackOptions)
     }
 
     if (posthog) {

@@ -132,6 +132,11 @@ export class PostHogMCP extends PostHog {
     // Fail fast on a config error (reserved extra key, undeclared extraRequired)
     // instead of first surfacing it when a tools/list is served.
     getFeedbackToolDescriptor(this.#feedbackOptions)
+    if (this.#feedbackOptions?.onFeedback) {
+      log(
+        'Warning: collectFeedback.onFeedback is ignored on the PostHogMCP path - route reports from your dispatcher via prepareToolCall().feedbackReport instead.'
+      )
+    }
     this.#captureModel = options.captureModel
     applyMcpLibIdentity(this)
   }
@@ -344,8 +349,9 @@ export class PostHogMCP extends PostHog {
     event.resourceName = this.#feedbackToolName
     // Deliberately no `$mcp_parameters`: the arguments are agent-narrated free
     // text, and the PII-redacted `$mcp_feedback_*` properties are the captured
-    // surface. Raw arguments would bypass that redaction.
-    event.properties = { ...buildFeedbackEventProperties(data.report), ...event.properties }
+    // surface. Raw arguments would bypass that redaction. Feedback properties
+    // win over the caller's, matching the instrument() path's spread order.
+    event.properties = { ...event.properties, ...buildFeedbackEventProperties(data.report) }
     applyIntent(event, buildFeedbackIntent(data.report), 'context_parameter')
     setEventModel(event, data.llmModel, data.llmModelSource)
     this.#emit(event)

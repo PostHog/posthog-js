@@ -128,22 +128,22 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
   })
 
   describe('config validation', () => {
-    it('rejects an extraProperties key that collides with a core field', () => {
-      const logger = vi.fn()
-      instrument(server, fakePostHog(), {
-        logger,
-        collectFeedback: { extraProperties: { summary: { type: 'string' } } },
-      })
-      expect(logger).toHaveBeenCalledWith(expect.stringContaining('collides'))
+    it('throws out of instrument() on a config error instead of silently disabling all analytics', () => {
+      expect(() =>
+        instrument(server, fakePostHog(), { collectFeedback: { extraProperties: { summary: { type: 'string' } } } })
+      ).toThrow(/collides/)
+      expect(() => instrument(server, fakePostHog(), { collectFeedback: { extraRequired: ['nope'] } })).toThrow(
+        /not declared/
+      )
     })
 
-    it('rejects an extraRequired key that was never declared', () => {
-      const logger = vi.fn()
-      instrument(server, fakePostHog(), {
-        logger,
-        collectFeedback: { extraRequired: ['nope'] },
-      })
-      expect(logger).toHaveBeenCalledWith(expect.stringContaining('not declared'))
+    it('leaves the server un-instrumented after a config throw (no half-applied wrapping)', async () => {
+      expect(() => instrument(server, fakePostHog(), { collectFeedback: { extraRequired: ['nope'] } })).toThrow()
+
+      // A corrected second call still instruments cleanly.
+      instrument(server, fakePostHog(), { collectFeedback: true })
+      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      expect(tools.find((t: any) => t.name === SEND_FEEDBACK)).toBeDefined()
     })
   })
 
@@ -327,6 +327,63 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
       expect(p[PostHogMCPAnalyticsProperty.FeedbackSummary]).not.toContain('jane@example.com')
       expect(p[PostHogMCPAnalyticsProperty.FeedbackSummary]).toContain('[redacted]')
+
+      await capture.stop()
+    })
+
+    it('redacts PII in tool_name like the other free-text fields', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), { collectFeedback: true })
+
+      await callTool(client, SEND_FEEDBACK, {
+        feedback_type: 'issue',
+        summary: 'A tool failed.',
+        tool_name: 'lookup_user for jane@example.com',
+      })
+
+      await new Promise((r) => setTimeout(r, 50))
+      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
+      expect(p[PostHogMCPAnalyticsProperty.FeedbackTool]).not.toContain('jane@example.com')
+      expect(p[PostHogMCPAnalyticsProperty.FeedbackTool]).toContain('[redacted]')
+
+      await capture.stop()
+    })
+
+    it('drops declared extras whose value violates the declared type or enum', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      const onFeedback = vi.fn()
+      instrument(server, fakePostHog(), {
+        collectFeedback: {
+          extraProperties: {
+            account_id: { type: 'string' },
+            severity: { type: 'string', enum: ['low', 'high'] },
+            retry_count: { type: 'number' },
+          },
+          onFeedback,
+        },
+      })
+
+      await callTool(client, SEND_FEEDBACK, {
+        feedback_type: 'issue',
+        summary: 'A tool failed.',
+        account_id: { $ne: null }, // object where a string was declared
+        severity: 'catastrophic', // not in the enum
+        retry_count: 3, // conforms
+      })
+
+      await new Promise((r) => setTimeout(r, 50))
+      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
+      expect(p.$mcp_feedback_account_id).toBeUndefined()
+      expect(p.$mcp_feedback_severity).toBeUndefined()
+      expect(p.$mcp_feedback_retry_count).toBe(3)
+
+      // The handler's extras hold only conforming values; raw still has everything.
+      const report = onFeedback.mock.calls[0][0]
+      expect(report.extras).toEqual({ retry_count: 3 })
+      expect(report.raw.account_id).toEqual({ $ne: null })
+      expect(report.raw.severity).toBe('catastrophic')
 
       await capture.stop()
     })

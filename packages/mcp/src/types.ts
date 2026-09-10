@@ -261,7 +261,11 @@ export interface FeedbackReport {
   /** The existing tool the feedback is about (`tool_name` argument). */
   toolName?: string
   taskCompleted?: boolean
-  /** Values of the declared `extraProperties` fields. */
+  /**
+   * Values of the declared `extraProperties` fields that match their declared
+   * `type`/`enum`. A value the agent sent with the wrong shape is left out
+   * (find it in `raw` if you need it), so these are safe to trust as declared.
+   */
   extras: JsonRecord
   /** The full raw arguments, for the handler only — never captured. */
   raw: JsonRecord
