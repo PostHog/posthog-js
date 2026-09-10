@@ -1,8 +1,8 @@
-import { buildResourceAttributes } from '../logs/logs-utils'
+import { buildOtlpLogsPayload, buildResourceAttributes } from '../logs/logs-utils'
 import type { ResolvedPostHogLogsConfig } from '../logs/types'
-import { buildMetricsResourceAttributes } from '../metrics/metrics-utils'
+import { buildMetricsResourceAttributes, buildOtlpMetricsPayload } from '../metrics/metrics-utils'
 import type { ResolvedPostHogMetricsConfig } from '../metrics/types'
-import { buildTracesResourceAttributes } from '../traces/otlp'
+import { buildOtlpTracesPayload, buildTracesResourceAttributes } from '../traces/otlp'
 import type { ResolvedTracesConfig } from '../traces/types'
 import { normalizeOsName, osResourceAttributes } from './otlp-resource'
 
@@ -79,6 +79,31 @@ describe('shared OTLP resource attributes', () => {
         'telemetry.sdk.name': 'posthog-node',
         'telemetry.sdk.version': '1.0.0',
       })
+    }
+  })
+
+  it.each([
+    ['a named key', 'payload'],
+    // Integer-like keys enumerate ahead of every string key, whatever the insertion order.
+    ['an integer-like key', '0'],
+  ])('keeps the identity keys when %s exhausts the encoder budget', (_label, key) => {
+    const [logs, metrics, traces] = allThree({
+      serviceName: 'checkout',
+      resourceAttributes: { [key]: Array.from({ length: 10 }, () => Array(1000).fill(1)) },
+    })
+    const encoded = [
+      buildOtlpLogsPayload([], logs as any, 's', '1').resourceLogs[0].resource.attributes,
+      buildOtlpMetricsPayload([], metrics as any, 's', '1').resourceMetrics[0].resource.attributes,
+      buildOtlpTracesPayload([], traces as any, 's', '1').resourceSpans[0].resource.attributes,
+    ]
+    for (const attributes of encoded) {
+      expect(attributes.map((attribute) => attribute.key)).toEqual([
+        key,
+        'service.name',
+        'telemetry.sdk.name',
+        'telemetry.sdk.version',
+      ])
+      expect(attributes).toContainEqual({ key: 'service.name', value: { stringValue: 'checkout' } })
     }
   })
 })
