@@ -1,5 +1,10 @@
+import type { OtlpKeyValue } from '@posthog/types'
+import type { Logger } from '../types'
+import { assignUserAttributes } from './json-utils'
+import { toOtlpKeyValueList } from './otlp-any-value'
+
 /**
- * Shape the logs and metrics resolved configs share for resource
+ * Shape the logs, metrics and traces resolved configs share for resource
  * attribution. Generic over the attribute value type so each signal keeps its
  * own value union.
  */
@@ -11,7 +16,7 @@ export interface OtlpResourceConfig<TAttributeValue> {
 }
 
 /**
- * OTLP resource attributes shared by the logs and metrics envelopes.
+ * OTLP resource attributes shared by the logs, metrics and traces envelopes.
  *
  * User `resourceAttributes` are spread first, then SDK-controlled keys on top so
  * a stray user key can't clobber the ingestion-attribution ones; the dedicated
@@ -26,13 +31,45 @@ export function buildOtlpResourceAttributes<TAttributeValue>(
   sdkVersion: string
 ): Record<string, TAttributeValue | string> {
   return {
-    ...config.resourceAttributes,
+    // Read key by key: a throwing accessor on a user-supplied attribute runs on
+    // every flush, before the pipeline's own error handling, and would otherwise
+    // stop the signal exporting entirely.
+    ...assignUserAttributes<Record<string, TAttributeValue>>({}, config.resourceAttributes),
     'service.name': config.serviceName || 'unknown_service',
     ...(config.environment && { 'deployment.environment': config.environment }),
     ...(config.serviceVersion && { 'service.version': config.serviceVersion }),
     'telemetry.sdk.name': sdkName,
     'telemetry.sdk.version': sdkVersion,
   }
+}
+
+/** The keys `buildOtlpResourceAttributes` sets itself, in the order it sets them. */
+const SDK_RESOURCE_KEYS = [
+  'service.name',
+  'deployment.environment',
+  'service.version',
+  'telemetry.sdk.name',
+  'telemetry.sdk.version',
+]
+
+/**
+ * Encodes resource attributes for an OTLP envelope. The SDK-set keys are
+ * encoded on a traversal budget of their own, after the user's: a user
+ * attribute large enough to exhaust the shared budget would otherwise cost the
+ * resource its `service.name`, which ingestion attributes every record by.
+ *
+ * @internal Shared within this SDK; not part of the stable public API.
+ */
+export function toOtlpResourceKeyValueList(attributes: Record<string, unknown>, logger?: Logger): OtlpKeyValue[] {
+  const user = assignUserAttributes<Record<string, unknown>>({}, attributes)
+  const sdk: Record<string, unknown> = {}
+  for (const key of SDK_RESOURCE_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(user, key)) {
+      sdk[key] = user[key]
+      delete user[key]
+    }
+  }
+  return [...toOtlpKeyValueList(user, logger), ...toOtlpKeyValueList(sdk, logger)]
 }
 
 /**
@@ -47,15 +84,19 @@ export function buildOtlpResourceAttributes<TAttributeValue>(
  * platforms they cover.
  */
 const OS_NAMES: Record<string, string> = {
-  // node:os platform()
+  // node:os platform(), all eleven of them
   darwin: 'macOS',
   win32: 'Windows',
+  // Cygwin is a POSIX layer over Windows, so it belongs under the same filter.
+  cygwin: 'Windows',
   linux: 'Linux',
   android: 'Android',
   freebsd: 'FreeBSD',
   openbsd: 'OpenBSD',
+  netbsd: 'NetBSD',
   sunos: 'SunOS',
   aix: 'AIX',
+  haiku: 'Haiku',
   // detectOS
   'Mac OS X': 'macOS',
 }
