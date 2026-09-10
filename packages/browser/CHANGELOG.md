@@ -1,5 +1,20 @@
 # posthog-js
 
+## 1.429.4
+
+### Patch Changes
+
+- [#4862](https://github.com/PostHog/posthog-js/pull/4862) [`3278cd0`](https://github.com/PostHog/posthog-js/commit/3278cd01bfb35ce5eed79420818f42f823c71370) Thanks [@pauldambra](https://github.com/pauldambra)! - Call the original console method with the console as its receiver when recording console logs. The wrapper passed `undefined` instead, and passed no receiver at all when reporting its own failures, which a console implementation is free to reject.
+  (2026-09-10)
+
+- [#4887](https://github.com/PostHog/posthog-js/pull/4887) [`0da006c`](https://github.com/PostHog/posthog-js/commit/0da006c5eb53630c7fc7d63151fc6632d6dd49e0) Thanks [@posthog](https://github.com/apps/posthog)! - Error tracking no longer counts an injected script as your own code. A stack frame is `in_app` only when its filename names a script your app was served — `http(s)`, `file`, `blob`, `app`, `capacitor`, `ionic`, a bundler scheme, or a bare path. A frame served over any other scheme, such as an in-app browser bridge on `iabjs://` or an extension content script on `chrome-extension://`, is kept for context but no longer groups the issue under your code.
+  (2026-09-10)
+
+- [#4837](https://github.com/PostHog/posthog-js/pull/4837) [`99b4fc7`](https://github.com/PostHog/posthog-js/commit/99b4fc7d16245b419e0e7f4bf746144d091e5217) Thanks [@pauldambra](https://github.com/pauldambra)! - Stop recording `autoplay` attribute mutations on `<video>` and `<audio>` during session replay. The check compared a lowercase tag name against `Element.tagName`, which is uppercase for HTML elements, so a looping background video emitted a mutation for every `autoplay` toggle.
+  (2026-09-10)
+- Updated dependencies [[`0da006c`](https://github.com/PostHog/posthog-js/commit/0da006c5eb53630c7fc7d63151fc6632d6dd49e0)]:
+  - @posthog/core@1.52.2
+
 ## 1.429.3
 
 ### Patch Changes

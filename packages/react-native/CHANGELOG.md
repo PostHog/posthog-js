@@ -1,5 +1,14 @@
 # posthog-react-native
 
+## 4.68.8
+
+### Patch Changes
+
+- [#4887](https://github.com/PostHog/posthog-js/pull/4887) [`0da006c`](https://github.com/PostHog/posthog-js/commit/0da006c5eb53630c7fc7d63151fc6632d6dd49e0) Thanks [@posthog](https://github.com/apps/posthog)! - Error tracking no longer counts an injected script as your own code. A stack frame is `in_app` only when its filename names a script your app was served — `http(s)`, `file`, `blob`, `app`, `capacitor`, `ionic`, a bundler scheme, or a bare path. A frame served over any other scheme, such as an in-app browser bridge on `iabjs://` or an extension content script on `chrome-extension://`, is kept for context but no longer groups the issue under your code.
+  (2026-09-10)
+- Updated dependencies [[`0da006c`](https://github.com/PostHog/posthog-js/commit/0da006c5eb53630c7fc7d63151fc6632d6dd49e0)]:
+  - @posthog/core@1.52.2
+
 ## 4.68.7
 
 ### Patch Changes
