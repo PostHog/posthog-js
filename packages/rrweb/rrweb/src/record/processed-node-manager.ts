@@ -8,14 +8,17 @@ export default class ProcessedNodeManager {
 
   private active = false;
 
-  public inOtherBuffer(node: Node, thisBuffer: MutationBuffer) {
+  public inOtherBuffer(
+    node: Node,
+    thisBuffer: MutationBuffer,
+  ): boolean | undefined {
     const buffers = this.nodeMap.get(node);
     return (
       buffers && Array.from(buffers).some((buffer) => buffer !== thisBuffer)
     );
   }
 
-  public add(node: Node, buffer: MutationBuffer) {
+  public add(node: Node, buffer: MutationBuffer): void {
     if (!this.active) {
       this.active = true;
       requestAnimationFrame(() => {
@@ -26,7 +29,7 @@ export default class ProcessedNodeManager {
     this.nodeMap.set(node, (this.nodeMap.get(node) || new Set()).add(buffer));
   }
 
-  public destroy() {
+  public destroy(): void {
     // cleanup no longer needed
   }
 }

@@ -104,6 +104,9 @@ export type {
     CapturePageviewOptions,
 } from '@posthog/types'
 
+// Segment integration types
+export type { SegmentEnrichmentFilterFn, SegmentIntegrationConfig } from '@posthog/types'
+
 // Toolbar types
 export type { ToolbarUserIntent, ToolbarSource, ToolbarVersion, ToolbarParams } from '@posthog/types'
 

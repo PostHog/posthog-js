@@ -34,6 +34,7 @@ import {
   checkDataURLSize,
   recompressBase64Image,
   absolutifyURLs,
+  SCRIPT_PLACEHOLDER,
 } from './utils';
 import dom from '@posthog/rrweb-utils';
 import {
@@ -675,7 +676,7 @@ function serializeTextNode(
     text = absolutifyURLs(text, getHref(options.doc));
   }
   if (isScript) {
-    text = 'SCRIPT_PLACEHOLDER';
+    text = SCRIPT_PLACEHOLDER;
   }
   if (!isStyle && !isScript && text && needsMask) {
     text = maskTextFn
@@ -1705,7 +1706,7 @@ function snapshot(
 export function visitSnapshot(
   node: serializedNodeWithId,
   onVisit: (node: serializedNodeWithId) => unknown,
-) {
+): void {
   function walk(current: serializedNodeWithId) {
     onVisit(current);
     if (
@@ -1719,7 +1720,7 @@ export function visitSnapshot(
   walk(node);
 }
 
-export function cleanupSnapshot() {
+export function cleanupSnapshot(): void {
   // allow a new recording to start numbering nodes from scratch
   _id = 1;
 }

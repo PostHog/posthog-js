@@ -1089,7 +1089,7 @@
         {
           "category": "Capture",
           "description": "Captures a screen view event.",
-          "details": "This function requires a name. You may also pass in an optional properties object. Screen name is automatically registered for the session and will be included in subsequent events.",
+          "details": "This function requires a name. You may also pass in an optional properties object. Once initialized, the screen name is registered immediately for subsequent events, including exceptions. During initialization, screen registration and event capture retain their call order. Exceptions use the last recorded screen, not a destination that has not yet been tracked.",
           "id": "screen",
           "showDocs": true,
           "title": "screen",
@@ -3368,6 +3368,10 @@
         {
           "type": "string",
           "name": "componentStack"
+        },
+        {
+          "type": "() => void",
+          "name": "resetError"
         }
       ],
       "path": "dist/PostHogErrorBoundary.d.ts"
@@ -3395,6 +3399,10 @@
       "id": "PostHogErrorBoundaryState",
       "name": "PostHogErrorBoundaryState",
       "properties": [
+        {
+          "type": "boolean",
+          "name": "hasError"
+        },
         {
           "type": "string",
           "name": "componentStack"
@@ -4874,10 +4882,6 @@
           "name": "position"
         },
         {
-          "type": "string",
-          "name": "placeholder"
-        },
-        {
           "type": "number",
           "name": "surveyPopupDelaySeconds"
         },
@@ -4896,6 +4900,10 @@
         {
           "type": "string",
           "name": "inputTextColor"
+        },
+        {
+          "type": "string",
+          "name": "placeholder"
         }
       ],
       "path": "dist/surveys/surveys-utils.d.ts"

@@ -13,7 +13,7 @@ import type {
     NetworkRequest,
     SessionRecordingCanvasOptions,
 } from './session-recording'
-import type { SegmentAnalytics } from './segment'
+import type { SegmentAnalytics, SegmentIntegrationConfig } from './segment'
 import type { PostHog } from './posthog'
 
 export type AutocaptureCompatibleElement = 'a' | 'button' | 'form' | 'input' | 'select' | 'textarea' | 'label'
@@ -164,22 +164,22 @@ export interface BootstrapConfig {
     /**
      * Distinct ID to use before the SDK has loaded persisted identity.
      */
-    distinctID?: string
+    distinctID?: string | null
 
     /**
      * Whether `distinctID` already identifies a known person profile.
      */
-    isIdentifiedID?: boolean
+    isIdentifiedID?: boolean | null
 
     /**
      * Feature flag values to use immediately until the SDK fetches fresh values.
      */
-    featureFlags?: Record<string, boolean | string>
+    featureFlags?: Record<string, boolean | string> | null
 
     /**
      * Feature flag payloads to use together with bootstrapped `featureFlags`.
      */
-    featureFlagPayloads?: Record<string, JsonType>
+    featureFlagPayloads?: Record<string, JsonType> | null
 
     /**
      * Optionally provide a sessionID, this is so that you can provide an existing sessionID here to continue a user's session across a domain or device. It MUST be:
@@ -188,7 +188,7 @@ export interface BootstrapConfig {
      * - the timestamp part must be <= the timestamp of the first event in the session
      * - the timestamp of the last event in the session must be < the timestamp part + 24 hours
      */
-    sessionID?: string
+    sessionID?: string | null
 }
 
 export interface ResetOptions {
@@ -296,7 +296,7 @@ export interface DeadClickCandidate {
     scrollDelayMs?: number
     // time between click and the most recent mutation
     mutationDelayMs?: number
-    // time between click and the most recent selection changed event
+    // delay to the closest selection changed event; pre-candidate delays are stored only within the suppression window
     selectionChangedDelayMs?: number
     // delay between the click and the nearest visibility change within the suppression window, on
     // either side — a tab going to or from hidden near a click (opening a new tab, or waking the
@@ -365,7 +365,12 @@ export type DeadClicksAutoCaptureConfig = {
     scroll_threshold_ms?: number
 
     /**
-     * We'll not consider a click to be a dead click, if it's followed by a selection change within `selection_change_threshold_ms` milliseconds
+     * We'll not consider a click to be a dead click if it selects/unselects text or moves a caret
+     * in editable content during its mouse gesture, regardless of how long the button is held.
+     * Selection changes outside a matching gesture suppress the click when they occur within
+     * `selection_change_threshold_ms` milliseconds immediately before or after it.
+     * When a closed shadow root hides whether a caret belongs to editable content, only the timed window applies.
+     * A value of 0 disables selection-based suppression.
      *
      * @default 100
      */
@@ -711,10 +716,16 @@ export interface SessionRecordingOptions {
      * JSON-LD inside a text mask or blocked element is never captured.
      * The recorder keeps properties on its universal safe list at every depth. This list includes `@type` values shaped like a Schema.org term, which means letters and digits only.
      * It drops property branches that are not on the allowlist.
+     * Retained strings starting with `http://`, `https://`, `//`, `/`, `./`, or `../` use replay URL masking, including query parameter and hash settings.
+     * This applies to nested entities and scalar arrays, but not to the fixed `@context`, normalized `@type`, or captured DOM IDs.
+     * Other strings, including bare relative paths and URLs embedded in text, are unchanged.
+     * A URL rejected by the masking callback is omitted. If the callback throws, the script is not captured.
      * It keeps an `@id` as a fragment only when replay also captures a DOM element with the same `id` value.
      * It drops every `@id` when `maskAllElementAttributes`, `maskAttributeFn`, or an `attributeFilter` without `id` can hide `id` attributes from replay.
      * It also keeps the containing entity tree, even when it redacts all other fields.
      * The event tag is `$json_ld`. The payload is a JSON-LD object or array.
+     * The event includes the current page URL in `data.href`, subject to replay URL masking and hash capture settings.
+     * The URL is omitted when the masking callback rejects it or throws.
      * The recorder removes all script nodes from snapshots when this option is enabled.
      * The JSON-LD observer starts only when this option is true at recording start.
      * @see https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/extensions/replay/external/json-ld.ts
@@ -1931,6 +1942,11 @@ export interface PostHogConfig {
      * (e.g. /flags?v=2&config=true) without evaluating any feature flags.  Most folks use this
      * to save money on feature flag evaluation (by bootstrapping feature flags on the server side).
      *
+     * This also stops surveys from displaying. PostHog creates an internal targeting flag for
+     * almost every survey, and every flag evaluates to false while flags are disabled. If you use
+     * surveys, set `advanced_only_evaluate_survey_feature_flags` instead, which evaluates survey
+     * flags only.
+     *
      * @default false
      */
     advanced_disable_feature_flags: boolean
@@ -2148,11 +2164,26 @@ export interface PostHogConfig {
     bootstrap: BootstrapConfig
 
     /**
-     * The segment analytics object.
+     * The Segment analytics object, or integration configuration.
+     *
+     * @example
+     * ```ts
+     * segment: {
+     *     analytics: window.analytics,
+     *     filterProperties: (properties) => {
+     *         for (const key in properties) {
+     *             if (key.startsWith('$sdk_debug_')) {
+     *                 delete properties[key]
+     *             }
+     *         }
+     *         return properties
+     *     }
+     * }
+     * ```
      *
      * @see https://posthog.com/docs/libraries/segment
      */
-    segment?: SegmentAnalytics
+    segment?: SegmentAnalytics | SegmentIntegrationConfig
 
     /**
      * Determines whether to capture heatmaps.

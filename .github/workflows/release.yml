@@ -1,7 +1,6 @@
 name: 'Release'
 
-permissions:
-    contents: read
+permissions: {}
 
 on:
     push:
@@ -83,6 +82,8 @@ jobs:
             slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
 
     check-changesets:
+        permissions:
+            contents: read
         name: Check for changesets
         if: >-
             inputs.target_version == '' &&
@@ -114,6 +115,8 @@ jobs:
                   fi
 
     notify-approval-needed:
+        permissions:
+            contents: read
         name: Notify Slack - Approval Needed
         needs: check-changesets
         if: needs.check-changesets.outputs.has-changesets == 'true'
@@ -273,6 +276,8 @@ jobs:
                   emoji_reaction: 'x'
 
     notify-rejected:
+        permissions:
+            actions: read
         name: Notify Slack - Rejected
         needs: [version-bump, notify-approval-needed]
         runs-on: ubuntu-latest
@@ -536,6 +541,7 @@ jobs:
                   emoji_reaction: 'x'
 
     gate-posthog-js-publish:
+        permissions: {}
         name: Gate npm publishing on posthog-js S3
         needs: [version-bump, notify-approval-needed, check-browser-version, build-s3-artifacts, upload-s3]
         runs-on: ubuntu-latest
@@ -1181,7 +1187,7 @@ jobs:
                   package-manager-cache: false
 
             - name: Setup pnpm
-              uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
+              uses: pnpm/setup@703c52620218391530e48b9e8870d5c0082e1b9b # v2.1.0
               with:
                   cache: false
                   install: false
@@ -1214,14 +1220,14 @@ jobs:
             # back to the EU role if the US variable were empty.
             - name: Configure AWS credentials (US)
               if: matrix.region.name == 'us'
-              uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+              uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
               with:
                   role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_US }}
                   aws-region: ${{ matrix.region.aws_region }}
 
             - name: Configure AWS credentials (EU)
               if: matrix.region.name == 'eu'
-              uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+              uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
               with:
                   role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
                   aws-region: ${{ matrix.region.aws_region }}
@@ -1288,6 +1294,8 @@ jobs:
                   emoji_reaction: 'x'
 
     notify-released:
+        permissions:
+            contents: read
         name: Notify Slack - Released
         needs: [notify-approval-needed, publish, publish-posthog-js, dispatch-posthog-upgrade, upload-s3]
         runs-on: ubuntu-latest
@@ -1314,6 +1322,7 @@ jobs:
                   remove_emoji_reaction: 'x'
 
     notify-recovery-result:
+        permissions: {}
         name: Notify posthog-js recovery result
         needs: [recover-posthog-js-s3, publish-recovered-posthog-js, dispatch-posthog-upgrade]
         runs-on: ubuntu-latest

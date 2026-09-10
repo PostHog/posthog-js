@@ -1,0 +1,16 @@
+{
+    "name": "@posthog-tooling/rrweb-build",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "bin": {
+        "vite": "./vite.mjs"
+    },
+    "exports": {
+        ".": "./index.ts"
+    },
+    "dependencies": {
+        "vite": "catalog:",
+        "vite-plugin-dts": "catalog:"
+    }
+}

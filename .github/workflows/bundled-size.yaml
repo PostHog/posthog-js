@@ -2,8 +2,7 @@ name: Bundled Size
 
 on: [pull_request]
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -11,6 +10,8 @@ concurrency:
 
 jobs:
   affected_posthog_js:
+    permissions:
+      contents: read
     uses: ./.github/workflows/check-affected.yml
     with:
       package-name: posthog-js
@@ -20,6 +21,8 @@ jobs:
         .github/actions/is-affected/action.yaml
 
   affected_browser:
+    permissions:
+      contents: read
     uses: ./.github/workflows/check-affected.yml
     with:
       package-name: "@posthog/browser"
@@ -48,7 +51,7 @@ jobs:
           package-manager-cache: false
 
       - name: Setup pnpm
-        uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
+        uses: pnpm/setup@703c52620218391530e48b9e8870d5c0082e1b9b # v2.1.0
         with:
           cache: false
           install: false
@@ -69,12 +72,12 @@ jobs:
           name: bundle-stats-array.html
           path: packages/browser/bundle-stats-array.html
 
-      - name: Skip PR comments for fork PR
-        if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
-        run: echo "Skipping bundled-size PR comments for fork PRs because GitHub tokens are read-only."
+      - name: Skip PR comments with a read-only token
+        if: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+        run: echo "Skipping bundled-size PR comments for fork or Dependabot PRs because GitHub tokens are read-only."
 
       - name: Find artifact link comment if it exists
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # pin v4.0.0
         id: fc
         with:
@@ -83,7 +86,7 @@ jobs:
           body-includes: Download bundle size visualization
 
       - name: Create or update artifact link comment
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # pin v5.0.0
         with:
           comment-id: ${{ steps.fc.outputs.comment-id }}
@@ -93,7 +96,7 @@ jobs:
           edit-mode: replace
 
       - uses: preactjs/compressed-size-action@f322c295dde06a1cb7ccaef105732dd8a726d1d9 # pin v2.10.0
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         # v2.10.0 targets Node 24 but still bundles a dependency that calls url.parse().
         env:
           NODE_OPTIONS: --disable-warning=DEP0169

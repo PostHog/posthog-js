@@ -454,8 +454,15 @@ const _sendBeacon = (options: RequestWithOptions) => {
             return
         }
 
-        logger.warn(`Beacon of ~${estimatedSize ?? 0} bytes was rejected by the browser, falling back to fetch`)
-        _fetch({ ...options, _keepaliveDisabled: true })
+        logger.warn(
+            `Beacon of ~${estimatedSize ?? 0} bytes was rejected by the browser, falling back to ${fetch ? 'fetch' : 'XHR'}`
+        )
+        if (fetch) {
+            // _keepaliveDisabled: a beacon-rejected payload would fail a keepalive fetch too (shared quota)
+            _fetch({ ...options, _keepaliveDisabled: true })
+        } else {
+            xhr(options)
+        }
     } catch (error) {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here
@@ -495,32 +502,37 @@ const addSentAtToCaptureBody = (data: NonNullable<RequestWithOptions['data']>): 
     }
 }
 
-const AVAILABLE_TRANSPORTS: {
-    transport: RequestWithOptions['transport']
-    method: (options: RequestWithOptions) => void
-}[] = []
+// Keep initialization local and pure so importing URL helpers does not retain transports and compression.
+const AVAILABLE_TRANSPORTS = /* @__PURE__ */ (() => {
+    const transports: {
+        transport: RequestWithOptions['transport']
+        method: (options: RequestWithOptions) => void
+    }[] = []
 
-// We add the transports in order of preference
-if (fetch) {
-    AVAILABLE_TRANSPORTS.push({
-        transport: 'fetch',
-        method: _fetch,
-    })
-}
+    // We add the transports in order of preference
+    if (fetch) {
+        transports.push({
+            transport: 'fetch',
+            method: _fetch,
+        })
+    }
 
-if (XMLHttpRequest) {
-    AVAILABLE_TRANSPORTS.push({
-        transport: 'XHR',
-        method: xhr,
-    })
-}
+    if (XMLHttpRequest) {
+        transports.push({
+            transport: 'XHR',
+            method: xhr,
+        })
+    }
 
-if (navigator?.sendBeacon) {
-    AVAILABLE_TRANSPORTS.push({
-        transport: 'sendBeacon',
-        method: _sendBeacon,
-    })
-}
+    if (navigator?.sendBeacon) {
+        transports.push({
+            transport: 'sendBeacon',
+            method: _sendBeacon,
+        })
+    }
+
+    return transports
+})()
 
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
 export const request = (_options: RequestWithOptions) => {

@@ -1155,6 +1155,19 @@ describe('posthog core', () => {
             )
         })
 
+        it.each([null, undefined, ''])('preserves the persisted identity when distinctID is %j', (distinctID) => {
+            const token = 'bootstrap-nullish-' + uuidv7()
+            const first = posthogWith({ token })
+            const posthog = posthogWith({
+                token,
+                bootstrap: { distinctID },
+            })
+
+            expect(posthog.get_distinct_id()).toBe(first.get_distinct_id())
+            expect(posthog.get_property('$device_id')).toBe(first.get_property('$device_id'))
+            expect(posthog.persistence.get_property(USER_STATE)).toBe('anonymous')
+        })
+
         it('treats identified distinctIDs appropriately', () => {
             const posthog = posthogWith(
                 {
@@ -1231,18 +1244,20 @@ describe('posthog core', () => {
             expect(posthog.getFeatureFlagPayload('undef')).toBe(undefined)
         })
 
-        it('does nothing when empty', () => {
+        it.each([
+            {},
+            { distinctID: null, isIdentifiedID: null, featureFlags: null, featureFlagPayloads: null, sessionID: null },
+        ])('does nothing when bootstrap is %j', (bootstrap) => {
             // memory persistence with an empty bootstrap is the exact volatile-identity case the init
             // warning covers, so allow that console.warn here instead of failing on it.
             const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
             const posthog = posthogWith({
-                bootstrap: {},
+                bootstrap,
                 persistence: 'memory',
             })
             warnSpy.mockRestore()
 
-            expect(posthog.get_distinct_id()).not.toBe('abcd')
-            expect(posthog.get_distinct_id()).not.toEqual(undefined)
+            expect(posthog.get_distinct_id()).toEqual(expect.any(String))
             expect(posthog.getFeatureFlag('multivariant')).toBe(undefined)
             expect(mockLogger.warn).toHaveBeenCalledWith(
                 expect.stringContaining('getFeatureFlag for key "multivariant" failed')

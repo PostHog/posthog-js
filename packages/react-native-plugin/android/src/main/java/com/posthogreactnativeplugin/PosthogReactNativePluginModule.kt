@@ -1,7 +1,9 @@
 package com.posthogreactnativeplugin
 
+import android.app.Activity
 import android.content.Intent
 import android.util.Log
+import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -23,8 +25,29 @@ import java.util.UUID
 
 class PosthogReactNativePluginModule(
   reactContext: ReactApplicationContext,
-) : ReactContextBaseJavaModule(reactContext) {
+) : ReactContextBaseJavaModule(reactContext),
+  ActivityEventListener {
   override fun getName(): String = NAME
+
+  override fun initialize() {
+    super.initialize()
+    // ReactActivity forwards onNewIntent to its listeners, so unlike a plain Android host the
+    // app needs no code of its own for warm-start taps.
+    reactApplicationContext.addActivityEventListener(this)
+  }
+
+  override fun onActivityResult(
+    activity: Activity,
+    requestCode: Int,
+    resultCode: Int,
+    data: Intent?,
+  ) = Unit
+
+  // A tap delivered while the process is alive never reaches onActivityCreated, so the native
+  // integration cannot see it. Deduplicated by message id against the cold-start path.
+  override fun onNewIntent(intent: Intent) {
+    PostHogAndroid.capturePushNotificationOpened(intent)
+  }
 
   @ReactMethod
   fun setup(
@@ -527,6 +550,7 @@ class PosthogReactNativePluginModule(
   fun removeListeners(count: Int) = Unit
 
   override fun invalidate() {
+    reactApplicationContext.removeActivityEventListener(this)
     if (pushModule === this) {
       // Decline mints fast after teardown instead of stalling the native 10s watchdog.
       pushModule = null

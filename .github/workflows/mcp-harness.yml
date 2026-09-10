@@ -14,11 +14,12 @@ concurrency:
     group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
     cancel-in-progress: true
 
-permissions:
-    contents: read
+permissions: {}
 
 jobs:
     affected:
+        permissions:
+            contents: read
         uses: ./.github/workflows/check-affected.yml
         with:
             package-name: '@posthog/mcp'
@@ -33,6 +34,8 @@ jobs:
                 .github/actions/setup/action.yaml
 
     harness:
+        permissions:
+            contents: read
         name: ${{ matrix.lane.name }}
         needs: affected
         if: needs.affected.outputs.is-affected == 'true'
