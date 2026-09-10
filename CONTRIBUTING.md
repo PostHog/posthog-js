@@ -147,7 +147,13 @@ Declaration entries remain self-contained, external package imports remain exter
 pnpm turbo run build --filter='./packages/rrweb/**'
 pnpm turbo run check-types --filter='./packages/rrweb/**'
 pnpm test:rrweb-declarations
+pnpm test:rrweb-package-exports
+pnpm test:rrweb-consumers
 ```
+
+The installed-consumer tests build and pack their prerequisites. `test:rrweb-package-exports` checks JavaScript/CSS export targets and native Node ESM/CommonJS behavior. `test:rrweb-consumers` checks strict declarations with TypeScript 4.7, 5.8, and 6, including coexistence with consumer Node 22/24 typings. Both need registry access; the strict type checks retain their tarballs, installs, and compiler logs in a reported temporary directory.
+
+The canvas WebRTC plugin ships its SimplePeer declaration shim and legacy-compatible Node typings for TypeScript 4.7 consumers. Its Vite development tools are provided by the private `tooling/rrweb-build` workspace so their modern typing peers remain separate from the published dependency. This type-only dependency does not change the workspace's Node 24 runtime requirement.
 
 The declaration regression tests also run through `pnpm test:unit`. When changing an entrypoint, verify its package exports and both declaration formats, and check a `pnpm dev` source edit/rebuild. Keep the shared build configs in Turbo's cache inputs.
 

@@ -1,5 +1,7 @@
 import { NodeType as RRNodeType } from '@posthog/rrweb-types';
-import type { NWSAPI } from 'nwsapi';
+import nwsapi, { type NWSAPI } from 'nwsapi';
+import cssom from 'cssom';
+import cssstyle from 'cssstyle';
 import type { CSSStyleDeclaration as CSSStyleDeclarationType } from 'cssstyle';
 import {
   BaseRRCDATASection,
@@ -15,9 +17,6 @@ import {
   type CSSStyleDeclaration,
   type IRRNode,
 } from '@posthog/rrdom';
-const nwsapi = require('nwsapi');
-const cssom = require('cssom');
-const cssstyle = require('cssstyle');
 
 export class RRWindow {
   scrollLeft = 0;
@@ -340,7 +339,7 @@ export class RRStyleElement extends RRElement {
       for (const child of this.childNodes)
         if (child.RRNodeType === RRNodeType.Text)
           result += (child as RRText).textContent;
-      this._sheet = cssom.parse(result);
+      this._sheet = cssom.parse(result) as unknown as CSSStyleSheet;
     }
     return this._sheet;
   }
