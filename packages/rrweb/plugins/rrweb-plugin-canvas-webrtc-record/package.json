@@ -36,14 +36,14 @@
     "author": "justin@recordonce.com",
     "license": "MIT",
     "dependencies": {
+        "@types/node": "^16.18.126",
         "simple-peer-light": "^9.10.0"
     },
     "devDependencies": {
+        "@posthog-tooling/rrweb-build": "workspace:*",
         "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-types": "workspace:*",
-        "typescript": "catalog:",
-        "vite": "catalog:",
-        "vite-plugin-dts": "catalog:"
+        "typescript": "catalog:"
     },
     "peerDependencies": {
         "@posthog/rrweb": "workspace:*"
