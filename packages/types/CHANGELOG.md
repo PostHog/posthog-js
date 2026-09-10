@@ -1,5 +1,15 @@
 # @posthog/types
 
+## 1.410.1
+
+### Patch Changes
+
+- [#4878](https://github.com/PostHog/posthog-js/pull/4878) [`14ba783`](https://github.com/PostHog/posthog-js/commit/14ba783ff8b469a8bd2fe40782c985326d89e672) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Allow null bootstrap values and treat null or empty distinct IDs as missing.
+  (2026-09-10)
+
+- [#4831](https://github.com/PostHog/posthog-js/pull/4831) [`9498567`](https://github.com/PostHog/posthog-js/commit/9498567cd71f13ed8e618185075d8c5628b93cc1) Thanks [@posthog](https://github.com/apps/posthog)! - Log a console message when advanced_disable_feature_flags stops surveys from displaying
+  (2026-09-10)
+
 ## 1.410.0
 
 ### Minor Changes
