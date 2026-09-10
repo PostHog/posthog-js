@@ -353,9 +353,7 @@ class PosthogReactNativePluginModule(
     promise: Promise,
   ) {
     try {
-      // JS owns React Native session IDs, so this does not rotate the session. Start with a
-      // fresh keyframe: a gated stop can discard the opening frame queued by native rotation.
-      PostHog.startSessionReplay(resumeCurrent && !PostHogSessionManager.isReactNative)
+      PostHog.startSessionReplay(resumeCurrent)
     } catch (e: Throwable) {
       logError("startRecording", e)
     } finally {
@@ -365,16 +363,12 @@ class PosthogReactNativePluginModule(
 
   @ReactMethod
   fun stopRecording(promise: Promise) {
-    // Session rotation queues replay re-initialization on main. Stop after that work so
-    // it cannot restart recording after JS has re-armed its event-trigger gate.
-    UiThreadUtil.runOnUiThread {
-      try {
-        PostHog.stopSessionReplay()
-      } catch (e: Throwable) {
-        logError("stopRecording", e)
-      } finally {
-        promise.resolve(null)
-      }
+    try {
+      PostHog.stopSessionReplay()
+    } catch (e: Throwable) {
+      logError("stopRecording", e)
+    } finally {
+      promise.resolve(null)
     }
   }
 
