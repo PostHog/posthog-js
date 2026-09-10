@@ -259,7 +259,13 @@ function serializeForCompression(data: unknown): string {
         // fast path: plain native stringify, since a replacer callback is expensive on
         // large snapshots and circular event data is rare
         return JSON.stringify(data)
-    } catch {
+    } catch (e) {
+        // data past the engine's maximum string length is not something the replacer can
+        // shorten, and the retry would build the string up to that limit all over again
+        // before failing the same way - on unload that stall is paid before the final flush
+        if (e instanceof RangeError) {
+            throw e
+        }
         // circular event data (e.g. a leaked instance graph) degrades gracefully to
         // '[Circular]' markers instead of throwing, the same two-step approach as jsonStringify
         return JSON.stringify(data, circularReferenceReplacer())
@@ -1831,13 +1837,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _processQueuedCompressionEventSync(queuedEvent: QueuedCompressionEvent) {
         try {
             let eventToSend: eventWithTime | compressedEventWithTime = queuedEvent.event
-            let size = estimateSize(queuedEvent.event)
+            let size: number | undefined
             if (queuedEvent.compressionEnabled) {
                 try {
                     ;({ event: eventToSend, size } = compressEventSync(queuedEvent.event))
                 } catch (e) {
                     logger.error('could not process queued compression event - will use uncompressed event', e)
                 }
+            }
+            // only size the raw event when compression did not already report a size: this drain
+            // runs on unload, and a discarded estimate costs a full stringify of every event
+            if (isUndefined(size)) {
+                size = estimateSize(queuedEvent.event)
             }
             try {
                 this._captureQueuedCompressionEvent(queuedEvent, eventToSend, size)

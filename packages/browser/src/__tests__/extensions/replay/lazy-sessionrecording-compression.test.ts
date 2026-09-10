@@ -378,6 +378,79 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         )
     })
 
+    it('does not retry serializing an event that is too large to stringify', async () => {
+        const gzipCompress = vi.fn(async (input: string) => {
+            // hold the async path open so the event is still queued at unload
+            await new Promise(() => {})
+            return new Blob([gzipSync(strToU8(input))])
+        })
+
+        const { emit, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+            gzipSupported: true,
+            gzipCompress,
+        })
+
+        // JSON.stringify only raises `Invalid string length` once it has built the string up to
+        // the engine's limit, so every extra attempt is another half-gigabyte stall on unload
+        let attempts = 0
+        const originalStringify = JSON.stringify
+        const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation((value: any, ...rest: any[]) => {
+            const serialized = originalStringify(value, ...rest)
+            if (serialized && serialized.indexOf('oversized') !== -1) {
+                attempts += 1
+                throw new RangeError('Invalid string length')
+            }
+            return serialized
+        })
+
+        try {
+            emit(createFullSnapshot({ content: 'oversized' }))
+
+            // only count the synchronous drain, the one path that cannot yield to the browser
+            attempts = 0
+            lazyLoadedSessionRecording['_onBeforeUnload']()
+        } finally {
+            stringifySpy.mockRestore()
+        }
+
+        // one failed compression, then the size estimate that decides the event has to be dropped
+        expect(attempts).toBe(2)
+    })
+
+    it('does not stringify an event twice when the synchronous drain compresses it', async () => {
+        const gzipCompress = vi.fn(async () => {
+            // hold the async path open so the event is still queued at unload
+            await new Promise(() => {})
+            return new Blob([])
+        })
+
+        const { emit, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+            gzipSupported: true,
+            gzipCompress,
+        })
+
+        emit(createFullSnapshot({ content: 'sized once' }))
+
+        let attempts = 0
+        const originalStringify = JSON.stringify
+        const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation((value: any, ...rest: any[]) => {
+            const serialized = originalStringify(value, ...rest)
+            if (serialized && serialized.indexOf('sized once') !== -1) {
+                attempts += 1
+            }
+            return serialized
+        })
+
+        try {
+            lazyLoadedSessionRecording['_onBeforeUnload']()
+        } finally {
+            stringifySpy.mockRestore()
+        }
+
+        // the compressed event carries its own size, so the raw event is never sized as well
+        expect(attempts).toBe(1)
+    })
+
     it('ships a full snapshot under the new session id when the recorder restarts while idle', async () => {
         const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
             gzipSupported: true,
