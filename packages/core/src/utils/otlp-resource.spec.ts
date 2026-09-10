@@ -87,8 +87,9 @@ describe('shared OTLP resource attributes', () => {
     // Integer-like keys enumerate ahead of every string key, whatever the insertion order.
     ['an integer-like key', '0'],
   ])('keeps the identity keys when %s exhausts the encoder budget', (_label, key) => {
+    const identity = { serviceName: 'checkout', serviceVersion: '2.1.0', environment: 'production' }
     const [logs, metrics, traces] = allThree({
-      serviceName: 'checkout',
+      ...identity,
       resourceAttributes: { [key]: Array.from({ length: 10 }, () => Array(1000).fill(1)) },
     })
     const encoded = [
@@ -96,14 +97,23 @@ describe('shared OTLP resource attributes', () => {
       buildOtlpMetricsPayload([], metrics as any, 's', '1').resourceMetrics[0].resource.attributes,
       buildOtlpTracesPayload([], traces as any, 's', '1').resourceSpans[0].resource.attributes,
     ]
+    // Every key the builder sets on its own, so one added there without being
+    // reserved fails here.
+    const sdkSet = Object.entries(
+      buildTracesResourceAttributes(identity as ResolvedTracesConfig, 'posthog-node', '1.0.0')
+    )
+    expect(sdkSet.map(([sdkKey]) => sdkKey)).toEqual([
+      'service.name',
+      'deployment.environment',
+      'service.version',
+      'telemetry.sdk.name',
+      'telemetry.sdk.version',
+    ])
     for (const attributes of encoded) {
-      expect(attributes.map((attribute) => attribute.key)).toEqual([
-        key,
-        'service.name',
-        'telemetry.sdk.name',
-        'telemetry.sdk.version',
-      ])
-      expect(attributes).toContainEqual({ key: 'service.name', value: { stringValue: 'checkout' } })
+      expect(attributes.map((attribute) => attribute.key)).toEqual([key, ...sdkSet.map(([sdkKey]) => sdkKey)])
+      for (const [sdkKey, sdkValue] of sdkSet) {
+        expect(attributes).toContainEqual({ key: sdkKey, value: { stringValue: sdkValue } })
+      }
     }
   })
 })
