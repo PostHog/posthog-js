@@ -16,11 +16,28 @@ const POSTHOG_TOKEN_PATTERN = /\bph[a-z]_[A-Za-z0-9_-]{20,}\b/g
 const SENSITIVE_KEY_PATTERN =
   /^(authorization|cookie|set-cookie|x-api-key|api[-_]?key|api[-_]?token|access[-_]?token|refresh[-_]?token|token|password|secret|client[-_]?secret|private[-_]?key)$/i
 
-const URL_PATTERN = /\b[a-z][a-z0-9+.-]{0,63}:\/\/[^\s<>"']+/gi
+// Deliberately no leading `\b`: `_` is a word character but not scheme-legal, so
+// `resource_https://user:pw@host` has no boundary to anchor to and would keep its
+// credentials. Leftmost matching makes `foo.https://x` match from `f` with scheme
+// `foo.https`, which redacts the same URL and is therefore harmless.
+const URL_PATTERN = /[a-z][a-z0-9+.-]{0,63}:\/\/[^\s<>"']+/gi
+// The terminal class above also absorbs the prose punctuation that follows a URL
+// in a sentence. See `splitTrailingPunctuation`.
+const URL_TRAILING_PUNCTUATION = '.,;:!?)]}'
+// `;` is a legacy field separator; normalizing it to `&` lets one split cover both.
+const URL_FIELD_SEPARATOR_PATTERN = /;/g
 const MAX_URL_LENGTH = 8192
 const MAX_URL_QUERY_FIELDS = 128
-const SENSITIVE_QUERY_KEY_PATTERN =
-  /^(auth|key|credential|signature|sig|AWSAccessKeyId|GoogleAccessId|Policy|Key-Pair-Id|X-Amz-(Credential|Signature|Security-Token)|X-Goog-(Credential|Signature))$/i
+// A query key is sensitive when any `-`/`_`/`.`-delimited segment names a
+// credential, so compound names (`private_token`, `oauth_signature`,
+// `subscription-key`, `X-Amz-Security-Token`, `Key-Pair-Id`) are covered without
+// enumerating every vendor's spelling. Over-redacting a benign `sort_key` is the
+// accepted trade for an analytics payload.
+const SENSITIVE_QUERY_KEY_SEGMENT_PATTERN =
+  /(^|[-_.])(auth|token|secret|password|passwd|pwd|credential|signature|sig|key|hmac|sas|bearer|jwt|session|sessionid)([-_.]|$)/i
+// `code` — the OAuth authorization code — is matched only as a whole key: as a
+// segment it would eat `country_code`, `zip_code`, and `lang_code`.
+const SENSITIVE_QUERY_KEY_EXACT_PATTERN = /^(code|AWSAccessKeyId|GoogleAccessId|Policy)$/i
 
 // PII redaction for the agent-narrated intent string only. `$mcp_intent` is free
 // text the calling LLM writes into the injected `context` argument, so it can
@@ -82,7 +99,9 @@ function shouldRedactKey(key: string): boolean {
 }
 
 function shouldRedactQueryKey(key: string): boolean {
-  return shouldRedactKey(key) || SENSITIVE_QUERY_KEY_PATTERN.test(key)
+  return (
+    shouldRedactKey(key) || SENSITIVE_QUERY_KEY_SEGMENT_PATTERN.test(key) || SENSITIVE_QUERY_KEY_EXACT_PATTERN.test(key)
+  )
 }
 
 function isBase64DataUrl(value: string): boolean {
@@ -101,38 +120,94 @@ function isBase64DataUrl(value: string): boolean {
   return BASE64_DATA_URL_PAYLOAD_PATTERN.test(payload.replace(/[\r\n]/g, ''))
 }
 
-function sanitizeUrl(value: string): string {
+function exceedsUrlFieldLimit(fields: string): boolean {
+  return fields.split('&', MAX_URL_QUERY_FIELDS + 1).length > MAX_URL_QUERY_FIELDS
+}
+
+/**
+ * Redacts the values of credential-named fields in one `&`-separated field list
+ * — a query string or a fragment. `serialized` is only meaningful when `changed`
+ * is true, so an untouched part keeps its original encoding instead of being
+ * re-serialized.
+ */
+function sanitizeUrlFields(fields: string, allowNestedUrls: boolean): { changed: boolean; serialized: string } {
+  const sanitized = new URLSearchParams()
+  let changed = false
+  for (const [key, value] of new URLSearchParams(fields)) {
+    if (shouldRedactQueryKey(key)) {
+      sanitized.append(key, REDACTED_VALUE)
+      changed = true
+    } else if (allowNestedUrls && value.includes('://')) {
+      const nested = value.replace(URL_PATTERN, (match) => sanitizeUrl(match, false))
+      changed ||= nested !== value
+      sanitized.append(key, nested)
+    } else {
+      sanitized.append(key, value)
+    }
+  }
+  return { changed, serialized: sanitized.toString() }
+}
+
+/**
+ * Splits the prose punctuation that follows a URL in a sentence off the end of a
+ * match, so it is not parsed as part of the address and can be re-appended
+ * verbatim to whatever the sanitizer returns.
+ *
+ * Walked back character by character rather than matched with a `$`-anchored
+ * pattern: a captured URI is attacker-influenceable, and on a long punctuation
+ * run that does not end the match a backtracking pattern is quadratic.
+ */
+function splitTrailingPunctuation(value: string): { address: string; suffix: string } {
+  let end = value.length
+  while (end > 0 && URL_TRAILING_PUNCTUATION.includes(value[end - 1])) {
+    end--
+  }
+  return { address: value.slice(0, end), suffix: value.slice(end) }
+}
+
+/**
+ * Redacts the credentials embedded in one URL-shaped match: the userinfo, plus
+ * the values of credential-named query and fragment fields. A retained value that
+ * is itself a URL — a gateway's `?url=` passthrough — gets the same pass one
+ * level deep, which `allowNestedUrls` turns off for that inner call.
+ */
+function sanitizeUrl(value: string, allowNestedUrls: boolean): string {
   if (value.length > MAX_URL_LENGTH) {
     return REDACTED_VALUE
   }
+  const { address, suffix } = splitTrailingPunctuation(value)
+  let url: URL
   try {
-    const url = new URL(value)
-    if (url.search.split('&', MAX_URL_QUERY_FIELDS + 1).length > MAX_URL_QUERY_FIELDS) {
-      return REDACTED_VALUE
-    }
-    let changed = false
-    if (url.username || url.password) {
-      url.username = REDACTED_VALUE
-      url.password = ''
-      changed = true
-    }
-    const query = new URLSearchParams()
-    for (const [key, item] of url.searchParams) {
-      if (shouldRedactQueryKey(key)) {
-        query.append(key, REDACTED_VALUE)
-        changed = true
-      } else {
-        query.append(key, item)
-      }
-    }
-    if (!changed) {
-      return value
-    }
-    url.search = query.toString()
-    return url.toString()
+    url = new URL(address)
   } catch {
-    return REDACTED_VALUE
+    return REDACTED_VALUE + suffix
   }
+
+  const query = url.search.slice(1).replace(URL_FIELD_SEPARATOR_PATTERN, '&')
+  // A fragment with no `=` is prose rather than a field list (`#section-2`), and
+  // stays byte-for-byte.
+  const fragment = url.hash.includes('=') ? url.hash.slice(1).replace(URL_FIELD_SEPARATOR_PATTERN, '&') : ''
+  if (exceedsUrlFieldLimit(query) || exceedsUrlFieldLimit(fragment)) {
+    return REDACTED_VALUE + suffix
+  }
+
+  let changed = false
+  if (url.username || url.password) {
+    url.username = REDACTED_VALUE
+    url.password = ''
+    changed = true
+  }
+  const sanitizedQuery = sanitizeUrlFields(query, allowNestedUrls)
+  if (sanitizedQuery.changed) {
+    url.search = sanitizedQuery.serialized
+    changed = true
+  }
+  const sanitizedFragment = sanitizeUrlFields(fragment, allowNestedUrls)
+  if (sanitizedFragment.changed) {
+    url.hash = sanitizedFragment.serialized
+    changed = true
+  }
+  return (changed ? url.toString() : address) + suffix
 }
 
 function sanitizeString(value: string): string {
@@ -144,7 +219,7 @@ function sanitizeString(value: string): string {
   ) {
     return BINARY_REDACTED_VALUE
   }
-  return value.replace(URL_PATTERN, sanitizeUrl).replace(POSTHOG_TOKEN_PATTERN, REDACTED_VALUE)
+  return value.replace(URL_PATTERN, (match) => sanitizeUrl(match, true)).replace(POSTHOG_TOKEN_PATTERN, REDACTED_VALUE)
 }
 
 function passesLuhn(digits: string): boolean {

@@ -102,9 +102,63 @@ describe('URL credential redaction', () => {
       'Cannot read https://%5Bredacted%5D@example.com/guide or https://example.com/guide?token=%5Bredacted%5D',
     ],
     ['https://fakeuser:fakepass@[invalid/guide?token=fakesecret', '[redacted]'],
+    // `_` is a word character but not scheme-legal, so a `\b`-anchored pattern
+    // would find no boundary here and leave the credentials in place.
+    ['resource_https://fakeuser:fakepass@example.com/doc', 'resource_https://%5Bredacted%5D@example.com/doc'],
+    [
+      'https://app.example.com/cb#access_token=fakeaccess&token_type=bearer',
+      'https://app.example.com/cb#access_token=%5Bredacted%5D&token_type=%5Bredacted%5D',
+    ],
+    ['https://example.com/x?a=1;token=fakesecret', 'https://example.com/x?a=1&token=%5Bredacted%5D'],
+    [
+      'https://example.com/x?jwt=fakejwt&sessionid=fakesession&code=fakecode&country_code=BR',
+      'https://example.com/x?jwt=%5Bredacted%5D&sessionid=%5Bredacted%5D&code=%5Bredacted%5D&country_code=BR',
+    ],
+    [
+      'https://gitlab.example.com/api?private_token=fakesecret&oauth_signature=fakesignature&id_token=fakeaccess&subscription-key=fakekey&sort_key=name',
+      'https://gitlab.example.com/api?private_token=%5Bredacted%5D&oauth_signature=%5Bredacted%5D&id_token=%5Bredacted%5D&subscription-key=%5Bredacted%5D&sort_key=%5Bredacted%5D',
+    ],
+    [
+      'See https://example.com/x?sig=fakesignature, then retry.',
+      'See https://example.com/x?sig=%5Bredacted%5D, then retry.',
+    ],
+    ['Failed (https://example.com/x?sig=fakesignature).', 'Failed (https://example.com/x?sig=%5Bredacted%5D).'],
+    [
+      'https://fakeuser:fakepass@en.wikipedia.org/wiki/Foo_(bar).',
+      'https://%5Bredacted%5D@en.wikipedia.org/wiki/Foo_(bar).',
+    ],
+    // A retained value that is itself a URL is sanitized one level deep, then
+    // re-serialized by `URLSearchParams` — hence the double-encoded `%255B`.
+    [
+      'https://gateway.example.com/fetch?url=https://svc:fakepass@internal.example.com/doc%3Ftoken%3Dfakesecret',
+      'https://gateway.example.com/fetch?url=https%3A%2F%2F%255Bredacted%255D%40internal.example.com%2Fdoc%3Ftoken%3D%255Bredacted%255D',
+    ],
   ])('sanitizes %s', (value, expected) => {
     expect(sanitizeCapturedValue(value)).toBe(expected)
     expect(sanitizeCapturedValue(expected)).toBe(expected)
+  })
+
+  it.each([
+    ['a fragment that is prose rather than fields', 'https://example.com/doc#section-2'],
+    ['a sentence whose URL carries no credentials', 'Failed (https://example.com/x?a=b).'],
+    ['a path ending in balanced parentheses', 'https://en.wikipedia.org/wiki/Foo_(bar)'],
+    ['a local file URL', 'file:///guide.md'],
+    ['a `;`-separated query with no sensitive key', 'https://example.com/x?a=1;b=2'],
+  ])('leaves %s byte-for-byte', (_label, value) => {
+    expect(sanitizeCapturedValue(value)).toBe(value)
+  })
+
+  it('splits trailing punctuation off long punctuation runs quickly', () => {
+    // The worst case for a `$`-anchored trailing-punctuation pattern: a long run
+    // that does *not* end the match, so every start position backtracks through
+    // it — ~40ms per URL, and a captured string can hold many. Each URL here
+    // stays under `MAX_URL_LENGTH` so the length bound does not short-circuit it.
+    const pathological = Array(50)
+      .fill(`https://example.com/${'.'.repeat(8_000)}a`)
+      .join(' ')
+    const start = Date.now()
+    expect(sanitizeCapturedValue(pathological)).toBe(pathological)
+    expect(Date.now() - start).toBeLessThan(1000)
   })
 })
 
