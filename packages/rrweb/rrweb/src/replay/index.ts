@@ -398,6 +398,7 @@ export class Replayer {
 
     const timer = new Timer([], {
       speed: this.config.speed,
+      onActionError: (error) => this.warn('Exception in timer action', error),
     });
     this.service = createPlayerService(
       {
@@ -1373,6 +1374,12 @@ export class Replayer {
     isSync: boolean,
   ) {
     const { data: d } = e;
+    // the player can be torn down while events are still queued: no document
+    // is left to apply them to, and Firefox turns its nodes into dead wrappers
+    // that throw on any access
+    if (!this.iframe.contentDocument) {
+      return;
+    }
     switch (d.source) {
       case IncrementalSource.Mutation: {
         try {

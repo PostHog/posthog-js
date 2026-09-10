@@ -12,15 +12,18 @@ export class Timer {
   private actions: actionWithDelay[];
   private raf: number | true | null = null;
   private lastTimestamp: number;
+  private onActionError?: (error: unknown) => void;
 
   constructor(
     actions: actionWithDelay[] = [],
     config: {
       speed: number;
+      onActionError?: (error: unknown) => void;
     },
   ) {
     this.actions = actions;
     this.speed = config.speed;
+    this.onActionError = config.onActionError;
   }
   /**
    * Add an action, possibly after the timer starts.
@@ -58,7 +61,13 @@ export class Timer {
 
       if (this.timeOffset >= action.delay) {
         this.actions.shift();
-        action.doAction();
+        try {
+          action.doAction();
+        } catch (error) {
+          // an uncaught throw from the frame callback leaves the rest of the
+          // queue unrun: one bad action must not end playback
+          this.onActionError?.(error);
+        }
       } else {
         break;
       }
