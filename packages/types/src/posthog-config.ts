@@ -2063,8 +2063,9 @@ export interface PostHogConfig {
     /**
      * Controls how often feature flags are automatically refreshed in long-running sessions.
      *
-     * By default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side
-     * flag changes without requiring a page reload. This is useful for SPAs and long-running tabs.
+     * The default interval is 5 minutes (300000ms) to pick up server-side flag changes without
+     * requiring a page reload. This is useful for SPAs and long-running tabs. An explicitly set
+     * positive interval stays fixed, even when the page gets no user interaction.
      *
      * **Each refresh is a billable feature flag request.** A page that stays open all day makes
      * up to 288 requests per day on the default interval, and every open tab and every named
@@ -2079,10 +2080,13 @@ export interface PostHogConfig {
      *
      * Hidden pages skip scheduled refreshes and reload due flags when they become visible.
      *
-     * A visible page that gets no user interaction (a kiosk or a signage screen) doubles the
-     * interval after every refresh, up to one hour. The next click, key press, wheel, touch, or
-     * return to visibility puts the page back on the configured interval. Scrolling driven by a
-     * script, such as an auto-playing carousel, does not count as an interaction.
+     * When this option is omitted, a visible page that gets no user interaction (such as a
+     * dashboard, a page being read, a video player, or a kiosk) doubles the interval after every
+     * refresh, up to one hour. Automatic refreshes continue at that interval; they do not stop.
+     * The next click, key press, wheel, touch, or return to visibility restores the five-minute
+     * default. Scrolling driven by a script, such as an auto-playing carousel, does not count as
+     * an interaction. Set this option explicitly to keep a fixed cadence, or to `0` to stop
+     * background refreshes completely.
      *
      * This option does not reload remote config.
      *

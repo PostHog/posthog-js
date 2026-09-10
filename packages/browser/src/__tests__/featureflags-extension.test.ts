@@ -385,6 +385,36 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
         })
 
+        it.each([refreshIntervalMs, defaultRefreshIntervalMs, maxIdleRefreshIntervalMs * 2])(
+            'keeps the explicit %s ms interval fixed on an idle page',
+            async (interval) => {
+                const featureFlags = await setupFeatureFlags(interval)
+                const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+                for (let i = 1; i <= 5; i++) {
+                    vi.advanceTimersByTime(interval)
+                    expect(reloadFeatureFlags).toHaveBeenCalledTimes(i)
+                }
+            }
+        )
+
+        it('switches from implicit backoff to an explicit interval with the same value', async () => {
+            const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+            featureFlags = posthog.featureFlags
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            vi.advanceTimersByTime(defaultRefreshIntervalMs * 3)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
+
+            posthog.set_config({ remote_config_refresh_interval_ms: defaultRefreshIntervalMs })
+            vi.advanceTimersByTime(defaultRefreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(3)
+            vi.advanceTimersByTime(defaultRefreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(4)
+
+            await posthog.shutdown()
+        })
+
         it('applies an interval configured from the loaded callback', async () => {
             const posthog = await createPosthogInstance(undefined, {
                 advanced_disable_feature_flags: true,
@@ -517,8 +547,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
         })
 
-        it('backs off while the visible page has no user interaction', async () => {
-            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+        it('backs off the implicit default while the visible page has no user interaction', async () => {
+            const refreshIntervalMs = defaultRefreshIntervalMs
+            const featureFlags = await setupFeatureFlags()
             const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             vi.advanceTimersByTime(refreshIntervalMs)
@@ -536,11 +567,10 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(3)
         })
 
-        it('never backs off past the maximum idle interval', async () => {
-            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+        it('continues refreshing at the maximum idle interval', async () => {
+            const featureFlags = await setupFeatureFlags()
             const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
-            // 60 intervals of one minute is the one-hour maximum.
             for (let i = 0; i < 20; i++) {
                 vi.advanceTimersByTime(maxIdleRefreshIntervalMs)
             }
@@ -551,8 +581,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(refreshCount + 1)
         })
 
-        it('returns to the configured interval after a user interaction', async () => {
-            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+        it('returns to the default interval after a user interaction', async () => {
+            const refreshIntervalMs = defaultRefreshIntervalMs
+            const featureFlags = await setupFeatureFlags()
             const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             vi.advanceTimersByTime(refreshIntervalMs * 3)
@@ -568,7 +599,8 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         })
 
         it('reloads due flags on a user interaction after a long idle period', async () => {
-            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+            const refreshIntervalMs = defaultRefreshIntervalMs
+            const featureFlags = await setupFeatureFlags()
             const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             vi.advanceTimersByTime(refreshIntervalMs * 3)
@@ -581,7 +613,8 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         })
 
         it('keeps backing off when only a scroll event fires', async () => {
-            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+            const refreshIntervalMs = defaultRefreshIntervalMs
+            const featureFlags = await setupFeatureFlags()
             const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
 
             vi.advanceTimersByTime(refreshIntervalMs)

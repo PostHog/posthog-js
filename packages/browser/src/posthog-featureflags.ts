@@ -380,9 +380,10 @@ export class PostHogFeatureFlags implements Extension {
 
         // An idle page (a kiosk or a signage screen) would otherwise poll forever, so back off
         // while nobody interacts with it and return to the configured interval when somebody does.
-        this._dueRefreshIntervalMs = this._hadUserInteraction
-            ? refreshIntervalMs
-            : Math.min(dueIntervalMs * 2, MAX_IDLE_REFRESH_INTERVAL_MS)
+        this._dueRefreshIntervalMs =
+            this._hadUserInteraction || !this._config.idleRefreshBackoff
+                ? refreshIntervalMs
+                : Math.min(dueIntervalMs * 2, MAX_IDLE_REFRESH_INTERVAL_MS)
         this._hadUserInteraction = false
         this.reloadFeatureFlags()
         this._scheduleNextRefresh()
@@ -418,6 +419,9 @@ export class PostHogFeatureFlags implements Extension {
             configuredIntervalMs > 0
                 ? configuredIntervalMs
                 : undefined
+        if (!this._config.idleRefreshBackoff) {
+            this._dueRefreshIntervalMs = refreshIntervalMs
+        }
         if (refreshIntervalMs === this._refreshIntervalMs) {
             return
         }
