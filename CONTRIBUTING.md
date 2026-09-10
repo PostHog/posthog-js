@@ -76,6 +76,18 @@ Some packages have their own contributor guides with extra package-level checks:
 - This repository is structured as a pnpm workspace and each SDK and tooling package is a member of this global workspace.
 - Example and playground projects are independent pnpm workspaces. Run `pnpm install` inside the specific project folder. Projects using the shared `.pnpmfile.cjs` rewrite PostHog dependencies to local tarballs, with exclusions such as `@posthog/cli` and `posthog-react-native-session-replay`. Check the project's `pnpm-workspace.yaml` and referenced pnpmfile for its exact behavior.
 
+## Dependency cooldown
+
+Every pnpm workspace, including independent examples, playgrounds, and CI fixtures, sets `minimumReleaseAge: 10080` (seven days). Root workspace members inherit the root policy. Shared `.pnpmfile.cjs` hooks must not lower it. The similarly named `min-release-age` setting in `.npmrc` is not a substitute for pnpm's workspace setting.
+
+Each independent workspace pins a pnpm version with cooldown support in `package.json`. Support starts at pnpm 10.16.0. Existing older pnpm 10 projects use 10.33.0 to avoid a major-version migration; previously unpinned workspaces use the root's 11.7.0. Both support the cooldown. A global pnpm version is not sufficient because project pins can select a different version.
+
+Run `pnpm --version` and `pnpm config get minimumReleaseAge` inside the project to verify the selected version and effective policy, including hook overrides. Corepack and pnpm's own version manager use separate caches. With Corepack, run `corepack install` inside the project if its pinned version is not cached. Use the Node version from `.nvmrc` for repository development.
+
+Run `pnpm test:dependency-cooldown` to check workspace settings, pnpm pins, standalone lockfiles, hook overrides, and native CI policy loading. A local mock registry also verifies that pnpm rejects a six-day-old version and resolves an eight-day-old version without downloading or executing package code. The checks run in the unit CI job.
+
+The native plugin example has its own workspace policy; do not use `--ignore-workspace` when installing it. Generated pnpm consumer fixtures also need an explicit cooldown and supported package-manager pin. These repository settings do not configure npm-based consumer tests or installations performed by SDK users.
+
 ## Dependency Release-Age Exceptions
 
 `minimumReleaseAgeExclude` entries are repository-local and are not inherited by consumers of published packages. Before adding an exception:

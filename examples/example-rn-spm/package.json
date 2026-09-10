@@ -1,5 +1,6 @@
 {
     "name": "posthog-react-native-spm-example",
+    "packageManager": "pnpm@11.7.0",
     "version": "0.0.1",
     "private": true,
     "scripts": {
