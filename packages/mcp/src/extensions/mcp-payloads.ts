@@ -39,6 +39,8 @@ const URL_PATTERN_ONCE = new RegExp(URL_PATTERN.source, 'i')
 const URL_AUTHORITY_SEARCH = /[a-z][a-z0-9+.-]{0,63}:\/\//i
 /** The same, anchored: does this match *open* with an authority? */
 const URL_AUTHORITY_PATTERN = new RegExp(`^${URL_AUTHORITY_SEARCH.source}`, 'i')
+/** A run of scheme-shaped words, each closed by a colon — `URL:`, `a:b:`. Nothing else counts as prose. */
+const PROSE_PREFIX_PATTERN = /^(?:[a-z][a-z0-9+.-]{0,63}:)+$/i
 // The terminal class above also absorbs the prose punctuation that follows a URL
 // in a sentence, `'` included now that a URL can contain one. See
 // `splitTrailingPunctuation`.
@@ -230,8 +232,14 @@ function sanitizeUrl(value: string, mode: UrlSanitizeMode): string {
   // is absorbed by the authority-less pattern, which would then read the whole
   // run as scheme `URL` with the address as its path — and never see the
   // userinfo. The address starts where the authority does.
+  //
+  // Only a run of scheme-shaped words counts as that prefix. Anything else in
+  // front of the authority (`?`, `/`, `=`, `+`) means this is an outer URI that
+  // merely carries a URL — `file:/guide?password=…&url=https://…` — and handing
+  // its query back verbatim as "prose" would leak the credential. Parsed whole,
+  // the query pass redacts it and the nested pass handles the inner address.
   const authority = URL_AUTHORITY_SEARCH.exec(value)
-  if (authority && authority.index > 0) {
+  if (authority && authority.index > 0 && PROSE_PREFIX_PATTERN.test(value.slice(0, authority.index))) {
     return value.slice(0, authority.index) + sanitizeUrl(value.slice(authority.index), mode)
   }
 

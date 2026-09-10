@@ -188,6 +188,15 @@ describe('URL credential redaction', () => {
     // address is taken to start where the authority does.
     ['Failed URL:https://fakeuser:fakepass@example.com/doc', 'Failed URL:https://%5Bredacted%5D@example.com/doc'],
     ['URL:https://example.com/x?token=fakesecret', 'URL:https://example.com/x?token=%5Bredacted%5D'],
+    ['a:b:https://fakeuser:fakepass@example.com/doc', 'a:b:https://%5Bredacted%5D@example.com/doc'],
+    // Only scheme-shaped words count as that prose prefix. Everything below has
+    // a `?`, `=` or `+` before the authority, so it is an outer URI carrying a
+    // URL — parsed whole, which is what redacts its own credential.
+    [
+      'file:/guide?password=fakepass&url=https://example.com',
+      'file:///guide?password=%5Bredacted%5D&url=https%3A%2F%2Fexample.com',
+    ],
+    ['resource:g?token=fakesecret+https://fakeuser:fakepass@b', 'resource:g?token=%5Bredacted%5D'],
     // No authority anywhere, so the whole run is one opaque-path URI.
     ['see:resource:guide?token=fakesecret', 'see:resource:guide?token=%5Bredacted%5D'],
     // Past the length bound too: it only caps a match with an authority.
