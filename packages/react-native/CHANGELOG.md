@@ -1,5 +1,15 @@
 # posthog-react-native
 
+## 4.68.5
+
+### Patch Changes
+
+- [#4891](https://github.com/PostHog/posthog-js/pull/4891) [`65fb811`](https://github.com/PostHog/posthog-js/commit/65fb8119017c5c4abe359d7630329567666a78f1) Thanks [@marandaneto](https://github.com/marandaneto)! - Safely share uncaught-error handlers across SDK instances and preserve React Native error handling when reporting fails.
+  (2026-09-10)
+
+- [#4890](https://github.com/PostHog/posthog-js/pull/4890) [`f79d11f`](https://github.com/PostHog/posthog-js/commit/f79d11f96ad351595c458bba3a7b88670c2be3b3) Thanks [@marandaneto](https://github.com/marandaneto)! - Handle nullish render errors safely, capture React component stacks, and support retrying from error boundary fallbacks.
+  (2026-09-10)
+
 ## 4.68.4
 
 ### Patch Changes
