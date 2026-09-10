@@ -12,7 +12,7 @@ import type { ResolvedTracesConfig, SpanRecord } from './types'
 import { nonNegativeCount } from './span'
 import { toOtlpKeyValueList } from '../utils/otlp-any-value'
 import { UNSERIALIZABLE_VALUE, sanitizeString } from '../utils/json-utils'
-import { buildOtlpResourceAttributes } from '../utils/otlp-resource'
+import { buildOtlpResourceAttributes, toOtlpResourceKeyValueList } from '../utils/otlp-resource'
 
 const SPAN_KIND_TO_OTLP: Record<SpanKind, number> = {
   internal: 1,
@@ -178,7 +178,7 @@ export function buildOtlpTracesPayload(
   return {
     resourceSpans: [
       {
-        resource: { attributes: toOtlpKeyValueList(resourceAttributes, logger) },
+        resource: { attributes: toOtlpResourceKeyValueList(resourceAttributes, logger) },
         scopeSpans: [
           {
             scope: { name: scopeName, version: scopeVersion },

@@ -2436,6 +2436,21 @@ describe('PostHogTraces', () => {
       expect(resource.find((attribute) => attribute.key === 'host.name')?.value).toEqual({ stringValue: 'abcd' })
     })
 
+    it('sends service.name when a resource attribute exhausts the encoder budget', async () => {
+      const traces = createTraces({
+        serviceName: 'checkout-api',
+        resourceAttributes: { payload: Array.from({ length: 10 }, () => Array(1000).fill(1)) } as never,
+      })
+      traces.startSpan('checkout').end()
+      await traces.flush()
+
+      const resource = sentPayloads()[0].resourceSpans[0].resource!.attributes
+      expect(resource).toContainEqual({ key: 'service.name', value: { stringValue: 'checkout-api' } })
+      expect(resource.map((attribute) => attribute.key)).toEqual(
+        expect.arrayContaining(['telemetry.sdk.name', 'telemetry.sdk.version'])
+      )
+    })
+
     it('does not throw on a Date-like object with no Date slot', () => {
       const traces = createTraces()
       const fakeDate = Object.create(Date.prototype)

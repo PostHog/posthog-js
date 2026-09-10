@@ -1,4 +1,7 @@
+import type { OtlpKeyValue } from '@posthog/types'
+import type { Logger } from '../types'
 import { assignUserAttributes } from './json-utils'
+import { toOtlpKeyValueList } from './otlp-any-value'
 
 /**
  * Shape the logs, metrics and traces resolved configs share for resource
@@ -38,6 +41,35 @@ export function buildOtlpResourceAttributes<TAttributeValue>(
     'telemetry.sdk.name': sdkName,
     'telemetry.sdk.version': sdkVersion,
   }
+}
+
+/** The keys `buildOtlpResourceAttributes` sets itself, in the order it sets them. */
+const SDK_RESOURCE_KEYS = [
+  'service.name',
+  'deployment.environment',
+  'service.version',
+  'telemetry.sdk.name',
+  'telemetry.sdk.version',
+]
+
+/**
+ * Encodes resource attributes for an OTLP envelope. The SDK-set keys are
+ * encoded on a traversal budget of their own, after the user's: a user
+ * attribute large enough to exhaust the shared budget would otherwise cost the
+ * resource its `service.name`, which ingestion attributes every record by.
+ *
+ * @internal Shared within this SDK; not part of the stable public API.
+ */
+export function toOtlpResourceKeyValueList(attributes: Record<string, unknown>, logger?: Logger): OtlpKeyValue[] {
+  const user = assignUserAttributes<Record<string, unknown>>({}, attributes)
+  const sdk: Record<string, unknown> = {}
+  for (const key of SDK_RESOURCE_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(user, key)) {
+      sdk[key] = user[key]
+      delete user[key]
+    }
+  }
+  return [...toOtlpKeyValueList(user, logger), ...toOtlpKeyValueList(sdk, logger)]
 }
 
 /**
