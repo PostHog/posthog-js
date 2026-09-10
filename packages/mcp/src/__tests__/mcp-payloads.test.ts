@@ -210,6 +210,16 @@ describe('URL credential redaction', () => {
       '[a](https://public.test/#intro)[b](https://user:password@private.test/doc)',
       '[a](https://public.test/#intro)[b](https://%5Bredacted%5D@private.test/doc)',
     ],
+    // The text in front of a fragment's fields is text too, so a whole address
+    // parked there is sanitized rather than preserved as a route.
+    [
+      'https://public.test/#https://fakeuser:fakepass@private.test/doc?page=1',
+      'https://public.test/#https://%5Bredacted%5D@private.test/doc?page=1',
+    ],
+    [
+      '[a](https://public.test/#intro)[b](https://fakeuser:fakepass@private.test/doc?page=1)',
+      '[a](https://public.test/#intro)[b](https://%5Bredacted%5D@private.test/doc?page=1)',
+    ],
     // The closing paren goes with the redacted trailing field, by the same rule
     // that drops a sentence's comma after one — it could be the credential's own
     // tail, and nothing here can tell markdown from prose.
@@ -262,6 +272,23 @@ describe('URL credential redaction', () => {
     ['a data URI past the length bound', `data:application/octet-stream;base64,${'AAAA%ZZ'.repeat(1_500)}`],
   ])('leaves %s byte-for-byte', (_label, value) => {
     expect(sanitizeCapturedValue(value)).toBe(value)
+  })
+
+  it.each([
+    // A fragment is itself a URL whose fragment is itself a URL: descending
+    // would recurse once per `#`. Depth is capped at two, so the third level is
+    // dropped whole.
+    ['a fragment nested once per `#`', `${'resource:x#'.repeat(10_000)}intro`, 'resource:x#resource:x#[redacted]'],
+    // Addresses run together: one pass over every piece, not one frame each.
+    [
+      'addresses run together without whitespace',
+      `${'https://a.test/x,'.repeat(10_000)}https://fakeuser:fakepass@b.test/doc`,
+      `${'https://a.test/x,'.repeat(10_000)}https://%5Bredacted%5D@b.test/doc`,
+    ],
+  ])('sanitizes %s without recursing per occurrence', (_label, value, expected) => {
+    const start = Date.now()
+    expect(sanitizeCapturedValue(value)).toBe(expected)
+    expect(Date.now() - start).toBeLessThan(1000)
   })
 
   it('splits trailing punctuation off long punctuation runs quickly', () => {

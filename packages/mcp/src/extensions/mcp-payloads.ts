@@ -47,8 +47,8 @@ const URL_FIELDS_START_PATTERN = /[?#]/
 // in a sentence, `'` included now that a URL can contain one. See
 // `splitTrailingPunctuation`.
 const URL_TRAILING_PUNCTUATION = ".,;:!?)]}'"
-// `;` is a legacy field separator; normalizing it to `&` lets one split cover both.
-const URL_FIELD_SEPARATOR_PATTERN = /;/g
+// `&` and its legacy alternative `;` both separate fields.
+const URL_FIELD_SEPARATOR_PATTERN = /[;&]/g
 const MAX_URL_LENGTH = 8192
 const MAX_URL_QUERY_FIELDS = 128
 // A query key is sensitive when any `-`/`_`/`.`-delimited segment names a
@@ -144,7 +144,7 @@ function isBase64DataUrl(value: string): boolean {
 }
 
 function exceedsUrlFieldLimit(fields: string): boolean {
-  return fields.split('&', MAX_URL_QUERY_FIELDS + 1).length > MAX_URL_QUERY_FIELDS
+  return fields.split(URL_FIELD_SEPARATOR_PATTERN, MAX_URL_QUERY_FIELDS + 1).length > MAX_URL_QUERY_FIELDS
 }
 
 /** How much of the sanitizer one call is allowed to apply. */
@@ -185,7 +185,7 @@ function sanitizeUrlFields(
   const sanitized = new URLSearchParams()
   let changed = false
   let lastFieldChanged = false
-  for (const [key, value] of new URLSearchParams(fields)) {
+  for (const [key, value] of new URLSearchParams(fields.replace(URL_FIELD_SEPARATOR_PATTERN, '&'))) {
     const sanitizedValue = sanitizeUrlFieldValue(key, value, allowNestedUrls)
     // Compared, not inferred from the key being sensitive: the PostHog-token
     // pass runs first, so a value can already read `[redacted]`, and calling
@@ -215,43 +215,62 @@ function splitTrailingPunctuation(value: string): { address: string; suffix: str
 }
 
 /**
- * Splits a fragment into the route a client-side router owns and the field list
- * after it. `#/callback?token=…` has to keep `/callback?` verbatim: parsed as
- * fields, the whole thing is a single key named `/callback?token` and no
- * credential ever matches.
+ * Splits a fragment into the text in front of its field list and the fields
+ * themselves. `#/callback?token=…` has to keep `/callback?` out of the fields:
+ * parsed as one, the whole thing is a single key named `/callback?token` and no
+ * credential ever matches. A fragment with no `=` is not a field list at all —
+ * it is all text.
  *
- * A fragment with no `=` is prose rather than a field list (`#section-2`) and
- * has no fields at all, so it stays byte-for-byte.
+ * That leading text only counts when it comes before every field. In
+ * `#k=v&next=https://x/?p=1` the `?` sits inside a field's value, and treating
+ * what precedes it as a route would hand the fields back unread.
+ *
+ * `fields` is returned verbatim so an untouched field list can be put back the
+ * way it arrived.
  */
-function splitFragmentFields(hash: string): { route: string; fields: string } {
-  if (!hash.includes('=')) {
-    return { route: '', fields: '' }
-  }
+function splitFragmentFields(hash: string): { text: string; fields: string } {
   const fragment = hash.slice(1)
-  // A route only counts when it comes before every field. `#/callback?k=v` is a
-  // route; in `#k=v&next=https://x/?p=1` the `?` sits inside a field's value, and
-  // treating what precedes it as a route would hand the fields back unread.
+  if (!fragment.includes('=')) {
+    return { text: fragment, fields: '' }
+  }
   const routeEnd = fragment.indexOf('?')
-  const route = routeEnd >= 0 && routeEnd < fragment.indexOf('=') ? fragment.slice(0, routeEnd + 1) : ''
-  return { route, fields: fragment.slice(route.length).replace(URL_FIELD_SEPARATOR_PATTERN, '&') }
+  const text = routeEnd >= 0 && routeEnd < fragment.indexOf('=') ? fragment.slice(0, routeEnd + 1) : ''
+  return { text, fields: fragment.slice(text.length) }
 }
 
 /**
- * Where a second address starts inside `value`, or -1. Only an authority ahead
- * of the value's own query or fragment counts; see {@link sanitizeUrl}.
+ * Sanitizes the part of a fragment that is text rather than fields — a plain
+ * `#intro`, or the route in front of a field list. It is text, and text can
+ * carry an address, so it gets the URL pass.
+ *
+ * Depth is capped the way a field value's is: at the nested level a URL-bearing
+ * text is dropped rather than descended into. That is also what stops
+ * `resource:x#resource:x#…` from recursing once per `#`.
  */
-function findEmbeddedAuthorityIndex(value: string): number {
+function sanitizeFragmentText(text: string, allowNestedUrls: boolean): string {
+  if (!allowNestedUrls) {
+    return URL_PATTERN_ONCE.test(text) ? REDACTED_VALUE : text
+  }
+  return sanitizeUrlsInString(text, { allowNestedUrls: false, stripPunctuation: true })
+}
+
+/**
+ * Every offset inside `value` where a further address starts. Only an authority
+ * ahead of the value's own query or fragment counts; see {@link sanitizeUrl}.
+ */
+function findEmbeddedAuthorityIndexes(value: string): number[] {
   const fields = URL_FIELDS_START_PATTERN.exec(value)
   const boundary = fields ? fields.index : value.length
+  const indexes: number[] = []
   for (const match of value.matchAll(URL_AUTHORITY_SEARCH_ALL)) {
     if (match.index >= boundary) {
       break
     }
     if (match.index > 0) {
-      return match.index
+      indexes.push(match.index)
     }
   }
-  return -1
+  return indexes
 }
 
 /**
@@ -259,8 +278,38 @@ function findEmbeddedAuthorityIndex(value: string): number {
  * the values of credential-named query and fragment fields. A retained value that
  * is itself a URL — a gateway's `?url=` passthrough — gets the same pass one
  * level deep.
+ *
+ * One match can hold more than one address: a prose word in front of it
+ * (`Failed URL:https://…`, `a:b:https://…`) or several run together
+ * (`…/doc,https://…`). Either way the later address begins inside what would
+ * parse as the earlier one's path, so its userinfo is never seen. The match is
+ * cut at every such offset and each piece sanitized on its own — one pass, no
+ * recursion, because by construction no piece can need cutting again: the cuts
+ * all precede the value's own `?`/`#`, so only the final piece has field data,
+ * and every authority inside that piece sits in it.
+ *
+ * Every piece but the last is sanitized without the punctuation split: it is
+ * followed by an address rather than by prose, so its last character is a
+ * separator, not a sentence's. (It matters — stripping the `:` off `URL:` would
+ * leave `URL`, which `new URL()` rejects, and the prose word would become
+ * `[redacted]`.)
  */
 function sanitizeUrl(value: string, mode: UrlSanitizeMode): string {
+  const embedded = findEmbeddedAuthorityIndexes(value)
+  if (embedded.length === 0) {
+    return sanitizeSingleUrl(value, mode)
+  }
+  let result = ''
+  let start = 0
+  for (const index of embedded) {
+    result += sanitizeSingleUrl(value.slice(start, index), { ...mode, stripPunctuation: false })
+    start = index
+  }
+  return result + sanitizeSingleUrl(value.slice(start), mode)
+}
+
+/** {@link sanitizeUrl} for a value already known to hold exactly one address. */
+function sanitizeSingleUrl(value: string, mode: UrlSanitizeMode): string {
   // The length bound caps the work an attacker-shaped address can force, so it
   // only applies to a match that has an authority. A long authority-less match
   // is usually a data URI; it is parsed like any other, which is linear in
@@ -268,28 +317,6 @@ function sanitizeUrl(value: string, mode: UrlSanitizeMode): string {
   // byte-for-byte when it holds nothing to redact.
   if (value.length > MAX_URL_LENGTH && URL_AUTHORITY_PATTERN.test(value)) {
     return REDACTED_VALUE
-  }
-
-  // One match can hold more than one address: a prose word in front of it
-  // (`Failed URL:https://…`, `a:b:https://…`) or two addresses run together
-  // (`…/doc,https://…`). Either way the second address begins inside what would
-  // parse as the first one's path, so its userinfo is never seen. Split the
-  // match where that address begins and sanitize each part on its own.
-  //
-  // Only before the value's own `?`/`#`: an authority past that belongs to a
-  // query or fragment value — a gateway's `?url=https://…` — where the field
-  // pass already redacts it or hands it to the nested pass.
-  //
-  // The left part is sanitized without the punctuation split: it is followed by
-  // an address rather than by prose, so its last character is a separator, not a
-  // sentence's. (It matters — stripping the `:` off `URL:` would leave `URL`,
-  // which `new URL()` rejects, and the prose word would become `[redacted]`.)
-  const embedded = findEmbeddedAuthorityIndex(value)
-  if (embedded > 0) {
-    return (
-      sanitizeUrl(value.slice(0, embedded), { ...mode, stripPunctuation: false }) +
-      sanitizeUrl(value.slice(embedded), mode)
-    )
   }
 
   const { address, suffix } = mode.stripPunctuation ? splitTrailingPunctuation(value) : { address: value, suffix: '' }
@@ -300,7 +327,7 @@ function sanitizeUrl(value: string, mode: UrlSanitizeMode): string {
     return REDACTED_VALUE + suffix
   }
 
-  const query = url.search.slice(1).replace(URL_FIELD_SEPARATOR_PATTERN, '&')
+  const query = url.search.slice(1)
   const hasFragment = url.hash !== ''
   const fragment = splitFragmentFields(url.hash)
   if (exceedsUrlFieldLimit(query) || exceedsUrlFieldLimit(fragment.fields)) {
@@ -318,21 +345,13 @@ function sanitizeUrl(value: string, mode: UrlSanitizeMode): string {
     url.search = sanitizedQuery.serialized
     changed = true
   }
+  const sanitizedText = sanitizeFragmentText(fragment.text, mode.allowNestedUrls)
   const sanitizedFragment = sanitizeUrlFields(fragment.fields, mode.allowNestedUrls)
-  if (sanitizedFragment.changed) {
-    url.hash = fragment.route + sanitizedFragment.serialized
+  if (sanitizedText !== fragment.text || sanitizedFragment.changed) {
+    // An untouched field list goes back verbatim rather than re-serialized: only
+    // the part that was actually rewritten should change encoding.
+    url.hash = sanitizedText + (sanitizedFragment.changed ? sanitizedFragment.serialized : fragment.fields)
     changed = true
-  } else if (hasFragment && fragment.fields === '') {
-    // A fragment with no `=` is not a field list — but it is still text, and text
-    // can carry an address. Two markdown links running together put the second
-    // one inside the first one's fragment (`#intro)[b](https://user:pw@host)`),
-    // where skipping it would publish the credentials.
-    const text = url.hash.slice(1)
-    const sanitizedText = sanitizeUrlsInString(text, { allowNestedUrls: false, stripPunctuation: true })
-    if (sanitizedText !== text) {
-      url.hash = sanitizedText
-      changed = true
-    }
   }
 
   // The punctuation split off the end may be the tail of the very credential
