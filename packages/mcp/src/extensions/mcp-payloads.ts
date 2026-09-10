@@ -41,6 +41,10 @@ const URL_AUTHORITY_SEARCH = /[a-z][a-z0-9+.-]{0,63}:\/\//i
 const URL_AUTHORITY_PATTERN = new RegExp(`^${URL_AUTHORITY_SEARCH.source}`, 'i')
 /** Every authority start in a value, in order. */
 const URL_AUTHORITY_SEARCH_ALL = new RegExp(URL_AUTHORITY_SEARCH.source, 'gi')
+/** Where a value's own fields begin; before this an `=` is a path character. */
+const URL_FIELDS_START_PATTERN = /[?#]/
+/** The characters that end the scan for what an authority is sitting in. */
+const URL_STRUCTURE_CHARACTERS = '=&;?#'
 // The terminal class above also absorbs the prose punctuation that follows a URL
 // in a sentence, `'` included now that a URL can contain one. See
 // `splitTrailingPunctuation`.
@@ -259,17 +263,40 @@ function sanitizeFragmentText(text: string, allowNestedUrls: boolean): string {
 }
 
 /**
- * Every offset inside `value` where an adjacent address starts; see
- * {@link sanitizeUrl}.
+ * Whether the authority at `index` is a field's value rather than an address of
+ * its own.
  *
- * An authority directly after `=` is in value position — a gateway's
- * `?url=https://…` — and stays with its field, which the field pass hands to the
- * nested pass. Anywhere else it is an address sitting next to another one.
+ * Only inside the fields region — before the first `?`/`#` an `=` is just a path
+ * character, and `…/redirect=https://user:pw@host` is two addresses, not a
+ * field. Within the fields, read backwards to the nearest structural character:
+ * an `=` means a field name came first, so everything up to the authority is
+ * that field's value. A gateway's `?url=https://…` is the plain case, and
+ * `?token=foo%20https://…` the one that matters — cutting there would strand the
+ * tail of a credential outside the redaction.
+ */
+function isFieldValuePosition(value: string, index: number, fieldsStart: number): boolean {
+  if (index < fieldsStart) {
+    return false
+  }
+  for (let cursor = index - 1; cursor >= fieldsStart; cursor--) {
+    if (URL_STRUCTURE_CHARACTERS.includes(value[cursor])) {
+      return value[cursor] === '='
+    }
+  }
+  return false
+}
+
+/**
+ * Every offset inside `value` where an adjacent address starts; see
+ * {@link sanitizeUrl}. An authority in value position stays with its field,
+ * which the field pass hands to the nested pass.
  */
 function findEmbeddedAuthorityIndexes(value: string): number[] {
+  const fields = URL_FIELDS_START_PATTERN.exec(value)
+  const fieldsStart = fields ? fields.index : value.length
   const indexes: number[] = []
   for (const match of value.matchAll(URL_AUTHORITY_SEARCH_ALL)) {
-    if (match.index > 0 && value[match.index - 1] !== '=') {
+    if (match.index > 0 && !isFieldValuePosition(value, match.index, fieldsStart)) {
       indexes.push(match.index)
     }
   }
@@ -289,9 +316,10 @@ function findEmbeddedAuthorityIndexes(value: string): number[] {
  * would parse as the earlier one's path, query key, or fragment — none of which
  * is examined for userinfo — so it is cut out and sanitized on its own.
  *
- * The exception is an authority directly after `=`: that one is a field's value,
- * and the field pass already gives it the nested pass. Cutting there would take
- * a gateway's `?url=https://…` out of the field it belongs to.
+ * The exception is an authority in value position — inside the fields, with a
+ * field name's `=` as the nearest structural character before it — which the
+ * field pass already gives the nested pass. Cutting there would take a gateway's
+ * `?url=https://…` out of the field it belongs to.
  *
  * One pass, no recursion: after the cuts, every authority left inside a piece is
  * either at its start or in value position, so no piece can need cutting again.

@@ -228,9 +228,21 @@ describe('URL credential redaction', () => {
       '[a](https://public.test/?download)[b](https://alice:fakepass@private.test/doc)',
       '[a](https://public.test/?download)[b](https://%5Bredacted%5D@private.test/doc)',
     ],
+    // Value position is decided by reading back to the nearest structural
+    // character. An `=` means a field name came first, so the address is part of
+    // that field's value and goes through the nested pass with it — cutting it
+    // out would leave the tail of the value stranded outside the redaction.
     [
       'https://example.com/?q=see,https://fakeuser:fakepass@x.test/doc',
-      'https://example.com/?q=see,https://%5Bredacted%5D@x.test/doc',
+      'https://example.com/?q=see%2Chttps%3A%2F%2F%255Bredacted%255D%40x.test%2Fdoc',
+    ],
+    ['https://host/x?token=foo%20https://secret.test/private', 'https://host/x?token=%5Bredacted%5D'],
+    // Value position exists only inside the fields. Before the first `?`/`#` an
+    // `=` is a path character, so these two are adjacent addresses, not fields.
+    ['https://host/a=b/c,https://fakeuser:fakepass@x.test/doc', 'https://host/a=b/c,https://%5Bredacted%5D@x.test/doc'],
+    [
+      'https://example.com/redirect=https://user:fakepass@private.example.com/doc',
+      'https://example.com/redirect=https://%5Bredacted%5D@private.example.com/doc',
     ],
     [
       'https://example.com/?https://fakeuser:fakepass@x.test/doc',
