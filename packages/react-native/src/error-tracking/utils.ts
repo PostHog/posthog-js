@@ -20,15 +20,54 @@ export function trackUnhandledRejections(tracker: ExceptionHook): void {
   }
 }
 
-export function trackUncaughtExceptions(tracker: ExceptionHook): void {
-  if (GLOBAL_OBJ?.ErrorUtils && GLOBAL_OBJ.ErrorUtils?.setGlobalHandler && GLOBAL_OBJ.ErrorUtils?.getGlobalHandler) {
-    const globalHandler = ErrorUtils.getGlobalHandler()
-    ErrorUtils.setGlobalHandler((error, isFatal) => {
-      tracker(error as Error, isFatal ?? false)
-      globalHandler?.(error, isFatal)
-    })
-  } else {
+const uncaughtExceptionSubscriptions = new WeakMap<
+  NonNullable<typeof GLOBAL_OBJ.ErrorUtils>,
+  { trackers: Set<ExceptionHook>; restore: () => void }
+>()
+
+export function trackUncaughtExceptions(tracker: ExceptionHook): () => void {
+  const errorUtils = GLOBAL_OBJ?.ErrorUtils
+  if (!errorUtils?.setGlobalHandler || !errorUtils.getGlobalHandler) {
     throw new Error('ErrorUtils globalHandlers are not defined')
+  }
+
+  let subscription = uncaughtExceptionSubscriptions.get(errorUtils)
+  if (!subscription) {
+    const previousHandler = errorUtils.getGlobalHandler()
+    const trackers = new Set<ExceptionHook>()
+    const handler = (error: Error, isFatal: boolean): void => {
+      try {
+        for (const callback of Array.from(trackers)) {
+          try {
+            callback(error, isFatal ?? false)
+          } catch {
+            // One reporter must not prevent other reporters or React Native from handling the error.
+          }
+        }
+      } finally {
+        previousHandler?.(error, isFatal)
+      }
+    }
+    subscription = {
+      trackers,
+      restore: () => {
+        // Another SDK may wrap our handler. Leave that chain intact and reuse our subscription set.
+        if (errorUtils.getGlobalHandler?.() === handler) {
+          errorUtils.setGlobalHandler?.(previousHandler)
+          uncaughtExceptionSubscriptions.delete(errorUtils)
+        }
+      },
+    }
+    errorUtils.setGlobalHandler(handler)
+    uncaughtExceptionSubscriptions.set(errorUtils, subscription)
+  }
+
+  const { trackers, restore } = subscription
+  trackers.add(tracker)
+  return () => {
+    if (trackers.delete(tracker) && trackers.size === 0) {
+      restore()
+    }
   }
 }
 
