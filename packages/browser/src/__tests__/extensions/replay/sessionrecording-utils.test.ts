@@ -263,6 +263,18 @@ describe(`SessionRecording utility functions`, () => {
             expect(serialized.length).toBe(12)
             expect(estimateSize(data)).toBe(14)
         })
+
+        it('estimates the size without stringifying when the data is too large to stringify', () => {
+            const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation(() => {
+                throw new RangeError('Invalid string length')
+            })
+
+            try {
+                expect(estimateSize({ text: 'hello' })).toBe(estimateCompressedEventSize({ text: 'hello' }))
+            } finally {
+                stringifySpy.mockRestore()
+            }
+        })
     })
 
     describe('splitBuffer', () => {

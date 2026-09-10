@@ -1844,7 +1844,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _drainCompressionQueueSync() {
         const queuedEvents = [...this._pendingCompressionEvents]
         queuedEvents.forEach((queuedEvent) => {
-            this._processQueuedCompressionEventSync(queuedEvent)
+            try {
+                this._processQueuedCompressionEventSync(queuedEvent)
+            } catch (e) {
+                // this drain runs on unload: a throw here would skip the remaining
+                // queued events and the final flush, truncating the recording
+                logger.error('could not drain queued compression event', e)
+            }
         })
     }
 

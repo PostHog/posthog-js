@@ -333,6 +333,46 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         expect(posthog.capture).toHaveBeenCalledTimes(1)
     })
 
+    it('ships the whole queue on unload when one event is too large to stringify', async () => {
+        const gzipCompress = vi.fn(async (input: string) => {
+            // hold the async path open so both events are still queued at unload
+            await new Promise(() => {})
+            return new Blob([gzipSync(strToU8(input))])
+        })
+
+        const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+            gzipSupported: true,
+            gzipCompress,
+        })
+
+        const originalStringify = JSON.stringify
+        const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation((value: any, ...rest: any[]) => {
+            const serialized = originalStringify(value, ...rest)
+            if (serialized && serialized.indexOf('oversized') !== -1) {
+                throw new RangeError('Invalid string length')
+            }
+            return serialized
+        })
+
+        try {
+            emit(createFullSnapshot({ content: 'oversized' }))
+            emit(createIncrementalSnapshot(456))
+
+            expect(() => lazyLoadedSessionRecording['_onBeforeUnload']()).not.toThrow()
+        } finally {
+            stringifySpy.mockRestore()
+        }
+
+        // the oversized event ships uncompressed, and it does not cost the event after it or the final flush
+        expect(posthog.capture).toHaveBeenCalledWith(
+            '$snapshot',
+            expect.objectContaining({
+                $snapshot_data: [expect.objectContaining({ type: 2 }), expect.objectContaining({ type: 3 })],
+            }),
+            expect.any(Object)
+        )
+    })
+
     it('ships a full snapshot under the new session id when the recorder restarts while idle', async () => {
         const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
             gzipSupported: true,

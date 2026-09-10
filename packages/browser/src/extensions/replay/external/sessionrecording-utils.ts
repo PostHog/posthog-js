@@ -32,8 +32,15 @@ function estimateStringBytes(data: string): number {
 }
 
 export function estimateSize(sizeable: unknown): number {
-    const stringifiedData = JSON.stringify(sizeable, circularReferenceReplacer())
-    return stringifiedData ? estimateStringBytes(stringifiedData) : 0
+    try {
+        const stringifiedData = JSON.stringify(sizeable, circularReferenceReplacer())
+        return stringifiedData ? estimateStringBytes(stringifiedData) : 0
+    } catch {
+        // an event whose JSON is longer than the engine's maximum string length makes
+        // JSON.stringify throw `RangeError: Invalid string length`. Size it without
+        // allocating that string, so one huge event cannot abort a flush.
+        return estimateCompressedEventSize(sizeable)
+    }
 }
 
 // Lightweight size estimate for compressed events without allocating a JSON string.
