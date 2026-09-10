@@ -86,7 +86,7 @@ Run `pnpm --version` and `pnpm config get minimumReleaseAge` inside the project 
 
 Run `pnpm test:dependency-cooldown` to check workspace settings, pnpm pins, standalone lockfiles, hook overrides, and native CI policy loading. A local mock registry also verifies that pnpm rejects a six-day-old version and resolves an eight-day-old version without downloading or executing package code. The checks run in the unit CI job.
 
-The native plugin example has its own policy for local workspace installs. Its CI installs intentionally use `--ignore-workspace` for standalone installation, so they pass `--config.minimum-release-age=10080` explicitly alongside the hoisted linker setting. Keep that explicit cooldown whenever bypassing the workspace policy. Generated pnpm consumer fixtures also need an explicit cooldown and supported package-manager pin. These repository settings do not configure npm-based consumer tests or installations performed by SDK users.
+The native plugin example has its own policy for local workspace installs. Its CI installs intentionally use `--ignore-workspace` for standalone installation, so they pass `--config.minimum-release-age=10080` explicitly alongside the hoisted linker setting. Keep that explicit cooldown whenever bypassing the workspace policy. Generated pnpm consumer fixtures also need an explicit cooldown and supported package-manager pin. The minimum-TypeScript fixture installs local tarballs for the browser SDK and its PostHog workspace dependencies, so testing the current source does not require cooldown exceptions for newly published SDK packages. These repository settings do not configure npm-based consumer tests or installations performed by SDK users.
 
 ## Dependency Release-Age Exceptions
 

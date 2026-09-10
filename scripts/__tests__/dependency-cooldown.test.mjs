@@ -110,7 +110,10 @@ for (const mode of [
                                 {
                                     name: packageName,
                                     version,
-                                    dist: { tarball: `${url}/${packageName}/-/${packageName}-${version}.tgz` },
+                                    dist: {
+                                        tarball: `${url}/${packageName}/-/${packageName}-${version}.tgz`,
+                                        integrity: 'sha512-' + Buffer.alloc(64).toString('base64'),
+                                    },
                                 },
                             ])
                         ),
@@ -126,9 +129,10 @@ for (const mode of [
             const registry = `http://127.0.0.1:${server.address().port}`
             const userConfig = path.join(directory, '.npmrc')
             await writeFile(userConfig, '')
-            const pnpmScript = process.env.npm_execpath
-            const command = pnpmScript?.includes('pnpm') ? process.execPath : 'pnpm'
-            const prefix = pnpmScript?.includes('pnpm') ? [pnpmScript] : []
+            const pnpmExecutable = process.env.npm_execpath || 'pnpm'
+            const isScript = path.isAbsolute(pnpmExecutable) && /\.(?:c|m)?js$/.test(pnpmExecutable)
+            const command = isScript ? process.execPath : pnpmExecutable
+            const prefix = isScript ? [pnpmExecutable] : []
 
             async function install(name, version) {
                 const cwd = path.join(directory, name)
