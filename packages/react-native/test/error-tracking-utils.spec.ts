@@ -99,8 +99,9 @@ describe('uncaught exception subscriptions', () => {
     expect(current).toBe(previous)
   })
 
-  it('does not overwrite another SDK handler on unsubscribe or wrap it again on resubscribe', () => {
-    const remove = trackUncaughtExceptions(vi.fn())
+  it('preserves another SDK handler and captures once through a fresh subscription', () => {
+    const oldTracker = vi.fn()
+    const remove = trackUncaughtExceptions(oldTracker)
     const wrapper = current
     const otherSdk = vi.fn((error: Error, isFatal?: boolean) => wrapper(error, isFatal))
     errorUtils.setGlobalHandler(otherSdk)
@@ -108,12 +109,36 @@ describe('uncaught exception subscriptions', () => {
     expect(current).toBe(otherSdk)
     const tracker = vi.fn()
     const removeNext = trackUncaughtExceptions(tracker)
-    expect(current).toBe(otherSdk)
+    expect(current).not.toBe(otherSdk)
     current(new Error('app failed'), true)
+    expect(oldTracker).not.toHaveBeenCalled()
     expect(tracker).toHaveBeenCalledTimes(1)
     expect(otherSdk).toHaveBeenCalledTimes(1)
     expect(previous).toHaveBeenCalledTimes(1)
     removeNext()
+    expect(current).toBe(otherSdk)
+  })
+
+  it('reinstalls capture after another SDK detaches an unsubscribed wrapper', () => {
+    const oldTracker = vi.fn()
+    const remove = trackUncaughtExceptions(oldTracker)
+    const wrapper = current
+    const otherSdk = vi.fn((error: Error, isFatal?: boolean) => wrapper(error, isFatal))
+    errorUtils.setGlobalHandler(otherSdk)
+    remove()
+    expect(current).toBe(otherSdk)
+    errorUtils.setGlobalHandler(previous)
+
+    const tracker = vi.fn()
+    const removeNext = trackUncaughtExceptions(tracker)
+    const error = new Error('app failed')
+    current(error, true)
+    expect(tracker.mock.calls).toEqual([[error, true]])
+    expect(oldTracker).not.toHaveBeenCalled()
+    expect(otherSdk).not.toHaveBeenCalled()
+    expect(previous.mock.calls).toEqual([[error, true]])
+    removeNext()
+    expect(current).toBe(previous)
   })
 
   it('removes only the shutting-down ErrorTracking instance', () => {

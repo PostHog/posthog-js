@@ -51,11 +51,11 @@ export function trackUncaughtExceptions(tracker: ExceptionHook): () => void {
     subscription = {
       trackers,
       restore: () => {
-        // Another SDK may wrap our handler. Leave that chain intact and reuse our subscription set.
+        // Leave another SDK's chain intact, but retire this empty subscription in case it is later detached.
         if (errorUtils.getGlobalHandler?.() === handler) {
           errorUtils.setGlobalHandler?.(previousHandler)
-          uncaughtExceptionSubscriptions.delete(errorUtils)
         }
+        uncaughtExceptionSubscriptions.delete(errorUtils)
       },
     }
     errorUtils.setGlobalHandler(handler)
