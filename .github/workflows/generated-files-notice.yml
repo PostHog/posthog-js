@@ -1,7 +1,6 @@
 name: Generated files notice
 
-permissions:
-  contents: read
+permissions: {}
 
 on:
   pull_request:
@@ -18,6 +17,8 @@ concurrency:
 
 jobs:
   warn-on-generated-file-edits:
+    permissions:
+      contents: read
     name: Warn on edits to auto-generated files
     runs-on: ubuntu-22.04
     # Bots that legitimately update these files (release bot, the

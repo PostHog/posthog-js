@@ -473,6 +473,7 @@ export class PostHog implements PostHogInterface {
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
     _isPageUnloading = false
+    private _isShutdown = false
     sessionRecording?: SessionRecording
     externalIntegrations?: ExternalIntegrations
     webPerformance = new DeprecatedWebPerformanceObserver()
@@ -1037,6 +1038,9 @@ export class PostHog implements PostHogInterface {
         // beacon path on a fully active page.
         addEventListener(window, 'pageshow', () => {
             this._isPageUnloading = false
+            if (!this._isShutdown) {
+                this._retryQueue?.resume()
+            }
         })
 
         // We want to avoid promises for IE11 compatibility, so we use callbacks here
@@ -3763,6 +3767,7 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        this._isShutdown = true
         this._getBrowserClientAdapter().dispose()
         this.sessionRecording?.dispose()
 

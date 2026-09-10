@@ -1,5 +1,34 @@
 # @posthog/types
 
+## 1.410.0
+
+### Minor Changes
+
+- [#4707](https://github.com/PostHog/posthog-js/pull/4707) [`b441eb2`](https://github.com/PostHog/posthog-js/commit/b441eb20dad495c414efd9bfe89b7b2e31d21b9d) Thanks [@posthog](https://github.com/apps/posthog)! - Segment integration: allow `segment` to accept an integration config with `filterProperties`, so customers can filter PostHog-generated enrichment properties before Segment sends an event to its destinations. Returning `null` or throwing leaves the original Segment event unenriched.
+  (2026-09-09)
+
+### Patch Changes
+
+- [#4876](https://github.com/PostHog/posthog-js/pull/4876) [`0c2a15f`](https://github.com/PostHog/posthog-js/commit/0c2a15f85ed04f91bc5337346752b9b2ed9703b3) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix dead-click detection for text selection and editable caret gestures when mouse release is delayed, while continuing to report inert text clicks.
+  (2026-09-09)
+
+- [#4733](https://github.com/PostHog/posthog-js/pull/4733) [`24fa541`](https://github.com/PostHog/posthog-js/commit/24fa541d9e9c2313a2e38383a83076e1473c9fe6) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix(web): avoid reporting clicks that select or unselect text as dead clicks
+  (2026-09-09)
+
+## 1.409.4
+
+### Patch Changes
+
+- [#4869](https://github.com/PostHog/posthog-js/pull/4869) [`891eefa`](https://github.com/PostHog/posthog-js/commit/891eefa06b73e2259845e625769161ae4a762fd7) Thanks [@robbie-c](https://github.com/robbie-c)! - Apply replay URL privacy settings to URL values in captured JSON-LD payloads.
+  (2026-09-09)
+
+## 1.409.3
+
+### Patch Changes
+
+- [#4864](https://github.com/PostHog/posthog-js/pull/4864) [`e8b2be1`](https://github.com/PostHog/posthog-js/commit/e8b2be1940539a3bf66fdffee978e9ee40a21d2d) Thanks [@robbie-c](https://github.com/robbie-c)! - Include the masked page URL with JSON-LD replay events.
+  (2026-09-09)
+
 ## 1.409.2
 
 ### Patch Changes

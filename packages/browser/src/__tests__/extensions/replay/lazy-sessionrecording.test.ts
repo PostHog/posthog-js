@@ -3830,6 +3830,53 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
+        it.each(['maskCapturedNetworkRequestFn', 'maskNetworkRequestFn'] as const)(
+            'applies replay URL privacy settings to JSON-LD payloads through %s',
+            async (maskOption) => {
+                const script = document.createElement('script')
+                script.type = 'application/ld+json'
+                script.textContent = JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': 'Product',
+                    category: 'https://example.com/category?gclid=secret&token=private#fragment',
+                    offers: [{ '@type': 'Offer', availability: '/unavailable' }],
+                })
+                document.body.appendChild(script)
+                posthog.config.session_recording.captureJsonLd = true
+                posthog.config.mask_personal_data_properties = true
+                posthog.config.disable_capture_url_hashes = true
+                const maskUrl = vi.fn((url: string) =>
+                    url === '/unavailable' ? undefined : url.replace('token=private', 'token=redacted')
+                )
+                if (maskOption === 'maskCapturedNetworkRequestFn') {
+                    posthog.config.session_recording.maskCapturedNetworkRequestFn = (request) => {
+                        const name = maskUrl(request.name)
+                        return name ? { ...request, name } : null
+                    }
+                } else {
+                    posthog.config.session_recording.maskNetworkRequestFn = (request) => {
+                        const url = maskUrl(request.url)
+                        return url ? { ...request, url } : null
+                    }
+                }
+                try {
+                    sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                    _emit(createMetaSnapshot())
+                    await Promise.resolve()
+
+                    expect(maskUrl).toHaveBeenCalledWith('https://example.com/category?gclid=<masked>&token=private')
+                    expect(_addCustomEvent).toHaveBeenCalledWith('$json_ld', {
+                        '@context': 'https://schema.org',
+                        '@type': 'Product',
+                        category: 'https://example.com/category?gclid=<masked>&token=redacted',
+                        offers: [{ '@type': 'Offer' }],
+                    })
+                } finally {
+                    script.remove()
+                }
+            }
+        )
+
         it('emits sanitized JSON-LD only while capture is enabled', async () => {
             const target = document.createElement('div')
             target.id = 'product-123'
@@ -3850,6 +3897,9 @@ describe('Lazy SessionRecording', () => {
                 sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 
                 expect(_addCustomEvent).not.toHaveBeenCalledWith('$json_ld', expect.anything())
+                _addCustomEvent.mockImplementation((tag: string, payload: unknown) => {
+                    _emit(createCustomSnapshot({}, payload as Record<string, unknown>, tag))
+                })
                 _emit(createMetaSnapshot())
                 await Promise.resolve()
 
@@ -3859,6 +3909,15 @@ describe('Lazy SessionRecording', () => {
                     '@id': 'product-123',
                     name: 'Camera',
                 })
+
+                _emit(createFullSnapshot())
+                _emit(createFullSnapshot())
+                await Promise.resolve()
+                const jsonLdEvents = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.filter(
+                    (event: eventWithTime) => event.type === EventType.Custom && event.data.tag === '$json_ld'
+                )
+                expect(jsonLdEvents).toHaveLength(1)
+                expect(jsonLdEvents[0].data.href).toBe('http://localhost/')
 
                 posthog.config.session_recording.captureJsonLd = false
                 document.body.appendChild(
@@ -3877,6 +3936,7 @@ describe('Lazy SessionRecording', () => {
                     expect.objectContaining({ name: 'After disable' })
                 )
             } finally {
+                _addCustomEvent.mockReset()
                 target.remove()
                 document.querySelectorAll('script[type="application/ld+json"]').forEach((element) => element.remove())
             }
@@ -4019,13 +4079,18 @@ describe('Lazy SessionRecording', () => {
                     expect(bufferedEvents[0]).toEqual(createMetaSnapshot({ data: { href: 'https://test.com/second' } }))
                     expect(jsonLdIndexes).toHaveLength(1)
                     expect(jsonLdIndexes[0]).toBeGreaterThan(fullSnapshotIndex)
-                    expect(bufferedEvents[jsonLdIndexes[0]]).toEqual(
-                        createCustomSnapshot(
+                    expect(bufferedEvents[jsonLdIndexes[0]]).toEqual({
+                        ...createCustomSnapshot(
                             {},
                             { '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' },
                             '$json_ld'
-                        )
-                    )
+                        ),
+                        data: {
+                            tag: '$json_ld',
+                            payload: { '@context': 'https://schema.org', '@type': 'Product', name: 'Camera' },
+                            href: 'http://localhost/',
+                        },
+                    })
                 } finally {
                     pendingTrigger.mockRestore()
                 }
@@ -4033,6 +4098,46 @@ describe('Lazy SessionRecording', () => {
                 _addCustomEvent.mockReset()
                 script.remove()
             }
+        })
+
+        it.each([
+            ['default', false, 'https://example.com/private?secret=<masked>#fragment'],
+            ['modern', true, 'https://example.com/public?secret=<masked>'],
+            ['legacy', true, 'https://example.com/public?secret=<masked>'],
+            ['reject', true, undefined],
+            ['throw', true, undefined],
+        ] as const)('applies %s URL masking to JSON-LD events', (masking, stripHash, expectedHref) => {
+            posthog.config.session_recording.captureJsonLd = true
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            posthog.config.disable_capture_url_hashes = stripHash
+            posthog.config.mask_personal_data_properties = true
+            posthog.config.custom_personal_data_properties = ['secret']
+            if (masking === 'modern') {
+                posthog.config.session_recording.maskCapturedNetworkRequestFn = (request) => ({
+                    ...request,
+                    name: request.name.replace('/private', '/public'),
+                })
+            } else if (masking === 'legacy') {
+                posthog.config.session_recording.maskNetworkRequestFn = (request) => ({
+                    ...request,
+                    url: request.url.replace('/private', '/public'),
+                })
+            } else if (masking === 'reject' || masking === 'throw') {
+                posthog.config.session_recording.maskCapturedNetworkRequestFn = () => {
+                    if (masking === 'throw') {
+                        throw new Error('masking failed')
+                    }
+                    return undefined
+                }
+            }
+            fakeNavigateTo('https://example.com/private?secret=hidden#fragment')
+            const payload = { '@context': 'https://schema.org', '@type': 'Product' }
+            _emit(createCustomSnapshot({}, payload, '$json_ld'))
+            const events = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data
+            const jsonLd = events.find((event: eventWithTime) => event.type === 5 && event.data.tag === '$json_ld')
+            expect(jsonLd).toBeDefined()
+            expect(jsonLd.data.href).toBe(expectedHref)
+            expect(jsonLd.data.payload).toEqual(payload)
         })
 
         it('does not emit JSON-LD by default', () => {

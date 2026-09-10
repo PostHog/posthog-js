@@ -24,14 +24,15 @@ concurrency:
     group: posthog-watcher-${{ github.repository }}-${{ inputs['issue-number'] || 'queue' }}
     cancel-in-progress: false
 
-permissions:
-    contents: write
-    issues: write
-    pull-requests: write
-    actions: read
+permissions: {}
 
 jobs:
     drain-queue:
+        permissions:
+            contents: write
+            issues: write
+            pull-requests: write
+            actions: read
         if: ${{ github.event_name != 'workflow_dispatch' || inputs['issue-number'] == '' }}
         runs-on: ubuntu-24.04
         steps:
@@ -51,7 +52,7 @@ jobs:
                   sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
             - name: Drain watcher queue
-              uses: PostHog/posthog-watcher-action@2a52bc42a5c60b415218da3d9705fd4c4fc0e76c
+              uses: PostHog/posthog-watcher-action@c14844661c889811bd633e0263320c33c100f4ee
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   mode: drain-queue
@@ -69,6 +70,11 @@ jobs:
                   pi-session-gist-token: ${{ secrets.PI_SESSION_GIST_TOKEN }}
 
     process-issue:
+        permissions:
+            contents: write
+            issues: write
+            pull-requests: write
+            actions: read
         if: ${{ github.event_name == 'workflow_dispatch' && inputs['issue-number'] != '' }}
         runs-on: ubuntu-24.04
         steps:
@@ -88,7 +94,7 @@ jobs:
                   sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
             - name: Process watcher issue
-              uses: PostHog/posthog-watcher-action@2a52bc42a5c60b415218da3d9705fd4c4fc0e76c
+              uses: PostHog/posthog-watcher-action@c14844661c889811bd633e0263320c33c100f4ee
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   issue-number: ${{ inputs['issue-number'] }}
