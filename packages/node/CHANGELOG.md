@@ -1,5 +1,28 @@
 # posthog-node
 
+## 5.52.0
+
+### Minor Changes
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add experimental distributed tracing to `posthog-node`: `startSpan`, `withSpan` and `getActiveSpan` record spans against a new `traces` client option. A service with tracing off still forwards an inbound `traceparent`, including from spans nested inside the one that received it, so a distributed trace is not severed. A `traceparent` may be passed as the one-element array `req.headersDistinct` gives. A `beforeSpanSend` hook sees every span before it is exported and may edit or drop it, and `maxAttributesPerSpan`, `maxEventsPerSpan`, `maxAttributeValueLength`, `maxLiveSpans` and `maxSpanAgeMs` bound what a single span and a single process may hold.
+  (2026-09-10)
+
+### Patch Changes
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Stop a throwing getter in `metrics.resourceAttributes` from breaking every metrics export — the key is recorded as `[Unserializable]` instead.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Honor `Retry-After` when the ingestion endpoint refuses a logs or metrics batch, instead of retrying on the SDK's own schedule alone. A refusal naming a longer wait extends the one being served, up to five minutes from when it started. Retry delays now carry jitter so clients refused together do not return together, and metrics backs off exponentially across consecutive failures rather than retrying on a fixed interval.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Logs and metrics now always send `service.name` and `telemetry.sdk.*`, even when a `resourceAttributes` value is too large to encode in full. Previously that value could crowd them out, and the records reached PostHog with no service attribution.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Stop sending logs and metrics batches over 10 MiB, or too large to serialize at all, instead of spending a request to discover the endpoint refuses them.
+  (2026-09-10)
+- Updated dependencies [[`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c)]:
+  - @posthog/core@1.53.0
+
 ## 5.51.8
 
 ### Patch Changes

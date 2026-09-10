@@ -1,5 +1,21 @@
 # posthog-js
 
+## 1.429.5
+
+### Patch Changes
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Cap the retry delay for log exports at 30 seconds, the ceiling the logs contract states. It previously doubled to 64 times the flush interval — 192s on web, 640s on React Native — so a log export now resumes within 30 seconds of a failing endpoint recovering, at the cost of more retry requests while that endpoint is down.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Keep backing off a failing log flush while new records arrive, instead of the next record resetting the retry to the flush interval.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Logs and metrics now always send `service.name` and `telemetry.sdk.*`, even when a `resourceAttributes` value is too large to encode in full. Previously that value could crowd them out, and the records reached PostHog with no service attribution.
+  (2026-09-10)
+- Updated dependencies [[`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c)]:
+  - @posthog/core@1.53.0
+  - @posthog/types@1.411.0
+
 ## 1.429.4
 
 ### Patch Changes

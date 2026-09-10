@@ -1,5 +1,24 @@
 # posthog-react-native
 
+## 4.68.9
+
+### Patch Changes
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Cap the retry delay for log exports at 30 seconds, the ceiling the logs contract states. It previously doubled to 64 times the flush interval — 192s on web, 640s on React Native — so a log export now resumes within 30 seconds of a failing endpoint recovering, at the cost of more retry requests while that endpoint is down.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Keep backing off a failing log flush while new records arrive, instead of the next record resetting the retry to the flush interval.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Honor `Retry-After` when the ingestion endpoint refuses a logs or metrics batch, instead of retrying on the SDK's own schedule alone. A refusal naming a longer wait extends the one being served, up to five minutes from when it started. Retry delays now carry jitter so clients refused together do not return together, and metrics backs off exponentially across consecutive failures rather than retrying on a fixed interval.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Stop sending logs and metrics batches over 10 MiB, or too large to serialize at all, instead of spending a request to discover the endpoint refuses them.
+  (2026-09-10)
+- Updated dependencies [[`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c)]:
+  - @posthog/core@1.53.0
+  - @posthog/types@1.411.0
+
 ## 4.68.8
 
 ### Patch Changes
