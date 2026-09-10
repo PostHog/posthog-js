@@ -21,11 +21,12 @@ on:
                 required: true
                 type: string
 
-permissions:
-    contents: read
+permissions: {}
 
 jobs:
     posthog-upgrade:
+        permissions:
+            contents: read
         name: Upgrade PostHog Package
         runs-on: ubuntu-latest
 

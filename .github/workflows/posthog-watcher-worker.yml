@@ -24,14 +24,15 @@ concurrency:
     group: posthog-watcher-${{ github.repository }}-${{ inputs['issue-number'] || 'queue' }}
     cancel-in-progress: false
 
-permissions:
-    contents: write
-    issues: write
-    pull-requests: write
-    actions: read
+permissions: {}
 
 jobs:
     drain-queue:
+        permissions:
+            contents: write
+            issues: write
+            pull-requests: write
+            actions: read
         if: ${{ github.event_name != 'workflow_dispatch' || inputs['issue-number'] == '' }}
         runs-on: ubuntu-24.04
         steps:
@@ -69,6 +70,11 @@ jobs:
                   pi-session-gist-token: ${{ secrets.PI_SESSION_GIST_TOKEN }}
 
     process-issue:
+        permissions:
+            contents: write
+            issues: write
+            pull-requests: write
+            actions: read
         if: ${{ github.event_name == 'workflow_dispatch' && inputs['issue-number'] != '' }}
         runs-on: ubuntu-24.04
         steps:
