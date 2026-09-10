@@ -16,7 +16,7 @@ const nameCache = {}
 // Shared across all entries so mangled property names are consistent between
 // module.slim.js and extension-bundles.js — see #3313.
 // Only property names (props) are shared; top-level variable names (vars) are
-// reset per-entry by the plugin below since each module has its own scope.
+// reset by finalTerser before minifying each chunk since each module has its own scope.
 
 // Rolldown renders chunks after renderChunk hooks, which would reformat @rollup/plugin-terser's output.
 // Minify the final chunk instead and feed the existing map into Terser so source maps stay chained.
