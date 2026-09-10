@@ -8,11 +8,10 @@ name: Public API label
 # This job must never check out or run PR code: it only reads the generated
 # reference JSON through the API and compares it with jq.
 # scripts/check-pull-request-target.mjs enforces this in CI.
+# No `paths` filter: it has to run when a PR reverts its API change to drop the label.
 on:
     pull_request_target:
         types: [opened, synchronize, reopened]
-        paths:
-            - 'packages/*/references/*-references-latest.json'
 
 concurrency:
     group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
@@ -39,6 +38,7 @@ jobs:
                   BASE_SHA: ${{ github.event.pull_request.base.sha }}
                   HEAD_SHA: ${{ github.event.pull_request.head.sha }}
                   IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+                  HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'public-api') }}
                   # Drop doc-only fields so JSDoc edits don't count. `example` stays:
                   # for type aliases it holds the type body, not a code sample.
                   API_SHAPE: >-
@@ -70,11 +70,16 @@ jobs:
 
                   if [[ ${#CHANGED[@]} -eq 0 ]]; then
                       echo "No public API change (doc-only or no reference changes)."
+                      if [[ "$HAS_LABEL" == 'true' ]]; then
+                          gh api -X DELETE "repos/$REPO/issues/$PR_NUMBER/labels/public-api" > /dev/null
+                      fi
                       exit 0
                   fi
 
                   echo "Public API changed in: ${CHANGED[*]}"
-                  gh api "repos/$REPO/issues/$PR_NUMBER/labels" -f 'labels[]=public-api' > /dev/null
+                  if [[ "$HAS_LABEL" != 'true' ]]; then
+                      gh api "repos/$REPO/issues/$PR_NUMBER/labels" -f 'labels[]=public-api' > /dev/null
+                  fi
 
                   MARKER='<!-- public-api-label -->'
                   if [[ "$IS_FORK" != 'true' ]] \
