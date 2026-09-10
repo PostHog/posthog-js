@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.51.7",
+  "version": "5.51.8",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -21,7 +21,7 @@
     "dev": "rslib build -w",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-    "generate-references": "pnpm build && pnpm exec api-extractor run --config ./api-extractor.jsonc --local && node scripts/generate-docs.mjs"
+    "generate-references": "pnpm exec api-extractor run --config ./api-extractor.jsonc --local && node scripts/generate-docs.mjs"
   },
   "engines": {
     "node": "^20.20.0 || >=22.22.0"

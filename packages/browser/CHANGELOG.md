@@ -1,5 +1,91 @@
 # posthog-js
 
+## 1.429.3
+
+### Patch Changes
+
+- [#4878](https://github.com/PostHog/posthog-js/pull/4878) [`14ba783`](https://github.com/PostHog/posthog-js/commit/14ba783ff8b469a8bd2fe40782c985326d89e672) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Allow null bootstrap values and treat null or empty distinct IDs as missing.
+  (2026-09-10)
+
+- [#4831](https://github.com/PostHog/posthog-js/pull/4831) [`9498567`](https://github.com/PostHog/posthog-js/commit/9498567cd71f13ed8e618185075d8c5628b93cc1) Thanks [@posthog](https://github.com/apps/posthog)! - Log a console message when advanced_disable_feature_flags stops surveys from displaying
+  (2026-09-10)
+- Updated dependencies [[`14ba783`](https://github.com/PostHog/posthog-js/commit/14ba783ff8b469a8bd2fe40782c985326d89e672), [`9498567`](https://github.com/PostHog/posthog-js/commit/9498567cd71f13ed8e618185075d8c5628b93cc1)]:
+  - @posthog/types@1.410.1
+
+## 1.429.2
+
+### Patch Changes
+
+- [#4880](https://github.com/PostHog/posthog-js/pull/4880) [`412c97c`](https://github.com/PostHog/posthog-js/commit/412c97ccf43b525e5a12606ba049eab14c440ed0) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix recording package exports, native ESM loading, and strict TypeScript 4.7 consumer compatibility.
+  (2026-09-10)
+- Updated dependencies [[`412c97c`](https://github.com/PostHog/posthog-js/commit/412c97ccf43b525e5a12606ba049eab14c440ed0)]:
+  - @posthog/core@1.52.1
+
+## 1.429.1
+
+### Patch Changes
+
+- [#4861](https://github.com/PostHog/posthog-js/pull/4861) [`61b92f9`](https://github.com/PostHog/posthog-js/commit/61b92f9f0c6ab739fb4e196127afa89f0f9c683d) Thanks [@pauldambra](https://github.com/pauldambra)! - Disable browser autofill on input and textarea fields during session replay.
+  (2026-09-09)
+
+## 1.429.0
+
+### Minor Changes
+
+- [#4707](https://github.com/PostHog/posthog-js/pull/4707) [`b441eb2`](https://github.com/PostHog/posthog-js/commit/b441eb20dad495c414efd9bfe89b7b2e31d21b9d) Thanks [@posthog](https://github.com/apps/posthog)! - Segment integration: allow `segment` to accept an integration config with `filterProperties`, so customers can filter PostHog-generated enrichment properties before Segment sends an event to its destinations. Returning `null` or throwing leaves the original Segment event unenriched.
+  (2026-09-09)
+
+### Patch Changes
+
+- [#4876](https://github.com/PostHog/posthog-js/pull/4876) [`0c2a15f`](https://github.com/PostHog/posthog-js/commit/0c2a15f85ed04f91bc5337346752b9b2ed9703b3) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix dead-click detection for text selection and editable caret gestures when mouse release is delayed, while continuing to report inert text clicks.
+  (2026-09-09)
+
+- [#4733](https://github.com/PostHog/posthog-js/pull/4733) [`24fa541`](https://github.com/PostHog/posthog-js/commit/24fa541d9e9c2313a2e38383a83076e1473c9fe6) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - fix(web): avoid reporting clicks that select or unselect text as dead clicks
+  (2026-09-09)
+
+- [#4882](https://github.com/PostHog/posthog-js/pull/4882) [`4bd37b7`](https://github.com/PostHog/posthog-js/commit/4bd37b77f265898f288f88d11374d99c3149e630) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Fix TypeScript compatibility between public replay events and the replay player.
+  (2026-09-09)
+
+- [#4833](https://github.com/PostHog/posthog-js/pull/4833) [`f1395b6`](https://github.com/PostHog/posthog-js/commit/f1395b6ce91af909ae0fdf095886f251f569a891) Thanks [@posthog](https://github.com/apps/posthog)! - Keep surveys hidden while capture is disabled and preserve answers if capture stops before submission.
+  (2026-09-09)
+- Updated dependencies [[`0c2a15f`](https://github.com/PostHog/posthog-js/commit/0c2a15f85ed04f91bc5337346752b9b2ed9703b3), [`24fa541`](https://github.com/PostHog/posthog-js/commit/24fa541d9e9c2313a2e38383a83076e1473c9fe6), [`b441eb2`](https://github.com/PostHog/posthog-js/commit/b441eb20dad495c414efd9bfe89b7b2e31d21b9d)]:
+  - @posthog/types@1.410.0
+
+## 1.428.11
+
+### Patch Changes
+
+- [#4725](https://github.com/PostHog/posthog-js/pull/4725) [`d5abece`](https://github.com/PostHog/posthog-js/commit/d5abece39d72e079a3233f26a1c54dbd569d53ee) Thanks [@bs1180](https://github.com/bs1180)! - fix(surveys): don't show the default "Start typing..." placeholder when the survey's placeholder text is empty
+  (2026-09-09)
+
+## 1.428.10
+
+### Patch Changes
+
+- [#4869](https://github.com/PostHog/posthog-js/pull/4869) [`891eefa`](https://github.com/PostHog/posthog-js/commit/891eefa06b73e2259845e625769161ae4a762fd7) Thanks [@robbie-c](https://github.com/robbie-c)! - Apply replay URL privacy settings to URL values in captured JSON-LD payloads.
+  (2026-09-09)
+- Updated dependencies [[`891eefa`](https://github.com/PostHog/posthog-js/commit/891eefa06b73e2259845e625769161ae4a762fd7), [`891eefa`](https://github.com/PostHog/posthog-js/commit/891eefa06b73e2259845e625769161ae4a762fd7)]:
+  - @posthog/types@1.409.4
+  - @posthog/core@1.52.0
+
+## 1.428.9
+
+### Patch Changes
+
+- [#4864](https://github.com/PostHog/posthog-js/pull/4864) [`e8b2be1`](https://github.com/PostHog/posthog-js/commit/e8b2be1940539a3bf66fdffee978e9ee40a21d2d) Thanks [@robbie-c](https://github.com/robbie-c)! - Include the masked page URL with JSON-LD replay events.
+  (2026-09-09)
+- Updated dependencies [[`e8b2be1`](https://github.com/PostHog/posthog-js/commit/e8b2be1940539a3bf66fdffee978e9ee40a21d2d)]:
+  - @posthog/types@1.409.3
+
+## 1.428.8
+
+### Patch Changes
+
+- [#4798](https://github.com/PostHog/posthog-js/pull/4798) [`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd) Thanks [@posthog](https://github.com/apps/posthog)! - fix(error-tracking): collapse repeated frame cycles in parsed stack traces to reduce grouping differences caused by recursion depth, while preserving distinct throw locations
+  (2026-09-09)
+- Updated dependencies [[`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd)]:
+  - @posthog/core@1.51.1
+
 ## 1.428.7
 
 ### Patch Changes

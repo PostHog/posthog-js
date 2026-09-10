@@ -1,5 +1,38 @@
 # @posthog/core
 
+## 1.52.1
+
+### Patch Changes
+
+- [#4880](https://github.com/PostHog/posthog-js/pull/4880) [`412c97c`](https://github.com/PostHog/posthog-js/commit/412c97ccf43b525e5a12606ba049eab14c440ed0) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix recording package exports, native ESM loading, and strict TypeScript 4.7 consumer compatibility.
+  (2026-09-10)
+
+## 1.52.0
+
+### Minor Changes
+
+- [#4869](https://github.com/PostHog/posthog-js/pull/4869) [`891eefa`](https://github.com/PostHog/posthog-js/commit/891eefa06b73e2259845e625769161ae4a762fd7) Thanks [@robbie-c](https://github.com/robbie-c)! - Add a shared isUrl helper for HTTP(S) URLs and explicit relative paths.
+  (2026-09-09)
+
+### Patch Changes
+
+- Updated dependencies [[`891eefa`](https://github.com/PostHog/posthog-js/commit/891eefa06b73e2259845e625769161ae4a762fd7)]:
+  - @posthog/types@1.409.4
+
+## 1.51.2
+
+### Patch Changes
+
+- [#4859](https://github.com/PostHog/posthog-js/pull/4859) [`c356c81`](https://github.com/PostHog/posthog-js/commit/c356c819e2dd632fad6db5fcea09050a565d3749) Thanks [@marandaneto](https://github.com/marandaneto)! - Include the root license and attribution notices in the published core package.
+  (2026-09-09)
+
+## 1.51.1
+
+### Patch Changes
+
+- [#4798](https://github.com/PostHog/posthog-js/pull/4798) [`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd) Thanks [@posthog](https://github.com/apps/posthog)! - fix(error-tracking): collapse repeated frame cycles in parsed stack traces to reduce grouping differences caused by recursion depth, while preserving distinct throw locations
+  (2026-09-09)
+
 ## 1.51.0
 
 ### Minor Changes

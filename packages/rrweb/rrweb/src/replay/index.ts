@@ -123,7 +123,7 @@ export class Replayer {
 
   public service: ReturnType<typeof createPlayerService>;
   public speedService: ReturnType<typeof createSpeedService>;
-  public get timer() {
+  public get timer(): Timer {
     return this.service.state.context.timer;
   }
 
@@ -484,12 +484,12 @@ export class Replayer {
     }
   }
 
-  public on(event: string, handler: Handler) {
+  public on(event: string, handler: Handler): this {
     this.emitter.on(event, handler);
     return this;
   }
 
-  public off(event: string, handler: Handler) {
+  public off(event: string, handler: Handler): this {
     this.emitter.off(event, handler);
     return this;
   }
@@ -517,7 +517,7 @@ export class Replayer {
     return timeout;
   }
 
-  public setConfig(config: Partial<playerConfig>) {
+  public setConfig(config: Partial<playerConfig>): void {
     Object.keys(config).forEach((key) => {
       const newConfigValue = config[key as keyof playerConfig];
       (this.config as Record<keyof playerConfig, typeof newConfigValue>)[
@@ -594,7 +594,7 @@ export class Replayer {
    * and cast event after the offset asynchronously with timer.
    * @param timeOffset - number
    */
-  public play(timeOffset = 0) {
+  public play(timeOffset = 0): void {
     if (this.seekRebuildInFlight) {
       // the superseded rebuild left the DOM with only part of
       // lastPlayedEvent's history, so a full rebuild is needed
@@ -612,7 +612,7 @@ export class Replayer {
     this.emitter.emit(ReplayerEvents.Start);
   }
 
-  public pause(timeOffset?: number) {
+  public pause(timeOffset?: number): void {
     if (timeOffset === undefined && this.service.state.matches('playing')) {
       this.service.send({ type: 'PAUSE' });
     }
@@ -626,7 +626,7 @@ export class Replayer {
     this.emitter.emit(ReplayerEvents.Pause);
   }
 
-  public resume(timeOffset = 0) {
+  public resume(timeOffset = 0): void {
     this.warn(
       `The 'resume' was deprecated in 1.0. Please use 'play' method which has the same interface.`,
     );
@@ -638,7 +638,7 @@ export class Replayer {
    * Totally destroy this replayer and please be careful that this operation is irreversible.
    * Memory occupation can be released by removing all references to this replayer.
    */
-  public destroy() {
+  public destroy(): void {
     // Make destroy() idempotent - return early if already destroyed
     if (!this.wrapper || !this.wrapper.parentNode) {
       return;
@@ -692,7 +692,7 @@ export class Replayer {
     this.emitter.emit(ReplayerEvents.Destroy);
   }
 
-  public startLive(baselineTime?: number) {
+  public startLive(baselineTime?: number): void {
     // cancel any chunked seek rebuild still in flight — its remaining
     // chunks would interleave stale seek-time events with live DOM writes
     this.applyGeneration++;
@@ -716,7 +716,7 @@ export class Replayer {
     this.service.send({ type: 'TO_LIVE', payload: { baselineTime } });
   }
 
-  public addEvent(rawEvent: eventWithTime | string) {
+  public addEvent(rawEvent: eventWithTime | string): void {
     const event = this.config.unpackFn
       ? this.config.unpackFn(rawEvent as string)
       : (rawEvent as eventWithTime);
@@ -734,12 +734,12 @@ export class Replayer {
     );
   }
 
-  public enableInteract() {
+  public enableInteract(): void {
     this.iframe.setAttribute('scrolling', 'auto');
     this.iframe.style.pointerEvents = 'auto';
   }
 
-  public disableInteract() {
+  public disableInteract(): void {
     this.iframe.setAttribute('scrolling', 'no');
     this.iframe.style.pointerEvents = 'none';
   }
@@ -748,7 +748,7 @@ export class Replayer {
    * Empties the replayer's cache and reclaims memory.
    * The replayer will use this cache to speed up the playback.
    */
-  public resetCache() {
+  public resetCache(): void {
     this.cache = createCache();
   }
 
@@ -2061,6 +2061,15 @@ export class Replayer {
       for (const attributeName in mutation.attributes) {
         if (typeof attributeName === 'string') {
           const value = mutation.attributes[attributeName];
+          // rebuild forces autocomplete="off" on inputs and textareas so the
+          // viewer's browser never offers autofill inside the replay; a
+          // recorded change to that attribute must not undo it
+          if (
+            attributeName === 'autocomplete' &&
+            (target.nodeName === 'INPUT' || target.nodeName === 'TEXTAREA')
+          ) {
+            continue;
+          }
           if (value === null) {
             (target as Element | RRElement).removeAttribute(attributeName);
             if (attributeName === 'open')

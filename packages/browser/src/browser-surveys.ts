@@ -71,6 +71,10 @@ class BrowserSurveysConfigSource implements SurveysConfigSource {
         return this._instance.consent.isOptedOut()
     }
 
+    isCapturing(): boolean {
+        return this._instance.is_capturing()
+    }
+
     getExtensions(): SurveysExtensionHost | undefined {
         const extensions = assignableWindow?.__PosthogExtensions__
         if (!extensions) {

@@ -3362,7 +3362,7 @@
           "releaseTag": "deprecated"
         },
         {
-          "description": "Will keep /flags running, but without evaluating any feature flags.\nUseful for when you need to load the config data associated with the flags endpoint\n(e.g. /flags?v=2&config=true) without evaluating any feature flags.  Most folks use this\nto save money on feature flag evaluation (by bootstrapping feature flags on the server side).",
+          "description": "Will keep /flags running, but without evaluating any feature flags.\nUseful for when you need to load the config data associated with the flags endpoint\n(e.g. /flags?v=2&config=true) without evaluating any feature flags.  Most folks use this\nto save money on feature flag evaluation (by bootstrapping feature flags on the server side).\n\nThis also stops surveys from displaying. PostHog creates an internal targeting flag for\nalmost every survey, and every flag evaluates to false while flags are disabled. If you use\nsurveys, set `advanced_only_evaluate_survey_feature_flags` instead, which evaluates survey\nflags only.",
           "type": "boolean",
           "name": "advanced_disable_feature_flags"
         },
@@ -3470,8 +3470,8 @@
           "name": "bootstrap"
         },
         {
-          "description": "The segment analytics object.",
-          "type": "SegmentAnalytics",
+          "description": "The Segment analytics object, or integration configuration.",
+          "type": "SegmentAnalytics | SegmentIntegrationConfig",
           "name": "segment"
         },
         {
