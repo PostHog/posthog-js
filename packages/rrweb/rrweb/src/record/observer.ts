@@ -10,6 +10,7 @@ import type { FontFaceSet } from 'css-font-loading-module';
 import {
   throttle,
   on,
+  callAllSafely,
   hookSetter,
   getWindowScroll,
   getWindowHeight,
@@ -409,7 +410,7 @@ function initViewportResizeObserver(
 export function findAndRemoveIframeBuffer(
   iframeEl: HTMLIFrameElement,
   knownDocs?: Set<Document>,
-) {
+): void {
   for (let i = mutationBuffers.length - 1; i >= 0; i--) {
     const buf = mutationBuffers[i];
     if (!buf) continue;
@@ -424,7 +425,7 @@ export function findAndRemoveIframeBuffer(
   }
 }
 
-export const INPUT_TAGS = ['INPUT', 'TEXTAREA', 'SELECT'];
+export const INPUT_TAGS: string[] = ['INPUT', 'TEXTAREA', 'SELECT'];
 const lastInputValueMap: WeakMap<EventTarget, inputValue> = new WeakMap();
 function initInputObserver({
   inputCb,
@@ -578,7 +579,11 @@ function initInputObserver({
     );
   }
   return callbackWrapper(() => {
-    handlers.forEach((h) => h());
+    // the hook resetters below restore shared DOM prototype accessors through a
+    // bare `Object.defineProperty`, which throws if the page made one of them
+    // non-configurable after we hooked it. Run them all: a leaked hook keeps
+    // intercepting every `value`/`checked` write for the life of the page.
+    callAllSafely(handlers);
   });
 }
 
@@ -1603,21 +1608,31 @@ export function initObservers(
   const handlers: listenerHandler[] = [];
 
   const cleanup = callbackWrapper(() => {
-    // Clean up this observer's mutation buffer
-    if (mutationBuffer) {
-      mutationBuffer.destroy();
-      mutationBuffer.reset();
-      // Remove only this buffer from the global array
-      const index = mutationBuffers.indexOf(mutationBuffer);
-      if (index !== -1) {
-        mutationBuffers.splice(index, 1);
+    try {
+      // Clean up this observer's mutation buffer
+      if (mutationBuffer) {
+        try {
+          mutationBuffer.destroy();
+          mutationBuffer.reset();
+        } finally {
+          // Remove only this buffer from the global array. In a finally: a throw
+          // above would otherwise leave it pinned there, holding this document
+          // and its canvas manager alive.
+          const index = mutationBuffers.indexOf(mutationBuffer);
+          if (index !== -1) {
+            mutationBuffers.splice(index, 1);
+          }
+        }
       }
+      // Disconnect the shadow observers owned by this document (e.g. an iframe being
+      // torn down) without touching the rest of the page's shadow observation.
+      o.shadowDomManager.resetForDoc(o.doc);
+      mutationObserver?.disconnect();
+    } finally {
+      // Releasing this document's listeners and patched APIs is the whole point
+      // of teardown, so it runs even when a step above throws.
+      callAllSafely(handlers);
     }
-    // Disconnect the shadow observers owned by this document (e.g. an iframe being
-    // torn down) without touching the rest of the page's shadow observation.
-    o.shadowDomManager.resetForDoc(o.doc);
-    mutationObserver?.disconnect();
-    handlers.forEach((handler) => handler());
   });
 
   try {

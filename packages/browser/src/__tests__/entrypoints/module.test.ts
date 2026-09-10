@@ -135,10 +135,22 @@ describe('Web vitals bundles', () => {
     })
 })
 
+describe('Slim runtime bundles', () => {
+    it('does not retain request transport or compression code in the extension bundle', () => {
+        const map = JSON.parse(
+            fs.readFileSync(path.resolve(__dirname, '../../../dist/extension-bundles.js.map'), 'utf-8')
+        )
+        expect(map.sources.some((source: string) => /fflate|\/gzip\.mjs$|\/encode-utils\.mjs$/.test(source))).toBe(
+            false
+        )
+        expect(map.names).not.toContain('AVAILABLE_TRANSPORTS')
+    })
+})
+
 describe('Slim module declarations', () => {
     it('share nominal types between extension bundles and both slim entrypoints', () => {
-        expect(extensionBundlesDts).toContain("from './module.slim'")
-        expect(moduleSlimDts).toContain("from './module.slim.no-external'")
+        expect(extensionBundlesDts).toMatch(/from ['"]\.\/module\.slim['"]/)
+        expect(moduleSlimDts).toMatch(/from ['"]\.\/module\.slim\.no-external['"]/)
         expect(moduleSlimDts).not.toContain('declare class PostHog')
 
         const fixtureDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-slim-types-'))
@@ -188,7 +200,18 @@ void extensionClasses
 })
 
 describe('Published entrypoint declarations', () => {
-    it('includes declarations for every source entrypoint', () => {
+    it('preserves the unbundled declarations previously emitted by the runtime build', () => {
+        const libDirectory = path.resolve(__dirname, '../../../lib/src')
+        const declarations = fs.readdirSync(libDirectory, { recursive: true }).filter((file) => file.endsWith('.d.ts'))
+        expect(declarations.length).toBeGreaterThan(0)
+        for (const declaration of declarations) {
+            expect(fs.readFileSync(path.resolve(__dirname, '../../../dist/src', declaration), 'utf-8')).toBe(
+                fs.readFileSync(path.join(libDirectory, declaration), 'utf-8')
+            )
+        }
+    })
+
+    it('emits exactly one public declaration per source entrypoint without shared chunks', () => {
         const distDirectory = path.resolve(__dirname, '../../../dist')
         const sourceDirectory = path.resolve(__dirname, '../../entrypoints')
         const declarations = fs
@@ -196,9 +219,12 @@ describe('Published entrypoint declarations', () => {
             .filter((file) => file.endsWith('.ts'))
             .map((file) => file.replace(/(?:\.(?:cjs|es|iife))?\.ts$/, '.d.ts'))
 
-        for (const declaration of declarations) {
-            expect(fs.existsSync(path.join(distDirectory, declaration))).toBe(true)
-        }
+        expect(
+            fs
+                .readdirSync(distDirectory)
+                .filter((file) => file.endsWith('.d.ts'))
+                .sort()
+        ).toEqual(declarations.sort())
     })
 
     it('resolves extension declarations from their public package paths', () => {
@@ -224,6 +250,20 @@ import DeadClicksAutocapture from 'posthog-js/dist/dead-clicks-autocapture'
 import initConversations from 'posthog-js/dist/conversations'
 import generateProductTours from 'posthog-js/dist/product-tours'
 import generateSurveys from 'posthog-js/dist/surveys'
+import type { Replayer, ReplayPlugin, eventWithTime as ReplayerEvent } from 'posthog-js/dist/rrweb'
+import type { EventType, eventWithTime } from 'posthog-js/dist/rrweb-types'
+
+declare const events: eventWithTime[]
+declare const ReplayerClass: typeof Replayer
+const plugin: ReplayPlugin = { handler(event: eventWithTime) { void event } }
+const replayer = new ReplayerClass(events, { plugins: [plugin] })
+replayer.addEvent(events[0])
+const replayEvent: ReplayerEvent = events[0]
+const publicEvent: eventWithTime = replayEvent
+const publicEventType: EventType = replayEvent.type
+const replayEventType: ReplayerEvent['type'] = publicEvent.type
+void publicEventType
+void replayEventType
 
 new DeadClicksAutocapture(posthog)
 initConversations({} as any, posthog)

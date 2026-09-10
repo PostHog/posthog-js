@@ -64,6 +64,24 @@ export function callSafely(fn: () => void): void {
   }
 }
 
+// Runs a list of cleanup handlers to completion. A handler can be missing (a
+// plugin observer that returned a non-function) or throw, and neither may stop
+// the rest from releasing their observers and listeners. Deliberately not
+// `callSafely` per handler: that rethrows anything but a SecurityError, which
+// is what used to escape teardown and abort the callers below.
+export function callAllSafely(fns: listenerHandler[]): void {
+  fns.forEach((fn) => {
+    if (typeof fn !== 'function') {
+      return;
+    }
+    try {
+      fn();
+    } catch (e) {
+      //
+    }
+  });
+}
+
 // https://github.com/rrweb-io/rrweb/pull/407
 const DEPARTED_MIRROR_ACCESS_WARNING =
   'Please stop import mirror directly. Instead of that,' +
@@ -112,7 +130,7 @@ export function throttle<T>(
 ) {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   let previous = 0;
-  return function (...args: T[]) {
+  return function (...args: T[]): void {
     const now = Date.now();
     if (!previous && options.leading === false) {
       previous = now;
@@ -141,7 +159,7 @@ export function hookSetter<T>(
   key: string | number | symbol,
   d: PropertyDescriptor,
   isRevoked?: boolean,
-  win = window,
+  win: Window & typeof globalThis = window,
 ): hookResetter {
   const original = win.Object.getOwnPropertyDescriptor(target, key);
   win.Object.defineProperty(
@@ -188,7 +206,7 @@ export function hookSetter<T>(
 }
 
 // guard against old third party libraries which redefine Date.now
-let nowTimestamp = Date.now;
+let nowTimestamp: () => number = Date.now;
 
 if (!(/*@__PURE__*/ /[1-9][0-9]{12}/.test(Date.now().toString()))) {
   // they have already redefined it! use a fallback
@@ -196,7 +214,7 @@ if (!(/*@__PURE__*/ /[1-9][0-9]{12}/.test(Date.now().toString()))) {
 }
 export { nowTimestamp };
 
-export function getWindowScroll(win: Window) {
+export function getWindowScroll(win: Window): { left: number; top: number } {
   const doc = win.document;
   return {
     left: doc.scrollingElement
@@ -336,7 +354,7 @@ export function legacy_isTouchEvent(
   return Boolean((event as TouchEvent).changedTouches);
 }
 
-export function polyfill(win = window) {
+export function polyfill(win: Window & typeof globalThis = window): void {
   if ('NodeList' in win && !win.NodeList.prototype.forEach) {
     win.NodeList.prototype.forEach = Array.prototype
       .forEach as unknown as NodeList['forEach'];
@@ -401,7 +419,7 @@ export function queueToResolveTrees(queue: addedNodeMutation[]): ResolveTree[] {
 export function iterateResolveTree(
   tree: ResolveTree,
   cb: (mutation: addedNodeMutation) => unknown,
-) {
+): void {
   cb(tree.value);
   /**
    * The resolve tree was designed to reflect the DOM layout,
@@ -493,7 +511,10 @@ export function getNestedRule(
   }
 }
 
-export function getPositionsAndIndex(nestedIndex: number[]) {
+export function getPositionsAndIndex(nestedIndex: number[]): {
+  positions: number[];
+  index: number | undefined;
+} {
   const positions = [...nestedIndex];
   const index = positions.pop();
   return { positions, index };
@@ -599,5 +620,9 @@ export function shadowHostInDom(n: Node): boolean {
 export function inDom(n: Node): boolean {
   const doc = n.ownerDocument;
   if (!doc) return false;
-  return dom.contains(doc, n) || shadowHostInDom(n);
+  if (dom.contains(doc, n)) return true;
+  // The common light-DOM path above stays unchanged. Read live connectivity
+  // rather than walking shadow hosts (or retrying containment for detached nodes).
+  const connected = dom.isConnected(n);
+  return typeof connected === 'boolean' ? connected : shadowHostInDom(n);
 }

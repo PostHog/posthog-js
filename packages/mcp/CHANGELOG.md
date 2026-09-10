@@ -1,5 +1,22 @@
 # @posthog/mcp
 
+## 0.14.1
+
+### Patch Changes
+
+- [#4798](https://github.com/PostHog/posthog-js/pull/4798) [`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd) Thanks [@posthog](https://github.com/apps/posthog)! - fix(error-tracking): collapse repeated frame cycles in parsed stack traces to reduce grouping differences caused by recursion depth, while preserving distinct throw locations
+  (2026-09-09)
+- Updated dependencies [[`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd)]:
+  - @posthog/core@1.51.1
+  - posthog-node@5.51.8
+
+## 0.14.0
+
+### Minor Changes
+
+- [#4829](https://github.com/PostHog/posthog-js/pull/4829) [`6724f10`](https://github.com/PostHog/posthog-js/commit/6724f10bef008642d1ccbd6c38d393dc39e7008c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Capture model identity from recognized client metadata before falling back to the injected `llm_model` argument.
+  (2026-09-08)
+
 ## 0.13.1
 
 ### Patch Changes

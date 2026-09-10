@@ -35,9 +35,9 @@ import './replay/styles/style.css';
 
 export type { recordOptions, ReplayPlugin } from './types';
 
-const { addCustomEvent } = record;
-const { freezePage } = record;
-const { takeFullSnapshot } = record;
+const addCustomEvent: typeof record.addCustomEvent = record.addCustomEvent;
+const freezePage: typeof record.freezePage = record.freezePage;
+const takeFullSnapshot: typeof record.takeFullSnapshot = record.takeFullSnapshot;
 
 export {
   record,

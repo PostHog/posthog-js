@@ -5,17 +5,18 @@
     "scripts": {
         "retest": "cross-env PUPPETEER_HEADLESS=true pnpm retest:headful",
         "retest:headful": "vitest run --exclude test/benchmark",
-        "build-and-test": "pnpm build && pnpm retest",
+        "build-and-test": "pnpm turbo run build && pnpm retest",
         "test:headless": "cross-env PUPPETEER_HEADLESS=true pnpm build-and-test",
         "test:headful": "cross-env PUPPETEER_HEADLESS=false pnpm build-and-test",
         "test": "pnpm test:headless",
-        "test:watch": "pnpm build && cross-env PUPPETEER_HEADLESS=true pnpm vitest --exclude test/benchmark",
+        "test:rrweb": "pnpm retest",
+        "test:watch": "pnpm turbo run build && cross-env PUPPETEER_HEADLESS=true pnpm vitest --exclude test/benchmark",
         "test:update": "pnpm test:headless --update",
         "retest:update": "cross-env PUPPETEER_HEADLESS=true pnpm retest --update",
         "dev": "vite build --watch",
-        "build": "pnpm turbo run prepublish",
-        "check-types": "tsc -noEmit",
-        "prepublish": "tsc -noEmit && vite build",
+        "build": "pnpm check-types && vite build && pnpm build:declarations",
+        "build:declarations": "rolldown -c rolldown.dts.config.mts",
+        "check-types": "tsc --noEmit",
         "lint": "oxlint src"
     },
     "type": "module",
@@ -38,7 +39,7 @@
                 "default": "./dist/rrweb.cjs"
             }
         },
-        "./dist/rrweb.css": "./dist/rrweb.css",
+        "./dist/rrweb.css": "./dist/style.css",
         "./dist/style.css": "./dist/style.css"
     },
     "files": [
