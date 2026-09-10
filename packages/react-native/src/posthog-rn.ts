@@ -48,6 +48,7 @@ import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isMacOS, isValidS
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativePlugin, OptionalReactNativePluginVersion } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
+import { getExceptionContext } from './error-tracking/exception-context'
 
 export { PostHogPersistedProperty }
 
@@ -1862,6 +1863,15 @@ export class PostHog extends PostHogCore {
    * })
    * ```
    *
+   * On iOS and Android, exceptions also include capture-time `$app_state` (active, background or
+   * inactive). When available, optional `expo-updates` (>= 0.25.0) adds `$expo_update_id`,
+   * `$expo_runtime_version`, `$expo_channel` and `$expo_is_embedded_launch` for enabled updates
+   * outside development mode. Optional `react-native-device-info` adds `$battery_level` (0–1),
+   * `$battery_charging` (including full) and `$low_power_mode`. Unknown values are omitted.
+   * These exception-only fields are separate from the static app metadata controlled by
+   * `customAppProperties`, including the existing `$app_version` and `$app_build`.
+   * Override these fields with `additionalProperties`, or remove them using `before_send`.
+   *
    * @param {Error} error The error to capture
    * @param {Object} [additionalProperties] Any additional properties to add to the error event
    * @returns {void}
@@ -1874,6 +1884,10 @@ export class PostHog extends PostHogCore {
     const resolvedHint: CoreErrorTracking.EventHint = hint ?? {
       mechanism: { handled: true, type: 'generic' },
       syntheticException: new Error('Synthetic Error'),
+    }
+
+    if (!this.isDisabled && !this.optedOut) {
+      additionalProperties = { ...getExceptionContext(), ...additionalProperties }
     }
 
     // Attach the rolling exception-steps buffer (no-op if the caller already provided their own).
