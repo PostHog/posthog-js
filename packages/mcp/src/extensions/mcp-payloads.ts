@@ -219,6 +219,27 @@ function splitTrailingPunctuation(value: string): { address: string; suffix: str
 }
 
 /**
+ * A fragment's tail, given how its head came out.
+ *
+ * A `?` inside a credential looks exactly like the one between a route and its
+ * fields. So when the head's last field was rewritten, everything after that `?`
+ * may be the rest of the value just replaced — `#password=prefix?rest` — and the
+ * tail goes whole rather than being read on its own terms. An empty tail has
+ * nothing to hide and stays empty. Either way it counts as a rewritten trailing
+ * field, so prose punctuation after the URL goes with it for the same reason.
+ */
+function sanitizeFragmentTail(
+  tail: string,
+  headLastFieldChanged: boolean,
+  allowNestedUrls: boolean
+): { value: string; lastFieldChanged: boolean } {
+  if (!headLastFieldChanged) {
+    return sanitizeFragmentPart(tail, allowNestedUrls)
+  }
+  return { value: tail === '' ? '' : REDACTED_VALUE, lastFieldChanged: true }
+}
+
+/**
  * Splits a fragment at its first `?`. `tail` is null when there is none.
  *
  * Nothing is assumed about either part. Shape alone cannot tell a router's route
@@ -382,7 +403,10 @@ function sanitizeSingleUrl(value: string, mode: UrlSanitizeMode): string {
     changed = true
   }
   const sanitizedHead = sanitizeFragmentPart(fragment.head, mode.allowNestedUrls)
-  const sanitizedTail = fragment.tail === null ? null : sanitizeFragmentPart(fragment.tail, mode.allowNestedUrls)
+  const sanitizedTail =
+    fragment.tail === null
+      ? null
+      : sanitizeFragmentTail(fragment.tail, sanitizedHead.lastFieldChanged, mode.allowNestedUrls)
   const sanitizedHash = sanitizedTail === null ? sanitizedHead.value : `${sanitizedHead.value}?${sanitizedTail.value}`
   if (sanitizedHash !== url.hash.slice(1)) {
     url.hash = sanitizedHash

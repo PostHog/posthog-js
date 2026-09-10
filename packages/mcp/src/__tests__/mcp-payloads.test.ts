@@ -116,6 +116,21 @@ describe('URL credential redaction', () => {
     // A fragment field list can be written with a leading slash, so `/` counts as
     // a segment separator in a key name. Re-serializing percent-encodes it.
     ['https://example.com/#/token=fakesecret', 'https://example.com/#%2Ftoken=%5Bredacted%5D'],
+    // A `?` inside a credential looks exactly like the one between a route and
+    // its fields, so when the head's last field was rewritten the tail is
+    // dropped whole rather than read on its own terms. `new URL()` leaves the
+    // brackets literal in a fragment.
+    ['https://example.com/#password=prefix?fakesecret', 'https://example.com/#password=%5Bredacted%5D?[redacted]'],
+    ['https://example.com/#password=prefix?token=x&page=1', 'https://example.com/#password=%5Bredacted%5D?[redacted]'],
+    // An empty tail has nothing to hide, so it stays empty rather than becoming a
+    // second `[redacted]`.
+    ['https://example.com/#password=fakepass?', 'https://example.com/#password=%5Bredacted%5D?'],
+    // Dropping the tail counts as rewriting the trailing field, so the sentence's
+    // comma goes with it — it could equally have been part of the credential.
+    [
+      'See https://example.com/#password=fakepass?rest, then retry.',
+      'See https://example.com/#password=%5Bredacted%5D?[redacted] then retry.',
+    ],
     // The head holds an `=` and is read as fields (`/docs/id` = `1`, benign); the
     // tail is its own field list. Reading the whole fragment as one would make it
     // a single key named `/docs/id` with the token buried in its value.
