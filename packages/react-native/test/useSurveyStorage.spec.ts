@@ -58,6 +58,7 @@ describe('useSurveyStorage', () => {
             : undefined
         ),
         setPersistedProperty: vi.fn(),
+        on: vi.fn(() => () => {}),
       } as unknown as PostHog
       const wrapper = ({ children }: { children: React.ReactNode }) =>
         React.createElement(PostHogContext.Provider, { value: { client: mockPostHog } }, children)

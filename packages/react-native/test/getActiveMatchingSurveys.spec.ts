@@ -291,6 +291,7 @@ describe('getActiveMatchingSurveys', () => {
         }),
       ]
 
+      mockActivatedSurveys.add('seen-survey-1')
       const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys)
 
       expect(result).toHaveLength(1)

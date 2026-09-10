@@ -4007,6 +4007,10 @@
           "name": "Surveys"
         },
         {
+          "type": "\"surveys_in_progress\"",
+          "name": "SurveysInProgress"
+        },
+        {
           "type": "\"surveys_seen\"",
           "name": "SurveysSeen"
         }
@@ -4643,6 +4647,10 @@
         {
           "type": "SurveySchedule",
           "name": "schedule"
+        },
+        {
+          "type": "boolean",
+          "name": "enable_partial_responses"
         }
       ],
       "path": "../core/src/types.ts"
@@ -4939,6 +4947,18 @@
           "name": "survey"
         },
         {
+          "type": "PostHog",
+          "name": "client"
+        },
+        {
+          "type": "SurveyProgress",
+          "name": "initialProgress"
+        },
+        {
+          "type": "(progress: SurveyProgress, completed: boolean) => boolean",
+          "name": "onProgressChange"
+        },
+        {
           "type": "string",
           "name": "surveyLanguage"
         },
@@ -4967,6 +4987,37 @@
       "properties": [],
       "path": "../core/src/types.ts",
       "example": "(typeof SurveyPosition)[keyof typeof SurveyPosition]"
+    },
+    {
+      "id": "SurveyProgress",
+      "name": "SurveyProgress",
+      "properties": [
+        {
+          "type": "string",
+          "name": "submissionId"
+        },
+        {
+          "type": "number",
+          "name": "questionIndex"
+        },
+        {
+          "type": "number[]",
+          "name": "questionOrder"
+        },
+        {
+          "type": "SurveyResponses",
+          "name": "responses"
+        },
+        {
+          "type": "Record<string, string>",
+          "name": "questionSnapshots"
+        },
+        {
+          "type": "string",
+          "name": "surveyLanguage"
+        }
+      ],
+      "path": "dist/surveys/survey-progress.d.ts"
     },
     {
       "id": "SurveyQuestion",
