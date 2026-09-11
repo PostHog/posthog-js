@@ -168,18 +168,20 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             config.errorTrackingConfig.exceptionSteps.maxBytes = maxBytes
         }
 
-        if let enabled = rageClickConfig["enabled"] as? Bool {
-            config.rageClickConfig.enabled = enabled
-        }
-        if let minimumTapCount = rageClickConfig["minimumTapCount"] as? Int {
-            config.rageClickConfig.minimumTapCount = minimumTapCount
-        }
-        if let thresholdPoints = rageClickConfig["thresholdPoints"] as? Double {
-            config.rageClickConfig.thresholdPoints = CGFloat(thresholdPoints)
-        }
-        if let timeoutInterval = rageClickConfig["timeoutInterval"] as? Double {
-            config.rageClickConfig.timeoutInterval = timeoutInterval
-        }
+        #if os(iOS) || targetEnvironment(macCatalyst)
+            if let enabled = rageClickConfig["enabled"] as? Bool {
+                config.rageClickConfig.enabled = enabled
+            }
+            if let minimumTapCount = rageClickConfig["minimumTapCount"] as? Int {
+                config.rageClickConfig.minimumTapCount = minimumTapCount
+            }
+            if let thresholdPoints = rageClickConfig["thresholdPoints"] as? Double {
+                config.rageClickConfig.thresholdPoints = CGFloat(thresholdPoints)
+            }
+            if let timeoutInterval = rageClickConfig["timeoutInterval"] as? Double {
+                config.rageClickConfig.timeoutInterval = timeoutInterval
+            }
+        #endif
 
         // React Native rethrows fatal JS errors natively (RCTFatalException / ExceptionsManager).
         // The JS layer already captured them, so drop the native duplicate.
