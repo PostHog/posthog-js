@@ -1,5 +1,6 @@
 import { execFileSync } from 'child_process'
 import fs from 'fs'
+import { createRequire } from 'module'
 import os from 'os'
 import path from 'path'
 import { pathToFileURL } from 'url'
@@ -196,6 +197,140 @@ void extensionClasses
         } finally {
             fs.rmSync(fixtureDirectory, { recursive: true })
         }
+    })
+})
+
+describe('Published subpath entry points', () => {
+    const packageRoot = path.resolve(__dirname, '../../..')
+    const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf-8'))
+    let consumerDirectory: string
+    let installedPackageRoot: string
+    let resolveAsConsumer: ReturnType<typeof createRequire>
+
+    beforeAll(() => {
+        consumerDirectory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-subpath-consumer-')))
+        installedPackageRoot = path.join(consumerDirectory, 'node_modules', 'posthog-js')
+        fs.mkdirSync(installedPackageRoot, { recursive: true })
+        const tarballPath = path.join(consumerDirectory, 'posthog-js.tgz')
+        // Skip prepack so this check does not strip source maps from the developer's build.
+        execFileSync('pnpm', ['--config.ignore-scripts=true', 'pack', '--out', tarballPath], {
+            cwd: packageRoot,
+            stdio: 'pipe',
+        })
+        execFileSync('tar', ['-xzf', tarballPath, '-C', installedPackageRoot, '--strip-components=1'])
+        resolveAsConsumer = createRequire(path.join(consumerDirectory, 'consumer.cjs'))
+    }, 60_000)
+
+    afterAll(() => {
+        if (consumerDirectory) {
+            fs.rmSync(consumerDirectory, { recursive: true, force: true })
+        }
+    })
+
+    it.each([
+        ['posthog-js/full', 'module.full'],
+        ['posthog-js/no-external', 'module.no-external'],
+        ['posthog-js/full/no-external', 'module.full.no-external'],
+    ])('%s ships a usable CommonJS client and an ESM entry for bundlers', (specifier, bundle) => {
+        expect(resolveAsConsumer.resolve(specifier)).toBe(path.join(installedPackageRoot, `dist/${bundle}.cjs`))
+        execFileSync(
+            process.execPath,
+            [
+                '--no-experimental-require-module',
+                '--eval',
+                `
+const assert = require('assert/strict')
+const { default: client, posthog, PostHog } = require(${JSON.stringify(specifier)})
+assert.equal(typeof client.init, 'function')
+assert.equal(typeof client.capture, 'function')
+assert.equal(client, posthog)
+assert.ok(client instanceof PostHog)
+`,
+            ],
+            { cwd: consumerDirectory, stdio: 'pipe' }
+        )
+
+        const inputs: string[] = JSON.parse(
+            execFileSync(
+                process.execPath,
+                [
+                    '--eval',
+                    `
+const { buildSync } = require(${JSON.stringify(require.resolve('esbuild'))})
+const { metafile } = buildSync({
+    stdin: { contents: "import posthog from '${specifier}'; console.log(posthog)", resolveDir: process.cwd() },
+    bundle: true,
+    platform: 'browser',
+    write: false,
+    metafile: true,
+})
+process.stdout.write(JSON.stringify(Object.keys(metafile.inputs)))
+`,
+                ],
+                { cwd: consumerDirectory, encoding: 'utf-8' }
+            )
+        )
+        const bundledFiles = inputs.map((file) => path.resolve(consumerDirectory, file))
+        expect(bundledFiles).toContain(path.join(installedPackageRoot, `dist/${bundle}.js`))
+        expect(bundledFiles).not.toContain(path.join(installedPackageRoot, `dist/${bundle}.cjs`))
+
+        const shimPath = resolveAsConsumer.resolve(`${specifier}/package.json`)
+        const shim = JSON.parse(fs.readFileSync(shimPath, 'utf-8'))
+        const resolveFromShim = (target: string) => path.resolve(path.dirname(shimPath), target)
+        expect(resolveFromShim(shim.module)).toBe(path.join(installedPackageRoot, `dist/${bundle}.js`))
+        // Declarations come from the package's own `types`, not the bundle's sibling .d.ts:
+        // PostHog has private members, so a second declaration file is a second, incompatible
+        // type — a client from here could not be passed to anything typed by `posthog-js`.
+        expect(resolveFromShim(shim.types)).toBe(path.join(installedPackageRoot, packageJson.types))
+    })
+
+    it.each([ts.ModuleResolutionKind.Node10, ts.ModuleResolutionKind.Bundler])(
+        'types every subpath client as the canonical PostHog with module resolution %s',
+        (moduleResolution) => {
+            const fixturePath = path.join(consumerDirectory, 'index.ts')
+            fs.writeFileSync(
+                fixturePath,
+                `
+import type { PostHog } from 'posthog-js'
+import posthogFull from 'posthog-js/full'
+import posthogNoExternal from 'posthog-js/no-external'
+import posthogFullNoExternal from 'posthog-js/full/no-external'
+
+const clients: PostHog[] = [posthogFull, posthogNoExternal, posthogFullNoExternal]
+void clients
+`
+            )
+
+            const options: ts.CompilerOptions = {
+                esModuleInterop: true,
+                module: ts.ModuleKind.ESNext,
+                moduleResolution,
+                noEmit: true,
+                skipLibCheck: true,
+                strict: true,
+                target: ts.ScriptTarget.ESNext,
+                types: [],
+            }
+            const program = ts.createProgram([fixturePath], options)
+            const diagnostics = ts.getPreEmitDiagnostics(program)
+            expect(
+                ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+                    getCanonicalFileName: (fileName) => fileName,
+                    getCurrentDirectory: () => consumerDirectory,
+                    getNewLine: () => '\n',
+                })
+            ).toBe('')
+        }
+    )
+
+    it.each([
+        'posthog-js',
+        'posthog-js/customizations',
+        'posthog-js/dist/module.full.no-external.js',
+        'posthog-js/dist/posthog-recorder',
+        'posthog-js/lib/src/constants',
+    ])('%s still resolves', (specifier) => {
+        expect(fs.existsSync(resolveAsConsumer.resolve(specifier))).toBe(true)
     })
 })
 
