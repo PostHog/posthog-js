@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.15.0
+
+### Minor Changes
+
+- [#4830](https://github.com/PostHog/posthog-js/pull/4830) [`39420d8`](https://github.com/PostHog/posthog-js/commit/39420d893556a64c2514b523dddf00b8044856a4) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Capture resource discovery and reads from instrumented MCP servers. URL credential redaction (userinfo, credential-named query and fragment parameters) now applies to every captured string, including existing `$mcp_tool_call` parameters, responses, and error messages, so URLs already flowing through tool-call data will show `%5Bredacted%5D` values after upgrading.
+  (2026-09-10)
+
 ## 0.14.1
 
 ### Patch Changes

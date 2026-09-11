@@ -164,22 +164,22 @@ export interface BootstrapConfig {
     /**
      * Distinct ID to use before the SDK has loaded persisted identity.
      */
-    distinctID?: string
+    distinctID?: string | null
 
     /**
      * Whether `distinctID` already identifies a known person profile.
      */
-    isIdentifiedID?: boolean
+    isIdentifiedID?: boolean | null
 
     /**
      * Feature flag values to use immediately until the SDK fetches fresh values.
      */
-    featureFlags?: Record<string, boolean | string>
+    featureFlags?: Record<string, boolean | string> | null
 
     /**
      * Feature flag payloads to use together with bootstrapped `featureFlags`.
      */
-    featureFlagPayloads?: Record<string, JsonType>
+    featureFlagPayloads?: Record<string, JsonType> | null
 
     /**
      * Optionally provide a sessionID, this is so that you can provide an existing sessionID here to continue a user's session across a domain or device. It MUST be:
@@ -188,7 +188,7 @@ export interface BootstrapConfig {
      * - the timestamp part must be <= the timestamp of the first event in the session
      * - the timestamp of the last event in the session must be < the timestamp part + 24 hours
      */
-    sessionID?: string
+    sessionID?: string | null
 }
 
 export interface ResetOptions {
@@ -296,7 +296,7 @@ export interface DeadClickCandidate {
     scrollDelayMs?: number
     // time between click and the most recent mutation
     mutationDelayMs?: number
-    // time between click and the most recent selection changed event
+    // delay to the closest selection changed event; pre-candidate delays are stored only within the suppression window
     selectionChangedDelayMs?: number
     // delay between the click and the nearest visibility change within the suppression window, on
     // either side — a tab going to or from hidden near a click (opening a new tab, or waking the
@@ -365,7 +365,12 @@ export type DeadClicksAutoCaptureConfig = {
     scroll_threshold_ms?: number
 
     /**
-     * We'll not consider a click to be a dead click, if it's followed by a selection change within `selection_change_threshold_ms` milliseconds
+     * We'll not consider a click to be a dead click if it selects/unselects text or moves a caret
+     * in editable content during its mouse gesture, regardless of how long the button is held.
+     * Selection changes outside a matching gesture suppress the click when they occur within
+     * `selection_change_threshold_ms` milliseconds immediately before or after it.
+     * When a closed shadow root hides whether a caret belongs to editable content, only the timed window applies.
+     * A value of 0 disables selection-based suppression.
      *
      * @default 100
      */
@@ -1936,6 +1941,11 @@ export interface PostHogConfig {
      * Useful for when you need to load the config data associated with the flags endpoint
      * (e.g. /flags?v=2&config=true) without evaluating any feature flags.  Most folks use this
      * to save money on feature flag evaluation (by bootstrapping feature flags on the server side).
+     *
+     * This also stops surveys from displaying. PostHog creates an internal targeting flag for
+     * almost every survey, and every flag evaluates to false while flags are disabled. If you use
+     * surveys, set `advanced_only_evaluate_survey_feature_flags` instead, which evaluates survey
+     * flags only.
      *
      * @default false
      */

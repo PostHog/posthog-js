@@ -153,3 +153,36 @@ export function toJsonSafeValue(value: unknown): unknown {
 
   return convert(value, 0)
 }
+
+/**
+ * Copies caller-supplied attributes onto `target`, own enumerable keys only.
+ *
+ * Read key by key rather than spread: a getter over a disposed resource or a
+ * revoked proxy throws on the read itself, before the encoder's guards see it.
+ */
+export function assignUserAttributes<T extends Record<string, any>>(
+  target: T,
+  source: Record<string, unknown> | undefined
+): T {
+  if (!source) {
+    return target
+  }
+  let keys: string[] = []
+  try {
+    keys = Object.keys(source)
+  } catch {
+    keys = []
+  }
+  for (const key of keys) {
+    let value: unknown
+    try {
+      value = source[key]
+    } catch {
+      value = UNSERIALIZABLE_VALUE
+    }
+    // defineProperty, not assignment: `attributes['__proto__'] = v` hits the
+    // prototype setter and the attribute vanishes.
+    Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
+  }
+  return target
+}

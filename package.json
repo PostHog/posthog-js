@@ -21,6 +21,8 @@
         "test": "turbo run lint test:unit test:built test:functional test:e2e test:rrweb //#test:rrweb-declarations",
         "test:unit": "turbo run test:unit test:built //#test:rrweb-declarations",
         "test:rrweb-declarations": "node --test scripts/rrweb-declarations.test.mjs",
+        "test:rrweb-consumers": "node --test scripts/rrweb-consumer-types.test.mjs",
+        "test:rrweb-package-exports": "pnpm turbo run build --filter=@posthog/rrweb-all --filter=rrdom-nodejs && node --test scripts/rrweb-package-exports.test.mjs",
         "test:built": "turbo test:built",
         "test:rrweb": "turbo test:rrweb",
         "test:build-graph": "node --test scripts/__tests__/build-graph.test.mjs",
