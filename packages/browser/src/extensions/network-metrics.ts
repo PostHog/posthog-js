@@ -151,6 +151,11 @@ const patchXHR = (instance: PostHog): (() => void) => {
  * Records a duration histogram for every `fetch` and `XMLHttpRequest`.
  * Observation only: the wrappers never change the arguments or the result,
  * and every failure inside them is caught and logged.
+ *
+ * Each transport is measured to the boundary its API exposes: a `fetch` promise
+ * settles when the response headers arrive, and `loadend` fires after the whole
+ * XHR response body. Aligning them would mean reading the fetch response body,
+ * which an observer must not do.
  */
 export const startNetworkMetrics = (instance: PostHog): (() => void) => {
     const restoreFetch = patchFetch(instance)

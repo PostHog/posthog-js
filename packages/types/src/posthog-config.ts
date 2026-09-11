@@ -1123,6 +1123,11 @@ export interface NetworkMetricsRequest {
 export interface NetworkMetricsResponse {
     /** The HTTP status code. `undefined` when the request failed before a response arrived. */
     status: number | undefined
+    /**
+     * How long the request took, in milliseconds. The end boundary follows the
+     * transport: a `fetch` is measured to its response headers, an
+     * `XMLHttpRequest` to the end of its response body.
+     */
     durationMs: number
 }
 
@@ -1210,6 +1215,8 @@ export interface BrowserMetricsConfig extends MetricsConfig {
     /**
      * Record the duration of every `fetch` and `XMLHttpRequest` as a histogram.
      * `true` uses the defaults. Requests to PostHog itself are not recorded.
+     * Each transport is measured to the boundary its API exposes: a `fetch` to
+     * its response headers, an `XMLHttpRequest` to the end of its response body.
      *
      * @default undefined
      */
