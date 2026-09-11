@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.69.0
+
+### Minor Changes
+
+- [#4899](https://github.com/PostHog/posthog-js/pull/4899) [`18ae6bb`](https://github.com/PostHog/posthog-js/commit/18ae6bba2c46f5e9ac2708ac7800f1c24774e628) Thanks [@marandaneto](https://github.com/marandaneto)! - Add optional Expo update metadata and app state to React Native JavaScript exceptions.
+  (2026-09-11)
+
+### Patch Changes
+
+- Updated dependencies [[`18ae6bb`](https://github.com/PostHog/posthog-js/commit/18ae6bba2c46f5e9ac2708ac7800f1c24774e628)]:
+  - @posthog/core@1.53.2
+
 ## 4.68.9
 
 ### Patch Changes

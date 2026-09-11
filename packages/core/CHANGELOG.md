@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.53.2
+
+### Patch Changes
+
+- [#4899](https://github.com/PostHog/posthog-js/pull/4899) [`18ae6bb`](https://github.com/PostHog/posthog-js/commit/18ae6bba2c46f5e9ac2708ac7800f1c24774e628) Thanks [@marandaneto](https://github.com/marandaneto)! - Share the trySafe utility through @posthog/core.
+  (2026-09-11)
+
 ## 1.53.1
 
 ### Patch Changes
