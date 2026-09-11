@@ -4,10 +4,19 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { CompatibleRequestHandlerExtra, MCPRequestLike, MCPServerLike } from '../types'
+import {
+  buildFeedbackEventProperties,
+  buildFeedbackIntent,
+  getFeedbackToolDescriptor,
+  handleFeedback,
+  parseFeedbackReport,
+  resolveCollectFeedbackOptions,
+  SEND_FEEDBACK_TOOL_NAME,
+} from './feedback'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import type { LoggerFn } from './logger'
-import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
+import { getReportMissingToolDescriptor, handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
   handleListToolsRequest,
@@ -98,8 +107,36 @@ async function handleToolCallRequest(
       extra,
       eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
-      parameterOwnership: getVirtualToolParameterOwnership(data, toolName),
+      parameterOwnership: getVirtualToolParameterOwnership(
+        data,
+        toolName,
+        getReportMissingToolDescriptor(toolName).inputSchema
+      ),
       execute: async () => handleReportMissing({ context }, data.logger),
+    })
+  }
+
+  const feedbackOptions = resolveCollectFeedbackOptions(data.options.collectFeedback)
+  const isFeedbackCandidate =
+    feedbackOptions !== undefined && toolName === (feedbackOptions.toolName ?? SEND_FEEDBACK_TOOL_NAME)
+
+  if (isFeedbackCandidate && (await isToolAdvertised(server, toolName, extra, data.logger)) === false) {
+    const report = parseFeedbackReport(request.params?.arguments, feedbackOptions)
+    return await captureToolCall({
+      server,
+      data,
+      request,
+      extra,
+      eventType: MCPAnalyticsEventType.mcpFeedback,
+      explicitContextIntent: buildFeedbackIntent(report),
+      omitCapturedParameters: true,
+      extraEventProperties: buildFeedbackEventProperties(report),
+      parameterOwnership: getVirtualToolParameterOwnership(
+        data,
+        toolName,
+        getFeedbackToolDescriptor(feedbackOptions).inputSchema
+      ),
+      execute: async () => handleFeedback(report, feedbackOptions, data.logger),
     })
   }
 
