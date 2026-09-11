@@ -1841,7 +1841,7 @@ export class PostHog extends PostHogCore {
    *
    * Exceptions also include capture-time `$app_state` (active, background, inactive or extension) on any
    * platform where React Native AppState provides a known value. On iOS and Android, optional
-   * `expo-updates` (>= 0.25.0) adds `$expo_update_id`, `$expo_runtime_version`, `$expo_channel`
+   * `expo-updates` (0.25.0 or newer) adds `$expo_update_id`, `$expo_runtime_version`, `$expo_channel`
    * and `$expo_is_embedded_launch` for enabled updates outside development mode. Unknown values
    * are omitted.
    * These exception-only fields are separate from the static app metadata controlled by
