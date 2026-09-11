@@ -11,7 +11,7 @@ import type {
 } from '../types'
 import { PostHogMCPAnalyticsProperty } from './constants'
 import { log, type LoggerFn } from './logger'
-import { sanitizeIntent, sanitizeIntentValue } from './mcp-payloads'
+import { sanitizeFreeText, sanitizeFreeTextValue } from './mcp-payloads'
 
 export const SEND_FEEDBACK_TOOL_NAME = 'send_feedback' as const
 
@@ -233,24 +233,24 @@ function truncateFeedbackText(value: string, maxLength: number): string {
 
 /**
  * Agent-narrated free text can contain a secret the LLM read aloud or personal
- * data it narrated, so it gets exactly the `$mcp_intent` pass (`sanitizeIntent`:
+ * data it narrated, so it gets exactly the `$mcp_intent` pass (`sanitizeFreeText`:
  * credentials → structured PII → URLs — the order is load-bearing, the URL
  * rewrite would percent-encode the `@` the email pattern anchors on), then a
  * length bound. The event-level pipeline does not process `event.properties`,
  * so this happens here.
  */
 function captureFreeText(value: string): string {
-  return truncateFeedbackText(sanitizeIntent(value), MAX_FEEDBACK_TEXT_LENGTH)
+  return truncateFeedbackText(sanitizeFreeText(value), MAX_FEEDBACK_TEXT_LENGTH)
 }
 
 /**
  * A declared extra is agent-supplied like the core free-text fields, so its
  * string leaves get the same intent-grade pass (with the key-based redaction
- * `sanitizeIntentValue` keeps for nested objects), then non-scalars are
+ * `sanitizeFreeTextValue` keeps for nested objects), then non-scalars are
  * JSON-stringified and everything is bounded.
  */
 function captureExtraValue(value: unknown): unknown {
-  const sanitized = sanitizeIntentValue(value)
+  const sanitized = sanitizeFreeTextValue(value)
   if (typeof sanitized === 'string') {
     return truncateFeedbackText(sanitized, MAX_FEEDBACK_TEXT_LENGTH)
   }
@@ -288,7 +288,7 @@ export function buildFeedbackEventProperties(report: FeedbackReport): JsonRecord
     // Nominally an identifier, but the schema can't stop an agent from writing
     // prose into it — so it gets the same intent-grade pass as the other free text.
     properties[PostHogMCPAnalyticsProperty.FeedbackTool] = truncateFeedbackText(
-      sanitizeIntent(report.toolName),
+      sanitizeFreeText(report.toolName),
       MAX_FEEDBACK_TOOL_NAME_LENGTH
     )
   }

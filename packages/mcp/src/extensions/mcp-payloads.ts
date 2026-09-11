@@ -508,8 +508,8 @@ function sanitizeString(value: string): string {
 }
 
 /**
- * Sanitizes the agent-narrated intent: structured PII on top of the passes every
- * captured string gets.
+ * Sanitizes agent-narrated free text (`$mcp_intent`, the `send_feedback`
+ * fields): structured PII on top of the passes every captured string gets.
  *
  * Every step of the order is load-bearing. The binary gate reads the value as it
  * arrived, because splicing `[redacted]` into a blob — a Luhn-valid run inside
@@ -519,7 +519,7 @@ function sanitizeString(value: string): string {
  * URL pass, because the URL rewrite percent-encodes the `@` that the email
  * pattern anchors on.
  */
-export function sanitizeIntent(value: string): string {
+export function sanitizeFreeText(value: string): string {
   if (isBinaryBlob(value)) {
     return BINARY_REDACTED_VALUE
   }
@@ -612,11 +612,11 @@ export function sanitizeCapturedValue(value: unknown): unknown {
 
 /**
  * {@link sanitizeCapturedValue} with the intent-grade string pass
- * ({@link sanitizeIntent}) on every string leaf, so nested agent-narrated
+ * ({@link sanitizeFreeText}) on every string leaf, so nested agent-narrated
  * values get structured-PII redaction in the load-bearing order too.
  */
-export function sanitizeIntentValue(value: unknown): unknown {
-  return sanitizeValueWith(value, sanitizeIntent)
+export function sanitizeFreeTextValue(value: unknown): unknown {
+  return sanitizeValueWith(value, sanitizeFreeText)
 }
 
 function sanitizeValueWith(value: unknown, sanitizeStringFn: (value: string) => string): unknown {
