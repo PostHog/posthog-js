@@ -1,6 +1,12 @@
 import * as ts from 'typescript'
 
-import type { SegmentAnalytics, SegmentPlugin, SegmentUser } from '../segment'
+import type {
+    SegmentAnalytics,
+    SegmentEnrichmentFilterFn,
+    SegmentIntegrationConfig,
+    SegmentPlugin,
+    SegmentUser,
+} from '../segment'
 
 type SegmentId = string | null | undefined
 
@@ -53,10 +59,17 @@ describe('SegmentAnalytics', () => {
             id: () => undefined,
         }
         const legacyUserId: string | undefined = legacyUser.id()
+        const filterProperties: SegmentEnrichmentFilterFn = (properties) => properties
+        const segmentConfig: SegmentIntegrationConfig = {
+            analytics: {} as AnalyticsNextSnippet,
+            filterProperties,
+        }
         const getLegacyRegisterResult = (analytics: SegmentAnalytics, integration: SegmentPlugin): Promise<void> =>
             analytics.register(integration)
 
         expect(legacyUserId).toBeUndefined()
+        expect(filterProperties({ property: 'value' })).toEqual({ property: 'value' })
+        expect(segmentConfig.filterProperties).toBe(filterProperties)
         expect(getLegacyRegisterResult).toEqual(expect.any(Function))
 
         const program = ts.createProgram([__filename], {

@@ -131,9 +131,8 @@ resource, tool results, and captured analytics. Browser rendering and
 app-to-host `postMessage` traffic are host-side concerns and are intentionally
 outside this server harness.
 
-The final informational line reports how many resource analytics events were
-observed. That count is not a compatibility assertion yet: automatic
-`resources/list` and `resources/read` capture is a separate SDK feature.
+The final line asserts that a `resources/list` carrying its listing and a
+`resources/read` carrying no response were both captured, on both SDK majors.
 
 ## Why it is built this way
 

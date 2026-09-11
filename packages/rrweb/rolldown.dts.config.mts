@@ -34,7 +34,7 @@ export default function declarations(
     plugins: [
       ...dts({
         emitDtsOnly: true,
-        // The generator follows each package's isolatedDeclarations opt-in.
+        generator: 'oxc',
         incremental: false,
       }),
       copyDeclarationsForCommonJs(),

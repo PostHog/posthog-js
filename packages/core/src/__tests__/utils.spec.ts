@@ -1,4 +1,12 @@
-import { assert, removeTrailingSlash, stripUrlHash, currentISOTime, currentTimestamp, raceWithTimeout } from '@/utils'
+import {
+  isUrl,
+  assert,
+  removeTrailingSlash,
+  stripUrlHash,
+  currentISOTime,
+  currentTimestamp,
+  raceWithTimeout,
+} from '@/utils'
 
 describe('utils', () => {
   describe('assert', () => {
@@ -9,6 +17,38 @@ describe('utils', () => {
     })
     it('should not throw on truthy value', () => {
       expect(() => assert('string', 'error')).not.toThrow('error')
+    })
+  })
+  describe('isUrl', () => {
+    it.each([
+      ['https://example.com/category?token=value#section', true],
+      ['HTTP://example.com/category', true],
+      [Object('https://example.com/category'), true],
+      [Object('Camera'), false],
+      ['//example.com/category', true],
+      ['/category?token=value', true],
+      ['./category', true],
+      ['../category', true],
+      ['  https://example.com/category  ', true],
+      ['/', true],
+      ['https://', true],
+      ['Camera', false],
+      ['Camera: Pro', false],
+      ['Books/Fiction', false],
+      ['Visit https://example.com', false],
+      ['mailto:hello@example.com', false],
+      ['#section', false],
+      ['?query=value', false],
+      ['', false],
+      ['   ', false],
+      [null, false],
+      [undefined, false],
+      [123, false],
+      [true, false],
+      [{ href: 'https://example.com' }, false],
+      [['https://example.com'], false],
+    ])('detects URL prefixes in %j: %s', (value, expected) => {
+      expect(isUrl(value)).toBe(expected)
     })
   })
   describe('removeTrailingSlash', () => {

@@ -423,6 +423,111 @@ function publishFailedToolEvent(
   }
 }
 
+type ResourceEventType = typeof MCPAnalyticsEventType.mcpResourcesList | typeof MCPAnalyticsEventType.mcpResourcesRead
+
+interface TraceRequestParams {
+  server: MCPServerLike
+  originalHandler: MCPRequestHandler
+  request: MCPRequestLike
+  extra: CompatibleRequestHandlerExtra | undefined
+  eventType: ResourceEventType
+  logger: LoggerFn
+}
+
+/** One resource request's outcome: either the handler threw, or it returned. */
+type ResourceOutcome = { error: unknown } | { result: unknown }
+
+/**
+ * Stamps a resource request's outcome onto its prepared event and publishes it.
+ *
+ * A listing's result is captured as the event response; a read's is not. What
+ * `resources/list` and `resources/templates/list` return is discovery metadata —
+ * names, uris, mime types, the next cursor — which answers "what did this client
+ * actually see?", while a read returns the resource body itself, which analytics
+ * has no business holding.
+ */
+function publishResourceEvent(
+  server: MCPServerLike,
+  preparedEvent: PreparedToolEvent | null,
+  startTime: Date,
+  params: TraceRequestParams,
+  outcome: ResourceOutcome
+): void {
+  if (!preparedEvent) {
+    return
+  }
+  const { event, requestAttribution } = preparedEvent
+  // Stamping is inside the `try` with the publish: `captureException` reads the
+  // thrown value's own `stack`, which an application error is free to define as
+  // a throwing getter. Outside, that would replace the resource error the caller
+  // is waiting on with ours.
+  try {
+    if ('error' in outcome) {
+      event.isError = true
+      event.error = captureException(outcome.error)
+    } else {
+      event.isError = false
+      if (params.eventType === MCPAnalyticsEventType.mcpResourcesList) {
+        event.response = outcome.result
+      }
+    }
+    event.duration = Date.now() - startTime.getTime()
+    captureEvent(server, event, params.logger, requestAttribution)
+  } catch (error) {
+    params.logger(`Warning: PostHog MCP analytics failed to publish ${params.request.method} analytics - ${error}`)
+  }
+}
+
+/** Builds the handler patch that captures one resource method, for either adapter. */
+export function traceResourceRequest(eventType: ResourceEventType, logger: LoggerFn): HandlerPatch {
+  return (server, originalHandler, request, extra) =>
+    captureResourceRequest({ server, originalHandler, request, extra, eventType, logger })
+}
+
+/** Captures a non-tool MCP request without changing its result or error semantics. */
+async function captureResourceRequest(params: TraceRequestParams): Promise<unknown> {
+  const { server, originalHandler, request, extra, eventType, logger } = params
+  const data = getServerTrackingData(server)
+  if (!data) {
+    logger(
+      'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using resources.'
+    )
+    return await originalHandler(request, extra)
+  }
+
+  const startTime = new Date()
+  let preparedEvent: PreparedToolEvent | null = null
+  try {
+    const sessionId = getSessionId(server, extra)
+    const sessionInfo = getSessionInfo(server, data, sessionId)
+    const event: McpEvent = {
+      sessionId,
+      eventType,
+      parameters: buildCapturedMcpParameters(request),
+      resourceName: eventType === MCPAnalyticsEventType.mcpResourcesRead ? request.params?.uri : undefined,
+      timestamp: startTime,
+    }
+    stampClientIdentity(event, request, extra, server)
+    stampTransportIdentity(event, extra)
+    const identity = await handleIdentify(server, data, sessionId, request, sessionInfo, extra)
+    await applyResolvedMetadata(event, data, request, extra)
+    preparedEvent = { event, requestAttribution: withIdentity(sessionInfo, identity) }
+  } catch (error) {
+    logger(`Warning: PostHog MCP analytics could not prepare ${request.method} analytics - ${error}`)
+  }
+
+  let result: unknown
+  try {
+    result = await originalHandler(request, extra)
+  } catch (error) {
+    publishResourceEvent(server, preparedEvent, startTime, params, { error })
+    throw error
+  }
+
+  publishResourceEvent(server, preparedEvent, startTime, params, { result })
+  return result
+}
+
 // --- tools/list -----------------------------------------------------------
 
 /**

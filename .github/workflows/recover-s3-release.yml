@@ -1,7 +1,6 @@
 name: 'Recover posthog-js S3 release'
 
-permissions:
-    contents: read
+permissions: {}
 
 on:
     workflow_call:
@@ -47,6 +46,8 @@ on:
 
 jobs:
     validate:
+        permissions:
+            contents: read
         name: Validate recovery inputs
         runs-on: ubuntu-latest
         outputs:
@@ -268,6 +269,11 @@ jobs:
         runs-on: ubuntu-latest
         permissions: {}
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - name: Notify Slack - S3 recovery approval needed
               continue-on-error: true
               env:
@@ -518,6 +524,11 @@ jobs:
             matrix:
                 region: ${{ fromJSON(needs.validate.outputs.upload-matrix) }}
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - name: Checkout current release tooling
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:

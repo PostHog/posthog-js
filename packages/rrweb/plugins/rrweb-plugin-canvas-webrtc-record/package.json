@@ -25,9 +25,9 @@
     ],
     "scripts": {
         "dev": "vite build --watch",
-        "build": "tsc -noEmit && vite build && pnpm build:declarations",
+        "build": "pnpm check-types && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
-        "check-types": "tsc -noEmit"
+        "check-types": "tsc --noEmit"
     },
     "repository": {
         "type": "git",
@@ -36,14 +36,14 @@
     "author": "justin@recordonce.com",
     "license": "MIT",
     "dependencies": {
+        "@types/node": "^16.18.126",
         "simple-peer-light": "^9.10.0"
     },
     "devDependencies": {
+        "@posthog-tooling/rrweb-build": "workspace:*",
         "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-types": "workspace:*",
-        "typescript": "catalog:",
-        "vite": "catalog:",
-        "vite-plugin-dts": "catalog:"
+        "typescript": "catalog:"
     },
     "peerDependencies": {
         "@posthog/rrweb": "workspace:*"

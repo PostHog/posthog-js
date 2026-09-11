@@ -17,11 +17,12 @@ on:
         description: Whether the package or an additional path is affected
         value: ${{ jobs.check.outputs.is-affected }}
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   check:
+    permissions:
+      contents: read
     runs-on: ubuntu-22.04
     outputs:
       is-affected: ${{ steps.is-affected.outputs.is-affected }}

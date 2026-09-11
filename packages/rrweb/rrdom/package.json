@@ -29,16 +29,15 @@
     },
     "scripts": {
         "dev": "vite build --watch",
-        "build": "tsc -noEmit && vite build && pnpm build:declarations",
+        "build": "pnpm check-types && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
-        "check-types": "tsc -noEmit",
+        "check-types": "tsc --noEmit",
         "test": "pnpm test:rrweb",
         "test:rrweb": "vitest run",
         "test:watch": "vitest",
         "lint": "oxlint src"
     },
     "devDependencies": {
-        "@posthog/rrweb-types": "workspace:*",
         "@types/jsdom": "^20.0.0",
         "jsdom": "^22.1.0",
         "puppeteer": "^23.11.1",
@@ -48,6 +47,7 @@
         "vitest": "^1.4.0"
     },
     "dependencies": {
-        "@posthog/rrweb-snapshot": "workspace:*"
+        "@posthog/rrweb-snapshot": "workspace:*",
+        "@posthog/rrweb-types": "workspace:*"
     }
 }

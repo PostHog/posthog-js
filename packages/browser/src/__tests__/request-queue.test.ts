@@ -82,8 +82,8 @@ describe('RequestQueue', () => {
                     {
                         url: '/e',
                         data: [
-                            { event: 'foo', offset: 3000 },
-                            { event: 'bar', offset: 1000 },
+                            { event: 'foo', timestamp: EPOCH - 3000 },
+                            { event: 'bar', timestamp: EPOCH - 1000 },
                         ],
                         transport: 'XHR',
                     },
@@ -91,17 +91,34 @@ describe('RequestQueue', () => {
                 [
                     {
                         url: '/identify',
-                        data: [{ event: '$identify', offset: 2000 }],
+                        data: [{ event: '$identify', timestamp: EPOCH - 2000 }],
                     },
                 ],
                 [
                     {
                         url: '/e',
-                        data: [{ event: 'zeta', offset: 0 }],
+                        data: [{ event: 'zeta', timestamp: EPOCH }],
                         batchKey: 'sessionRecording',
                     },
                 ],
             ])
+        })
+
+        it('preserves event timestamps and leaves timestamp-free recording payloads unchanged', () => {
+            const timestamp = new Date(EPOCH - 60_000)
+            const event = { event: 'backdated', timestamp }
+            const recording = { recording_payload: 'example' }
+            queue.enqueue({ url: '/e', data: event })
+            queue.enqueue({ url: '/s', data: recording })
+            queue.enable()
+
+            vi.runOnlyPendingTimers()
+
+            expect(sendRequest).toHaveBeenNthCalledWith(1, { url: '/e', data: [{ event: 'backdated', timestamp }] })
+            expect(sendRequest).toHaveBeenNthCalledWith(2, { url: '/s', data: [{ recording_payload: 'example' }] })
+            expect(event.timestamp).toBe(timestamp)
+            expect(event).not.toHaveProperty('offset')
+            expect(recording).not.toHaveProperty('offset')
         })
 
         it('handles unload', () => {

@@ -3,12 +3,12 @@
     "version": "0.0.27",
     "scripts": {
         "dev": "vite build --watch",
-        "build": "tsc -noEmit && vite build && pnpm build:declarations",
+        "build": "pnpm check-types && vite build && pnpm build:declarations",
         "build:declarations": "rolldown -c rolldown.dts.config.mts",
         "test": "pnpm test:rrweb",
         "test:rrweb": "vitest run",
         "test:watch": "vitest watch",
-        "check-types": "tsc -noEmit",
+        "check-types": "tsc --noEmit",
         "lint": "oxlint src"
     },
     "repository": {
@@ -17,19 +17,19 @@
     },
     "license": "MIT",
     "type": "module",
-    "main": "./dist/all.cjs",
-    "module": "./dist/all.js",
-    "unpkg": "./dist/all.umd.cjs",
+    "main": "./dist/rrweb-all.cjs",
+    "module": "./dist/rrweb-all.js",
+    "unpkg": "./dist/rrweb-all.umd.cjs",
     "typings": "dist/index.d.ts",
     "exports": {
         ".": {
             "import": {
                 "types": "./dist/index.d.ts",
-                "default": "./dist/all.js"
+                "default": "./dist/rrweb-all.js"
             },
             "require": {
                 "types": "./dist/index.d.cts",
-                "default": "./dist/all.cjs"
+                "default": "./dist/rrweb-all.cjs"
             }
         }
     },

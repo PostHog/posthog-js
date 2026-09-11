@@ -1,7 +1,7 @@
 import { QueuedRequestWithOptions, RequestQueueConfig } from './types'
 import { each } from '@posthog/browser-common/utils/general-utils'
 
-import { isArray, isUndefined, clampToRange } from '@posthog/core'
+import { isUndefined, clampToRange } from '@posthog/core'
 import { logger } from '@posthog/browser-common/utils/logger'
 
 export const DEFAULT_FLUSH_INTERVAL_MS = 3000
@@ -62,16 +62,7 @@ export class RequestQueue {
             if (this._queue.length > 0) {
                 const requests = this._formatQueue()
                 for (const key in requests) {
-                    const req = requests[key]
-                    const now = new Date().getTime()
-
-                    if (req.data && isArray(req.data)) {
-                        each(req.data, (data) => {
-                            data['offset'] = Math.abs(data['timestamp'] - now)
-                            delete data['timestamp']
-                        })
-                    }
-                    this._sendRequestSafely(req)
+                    this._sendRequestSafely(requests[key])
                 }
             }
         }, this._flushTimeoutMs)

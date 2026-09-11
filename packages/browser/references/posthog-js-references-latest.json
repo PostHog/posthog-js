@@ -3362,7 +3362,7 @@
           "releaseTag": "deprecated"
         },
         {
-          "description": "Will keep /flags running, but without evaluating any feature flags.\nUseful for when you need to load the config data associated with the flags endpoint\n(e.g. /flags?v=2&config=true) without evaluating any feature flags.  Most folks use this\nto save money on feature flag evaluation (by bootstrapping feature flags on the server side).",
+          "description": "Will keep /flags running, but without evaluating any feature flags.\nUseful for when you need to load the config data associated with the flags endpoint\n(e.g. /flags?v=2&config=true) without evaluating any feature flags.  Most folks use this\nto save money on feature flag evaluation (by bootstrapping feature flags on the server side).\n\nThis also stops surveys from displaying. PostHog creates an internal targeting flag for\nalmost every survey, and every flag evaluates to false while flags are disabled. If you use\nsurveys, set `advanced_only_evaluate_survey_feature_flags` instead, which evaluates survey\nflags only.",
           "type": "boolean",
           "name": "advanced_disable_feature_flags"
         },
@@ -3423,7 +3423,7 @@
           "name": "surveys_request_timeout_ms"
         },
         {
-          "description": "Controls how often feature flags are automatically refreshed in long-running sessions.\n\nBy default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side\nflag changes without requiring a page reload. This is useful for SPAs and long-running tabs.\n\n**Tradeoffs:**\n- **Shorter intervals**: Feature flag changes propagate faster, but increases network requests and server load.\n- **Longer intervals**: Reduces network traffic (better for mobile/battery), but flag changes take longer to propagate.\n- **Disabled (0 or any negative value)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.\n  Use this if you control flag updates manually or have infrequent flag changes.\n\nHidden pages skip scheduled refreshes and reload due flags when they become visible.\nThis option does not reload remote config.",
+          "description": "Controls how often feature flags are automatically refreshed in long-running sessions.\n\nThe default interval is 5 minutes (300000ms) to pick up server-side flag changes without\nrequiring a page reload. This is useful for SPAs and long-running tabs. An explicitly set\npositive interval stays fixed, even when the page gets no user interaction.\n\n**Each refresh is a billable feature flag request.** A page that stays open all day makes\nup to 288 requests per day on the default interval, and every open tab and every named\ninstance refreshes on its own timer, so they add up. Set this option to `0` to stop the\nbackground refreshes if that cost is not useful to you.\n\n**Tradeoffs:**\n- **Shorter intervals**: Feature flag changes propagate faster, but increases network requests, cost, and server load.\n- **Longer intervals**: Reduces network traffic (better for mobile/battery) and cost, but flag changes take longer to propagate.\n- **Disabled (0 or any negative value)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.\n  Use this if you control flag updates manually or have infrequent flag changes.\n\nHidden pages skip scheduled refreshes and reload due flags when they become visible.\n\nWhen this option is omitted, a visible page that gets no user interaction (such as a\ndashboard, a page being read, a video player, or a kiosk) doubles the interval after every\nrefresh, up to one hour. Automatic refreshes continue at that interval; they do not stop.\nThe next click, key press, wheel, touch, or return to visibility restores the five-minute\ndefault. Scrolling driven by a script, such as an auto-playing carousel, does not count as\nan interaction. Set this option explicitly to keep a fixed cadence, or to `0` to stop\nbackground refreshes completely.\n\nThis option does not reload remote config.",
           "type": "number",
           "name": "remote_config_refresh_interval_ms"
         },
@@ -3470,8 +3470,8 @@
           "name": "bootstrap"
         },
         {
-          "description": "The segment analytics object.",
-          "type": "SegmentAnalytics",
+          "description": "The Segment analytics object, or integration configuration.",
+          "type": "SegmentAnalytics | SegmentIntegrationConfig",
           "name": "segment"
         },
         {

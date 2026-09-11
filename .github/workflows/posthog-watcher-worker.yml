@@ -24,17 +24,23 @@ concurrency:
     group: posthog-watcher-${{ github.repository }}-${{ inputs['issue-number'] || 'queue' }}
     cancel-in-progress: false
 
-permissions:
-    contents: write
-    issues: write
-    pull-requests: write
-    actions: read
+permissions: {}
 
 jobs:
     drain-queue:
+        permissions:
+            contents: write
+            issues: write
+            pull-requests: write
+            actions: read
         if: ${{ github.event_name != 'workflow_dispatch' || inputs['issue-number'] == '' }}
         runs-on: ubuntu-24.04
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 0
@@ -69,9 +75,19 @@ jobs:
                   pi-session-gist-token: ${{ secrets.PI_SESSION_GIST_TOKEN }}
 
     process-issue:
+        permissions:
+            contents: write
+            issues: write
+            pull-requests: write
+            actions: read
         if: ${{ github.event_name == 'workflow_dispatch' && inputs['issue-number'] != '' }}
         runs-on: ubuntu-24.04
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 0

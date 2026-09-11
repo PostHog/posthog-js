@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Build and Development
 
-- `pnpm build` - Build the library (TypeScript compilation + Rolldown/Rollup bundling)
+- `pnpm build` - Build the library (TypeScript compilation + Rolldown bundling)
 - `pnpm dev` - Start development with file watching
 - `pnpm start` - Alias for `pnpm dev`; see [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup
 - `pnpm clean` - Remove build artifacts (lib/, dist/, react/dist/)
@@ -74,7 +74,7 @@ The `/src/extensions/` directory contains modular features:
 ### Build System
 
 - **TypeScript** compilation to `lib/` directory
-- **Rolldown** runtime bundling, with **Rollup** retained for cross-bundle runtime entries and declarations
+- **Rolldown** runtime and declaration bundling; **TypeScript** still generates and checks declarations
 - **Preact** for UI components (surveys, toolbar)
 - **Lightning CSS** for CSS processing, nesting transforms, and minification
 - **Terser** for minification with property mangling

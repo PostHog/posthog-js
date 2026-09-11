@@ -1,5 +1,71 @@
 # posthog-react-native
 
+## 4.68.9
+
+### Patch Changes
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Cap the retry delay for log exports at 30 seconds, the ceiling the logs contract states. It previously doubled to 64 times the flush interval — 192s on web, 640s on React Native — so a log export now resumes within 30 seconds of a failing endpoint recovering, at the cost of more retry requests while that endpoint is down.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Keep backing off a failing log flush while new records arrive, instead of the next record resetting the retry to the flush interval.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Honor `Retry-After` when the ingestion endpoint refuses a logs or metrics batch, instead of retrying on the SDK's own schedule alone. A refusal naming a longer wait extends the one being served, up to five minutes from when it started. Retry delays now carry jitter so clients refused together do not return together, and metrics backs off exponentially across consecutive failures rather than retrying on a fixed interval.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Stop sending logs and metrics batches over 10 MiB, or too large to serialize at all, instead of spending a request to discover the endpoint refuses them.
+  (2026-09-10)
+- Updated dependencies [[`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c)]:
+  - @posthog/core@1.53.0
+  - @posthog/types@1.411.0
+
+## 4.68.8
+
+### Patch Changes
+
+- [#4887](https://github.com/PostHog/posthog-js/pull/4887) [`0da006c`](https://github.com/PostHog/posthog-js/commit/0da006c5eb53630c7fc7d63151fc6632d6dd49e0) Thanks [@posthog](https://github.com/apps/posthog)! - Error tracking no longer counts an injected script as your own code. A stack frame is `in_app` only when its filename names a script your app was served — `http(s)`, `file`, `blob`, `app`, `capacitor`, `ionic`, a bundler scheme, or a bare path. A frame served over any other scheme, such as an in-app browser bridge on `iabjs://` or an extension content script on `chrome-extension://`, is kept for context but no longer groups the issue under your code.
+  (2026-09-10)
+- Updated dependencies [[`0da006c`](https://github.com/PostHog/posthog-js/commit/0da006c5eb53630c7fc7d63151fc6632d6dd49e0)]:
+  - @posthog/core@1.52.2
+
+## 4.68.7
+
+### Patch Changes
+
+- [#4900](https://github.com/PostHog/posthog-js/pull/4900) [`c02532f`](https://github.com/PostHog/posthog-js/commit/c02532f2c4cdb7d2c876405adbc290cb374c0bad) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix stale screen names on React Native exceptions and missed screen tracking on tab changes.
+  (2026-09-10)
+
+## 4.68.6
+
+### Patch Changes
+
+- [#4896](https://github.com/PostHog/posthog-js/pull/4896) [`d9a2142`](https://github.com/PostHog/posthog-js/commit/d9a2142c0635895ee1c85676f2d50048cf289fb3) Thanks [@marandaneto](https://github.com/marandaneto)! - Give fatal JavaScript exceptions up to two seconds to persist before forwarding to React Native's fatal handler.
+  (2026-09-10)
+
+## 4.68.5
+
+### Patch Changes
+
+- [#4891](https://github.com/PostHog/posthog-js/pull/4891) [`65fb811`](https://github.com/PostHog/posthog-js/commit/65fb8119017c5c4abe359d7630329567666a78f1) Thanks [@marandaneto](https://github.com/marandaneto)! - Safely share uncaught-error handlers across SDK instances and preserve React Native error handling when reporting fails.
+  (2026-09-10)
+
+- [#4890](https://github.com/PostHog/posthog-js/pull/4890) [`f79d11f`](https://github.com/PostHog/posthog-js/commit/f79d11f96ad351595c458bba3a7b88670c2be3b3) Thanks [@marandaneto](https://github.com/marandaneto)! - Handle nullish render errors safely, capture React component stacks, and support retrying from error boundary fallbacks.
+  (2026-09-10)
+
+## 4.68.4
+
+### Patch Changes
+
+- [#4725](https://github.com/PostHog/posthog-js/pull/4725) [`d5abece`](https://github.com/PostHog/posthog-js/commit/d5abece39d72e079a3233f26a1c54dbd569d53ee) Thanks [@bs1180](https://github.com/bs1180)! - fix(surveys): don't show the default "Start typing..." placeholder when the survey's placeholder text is empty
+  (2026-09-09)
+
+## 4.68.3
+
+### Patch Changes
+
+- [#4851](https://github.com/PostHog/posthog-js/pull/4851) [`250360d`](https://github.com/PostHog/posthog-js/commit/250360d3a02dbb4147579fa893a40edcd2938cb6) Thanks [@Anzormumladze](https://github.com/Anzormumladze)! - Keep the keyboard open when touching survey content to select, paste, or scroll text.
+  (2026-09-09)
+
 ## 4.68.2
 
 ### Patch Changes

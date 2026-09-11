@@ -2068,6 +2068,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         const compressionEnabled = this._instance.config.session_recording.compress_events ?? true
 
+        if (event.type === EventType.Custom && event.data.tag === JSON_LD_EVENT_TAG) {
+            let href: string | undefined
+            try {
+                href = window ? this._maskReplayUrl(window.location.href) : undefined
+            } catch {
+                // A masking callback failure must not expose the original URL or interrupt recording.
+            }
+            event.data.href = href
+        }
+
         if (
             this._queuedCompressionEvents > 0 ||
             (compressionEnabled && shouldUseNativeAsyncSessionRecordingGzip(event))
@@ -3008,6 +3018,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             !this._jsonLdCapture
         ) {
             this._jsonLdCapture = startJsonLdCapture(document, window.MutationObserver, {
+                maskUrl: (url) => this._maskReplayUrl(url),
                 attributeFilter: sessionRecordingOptions.attributeFilter,
                 blockClass: sessionRecordingOptions.blockClass,
                 blockSelector: sessionRecordingOptions.blockSelector,
