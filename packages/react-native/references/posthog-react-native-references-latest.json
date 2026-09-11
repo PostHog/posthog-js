@@ -4255,6 +4255,21 @@
           "name": "verifyScreenshotMaskAlignment"
         },
         {
+          "description": "Experimental. Multiplier for the physical width and height of screenshots, clamped to 0.1–1.0.\nFor example, 0.5 captures half the width and height, or one quarter of the pixels.\nThe logical replay viewport is unchanged. Non-finite values use the native default.\nAndroid only. Requires `@posthog/react-native-plugin` 2.8.0 or later.\nDoes not enable session replay or change compression quality or color mode.",
+          "type": "number",
+          "name": "screenshotScale"
+        },
+        {
+          "description": "Experimental. WebP compression quality, clamped to 0–100. Fractional values are truncated.\nHigher values generally retain more detail and produce larger payloads.\nCompression is lossy, except at quality 100 on Android 10, which uses lossless WebP.\nNon-finite values use the native default. Does not change screenshot resolution.\nAndroid only. Requires `@posthog/react-native-plugin` 2.8.0 or later.",
+          "type": "number",
+          "name": "screenshotCompressionQuality"
+        },
+        {
+          "description": "Experimental. Screenshot bitmap pixel format. ARGB_8888 preserves transparency and color precision.\nRGB_565 uses half the bitmap memory but reduces color precision and removes alpha,\nmaking transparent window regions appear black. Unsupported devices fall back to ARGB_8888.\nAndroid only. Requires `@posthog/react-native-plugin` 2.8.0 or later.",
+          "type": "\"ARGB_8888\" | \"RGB_565\"",
+          "name": "screenshotColorMode"
+        },
+        {
           "description": "Schedule screenshot image capture on a background queue.\niOS only\nExperimental support\n\nWarning: Enabling this option will trigger Main Thread Checker warnings and may\nbriefly freeze the app the first time a screenshot is captured. Consider disabling\nMain Thread Checker in your scheme's run diagnostics when enabling this.",
           "type": "boolean",
           "name": "screenshotModeBackgroundCapture"
