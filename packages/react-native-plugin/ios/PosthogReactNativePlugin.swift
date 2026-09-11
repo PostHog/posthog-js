@@ -69,6 +69,30 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
     private var hasPushListeners = false
     private var pushIdentityCompletions: [String: (String?) -> Void] = [:]
 
+    #if os(iOS)
+        /// Installs the native SDK's notification-open swizzles when the app finishes launching, so
+        /// a tap that cold-launches the app is held until JS reaches `setup()`, which then captures
+        /// it as `$push_notification_opened`. The launch observer in `PosthogReactNativePlugin.mm`
+        /// calls this, so host apps need no code.
+        ///
+        /// JS config isn't known this early, so `capturePushNotificationOpened: false` can't prevent
+        /// it; `setup()` releases the prewarm instead. To skip it entirely, set
+        /// `com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED` to `false` in Info.plist
+        /// (default `true`):
+        ///
+        /// ```xml
+        /// <key>com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED</key>
+        /// <false/>
+        /// ```
+        @objc static func prewarmPushNotificationOpenCapture() {
+            let key = "com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED"
+            guard Bundle.main.object(forInfoDictionaryKey: key) as? Bool ?? true else { return }
+            if #available(iOS 14.0, *) {
+                PostHogSDK.prewarmPushNotificationOpenCapture()
+            }
+        }
+    #endif
+
     public override func supportedEvents() -> [String]! {
         [PosthogReactNativePlugin.pushIdentityEvent]
     }
