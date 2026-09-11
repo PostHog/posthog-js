@@ -130,7 +130,8 @@ const patchXHR = (instance: PostHog): (() => void) => {
                     const start = now()
                     const onLoadEnd = () => {
                         this.removeEventListener('loadend', onLoadEnd)
-                        record(instance, request, this.status, start)
+                        // XHR reports status 0 when no response arrived, which the callback contract calls `undefined`.
+                        record(instance, request, this.status || undefined, start)
                     }
                     addEventListener(this as unknown as Element, 'loadend', onLoadEnd)
                 }

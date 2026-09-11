@@ -335,6 +335,18 @@ describe('network metrics', () => {
             })
         })
 
+        it('passes an undefined status to the attributes function when the XHR reports no response', () => {
+            const attributes = vi.fn(() => ({}))
+            start({ attributes })
+
+            sendXHR('get', 'https://api.example.com/things', 0)
+
+            expect(attributes).toHaveBeenCalledWith(expect.anything(), {
+                status: undefined,
+                durationMs: expect.any(Number),
+            })
+        })
+
         it('records nothing when network metrics are turned off after start', async () => {
             start()
             mockPostHog.config.metrics = { network: false }
