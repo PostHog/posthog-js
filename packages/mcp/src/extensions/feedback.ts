@@ -347,13 +347,10 @@ export async function handleFeedback(
       if (typeof reply === 'string' && reply.trim()) {
         return { content: [{ type: 'text' as const, text: reply }] }
       }
-    } catch (error) {
-      // Only the exception's type, matching the report log above: a handler can
-      // echo the unsanitized report (PII, credentials, log-forging newlines,
-      // unbounded length) into its error message, and that agent-controlled
-      // text does not belong in host logs any more than `report.summary` does.
-      const errorName = error instanceof Error ? error.name : typeof error
-      logger(`Warning: onFeedback handler threw (${errorName}); returning the default acknowledgement`)
+    } catch {
+      // The whole thrown value is host-controlled and mutable. Do not log any
+      // part of it because it can contain PII or log-forging newlines.
+      logger('Warning: onFeedback handler threw; returning the default acknowledgement')
     }
   }
   return sendFeedbackResult()

@@ -540,7 +540,9 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
         logger: (message: string) => logged.push(message),
         collectFeedback: {
           onFeedback: async () => {
-            throw new Error('backend down for jane@example.com')
+            const error = new Error('backend down for jane@example.com')
+            error.name = 'jane@example.com\nforged log line'
+            throw error
           },
         },
       })
@@ -549,12 +551,13 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
 
       expect(result.content[0].text).toContain('recorded')
 
-      // Only the exception's type reaches the log — an error message can echo
-      // agent-controlled report text (PII, log-forging newlines).
+      // No part of the thrown value reaches the log. Both its message and its
+      // mutable name can contain agent-controlled PII or log-forging newlines.
       const warning = logged.find((line) => line.includes('onFeedback handler threw'))
-      expect(warning).toContain('Error')
+      expect(warning).toBe('Warning: onFeedback handler threw; returning the default acknowledgement')
       expect(warning).not.toContain('backend down')
       expect(warning).not.toContain('jane@example.com')
+      expect(warning).not.toContain('forged log line')
 
       await new Promise((r) => setTimeout(r, 50))
       expect(capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)).toHaveLength(1)
