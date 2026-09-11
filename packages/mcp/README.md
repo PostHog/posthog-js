@@ -263,13 +263,18 @@ const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN, {
 return { tools: posthog.prepareToolList(myTools, { collectFeedback: true }) }
 
 // tools/call dispatcher
-const prepared = posthog.prepareToolCall(name, rawArgs)
+const originalTool = myTools.find((tool) => tool.name === name)
+const prepared = posthog.prepareToolCall(name, rawArgs, { originalTool })
 if (prepared.isFeedback) {
   posthog.captureFeedback({ report: prepared.feedbackReport!, ...identity })
   await myFeedbackBackend.record(prepared.feedbackReport!)
   return sendFeedbackResult() // or a custom text reply
 }
 ```
+
+`originalTool` must come from the application's tool list before `prepareToolList()` adds PostHog's
+virtual tools. This lets a real application tool with the configured feedback name win, including
+when `tools/list` and `tools/call` reach different server replicas.
 
 `send_feedback` covers what `reportMissing` covers — a capability gap is
 `feedback_type: "missing_capability"` — so new integrations should enable only `collectFeedback`.

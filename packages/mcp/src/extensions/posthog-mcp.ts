@@ -278,8 +278,12 @@ export class PostHogMCP extends PostHog {
    *
    * @example
    * ```ts
+   * const originalTool = myTools.find((tool) => tool.name === name)
    * const { intent, intentSource, llmModel, llmModelSource, args, isMissingCapability } =
-   *   posthog.prepareToolCall(name, rawArgs, { requestMeta: request.params?._meta })
+   *   posthog.prepareToolCall(name, rawArgs, {
+   *     originalTool,
+   *     requestMeta: request.params?._meta,
+   *   })
    * if (isMissingCapability) {
    *   posthog.captureMissingCapability({ context: intent, llmModel, llmModelSource, ...identity })
    *   return getMoreToolsResult()

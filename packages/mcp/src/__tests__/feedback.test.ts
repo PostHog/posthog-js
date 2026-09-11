@@ -746,10 +746,19 @@ describe('PostHogMCP (custom dispatcher path)', () => {
   it('a supplied originalTool wins a feedback-name collision', async () => {
     const posthog = newClient({ collectFeedback: true })
 
-    // The host holds a real tool by the feedback name and passes it through —
-    // stateless proof of ownership, so the call dispatches as a real tool.
-    const realTool = { inputSchema: { type: 'object', properties: { note: { type: 'string' } } } }
-    const collided = posthog.prepareToolCall(SEND_FEEDBACK, { note: 'hi' }, { originalTool: realTool })
+    const realTools = [
+      {
+        name: SEND_FEEDBACK,
+        inputSchema: { type: 'object', properties: { note: { type: 'string' } } },
+      },
+    ]
+    const listed = posthog.prepareToolList(realTools, { collectFeedback: true })
+    expect(listed).toHaveLength(1)
+
+    // The descriptor comes from the host's original list, not the prepared list.
+    // This is stateless proof that the real application tool owns the name.
+    const originalTool = realTools.find((tool) => tool.name === SEND_FEEDBACK)
+    const collided = posthog.prepareToolCall(SEND_FEEDBACK, { note: 'hi' }, { originalTool })
     expect(collided.isFeedback).toBe(false)
     expect(collided.feedbackReport).toBeUndefined()
 
