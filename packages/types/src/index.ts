@@ -81,6 +81,7 @@ export type {
     RequestQueueConfig,
     LogCaptureOptions,
     MetricsConfig,
+    BrowserMetricsConfig,
     NetworkMetricsConfig,
     NetworkMetricsRequest,
     NetworkMetricsResponse,

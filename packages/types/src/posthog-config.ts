@@ -1149,15 +1149,9 @@ export interface NetworkMetricsConfig {
 
 /**
  * Options for the posthog.metrics API (count, gauge, histogram).
+ * Shared by every SDK; browser-only options live in `BrowserMetricsConfig`.
  */
 export interface MetricsConfig {
-    /**
-     * Record the duration of every `fetch` and `XMLHttpRequest` as a histogram.
-     * `true` uses the defaults. Requests to PostHog itself are not recorded.
-     *
-     * @default undefined
-     */
-    network?: boolean | NetworkMetricsConfig
     /**
      * The service name for metric series.
      * Maps to the OTel resource attribute 'service.name'.
@@ -1206,6 +1200,20 @@ export interface MetricsConfig {
      * sample (return `null` to drop) before it is aggregated.
      */
     beforeSend?: BeforeSendMetricFn | BeforeSendMetricFn[]
+}
+
+/**
+ * Metrics configuration options for the browser SDK. Adds the options that
+ * only the browser SDK implements to the shared metrics options.
+ */
+export interface BrowserMetricsConfig extends MetricsConfig {
+    /**
+     * Record the duration of every `fetch` and `XMLHttpRequest` as a histogram.
+     * `true` uses the defaults. Requests to PostHog itself are not recorded.
+     *
+     * @default undefined
+     */
+    network?: boolean | NetworkMetricsConfig
 }
 
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
@@ -1588,7 +1596,7 @@ export interface PostHogConfig {
      *
      * @default undefined
      */
-    metrics?: MetricsConfig
+    metrics?: BrowserMetricsConfig
 
     /**
      * Determines whether PostHog should disable all conversations functionality.

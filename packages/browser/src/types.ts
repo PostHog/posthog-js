@@ -150,6 +150,7 @@ export type {
     BeforeSendMetricFn,
     OtlpMetricsPayload,
     MetricsConfig,
+    BrowserMetricsConfig,
     NetworkMetricsConfig,
     NetworkMetricsRequest,
     NetworkMetricsResponse,
