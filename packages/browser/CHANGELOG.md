@@ -1,5 +1,22 @@
 # posthog-js
 
+## 1.430.0
+
+### Minor Changes
+
+- [#4834](https://github.com/PostHog/posthog-js/pull/4834) [`5f2b0fe`](https://github.com/PostHog/posthog-js/commit/5f2b0fe2b42bad764327457949030dff396b7ac0) Thanks [@posthog](https://github.com/apps/posthog)! - Add `posthog-js/full`, `posthog-js/no-external` and `posthog-js/full/no-external` entry points, so desktop apps and other CSP-restricted builds can `require` a bundle instead of deep-importing an ES module from `dist/`
+  (2026-09-11)
+
+### Patch Changes
+
+- [#4860](https://github.com/PostHog/posthog-js/pull/4860) [`8207df8`](https://github.com/PostHog/posthog-js/commit/8207df8564d01977e3f9ffdcae4585d11e620ca3) Thanks [@posthog](https://github.com/apps/posthog)! - Back off automatic feature flag refreshes on idle visible pages only when `remote_config_refresh_interval_ms` is omitted, preserving explicitly configured intervals.
+  (2026-09-11)
+
+- [#4901](https://github.com/PostHog/posthog-js/pull/4901) [`65aafcc`](https://github.com/PostHog/posthog-js/commit/65aafcc52304e1ad3166430da0f1b9aaacbf95b0) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve batched event timestamps so delayed retries do not shift event times and prevent deduplication.
+  (2026-09-11)
+- Updated dependencies [[`8207df8`](https://github.com/PostHog/posthog-js/commit/8207df8564d01977e3f9ffdcae4585d11e620ca3)]:
+  - @posthog/types@1.411.1
+
 ## 1.429.5
 
 ### Patch Changes
