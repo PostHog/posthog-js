@@ -48,10 +48,18 @@ export interface PostHogReactNativePluginPushConfig {
   pushIdentityProviderEnabled?: boolean
 }
 
+export interface PostHogReactNativePluginRageClickConfig {
+  enabled?: boolean
+  minimumTapCount?: number
+  thresholdPoints?: number
+  timeoutInterval?: number
+}
+
 export interface PostHogReactNativePluginConfig {
   sessionReplay?: PostHogReactNativePluginSessionReplayConfig
   errorTracking?: PostHogReactNativePluginErrorTrackingConfig
   push?: PostHogReactNativePluginPushConfig
+  rageClick?: PostHogReactNativePluginRageClickConfig
 }
 
 export function setup(

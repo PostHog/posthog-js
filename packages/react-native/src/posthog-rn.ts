@@ -42,6 +42,7 @@ import {
   PostHogCustomAppProperties,
   PostHogCustomStorage,
   PostHogPushIdentityProvider,
+  PostHogRageClickConfig,
   PostHogSessionReplayConfig,
 } from './types'
 import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isMacOS, isValidSampleRate, isWeb } from './utils'
@@ -132,6 +133,22 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * Error Tracking Configuration
    */
   errorTracking?: ErrorTrackingOptions
+
+  /**
+   * Configure rage click (rage tap) detection on iOS.
+   *
+   * The native iOS SDK fires a `$rageclick` event when a user taps the same
+   * area repeatedly in quick succession. The default thresholds (3 taps,
+   * 30 points, 1 second) were tuned for web and frequently produce false
+   * positives on mobile. Raise the thresholds or set `enabled: false` to
+   * suppress them.
+   *
+   * Android is unaffected — posthog-android does not have native rage click
+   * detection.
+   *
+   * Requires `@posthog/react-native-plugin` version 2.7.0 or newer.
+   */
+  rageClickConfig?: PostHogRageClickConfig
 
   /**
    * Automatically include common device and app properties in feature flag evaluation.
@@ -2624,6 +2641,7 @@ export class PostHog extends PostHogCore {
             capturePushNotificationOpened: options?.capturePushNotificationOpened ?? true,
             pushIdentityProviderEnabled,
           },
+          ...(options?.rageClickConfig && { rageClick: options.rageClickConfig }),
         }
         await OptionalReactNativePlugin.setup(String(sessionId), sdkOptions, pluginConfig)
         // Native resolves its own persisted opt-out over the config value passed above, so an

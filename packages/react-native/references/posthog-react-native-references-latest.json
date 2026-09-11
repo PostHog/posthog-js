@@ -3857,6 +3857,11 @@
           "name": "pushIdentityProvider"
         },
         {
+          "description": "Configure rage click (rage tap) detection on iOS.\nThe native iOS SDK fires a `$rageclick` event when a user taps the same area repeatedly in quick succession. The default thresholds (3 taps, 30 points, 1 second) were tuned for web and frequently produce false positives on mobile. Raise the thresholds or set `enabled: false` to suppress them.\nAndroid is unaffected — posthog-android does not have native rage click detection.\nRequires `@posthog/react-native-plugin` version 2.7.0 or newer.",
+          "type": "PostHogRageClickConfig",
+          "name": "rageClickConfig"
+        },
+        {
           "description": "A list of headers that should be sent with requests to the PostHog API.",
           "type": "{\n        [header_name: string]: string;\n    }",
           "name": "requestHeaders"
@@ -4061,6 +4066,33 @@
       "properties": [],
       "path": "dist/types.d.ts",
       "example": "(distinctId: string, appId: string) => Promise<string | null>"
+    },
+    {
+      "id": "PostHogRageClickConfig",
+      "name": "PostHogRageClickConfig",
+      "properties": [
+        {
+          "description": "Enable or disable rage click (rage tap) detection.\n\nWhen enabled the native SDK emits a `$rageclick` event whenever a user\ntaps the same area repeatedly in quick succession.",
+          "type": "boolean",
+          "name": "enabled"
+        },
+        {
+          "description": "Number of consecutive taps required to trigger a rage click.",
+          "type": "number",
+          "name": "minimumTapCount"
+        },
+        {
+          "description": "Maximum pixel distance between consecutive taps for them to still\ncount toward a rage click.",
+          "type": "number",
+          "name": "thresholdPoints"
+        },
+        {
+          "description": "Maximum time in seconds allowed between consecutive taps.",
+          "type": "number",
+          "name": "timeoutInterval"
+        }
+      ],
+      "path": "dist/types.d.ts"
     },
     {
       "id": "PostHogReactNativePluginExtended",
