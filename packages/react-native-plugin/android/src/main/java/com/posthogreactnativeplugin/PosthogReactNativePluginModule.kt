@@ -669,8 +669,9 @@ internal fun applyScreenshotConfig(
   config: PostHogSessionReplayConfig,
 ) {
   getDoubleOrNull(map, "screenshotScale")?.let { scale ->
-    // Clamp before narrowing so a finite JS number cannot overflow to a Float infinity.
-    config.screenshotScale = if (scale.isFinite()) scale.coerceIn(0.1, 1.0).toFloat() else 1f
+    // Keep finite values within Float range; the native setter clamps to its supported range.
+    val floatMax = Float.MAX_VALUE.toDouble()
+    config.screenshotScale = if (scale.isFinite()) scale.coerceIn(-floatMax, floatMax).toFloat() else 1f
   }
   getDoubleOrNull(map, "screenshotCompressionQuality")?.takeIf { it.isFinite() }?.let { quality ->
     config.screenshotCompressionQuality = quality.toInt()
