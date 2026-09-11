@@ -184,7 +184,13 @@ function parseSentiment(value: unknown): FeedbackSentiment | undefined {
  */
 function matchesExtraSchema(value: unknown, schema: FeedbackExtraPropertySchema): boolean {
   const type = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value
-  if (schema.type !== type && !(schema.type === 'integer' && typeof value === 'number')) {
+  if (schema.type === 'integer') {
+    // A JSON Schema `integer` accepts a whole-valued number (`3`, `3.0`) but
+    // not a fractional one (`3.5`) — `typeof` alone can't tell them apart.
+    if (!Number.isInteger(value)) {
+      return false
+    }
+  } else if (schema.type !== type) {
     return false
   }
   return !Array.isArray(schema.enum) || schema.enum.includes(value as string)
@@ -342,7 +348,12 @@ export async function handleFeedback(
         return { content: [{ type: 'text' as const, text: reply }] }
       }
     } catch (error) {
-      logger(`Warning: onFeedback handler threw; returning the default acknowledgement - ${error}`)
+      // Only the exception's type, matching the report log above: a handler can
+      // echo the unsanitized report (PII, credentials, log-forging newlines,
+      // unbounded length) into its error message, and that agent-controlled
+      // text does not belong in host logs any more than `report.summary` does.
+      const errorName = error instanceof Error ? error.name : typeof error
+      logger(`Warning: onFeedback handler threw (${errorName}); returning the default acknowledgement`)
     }
   }
   return sendFeedbackResult()

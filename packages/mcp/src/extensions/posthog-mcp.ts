@@ -304,7 +304,13 @@ export class PostHogMCP extends PostHog {
       ? resolveModel({ params: { arguments: args, _meta: options.requestMeta } }, ownsModel)
       : undefined
     const strippedArgs = stripContext(args)
-    const isFeedback = this.#feedbackOptions !== undefined && name === this.#feedbackToolName
+    // A supplied `originalTool` is a real application tool by this name (it
+    // comes from the host's own list, which never holds the virtual tool), so
+    // the real tool wins — the stateless twin of instrument()'s listing-derived
+    // collision handling. Without it the name match stands, and the documented
+    // remedy for a collision is configuring a non-colliding `toolName`.
+    const isFeedback =
+      this.#feedbackOptions !== undefined && name === this.#feedbackToolName && options.originalTool == null
     return {
       intent,
       intentSource: intent ? 'context_parameter' : undefined,
