@@ -1,5 +1,6 @@
 import { isFunction, isString } from '@posthog/core'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { convertToURL } from '@posthog/browser-common/utils/request-utils'
 import { window } from '@posthog/browser-common/utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import type { PostHog } from '../posthog-core'
@@ -15,7 +16,7 @@ const now = (): number => (window?.performance?.now ? window.performance.now() :
 
 // All-digit segments, or hex/uuid-like segments of 8+ characters that contain a digit.
 const isIdLikeSegment = (segment: string): boolean =>
-    /^\d+$/.test(segment) || (segment.length >= 8 && /^[0-9a-f-]+$/i.test(segment) && /\d/.test(segment))
+    /^\d+$/.test(segment) || (segment.length >= 8 && /^[0-9a-f-]*\d[0-9a-f-]*$/i.test(segment))
 
 const templatePath = (pathname: string): string =>
     pathname
@@ -25,16 +26,7 @@ const templatePath = (pathname: string): string =>
 
 const statusClass = (status: number | undefined): string => (status ? `${Math.floor(status / 100)}xx` : 'error')
 
-const parseUrl = (url: string): URL | undefined => {
-    try {
-        // oxlint-disable-next-line compat/compat
-        return new URL(url, window?.location?.href)
-    } catch {
-        return undefined
-    }
-}
-
-const toAbsoluteUrl = (url: string): string => parseUrl(url)?.href ?? url
+const toAbsoluteUrl = (url: string): string => convertToURL(url)?.href || url
 
 const toRequest = (method: unknown, url: unknown): NetworkMetricsRequest => ({
     url: toAbsoluteUrl(String(url)),
@@ -71,7 +63,7 @@ const record = (instance: PostHog, request: NetworkMetricsRequest, status: numbe
         if (!name) {
             return
         }
-        const url = parseUrl(request.url)
+        const url = convertToURL(request.url)
         const attributes: MetricAttributes = {
             method: request.method,
             host: url?.hostname ?? '',
