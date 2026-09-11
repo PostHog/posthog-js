@@ -11,7 +11,7 @@ import type {
 } from '../types'
 import { PostHogMCPAnalyticsProperty } from './constants'
 import { log, type LoggerFn } from './logger'
-import { redactPii, sanitizeCapturedValue } from './mcp-payloads'
+import { sanitizeIntent, sanitizeIntentValue } from './mcp-payloads'
 
 export const SEND_FEEDBACK_TOOL_NAME = 'send_feedback' as const
 
@@ -231,36 +231,34 @@ function truncateFeedbackText(value: string, maxLength: number): string {
   return value.length > maxLength ? value.slice(0, maxLength) + TRUNCATION_SUFFIX : value
 }
 
-/** Strips structured PII, then bounds the length. Shared by every free-text capture below. */
-function redactAndBoundText(text: string): string {
-  return truncateFeedbackText(redactPii(text), MAX_FEEDBACK_TEXT_LENGTH)
-}
-
 /**
  * Agent-narrated free text can contain a secret the LLM read aloud or personal
- * data it narrated, so it gets the `$mcp_intent` treatment: sanitize, strip
- * structured PII, then bound the length. The event-level pipeline does not
- * process `event.properties`, so this happens here.
+ * data it narrated, so it gets exactly the `$mcp_intent` pass (`sanitizeIntent`:
+ * credentials → structured PII → URLs — the order is load-bearing, the URL
+ * rewrite would percent-encode the `@` the email pattern anchors on), then a
+ * length bound. The event-level pipeline does not process `event.properties`,
+ * so this happens here.
  */
 function captureFreeText(value: string): string {
-  return redactAndBoundText(sanitizeCapturedValue(value) as string)
+  return truncateFeedbackText(sanitizeIntent(value), MAX_FEEDBACK_TEXT_LENGTH)
 }
 
 /**
- * A declared extra is agent-supplied like the core free-text fields, so it gets
- * the same treatment: sanitize, strip structured PII, bound the length.
- * Non-scalars are JSON-stringified first so the redaction sees the full text.
+ * A declared extra is agent-supplied like the core free-text fields, so its
+ * string leaves get the same intent-grade pass (with the key-based redaction
+ * `sanitizeIntentValue` keeps for nested objects), then non-scalars are
+ * JSON-stringified and everything is bounded.
  */
 function captureExtraValue(value: unknown): unknown {
-  const sanitized = sanitizeCapturedValue(value)
+  const sanitized = sanitizeIntentValue(value)
   if (typeof sanitized === 'string') {
-    return redactAndBoundText(sanitized)
+    return truncateFeedbackText(sanitized, MAX_FEEDBACK_TEXT_LENGTH)
   }
   if (sanitized == null || typeof sanitized === 'number' || typeof sanitized === 'boolean') {
     return sanitized
   }
   try {
-    return redactAndBoundText(JSON.stringify(sanitized))
+    return truncateFeedbackText(JSON.stringify(sanitized), MAX_FEEDBACK_TEXT_LENGTH)
   } catch {
     return undefined
   }
@@ -288,9 +286,9 @@ export function buildFeedbackEventProperties(report: FeedbackReport): JsonRecord
   }
   if (report.toolName) {
     // Nominally an identifier, but the schema can't stop an agent from writing
-    // prose into it — so it gets the same PII redaction as the other free text.
+    // prose into it — so it gets the same intent-grade pass as the other free text.
     properties[PostHogMCPAnalyticsProperty.FeedbackTool] = truncateFeedbackText(
-      redactPii(sanitizeCapturedValue(report.toolName) as string),
+      sanitizeIntent(report.toolName),
       MAX_FEEDBACK_TOOL_NAME_LENGTH
     )
   }

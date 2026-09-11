@@ -331,6 +331,38 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       await capture.stop()
     })
 
+    it('redacts PII inside URLs (PII pass runs before the URL rewrite percent-encodes it)', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), {
+        collectFeedback: { extraProperties: { context_url: { type: 'string' }, meta: { type: 'object' } } },
+      })
+
+      const url = 'https://example.com/?email=jane@example.com&token=secret123'
+      await callTool(client, SEND_FEEDBACK, {
+        feedback_type: 'issue',
+        summary: `The tool failed for ${url} repeatedly.`,
+        tool_name: `lookup via ${url}`,
+        context_url: url,
+        meta: { link: url },
+      })
+
+      await new Promise((r) => setTimeout(r, 50))
+      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
+      for (const captured of [
+        p[PostHogMCPAnalyticsProperty.FeedbackSummary],
+        p[PostHogMCPAnalyticsProperty.FeedbackTool],
+        p.$mcp_feedback_context_url,
+        p.$mcp_feedback_meta,
+      ]) {
+        // Neither the raw email nor its percent-encoded form may survive.
+        expect(captured).not.toContain('jane@example.com')
+        expect(captured).not.toContain('jane%40example.com')
+      }
+
+      await capture.stop()
+    })
+
     it('redacts PII in tool_name like the other free-text fields', async () => {
       const capture = new EventCapture()
       await capture.start()

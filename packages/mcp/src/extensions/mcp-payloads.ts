@@ -607,16 +607,29 @@ export function redactPii(value: string): string {
 }
 
 export function sanitizeCapturedValue(value: unknown): unknown {
+  return sanitizeValueWith(value, sanitizeString)
+}
+
+/**
+ * {@link sanitizeCapturedValue} with the intent-grade string pass
+ * ({@link sanitizeIntent}) on every string leaf, so nested agent-narrated
+ * values get structured-PII redaction in the load-bearing order too.
+ */
+export function sanitizeIntentValue(value: unknown): unknown {
+  return sanitizeValueWith(value, sanitizeIntent)
+}
+
+function sanitizeValueWith(value: unknown, sanitizeStringFn: (value: string) => string): unknown {
   if (value == null) {
     return value
   }
 
   if (typeof value === 'string') {
-    return sanitizeString(value)
+    return sanitizeStringFn(value)
   }
 
   if (Array.isArray(value)) {
-    return value.map(sanitizeCapturedValue)
+    return value.map((item) => sanitizeValueWith(item, sanitizeStringFn))
   }
 
   if (value instanceof Date) {
@@ -629,7 +642,7 @@ export function sanitizeCapturedValue(value: unknown): unknown {
 
   const result: JsonRecord = {}
   for (const [key, nestedValue] of Object.entries(value)) {
-    result[key] = shouldRedactKey(key) ? REDACTED_VALUE : sanitizeCapturedValue(nestedValue)
+    result[key] = shouldRedactKey(key) ? REDACTED_VALUE : sanitizeValueWith(nestedValue, sanitizeStringFn)
   }
   return result
 }
