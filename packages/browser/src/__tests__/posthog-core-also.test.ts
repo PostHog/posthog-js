@@ -402,6 +402,17 @@ describe('posthog core', () => {
             )
         })
 
+        it.each([
+            ['recordings', 'session-1'],
+            [undefined, undefined],
+        ])('groups requests with batchKey %s by session id', (batchKey, batchGroup) => {
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+
+            posthog.capture('$snapshot', { $session_id: 'session-1' }, batchKey ? { _batchKey: batchKey } : undefined)
+
+            expect(vi.mocked(posthog._send_request).mock.calls[0][0].batchGroup).toEqual(batchGroup)
+        })
+
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
             posthog._onRemoteConfig({ ok: true, config: { analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig })

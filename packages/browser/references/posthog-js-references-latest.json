@@ -4497,6 +4497,11 @@
       "name": "QueuedRequestWithOptions",
       "properties": [
         {
+          "description": "requests sharing a batchKey are still sent separately when this differs",
+          "type": "string",
+          "name": "batchGroup"
+        },
+        {
           "description": "key of queue, e.g. 'sessionRecording' vs 'event'",
           "type": "string",
           "name": "batchKey"

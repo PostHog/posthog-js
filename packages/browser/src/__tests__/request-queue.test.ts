@@ -121,6 +121,45 @@ describe('RequestQueue', () => {
             expect(recording).not.toHaveProperty('offset')
         })
 
+        it('sends requests with the same batchKey but different batchGroup separately', () => {
+            queue.enqueue({
+                data: { event: 'a1', timestamp: EPOCH },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'a',
+            })
+            queue.enqueue({
+                data: { event: 'a2', timestamp: EPOCH },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'a',
+            })
+            queue.enqueue({
+                data: { event: 'b1', timestamp: EPOCH },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'b',
+            })
+
+            queue.enable()
+            vi.runOnlyPendingTimers()
+
+            expect(vi.mocked(sendRequest).mock.calls).toEqual([
+                [
+                    {
+                        url: '/s',
+                        data: [
+                            { event: 'a1', timestamp: EPOCH },
+                            { event: 'a2', timestamp: EPOCH },
+                        ],
+                        batchKey: 'recordings',
+                        batchGroup: 'a',
+                    },
+                ],
+                [{ url: '/s', data: [{ event: 'b1', timestamp: EPOCH }], batchKey: 'recordings', batchGroup: 'b' }],
+            ])
+        })
+
         it('handles unload', () => {
             queue.enqueue({ url: '/s', data: { recording_payload: 'example' } })
             queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: 1_610_000_000 } })
