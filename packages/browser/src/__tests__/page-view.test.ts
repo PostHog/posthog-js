@@ -119,11 +119,46 @@ describe('PageView ID manager', () => {
             expect(secondPageView.$pageview_id).toEqual(pageviewId2)
         })
 
+        it('resets scroll maximums for a new pageview', () => {
+            mockWindowGetter.mockReturnValue({
+                location: { pathname: '/page-a' },
+                scrollY: 2000,
+                document: {
+                    documentElement: {
+                        clientHeight: 1000,
+                        scrollHeight: 4000,
+                    },
+                },
+            })
+            pageViewIdManager.doPageView(firstTimestamp, pageviewId1)
+            instance.scrollManager['_updateScrollData']()
+
+            mockWindowGetter.mockReturnValue({
+                location: { pathname: '/page-b' },
+                scrollY: 0,
+                document: {
+                    documentElement: {
+                        clientHeight: 1000,
+                        scrollHeight: 500,
+                    },
+                },
+            })
+            pageViewIdManager.doPageView(secondTimestamp, pageviewId2)
+            vi.runOnlyPendingTimers()
+
+            const pageLeave = pageViewIdManager.doPageLeave(secondTimestamp)
+            expect(pageLeave.$prev_pageview_max_scroll).toEqual(0)
+            expect(pageLeave.$prev_pageview_max_scroll_percentage).toEqual(1)
+            expect(pageLeave.$prev_pageview_max_content).toEqual(1000)
+            expect(pageLeave.$prev_pageview_max_content_percentage).toEqual(1)
+        })
+
         it('can handle scroll updates before doPageView is called', () => {
             instance.scrollManager['_updateScrollData']()
             const firstPageView = pageViewIdManager.doPageView(firstTimestamp, pageviewId1)
             expect(firstPageView.$prev_pageview_last_scroll).toBeUndefined()
 
+            vi.runOnlyPendingTimers()
             const secondPageView = pageViewIdManager.doPageView(secondTimestamp, pageviewId2)
             expect(secondPageView.$prev_pageview_last_scroll).toBeDefined()
         })
