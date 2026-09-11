@@ -420,6 +420,30 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       await capture.stop()
     })
 
+    it('redacts credential-named keys inside nested extras', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), {
+        collectFeedback: { extraProperties: { meta: { type: 'object' } } },
+      })
+
+      // The values match no PII pattern — only the key-name check catches them.
+      await callTool(client, SEND_FEEDBACK, {
+        feedback_type: 'issue',
+        summary: 'A tool failed.',
+        meta: { password: 'hunter2', api_key: 'ak-12345', note: 'retry failed' },
+      })
+
+      await new Promise((r) => setTimeout(r, 50))
+      const p = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)[0].properties
+      expect(p.$mcp_feedback_meta).not.toContain('hunter2')
+      expect(p.$mcp_feedback_meta).not.toContain('ak-12345')
+      expect(p.$mcp_feedback_meta).toContain('[redacted]')
+      expect(p.$mcp_feedback_meta).toContain('retry failed')
+
+      await capture.stop()
+    })
+
     it('redacts PII in declared extras, scalar and stringified', async () => {
       const capture = new EventCapture()
       await capture.start()
