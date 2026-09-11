@@ -289,7 +289,7 @@ Public API is hard to change once it ships, so agree on it before writing the im
 - If a reviewer suggests a different API on your PR, confirm it with them before re-implementing. Treat it as a question, not an instruction.
 - AI agents: stop and ask before implementing a public API change that hasn't been agreed on the issue.
 
-If `pnpm generate-references` changes anything other than descriptions in a `*-references-latest.json` file, your change touches public API.
+`pnpm generate-references` regenerates the API references for `posthog-js`, `posthog-node`, and `posthog-react-native`. Treat its diff as a signal to inspect, not a verdict: a changed signature, type, or member in a `*-references-latest.json` file usually means your change touches public API, while descriptions, examples, and source paths change without it. For other packages, check what the package exports.
 
 ## Opening a new PR
 
