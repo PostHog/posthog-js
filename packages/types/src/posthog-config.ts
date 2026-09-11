@@ -2063,16 +2063,31 @@ export interface PostHogConfig {
     /**
      * Controls how often feature flags are automatically refreshed in long-running sessions.
      *
-     * By default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side
-     * flag changes without requiring a page reload. This is useful for SPAs and long-running tabs.
+     * The default interval is 5 minutes (300000ms) to pick up server-side flag changes without
+     * requiring a page reload. This is useful for SPAs and long-running tabs. An explicitly set
+     * positive interval stays fixed, even when the page gets no user interaction.
+     *
+     * **Each refresh is a billable feature flag request.** A page that stays open all day makes
+     * up to 288 requests per day on the default interval, and every open tab and every named
+     * instance refreshes on its own timer, so they add up. Set this option to `0` to stop the
+     * background refreshes if that cost is not useful to you.
      *
      * **Tradeoffs:**
-     * - **Shorter intervals**: Feature flag changes propagate faster, but increases network requests and server load.
-     * - **Longer intervals**: Reduces network traffic (better for mobile/battery), but flag changes take longer to propagate.
+     * - **Shorter intervals**: Feature flag changes propagate faster, but increases network requests, cost, and server load.
+     * - **Longer intervals**: Reduces network traffic (better for mobile/battery) and cost, but flag changes take longer to propagate.
      * - **Disabled (0 or any negative value)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.
      *   Use this if you control flag updates manually or have infrequent flag changes.
      *
      * Hidden pages skip scheduled refreshes and reload due flags when they become visible.
+     *
+     * When this option is omitted, a visible page that gets no user interaction (such as a
+     * dashboard, a page being read, a video player, or a kiosk) doubles the interval after every
+     * refresh, up to one hour. Automatic refreshes continue at that interval; they do not stop.
+     * The next click, key press, wheel, touch, or return to visibility restores the five-minute
+     * default. Scrolling driven by a script, such as an auto-playing carousel, does not count as
+     * an interaction. Set this option explicitly to keep a fixed cadence, or to `0` to stop
+     * background refreshes completely.
+     *
      * This option does not reload remote config.
      *
      * @default 300000 (5 minutes)
