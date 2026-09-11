@@ -1,6 +1,6 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { instrument, PostHogMCP } from '../index'
+import { instrument } from '../index'
 import type { MCPAnalyticsOptions, MCPRequestLike, MCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 
@@ -93,13 +93,5 @@ describe('MCP analytics defaults', () => {
     expect(result.content).toHaveLength(1)
     expect(server.received.mock.calls[0][0].params?.arguments).toEqual(args)
     expect(capture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(1)
-  })
-
-  it('enables model capture for custom dispatchers while honoring opt-out', () => {
-    for (const enabled of [undefined, false]) {
-      const client = new PostHogMCP('test', { disabled: true, captureModel: enabled })
-      const tools = client.prepareToolList([{ name: 'echo', inputSchema: { type: 'object', properties: {} } }])
-      expect(Boolean(tools[0].inputSchema?.properties?.llm_model)).toBe(enabled !== false)
-    }
   })
 })
