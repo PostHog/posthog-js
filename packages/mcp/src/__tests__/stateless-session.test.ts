@@ -39,7 +39,7 @@ function createPod(podName: string, options?: MCPAnalyticsOptions): { server: Se
   server.setRequestHandler(CallToolRequestSchema, async () => ({
     content: [{ type: 'text', text: 'plan: enterprise' }],
   }))
-  instrument(server, fakePostHog(), options)
+  instrument(server, fakePostHog(), { enableConversationId: false, ...options })
   return { server, lowLevel: server as unknown as MCPServerLike }
 }
 

@@ -48,6 +48,7 @@ import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from
 import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, SEND_FEEDBACK_TOOL_NAME } from './feedback'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
+import { findToolOwnership } from './tool-schema'
 
 /**
  * Single instrumentation core shared by the low-level (`Server`) and high-level
@@ -682,8 +683,8 @@ export async function isToolAdvertised(
   extra: CompatibleRequestHandlerExtra | undefined,
   logger: LoggerFn
 ): Promise<boolean | undefined> {
-  const listHandler = originalRequestHandlers.get(server)?.get('tools/list')
-  if (!listHandler || !server._requestHandlers.has('tools/list')) {
+  const listHandler = getOriginalListHandler(server)
+  if (!listHandler) {
     return undefined
   }
 
@@ -701,6 +702,35 @@ export async function isToolAdvertised(
     )
     return undefined
   }
+}
+
+function getOriginalListHandler(server: MCPServerLike): MCPRequestHandler | undefined {
+  if (!server._requestHandlers.has('tools/list')) return undefined
+  return originalRequestHandlers.get(server)?.get('tools/list')
+}
+
+export async function resolveUnlistedToolOwnership(
+  server: MCPServerLike,
+  request: MCPRequestLike,
+  extra: CompatibleRequestHandlerExtra | undefined
+): Promise<AnalyticsParameterOwnership | undefined> {
+  const data = getServerTrackingData(server)
+  const name = request.params?.name
+  if (!data || !name) return undefined
+  if (!needsToolSchema(data)) return undefined
+  const cached = data.toolAnalyticsParameterOwnership.get(name)
+  if (cached) return cached
+  const handler = getOriginalListHandler(server)
+  if (!handler) return undefined
+  return findToolOwnership(
+    name,
+    (cursor) => handler({ ...request, method: 'tools/list', params: { _meta: request.params?._meta, cursor } }, extra),
+    () => data.logger('Warning: Could not resolve analytics argument ownership; leaving tool arguments unchanged.')
+  )
+}
+
+function needsToolSchema(data: MCPAnalyticsData): boolean {
+  return data.options.enableConversationId === true || isCaptureModelEnabled(data.options.captureModel)
 }
 
 /**

@@ -582,7 +582,7 @@ describe('Low-level Server tracing (e2e)', () => {
     }
   })
 
-  it('captures intent, but strips nothing, before low-level ownership is learned from tools/list', async () => {
+  it('resolves ownership from the raw catalog before the first low-level call', async () => {
     const { server, client, receivedCalls, connect, cleanup } = await setupLowLevelServer()
     try {
       instrument(server, fakePostHog(), { context: true, enableConversationId: true })
@@ -601,20 +601,16 @@ describe('Low-level Server tracing (e2e)', () => {
 
       expect(receivedCalls.at(-1)).toEqual({
         name: 'echo',
-        arguments: { context: 'unknown context', conversation_id: 'unknown conversation', text: 'hi' },
+        arguments: { text: 'hi' },
       })
       expect(
         (result.content as { text?: string }[]).some((content) => content.text?.includes('"conversation_id"'))
-      ).toBe(false)
+      ).toBe(true)
       await new Promise((resolve) => setTimeout(resolve, 50))
       const event = eventCapture.getEvents().find((candidate) => candidate.resourceName === 'echo')
-      // Ownership is unknown here — this instance never served a `tools/list`,
-      // which on a stateless server is every instance. Unknown no longer means
-      // "throw the intent away": the argument arrived because some advertised
-      // listing asked for it. Nothing is stripped and no handle is minted, since
-      // both of those can damage the customer's call and stay fail-closed.
+      // No client tools/list is needed: the raw catalog establishes ownership.
       expect(event?.userIntent).toBe('unknown context')
-      expect(event?.conversationId).toBeUndefined()
+      expect(event?.conversationId).toBeDefined()
     } finally {
       await cleanup()
     }
