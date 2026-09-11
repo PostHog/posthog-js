@@ -229,7 +229,7 @@
         },
         {
           "category": "",
-          "description": "Captures `$push_notification_opened` when a user opens a push notification. Requires `@posthog/react-native-plugin`.\nOnly for taps  cannot see itself — local notifications, plus warm-start and foreground taps on Android — or the tap is counted twice.\nKeys of `payload`'s `posthog` entry become `$notification_<key>` properties. Leave `action` unset for a plain tap; `subtitle` is iOS only. The native SDK builds and sends the event, so JS `before_send` never sees it — redact anything sensitive first.\nNot supported on web.",
+          "description": "Captures `$push_notification_opened` when a user opens a push notification. Requires `@posthog/react-native-plugin`.\nOnly for taps  cannot see itself — local notifications, plus Android taps while the app is running before `@posthog/react-native-plugin` 2.6.0 — or the tap can be counted twice.\nKeys of `payload`'s `posthog` entry become `$notification_<key>` properties. Leave `action` unset for a plain tap; `subtitle` is iOS only. The native SDK builds and sends the event, so JS `before_send` never sees it — redact anything sensitive first.\nNot supported on web.",
           "details": null,
           "id": "capturePushNotificationOpened",
           "showDocs": true,
@@ -3802,7 +3802,7 @@
           "name": "captureAppLifecycleEvents"
         },
         {
-          "description": "Whether to automatically capture `$push_notification_opened` on a notification tap. Requires `@posthog/react-native-plugin`.\nFires for pushes from any provider, not just PostHog's — but title and body are attached only for PostHog's own, so third-party notification text never reaches analytics. Android sees cold starts only; call  for the taps it misses.\nThe native SDK builds and sends this event, so JS `before_send` never sees it.\nNot supported on web.\ntrue",
+          "description": "Whether to automatically capture `$push_notification_opened` on a notification tap. Requires `@posthog/react-native-plugin`.\nFires for pushes from any provider, not just PostHog's — but title and body are attached only for PostHog's own, so third-party notification text never reaches analytics. On Android, taps that launch the app and taps while it's running are both captured from `@posthog/react-native-plugin` 2.6.0 (earlier versions: cold starts only); call  for the taps it misses.\nThe native SDK builds and sends this event, so JS `before_send` never sees it.\nNot supported on web.\ntrue",
           "type": "boolean",
           "name": "capturePushNotificationOpened"
         },

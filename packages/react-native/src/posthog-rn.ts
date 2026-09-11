@@ -231,8 +231,9 @@ export interface PostHogOptions extends PostHogCoreOptions {
    *
    * Fires for pushes from any provider, not just PostHog's — but title and body are
    * attached only for PostHog's own, so third-party notification text never reaches
-   * analytics. Android sees cold starts only; call
-   * {@link PostHog.capturePushNotificationOpened} for the taps it misses.
+   * analytics. On Android, taps that launch the app and taps while it's running are both
+   * captured from `@posthog/react-native-plugin` 2.6.0 (earlier versions: cold starts
+   * only); call {@link PostHog.capturePushNotificationOpened} for the taps it misses.
    *
    * The native SDK builds and sends this event, so JS `before_send` never sees it.
    *
@@ -2217,8 +2218,8 @@ export class PostHog extends PostHogCore {
    * Requires `@posthog/react-native-plugin`.
    *
    * Only for taps {@link PostHogOptions.capturePushNotificationOpened} cannot see itself —
-   * local notifications, plus warm-start and foreground taps on Android — or the tap is
-   * counted twice.
+   * local notifications, plus Android taps while the app is running before
+   * `@posthog/react-native-plugin` 2.6.0 — or the tap can be counted twice.
    *
    * Keys of `payload`'s `posthog` entry become `$notification_<key>` properties. Leave
    * `action` unset for a plain tap; `subtitle` is iOS only. The native SDK builds and
