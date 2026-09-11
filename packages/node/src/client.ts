@@ -944,6 +944,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         })
         .catch((err) => {
           if (err) {
+            if (immediate) {
+              throw err
+            }
             console.error(err)
           }
         })
@@ -1022,7 +1025,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Capture}
    *
    * @param props - The event properties
-   * @returns Promise that resolves when the event is captured
+   * @returns Promise that resolves when the event is captured. Rejects if the request fails after retries; disabled, opted-out, or filtered events are skipped.
    */
   async captureImmediate(props: EventMessage): Promise<void> {
     this._warnIfInvalidCapture(
@@ -1062,7 +1065,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Capture}
    *
    * @param props - The event properties
-   * @returns The event UUID, or `undefined` when the client is disabled
+   * @returns The event UUID, or `undefined` when disabled. Rejects if the request fails after retries; opted-out or filtered events are skipped.
    */
   async captureAiImmediate(props: EventMessage): Promise<string | undefined> {
     if (this.disabled) {
@@ -1151,7 +1154,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Identification}
    *
    * @param data - The identify data containing distinctId and properties
-   * @returns Promise that resolves when the identify is processed
+   * @returns Promise that resolves when the identify is processed. Rejects if the request fails after retries; disabled, opted-out, or filtered events are skipped.
    */
   async identifyImmediate({ distinctId, properties = {}, disableGeoip }: IdentifyMessage): Promise<void> {
     // Catch properties passed as $set and move them to the top level
@@ -1277,7 +1280,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Identification}
    *
    * @param data - The alias data containing distinctId and alias
-   * @returns Promise that resolves when the alias is processed
+   * @returns Promise that resolves when the alias is processed. Rejects if the request fails after retries; disabled, opted-out, or filtered events are skipped.
    */
   async aliasImmediate(data: { distinctId: string; alias: string; disableGeoip?: boolean }): Promise<void> {
     await this._sendPreparedEvent(
@@ -2546,7 +2549,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * {@label Identification}
    *
    * @param data - The group identify data
-   * @returns Promise that resolves when the group identify is processed
+   * @returns Promise that resolves when the group identify is processed. Rejects if the request fails after retries; disabled, opted-out, or filtered events are skipped.
    */
   async groupIdentifyImmediate({
     groupType,
@@ -3108,7 +3111,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param distinctId - Optional user distinct ID
    * @param additionalProperties - Optional additional properties to include
    * @param flags - Optional `FeatureFlagEvaluations` snapshot to attach the same flag context as your other events
-   * @returns Promise that resolves when the error is captured
+   * @returns Promise that resolves when the error is captured. Rejects if the request fails after retries; disabled, opted-out, or filtered events are skipped.
    */
   async captureExceptionImmediate(
     error: unknown,
