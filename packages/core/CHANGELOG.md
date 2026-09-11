@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.53.1
+
+### Patch Changes
+
+- [#4908](https://github.com/PostHog/posthog-js/pull/4908) [`4a3c74b`](https://github.com/PostHog/posthog-js/commit/4a3c74bff482ad626e769ff8c8ad51353b0509cd) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Child spans now share their parent's clock, so a child no longer appears to start before or end after its parent by up to a millisecond, or by more when the system clock is adjusted mid-trace.
+  (2026-09-11)
+
 ## 1.53.0
 
 ### Minor Changes
