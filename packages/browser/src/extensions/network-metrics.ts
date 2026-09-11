@@ -34,11 +34,19 @@ const toRequest = (method: unknown, url: unknown): NetworkMetricsRequest => ({
 })
 
 // `api_host` may be a relative proxy path like `/ingest`, so resolve it the same way as the request url.
+// The match stops at a path boundary: with `api_host: '/ingest'`, `/ingest/e/` belongs to PostHog but the
+// application's own `/ingestion-status` does not. A host root matches that whole origin, which is what the
+// subdomain and cloud setups need.
+const isUnderEndpoint = (url: string, endpoint: string): boolean => {
+    const base = toAbsoluteUrl(endpoint).replace(/\/$/, '')
+    return url === base || url.indexOf(base + '/') === 0 || url.indexOf(base + '?') === 0
+}
+
 const isPostHogRequest = (instance: PostHog, url: string): boolean => {
     const router = instance.requestRouter
     return (
-        url.indexOf(toAbsoluteUrl(router.endpointFor('api'))) === 0 ||
-        url.indexOf(toAbsoluteUrl(router.endpointFor('flags'))) === 0 ||
+        isUnderEndpoint(url, router.endpointFor('api')) ||
+        isUnderEndpoint(url, router.endpointFor('flags')) ||
         router.isIngestionEndpoint(url)
     )
 }

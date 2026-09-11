@@ -185,6 +185,19 @@ describe('network metrics', () => {
             }
         )
 
+        it.each([['/ingestion-status'], ['/ingest-batch']])(
+            'records an application path that only shares the api_host prefix: %s',
+            async (path) => {
+                ;(mockPostHog.requestRouter.endpointFor as vi.Mock).mockReturnValue('/ingest')
+                start()
+
+                await window.fetch(path)
+
+                expect(recorded()).toHaveLength(1)
+                expect(recorded()[0][2].attributes.path).toBe(path)
+            }
+        )
+
         it('does not record requests to a proxied PostHog ingestion path', async () => {
             ;(mockPostHog.requestRouter.isIngestionEndpoint as vi.Mock).mockReturnValue(true)
             start()
