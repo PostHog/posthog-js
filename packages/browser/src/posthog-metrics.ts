@@ -107,6 +107,18 @@ export class PostHogMetrics implements Extension {
         this._core?.reset()
     }
 
+    /**
+     * Stops everything this extension installed: the global `fetch` and
+     * `XMLHttpRequest` wrappers, and the aggregator's pending window and timer.
+     * `shutdown()` calls this after its final flush, so a shut down instance
+     * leaves nothing behind in the page.
+     */
+    dispose(): void {
+        this._stopNetworkMetrics?.()
+        this._stopNetworkMetrics = undefined
+        this._core?.reset()
+    }
+
     // Host adapter for core's `PostHogMetrics`; structurally checked against
     // `MetricsHost` at the `new CorePostHogMetrics` call.
     private _createHost() {

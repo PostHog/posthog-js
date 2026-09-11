@@ -177,6 +177,16 @@ describe('posthog-metrics', () => {
             expect(isFetchWrapped()).toBe(wrapped)
         })
 
+        it('stops wrapping on dispose, so shutdown leaves no wrapper behind', () => {
+            ;(mockPostHog.config as any).metrics = { network: true }
+            metrics.initialize()
+            expect(isFetchWrapped()).toBe(true)
+
+            metrics.dispose()
+
+            expect(isFetchWrapped()).toBe(false)
+        })
+
         it('starts and stops wrapping when the config changes', () => {
             ;(mockPostHog.config as any).metrics = { network: true }
             metrics.initialize()
