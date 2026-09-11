@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.430.2
+
+### Patch Changes
+
+- [#4897](https://github.com/PostHog/posthog-js/pull/4897) [`a140fa7`](https://github.com/PostHog/posthog-js/commit/a140fa77bf74eac3d58aa93dc7d1b97eca7de5d1) Thanks [@fasyy612](https://github.com/fasyy612)! - Send each replay session's snapshots in their own request so a session rotation no longer files the new session's first snapshot under the old session.
+  (2026-09-11)
+
 ## 1.430.1
 
 ### Patch Changes

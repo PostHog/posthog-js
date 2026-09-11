@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.16.0
+
+### Minor Changes
+
+- [#4870](https://github.com/PostHog/posthog-js/pull/4870) [`cc6373b`](https://github.com/PostHog/posthog-js/commit/cc6373bf42ba1cd777c6f7ecb5596e18d8df1cd5) Thanks [@gesh](https://github.com/gesh)! - Add the `send_feedback` virtual tool (new `collectFeedback` option): an honest, general agent-feedback channel with missing capabilities as the priority category. Every call emits a new `$mcp_feedback` event with `$mcp_feedback_type` and the other `$mcp_feedback_*` properties. Hosts can rename the tool, replace its description, declare `extraProperties` (captured as `$mcp_feedback_<key>`), and route reports to a real backend via `onFeedback` (`instrument()` path) or `prepareToolCall().feedbackReport` + `captureFeedback()` + `sendFeedbackResult()` (custom-dispatcher path). `reportMissing` / `get_more_tools` / `$mcp_missing_capability` are unchanged; new integrations should enable only `collectFeedback`.
+  (2026-09-11)
+
 ## 0.15.0
 
 ### Minor Changes

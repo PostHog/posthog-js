@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.70.0
+
+### Minor Changes
+
+- [#4886](https://github.com/PostHog/posthog-js/pull/4886) [`652a5bc`](https://github.com/PostHog/posthog-js/commit/652a5bc2b7a5c4c66d82ed886482f854c41be87d) Thanks [@itsalysialynn](https://github.com/itsalysialynn)! - Expose rageClickConfig for tuning or disabling native iOS rage click detection from React Native.
+  (2026-09-11)
+
+### Patch Changes
+
+- Updated dependencies [[`652a5bc`](https://github.com/PostHog/posthog-js/commit/652a5bc2b7a5c4c66d82ed886482f854c41be87d)]:
+  - @posthog/react-native-plugin@2.7.0
+
 ## 4.69.0
 
 ### Minor Changes
