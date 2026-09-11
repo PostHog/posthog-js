@@ -115,6 +115,14 @@ export function currentISOTime(): string {
   return new Date().toISOString()
 }
 
+export function trySafe<T>(fn: () => T): T | undefined {
+  try {
+    return fn()
+  } catch {
+    return undefined
+  }
+}
+
 export function safeSetTimeout(fn: () => void, timeout: number): any {
   // NOTE: we use this so rarely that it is totally fine to do `safeSetTimeout(fn, 0)``
   // rather than setImmediate.

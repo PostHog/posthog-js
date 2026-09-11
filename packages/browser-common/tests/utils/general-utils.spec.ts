@@ -4,9 +4,19 @@ import {
     extend,
     migrateConfigField,
     stripEmptyProperties,
+    trySafe,
 } from '../../src/utils/general-utils'
 
 describe('general utils', () => {
+    it('keeps trySafe available from the general utils export', () => {
+        expect(trySafe(() => false)).toBe(false)
+        expect(
+            trySafe(() => {
+                throw new Error('unavailable')
+            })
+        ).toBeUndefined()
+    })
+
     describe('_copyAndTruncateStrings', () => {
         it.each([
             ['same-realm', () => new TypeError('long error message')],
