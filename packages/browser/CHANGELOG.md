@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.430.1
+
+### Patch Changes
+
+- [#4913](https://github.com/PostHog/posthog-js/pull/4913) [`0224a83`](https://github.com/PostHog/posthog-js/commit/0224a83ee0720348285551aac8408365b3990a93) Thanks [@github-actions](https://github.com/apps/github-actions)! - Fix scroll depth metrics carrying over between pages after client-side navigation.
+  (2026-09-11)
+
 ## 1.430.0
 
 ### Minor Changes
