@@ -145,7 +145,7 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * Android is unaffected — posthog-android does not have native rage click
    * detection.
    *
-   * Requires `@posthog/react-native-plugin` >= 2.6.0.
+   * Requires `@posthog/react-native-plugin` >= 2.7.0.
    */
   rageClickConfig?: PostHogRageClickConfig
 
