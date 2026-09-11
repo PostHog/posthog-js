@@ -291,6 +291,18 @@ The recommended workflow for testing local changes uses tarballs, which most rea
 
 Oxfmt checks workspace package code during linting. Pre-commit hooks (via prek) automatically lint and format staged TypeScript and JavaScript files, and format staged JSON and Markdown files.
 
+## Public API changes
+
+Public API is hard to change once it ships, so agree on it before writing the implementation. Our [SDK guidelines](https://posthog.com/handbook/engineering/sdks/guidelines) explain how we design it.
+
+- If you need something the SDK doesn't support and it would add or change a public option, method, or exported type, open an issue describing your use case first. At this stage, context is more useful to us than code.
+- Wait for a maintainer to agree on the API shape on the issue before implementing it.
+- Check first whether an existing option or hook, such as `before_send`, already covers the use case. We avoid offering two ways to do the same thing.
+- If a reviewer suggests a different API on your PR, confirm it with them before re-implementing. Treat it as a question, not an instruction.
+- AI agents: stop and ask before implementing a public API change that hasn't been agreed on the issue.
+
+`pnpm generate-references` regenerates the API references for `posthog-js`, `posthog-node`, and `posthog-react-native`. Treat its diff as a signal to inspect, not a verdict: a changed signature, type, or member in a `*-references-latest.json` file usually means your change touches public API, while descriptions, examples, and source paths change without it. For other packages, check what the package exports.
+
 ## Opening a new PR
 
 - PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/) format.
