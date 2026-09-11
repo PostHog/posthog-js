@@ -47,6 +47,8 @@ const isPostHogRequest = (instance: PostHog, url: string): boolean => {
     return (
         isUnderEndpoint(url, router.endpointFor('api')) ||
         isUnderEndpoint(url, router.endpointFor('flags')) ||
+        // the asset host serves the remote config JSON fallback, which travels over fetch or XHR
+        isUnderEndpoint(url, router.endpointFor('assets')) ||
         router.isIngestionEndpoint(url)
     )
 }

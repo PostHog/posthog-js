@@ -56,9 +56,15 @@ describe('network metrics', () => {
             config: { metrics: {} },
             metrics: { histogram },
             requestRouter: {
-                endpointFor: vi.fn((target: string) =>
-                    target === 'flags' ? 'https://flags.example.com' : 'https://us.i.posthog.com'
-                ),
+                endpointFor: vi.fn((target: string) => {
+                    if (target === 'flags') {
+                        return 'https://flags.example.com'
+                    }
+                    if (target === 'assets') {
+                        return 'https://us-assets.i.posthog.com'
+                    }
+                    return 'https://us.i.posthog.com'
+                }),
                 isIngestionEndpoint: vi.fn(() => false),
             },
         } as unknown as PostHog
@@ -165,6 +171,7 @@ describe('network metrics', () => {
             ['https://us.i.posthog.com/i/v1/metrics?token=abc'],
             ['https://us.i.posthog.com/e/?ip=1'],
             ['https://flags.example.com/flags/?v=2'],
+            ['https://us-assets.i.posthog.com/array/phc_token/config'],
         ])('does not record requests to PostHog itself: %s', async (url) => {
             start()
 
