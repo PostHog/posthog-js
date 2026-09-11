@@ -4049,6 +4049,7 @@ export class PostHog implements PostHogInterface {
 
             this.exceptionObserver?.onConfigChange()
             this.exceptions?.onConfigChange()
+            this.metrics?.onConfigChange()
 
             this.sessionRecording?.startIfEnabledOrStop()
             this.tracingHeaders?.startIfEnabledOrStop()

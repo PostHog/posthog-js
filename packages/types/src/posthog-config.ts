@@ -1111,10 +1111,53 @@ export interface LogsConfig extends LogCaptureOptions {
     captureConsoleLogs?: boolean
 }
 
+/** The request a network metric describes. */
+export interface NetworkMetricsRequest {
+    /** The full request URL, including the query string. */
+    url: string
+    /** The HTTP method in upper case, e.g. 'GET'. */
+    method: string
+}
+
+/** How a network request ended. */
+export interface NetworkMetricsResponse {
+    /** The HTTP status code. `undefined` when the request failed before a response arrived. */
+    status: number | undefined
+    durationMs: number
+}
+
+/**
+ * Options for automatic `fetch` and `XMLHttpRequest` duration metrics.
+ * Recording never changes the request or its result.
+ */
+export interface NetworkMetricsConfig {
+    /**
+     * The metric name. A string is used for every request. A function is
+     * called once per request; return a falsy value to skip that request.
+     *
+     * @default 'http.client.request.duration'
+     */
+    name?: string | ((request: NetworkMetricsRequest) => string | null | undefined)
+    /**
+     * Adds attributes to each recorded request. The result is merged over the
+     * default attributes (`method`, `host`, `path`, `status_class`), so it can
+     * also replace them, e.g. to set `path` to a route template.
+     * Keep attribute values low-cardinality.
+     */
+    attributes?: (request: NetworkMetricsRequest, response: NetworkMetricsResponse) => MetricAttributes | undefined
+}
+
 /**
  * Options for the posthog.metrics API (count, gauge, histogram).
  */
 export interface MetricsConfig {
+    /**
+     * Record the duration of every `fetch` and `XMLHttpRequest` as a histogram.
+     * `true` uses the defaults. Requests to PostHog itself are not recorded.
+     *
+     * @default undefined
+     */
+    network?: boolean | NetworkMetricsConfig
     /**
      * The service name for metric series.
      * Maps to the OTel resource attribute 'service.name'.

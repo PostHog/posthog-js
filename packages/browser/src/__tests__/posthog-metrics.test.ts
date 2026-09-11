@@ -1,11 +1,11 @@
 import { PostHogMetrics } from '../posthog-metrics'
 import { PostHog } from '../posthog-core'
 
-const mockLogger = {
+const mockLogger = vi.hoisted(() => ({
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-}
+}))
 
 vi.mock('@posthog/browser-common/utils/logger', () => ({
     createLogger: vi.fn(() => mockLogger),
@@ -148,5 +148,46 @@ describe('posthog-metrics', () => {
 
         const resourceAttrs = sentRequests()[1].data.resourceMetrics[0].resource.attributes
         expect(resourceAttrs).toContainEqual({ key: 'service.name', value: { stringValue: 'renamed-service' } })
+    })
+
+    describe('network metrics', () => {
+        const originalFetch = window.fetch
+        const isFetchWrapped = (): boolean => !!(window.fetch as any).__posthog_wrapped__
+
+        beforeEach(() => {
+            Object.defineProperty(window, 'fetch', { configurable: true, value: vi.fn(), writable: true })
+        })
+
+        afterEach(() => {
+            ;(mockPostHog.config as any).metrics = {}
+            metrics.onConfigChange()
+            Object.defineProperty(window, 'fetch', { configurable: true, value: originalFetch, writable: true })
+        })
+
+        it.each([
+            [undefined, false],
+            [false, false],
+            [true, true],
+            [{ name: 'api.duration' }, true],
+        ])('with metrics.network = %j wraps fetch on initialize: %s', (network, wrapped) => {
+            ;(mockPostHog.config as any).metrics = { network }
+
+            metrics.initialize()
+
+            expect(isFetchWrapped()).toBe(wrapped)
+        })
+
+        it('starts and stops wrapping when the config changes', () => {
+            ;(mockPostHog.config as any).metrics = { network: true }
+            metrics.initialize()
+            metrics.onConfigChange()
+            expect(isFetchWrapped()).toBe(true)
+            ;(mockPostHog.config as any).metrics = { network: false }
+            metrics.onConfigChange()
+            expect(isFetchWrapped()).toBe(false)
+            ;(mockPostHog.config as any).metrics = { network: true }
+            metrics.onConfigChange()
+            expect(isFetchWrapped()).toBe(true)
+        })
     })
 })

@@ -280,6 +280,22 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
   \\"metrics\\": [
     \\"undefined\\",
     {
+      \\"network\\": [
+        \\"undefined\\",
+        \\"false\\",
+        \\"true\\",
+        {
+          \\"name\\": [
+            \\"undefined\\",
+            \\"string\\",
+            \\"(request: NetworkMetricsRequest) => string | null | undefined\\"
+          ],
+          \\"attributes\\": [
+            \\"undefined\\",
+            \\"(request: NetworkMetricsRequest, response: NetworkMetricsResponse) => MetricAttributes | undefined\\"
+          ]
+        }
+      ],
       \\"serviceName\\": [
         \\"undefined\\",
         \\"string\\"

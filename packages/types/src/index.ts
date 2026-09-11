@@ -81,6 +81,9 @@ export type {
     RequestQueueConfig,
     LogCaptureOptions,
     MetricsConfig,
+    NetworkMetricsConfig,
+    NetworkMetricsRequest,
+    NetworkMetricsResponse,
     CapturePageviewOptions,
     PostHogConfig,
 } from './posthog-config'
