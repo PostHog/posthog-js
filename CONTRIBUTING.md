@@ -331,6 +331,30 @@ The main unit, functional, local Playwright, MCP, SDK compliance, and native plu
 
 Publishing, S3 recovery, reference-generation, downstream-upgrade, and watcher worker/sweep workflows run in trusted push, manual, or scheduled contexts rather than untrusted PR test jobs. Their required GitHub App, AWS/OIDC, Slack, and OpenAI configuration must not be bypassed to make a release or automation run appear successful.
 
+### CI egress auditing
+
+Credential-bearing GitHub-hosted Ubuntu jobs run the SHA-pinned `step-security/harden-runner` action as their first step, before checkout, dependency installation, or token creation. Coverage includes jobs with write-capable `GITHUB_TOKEN` permissions, OIDC access, GitHub App credentials, or service secrets, including secrets used only in failure notifications. Read-only jobs without service secrets are intentionally outside this rollout.
+
+The initial policy is `egress-policy: audit`. It reports network activity to StepSecurity but does not enforce a job-specific outbound allowlist. Audit mode requires StepSecurity telemetry; review the service's data handling before adding sensitive destinations. Do not interpret a successful audit step as proof that exfiltration is prevented, and do not add token permissions just for auditing.
+
+Before enabling `egress-policy: block` for a job:
+
+1. Review the report linked from the job summary after representative successful runs, including cold dependency downloads, matrix variants, and relevant failure/recovery paths. Do not trigger a production release solely to collect a baseline.
+2. Review every observed destination and commit a narrow `allowed-endpoints` list for that job. Do not automatically approve unexplained traffic or share publishing destinations with unrelated build jobs.
+3. Verify required traffic succeeds and an unlisted destination is blocked in a disposable, credential-free job on the same runner type before using the policy with real credentials.
+
+The following credential-bearing jobs are not covered by this setup:
+
+| Jobs                                                                                                      | Reason and follow-up                                                                                                                                                                                                   |
+| --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `integration.yml` / `browsers`                                                                            | Runs in a job container. Harden-Runner does not support this layout on standard GitHub-hosted runners. Move enforcement to a supported host or runner image.                                                           |
+| `library-ci.yml` / `compat`                                                                               | Uses Depot and a job container. Verify provider-level enforcement or a supported agent deployment separately.                                                                                                          |
+| Feature Flags project board, changeset hygiene, release approval notification, and SDK compliance callers | Their steps live in pinned reusable workflows in `PostHog/.github` or `PostHog/posthog-sdk-test-harness`. Add monitoring there, then update the caller pins. A caller cannot prepend steps to a reusable workflow job. |
+
+The local S3 recovery reusable workflow is covered inside its credential-bearing jobs. macOS native builds currently have no declared service secrets or write permissions and remain outside this rollout. Hosted macOS/Windows monitoring does not provide the same blocking support as hosted Linux. See the [Harden-Runner compatibility matrix](https://github.com/step-security/harden-runner#environment-compatibility-matrix) and [limitations](https://github.com/step-security/harden-runner/blob/main/docs/limitations.md) before expanding coverage.
+
+Network auditing or blocking does not replace least-privilege tokens or build/publish separation. An allowed destination such as the GitHub API can still be abused with a stolen token.
+
 ## Configuration Files
 
 - `package.json` - Root workspace scripts and dependencies

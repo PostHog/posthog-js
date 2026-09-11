@@ -145,6 +145,11 @@ jobs:
             # `TOOLBAR_PUBLIC_PATH`) and to double-check the S3 upload path.
             version: ${{ steps.get-version.outputs.version }}
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - name: Notify Slack - Approved
               continue-on-error: true # Don't block release if Slack notification fails
               uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
@@ -283,6 +288,11 @@ jobs:
         runs-on: ubuntu-latest
         if: always() && needs.version-bump.result == 'failure' && needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - name: Check for rejection
               id: check-rejection
               env:
@@ -362,6 +372,11 @@ jobs:
         # Keep npm trusted publishing in this workflow. Reuse these steps for
         # the separately gated posthog-js job below.
         steps: &publish-package-steps
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
@@ -547,6 +562,11 @@ jobs:
         runs-on: ubuntu-latest
         if: always() && needs.version-bump.outputs.commit-hash != ''
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - name: Require successful posthog-js S3 release before npm publishing
               env:
                   BUILD_RESULT: ${{ needs.build-s3-artifacts.result }}
@@ -711,6 +731,11 @@ jobs:
                     - name: '@posthog/rollup-plugin'
                       path: packages/rollup-plugin
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - name: Checkout repository
               if: >-
                   needs.recover-posthog-js-s3.result != 'success' ||
@@ -837,6 +862,11 @@ jobs:
         permissions:
             contents: read
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
@@ -957,6 +987,11 @@ jobs:
             # it defensively, but we set it correctly here too).
             TOOLBAR_PUBLIC_PATH: https://${{ matrix.region.host }}/static/${{ needs.version-bump.outputs.version }}/
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - name: Checkout posthog/posthog
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
@@ -1166,6 +1201,11 @@ jobs:
                     - { name: us, bucket: us-assets.i.posthog.com, aws_region: us-east-1 }
                     - { name: eu, bucket: eu-assets.i.posthog.com, aws_region: eu-central-1 }
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             # Sparse checkout the release tooling plus the root pnpm files so
             # we can do a locked, filtered install for @posthog-tooling/release.
             - name: Checkout release tooling
@@ -1320,6 +1360,11 @@ jobs:
             (needs.upload-s3.result == 'success' || needs.upload-s3.result == 'skipped') &&
             needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -1348,6 +1393,11 @@ jobs:
              inputs.publish_to_npm == true ||
              inputs.force_overwrite == true)
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - name: Resolve recovery result
               id: result
               env:
