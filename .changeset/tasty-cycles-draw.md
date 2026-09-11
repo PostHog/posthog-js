@@ -3,4 +3,4 @@
 '@posthog/react-native-plugin': minor
 ---
 
-Add Android session replay screenshot scale, compression quality, and color mode settings.
+Add experimental Android-only `screenshotScale`, `screenshotCompressionQuality`, and `screenshotColorMode` options to `sessionReplayConfig`, and bump `com.posthog:posthog-android` to 3.63.1.
