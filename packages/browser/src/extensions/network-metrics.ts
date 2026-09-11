@@ -133,9 +133,11 @@ const patchXHR = (instance: PostHog): (() => void) => {
                 const request = requests.get(this)
                 if (request) {
                     const start = now()
-                    addEventListener(this as unknown as Element, 'loadend', () =>
+                    const onLoadEnd = () => {
+                        this.removeEventListener('loadend', onLoadEnd)
                         record(instance, request, this.status, start)
-                    )
+                    }
+                    addEventListener(this as unknown as Element, 'loadend', onLoadEnd)
                 }
             } catch (e) {
                 logger.error('Failed to observe XHR send', e)

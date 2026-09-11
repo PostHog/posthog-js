@@ -220,6 +220,47 @@ describe('network metrics', () => {
             expect(openSpy).toHaveBeenCalledWith('GET', 'https://api.example.com/things', true, 'user', 'pass')
             expect(sendSpy).toHaveBeenCalledWith('body')
         })
+
+        it('records histogram exactly once per response when an XHR instance is reused', () => {
+            start()
+            const xhr = new window.XMLHttpRequest() as unknown as FakeXHR
+
+            xhr.open('GET', 'https://api.example.com/things/1')
+            xhr.send()
+            xhr.respond(200)
+
+            expect(recorded()).toHaveLength(1)
+            expect(recorded()[0][2].attributes.path).toBe('/things/:id')
+
+            xhr.open('GET', 'https://api.example.com/things/2')
+            xhr.send()
+            xhr.respond(201)
+
+            expect(recorded()).toHaveLength(2)
+            expect(recorded()[1][2].attributes.path).toBe('/things/:id')
+        })
+
+        it('handles send() with no prior open()', () => {
+            start()
+            const xhr = new window.XMLHttpRequest() as unknown as FakeXHR
+
+            expect(() => xhr.send()).not.toThrow()
+            expect(recorded()).toEqual([])
+        })
+
+        it('passes through a synchronous throw from the original send', () => {
+            start()
+            const xhr = new window.XMLHttpRequest() as unknown as FakeXHR
+            const error = new Error('InvalidStateError')
+
+            sendSpy.mockImplementationOnce(() => {
+                throw error
+            })
+
+            xhr.open('GET', 'https://api.example.com/things')
+            expect(() => xhr.send()).toThrow(error)
+            expect(recorded()).toEqual([])
+        })
     })
 
     describe('config', () => {
