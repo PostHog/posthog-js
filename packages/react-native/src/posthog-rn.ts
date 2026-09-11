@@ -236,6 +236,11 @@ export interface PostHogOptions extends PostHogCoreOptions {
    *
    * The native SDK builds and sends this event, so JS `before_send` never sees it.
    *
+   * On iOS, `false` doesn't stop the hook the SDK installs at launch to catch a tap that
+   * cold-launches the app, because it runs before your JS. To skip that hook too, also set
+   * `com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED` to `false` in `Info.plist`
+   * (Expo: `ios.infoPlist`).
+   *
    * Not supported on web.
    *
    * @default true
