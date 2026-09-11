@@ -56,6 +56,7 @@ test('strict rrdom-nodejs, canvas WebRTC and core installed consumer declaration
             JSON.stringify(
                 {
                     private: true,
+                    packageManager: JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).packageManager,
                     dependencies,
                     devDependencies: {
                         ...Object.fromEntries(
@@ -69,7 +70,10 @@ test('strict rrdom-nodejs, canvas WebRTC and core installed consumer declaration
             )
         )
         // Overrides ensure transitive workspace ranges resolve to the same built tarballs.
-        writeFileSync(path.join(consumer, 'pnpm-workspace.yaml'), `overrides: ${JSON.stringify(dependencies)}\n`)
+        writeFileSync(
+            path.join(consumer, 'pnpm-workspace.yaml'),
+            `minimumReleaseAge: 10080\noverrides: ${JSON.stringify(dependencies)}\n`
+        )
         pnpm(['install', '--lockfile-only'], consumer, `${label}-lock.log`)
         pnpm(['install', '--frozen-lockfile'], consumer, `${label}-install.log`)
         for (const name of Object.keys(dependencies)) {

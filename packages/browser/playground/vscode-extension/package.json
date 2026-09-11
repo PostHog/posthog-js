@@ -1,5 +1,6 @@
 {
     "name": "posthog-vscode-playground",
+    "packageManager": "pnpm@11.7.0",
     "displayName": "PostHog VS Code Playground",
     "description": "A playground for testing PostHog integration in a VS Code extension.",
     "version": "0.0.1",

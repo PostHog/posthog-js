@@ -25,6 +25,7 @@
         "test:rrweb-package-exports": "pnpm turbo run build --filter=@posthog/rrweb-all --filter=rrdom-nodejs && node --test scripts/rrweb-package-exports.test.mjs",
         "test:built": "turbo test:built",
         "test:rrweb": "turbo test:rrweb",
+        "test:dependency-cooldown": "node --test scripts/__tests__/dependency-cooldown.test.mjs",
         "test:build-graph": "node --test scripts/__tests__/build-graph.test.mjs",
         "test:docs-scripts": "node --test \"scripts/docs/__tests__/*.test.js\"",
         "test:dev-watch": "node --test scripts/test-dev-watch.mjs",

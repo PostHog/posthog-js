@@ -1,5 +1,6 @@
 {
     "name": "csp-violations-playground",
+    "packageManager": "pnpm@11.7.0",
     "version": "1.0.0",
     "description": "A playground for testing CSP violation reports with PostHog",
     "main": "server.js",
