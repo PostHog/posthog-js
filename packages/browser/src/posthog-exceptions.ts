@@ -37,6 +37,13 @@ const EXTENSION_URL_PREFIXES = [
 // exception value instead. No page or SDK code references these names.
 const INJECTED_BROWSER_SCRIPT_GLOBALS = ['__firefox__', '__gCrWeb']
 
+// Password-manager extensions run their autofill content script in the page world, so the frame
+// filename is the page URL here too and EXTENSION_URL_PREFIXES cannot catch it. The script throws
+// when it reads one of its own services before that service exists. Each signature pairs a function
+// only the autofill script defines with the internal name the exception value reports, so a
+// first-party error of the same type on the same page is still captured.
+const EXTENSION_AUTOFILL_SIGNATURES = [{ functionName: 'checkPageContainsShadowDom', internal: 'domQueryService' }]
+
 export function buildErrorPropertiesBuilder() {
     return new ErrorTracking.ErrorPropertiesBuilder(
         [
@@ -333,8 +340,20 @@ export class PostHogExceptions implements Extension {
     }
 
     private _isInjectedBrowserScriptException(exceptionList: ErrorTracking.ExceptionList): boolean {
-        return exceptionList.some(({ value }) => {
-            return isString(value) && INJECTED_BROWSER_SCRIPT_GLOBALS.some((global) => value.includes(global))
+        return exceptionList.some(({ value, stacktrace }) => {
+            if (!isString(value)) {
+                return false
+            }
+
+            if (INJECTED_BROWSER_SCRIPT_GLOBALS.some((global) => value.includes(global))) {
+                return true
+            }
+
+            const frames = stacktrace?.frames ?? []
+            return EXTENSION_AUTOFILL_SIGNATURES.some(
+                ({ functionName, internal }) =>
+                    value.includes(internal) && frames.some((frame) => frame.function === functionName)
+            )
         })
     }
 

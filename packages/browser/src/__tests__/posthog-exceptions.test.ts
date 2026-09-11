@@ -427,6 +427,11 @@ describe('PostHogExceptions', () => {
                 filename: 'https://example.com/project/566302/sessions/index.js',
                 platform: 'javascript:web',
             }
+            const autofillFrame = {
+                filename: 'https://example.com/login',
+                function: 'checkPageContainsShadowDom',
+                platform: 'javascript:web',
+            }
 
             it.each([
                 ['Firefox for iOS', { type: 'ReferenceError', value: "Can't find variable: __firefox__" }],
@@ -463,6 +468,54 @@ describe('PostHogExceptions', () => {
                     type: 'ReferenceError',
                     value: "Can't find variable: __firefox__",
                     stacktrace: { frames: [pageFrame], type: 'raw' },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('does not capture exceptions thrown by a password-manager autofill script on the page URL', () => {
+                const exception = {
+                    type: 'TypeError',
+                    value: "undefined is not an object (evaluating 'this.domQueryService')",
+                    stacktrace: { frames: [autofillFrame], type: 'raw' },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toBeCalledWith(
+                    '$exception',
+                    { $exception_list: [exception] },
+                    expect.anything()
+                )
+            })
+
+            it('captures a first-party TypeError on the same page', () => {
+                const exception = {
+                    type: 'TypeError',
+                    value: "undefined is not an object (evaluating 'this.loginService')",
+                    stacktrace: { frames: [autofillFrame], type: 'raw' },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('captures the autofill value when no frame names an autofill function', () => {
+                const exception = {
+                    type: 'TypeError',
+                    value: "undefined is not an object (evaluating 'this.domQueryService')",
+                    stacktrace: { frames: [pageFrame], type: 'raw' },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('captures password-manager autofill exceptions when extension capture is enabled', () => {
+                exceptions.onRemoteConfig({
+                    ok: true,
+                    config: { errorTracking: { captureExtensionExceptions: true } } as RemoteConfig,
+                })
+                const exception = {
+                    type: 'TypeError',
+                    value: "undefined is not an object (evaluating 'this.domQueryService')",
+                    stacktrace: { frames: [autofillFrame], type: 'raw' },
                 }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
                 expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
