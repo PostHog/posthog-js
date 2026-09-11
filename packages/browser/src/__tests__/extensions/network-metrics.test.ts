@@ -173,6 +173,18 @@ describe('network metrics', () => {
             expect(recorded()).toEqual([])
         })
 
+        it.each([['/ingest/e/?ip=1'], ['http://localhost/ingest/i/v1/metrics']])(
+            'does not record requests to a relative PostHog api_host: %s',
+            async (url) => {
+                ;(mockPostHog.requestRouter.endpointFor as vi.Mock).mockReturnValue('/ingest')
+                start()
+
+                await window.fetch(url)
+
+                expect(recorded()).toEqual([])
+            }
+        )
+
         it('does not record requests to a proxied PostHog ingestion path', async () => {
             ;(mockPostHog.requestRouter.isIngestionEndpoint as vi.Mock).mockReturnValue(true)
             start()

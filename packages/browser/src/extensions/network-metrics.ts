@@ -34,16 +34,19 @@ const parseUrl = (url: string): URL | undefined => {
     }
 }
 
+const toAbsoluteUrl = (url: string): string => parseUrl(url)?.href ?? url
+
 const toRequest = (method: unknown, url: unknown): NetworkMetricsRequest => ({
-    url: parseUrl(String(url))?.href ?? String(url),
+    url: toAbsoluteUrl(String(url)),
     method: String(method).toUpperCase(),
 })
 
+// `api_host` may be a relative proxy path like `/ingest`, so resolve it the same way as the request url.
 const isPostHogRequest = (instance: PostHog, url: string): boolean => {
     const router = instance.requestRouter
     return (
-        url.indexOf(router.endpointFor('api')) === 0 ||
-        url.indexOf(router.endpointFor('flags')) === 0 ||
+        url.indexOf(toAbsoluteUrl(router.endpointFor('api'))) === 0 ||
+        url.indexOf(toAbsoluteUrl(router.endpointFor('flags'))) === 0 ||
         router.isIngestionEndpoint(url)
     )
 }
