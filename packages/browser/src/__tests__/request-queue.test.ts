@@ -104,6 +104,35 @@ describe('RequestQueue', () => {
             ])
         })
 
+        it('does not merge requests that share a batch key but not a batch group', () => {
+            queue.enqueue({
+                data: { event: '$snapshot', timestamp: EPOCH - 2000 },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'session-one-window-one',
+            })
+            queue.enqueue({
+                data: { event: '$snapshot', timestamp: EPOCH - 1000 },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'session-two-window-two',
+            })
+            queue.enqueue({
+                data: { event: '$snapshot', timestamp: EPOCH },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'session-one-window-one',
+            })
+
+            queue.enable()
+            vi.runOnlyPendingTimers()
+
+            expect(vi.mocked(sendRequest).mock.calls.map(([req]) => [req.batchGroup, req.data?.length])).toEqual([
+                ['session-one-window-one', 2],
+                ['session-two-window-two', 1],
+            ])
+        })
+
         it('preserves event timestamps and leaves timestamp-free recording payloads unchanged', () => {
             const timestamp = new Date(EPOCH - 60_000)
             const event = { event: 'backdated', timestamp }

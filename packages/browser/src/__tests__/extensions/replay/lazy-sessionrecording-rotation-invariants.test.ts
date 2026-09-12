@@ -329,6 +329,22 @@ function checkInvariants(
     ) {
         violations.push(`(4) idle right after rotation into ${h.lazy._sessionId} with a recent interaction`)
     }
+    // the request queue merges same-key requests into one payload, so a batch group two epochs share
+    // would ship their snapshots in one upload and the player reads the later epoch's Meta and
+    // FullSnapshot as a late initial snapshot
+    const epochByBatchGroup = new Map<string, string>()
+    h.capture.mock.calls
+        .filter(([name]) => name === '$snapshot')
+        .forEach(([, props, options]) => {
+            const batchGroup = String(options?._batchGroup)
+            const epoch = `${props.$session_id}/${props.$window_id}`
+            const seen = epochByBatchGroup.get(batchGroup)
+            if (isUndefined(seen)) {
+                epochByBatchGroup.set(batchGroup, epoch)
+            } else if (seen !== epoch) {
+                violations.push(`(6) batch group ${batchGroup} shared by epochs ${seen} and ${epoch}`)
+            }
+        })
     if (h.record.mock.calls.length !== 1 + state.rotations) {
         violations.push(`(5) record called ${h.record.mock.calls.length} times for ${state.rotations} rotations`)
     }

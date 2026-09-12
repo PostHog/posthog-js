@@ -2524,6 +2524,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             _url: this._instance.requestRouter.endpointFor('api', this._endpoint),
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
+            // one upload must never span two epochs: the queue merges same-key requests into one
+            // payload, and the player reads a second epoch's Meta and FullSnapshot inside an upload
+            // as an initial snapshot that arrived late
+            _batchGroup: `${properties.$session_id}-${properties.$window_id}`,
             skip_client_rate_limiting: true,
         })
     }

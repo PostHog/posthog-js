@@ -26,6 +26,7 @@ exports[`Lazy SessionRecording > recording > records events emitted before and a
     "$window_id": "windowId",
   },
   {
+    "_batchGroup": "<generated-session-id>-windowId",
     "_batchKey": "recordings",
     "_noTruncate": true,
     "_url": "https://test.com/s/",

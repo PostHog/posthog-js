@@ -187,6 +187,9 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties, useBabel) => [
                               // used in config
                               '_url',
                               '_batchKey',
+                              // written by the separately built lazy recorder and read by capture(),
+                              // so it must keep its literal name in every artifact
+                              '_batchGroup',
                               '_noTruncate',
                               '_onCapture',
 

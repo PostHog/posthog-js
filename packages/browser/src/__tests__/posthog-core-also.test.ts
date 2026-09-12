@@ -402,6 +402,27 @@ describe('posthog core', () => {
             )
         })
 
+        it('carries the explicit session/window batch group onto the request', () => {
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+
+            posthog.capture(
+                '$snapshot',
+                { $session_id: 'session-one', $window_id: 'window-one' },
+                {
+                    _url: 'https://app.posthog.com/s/',
+                    _batchKey: 'recordings',
+                    _batchGroup: 'session-one-window-one',
+                }
+            )
+
+            expect(posthog._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    batchKey: 'recordings',
+                    batchGroup: 'session-one-window-one',
+                })
+            )
+        })
+
         it.each([
             ['recordings', 'session-1'],
             [undefined, undefined],
