@@ -2219,7 +2219,9 @@ export class PostHog extends PostHogCore {
    *
    * Only for taps {@link PostHogOptions.capturePushNotificationOpened} cannot see itself —
    * local notifications, plus Android taps while the app is running if
-   * `@posthog/react-native-plugin` is older than 2.6.0 — or the tap can be counted twice.
+   * `@posthog/react-native-plugin` is older than 2.6.0. A notification PostHog sent is still
+   * counted once when both paths report it (same `posthog.invocation_id` and action within
+   * five minutes); one from another provider is counted twice.
    *
    * Keys of `payload`'s `posthog` entry become `$notification_<key>` properties. Leave
    * `action` unset for a plain tap; `subtitle` is iOS only. The native SDK builds and
