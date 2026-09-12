@@ -1317,6 +1317,7 @@ export abstract class PostHogCoreStateless {
       await this.sendBatch([message], undefined, explicitRoute ?? this.getQueueRouteKey(message))
     } catch (err) {
       this._events.emit('error', err)
+      throw err
     }
   }
 
@@ -1935,7 +1936,8 @@ export abstract class PostHogCoreStateless {
           // We only throw on HTTP errors if we're not in no-cors mode.
           // https://developer.mozilla.org/en-US/docs/Web/API/Request/mode#no-cors
           const isNoCors = options.mode === 'no-cors'
-          if (!isNoCors && (res.status < 200 || res.status >= 400)) {
+          const maxSuccessStatus = responseHandling.type === 'successful-write' ? 300 : 400
+          if (!isNoCors && (res.status < 200 || res.status >= maxSuccessStatus)) {
             // Read error bodies lazily so retryable statuses are retried immediately. The
             // getter still uses this attempt's deadline when diagnostics request the body.
             throw new PostHogFetchHttpError(res, reqByteLength, requestDeadline, ctrl)
@@ -1996,7 +1998,17 @@ export abstract class PostHogCoreStateless {
 
     const doShutdown = async (): Promise<void> => {
       try {
-        await this.promiseQueue.join()
+        while (this.promiseQueue.length > 0) {
+          try {
+            await this.promiseQueue.join()
+          } catch (e) {
+            if (!isPostHogFetchError(e)) {
+              throw e
+            }
+            // A failed immediate request must not skip other pending work or the queued events below.
+            await logFlushError(e)
+          }
+        }
 
         while (true) {
           const hasQueuedEvents = this.getActiveQueueRoutes().some((route) => this.getRouteQueue(route).length > 0)
