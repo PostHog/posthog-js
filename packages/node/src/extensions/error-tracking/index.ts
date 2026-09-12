@@ -8,6 +8,47 @@ import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
 const SHUTDOWN_TIMEOUT = 2000
 
+function sanitizeAdditionalPropertyValue(val: unknown): unknown {
+  if (val instanceof Date) {
+    return val.toISOString()
+  }
+  if (val instanceof Error) {
+    const errorObj: Record<string, any> = {
+      name: val.name,
+      message: val.message,
+      stack: val.stack,
+    }
+    for (const key of Object.keys(val)) {
+      errorObj[key] = (val as any)[key]
+    }
+    return errorObj
+  }
+  if (Array.isArray(val)) {
+    return val.map(sanitizeAdditionalPropertyValue)
+  }
+  if (val !== null && typeof val === 'object' && val.constructor === Object) {
+    const res: Record<string, any> = {}
+    for (const [k, v] of Object.entries(val)) {
+      res[k] = sanitizeAdditionalPropertyValue(v)
+    }
+    return res
+  }
+  return val
+}
+
+export function sanitizeAdditionalProperties(
+  additionalProperties?: Record<string | number, any>
+): Record<string | number, any> | undefined {
+  if (!additionalProperties) {
+    return additionalProperties
+  }
+  const sanitized: Record<string | number, any> = {}
+  for (const [key, val] of Object.entries(additionalProperties)) {
+    sanitized[key] = sanitizeAdditionalPropertyValue(val)
+  }
+  return sanitized
+}
+
 export default class ErrorTracking {
   private client: PostHogBackendClient
   private _exceptionAutocaptureEnabled: boolean
@@ -19,19 +60,9 @@ export default class ErrorTracking {
     this._exceptionAutocaptureEnabled = options.enableExceptionAutocapture || false
     this._logger = _logger
 
-    // Burst protection is scoped PER EXCEPTION TYPE: the rate limiter is keyed by exception type
-    // (see `consumeRateLimit(exceptionType)` below), so each distinct type gets its own fresh
-    // token bucket. There is no aggregate cap across all types — a burst made up of many distinct
-    // types is not throttled in total, only per individual type.
-    //
-    // By default each exception type captures ten exceptions before being rate limited, then
-    // refills at a rate of one token / 10 second period (e.g. captures 1 rate-limited exception of
-    // that type every 10 seconds until the burst ends). The bucket size and refill rate can be
-    // tuned via the `exceptionRateLimiterBucketSize` and `exceptionRateLimiterRefillRate`
-    // options.
     this._rateLimiter = new BucketedRateLimiter({
       ...resolveExceptionRateLimiterConfig(options),
-      refillInterval: 10000, // ten seconds in milliseconds
+      refillInterval: 10000,
       _logger: this._logger,
     })
 
@@ -49,7 +80,7 @@ export default class ErrorTracking {
     distinctId?: string,
     additionalProperties?: Record<string | number, any>
   ): Promise<EventMessage> {
-    const properties: EventMessage['properties'] = { ...additionalProperties }
+    const properties: EventMessage['properties'] = { ...sanitizeAdditionalProperties(additionalProperties) }
 
     const exceptionProperties = builder.buildFromUnknown(error, hint)
     exceptionProperties.$exception_list = await builder.modifyFrames(exceptionProperties.$exception_list)
