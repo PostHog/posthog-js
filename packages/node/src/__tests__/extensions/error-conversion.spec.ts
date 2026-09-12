@@ -1,4 +1,5 @@
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import ErrorTracking from '@/extensions/error-tracking'
 import { execFileSync } from 'node:child_process'
 import { constants, type ReadStream } from 'node:fs'
 import { mkdtemp, open, rename, rm, symlink, truncate, writeFile } from 'node:fs/promises'
@@ -58,6 +59,35 @@ describe('error conversion', () => {
     expect(exceptionList.length).toEqual(2)
     expect(exceptionList[0].value).toEqual('test error')
     expect(exceptionList[1].value).toEqual('Object captured as exception with keys: error_code')
+  })
+
+  it('should serialize Date and Error objects in additionalProperties', async () => {
+    const customError = new Error('Nested error message')
+    ;(customError as any).customCode = 123
+    const date = new Date('2026-09-12T12:00:00.000Z')
+
+    const message = await ErrorTracking.buildEventMessage(
+      errorPropertiesBuilder,
+      new Error('Primary error'),
+      { syntheticException: new Error('synth') },
+      'test-user',
+      {
+        timestamp: date,
+        nestedError: customError,
+        simple: 'string-val',
+      }
+    )
+
+    expect(message.properties?.timestamp).toEqual('2026-09-12T12:00:00.000Z')
+    expect(message.properties?.nestedError).toEqual(
+      expect.objectContaining({
+        name: 'Error',
+        message: 'Nested error message',
+        customCode: 123,
+      })
+    )
+    expect(message.properties?.nestedError.stack).toBeDefined()
+    expect(message.properties?.simple).toEqual('string-val')
   })
 
   describe('source context file reads', () => {
