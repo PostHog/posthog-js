@@ -2413,17 +2413,34 @@
           "name": "flags"
         },
         {
-          "description": "Mapping of group type index to group name",
+          "description": "Mapping of group type index to group name, using the flag-definitions endpoint's field name.",
+          "type": "Record<string, string>",
+          "name": "group_type_mapping"
+        },
+        {
+          "description": "Legacy alias for group_type_mapping, retained for existing providers and cache readers.",
           "type": "Record<string, string>",
           "name": "groupTypeMapping"
         },
         {
-          "description": "Server-controlled gate for minimal `$feature_flag_called` events, from the top-level `minimal_flag_called_events` field of the flag-definitions payload. Absent (e.g. cached data written by an older SDK version) means full events.",
+          "description": "Server-controlled gate for minimal `$feature_flag_called` events, from the top-level `minimal_flag_called_events` field of the flag-definitions payload. If neither this field nor its legacy alias is present, full events are sent.",
+          "type": "boolean",
+          "name": "minimal_flag_called_events"
+        },
+        {
+          "description": "Legacy alias for minimal_flag_called_events.",
           "type": "boolean",
           "name": "minimalFlagCalledEvents"
         }
       ],
       "path": "src/extensions/feature-flags/cache.ts"
+    },
+    {
+      "id": "FlagDefinitionCacheInput",
+      "name": "FlagDefinitionCacheInput",
+      "properties": [],
+      "path": "src/extensions/feature-flags/cache.ts",
+      "example": "FlagDefinitionCacheData | (Omit<FlagDefinitionCacheData, 'groupTypeMapping'> & {\n    group_type_mapping: Record<string, string>;\n    groupTypeMapping?: Record<string, string>;\n})"
     },
     {
       "id": "FlagDefinitionCacheProvider",
@@ -3161,6 +3178,10 @@
           "name": "requestId"
         },
         {
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
+        },
+        {
           "type": "(boolean | { [key: string]: JsonType; }) & (boolean | { [key: string]: JsonType; })",
           "name": "sessionRecording"
         },
@@ -3195,10 +3216,6 @@
         {
           "type": "number",
           "name": "evaluatedAt"
-        },
-        {
-          "type": "boolean",
-          "name": "minimalFlagCalledEvents"
         }
       ],
       "path": "../core/src/types.ts"
@@ -3224,6 +3241,10 @@
           "name": "requestId"
         },
         {
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
+        },
+        {
           "type": "(boolean | { [key: string]: JsonType; }) & (boolean | { [key: string]: JsonType; })",
           "name": "sessionRecording"
         },
@@ -3258,10 +3279,6 @@
         {
           "type": "number",
           "name": "evaluatedAt"
-        },
-        {
-          "type": "boolean",
-          "name": "minimalFlagCalledEvents"
         }
       ],
       "path": "../core/src/types.ts"
@@ -3637,7 +3654,7 @@
         },
         {
           "description": "Optional cache provider for feature flag definitions.\n\nAllows custom caching strategies (Redis, database, etc.) for flag definitions\nin multi-worker environments. If not provided, defaults to in-memory cache.\n\nThis enables distributed coordination where only one worker fetches flags while\nothers use cached data, reducing API calls and improving performance.",
-          "type": "FlagDefinitionCacheProvider",
+          "type": "FlagDefinitionCacheProvider<FlagDefinitionCacheInput>",
           "name": "flagDefinitionCacheProvider"
         },
         {
