@@ -378,6 +378,41 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         )
     })
 
+    it('counts an event dropped for being too large to stringify on the replay debug properties', async () => {
+        const gzipCompress = vi.fn(async (input: string) => {
+            // hold the async path open so the event is still queued at unload
+            await new Promise(() => {})
+            return new Blob([gzipSync(strToU8(input))])
+        })
+
+        const { emit, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+            gzipSupported: true,
+            gzipCompress,
+        })
+
+        const originalStringify = JSON.stringify
+        const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation((value: any, ...rest: any[]) => {
+            const serialized = originalStringify(value, ...rest)
+            if (serialized && serialized.indexOf('oversized') !== -1) {
+                throw new RangeError('Invalid string length')
+            }
+            return serialized
+        })
+
+        try {
+            emit(createFullSnapshot({ content: 'oversized' }))
+            lazyLoadedSessionRecording['_onBeforeUnload']()
+        } finally {
+            stringifySpy.mockRestore()
+        }
+
+        // the drop only writes a debug-gated console line, so without this counter the recording
+        // loses data with nothing in our own data to show for it
+        expect(lazyLoadedSessionRecording.sdkDebugProperties['$sdk_debug_replay_unstringifiable_events_dropped']).toBe(
+            1
+        )
+    })
+
     it('does not retry serializing an event that is too large to stringify', async () => {
         const gzipCompress = vi.fn(async (input: string) => {
             // hold the async path open so the event is still queued at unload

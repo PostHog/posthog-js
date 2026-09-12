@@ -537,6 +537,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _throttledMutationsDropped = 0
     private _oversizedMutationsDropped = 0
     private _oversizedMutationBytesDropped = 0
+    // events dropped because their JSON is longer than the engine's maximum string length. The
+    // page keeps running and the recording loses them silently, so the count has to ship
+    private _unstringifiableEventsDropped = 0
     // true while the current epoch has had no user interaction; a held epoch is
     // discarded (not shipped) by stop or a subsequent rotation
     private _holdFlushUntilInteraction = false
@@ -1628,10 +1631,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // belongs to the old session) and before the new one takes its first snapshot
             this._slowestFullSnapshot = undefined
             this._lastSeenSnapshotCost = undefined
-            // the throttler drop counts are per-session too, so the new session starts at zero
+            // the drop counts are per-session too, so the new session starts at zero
             this._throttledMutationsDropped = 0
             this._oversizedMutationsDropped = 0
             this._oversizedMutationBytesDropped = 0
+            this._unstringifiableEventsDropped = 0
             getRRWeb()?.resetSnapshotCostState?.()
             this.start('session_id_changed')
         } finally {
@@ -1724,6 +1728,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // queued recording chunk into one request, so buffering an event that cannot be
         // stringified would take every chunk queued alongside it down too. Drop only this event.
         if (size === UNSTRINGIFIABLE_EVENT_SIZE) {
+            this._unstringifiableEventsDropped += 1
             logger.error('could not stringify event - dropping it to keep the rest of the recording')
             return
         }
@@ -2823,6 +2828,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_throttled_mutations_dropped: this._throttledMutationsDropped,
             $sdk_debug_replay_oversized_mutations_dropped: this._oversizedMutationsDropped,
             $sdk_debug_replay_oversized_mutation_bytes_dropped: this._oversizedMutationBytesDropped,
+            // cumulative across the session: events too large to stringify, each one a gap in
+            // the recording that nothing else reports
+            $sdk_debug_replay_unstringifiable_events_dropped: this._unstringifiableEventsDropped,
             $sdk_debug_replay_rrweb_error: this._rrwebError,
             [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
