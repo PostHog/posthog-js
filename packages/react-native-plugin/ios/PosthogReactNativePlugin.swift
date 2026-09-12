@@ -47,10 +47,10 @@ private func isReactNativeFatalJsError(_ event: PostHogEvent) -> Bool {
     }
 }
 
-/// Carries the ids JS holds into `beforeSend` for the length of `PostHogSDK.setup(_:)`.
+/// Carries the distinct id JS holds into `beforeSend` for the length of `PostHogSDK.setup(_:)`.
 ///
 /// `setup()` installs the push-open integration, which replays a tap that cold-launched the app
-/// synchronously — before `setIdentify` can mirror those ids into native storage, so the replayed
+/// synchronously — before `setIdentify` can mirror that id into native storage, so the replayed
 /// event would carry whatever identity the previous launch left behind. posthog-ios offers no seam
 /// to seed identity earlier (its storage manager is created inside `setup()`, with an internal
 /// initializer), and disabling the integration to delay the replay discards the held tap instead of
@@ -243,7 +243,9 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             if isReactNativeFatalJsError(event) {
                 return nil
             }
-            if let distinctId = setupIdentity.pendingDistinctId {
+            // Only the replayed tap. `setup()` also replays the previous launch's crash report,
+            // and that `$exception` carries the distinct id recorded at crash time, which stands.
+            if event.event == "$push_notification_opened", let distinctId = setupIdentity.pendingDistinctId {
                 event.distinctId = distinctId
             }
             return event
