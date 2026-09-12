@@ -526,7 +526,7 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
     it('shares one session across send_feedback and the surrounding tool calls', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, fakePostHog(), { collectFeedback: true })
+      instrument(server, fakePostHog(), { enableConversationId: false, collectFeedback: true })
 
       await callTool(client, 'add_todo', { text: 'First', context: 'Adding first todo' })
       await callTool(client, SEND_FEEDBACK, { feedback_type: 'other', summary: 'General note.' })

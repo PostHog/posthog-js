@@ -31,7 +31,7 @@ function createServer(options: MCPAnalyticsOptions): MCPServerLike {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [{ name: 'echo', description: 'Echoes a request label', inputSchema: { type: 'object' } }],
   }))
-  instrument(server, fakePostHog(), options)
+  instrument(server, fakePostHog(), { enableConversationId: false, ...options })
   return server as unknown as MCPServerLike
 }
 

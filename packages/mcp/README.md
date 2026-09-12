@@ -80,7 +80,7 @@ Protocol revision is a property of each **request**, not of the server: a v2 ser
 
 - **On `2026-07-28`** there is no `initialize` and no session header — the revision removed
   protocol-level sessions, and this SDK will not mint one. Session correlation therefore comes from
-  `enableConversationId`, which is **opt-in**. Without it every request is its own `$session_id`.
+  `enableConversationId`, which is **on by default**. Without it every request is its own `$session_id`.
 - **On `2025-11-25`**, the session id and the client's name and version are exchanged once at
   `initialize`. If your server builds a fresh `McpServer` per HTTP request — which
   `createMcpHandler` does by default — the instance serving a later `tools/call` never saw that
@@ -158,9 +158,24 @@ over-redacting ordinary prose. It also applies only to `$mcp_intent`: structured
 results are left as-is, because the same shapes are often legitimate data there. If you need a stronger
 guarantee, `context: false` and the `beforeSend` hook above remain the ways to drop the field entirely.
 
+### Defaults and opt-outs
+
+Intent, model capture, conversation correlation, and exception capture are enabled by default.
+Missing-capability reporting and feedback collection remain disabled.
+
+```ts
+instrument(server, posthog, { captureModel: false, enableConversationId: false })
+```
+
+Conversation correlation adds an optional `conversation_id` argument and returns a handle in
+eligible tool results. Clients must echo that handle to group later calls; calls without it mint
+new handles. Set `enableConversationId: false` to retain transport-based session grouping and
+unchanged response content. Custom `PostHogMCP` dispatchers enable model capture by default,
+but continue to supply their own session IDs.
+
 ### What `$mcp_llm_model` records, and when it stays empty
 
-`captureModel` is **off** by default. Turn it on and the SDK records the best model id visible to the
+`captureModel` is **on** by default. The SDK records the best model id visible to the
 server as `$mcp_llm_model`. Recognized client metadata wins with source `client_metadata`. Otherwise,
 the SDK injects a required `llm_model` parameter and records the answer with source `self_reported`.
 
@@ -178,12 +193,12 @@ Its capture and stripping require the SDK to have confirmed the parameter is its
   request from the live tool registry, so those work even on a fresh instance.
 - The `get_more_tools` virtual tool works on any instance and on either server type: the SDK writes
   that descriptor itself, so what it declares is known without a listing.
-- Instrumenting a low-level `Server` learns ownership of **your** tools while serving `tools/list`.
-  On a server that builds a fresh instance per HTTP request — `createMcpHandler`, or
-  `@rekog/mcp-nest` in its stateless mode — the instance handling a `tools/call` never served one,
-  so for those tools it neither strips `llm_model` nor records `$mcp_llm_model`. Nothing breaks and
-  no wrong value is stored; the property is simply absent while agents still pay a token for the
-  extra field.
+- Instrumenting a low-level `Server` learns ownership while serving `tools/list`. On a fresh
+  instance it consults the original listing handler before dispatch, preserving the request's
+  metadata and handler context. This internal lookup emits no discovery event and does not
+  inject virtual tools. It stops after 16 pages or 250 ms. If lookup fails or the tool is absent,
+  arguments remain untouched and self-reported model capture stays empty; client metadata
+  can still supply the model.
 
 As with `context`, what matters is instance lifetime rather than statelessness: a transport-stateless
 server (`sessionIdGenerator: undefined`) that keeps one long-lived server object learns ownership
