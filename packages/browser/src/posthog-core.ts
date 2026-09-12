@@ -1434,11 +1434,14 @@ export class PostHog implements PostHogInterface {
         })
     }
 
-    _send_retriable_request(options: QueuedRequestWithOptions): void {
+    _send_retriable_request(
+        options: QueuedRequestWithOptions,
+        transportOverride?: QueuedRequestWithOptions['transport']
+    ): void {
         if (this._retryQueue) {
-            this._retryQueue.retriableRequest(options)
+            this._retryQueue.retriableRequest(options, transportOverride)
         } else {
-            this._send_request(options)
+            this._send_request(transportOverride ? { ...options, transport: transportOverride } : options)
         }
     }
 
@@ -1893,17 +1896,17 @@ export class PostHog implements PostHogInterface {
         ) {
             this._requestQueue.enqueue(requestOptions)
         } else {
-            // Keep response-capable transports on active pages so failures can be retried.
-            // During unload, prefer sendBeacon unless a response or custom headers are required.
+            let transportOverride: QueuedRequestWithOptions['transport']
+            // Keep the automatic beacon choice out of queued retries, which may run after a bfcache restore.
             if (
                 !requestOptions.transport &&
                 !requestOptions.callback &&
                 isEmptyObject(this.config.request_headers ?? {}) &&
                 this._isPageUnloading
             ) {
-                requestOptions.transport = 'sendBeacon'
+                transportOverride = 'sendBeacon'
             }
-            this._send_retriable_request(requestOptions)
+            this._send_retriable_request(requestOptions, transportOverride)
         }
 
         return data
