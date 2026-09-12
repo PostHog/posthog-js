@@ -2892,6 +2892,43 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
+     * Register an event listener that runs when the set of active matching surveys changes.
+     * The listener receives the initial matching set and updates after event/action triggers,
+     * cancellation, consumption, session expiry, definitions refresh, captured pageviews,
+     * feature-flag updates, marking a survey as seen, and reset. Unchanged results are suppressed.
+     *
+     * URL conditions are re-evaluated on captured `$pageview` events, including automatic SPA
+     * pageviews when `capture_pageview` is `'history_change'`. With automatic pageviews disabled,
+     * capture `$pageview` after navigation. This does not observe arbitrary DOM mutations or time
+     * passing; selector, device and wait-period conditions are checked on the supported updates.
+     *
+     * The optional callback context distinguishes load errors from a successfully loaded empty
+     * result. Recoverable load failures keep the subscription alive. Unsubscribing prevents any
+     * further delivery, including callbacks from an outstanding initial request.
+     *
+     * {@label Surveys}
+     *
+     * @example
+     * ```js
+     * const unsubscribe = posthog.onActiveMatchingSurveysChanged((surveys) => {
+     *     // respond to changes in currently matching surveys
+     * })
+     * ```
+     *
+     * @public
+     *
+     * @param {SurveyCallback} callback The callback to call with active matching surveys.
+     * @returns A function that can be called to unsubscribe the listener.
+     */
+    onActiveMatchingSurveysChanged(callback: SurveyCallback): () => void {
+        if (!this.surveys) {
+            callback([], { isLoaded: false, error: SURVEYS_NOT_AVAILABLE })
+            return () => {}
+        }
+        return this.surveys.onActiveMatchingSurveysChanged(callback)
+    }
+
+    /**
      * Although we recommend using popover surveys and display conditions,
      * if you want to show surveys programmatically without setting up all
      * the extra logic needed for API surveys, you can render surveys

@@ -1309,6 +1309,35 @@
           "path": "lib/src/posthog-core.d.ts"
         },
         {
+          "category": "Surveys",
+          "description": "Register an event listener that runs when the set of active matching surveys changes. The listener receives the initial matching set and updates after event/action triggers, cancellation, consumption, session expiry, definitions refresh, captured pageviews, feature-flag updates, marking a survey as seen, and reset. Unchanged results are suppressed.\nURL conditions are re-evaluated on captured `$pageview` events, including automatic SPA pageviews when `capture_pageview` is `'history_change'`. With automatic pageviews disabled, capture `$pageview` after navigation. This does not observe arbitrary DOM mutations or time passing; selector, device and wait-period conditions are checked on the supported updates.\nThe optional callback context distinguishes load errors from a successfully loaded empty result. Recoverable load failures keep the subscription alive. Unsubscribing prevents any further delivery, including callbacks from an outstanding initial request.",
+          "details": null,
+          "id": "onActiveMatchingSurveysChanged",
+          "showDocs": true,
+          "title": "onActiveMatchingSurveysChanged",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nconst unsubscribe = posthog.onActiveMatchingSurveysChanged((surveys) => {\n    // respond to changes in currently matching surveys\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The callback to call with active matching surveys.",
+              "isOptional": false,
+              "type": "SurveyCallback",
+              "name": "callback"
+            }
+          ],
+          "returnType": {
+            "id": "() => void",
+            "name": "() => void"
+          },
+          "path": "lib/src/posthog-core.d.ts"
+        },
+        {
           "category": "Feature flags",
           "description": "Register an event listener that runs when feature flags become available or when they change. If there are flags, the listener is called immediately in addition to being called on future changes. Note that this is not called only when we fetch feature flags from the server, but also when they change in the browser.",
           "details": null,
@@ -3949,6 +3978,11 @@
           "description": "Get active surveys that match the current user.",
           "type": "(callback: (surveys: any[]) => void, forceReload?: boolean) => void",
           "name": "getActiveMatchingSurveys"
+        },
+        {
+          "description": "Observe the initial matching surveys and updates after event/action and survey lifecycle\nchanges, definitions refreshes, captured pageviews, feature-flag updates, and reset.\nURL changes require a captured pageview; arbitrary DOM mutations and elapsed time\nare not observed. Unchanged results are suppressed. Recoverable load errors are\nreported through the optional context without ending the subscription.",
+          "type": "(callback: (surveys: any[], context?: { isLoaded: boolean; error?: string; }) => void) => () => void",
+          "name": "onActiveMatchingSurveysChanged"
         },
         {
           "description": "Render a survey in a specific container.",

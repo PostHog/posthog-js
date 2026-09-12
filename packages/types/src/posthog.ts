@@ -631,6 +631,20 @@ export interface PostHog {
     getActiveMatchingSurveys(callback: (surveys: any[]) => void, forceReload?: boolean): void
 
     /**
+     * Observe the initial matching surveys and updates after event/action and survey lifecycle
+     * changes, definitions refreshes, captured pageviews, feature-flag updates, and reset.
+     * URL changes require a captured pageview; arbitrary DOM mutations and elapsed time
+     * are not observed. Unchanged results are suppressed. Recoverable load errors are
+     * reported through the optional context without ending the subscription.
+     *
+     * @param callback - Callback to receive the active matching surveys
+     * @returns A function to unsubscribe
+     */
+    onActiveMatchingSurveysChanged(
+        callback: (surveys: any[], context?: { isLoaded: boolean; error?: string }) => void
+    ): () => void
+
+    /**
      * Render a survey in a specific container.
      *
      * @param surveyId - The survey ID
