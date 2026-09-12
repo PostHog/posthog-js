@@ -12,6 +12,7 @@ import {
     USER_STATE_IDENTIFIED,
     DOM_EVENT_VISIBILITYCHANGE,
     ENABLE_PERSON_PROCESSING,
+    EVENT_CLIENT_INGESTION_WARNING,
     EVENT_GROUPIDENTIFY,
     EVENT_IDENTIFY,
     EVENT_PAGELEAVE,
@@ -494,6 +495,7 @@ export class PostHog implements PostHogInterface {
     _sessionRegisteredPropKeys: Set<string> = new Set()
     _sessionRegisteredPropertiesStorageKey: string = ''
     _cachedPersonProperties: string | null
+    private _personProcessingWarned: Set<string> = new Set()
 
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
@@ -3166,16 +3168,20 @@ export class PostHog implements PostHogInterface {
                     this.persistence._publishSuppressedCookieSnapshot()
                 }
 
-                this.capture(EVENT_IDENTIFY, identifyProperties, {
-                    $set: userPropertiesToSet || {},
-                    $set_once: userPropertiesToSetOnce || {},
-                })
-
-                this._cachedPersonProperties = getPersonPropertiesHash(
-                    new_distinct_id,
-                    userPropertiesToSet,
-                    userPropertiesToSetOnce
-                )
+                // Only remember properties that capture accepted. Caching a call that capture
+                // dropped would make the caller's retry look like a duplicate and drop it too.
+                if (
+                    this.capture(EVENT_IDENTIFY, identifyProperties, {
+                        $set: userPropertiesToSet || {},
+                        $set_once: userPropertiesToSetOnce || {},
+                    })
+                ) {
+                    this._cachedPersonProperties = getPersonPropertiesHash(
+                        new_distinct_id,
+                        userPropertiesToSet,
+                        userPropertiesToSetOnce
+                    )
+                }
 
                 // Forward the previous distinct id for default flag consistency, or clear
                 // any stale handoff when reuseAnonymousId opts out of anonymous merging.
@@ -3191,15 +3197,15 @@ export class PostHog implements PostHogInterface {
                 if (this.config.cookieWinsOnConflict) {
                     this.persistence._publishSuppressedCookieSnapshot()
                 }
-                this.capture('$set', { $set: setProperties, $set_once: setOnceProperties })
-
                 // This transition must create/update the person even when an identical property call was cached earlier.
                 // Cache only after capture so deduplication cannot suppress the transition event.
-                this._cachedPersonProperties = getPersonPropertiesHash(
-                    new_distinct_id,
-                    userPropertiesToSet,
-                    userPropertiesToSetOnce
-                )
+                if (this.capture('$set', { $set: setProperties, $set_once: setOnceProperties })) {
+                    this._cachedPersonProperties = getPersonPropertiesHash(
+                        new_distinct_id,
+                        userPropertiesToSet,
+                        userPropertiesToSetOnce
+                    )
+                }
             } else if (userPropertiesToSet || userPropertiesToSetOnce) {
                 // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
                 // and if so, send a $set event
@@ -3287,9 +3293,9 @@ export class PostHog implements PostHogInterface {
             true
         )
 
-        this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
-
-        this._cachedPersonProperties = hash
+        if (this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })) {
+            this._cachedPersonProperties = hash
+        }
     }
 
     /**
@@ -4519,14 +4525,45 @@ export class PostHog implements PostHogInterface {
      */
     _requirePersonProcessing(function_name: string): boolean {
         if (this.config.person_profiles === 'never') {
-            logger.error(
+            const message =
                 function_name + ' was called, but process_person is set to "never". This call will be ignored.'
-            )
+            logger.error(message)
+            // The console error only reaches whoever has the console open, so report the drop to
+            // PostHog too. Once per call site per page load, because a call inside a render loop
+            // would otherwise report the same mistake on every render.
+            if (!this._personProcessingWarned.has(function_name)) {
+                // Marked before the capture so a `before_send` that calls back in cannot recurse,
+                // and unmarked again when capture returned nothing: opting out or waiting on
+                // consent must not silence the drop for the rest of the page load.
+                this._personProcessingWarned.add(function_name)
+                if (
+                    !this._captureClientIngestionWarning(
+                        `posthog-js person processing disabled: ${message} Any person properties it carried were discarded.`
+                    )
+                ) {
+                    this._personProcessingWarned.delete(function_name)
+                }
+            }
             return false
         }
         this._warnIfVolatileIdentityWithoutStableId()
         this._register_single(ENABLE_PERSON_PROCESSING, true)
         return true
+    }
+
+    /**
+     * Reports something the SDK dropped locally as an ingestion warning, so it is visible in
+     * PostHog and not only in the browser console. Ingestion keeps only the message, so every
+     * useful detail belongs in it rather than in extra properties. These warnings always skip the
+     * client rate limiter: one the limiter could drop would go silent in exactly the chatty apps
+     * that need it. Callers are responsible for not repeating the same warning.
+     */
+    _captureClientIngestionWarning(message: string): CaptureResult | undefined {
+        return this.capture(
+            EVENT_CLIENT_INGESTION_WARNING,
+            { $$client_ingestion_warning_message: message },
+            { skip_client_rate_limiting: true }
+        )
     }
 
     private _is_persistence_disabled(): boolean {

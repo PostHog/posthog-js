@@ -2,6 +2,7 @@ import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import ErrorTracking from '@/extensions/error-tracking'
 import type { IPostHog } from '@/types'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending, wait, waitForPromises } from './utils'
+import { _resetDeprecationWarningsForTests } from '@/client'
 import { randomUUID } from 'crypto'
 import { UUID_REGEX } from '@posthog/core'
 
@@ -298,6 +299,49 @@ describe('PostHog Node.js', () => {
           },
         },
       ])
+    })
+
+    it('should warn when $set is mixed with top-level properties that are dropped', async () => {
+      _resetDeprecationWarningsForTests()
+
+      posthog.identify({ distinctId: '123', properties: { $set: { foo: 'bar' }, name: 'Max Hedgehog' } })
+      posthog.identify({ distinctId: '123', properties: { $set: { foo: 'bar' }, name: 'Max Hedgehog' } })
+      posthog.identify({ distinctId: '123', properties: { $set: { foo: 'bar' }, plan: 'premium' } })
+      await waitForFlushTimer()
+
+      // the drop itself is unchanged, but it is no longer silent
+      expect(getLastBatchEvents()?.[0]).toMatchObject({
+        event: '$identify',
+        properties: { $set: { foo: 'bar' } },
+      })
+      // repeats stay quiet, but a second call site dropping a different property is still reported
+      expect(warnSpy.mock.calls.map((call) => call[0])).toEqual([
+        expect.stringContaining('identify() ignored the top-level properties name'),
+        expect.stringContaining('identify() ignored the top-level properties plan'),
+      ])
+    })
+
+    it('should bound the ids it dedups the dropped-properties warning on', async () => {
+      _resetDeprecationWarningsForTests()
+
+      // the same names in a different order are one call site, not two
+      posthog.identify({ distinctId: '123', properties: { $set: { foo: 'bar' }, name: 'Max', plan: 'premium' } })
+      posthog.identify({ distinctId: '123', properties: { $set: { foo: 'bar' }, plan: 'premium', name: 'Max' } })
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+
+      // an app spreading per-request keys next to $set stops minting new ids once the cap is hit,
+      // so it can neither grow the process-wide set nor warn on every call
+      for (let i = 0; i < 100; i++) {
+        posthog.identify({ distinctId: '123', properties: { $set: { foo: 'bar' }, [`field_${i}`]: i } })
+      }
+      const warningsAtCap = warnSpy.mock.calls.length
+      for (let i = 100; i < 200; i++) {
+        posthog.identify({ distinctId: '123', properties: { $set: { foo: 'bar' }, [`field_${i}`]: i } })
+      }
+      await waitForFlushTimer()
+
+      expect(warningsAtCap).toBeLessThan(100)
+      expect(warnSpy.mock.calls.length).toBe(warningsAtCap)
     })
 
     it('should capture alias events on shared queue', async () => {

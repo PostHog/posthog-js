@@ -148,4 +148,32 @@ describe('FunctionalTests / Identify', () => {
             )
         )
     })
+
+    test('identify reports a dropped person property as an ingestion warning', async () => {
+        const neverToken = uuidv7()
+        const neverPosthog = await createPosthogInstance(neverToken, {
+            advanced_disable_flags: true,
+            disable_surveys: true,
+            person_profiles: 'never',
+            before_send: (cr) => cr,
+        })
+
+        neverPosthog.identify('test-id', { name: 'Max Hedgehog' })
+
+        await waitFor(() =>
+            expect(getRequests(neverToken)['/e/']).toContainEqual(
+                expect.objectContaining({
+                    event: '$$client_ingestion_warning',
+                    properties: expect.objectContaining({
+                        $$client_ingestion_warning_message: expect.stringContaining(
+                            'posthog-js person processing disabled: posthog.identify was called'
+                        ),
+                    }),
+                })
+            )
+        )
+
+        const events = getRequests(neverToken)['/e/'].map((request) => request.event)
+        expect(events).not.toContain('$identify')
+    })
 })
