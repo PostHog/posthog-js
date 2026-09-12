@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Contain exceptions from the replay player frame loop, so one failed action cannot stop playback after the player document is gone.
+Contain replay errors during playback and seeking so a failed event does not stall the remaining events.

@@ -206,6 +206,7 @@ export class Replayer {
   // play/seek superseded the rebuild and its pending chunks must stop.
   private applyGeneration = 0;
   private seekRebuildInFlight = false;
+  private seekNeedsFullRebuild = false;
   private styleSheetLoadListeners: Map<HTMLLinkElement, () => void> = new Map();
 
   constructor(
@@ -596,10 +597,11 @@ export class Replayer {
    * @param timeOffset - number
    */
   public play(timeOffset = 0): void {
-    if (this.seekRebuildInFlight) {
-      // the superseded rebuild left the DOM with only part of
-      // lastPlayedEvent's history, so a full rebuild is needed
+    if (this.seekRebuildInFlight || this.seekNeedsFullRebuild) {
+      // A superseded or failed rebuild is not a reliable seek delta base,
+      // even if later events were successfully applied to it.
       this.service.send({ type: 'RESET_LAST_PLAYED' });
+      this.seekNeedsFullRebuild = false;
     }
     if (this.service.state.matches('paused')) {
       this.service.send({ type: 'PLAY', payload: { timeOffset } });
@@ -871,7 +873,16 @@ export class Replayer {
     this.discardStaleFlushBuffers();
     applyEventsWithYield({
       events: events.filter(this.shouldCastInSyncMode),
-      castEvent: (event) => this.getCastFn(event, true)(),
+      castEvent: (event) => {
+        try {
+          this.getCastFn(event, true)();
+        } catch (error) {
+          if (generation === this.applyGeneration) {
+            this.seekNeedsFullRebuild = true;
+          }
+          this.warn('Exception in fast-forward event', error);
+        }
+      },
       yieldBudgetMs: this.config.seekYieldBudgetMs ?? 0,
       // addTimeout so destroy() cancels any pending continuation
       schedule: (continueApplying) => void this.addTimeout(continueApplying, 0),
