@@ -407,7 +407,7 @@ function compressEventSync(event: eventWithTime): CompressedEventResult {
             )
         }
     } catch (e) {
-        logger.error('could not compress event - will use uncompressed event', e)
+        logger.warn('could not compress event - will use uncompressed event', e)
     }
     return { event, size: estimateSize(event) }
 }
@@ -437,7 +437,7 @@ async function compressEventAsync(event: eventWithTime): Promise<CompressedEvent
         if (isNativeAsyncGzipError(e)) {
             _nativeAsyncSessionRecordingGzipDisabled = true
         }
-        logger.error('could not compress event asynchronously - trying synchronous compression', e)
+        logger.warn('could not compress event asynchronously - trying synchronous compression', e)
         return compressEventSync(event)
     }
     return { event, size: estimateSize(event) }
@@ -1729,7 +1729,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // stringified would take every chunk queued alongside it down too. Drop only this event.
         if (size === UNSTRINGIFIABLE_EVENT_SIZE) {
             this._unstringifiableEventsDropped += 1
-            logger.error('could not stringify event - dropping it to keep the rest of the recording')
+            logger.warn('could not stringify event - dropping it to keep the rest of the recording')
             return
         }
 
@@ -1847,7 +1847,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 try {
                     ;({ event: eventToSend, size } = compressEventSync(queuedEvent.event))
                 } catch (e) {
-                    logger.error('could not process queued compression event - will use uncompressed event', e)
+                    logger.warn('could not process queued compression event - will use uncompressed event', e)
                 }
             }
             // only size the raw event when compression did not already report a size: this drain
@@ -1859,7 +1859,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._captureQueuedCompressionEvent(queuedEvent, eventToSend, size)
             } catch (e) {
                 // the async path swallows this too, a throw here would abort the rotation restart
-                logger.error('could not capture queued compression event', e)
+                logger.warn('could not capture queued compression event', e)
             }
         } finally {
             this._finishQueuedCompressionEvent(queuedEvent)
@@ -1874,7 +1874,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             } catch (e) {
                 // this drain runs on unload: a throw here would skip the remaining
                 // queued events and the final flush, truncating the recording
-                logger.error('could not drain queued compression event', e)
+                logger.warn('could not drain queued compression event', e)
             }
         })
     }
@@ -1916,7 +1916,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 } catch (e) {
                     // a compression failure must never reject the queue promise chain, since the
                     // rejection would surface as an unhandled rejection and drop the event
-                    logger.error('could not process queued compression event - will use uncompressed event', e)
+                    logger.warn('could not process queued compression event - will use uncompressed event', e)
                     eventToSend = event
                     size = estimateSize(event)
                 }

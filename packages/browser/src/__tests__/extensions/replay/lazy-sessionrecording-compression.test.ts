@@ -413,6 +413,63 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         )
     })
 
+    it.each(['direct', 'async', 'unload'])(
+        'does not report a handled stringify failure to error tracking on the %s path',
+        async (path) => {
+            const { emit, lazyLoadedSessionRecording, assignableWindow } = await setupLazyLoadedSessionRecording({
+                gzipSupported: path !== 'direct',
+                ...(path === 'unload' ? { gzipCompress: vi.fn(() => new Promise(() => {})) } : {}),
+            })
+            const { default: Config } = await import('../../../config')
+            await import('../../../entrypoints/exception-autocapture')
+
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+            const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+            const captureException = vi.fn()
+            const unwrap =
+                assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapConsoleError(captureException)
+            const originalStringify = JSON.stringify
+            const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation((value: any, ...rest: any[]) => {
+                const serialized = originalStringify(value, ...rest)
+                if (serialized && serialized.includes('oversized-test-event')) {
+                    throw new RangeError('Invalid string length')
+                }
+                return serialized
+            })
+
+            try {
+                Config.DEBUG = true
+                console.error('error tracking control')
+                expect(captureException).toHaveBeenCalledTimes(1)
+                captureException.mockClear()
+                errorSpy.mockClear()
+
+                emit(createFullSnapshot({ content: 'oversized-test-event' }))
+                if (path === 'unload') {
+                    lazyLoadedSessionRecording['_onBeforeUnload']()
+                } else if (path === 'async') {
+                    await lazyLoadedSessionRecording['_compressionQueue']
+                }
+
+                expect(captureException).not.toHaveBeenCalled()
+                expect(errorSpy).not.toHaveBeenCalled()
+                expect(warnSpy).toHaveBeenCalled()
+                expect(
+                    lazyLoadedSessionRecording.sdkDebugProperties['$sdk_debug_replay_unstringifiable_events_dropped']
+                ).toBe(1)
+            } finally {
+                Config.DEBUG = false
+                stringifySpy.mockRestore()
+                unwrap()
+                errorSpy.mockRestore()
+                warnSpy.mockRestore()
+                logSpy.mockRestore()
+                lazyLoadedSessionRecording.discard()
+            }
+        }
+    )
+
     it('does not retry serializing an event that is too large to stringify', async () => {
         const gzipCompress = vi.fn(async (input: string) => {
             // hold the async path open so the event is still queued at unload
