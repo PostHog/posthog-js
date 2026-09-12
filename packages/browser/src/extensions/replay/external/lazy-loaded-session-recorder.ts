@@ -31,6 +31,7 @@ import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     splitBuffer,
     truncateLargeConsoleLogs,
+    UNSTRINGIFIABLE_EVENT_SIZE,
 } from './sessionrecording-utils'
 export { SEVEN_MEGABYTES, splitBuffer } from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
@@ -258,7 +259,13 @@ function serializeForCompression(data: unknown): string {
         // fast path: plain native stringify, since a replacer callback is expensive on
         // large snapshots and circular event data is rare
         return JSON.stringify(data)
-    } catch {
+    } catch (e) {
+        // data past the engine's maximum string length is not something the replacer can
+        // shorten, and the retry would build the string up to that limit all over again
+        // before failing the same way - on unload that stall is paid before the final flush
+        if (e instanceof RangeError) {
+            throw e
+        }
         // circular event data (e.g. a leaked instance graph) degrades gracefully to
         // '[Circular]' markers instead of throwing, the same two-step approach as jsonStringify
         return JSON.stringify(data, circularReferenceReplacer())
@@ -400,7 +407,7 @@ function compressEventSync(event: eventWithTime): CompressedEventResult {
             )
         }
     } catch (e) {
-        logger.error('could not compress event - will use uncompressed event', e)
+        logger.warn('could not compress event - will use uncompressed event', e)
     }
     return { event, size: estimateSize(event) }
 }
@@ -430,7 +437,7 @@ async function compressEventAsync(event: eventWithTime): Promise<CompressedEvent
         if (isNativeAsyncGzipError(e)) {
             _nativeAsyncSessionRecordingGzipDisabled = true
         }
-        logger.error('could not compress event asynchronously - trying synchronous compression', e)
+        logger.warn('could not compress event asynchronously - trying synchronous compression', e)
         return compressEventSync(event)
     }
     return { event, size: estimateSize(event) }
@@ -530,6 +537,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _throttledMutationsDropped = 0
     private _oversizedMutationsDropped = 0
     private _oversizedMutationBytesDropped = 0
+    // events dropped because their JSON is longer than the engine's maximum string length. The
+    // page keeps running and the recording loses them silently, so the count has to ship
+    private _unstringifiableEventsDropped = 0
     // true while the current epoch has had no user interaction; a held epoch is
     // discarded (not shipped) by stop or a subsequent rotation
     private _holdFlushUntilInteraction = false
@@ -1621,10 +1631,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // belongs to the old session) and before the new one takes its first snapshot
             this._slowestFullSnapshot = undefined
             this._lastSeenSnapshotCost = undefined
-            // the throttler drop counts are per-session too, so the new session starts at zero
+            // the drop counts are per-session too, so the new session starts at zero
             this._throttledMutationsDropped = 0
             this._oversizedMutationsDropped = 0
             this._oversizedMutationBytesDropped = 0
+            this._unstringifiableEventsDropped = 0
             getRRWeb()?.resetSnapshotCostState?.()
             this.start('session_id_changed')
         } finally {
@@ -1713,6 +1724,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         targetSessionId: string,
         targetWindowId: string
     ) {
+        // the request encoder stringifies the whole batch, and the request queue merges every
+        // queued recording chunk into one request, so buffering an event that cannot be
+        // stringified would take every chunk queued alongside it down too. Drop only this event.
+        if (size === UNSTRINGIFIABLE_EVENT_SIZE) {
+            this._unstringifiableEventsDropped += 1
+            logger.warn('could not stringify event - dropping it to keep the rest of the recording')
+            return
+        }
+
         const properties = {
             $snapshot_bytes: size,
             $snapshot_data: eventToSend,
@@ -1822,19 +1842,24 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _processQueuedCompressionEventSync(queuedEvent: QueuedCompressionEvent) {
         try {
             let eventToSend: eventWithTime | compressedEventWithTime = queuedEvent.event
-            let size = estimateSize(queuedEvent.event)
+            let size: number | undefined
             if (queuedEvent.compressionEnabled) {
                 try {
                     ;({ event: eventToSend, size } = compressEventSync(queuedEvent.event))
                 } catch (e) {
-                    logger.error('could not process queued compression event - will use uncompressed event', e)
+                    logger.warn('could not process queued compression event - will use uncompressed event', e)
                 }
+            }
+            // only size the raw event when compression did not already report a size: this drain
+            // runs on unload, and a discarded estimate costs a full stringify of every event
+            if (isUndefined(size)) {
+                size = estimateSize(queuedEvent.event)
             }
             try {
                 this._captureQueuedCompressionEvent(queuedEvent, eventToSend, size)
             } catch (e) {
                 // the async path swallows this too, a throw here would abort the rotation restart
-                logger.error('could not capture queued compression event', e)
+                logger.warn('could not capture queued compression event', e)
             }
         } finally {
             this._finishQueuedCompressionEvent(queuedEvent)
@@ -1844,7 +1869,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _drainCompressionQueueSync() {
         const queuedEvents = [...this._pendingCompressionEvents]
         queuedEvents.forEach((queuedEvent) => {
-            this._processQueuedCompressionEventSync(queuedEvent)
+            try {
+                this._processQueuedCompressionEventSync(queuedEvent)
+            } catch (e) {
+                // this drain runs on unload: a throw here would skip the remaining
+                // queued events and the final flush, truncating the recording
+                logger.warn('could not drain queued compression event', e)
+            }
         })
     }
 
@@ -1885,7 +1916,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 } catch (e) {
                     // a compression failure must never reject the queue promise chain, since the
                     // rejection would surface as an unhandled rejection and drop the event
-                    logger.error('could not process queued compression event - will use uncompressed event', e)
+                    logger.warn('could not process queued compression event - will use uncompressed event', e)
                     eventToSend = event
                     size = estimateSize(event)
                 }
@@ -2797,6 +2828,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_throttled_mutations_dropped: this._throttledMutationsDropped,
             $sdk_debug_replay_oversized_mutations_dropped: this._oversizedMutationsDropped,
             $sdk_debug_replay_oversized_mutation_bytes_dropped: this._oversizedMutationBytesDropped,
+            // cumulative across the session: events too large to stringify, each one a gap in
+            // the recording that nothing else reports
+            $sdk_debug_replay_unstringifiable_events_dropped: this._unstringifiableEventsDropped,
             $sdk_debug_replay_rrweb_error: this._rrwebError,
             [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,

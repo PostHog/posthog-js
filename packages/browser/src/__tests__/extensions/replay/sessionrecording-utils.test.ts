@@ -10,6 +10,7 @@ import {
     estimateSize,
     estimateCompressedEventSize,
     circularReferenceReplacer,
+    UNSTRINGIFIABLE_EVENT_SIZE,
 } from '../../../extensions/replay/external/sessionrecording-utils'
 import { largeString, threeMBAudioURI, threeMBImageURI } from '../test_data/sessionrecording-utils-test-data'
 import type { eventWithTime } from '../../../extensions/replay/types/rrweb-types'
@@ -262,6 +263,18 @@ describe(`SessionRecording utility functions`, () => {
             expect(serialized).toBe('{"text":"€"}')
             expect(serialized.length).toBe(12)
             expect(estimateSize(data)).toBe(14)
+        })
+
+        it('reports a failure instead of throwing when the data is too large to stringify', () => {
+            const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation(() => {
+                throw new RangeError('Invalid string length')
+            })
+
+            try {
+                expect(estimateSize({ text: 'hello' })).toBe(UNSTRINGIFIABLE_EVENT_SIZE)
+            } finally {
+                stringifySpy.mockRestore()
+            }
         })
     })
 

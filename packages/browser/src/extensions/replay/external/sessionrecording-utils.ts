@@ -31,9 +31,19 @@ function estimateStringBytes(data: string): number {
     return new Blob([data]).size
 }
 
+// an event whose JSON is longer than the engine's maximum string length makes JSON.stringify
+// throw `RangeError: Invalid string length`. Such an event can never reach the server either -
+// the request encoder stringifies the whole batch - so estimateSize reports the failure with
+// this size instead of throwing, and the caller drops that one event.
+export const UNSTRINGIFIABLE_EVENT_SIZE = -1
+
 export function estimateSize(sizeable: unknown): number {
-    const stringifiedData = JSON.stringify(sizeable, circularReferenceReplacer())
-    return stringifiedData ? estimateStringBytes(stringifiedData) : 0
+    try {
+        const stringifiedData = JSON.stringify(sizeable, circularReferenceReplacer())
+        return stringifiedData ? estimateStringBytes(stringifiedData) : 0
+    } catch {
+        return UNSTRINGIFIABLE_EVENT_SIZE
+    }
 }
 
 // Lightweight size estimate for compressed events without allocating a JSON string.
