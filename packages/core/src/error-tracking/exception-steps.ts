@@ -1,10 +1,16 @@
 import { isArray, isNumber, isObject, isString, safeJsonStringify } from '@/utils'
 
 export const EXCEPTION_STEP_INTERNAL_FIELDS = {
+  TYPE: '$type',
   MESSAGE: '$message',
   TIMESTAMP: '$timestamp',
 } as const
 
+/**
+ * Only `$message` and `$timestamp` are reserved: the SDK owns their canonical values, so a caller
+ * cannot spoof them. `$type` stays writable by a caller who wants to categorise their own steps, and
+ * an SDK sets it itself only on a step the SDK records without the caller asking.
+ */
 const RESERVED_EXCEPTION_STEP_KEYS = new Set<string>([
   EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE,
   EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP,
