@@ -702,13 +702,13 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
 
                     {showRecoverFooter && (
                         <div style={styles.recoverFooter}>
-                            Don't see your previous tickets?{' '}
+                            {config.ticketRecoveryText || "Don't see your previous tickets?"}{' '}
                             <button
                                 type="button"
                                 style={styles.recoverFooterLink}
                                 onClick={this._handleOpenRestoreRequest}
                             >
-                                Recover them here
+                                {config.ticketRecoveryLinkText || 'Recover them here'}
                             </button>
                         </div>
                     )}
