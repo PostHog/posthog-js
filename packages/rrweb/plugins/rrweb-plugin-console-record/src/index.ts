@@ -192,7 +192,10 @@ function initLogObserver(
       level,
       (original: (...args: Array<unknown>) => void) => {
         return (...args: Array<unknown>) => {
-          original.apply(this, args);
+          // `this` here is the enclosing `replace`, which is called as a plain
+          // function, so it is undefined. Native console methods can reject a
+          // foreign receiver, so pass the logger the method was taken from.
+          original.apply(_logger, args);
 
           if (level === 'assert' && !!args[0]) {
             // assert does not log if the first argument evaluates to true
@@ -234,7 +237,7 @@ function initLogObserver(
               });
             }
           } catch (error) {
-            original('rrweb logger error:', error, ...args);
+            original.apply(_logger, ['rrweb logger error:', error, ...args]);
           } finally {
             inStack = false;
           }

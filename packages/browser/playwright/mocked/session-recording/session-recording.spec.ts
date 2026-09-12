@@ -2,7 +2,6 @@ import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-tes
 import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { Page } from '@playwright/test'
 import { isUndefined } from '@posthog/core'
-import { pollUntilCondition } from '../utils/event-capture-utils'
 
 async function ensureRecordingIsStopped(page: Page) {
     await page.resetCapturedEvents()
@@ -268,7 +267,7 @@ test.describe('Session recording - array.js', () => {
             ph?.reset()
         })
 
-        // First request may flush old session buffer
+        // The old session buffer and the new session snapshot ship as separate requests
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/ses/*'],
             action: async () => {
@@ -276,17 +275,8 @@ test.describe('Session recording - array.js', () => {
             },
         })
 
-        // Second request gets new session snapshot
-        await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/ses/*'],
-            action: async () => {
-                await page.locator('[data-cy-input]').type('more activity')
-            },
-        })
-
-        // the old session's tail and the new session's snapshot ship as separate uploads, so the
-        // three snapshots below do not arrive in a fixed number of requests
-        await pollUntilCondition(page, async () => (await page.capturedEvents()).length >= 3)
+        await page.locator('[data-cy-input]').type('more activity')
+        await expect.poll(async () => (await page.capturedEvents()).length).toBe(3)
 
         const capturedEvents = await page.capturedEvents()
 

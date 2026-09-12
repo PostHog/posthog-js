@@ -402,12 +402,12 @@ describe('posthog core', () => {
             )
         })
 
-        it('carries the batch group onto the request so the queue can keep it separate', () => {
+        it('carries the explicit session/window batch group onto the request', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
 
             posthog.capture(
-                'event-name',
-                { foo: 'bar' },
+                '$snapshot',
+                { $session_id: 'session-one', $window_id: 'window-one' },
                 {
                     _url: 'https://app.posthog.com/s/',
                     _batchKey: 'recordings',
@@ -421,6 +421,17 @@ describe('posthog core', () => {
                     batchGroup: 'session-one-window-one',
                 })
             )
+        })
+
+        it.each([
+            ['recordings', 'session-1'],
+            [undefined, undefined],
+        ])('groups requests with batchKey %s by session id', (batchKey, batchGroup) => {
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+
+            posthog.capture('$snapshot', { $session_id: 'session-1' }, batchKey ? { _batchKey: batchKey } : undefined)
+
+            expect(vi.mocked(posthog._send_request).mock.calls[0][0].batchGroup).toEqual(batchGroup)
         })
 
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
@@ -1176,6 +1187,19 @@ describe('posthog core', () => {
             )
         })
 
+        it.each([null, undefined, ''])('preserves the persisted identity when distinctID is %j', (distinctID) => {
+            const token = 'bootstrap-nullish-' + uuidv7()
+            const first = posthogWith({ token })
+            const posthog = posthogWith({
+                token,
+                bootstrap: { distinctID },
+            })
+
+            expect(posthog.get_distinct_id()).toBe(first.get_distinct_id())
+            expect(posthog.get_property('$device_id')).toBe(first.get_property('$device_id'))
+            expect(posthog.persistence.get_property(USER_STATE)).toBe('anonymous')
+        })
+
         it('treats identified distinctIDs appropriately', () => {
             const posthog = posthogWith(
                 {
@@ -1252,18 +1276,20 @@ describe('posthog core', () => {
             expect(posthog.getFeatureFlagPayload('undef')).toBe(undefined)
         })
 
-        it('does nothing when empty', () => {
+        it.each([
+            {},
+            { distinctID: null, isIdentifiedID: null, featureFlags: null, featureFlagPayloads: null, sessionID: null },
+        ])('does nothing when bootstrap is %j', (bootstrap) => {
             // memory persistence with an empty bootstrap is the exact volatile-identity case the init
             // warning covers, so allow that console.warn here instead of failing on it.
             const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
             const posthog = posthogWith({
-                bootstrap: {},
+                bootstrap,
                 persistence: 'memory',
             })
             warnSpy.mockRestore()
 
-            expect(posthog.get_distinct_id()).not.toBe('abcd')
-            expect(posthog.get_distinct_id()).not.toEqual(undefined)
+            expect(posthog.get_distinct_id()).toEqual(expect.any(String))
             expect(posthog.getFeatureFlag('multivariant')).toBe(undefined)
             expect(mockLogger.warn).toHaveBeenCalledWith(
                 expect.stringContaining('getFeatureFlag for key "multivariant" failed')

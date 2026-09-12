@@ -67,8 +67,10 @@ export interface CompatibleTextToolResult {
 }
 
 export interface MCPRequestParamsLike {
+  _meta?: JsonRecord
   arguments?: JsonRecord
   name?: string
+  uri?: string
   [key: string]: unknown
 }
 
@@ -100,6 +102,20 @@ export interface MCPAnalyticsOptions {
   /** Enable the `get_more_tools` virtual tool so agents can report missing functionality. */
   reportMissing?: boolean
   /**
+   * Inject the `send_feedback` virtual tool so agents can send feedback about
+   * this server to its developers — a missing capability (the priority
+   * category), a tool that failed or confused them, or praise. Calls to it emit
+   * `$mcp_feedback` (never a `$mcp_tool_call`). Off by default.
+   *
+   * `true` uses the defaults; the object form renames the tool, replaces its
+   * description, declares host-specific `extraProperties`, or wires an
+   * `onFeedback` handler that routes reports to a real backend.
+   *
+   * Covers what `reportMissing` covers (as `feedback_type: "missing_capability"`),
+   * so new integrations should enable only one of the two.
+   */
+  collectFeedback?: CollectFeedbackConfig
+  /**
    * Rename the `get_more_tools` virtual tool (the `reportMissing` feature).
    * Defaults to `get_more_tools`. Set once here so the tool is advertised and
    * detected under the same name.
@@ -130,17 +146,15 @@ export interface MCPAnalyticsOptions {
   /** Inject a required `context` parameter on every tool to capture user intent. */
   context?: boolean | MCPAnalyticsContextOptions
   /**
-   * Inject a required `llm_model` parameter on every tool so the calling agent
-   * self-reports the model it runs as, captured as `$mcp_llm_model` with
-   * `$mcp_llm_model_source = "self_reported"`. Off by default.
+   * Capture the calling model as `$mcp_llm_model`. Recognized client metadata
+   * takes precedence, with an injected `llm_model` parameter as the fallback.
+   * Off by default.
    *
-   * The MCP wire deliberately carries no model identity, so self-report is the
-   * only capture path — harnesses inject the model id into the agent's system
-   * prompt, and agents restate it accurately. Like `clientInfo` in the MCP
-   * spec, the value is unverified: use it for per-model quality analytics, not
-   * billing or security. An honest `"unknown"` from the agent is dropped
-   * rather than captured. Reasoning effort is intentionally not collected —
-   * agents don't reliably know it, so it would only ever be noise.
+   * MCP does not standardize model identity. Some clients expose it through
+   * vendor metadata; other harnesses inject it into the agent's system prompt
+   * so the agent can restate it. `$mcp_llm_model_source` records which path won.
+   * Both paths are unverified: use them for quality analytics, not billing or
+   * security. Missing, blank, and `"unknown"` values are dropped.
    */
   captureModel?: boolean | MCPAnalyticsModelOptions
   /**
@@ -186,13 +200,85 @@ export interface MCPAnalyticsContextOptions {
   description?: string
 }
 
+export type FeedbackType = 'missing_capability' | 'issue' | 'praise' | 'other'
+export type FeedbackSentiment = 'positive' | 'neutral' | 'negative' | 'mixed'
+
+/** The `collectFeedback` option: `true` for the defaults, or the object form. */
+export type CollectFeedbackConfig = boolean | CollectFeedbackOptions
+
+/**
+ * A host-declared input-schema fragment for one `send_feedback` extra property —
+ * plain JSON Schema, the same shape the MCP `tools/list` wire format uses.
+ */
+export interface FeedbackExtraPropertySchema {
+  type: string
+  description?: string
+  enum?: string[]
+  [key: string]: unknown
+}
+
+/** Object form of {@link CollectFeedbackConfig}. */
+export interface CollectFeedbackOptions {
+  /**
+   * Rename the `send_feedback` virtual tool. Set once so the tool is advertised
+   * and detected under the same name. Defaults to `send_feedback`.
+   */
+  toolName?: string
+  /** Replace the default tool description. */
+  description?: string
+  /**
+   * Host-specific fields merged into the tool's advertised input schema. Each
+   * declared key is captured as a `$mcp_feedback_<key>` event property (through
+   * the standard sanitize/truncate pipeline); arguments the agent invents beyond
+   * the schema are never captured. A key that collides with a core field or an
+   * SDK-injected argument throws at configuration time.
+   */
+  extraProperties?: Record<string, FeedbackExtraPropertySchema>
+  /** Keys of `extraProperties` to advertise as required. */
+  extraRequired?: string[]
+  /**
+   * Route each report to a real backend (`instrument()` path only — a custom
+   * dispatcher routes reports itself, see {@link PreparedToolCall.isFeedback}).
+   * Return a string to replace the default acknowledgement text. A throw is
+   * logged and falls back to the default reply; the `$mcp_feedback` event is
+   * captured either way. The returned string is captured as `$mcp_response`
+   * through the generic sanitize pipeline only — unlike `$mcp_feedback_summary`
+   * / `details`, it does not get structured-PII redaction, so avoid echoing
+   * the agent's raw report text back in it.
+   */
+  onFeedback?: (report: FeedbackReport) => MaybePromise<string | void>
+}
+
+/** One parsed `send_feedback` call, as handed to `onFeedback` and the dispatcher. */
+export interface FeedbackReport {
+  /** Invalid or missing values fall back to `other`. */
+  feedbackType: FeedbackType
+  /** One-sentence summary; empty string when the agent omitted it. */
+  summary: string
+  sentiment?: FeedbackSentiment
+  frictionPoints?: string
+  suggestedImprovement?: string
+  details?: string
+  /** The existing tool the feedback is about (`tool_name` argument). */
+  toolName?: string
+  taskCompleted?: boolean
+  /**
+   * Values of the declared `extraProperties` fields that match their declared
+   * `type`/`enum`. A value the agent sent with the wrong shape is left out
+   * (find it in `raw` if you need it), so these are safe to trust as declared.
+   */
+  extras: JsonRecord
+  /** The full raw arguments, for the handler only — never captured. */
+  raw: JsonRecord
+}
+
 export interface MCPAnalyticsModelOptions {
   description?: string
 }
 
 export type MaybePromise<T> = T | Promise<T>
 export type MCPAnalyticsIntentSource = 'context_parameter' | 'inferred'
-export type MCPAnalyticsModelSource = 'self_reported'
+export type MCPAnalyticsModelSource = 'client_metadata' | 'self_reported'
 
 export type ToolCallback =
   | ((
@@ -245,12 +331,11 @@ export interface Event {
   eventType: MCPAnalyticsEventType
   groups?: Record<string, string>
   /**
-   * The calling agent's self-reported model id → `$mcp_llm_model`. Read off
-   * the SDK-injected `llm_model` argument (`captureModel` option); unverified
-   * by design, like the MCP spec's own `clientInfo`.
+   * The calling model id → `$mcp_llm_model`. Resolved from recognized client
+   * metadata first, then the SDK-injected `llm_model` argument; unverified.
    */
   llmModel?: string
-  /** How the model id was obtained → `$mcp_llm_model_source`. Always `self_reported` today. */
+  /** How the model id was obtained → `$mcp_llm_model_source`. */
   llmModelSource?: MCPAnalyticsModelSource
   /**
    * Explicit PostHog event name. When set (via `capture(server, { event })`) it
@@ -512,8 +597,8 @@ export interface ToolCallCaptureData extends McpCaptureCommon {
    */
   intentSource?: MCPAnalyticsIntentSource
   /**
-   * The calling agent's self-reported model id -> `$mcp_llm_model`. On the
-   * custom-dispatcher path, read it from {@link PostHogMCP.prepareToolCall}.
+   * The calling model id -> `$mcp_llm_model`. On the custom-dispatcher path,
+   * read it from {@link PostHogMCP.prepareToolCall}.
    */
   llmModel?: string
   /** How the model id was obtained -> `$mcp_llm_model_source`. */
@@ -591,6 +676,14 @@ export interface PrepareToolListOptions {
    * {@link PostHogMCP.captureMissingCapability} and reply with `getMoreToolsResult()`.
    */
   reportMissing?: boolean
+  /**
+   * Append the `send_feedback` virtual tool so agents can send feedback.
+   * Defaults to `false`, and requires the `PostHogMCP` constructor's
+   * `collectFeedback` option (the enable switch that also gates detection).
+   * When the agent calls it, route the call to
+   * {@link PostHogMCP.captureFeedback} and reply with `sendFeedbackResult()`.
+   */
+  collectFeedback?: boolean
 }
 
 /** Options for {@link PostHogMCP.prepareToolCall}. */
@@ -600,6 +693,8 @@ export interface PrepareToolCallOptions {
    * multi-replica servers so SDK argument ownership is resolved per request.
    */
   originalTool?: { inputSchema?: unknown }
+  /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata. */
+  requestMeta?: JsonRecord
 }
 
 /**
@@ -612,14 +707,26 @@ export interface PreparedToolCall {
   intent?: string
   /** Where the intent came from. Always `context_parameter` here when set. */
   intentSource?: MCPAnalyticsIntentSource
-  /** The agent's self-reported model id, when `captureModel` is enabled and owned by the SDK. */
+  /** The calling model id, when `captureModel` is enabled and a supported source provides it. */
   llmModel?: string
-  /** How the model id was obtained. Always `self_reported` when present. */
+  /** How the model id was obtained. */
   llmModelSource?: MCPAnalyticsModelSource
   /** The call arguments with SDK-owned `context` and `llm_model` keys removed. */
   args?: Record<string, unknown>
   /** True when `name` is the `get_more_tools` virtual tool. */
   isMissingCapability: boolean
+  /**
+   * True when `name` is the `send_feedback` virtual tool AND the constructor's
+   * `collectFeedback` option is set. Always false without that opt-in, so a real
+   * tool that happens to use the name is never shadowed.
+   */
+  isFeedback: boolean
+  /**
+   * The parsed feedback report, set only when {@link PreparedToolCall.isFeedback}
+   * is true. Pass it to {@link PostHogMCP.captureFeedback} and to your own
+   * feedback backend, then reply with `sendFeedbackResult()` or a custom text.
+   */
+  feedbackReport?: FeedbackReport
 }
 
 /** Payload for {@link PostHogMCP.captureMissingCapability}. Emits `$mcp_missing_capability`. */
@@ -629,10 +736,23 @@ export interface MissingCapabilityCaptureData extends McpCaptureCommon {
    * on the `get_more_tools` call) → `$mcp_intent`.
    */
   context?: string
-  /** The calling agent's self-reported model id -> `$mcp_llm_model`. */
+  /** The calling model id -> `$mcp_llm_model`. */
   llmModel?: string
   /** How the model id was obtained -> `$mcp_llm_model_source`. */
   llmModelSource?: MCPAnalyticsModelSource
   /** Captured call arguments → `$mcp_parameters` (sanitized + truncated). */
   parameters?: unknown
+}
+
+/** Payload for {@link PostHogMCP.captureFeedback}. Emits `$mcp_feedback`. */
+export interface FeedbackCaptureData extends McpCaptureCommon {
+  /**
+   * The parsed report (from {@link PreparedToolCall.feedbackReport}) →
+   * `$mcp_feedback_*` properties, with the summary and details as `$mcp_intent`.
+   */
+  report: FeedbackReport
+  /** The calling model id -> `$mcp_llm_model`. */
+  llmModel?: string
+  /** How the model id was obtained -> `$mcp_llm_model_source`. */
+  llmModelSource?: MCPAnalyticsModelSource
 }

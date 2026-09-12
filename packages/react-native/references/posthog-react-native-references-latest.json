@@ -154,7 +154,7 @@
         },
         {
           "category": "Error tracking",
-          "description": "Capture a caught exception manually",
+          "description": "Capture a caught exception manually\nExceptions also include capture-time `$app_state` (active, background, inactive or extension) on any platform where React Native AppState provides a known value. On iOS and Android, optional `expo-updates` (0.25.0 or newer) adds `$expo_update_id`, `$expo_runtime_version`, `$expo_channel` and `$expo_is_embedded_launch` for enabled updates outside development mode. Unknown values are omitted. These exception-only fields are separate from the static app metadata controlled by `customAppProperties`, including the existing `$app_version` and `$app_build`. Override these fields with `additionalProperties`, or remove them using `before_send`.",
           "details": null,
           "id": "captureException",
           "showDocs": true,
@@ -1089,7 +1089,7 @@
         {
           "category": "Capture",
           "description": "Captures a screen view event.",
-          "details": "This function requires a name. You may also pass in an optional properties object. Screen name is automatically registered for the session and will be included in subsequent events.",
+          "details": "This function requires a name. You may also pass in an optional properties object. Once initialized, the screen name is registered immediately for subsequent events, including exceptions. During initialization, screen registration and event capture retain their call order. Exceptions use the last recorded screen, not a destination that has not yet been tracked.",
           "id": "screen",
           "showDocs": true,
           "title": "screen",
@@ -3368,6 +3368,10 @@
         {
           "type": "string",
           "name": "componentStack"
+        },
+        {
+          "type": "() => void",
+          "name": "resetError"
         }
       ],
       "path": "dist/PostHogErrorBoundary.d.ts"
@@ -3395,6 +3399,10 @@
       "id": "PostHogErrorBoundaryState",
       "name": "PostHogErrorBoundaryState",
       "properties": [
+        {
+          "type": "boolean",
+          "name": "hasError"
+        },
         {
           "type": "string",
           "name": "componentStack"
@@ -3725,7 +3733,7 @@
           "name": "flushIntervalMs"
         },
         {
-          "description": "Max records per outbound POST. Keeps each request under the server's 2 MB cap. On a 413 response, the SDK halves this value, retries the same records, then ramps back up by 1 per healthy send. A 413 on a single-record batch drops the record (it's larger than the server can accept regardless of batch size). Default: 50 (RN) / 100 (browser).",
+          "description": "Max records per outbound POST. Keeps each request under the server's request body cap. On a 413 response, the SDK halves this value, retries the same records, then ramps back up by 1 per healthy send. A 413 on a single-record batch drops the record (it's larger than the server can accept regardless of batch size). Default: 50 (RN) / 100 (browser).",
           "type": "number",
           "name": "maxBatchRecordsPerPost"
         },
@@ -3847,6 +3855,11 @@
           "description": "Mints a signed identity-verification token for push subscription requests. Only needed when your PostHog project requires identity verification for push. Requires `@posthog/react-native-plugin`.\nCalled with the current `distinctId` and `appId`. Mint on your backend (HS256, `sub` = distinctId, an `app_id` claim, `aud` = `posthog:push_identity`), never in the app. Return `null` to send the request unauthenticated; a slow or throwing implementation does the same after 10 seconds.",
           "type": "PostHogPushIdentityProvider",
           "name": "pushIdentityProvider"
+        },
+        {
+          "description": "Configure rage click (rage tap) detection on iOS.\nThe native iOS SDK fires a `$rageclick` event when a user taps the same area repeatedly in quick succession. The default thresholds (3 taps, 30 points, 1 second) were tuned for web and frequently produce false positives on mobile. Raise the thresholds or set `enabled: false` to suppress them.\nAndroid is unaffected — posthog-android does not have native rage click detection.\nRequires `@posthog/react-native-plugin` version 2.7.0 or newer.",
+          "type": "PostHogRageClickConfig",
+          "name": "rageClickConfig"
         },
         {
           "description": "A list of headers that should be sent with requests to the PostHog API.",
@@ -4055,6 +4068,33 @@
       "example": "(distinctId: string, appId: string) => Promise<string | null>"
     },
     {
+      "id": "PostHogRageClickConfig",
+      "name": "PostHogRageClickConfig",
+      "properties": [
+        {
+          "description": "Enable or disable rage click (rage tap) detection.\n\nWhen enabled the native SDK emits a `$rageclick` event whenever a user\ntaps the same area repeatedly in quick succession.",
+          "type": "boolean",
+          "name": "enabled"
+        },
+        {
+          "description": "Number of consecutive taps required to trigger a rage click.",
+          "type": "number",
+          "name": "minimumTapCount"
+        },
+        {
+          "description": "Maximum pixel distance between consecutive taps for them to still\ncount toward a rage click.",
+          "type": "number",
+          "name": "thresholdPoints"
+        },
+        {
+          "description": "Maximum time in seconds allowed between consecutive taps.",
+          "type": "number",
+          "name": "timeoutInterval"
+        }
+      ],
+      "path": "dist/types.d.ts"
+    },
+    {
       "id": "PostHogReactNativePluginExtended",
       "name": "PostHogReactNativePluginExtended",
       "properties": [
@@ -4213,6 +4253,21 @@
           "description": "Verify that masks remain aligned while capturing session replay screenshots.\nAndroid only. Requires `@posthog/react-native-plugin`.\n\nEnabling this can preserve screenshots during pixel-only redraws, including\ncontinuously animated content, but performs additional view hierarchy walks\nwhile a screenshot is captured.",
           "type": "boolean",
           "name": "verifyScreenshotMaskAlignment"
+        },
+        {
+          "description": "Experimental. Multiplier for the physical width and height of screenshots, clamped to 0.1–1.0.\nFor example, 0.5 captures half the width and height, or one quarter of the pixels.\nThe logical replay viewport is unchanged. Non-finite values use the native default.\nAndroid only. Requires `@posthog/react-native-plugin` 2.8.0 or later.\nDoes not enable session replay or change compression quality or color mode.",
+          "type": "number",
+          "name": "screenshotScale"
+        },
+        {
+          "description": "Experimental. WebP compression quality, clamped to 0–100. Fractional values are truncated.\nHigher values generally retain more detail and produce larger payloads.\nCompression is lossy, except at quality 100 on Android 10, which uses lossless WebP.\nNon-finite values use the native default. Does not change screenshot resolution.\nAndroid only. Requires `@posthog/react-native-plugin` 2.8.0 or later.",
+          "type": "number",
+          "name": "screenshotCompressionQuality"
+        },
+        {
+          "description": "Experimental. Screenshot bitmap pixel format. ARGB_8888 preserves transparency and color precision.\nRGB_565 uses half the bitmap memory but reduces color precision and removes alpha,\nmaking transparent window regions appear black. Unsupported devices fall back to ARGB_8888.\nAndroid only. Requires `@posthog/react-native-plugin` 2.8.0 or later.",
+          "type": "\"ARGB_8888\" | \"RGB_565\"",
+          "name": "screenshotColorMode"
         },
         {
           "description": "Schedule screenshot image capture on a background queue.\niOS only\nExperimental support\n\nWarning: Enabling this option will trigger Main Thread Checker warnings and may\nbriefly freeze the app the first time a screenshot is captured. Consider disabling\nMain Thread Checker in your scheme's run diagnostics when enabling this.",
@@ -4445,14 +4500,21 @@
       "name": "SendLogsBatchOutcome",
       "properties": [],
       "path": "../core/src/posthog-core-stateless.ts",
-      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
     },
     {
       "id": "SendMetricsBatchOutcome",
       "name": "SendMetricsBatchOutcome",
       "properties": [],
       "path": "../core/src/metrics/types.ts",
-      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+    },
+    {
+      "id": "SendTracesBatchOutcome",
+      "name": "SendTracesBatchOutcome",
+      "properties": [],
+      "path": "../core/src/traces/types.ts",
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n    retryAfterMs?: number;\n} | {\n    kind: 'too-large';\n    measuredLocally?: boolean;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
     },
     {
       "id": "SeverityLevel",
@@ -4874,10 +4936,6 @@
           "name": "position"
         },
         {
-          "type": "string",
-          "name": "placeholder"
-        },
-        {
           "type": "number",
           "name": "surveyPopupDelaySeconds"
         },
@@ -4896,6 +4954,10 @@
         {
           "type": "string",
           "name": "inputTextColor"
+        },
+        {
+          "type": "string",
+          "name": "placeholder"
         }
       ],
       "path": "dist/surveys/surveys-utils.d.ts"

@@ -42,12 +42,14 @@ import {
   PostHogCustomAppProperties,
   PostHogCustomStorage,
   PostHogPushIdentityProvider,
+  PostHogRageClickConfig,
   PostHogSessionReplayConfig,
 } from './types'
 import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isMacOS, isValidSampleRate, isWeb } from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativePlugin, OptionalReactNativePluginVersion } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
+import { getExceptionContext } from './error-tracking/exception-context'
 
 export { PostHogPersistedProperty }
 
@@ -131,6 +133,22 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * Error Tracking Configuration
    */
   errorTracking?: ErrorTrackingOptions
+
+  /**
+   * Configure rage click (rage tap) detection on iOS.
+   *
+   * The native iOS SDK fires a `$rageclick` event when a user taps the same
+   * area repeatedly in quick succession. The default thresholds (3 taps,
+   * 30 points, 1 second) were tuned for web and frequently produce false
+   * positives on mobile. Raise the thresholds or set `enabled: false` to
+   * suppress them.
+   *
+   * Android is unaffected — posthog-android does not have native rage click
+   * detection.
+   *
+   * Requires `@posthog/react-native-plugin` version 2.7.0 or newer.
+   */
+  rageClickConfig?: PostHogRageClickConfig
 
   /**
    * Automatically include common device and app properties in feature flag evaluation.
@@ -325,7 +343,11 @@ export class PostHog extends PostHogCore {
     this._isInitialized = false
     this._persistence = options?.persistence ?? 'file'
     this._disableSurveys = options?.disableSurveys ?? false
-    this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger)
+    this._errorTracking = new ErrorTracking(this, options?.errorTracking, this._logger, async () => {
+      // captureException can enqueue through wrap() after asynchronous storage initialization.
+      await this._initPromise
+      await this._eventsStorage.waitForPersist()
+    })
     this._setDefaultPersonProperties = options?.setDefaultPersonProperties ?? true
     this._overrideDisplayLanguage = options?.overrideDisplayLanguage?.trim() || null
     this._requestHeaders = options?.requestHeaders ?? {}
@@ -616,7 +638,7 @@ export class PostHog extends PostHogCore {
    * SLA so a hung storage backend can't run past it.
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
-    this._errorTracking.clearExceptionSteps()
+    this._errorTracking.shutdown()
     const start = Date.now()
     const logsBudgetMs = Math.min(shutdownTimeoutMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
     try {
@@ -1461,7 +1483,9 @@ export class PostHog extends PostHogCore {
    *
    * @remarks
    * This function requires a name. You may also pass in an optional properties object.
-   * Screen name is automatically registered for the session and will be included in subsequent events.
+   * Once initialized, the screen name is registered immediately for subsequent events, including exceptions.
+   * During initialization, screen registration and event capture retain their call order.
+   * Exceptions use the last recorded screen, not a destination that has not yet been tracked.
    *
    * {@label Capture}
    *
@@ -1487,8 +1511,10 @@ export class PostHog extends PostHogCore {
    * @param options - Optional capture options
    */
   async screen(name: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): Promise<void> {
-    await this._initPromise
-    // Screen name is good to know for all other subsequent events
+    // Keep queued captures in order during initialization, without yielding once the client is ready.
+    if (!this._isInitialized) {
+      await this._initPromise
+    }
     this.registerForSession({
       $screen_name: name,
     })
@@ -1834,6 +1860,15 @@ export class PostHog extends PostHogCore {
   /**
    * Capture a caught exception manually
    *
+   * Exceptions also include capture-time `$app_state` (active, background, inactive or extension) on any
+   * platform where React Native AppState provides a known value. On iOS and Android, optional
+   * `expo-updates` (0.25.0 or newer) adds `$expo_update_id`, `$expo_runtime_version`, `$expo_channel`
+   * and `$expo_is_embedded_launch` for enabled updates outside development mode. Unknown values
+   * are omitted.
+   * These exception-only fields are separate from the static app metadata controlled by
+   * `customAppProperties`, including the existing `$app_version` and `$app_build`.
+   * Override these fields with `additionalProperties`, or remove them using `before_send`.
+   *
    * {@label Error tracking}
    *
    * @public
@@ -1871,6 +1906,8 @@ export class PostHog extends PostHogCore {
       mechanism: { handled: true, type: 'generic' },
       syntheticException: new Error('Synthetic Error'),
     }
+
+    additionalProperties = { ...getExceptionContext(), ...additionalProperties }
 
     // Attach the rolling exception-steps buffer (no-op if the caller already provided their own).
     additionalProperties = this._errorTracking.attachExceptionSteps(additionalProperties)
@@ -2432,6 +2469,9 @@ export class PostHog extends PostHogCore {
       captureLog: localCaptureLog = true,
       captureNetworkTelemetry: localCaptureNetworkTelemetry = true,
       verifyScreenshotMaskAlignment = false,
+      screenshotScale,
+      screenshotCompressionQuality,
+      screenshotColorMode,
       screenshotModeBackgroundCapture = false,
       sampleRate: localSampleRate,
       iOSdebouncerDelayMs = defaultThrottleDelayMs,
@@ -2516,6 +2556,9 @@ export class PostHog extends PostHogCore {
       captureLog,
       captureNetworkTelemetry,
       verifyScreenshotMaskAlignment,
+      ...(Number.isFinite(screenshotScale) ? { screenshotScale } : {}),
+      ...(Number.isFinite(screenshotCompressionQuality) ? { screenshotCompressionQuality } : {}),
+      ...(screenshotColorMode !== undefined ? { screenshotColorMode } : {}),
       screenshotModeBackgroundCapture,
       sampleRate,
       iOSdebouncerDelayMs,
@@ -2604,6 +2647,7 @@ export class PostHog extends PostHogCore {
             capturePushNotificationOpened: options?.capturePushNotificationOpened ?? true,
             pushIdentityProviderEnabled,
           },
+          ...(options?.rageClickConfig && { rageClick: options.rageClickConfig }),
         }
         await OptionalReactNativePlugin.setup(String(sessionId), sdkOptions, pluginConfig)
         // Native resolves its own persisted opt-out over the config value passed above, so an

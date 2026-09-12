@@ -1,5 +1,36 @@
 # @posthog/mcp
 
+## 0.16.0
+
+### Minor Changes
+
+- [#4870](https://github.com/PostHog/posthog-js/pull/4870) [`cc6373b`](https://github.com/PostHog/posthog-js/commit/cc6373bf42ba1cd777c6f7ecb5596e18d8df1cd5) Thanks [@gesh](https://github.com/gesh)! - Add the `send_feedback` virtual tool (new `collectFeedback` option): an honest, general agent-feedback channel with missing capabilities as the priority category. Every call emits a new `$mcp_feedback` event with `$mcp_feedback_type` and the other `$mcp_feedback_*` properties. Hosts can rename the tool, replace its description, declare `extraProperties` (captured as `$mcp_feedback_<key>`), and route reports to a real backend via `onFeedback` (`instrument()` path) or `prepareToolCall().feedbackReport` + `captureFeedback()` + `sendFeedbackResult()` (custom-dispatcher path). `reportMissing` / `get_more_tools` / `$mcp_missing_capability` are unchanged; new integrations should enable only `collectFeedback`.
+  (2026-09-11)
+
+## 0.15.0
+
+### Minor Changes
+
+- [#4830](https://github.com/PostHog/posthog-js/pull/4830) [`39420d8`](https://github.com/PostHog/posthog-js/commit/39420d893556a64c2514b523dddf00b8044856a4) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Capture resource discovery and reads from instrumented MCP servers. URL credential redaction (userinfo, credential-named query and fragment parameters) now applies to every captured string, including existing `$mcp_tool_call` parameters, responses, and error messages, so URLs already flowing through tool-call data will show `%5Bredacted%5D` values after upgrading.
+  (2026-09-10)
+
+## 0.14.1
+
+### Patch Changes
+
+- [#4798](https://github.com/PostHog/posthog-js/pull/4798) [`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd) Thanks [@posthog](https://github.com/apps/posthog)! - fix(error-tracking): collapse repeated frame cycles in parsed stack traces to reduce grouping differences caused by recursion depth, while preserving distinct throw locations
+  (2026-09-09)
+- Updated dependencies [[`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd)]:
+  - @posthog/core@1.51.1
+  - posthog-node@5.51.8
+
+## 0.14.0
+
+### Minor Changes
+
+- [#4829](https://github.com/PostHog/posthog-js/pull/4829) [`6724f10`](https://github.com/PostHog/posthog-js/commit/6724f10bef008642d1ccbd6c38d393dc39e7008c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Capture model identity from recognized client metadata before falling back to the injected `llm_model` argument.
+  (2026-09-08)
+
 ## 0.13.1
 
 ### Patch Changes

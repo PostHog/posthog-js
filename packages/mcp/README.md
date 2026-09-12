@@ -160,17 +160,19 @@ guarantee, `context: false` and the `beforeSend` hook above remain the ways to d
 
 ### What `$mcp_llm_model` records, and when it stays empty
 
-`captureModel` is **off** by default. Turn it on and the SDK adds a required `llm_model` parameter to
-every tool it advertises — including the `get_more_tools` virtual tool — asks the agent which model
-it runs as, and records the answer as `$mcp_llm_model` with `$mcp_llm_model_source = "self_reported"`.
+`captureModel` is **off** by default. Turn it on and the SDK records the best model id visible to the
+server as `$mcp_llm_model`. Recognized client metadata wins with source `client_metadata`. Otherwise,
+the SDK injects a required `llm_model` parameter and records the answer with source `self_reported`.
 
-The value is self-reported and unverified, exactly like `clientInfo` in the MCP spec. Use it to spot
-degradation across models ("does our MCP get worse on model X?"), never for billing or access
-control. An agent that answers `unknown` is recorded as nothing rather than as a model called
-"unknown".
+MCP does not standardize or attest model identity. Client metadata and self-report are both
+unverified. Use the value to spot degradation across models, never for billing or access control.
+Missing, blank, and `unknown` values are recorded as nothing.
 
-Unlike `context`, this option degrades to **silence** rather than to a kept argument. Both the strip
-and the capture require the SDK to have confirmed the parameter is its own:
+The recognized metadata path is Codex's `x-codex-turn-metadata.model` field inside request `_meta`.
+Other clients keep using self-report until they expose a stable model field.
+
+Unlike `context`, the self-report fallback degrades to **silence** rather than to a kept argument.
+Its capture and stripping require the SDK to have confirmed the parameter is its own:
 
 - `instrument(server)` on a high-level `McpServer` resolves ownership for your registered tools per
   request from the live tool registry, so those work even on a fresh instance.
@@ -198,13 +200,82 @@ const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN, { captureModel
 
 const tools = posthog.prepareToolList(serverTools)
 const originalTool = serverTools.find((tool) => tool.name === toolName)
-const { args, llmModel, llmModelSource } = posthog.prepareToolCall(toolName, rawArgs, { originalTool })
+const { args, llmModel, llmModelSource } = posthog.prepareToolCall(toolName, rawArgs, {
+  originalTool,
+  requestMeta: request.params?._meta,
+})
 const result = await dispatch(toolName, args)
 
 posthog.captureToolCall({ toolName, llmModel, llmModelSource, isError: false })
 ```
 
 A persistent single-process dispatcher can omit `originalTool` after it has prepared its tool list.
+Pass `requestMeta` whenever the request supplies `_meta`; this enables recognized client metadata
+without changing the arguments sent to the tool.
+
+### Collecting agent feedback (`send_feedback`)
+
+`collectFeedback` is **off** by default. Turn it on and the SDK advertises a `send_feedback` virtual
+tool: an honest, general feedback channel from the agent to your team. The tool description makes
+missing capabilities the priority category ("report a missing capability whenever no available tool
+fits your task, even if you can work around it") and also invites reports about a tool that failed
+or confused the agent, and praise. Every call emits one `$mcp_feedback` event — never a
+`$mcp_tool_call` — with `$mcp_feedback_type`, `$mcp_feedback_summary`, and the other
+`$mcp_feedback_*` properties; the summary and details double as `$mcp_intent`. The agent receives an
+acknowledgement that says exactly what happened: the report was recorded, no tools were added.
+
+```ts
+instrument(server, posthog, {
+  collectFeedback: {
+    // All fields optional; `collectFeedback: true` uses the defaults.
+    toolName: 'send_feedback',
+    extraProperties: {
+      product_area: { type: 'string', description: 'The product or feature the feedback is about.' },
+    },
+    extraRequired: ['product_area'],
+    onFeedback: async (report) => {
+      await myFeedbackBackend.record(report) // report.extras.product_area, report.raw, ...
+      return 'Thanks - your feedback reached the team.' // replaces the default acknowledgement
+    },
+  },
+})
+```
+
+Host-declared `extraProperties` are merged into the advertised schema and captured as
+`$mcp_feedback_<key>` (sanitized and bounded like every captured value). Arguments the agent invents
+beyond the schema are never captured — they reach `onFeedback` via `report.raw` only. A key that
+collides with a core field fails at configuration time. Free-text fields go through the same PII
+redaction as `$mcp_intent`.
+
+`onFeedback`'s returned string replaces the acknowledgement and is captured as `$mcp_response`
+through the generic sanitize pipeline only — it does not get the structured-PII redaction applied to
+`$mcp_feedback_summary`/`details`, so don't echo the agent's raw report text back in it.
+
+On the custom-dispatcher path, configure the tool on the `PostHogMCP` constructor and route reports
+yourself (`onFeedback` does not apply there):
+
+```ts
+const posthog = new PostHogMCP(process.env.POSTHOG_PROJECT_TOKEN, {
+  collectFeedback: { toolName: 'send_feedback' },
+})
+
+// tools/list handler
+return { tools: posthog.prepareToolList(myTools, { collectFeedback: true }) }
+
+// tools/call dispatcher
+const prepared = posthog.prepareToolCall(name, rawArgs)
+if (prepared.isFeedback) {
+  posthog.captureFeedback({ report: prepared.feedbackReport!, ...identity })
+  await myFeedbackBackend.record(prepared.feedbackReport!)
+  return sendFeedbackResult() // or a custom text reply
+}
+```
+
+`send_feedback` covers what `reportMissing` covers — a capability gap is
+`feedback_type: "missing_capability"` — so new integrations should enable only `collectFeedback`.
+`reportMissing` and its `$mcp_missing_capability` event stay unchanged for existing users; enabling
+both advertises both tools. Like `get_more_tools`, a real tool that already uses the configured name
+wins: the SDK warns, skips injection, and delegates calls to the real handler.
 
 ### If you switched to `instrument(server.server)`
 

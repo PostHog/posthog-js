@@ -1,6 +1,6 @@
 {
     "name": "@posthog/browser-common",
-    "version": "0.8.2",
+    "version": "0.8.3",
     "description": "Internal shared browser utilities and extension primitives for PostHog Browser SDKs",
     "license": "MIT",
     "repository": {
@@ -79,7 +79,7 @@
         "build": "rslib build",
         "dev": "rslib build -w",
         "test:unit": "vitest run",
-        "check-types": "pnpm build",
+        "check-types": "tsc --noEmit --project tsconfig.build.json",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
     "dependencies": {

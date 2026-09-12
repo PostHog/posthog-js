@@ -166,6 +166,12 @@ importers:
       rimraf:
         specifier: ^6.1.3
         version: 6.1.3
+      rolldown:
+        specifier: 'catalog:'
+        version: 1.2.4
+      rolldown-plugin-dts:
+        specifier: 'catalog:'
+        version: 0.27.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(rolldown@1.2.4)(typescript@5.8.2)
       rollup:
         specifier: 'catalog:'
         version: 4.53.3
@@ -256,7 +262,7 @@ importers:
         version: link:../node
       tsdown:
         specifier: 'catalog:'
-        version: 0.22.14(@volar/typescript@2.4.28)(typescript@5.8.2)
+        version: 0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -351,21 +357,6 @@ importers:
       '@rollup/plugin-babel':
         specifier: ^6.0.4
         version: 6.0.4(@babel/core@7.28.5)(@types/babel__core@7.20.5)(rollup@4.53.3)
-      '@rollup/plugin-commonjs':
-        specifier: ^28.0.6
-        version: 28.0.6(rollup@4.53.3)
-      '@rollup/plugin-json':
-        specifier: ^6.1.0
-        version: 6.1.0(rollup@4.53.3)
-      '@rollup/plugin-node-resolve':
-        specifier: ^16.0.3
-        version: 16.0.3(rollup@4.53.3)
-      '@rollup/plugin-terser':
-        specifier: ^0.4.4
-        version: 0.4.4(rollup@4.53.3)
-      '@rollup/plugin-typescript':
-        specifier: ^12.3.0
-        version: 12.3.0(rollup@4.53.3)(tslib@2.8.1)(typescript@5.8.2)
       '@sentry/types':
         specifier: 8.7.0
         version: 8.7.0
@@ -447,12 +438,9 @@ importers:
       rolldown:
         specifier: 'catalog:'
         version: 1.2.4
-      rollup:
+      rolldown-plugin-dts:
         specifier: 'catalog:'
-        version: 4.53.3
-      rollup-plugin-dts:
-        specifier: ^6.2.3
-        version: 6.2.3(rollup@4.53.3)(typescript@5.8.2)
+        version: 0.27.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(rolldown@1.2.4)(typescript@5.8.2)
       rollup-plugin-visualizer:
         specifier: ^6.0.3
         version: 6.0.3(rolldown@1.2.4)(rollup@4.53.3)
@@ -773,6 +761,9 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
+      '@posthog/types':
+        specifier: workspace:^
+        version: link:../types
       '@rslib/core':
         specifier: 'catalog:'
         version: 0.23.2(@microsoft/api-extractor@7.58.9(@types/node@20.19.9))(@typescript/native-preview@7.0.0-dev.20260216.1)(core-js@3.49.0)(typescript@5.9.3)
@@ -942,7 +933,7 @@ importers:
         version: 19.2.7(react@19.2.7)
       tsdown:
         specifier: 0.22.14
-        version: 0.22.14(@volar/typescript@2.4.28)(typescript@5.8.2)
+        version: 0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@5.8.2)
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
@@ -1034,6 +1025,9 @@ importers:
       expo-localization:
         specifier: ^11.0.0
         version: 11.0.0
+      expo-updates:
+        specifier: ^0.25.0
+        version: 0.25.0(expo@45.0.8(@babel/core@7.28.5))
       jsdom:
         specifier: 'catalog:'
         version: 26.1.0
@@ -1184,10 +1178,16 @@ importers:
 
   packages/rrweb/plugins/rrweb-plugin-canvas-webrtc-record:
     dependencies:
+      '@types/node':
+        specifier: ^16.18.126
+        version: 16.18.126
       simple-peer-light:
         specifier: ^9.10.0
         version: 9.10.0
     devDependencies:
+      '@posthog-tooling/rrweb-build':
+        specifier: workspace:*
+        version: link:../../../../tooling/rrweb-build
       '@posthog/rrweb':
         specifier: workspace:*
         version: link:../../rrweb
@@ -1197,12 +1197,6 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
-      vite:
-        specifier: 'catalog:'
-        version: 8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0)
-      vite-plugin-dts:
-        specifier: 'catalog:'
-        version: 5.0.3(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(esbuild@0.28.1)(rolldown@1.2.4)(rollup@4.62.3)(typescript@5.8.2)(vite@8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0))(webpack@5.108.1(esbuild@0.28.1)(lightningcss@1.33.0))
 
   packages/rrweb/plugins/rrweb-plugin-canvas-webrtc-replay:
     dependencies:
@@ -1383,10 +1377,10 @@ importers:
       '@posthog/rrweb-snapshot':
         specifier: workspace:*
         version: link:../rrweb-snapshot
-    devDependencies:
       '@posthog/rrweb-types':
         specifier: workspace:*
         version: link:../types
+    devDependencies:
       '@types/jsdom':
         specifier: ^20.0.0
         version: 20.0.1
@@ -1417,6 +1411,9 @@ importers:
       '@posthog/rrweb-types':
         specifier: workspace:*
         version: link:../types
+      '@types/nwsapi':
+        specifier: ^2.2.2
+        version: 2.2.7
       cssom:
         specifier: ^0.5.0
         version: 0.5.0
@@ -1436,9 +1433,6 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.9
-      '@types/nwsapi':
-        specifier: ^2.2.2
-        version: 2.2.7
       compare-versions:
         specifier: ^4.1.3
         version: 4.1.4
@@ -1545,6 +1539,9 @@ importers:
 
   packages/rrweb/rrweb-snapshot:
     dependencies:
+      '@posthog/rrweb-types':
+        specifier: workspace:*
+        version: link:../types
       '@types/postcss-safe-parser':
         specifier: ^5.0.4
         version: 5.0.4
@@ -1555,9 +1552,6 @@ importers:
         specifier: ^7.0.1
         version: 7.0.1(postcss@8.5.24)
     devDependencies:
-      '@posthog/rrweb-types':
-        specifier: workspace:*
-        version: link:../types
       '@posthog/rrweb-utils':
         specifier: workspace:*
         version: link:../utils
@@ -1655,7 +1649,7 @@ importers:
         version: 26.1.0
       tsdown:
         specifier: 'catalog:'
-        version: 0.22.14(@volar/typescript@2.4.28)(typescript@5.8.2)
+        version: 0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@5.8.2)
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
@@ -1744,6 +1738,15 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.8.2
+
+  tooling/rrweb-build:
+    dependencies:
+      vite:
+        specifier: 'catalog:'
+        version: 8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0)
+      vite-plugin-dts:
+        specifier: 'catalog:'
+        version: 5.0.3(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(esbuild@0.28.1)(rolldown@1.2.4)(rollup@4.62.3)(typescript@5.8.2)(vite@8.2.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0))(webpack@5.108.1(esbuild@0.28.1)(lightningcss@1.33.0))
 
   tooling/tsconfig-base: {}
 
@@ -4433,14 +4436,23 @@ packages:
   '@expo/code-signing-certificates@0.0.2':
     resolution: {integrity: sha512-vnPHFjwOqxQ1VLztktY+fYCfwvLzjqpzKn09rchcQE7Sdf0wtW5fFtIZBEFOOY5wasp8tXSnp627zrAwazPHzg==}
 
+  '@expo/code-signing-certificates@0.0.5':
+    resolution: {integrity: sha512-BNhXkY1bblxKZpltzAx98G2Egj9g1Q+JRcvR7E99DOj862FTCX+ZPsAUtPTr7aHxwtrL7+fL3r0JSmM9kBm+Bw==}
+
   '@expo/config-plugins@10.1.2':
     resolution: {integrity: sha512-IMYCxBOcnuFStuK0Ay+FzEIBKrwW8OVUMc65+v0+i7YFIIe8aL342l7T4F8lR4oCfhXn7d6M5QPgXvjtc/gAcw==}
 
   '@expo/config-plugins@4.1.5':
     resolution: {integrity: sha512-RVvU40RtZt12HavuDAe+LDIq9lHj7sheOfMEHdmpJ/uTA8pgvkbc56XF6JHQD+yRr6+uhhb+JnAasGq49dsQbw==}
 
+  '@expo/config-plugins@8.0.11':
+    resolution: {integrity: sha512-oALE1HwnLFthrobAcC9ocnR9KXLzfWEjgIe4CPe+rDsfC6GDs8dGYCXfRFoCEzoLN4TGYs9RdZ8r0KoCcNrm2A==}
+
   '@expo/config-types@45.0.0':
     resolution: {integrity: sha512-/QGhhLWyaGautgEyU50UJr5YqKJix5t77ePTwreOVAhmZH+ff3nrrtYTTnccx+qF08ZNQmfAyYMCD3rQfzpiJA==}
+
+  '@expo/config-types@51.0.3':
+    resolution: {integrity: sha512-hMfuq++b8VySb+m9uNNrlpbvGxYc8OcFCUX9yTmi9tlx6A4k8SDabWFBgmnr4ao3wEArvWrtUQIfQCVtPRdpKA==}
 
   '@expo/config-types@53.0.5':
     resolution: {integrity: sha512-kqZ0w44E+HEGBjy+Lpyn0BVL5UANg/tmNixxaRMLS6nf37YsDrLk2VMAmeKMMk5CKG0NmOdVv3ngeUjRQMsy9g==}
@@ -4451,6 +4463,9 @@ packages:
   '@expo/config@6.0.26':
     resolution: {integrity: sha512-nMQaZl69r6CMJFhCj0xcGJN9bIi4Uws0k9K6q6rGFPFNarS0z0aexeyNLv93/J+hsTJVn0GEYtGz5Y/R8boXxw==}
 
+  '@expo/config@9.0.4':
+    resolution: {integrity: sha512-g5ns5u1JSKudHYhjo1zaSfkJ/iZIcWmUmIQptMJZ6ag1C0ShL2sj8qdfU8MmAMuKLOgcIfSaiWlQnm4X3VJVkg==}
+
   '@expo/dev-server@0.1.116':
     resolution: {integrity: sha512-jUyOv3S55wBsYiFhiYVz35Ui8QTnUGVKlsPRgQHnKU70Ey4jxJqObtGkNnrgazzDfy9S7qFJKiyJQro7621ipA==}
 
@@ -4459,6 +4474,10 @@ packages:
 
   '@expo/env@1.0.7':
     resolution: {integrity: sha512-qSTEnwvuYJ3umapO9XJtrb1fAqiPlmUUg78N0IZXXGwQRt+bkp0OBls+Y5Mxw/Owj8waAM0Z3huKKskRADR5ow==}
+
+  '@expo/fingerprint@0.7.1':
+    resolution: {integrity: sha512-lbTwFiIk0lOm9zzPRvnC45GfPqXqPB3w4hDDKVma+8FDAbPCWhNN42ltLhx/ekwcHFQxURmg0fHm59k0Vy+jtw==}
+    hasBin: true
 
   '@expo/image-utils@0.3.21':
     resolution: {integrity: sha512-Ha7pNcpl52RJIeYz3gR1ajOgPPl7WLZWiLqtLi94s9J0a7FvmNBMqd/VKrfHNj8QmtZxXcmXr7y7tPhZbVFg7w==}
@@ -4492,6 +4511,9 @@ packages:
   '@expo/plist@0.0.18':
     resolution: {integrity: sha512-+48gRqUiz65R21CZ/IXa7RNBXgAI/uPSdvJqoN9x1hfL44DNbUoWHgHiEXTx7XelcATpDwNTz6sHLfy0iNqf+w==}
 
+  '@expo/plist@0.1.3':
+    resolution: {integrity: sha512-GW/7hVlAylYg1tUrEASclw1MMk9FP4ZwyFAY/SUTJIhPDQHtfOlXREyWV3hhrHdX/K+pS73GNgdfT6E/e+kBbg==}
+
   '@expo/plist@0.3.5':
     resolution: {integrity: sha512-9RYVU1iGyCJ7vWfg3e7c/NVyMFs8wbl+dMWZphtFtsqyN9zppGREU3ctlD3i8KUE0sCUTVnLjCWr+VeUIDep2g==}
 
@@ -4511,6 +4533,10 @@ packages:
 
   '@expo/spawn-async@1.7.2':
     resolution: {integrity: sha512-QdWi16+CHB9JYP7gma19OVVg0BFkvU8zNj9GjWorYI8Iv8FUxjOCcYRuAmX4s/h91e4e7BPsskc8cSrZYho9Ew==}
+    engines: {node: '>=12'}
+
+  '@expo/spawn-async@1.8.0':
+    resolution: {integrity: sha512-eb9xxd/LbuEGSdua4NumCu/McVB9EM+F/JxB9pWgnERw4HQ9XyTNH1KapG6oqLWR8TuRK2LQfzJlmNi94CVobw==}
     engines: {node: '>=12'}
 
   '@expo/sudo-prompt@9.3.2':
@@ -6919,15 +6945,6 @@ packages:
       rollup:
         optional: true
 
-  '@rollup/plugin-terser@0.4.4':
-    resolution: {integrity: sha512-XHeJC5Bgvs8LfukDwWZp7yeqin6ns8RTl2B9avbejt6tZqsqvVoWI7ZTQrcNsfKEDWBTnTxM8nMDkO2IFFbd0A==}
-    engines: {node: '>=14.0.0'}
-    peerDependencies:
-      rollup: ^2.0.0||^3.0.0||^4.0.0
-    peerDependenciesMeta:
-      rollup:
-        optional: true
-
   '@rollup/plugin-terser@1.0.0':
     resolution: {integrity: sha512-FnCxhTBx6bMOYQrar6C8h3scPt8/JwIzw3+AJ2K++6guogH5fYaIFia+zZuhqv0eo1RN7W1Pz630SyvLbDjhtQ==}
     engines: {node: '>=20.0.0'}
@@ -7926,6 +7943,9 @@ packages:
 
   '@types/node@12.20.55':
     resolution: {integrity: sha512-J8xLz7q2OFulZ2cyGTLE1TbbZcjpno7FaN6zdJNrgAdrJ+DZzh/uFR6YrTb4C+nXakvud8Q4+rbhoIWlYQbUFQ==}
+
+  '@types/node@16.18.126':
+    resolution: {integrity: sha512-OTcgaiwfGFBKacvfwuHzzn1KLxH/er8mluiy8/uM3sGXHaRe73RrSIj01jow9t4kJEW633Ov+cOexXeiApTyAw==}
 
   '@types/node@20.19.9':
     resolution: {integrity: sha512-cuVNgarYWZqxRJDQHEB58GEONhOK79QVR/qYx4S7kcUObQvUwvFnYxJuuHUKm2aieN9X3yZB4LZsuYNU1Qphsw==}
@@ -10744,6 +10764,9 @@ packages:
     peerDependencies:
       expo: '*'
 
+  expo-eas-client@0.12.0:
+    resolution: {integrity: sha512-Jkww9Cwpv0z7DdLYiRX0r4fqBEcI9cKqTn7cHx63S09JaZ2rcwEE4zYHgrXwjahO+tU2VW8zqH+AJl6RhhW4zA==}
+
   expo-error-recovery@3.1.0:
     resolution: {integrity: sha512-qUxCW7kPB6AVX5h3ZPVnxw4LLZWsRwAPBtRDlh1UDN7GWZ+CQN1SNk0w0BPotjNtSlXEZSFDqKqtoDDAUYjNmg==}
     peerDependencies:
@@ -10764,6 +10787,9 @@ packages:
     peerDependencies:
       expo: '*'
 
+  expo-json-utils@0.13.1:
+    resolution: {integrity: sha512-mlfaSArGVb+oJmUcR22jEONlgPp0wj4iNIHfQ2je9Q8WTOqMc0Ws9tUciz3JdJnhffdHqo/k8fpvf0IRmN5HPA==}
+
   expo-keep-awake@10.1.1:
     resolution: {integrity: sha512-9zC0sdhQljUeMr2yQ7o4kzEZXVAy82fFOAZE1+TwPL7qR0b0sphe7OJ5T1GX1qLcwuVaJ8YewaPoLSHRk79+Rg==}
     peerDependencies:
@@ -10771,6 +10797,11 @@ packages:
 
   expo-localization@11.0.0:
     resolution: {integrity: sha512-LLK7+pYScM5ob8/IsnCb4JVQb6AvWP5anTIikaZmpz7XCUJ0KHaCPY8YfUjVSSwWspSMLxpqKEZtAra+bHxYZA==}
+
+  expo-manifests@0.14.3:
+    resolution: {integrity: sha512-L3b5/qocBPiQjbW0cpOHfnqdKZbTJS7sA3mgeDJT+mWga/xYsdpma1EfNmsuvrOzjLGjStr1k1fceM9Bl49aqQ==}
+    peerDependencies:
+      expo: '*'
 
   expo-modules-autolinking@0.8.1:
     resolution: {integrity: sha512-S8qfaXCv//7tQWV9M+JKx3CF7ypYhDdSUbkUQdaVO/r8D76/aRTArY/aRw1yEfaAOzyK8C8diDToV1itl51DfQ==}
@@ -10782,6 +10813,20 @@ packages:
 
   expo-modules-core@0.9.2:
     resolution: {integrity: sha512-p/C0GJxFIIDGwmrWi70Q0ggfsgeUFS25ZkkBgoaHT7MVgiMjlKA/DCC3D6ZUkHl/JlzUm0aTftIGS8LWXsnZBw==}
+
+  expo-structured-headers@3.8.0:
+    resolution: {integrity: sha512-R+gFGn0x5CWl4OVlk2j1bJTJIz4KO8mPoCHpRHmfqMjmrMvrOM0qQSY3V5NHXwp1yT/L2v8aUmFQsBRIdvi1XA==}
+
+  expo-updates-interface@0.16.2:
+    resolution: {integrity: sha512-929XBU70q5ELxkKADj1xL0UIm3HvhYhNAOZv5DSk7rrKvLo7QDdPyl+JVnwZm9LrkNbH4wuE2rLoKu1KMgZ+9A==}
+    peerDependencies:
+      expo: '*'
+
+  expo-updates@0.25.0:
+    resolution: {integrity: sha512-21qr+I6cKes5ToTz9FFYLqcSYNXH2GJL4bLWfP0MVijLAqbO5yhGDeSuMOhQ0UhimGDrgVpbLtVS2S6iZyfCog==}
+    hasBin: true
+    peerDependencies:
+      expo: '*'
 
   expo@45.0.8:
     resolution: {integrity: sha512-1dSMiodS7t44+1jijPL6ky1CRR/L2pPhrDoaSDo4WBS9ntEa1hEBhC+qa1Th5VkjqG9qkR73AGRgx4h8ozRvsA==}
@@ -15126,9 +15171,6 @@ packages:
   radix3@1.1.2:
     resolution: {integrity: sha512-b484I/7b8rDEdSDKckSSBA8knMpcdsXudlE/LNL639wFoHKwLbEkQFZHWEYwDC0wa0FKUcCY+GAF73Z7wxNVFA==}
 
-  randombytes@2.1.0:
-    resolution: {integrity: sha512-vYl3iOX+4CKUWuxGi9Ukhie6fsqXqS9FE2Zaic4tNFD2N2QQaXOMFbuKK4QmDHC0JO6B1Zp41J0LpT0oR68amQ==}
-
   range-parser@1.2.1:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
     engines: {node: '>= 0.6'}
@@ -15833,9 +15875,6 @@ packages:
     resolution: {integrity: sha512-3vmBkMZLQO+BR4RPHcyRGdE09XCF6cvxzk2N2qn8Er3F91cy8Qt7VvEbZBOpaL53qsBbe2cFOefU6tRY6WDelA==}
     engines: {node: '>=10'}
 
-  serialize-javascript@6.0.1:
-    resolution: {integrity: sha512-owoXEFjWRllis8/M1Q+Cw5k8ZH40e3zhp/ovX+Xr/vi1qj6QesbyXXViFbpNvWvPNAD62SutwEXavefrLJWj7w==}
-
   serialize-javascript@7.0.7:
     resolution: {integrity: sha512-YAy8Od6KV+uuwUuU50np8fGB/Aues6Y0nAhA9y/hId74PlKUcme4pXcBD46NWKr1Q4osN/iseZ17YqO1XfmI8g==}
     engines: {node: '>=20.0.0'}
@@ -16362,6 +16401,11 @@ packages:
     engines: {node: ^22.11.0 || ^24.11.0 || >=26.0}
     peerDependencies:
       postcss: ^8.5.15
+
+  sucrase@3.34.0:
+    resolution: {integrity: sha512-70/LQEZ07TEcxiU2dz51FKaE6hCTWC6vr7FOk3Gr0U60C3shtAN+H+BFr9XlYe5xqf3RA8nrc+VIwzCfnxuXJw==}
+    engines: {node: '>=8'}
+    hasBin: true
 
   sucrase@3.35.0:
     resolution: {integrity: sha512-8EbVDiu9iN/nESwxeSxDKe0dunta1GOlHufmSSXxMD2z2/tMZpDMpvXQGsc+ajGo8y2uYUmixaSRUc/QPoQ0GA==}
@@ -21868,6 +21912,11 @@ snapshots:
       node-forge: 1.3.2
       nullthrows: 1.1.1
 
+  '@expo/code-signing-certificates@0.0.5':
+    dependencies:
+      node-forge: 1.3.2
+      nullthrows: 1.1.1
+
   '@expo/config-plugins@10.1.2':
     dependencies:
       '@expo/config-types': 53.0.5
@@ -21907,7 +21956,29 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@expo/config-plugins@8.0.11':
+    dependencies:
+      '@expo/config-types': 51.0.3
+      '@expo/json-file': 8.3.3
+      '@expo/plist': 0.1.3
+      '@expo/sdk-runtime-versions': 1.0.0
+      chalk: 4.1.2
+      debug: 4.4.3
+      find-up: 5.0.0
+      getenv: 1.0.0
+      glob: 7.1.6
+      resolve-from: 5.0.0
+      semver: 7.8.5
+      slash: 3.0.0
+      slugify: 1.6.9
+      xcode: 3.0.1
+      xml2js: 0.6.0
+    transitivePeerDependencies:
+      - supports-color
+
   '@expo/config-types@45.0.0': {}
+
+  '@expo/config-types@51.0.3': {}
 
   '@expo/config-types@53.0.5': {}
 
@@ -21945,6 +22016,22 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@expo/config@9.0.4':
+    dependencies:
+      '@babel/code-frame': 7.10.4
+      '@expo/config-plugins': 8.0.11
+      '@expo/config-types': 51.0.3
+      '@expo/json-file': 8.3.3
+      getenv: 1.0.0
+      glob: 7.1.6
+      require-from-string: 2.0.2
+      resolve-from: 5.0.0
+      semver: 7.8.5
+      slugify: 1.6.9
+      sucrase: 3.34.0
+    transitivePeerDependencies:
+      - supports-color
+
   '@expo/dev-server@0.1.116':
     dependencies:
       '@expo/bunyan': 4.0.0
@@ -21979,6 +22066,19 @@ snapshots:
       dotenv: 16.4.7
       dotenv-expand: 11.0.7
       getenv: 2.0.0
+    transitivePeerDependencies:
+      - supports-color
+
+  '@expo/fingerprint@0.7.1':
+    dependencies:
+      '@expo/spawn-async': 1.8.0
+      chalk: 4.1.2
+      debug: 4.4.3
+      find-up: 5.0.0
+      minimatch: 3.1.5
+      p-limit: 3.1.0
+      resolve-from: 5.0.0
+      semver: 7.8.5
     transitivePeerDependencies:
       - supports-color
 
@@ -22081,6 +22181,12 @@ snapshots:
       base64-js: 1.5.1
       xmlbuilder: 14.0.0
 
+  '@expo/plist@0.1.3':
+    dependencies:
+      '@xmldom/xmldom': 0.7.13
+      base64-js: 1.5.1
+      xmlbuilder: 14.0.0
+
   '@expo/plist@0.3.5':
     dependencies:
       '@xmldom/xmldom': 0.8.14
@@ -22123,6 +22229,10 @@ snapshots:
       cross-spawn: 6.0.6
 
   '@expo/spawn-async@1.7.2':
+    dependencies:
+      cross-spawn: 7.0.6
+
+  '@expo/spawn-async@1.8.0':
     dependencies:
       cross-spawn: 7.0.6
 
@@ -25224,14 +25334,6 @@ snapshots:
     optionalDependencies:
       rollup: 4.62.3
 
-  '@rollup/plugin-terser@0.4.4(rollup@4.53.3)':
-    dependencies:
-      serialize-javascript: 6.0.1
-      smob: 1.4.1
-      terser: 5.48.0
-    optionalDependencies:
-      rollup: 4.53.3
-
   '@rollup/plugin-terser@1.0.0(rollup@4.62.3)':
     dependencies:
       serialize-javascript: 7.0.7
@@ -26465,6 +26567,8 @@ snapshots:
       '@types/node': 22.20.1
 
   '@types/node@12.20.55': {}
+
+  '@types/node@16.18.126': {}
 
   '@types/node@20.19.9':
     dependencies:
@@ -29944,6 +30048,8 @@ snapshots:
       expo: 45.0.8(@babel/core@7.28.5)
       ua-parser-js: 0.7.40
 
+  expo-eas-client@0.12.0: {}
+
   expo-error-recovery@3.1.0(expo@45.0.8(@babel/core@7.28.5)):
     dependencies:
       expo: 45.0.8(@babel/core@7.28.5)
@@ -29970,6 +30076,8 @@ snapshots:
       expo: 45.0.8(@babel/core@7.28.5)
       fontfaceobserver: 2.3.0
 
+  expo-json-utils@0.13.1: {}
+
   expo-keep-awake@10.1.1(expo@45.0.8(@babel/core@7.28.5)):
     dependencies:
       expo: 45.0.8(@babel/core@7.28.5)
@@ -29977,6 +30085,14 @@ snapshots:
   expo-localization@11.0.0:
     dependencies:
       rtl-detect: 1.1.2
+
+  expo-manifests@0.14.3(expo@45.0.8(@babel/core@7.28.5)):
+    dependencies:
+      '@expo/config': 9.0.4
+      expo: 45.0.8(@babel/core@7.28.5)
+      expo-json-utils: 0.13.1
+    transitivePeerDependencies:
+      - supports-color
 
   expo-modules-autolinking@0.8.1:
     dependencies:
@@ -29998,6 +30114,34 @@ snapshots:
     dependencies:
       compare-versions: 3.6.0
       invariant: 2.2.4
+
+  expo-structured-headers@3.8.0: {}
+
+  expo-updates-interface@0.16.2(expo@45.0.8(@babel/core@7.28.5)):
+    dependencies:
+      expo: 45.0.8(@babel/core@7.28.5)
+
+  expo-updates@0.25.0(expo@45.0.8(@babel/core@7.28.5)):
+    dependencies:
+      '@expo/code-signing-certificates': 0.0.5
+      '@expo/config': 9.0.4
+      '@expo/config-plugins': 8.0.11
+      '@expo/fingerprint': 0.7.1
+      '@expo/spawn-async': 1.8.0
+      arg: 4.1.0
+      chalk: 4.1.2
+      expo: 45.0.8(@babel/core@7.28.5)
+      expo-eas-client: 0.12.0
+      expo-manifests: 0.14.3(expo@45.0.8(@babel/core@7.28.5))
+      expo-structured-headers: 3.8.0
+      expo-updates-interface: 0.16.2(expo@45.0.8(@babel/core@7.28.5))
+      fast-glob: 3.3.3
+      fbemitter: 3.0.0
+      ignore: 5.3.2
+      resolve-from: 5.0.0
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
 
   expo@45.0.8(@babel/core@7.28.5):
     dependencies:
@@ -35673,10 +35817,6 @@ snapshots:
 
   radix3@1.1.2: {}
 
-  randombytes@2.1.0:
-    dependencies:
-      safe-buffer: 5.2.1
-
   range-parser@1.2.1: {}
 
   range-parser@1.3.0: {}
@@ -36606,10 +36746,6 @@ snapshots:
     dependencies:
       type-fest: 0.12.0
 
-  serialize-javascript@6.0.1:
-    dependencies:
-      randombytes: 2.1.0
-
   serialize-javascript@7.0.7: {}
 
   seroval@1.6.0: {}
@@ -37195,6 +37331,16 @@ snapshots:
       browserslist: 4.28.7
       postcss: 8.5.24
       postcss-selector-parser: 7.1.4
+
+  sucrase@3.34.0:
+    dependencies:
+      '@jridgewell/gen-mapping': 0.3.13
+      commander: 4.1.1
+      glob: 7.1.6
+      lines-and-columns: 1.2.4
+      mz: 2.7.0
+      pirates: 4.0.7
+      ts-interface-checker: 0.1.13
 
   sucrase@3.35.0:
     dependencies:
@@ -37845,7 +37991,7 @@ snapshots:
     optionalDependencies:
       typescript: 5.8.2
 
-  tsdown@0.22.14(@volar/typescript@2.4.28)(typescript@5.8.2):
+  tsdown@0.22.14(@volar/typescript@2.4.28)(oxc-resolver@11.24.2)(typescript@5.8.2):
     dependencies:
       ansis: 4.3.1
       cac: 7.0.0

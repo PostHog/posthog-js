@@ -76,6 +76,18 @@ Some packages have their own contributor guides with extra package-level checks:
 - This repository is structured as a pnpm workspace and each SDK and tooling package is a member of this global workspace.
 - Example and playground projects are independent pnpm workspaces. Run `pnpm install` inside the specific project folder. Projects using the shared `.pnpmfile.cjs` rewrite PostHog dependencies to local tarballs, with exclusions such as `@posthog/cli` and `posthog-react-native-session-replay`. Check the project's `pnpm-workspace.yaml` and referenced pnpmfile for its exact behavior.
 
+## Dependency cooldown
+
+Every pnpm workspace, including independent examples, playgrounds, and CI fixtures, sets `minimumReleaseAge: 10080` (seven days). Root workspace members inherit the root policy. Shared `.pnpmfile.cjs` hooks must not lower it. The similarly named `min-release-age` setting in `.npmrc` is not a substitute for pnpm's workspace setting.
+
+Each independent workspace pins a pnpm version with cooldown support in `package.json`. Support starts at pnpm 10.16.0. Existing older pnpm 10 projects use 10.33.0 to avoid a major-version migration; previously unpinned workspaces use the root's 11.7.0. Both support the cooldown. A global pnpm version is not sufficient because project pins can select a different version.
+
+Run `pnpm --version` and `pnpm config get minimumReleaseAge` inside the project to verify the selected version and effective policy, including hook overrides. Corepack and pnpm's own version manager use separate caches. With Corepack, run `corepack install` inside the project if its pinned version is not cached. Use the Node version from `.nvmrc` for repository development.
+
+Run `pnpm test:dependency-cooldown` to check workspace settings, pnpm pins, standalone lockfiles, hook overrides, and native CI policy loading. A local mock registry also verifies that pnpm rejects a six-day-old version and resolves an eight-day-old version without downloading or executing package code. The checks run in the unit CI job.
+
+The native plugin example has its own policy for local workspace installs. Its CI installs intentionally use `--ignore-workspace` for standalone installation, so they pass `--config.minimum-release-age=10080` explicitly alongside the hoisted linker setting. Keep that explicit cooldown whenever bypassing the workspace policy. Generated pnpm consumer fixtures also need an explicit cooldown and supported package-manager pin. The minimum-TypeScript fixture installs local tarballs for the browser SDK and its PostHog workspace dependencies, so testing the current source does not require cooldown exceptions for newly published SDK packages. These repository settings do not configure npm-based consumer tests or installations performed by SDK users.
+
 ## Dependency Release-Age Exceptions
 
 `minimumReleaseAgeExclude` entries are repository-local and are not inherited by consumers of published packages. Before adding an exception:
@@ -101,8 +113,17 @@ pnpm dev
 # Run all tests across packages
 pnpm test
 
-# Run unit tests only
+# Run unit tests and their dedicated built-output checks (no rrweb browser tests)
 pnpm test:unit
+
+# Run dedicated built-output checks only
+pnpm test:built
+
+# Run rrweb tests (requires Puppeteer's Chrome; Linux CI also uses Xvfb)
+pnpm test:rrweb
+
+# Validate task ordering without compiling packages
+pnpm test:build-graph
 
 # Lint all packages
 pnpm lint
@@ -125,6 +146,28 @@ pnpm clean
 # Clean all node_modules (workspace-wide)
 pnpm clean:dep
 ```
+
+### rrweb declaration builds
+
+All 16 rrweb workspace packages use `build: pnpm check-types && vite build && pnpm build:declarations`, with `check-types: tsc --noEmit`. This explicit semantic-check step must succeed before JavaScript or declaration generation starts. `build:declarations` only emits types; it is not a substitute for `check-types` or the production build.
+
+The shared `packages/rrweb/rolldown.dts.config.mts` explicitly uses Oxc for all 16 packages, each of which enables `isolatedDeclarations` in its TSConfig. Exported declarations must have sufficient type annotations for isolated generation. Keep semantic checking enabled: Oxc does not replace TypeScript's type checker.
+
+Declaration entries remain self-contained, external package imports remain external, and each `.d.ts` has an identical `.d.cts` sibling. Watch mode uses Vite's declaration plugin except for `rrweb-record`, which runs a separate Rolldown declaration watcher. The alternate rrweb entrypoint config also retains Vite's declaration plugin.
+
+```sh
+pnpm turbo run build --filter='./packages/rrweb/**'
+pnpm turbo run check-types --filter='./packages/rrweb/**'
+pnpm test:rrweb-declarations
+pnpm test:rrweb-package-exports
+pnpm test:rrweb-consumers
+```
+
+The installed-consumer tests build and pack their prerequisites. `test:rrweb-package-exports` checks JavaScript/CSS export targets and native Node ESM/CommonJS behavior. `test:rrweb-consumers` checks strict declarations with TypeScript 4.7, 5.8, and 6, including coexistence with consumer Node 22/24 typings. Both need registry access; the strict type checks retain their tarballs, installs, and compiler logs in a reported temporary directory.
+
+The canvas WebRTC plugin ships its SimplePeer declaration shim and legacy-compatible Node typings for TypeScript 4.7 consumers. Its Vite development tools are provided by the private `tooling/rrweb-build` workspace so their modern typing peers remain separate from the published dependency. This type-only dependency does not change the workspace's Node 24 runtime requirement.
+
+The declaration regression tests also run through `pnpm test:unit`. When changing an entrypoint, verify its package exports and both declaration formats, and check a `pnpm dev` source edit/rebuild. Keep the shared build configs in Turbo's cache inputs.
 
 ### Dead code audit (Knip)
 
@@ -157,7 +200,9 @@ Common package scripts are listed below. Availability and build output directori
 - `lint:fix` - Fix linting issues
 - `build` - Transpile, minify and/or bundle source code (usually into `dist/` or `lib/`)
 - `dev` - Build and watch for changes
-- `test:unit` - Run unit tests
+- `test:unit` - Run unit tests; some packages still include built-output assertions
+- `test:built` - Run dedicated built-output assertions (if available)
+- `test:rrweb` - Run vendored rrweb suites, including real-browser and built-output tests
 - `test:functional` - Run functional/integration tests (if applicable)
 - `package` - Create a tarball of this package that can be installed inside an example or playground project
 
@@ -178,6 +223,14 @@ pnpm turbo --filter=posthog-react-native build
 # Lint a specific package
 pnpm turbo --filter=@posthog/react lint
 ```
+
+### Task dependency contracts
+
+Use root scripts or `pnpm turbo run <task> --filter=<package>` to bootstrap prerequisites. Package build, type-check, test, and reference-generation scripts are leaf commands: running them directly assumes their required dependency outputs already exist. rrweb uses the same `build -> ^build` graph as the SDKs; there is no separate `prepublish` task graph. Its explicit standalone `build-and-test` and watch wrappers bootstrap dependencies through Turbo.
+
+`pnpm test` schedules lint and test leaf tasks directly so package-level `test` convenience scripts do not run the same suites again. rrweb suites live under `test:rrweb`, outside the ordinary unit CI job. `pnpm test:unit` also schedules `test:built` to preserve built-output coverage; for a filtered equivalent, use `pnpm turbo run test:unit test:built --filter=<package>`.
+
+Browser-next separates its source suite (`test:unit`, requiring dependency builds only) from its mixed-module delivery check (`test:built`, requiring its own build). Its `check-types` task also requires its own build because it includes package-consumer fixtures. Other packages retain their existing production-build prerequisites until their artifact checks are separated and verified. `pnpm test:build-graph` guards these ordering and coverage contracts with Turbo dry runs.
 
 ## CI-aligned checks
 
@@ -238,6 +291,18 @@ The recommended workflow for testing local changes uses tarballs, which most rea
 
 Oxfmt checks workspace package code during linting. Pre-commit hooks (via prek) automatically lint and format staged TypeScript and JavaScript files, and format staged JSON and Markdown files.
 
+## Public API changes
+
+Public API is hard to change once it ships, so agree on it before writing the implementation. Our [SDK guidelines](https://posthog.com/handbook/engineering/sdks/guidelines) explain how we design it.
+
+- If you need something the SDK doesn't support and it would add or change a public option, method, or exported type, open an issue describing your use case first. At this stage, context is more useful to us than code.
+- Wait for a maintainer to agree on the API shape on the issue before implementing it.
+- Check first whether an existing option or hook, such as `before_send`, already covers the use case. We avoid offering two ways to do the same thing.
+- If a reviewer suggests a different API on your PR, confirm it with them before re-implementing. Treat it as a question, not an instruction.
+- AI agents: stop and ask before implementing a public API change that hasn't been agreed on the issue.
+
+`pnpm generate-references` regenerates the API references for `posthog-js`, `posthog-node`, and `posthog-react-native`. Treat its diff as a signal to inspect, not a verdict: a changed signature, type, or member in a `*-references-latest.json` file usually means your change touches public API, while descriptions, examples, and source paths change without it. For other packages, check what the package exports.
+
 ## Opening a new PR
 
 - PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/) format.
@@ -262,6 +327,8 @@ Follow [RELEASING.md](./RELEASING.md) for changeset requirements and writing gui
 
 ### CI credentials and restricted PRs
 
+Set workflow-level `permissions: {}` and grant `GITHUB_TOKEN` permissions explicitly on each job, including reusable-workflow callers. Build-only jobs should use `contents: read`; jobs that do not use the GitHub API or checkout should use `permissions: {}`. Grant write permissions and `id-token: write` only to jobs that need them. These settings do not restrict GitHub App tokens or other secrets, and every step in a privileged job shares its token permissions.
+
 Fork and Dependabot PRs may not have repository secrets, and their default `GITHUB_TOKEN` can be read-only. A same-repository PR is not proof that credentials are available.
 
 - `integration.yml` checks `POSTHOG_API_HOST`, `POSTHOG_PROJECT_ID`, `POSTHOG_PROJECT_API_KEY`, and `POSTHOG_PERSONAL_API_KEY` before checkout, dependency installation, builds, or live tests.
@@ -275,6 +342,30 @@ Bundle-size, compatibility, incident-risk, description, and versioning checks sk
 The main unit, functional, local Playwright, MCP, SDK compliance, and native plugin checks do not require live API credentials. AI live-provider tests already skip without their respective `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`. Next.js CI smoke builds use dummy configuration and disable real sourcemap uploads.
 
 Publishing, S3 recovery, reference-generation, downstream-upgrade, and watcher worker/sweep workflows run in trusted push, manual, or scheduled contexts rather than untrusted PR test jobs. Their required GitHub App, AWS/OIDC, Slack, and OpenAI configuration must not be bypassed to make a release or automation run appear successful.
+
+### CI egress auditing
+
+Credential-bearing GitHub-hosted Ubuntu jobs run the SHA-pinned `step-security/harden-runner` action as their first step, before checkout, dependency installation, or token creation. Coverage includes jobs with write-capable `GITHUB_TOKEN` permissions, OIDC access, GitHub App credentials, or service secrets, including secrets used only in failure notifications. Read-only jobs without service secrets are intentionally outside this rollout.
+
+The initial policy is `egress-policy: audit`. It reports network activity to StepSecurity but does not enforce a job-specific outbound allowlist. Audit mode requires StepSecurity telemetry; review the service's data handling before adding sensitive destinations. Do not interpret a successful audit step as proof that exfiltration is prevented, and do not add token permissions just for auditing.
+
+Before enabling `egress-policy: block` for a job:
+
+1. Review the report linked from the job summary after representative successful runs, including cold dependency downloads, matrix variants, and relevant failure/recovery paths. Do not trigger a production release solely to collect a baseline.
+2. Review every observed destination and commit a narrow `allowed-endpoints` list for that job. Do not automatically approve unexplained traffic or share publishing destinations with unrelated build jobs.
+3. Verify required traffic succeeds and an unlisted destination is blocked in a disposable, credential-free job on the same runner type before using the policy with real credentials.
+
+The following credential-bearing jobs are not covered by this setup:
+
+| Jobs                                                                                                      | Reason and follow-up                                                                                                                                                                                                   |
+| --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `integration.yml` / `browsers`                                                                            | Runs in a job container. Harden-Runner does not support this layout on standard GitHub-hosted runners. Move enforcement to a supported host or runner image.                                                           |
+| `library-ci.yml` / `compat`                                                                               | Uses Depot and a job container. Verify provider-level enforcement or a supported agent deployment separately.                                                                                                          |
+| Feature Flags project board, changeset hygiene, release approval notification, and SDK compliance callers | Their steps live in pinned reusable workflows in `PostHog/.github` or `PostHog/posthog-sdk-test-harness`. Add monitoring there, then update the caller pins. A caller cannot prepend steps to a reusable workflow job. |
+
+The local S3 recovery reusable workflow is covered inside its credential-bearing jobs. macOS native builds currently have no declared service secrets or write permissions and remain outside this rollout. Hosted macOS/Windows monitoring does not provide the same blocking support as hosted Linux. See the [Harden-Runner compatibility matrix](https://github.com/step-security/harden-runner#environment-compatibility-matrix) and [limitations](https://github.com/step-security/harden-runner/blob/main/docs/limitations.md) before expanding coverage.
+
+Network auditing or blocking does not replace least-privilege tokens or build/publish separation. An allowed destination such as the GitHub API can still be abused with a stolen token.
 
 ## Configuration Files
 

@@ -43,7 +43,7 @@ Fixtures import `@posthog/mcp` through Node self-reference, which resolves to
 | each SDK lane          | `dual-era/probe-late-handlers.mjs --major v1\|v2` | handlers registered _after_ `instrument()` — the mcp-nest/adapter ordering. Each lane runs only its own major's half, so a red probe names the stack                                      |
 | `official SDK v2` only | `dual-era/probe-first-call-error.mjs`             | the **first** call of a conversation fails, with `conversation_id` on (v2-only by construction: on v1 the thrown error is captured before the appended result, so the bug is unreachable) |
 | each SDK lane          | `dual-era/probe-pagination.mjs --major v1\|v2`    | a **two-page** tool catalogue: `nextCursor`, `ttlMs`, `cacheScope` and result `_meta` survive the listing wrapper                                                                         |
-| each SDK lane          | `dual-era/probe-mcp-apps.mjs --major v1\|v2`      | a real MCP App tool and `ui://` resource: app metadata, HTML/CSP, structured results and result `_meta` survive instrumentation; self-reported model capture still works                  |
+| each SDK lane          | `dual-era/probe-mcp-apps.mjs --major v1\|v2`      | a real MCP App tool and `ui://` resource: app metadata, HTML/CSP, structured results and result `_meta` survive instrumentation; client model metadata wins over self-report              |
 | `mcp-nest (SDK v1)`    | `nest-v1/verify.mjs`                              | NestJS + `@rekog/mcp-nest` 1.9 + SDK v1, stateless — 16 assertions × `LEVEL=high\|low`                                                                                                    |
 | `mcp-nest (SDK v2)`    | `nest-v2/verify.mjs`                              | NestJS + `@rekog/mcp-nest` 2.0 + SDK v2, stateless, both eras — 37 assertions × `LEVEL=high\|low`                                                                                         |
 
@@ -131,9 +131,8 @@ resource, tool results, and captured analytics. Browser rendering and
 app-to-host `postMessage` traffic are host-side concerns and are intentionally
 outside this server harness.
 
-The final informational line reports how many resource analytics events were
-observed. That count is not a compatibility assertion yet: automatic
-`resources/list` and `resources/read` capture is a separate SDK feature.
+The final line asserts that a `resources/list` carrying its listing and a
+`resources/read` carrying no response were both captured, on both SDK majors.
 
 ## Why it is built this way
 

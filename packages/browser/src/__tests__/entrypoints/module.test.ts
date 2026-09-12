@@ -1,5 +1,6 @@
 import { execFileSync } from 'child_process'
 import fs from 'fs'
+import { createRequire } from 'module'
 import os from 'os'
 import path from 'path'
 import { pathToFileURL } from 'url'
@@ -135,10 +136,22 @@ describe('Web vitals bundles', () => {
     })
 })
 
+describe('Slim runtime bundles', () => {
+    it('does not retain request transport or compression code in the extension bundle', () => {
+        const map = JSON.parse(
+            fs.readFileSync(path.resolve(__dirname, '../../../dist/extension-bundles.js.map'), 'utf-8')
+        )
+        expect(map.sources.some((source: string) => /fflate|\/gzip\.mjs$|\/encode-utils\.mjs$/.test(source))).toBe(
+            false
+        )
+        expect(map.names).not.toContain('AVAILABLE_TRANSPORTS')
+    })
+})
+
 describe('Slim module declarations', () => {
     it('share nominal types between extension bundles and both slim entrypoints', () => {
-        expect(extensionBundlesDts).toContain("from './module.slim'")
-        expect(moduleSlimDts).toContain("from './module.slim.no-external'")
+        expect(extensionBundlesDts).toMatch(/from ['"]\.\/module\.slim['"]/)
+        expect(moduleSlimDts).toMatch(/from ['"]\.\/module\.slim\.no-external['"]/)
         expect(moduleSlimDts).not.toContain('declare class PostHog')
 
         const fixtureDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-slim-types-'))
@@ -187,8 +200,153 @@ void extensionClasses
     })
 })
 
+describe('Published subpath entry points', () => {
+    const packageRoot = path.resolve(__dirname, '../../..')
+    const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf-8'))
+    let consumerDirectory: string
+    let installedPackageRoot: string
+    let resolveAsConsumer: ReturnType<typeof createRequire>
+
+    beforeAll(() => {
+        consumerDirectory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-subpath-consumer-')))
+        installedPackageRoot = path.join(consumerDirectory, 'node_modules', 'posthog-js')
+        fs.mkdirSync(installedPackageRoot, { recursive: true })
+        const tarballPath = path.join(consumerDirectory, 'posthog-js.tgz')
+        // Skip prepack so this check does not strip source maps from the developer's build.
+        execFileSync('pnpm', ['--config.ignore-scripts=true', 'pack', '--out', tarballPath], {
+            cwd: packageRoot,
+            stdio: 'pipe',
+        })
+        execFileSync('tar', ['-xzf', tarballPath, '-C', installedPackageRoot, '--strip-components=1'])
+        resolveAsConsumer = createRequire(path.join(consumerDirectory, 'consumer.cjs'))
+    }, 60_000)
+
+    afterAll(() => {
+        if (consumerDirectory) {
+            fs.rmSync(consumerDirectory, { recursive: true, force: true })
+        }
+    })
+
+    it.each([
+        ['posthog-js/full', 'module.full'],
+        ['posthog-js/no-external', 'module.no-external'],
+        ['posthog-js/full/no-external', 'module.full.no-external'],
+    ])('%s ships a usable CommonJS client and an ESM entry for bundlers', (specifier, bundle) => {
+        expect(resolveAsConsumer.resolve(specifier)).toBe(path.join(installedPackageRoot, `dist/${bundle}.cjs`))
+        execFileSync(
+            process.execPath,
+            [
+                '--no-experimental-require-module',
+                '--eval',
+                `
+const assert = require('assert/strict')
+const { default: client, posthog, PostHog } = require(${JSON.stringify(specifier)})
+assert.equal(typeof client.init, 'function')
+assert.equal(typeof client.capture, 'function')
+assert.equal(client, posthog)
+assert.ok(client instanceof PostHog)
+`,
+            ],
+            { cwd: consumerDirectory, stdio: 'pipe' }
+        )
+
+        const inputs: string[] = JSON.parse(
+            execFileSync(
+                process.execPath,
+                [
+                    '--eval',
+                    `
+const { buildSync } = require(${JSON.stringify(require.resolve('esbuild'))})
+const { metafile } = buildSync({
+    stdin: { contents: "import posthog from '${specifier}'; console.log(posthog)", resolveDir: process.cwd() },
+    bundle: true,
+    platform: 'browser',
+    write: false,
+    metafile: true,
+})
+process.stdout.write(JSON.stringify(Object.keys(metafile.inputs)))
+`,
+                ],
+                { cwd: consumerDirectory, encoding: 'utf-8' }
+            )
+        )
+        const bundledFiles = inputs.map((file) => path.resolve(consumerDirectory, file))
+        expect(bundledFiles).toContain(path.join(installedPackageRoot, `dist/${bundle}.js`))
+        expect(bundledFiles).not.toContain(path.join(installedPackageRoot, `dist/${bundle}.cjs`))
+
+        const shimPath = resolveAsConsumer.resolve(`${specifier}/package.json`)
+        const shim = JSON.parse(fs.readFileSync(shimPath, 'utf-8'))
+        const resolveFromShim = (target: string) => path.resolve(path.dirname(shimPath), target)
+        expect(resolveFromShim(shim.module)).toBe(path.join(installedPackageRoot, `dist/${bundle}.js`))
+        // Declarations come from the package's own `types`, not the bundle's sibling .d.ts:
+        // PostHog has private members, so a second declaration file is a second, incompatible
+        // type — a client from here could not be passed to anything typed by `posthog-js`.
+        expect(resolveFromShim(shim.types)).toBe(path.join(installedPackageRoot, packageJson.types))
+    })
+
+    it.each([ts.ModuleResolutionKind.Node10, ts.ModuleResolutionKind.Bundler])(
+        'types every subpath client as the canonical PostHog with module resolution %s',
+        (moduleResolution) => {
+            const fixturePath = path.join(consumerDirectory, 'index.ts')
+            fs.writeFileSync(
+                fixturePath,
+                `
+import type { PostHog } from 'posthog-js'
+import posthogFull from 'posthog-js/full'
+import posthogNoExternal from 'posthog-js/no-external'
+import posthogFullNoExternal from 'posthog-js/full/no-external'
+
+const clients: PostHog[] = [posthogFull, posthogNoExternal, posthogFullNoExternal]
+void clients
+`
+            )
+
+            const options: ts.CompilerOptions = {
+                esModuleInterop: true,
+                module: ts.ModuleKind.ESNext,
+                moduleResolution,
+                noEmit: true,
+                skipLibCheck: true,
+                strict: true,
+                target: ts.ScriptTarget.ESNext,
+                types: [],
+            }
+            const program = ts.createProgram([fixturePath], options)
+            const diagnostics = ts.getPreEmitDiagnostics(program)
+            expect(
+                ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+                    getCanonicalFileName: (fileName) => fileName,
+                    getCurrentDirectory: () => consumerDirectory,
+                    getNewLine: () => '\n',
+                })
+            ).toBe('')
+        }
+    )
+
+    it.each([
+        'posthog-js',
+        'posthog-js/customizations',
+        'posthog-js/dist/module.full.no-external.js',
+        'posthog-js/dist/posthog-recorder',
+        'posthog-js/lib/src/constants',
+    ])('%s still resolves', (specifier) => {
+        expect(fs.existsSync(resolveAsConsumer.resolve(specifier))).toBe(true)
+    })
+})
+
 describe('Published entrypoint declarations', () => {
-    it('includes declarations for every source entrypoint', () => {
+    it('preserves the unbundled declarations previously emitted by the runtime build', () => {
+        const libDirectory = path.resolve(__dirname, '../../../lib/src')
+        const declarations = fs.readdirSync(libDirectory, { recursive: true }).filter((file) => file.endsWith('.d.ts'))
+        expect(declarations.length).toBeGreaterThan(0)
+        for (const declaration of declarations) {
+            expect(fs.readFileSync(path.resolve(__dirname, '../../../dist/src', declaration), 'utf-8')).toBe(
+                fs.readFileSync(path.join(libDirectory, declaration), 'utf-8')
+            )
+        }
+    })
+
+    it('emits exactly one public declaration per source entrypoint without shared chunks', () => {
         const distDirectory = path.resolve(__dirname, '../../../dist')
         const sourceDirectory = path.resolve(__dirname, '../../entrypoints')
         const declarations = fs
@@ -196,9 +354,12 @@ describe('Published entrypoint declarations', () => {
             .filter((file) => file.endsWith('.ts'))
             .map((file) => file.replace(/(?:\.(?:cjs|es|iife))?\.ts$/, '.d.ts'))
 
-        for (const declaration of declarations) {
-            expect(fs.existsSync(path.join(distDirectory, declaration))).toBe(true)
-        }
+        expect(
+            fs
+                .readdirSync(distDirectory)
+                .filter((file) => file.endsWith('.d.ts'))
+                .sort()
+        ).toEqual(declarations.sort())
     })
 
     it('resolves extension declarations from their public package paths', () => {
@@ -224,6 +385,20 @@ import DeadClicksAutocapture from 'posthog-js/dist/dead-clicks-autocapture'
 import initConversations from 'posthog-js/dist/conversations'
 import generateProductTours from 'posthog-js/dist/product-tours'
 import generateSurveys from 'posthog-js/dist/surveys'
+import type { Replayer, ReplayPlugin, eventWithTime as ReplayerEvent } from 'posthog-js/dist/rrweb'
+import type { EventType, eventWithTime } from 'posthog-js/dist/rrweb-types'
+
+declare const events: eventWithTime[]
+declare const ReplayerClass: typeof Replayer
+const plugin: ReplayPlugin = { handler(event: eventWithTime) { void event } }
+const replayer = new ReplayerClass(events, { plugins: [plugin] })
+replayer.addEvent(events[0])
+const replayEvent: ReplayerEvent = events[0]
+const publicEvent: eventWithTime = replayEvent
+const publicEventType: EventType = replayEvent.type
+const replayEventType: ReplayerEvent['type'] = publicEvent.type
+void publicEventType
+void replayEventType
 
 new DeadClicksAutocapture(posthog)
 initConversations({} as any, posthog)

@@ -2,8 +2,7 @@ name: Bundled Size
 
 on: [pull_request]
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -11,6 +10,8 @@ concurrency:
 
 jobs:
   affected_posthog_js:
+    permissions:
+      contents: read
     uses: ./.github/workflows/check-affected.yml
     with:
       package-name: posthog-js
@@ -20,6 +21,8 @@ jobs:
         .github/actions/is-affected/action.yaml
 
   affected_browser:
+    permissions:
+      contents: read
     uses: ./.github/workflows/check-affected.yml
     with:
       package-name: "@posthog/browser"
@@ -39,6 +42,11 @@ jobs:
       pull-requests: write
 
     steps:
+      - name: Audit runner egress
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js

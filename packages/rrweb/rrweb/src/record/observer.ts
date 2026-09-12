@@ -410,7 +410,7 @@ function initViewportResizeObserver(
 export function findAndRemoveIframeBuffer(
   iframeEl: HTMLIFrameElement,
   knownDocs?: Set<Document>,
-) {
+): void {
   for (let i = mutationBuffers.length - 1; i >= 0; i--) {
     const buf = mutationBuffers[i];
     if (!buf) continue;
@@ -425,7 +425,7 @@ export function findAndRemoveIframeBuffer(
   }
 }
 
-export const INPUT_TAGS = ['INPUT', 'TEXTAREA', 'SELECT'];
+export const INPUT_TAGS: string[] = ['INPUT', 'TEXTAREA', 'SELECT'];
 const lastInputValueMap: WeakMap<EventTarget, inputValue> = new WeakMap();
 function initInputObserver({
   inputCb,

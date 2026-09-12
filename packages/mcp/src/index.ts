@@ -14,6 +14,7 @@ import { applyMcpLibIdentity } from './extensions/lib-identity'
 import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
 import { instrumentLowLevelServer } from './extensions/instrument-lowlevel'
 import { instrumentHighLevelServer } from './extensions/instrument-highlevel'
+import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions } from './extensions/feedback'
 import type {
   CaptureEventData,
   HighLevelMCPServerLike,
@@ -25,9 +26,9 @@ import type {
 } from './types'
 
 /**
- * Instruments an MCP server so PostHog auto-captures tool calls, tool listings, initialize
- * requests, identity, and exceptions. Returns a handle whose `capture()` method records
- * custom events, so you don't pass the server around after wiring it up.
+ * Instruments an MCP server so PostHog auto-captures tool calls, tool and resource listings,
+ * resource reads, initialize requests, identity, and exceptions. Returns a handle whose
+ * `capture()` method records custom events, so you don't pass the server around after wiring it up.
  *
  * **Idempotent per server instance.** Per-server tracking state lives in a module-level
  * `WeakMap<MCPServerLike, MCPAnalyticsData>` (`internal.ts`); a second `instrument()` call
@@ -52,6 +53,17 @@ import type {
  */
 function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOptions = {}): McpAnalytics {
   const logger = createLogger(options?.logger)
+
+  // Fail fast on a `collectFeedback` config error (reserved extra key,
+  // undeclared extraRequired). Above the graceful-degradation try so it throws
+  // out of instrument() like PostHogMCP's constructor does — inside the catch it
+  // would silently disable ALL analytics for the server, not just feedback.
+  // `options?.` — untyped JavaScript can pass null options (see logger-isolation.test.ts).
+  const feedbackOptions = resolveCollectFeedbackOptions(options?.collectFeedback)
+  if (feedbackOptions) {
+    getFeedbackToolDescriptor(feedbackOptions)
+  }
+
   try {
     if (!posthog) {
       logger('Warning: No PostHog client passed to instrument(). Events will not be sent anywhere.')
@@ -129,6 +141,7 @@ function getLowLevelServer(server: MCPServerLike | HighLevelMCPServerLike): MCPS
  */
 const DEFAULT_OPTIONS = {
   reportMissing: false,
+  collectFeedback: false,
   enableConversationId: false,
 } satisfies Partial<MCPAnalyticsOptions>
 
@@ -215,14 +228,22 @@ export {
 export { getRequestHeaders } from './extensions/request-headers'
 export { PostHogMCP, type PostHogMCPOptions } from './extensions/posthog-mcp'
 export { getMoreToolsResult } from './extensions/tools'
+export { sendFeedbackResult, SEND_FEEDBACK_TOOL_NAME } from './extensions/feedback'
 export { setLogger } from './extensions/logger'
 // Re-export the posthog-node client so a single import works:
 //   import { PostHog, instrument } from "@posthog/mcp"
 // posthog-node stays a peer dependency, so this resolves the host app's installed copy.
 export { PostHog, type PostHogOptions } from 'posthog-node'
 export type {
+  FeedbackCaptureData,
+  FeedbackExtraPropertySchema,
+  CollectFeedbackOptions,
+  FeedbackReport,
+  FeedbackSentiment,
+  FeedbackType,
   BeforeSendFn,
   CaptureEventData,
+  CollectFeedbackConfig,
   InitializeCaptureData,
   McpAnalytics,
   McpCaptureCommon,

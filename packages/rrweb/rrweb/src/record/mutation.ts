@@ -227,7 +227,7 @@ export default class MutationBuffer {
   private unattachedDoc: HTMLDocument;
   private canvasManagerReleased = false;
 
-  public init(options: MutationBufferParam) {
+  public init(options: MutationBufferParam): void {
     (
       [
         'mutationCb',
@@ -263,39 +263,39 @@ export default class MutationBuffer {
     this.canvasManager.acquire();
   }
 
-  public freeze() {
+  public freeze(): void {
     this.frozen = true;
     this.canvasManager.freeze();
   }
 
-  public unfreeze() {
+  public unfreeze(): void {
     this.frozen = false;
     this.canvasManager.unfreeze();
     this.emit();
   }
 
-  public isFrozen() {
+  public isFrozen(): boolean {
     return this.frozen;
   }
 
-  public lock() {
+  public lock(): void {
     this.locked = true;
     this.canvasManager.lock();
   }
 
-  public unlock() {
+  public unlock(): void {
     this.locked = false;
     this.canvasManager.unlock();
     this.emit();
   }
 
-  public reset() {
+  public reset(): void {
     // Don't reset the shared shadowDomManager here — that would disconnect every shadow-root observer on the page when any single buffer is torn down.
     this.releaseCanvasManager();
   }
 
   // Idempotent so teardown can run twice (iframe pagehide + stop); shadow restore handlers call this directly, not reset(), per the recursion-guard unit test.
-  public releaseCanvasManager() {
+  public releaseCanvasManager(): void {
     if (this.canvasManagerReleased) {
       return;
     }
@@ -312,7 +312,7 @@ export default class MutationBuffer {
     return this.doc;
   }
 
-  public destroy() {
+  public destroy(): void {
     for (const node of this.mapRemoves) {
       // Consume before traversal, as shift() did, including when it throws.
       this.mapRemoves.delete(node);
@@ -320,12 +320,12 @@ export default class MutationBuffer {
     }
   }
 
-  public processMutations = (mutations: mutationRecord[]) => {
+  public processMutations = (mutations: mutationRecord[]): void => {
     mutations.forEach(this.processMutation); // adds mutations to the buffer
     this.emit(); // clears buffer if not locked/frozen
   };
 
-  public emit = () => {
+  public emit = (): void => {
     if (this.frozen || this.locked) {
       return;
     }
@@ -671,7 +671,7 @@ export default class MutationBuffer {
     this.mutationCb(payload);
   };
 
-  public bufferBelongsToIframe = (iframeEl: HTMLIFrameElement) => {
+  public bufferBelongsToIframe = (iframeEl: HTMLIFrameElement): boolean => {
     return this.doc === iframeEl.contentDocument;
   };
 
@@ -732,6 +732,7 @@ export default class MutationBuffer {
       }
       case 'attributes': {
         const target = m.target as Element;
+        const tagNameLower = toLowerCase(target.tagName);
         const sourceAttributeName = m.attributeName as string;
         const attributeNamespace = m.attributeNamespace ?? null;
         let attributeName = getSerializedAttributeName(
@@ -765,7 +766,7 @@ export default class MutationBuffer {
 
         let item = this.attributeMap.get(m.target);
         const isIframeSrc =
-          target.tagName === 'IFRAME' && attributeName === 'src';
+          tagNameLower === 'iframe' && attributeName === 'src';
         if (
           isIframeSrc &&
           !this.keepIframeSrcFn(value as string) &&
@@ -773,33 +774,33 @@ export default class MutationBuffer {
         ) {
           return;
         }
-        if (!item) {
-          item = {
-            node: m.target,
-            attributes: {},
-            styleDiff: {},
-            _unchangedStyles: {},
-          };
-          this.attributes.push(item);
-          this.attributeMap.set(m.target, item);
-        }
 
         // Keep this property on inputs that used to be password inputs
         // This is used to ensure we do not unmask value when using e.g. a "Show password" type button
         if (
           attributeName === 'type' &&
-          target.tagName === 'INPUT' &&
+          tagNameLower === 'input' &&
           (m.oldValue || '').toLowerCase() === 'password'
         ) {
           target.setAttribute('data-rr-is-password', 'true');
         }
 
-        if (!ignoreAttribute(target.tagName, attributeName, value)) {
+        if (!ignoreAttribute(tagNameLower, attributeName, value)) {
+          if (!item) {
+            item = {
+              node: m.target,
+              attributes: {},
+              styleDiff: {},
+              _unchangedStyles: {},
+            };
+            this.attributes.push(item);
+            this.attributeMap.set(m.target, item);
+          }
           // Transform with the source name before representing an inaccessible
           // iframe's source under the final rr_src key.
           const transformedValue = transformAttribute(
             this.doc,
-            toLowerCase(target.tagName),
+            tagNameLower,
             toLowerCase(attributeName),
             value,
             target,
@@ -850,7 +851,7 @@ export default class MutationBuffer {
                 item.styleDiff[pname] = false; // delete
               }
             }
-          } else if (attributeName === 'open' && target.tagName === 'DIALOG') {
+          } else if (attributeName === 'open' && tagNameLower === 'dialog') {
             if (target.matches('dialog:modal')) {
               item.attributes['rr_open_mode'] = 'modal';
             } else {

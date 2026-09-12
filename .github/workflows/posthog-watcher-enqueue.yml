@@ -12,11 +12,7 @@ on:
     pull_request_review_comment:
         types: [created]
 
-permissions:
-    contents: write # write queue.json to the state branch
-    issues: read
-    pull-requests: read
-    actions: write # dispatch the drain workflow immediately after enqueueing
+permissions: {}
 
 concurrency:
     group: posthog-watcher-enqueue-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
@@ -24,6 +20,11 @@ concurrency:
 
 jobs:
     enqueue:
+        permissions:
+            contents: write # write queue.json to the state branch
+            issues: read
+            pull-requests: read
+            actions: write # dispatch the drain workflow immediately after enqueueing
         if: >-
             ${{
               github.event_name == 'issues' ||
@@ -36,10 +37,15 @@ jobs:
             }}
         runs-on: ubuntu-24.04
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
             - name: Enqueue watcher event
-              uses: PostHog/posthog-watcher-action@2a52bc42a5c60b415218da3d9705fd4c4fc0e76c
+              uses: PostHog/posthog-watcher-action@c14844661c889811bd633e0263320c33c100f4ee
               with:
                   mode: enqueue
                   trigger-drain-workflow: 'true'

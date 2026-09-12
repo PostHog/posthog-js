@@ -12,6 +12,42 @@ function getFlushedBatches(): any[][] {
     .map((c) => JSON.parse((c[1] as any).body).batch)
 }
 
+describe('flush combines events and spans', () => {
+  it('waits for the span export even when the event flush rejects', async () => {
+    // `Promise.all` settled on the event rejection, so a serverless host could
+    // freeze the invocation with the span request still open.
+    vi.useRealTimers()
+    const order: string[] = []
+    mockedFetch.mockImplementation(async (url: any) => {
+      if (String(url).includes('/i/v1/traces')) {
+        order.push('traces-start')
+        await new Promise((resolve) => setTimeout(resolve, 30))
+        order.push('traces-done')
+        return { status: 200, text: () => Promise.resolve('{}'), json: () => Promise.resolve({}) } as any
+      }
+      throw new Error('events endpoint down')
+    })
+    const posthog = new PostHog('key', {
+      host: 'http://example.com',
+      flushAt: 1,
+      fetchRetryCount: 0,
+      traces: { serviceName: 'svc' },
+      disableCompression: true,
+    })
+    posthog.capture({ distinctId: 'u', event: 'e' })
+    posthog.startSpan('s').end()
+
+    await expect(posthog.flush()).rejects.toThrow()
+    order.push('flush-returned')
+
+    // Exact, not an index comparison: before the fix `traces-done` is absent
+    // when flush returns, and `indexOf` gives -1, which passes any `lessThan`.
+    expect(order).toEqual(['traces-start', 'traces-done', 'flush-returned'])
+    await posthog.shutdown()
+    vi.useFakeTimers()
+  })
+})
+
 describe('waitUntil debounced flush', () => {
   vi.useFakeTimers()
 
