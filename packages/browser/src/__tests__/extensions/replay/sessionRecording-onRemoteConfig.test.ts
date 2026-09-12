@@ -17,7 +17,11 @@ import { type fullSnapshotEvent, type metaEvent } from '../../../extensions/repl
 import Mock = vi.Mock
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
-import { AndTriggerMatching, OrTriggerMatching } from '../../../extensions/replay/external/triggerMatching'
+import {
+    AndTriggerMatching,
+    OrTriggerMatching,
+    SessionRecordingStatus,
+} from '../../../extensions/replay/external/triggerMatching'
 import {
     LazyLoadedSessionRecording,
     RECORDING_REMOTE_CONFIG_TTL_MS,
@@ -80,6 +84,11 @@ describe('SessionRecording', () => {
     let windowIdGeneratorMock: Mock
     let removePageviewCaptureHookMock: Mock
     let simpleEventEmitter: SimpleEventEmitter
+
+    // the status trigger matching decided, before the held overlay that `status` reports
+    function matchedStatus(): SessionRecordingStatus {
+        return sessionRecording['_lazyLoadedSessionRecording']['_matchedStatus']
+    }
 
     const addRRwebToWindow = () => {
         assignableWindow.__PosthogExtensions__.rrweb = {
@@ -311,7 +320,7 @@ describe('SessionRecording', () => {
                 })
             )
             expect(loadScriptMock).toHaveBeenCalled()
-            expect(sessionRecording['status']).toBe('active')
+            expect(matchedStatus()).toBe('active')
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                 ...EMPTY_BUFFER,
                 sessionId: sessionId,
@@ -336,7 +345,7 @@ describe('SessionRecording', () => {
                 })
             )
             expect(loadScriptMock).toHaveBeenCalled()
-            expect(sessionRecording['status']).toBe('active')
+            expect(matchedStatus()).toBe('active')
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
                 ...EMPTY_BUFFER,
                 sessionId: sessionId,
@@ -358,7 +367,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording['status']).toBe('disabled')
 
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-            expect(sessionRecording['status']).toBe('active')
+            expect(matchedStatus()).toBe('active')
         })
 
         it('sample rate is null when flags does not return it', () => {
@@ -438,7 +447,7 @@ describe('SessionRecording', () => {
             // Recording starts from cache
             sessionRecording.startIfEnabledOrStop()
             expect(loadScriptMock).toHaveBeenCalled()
-            expect(sessionRecording.status).toBe('active')
+            expect(matchedStatus()).toBe('active')
 
             const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
             const discardSpy = vi.spyOn(lazyRecorder!, 'discard')
@@ -560,7 +569,7 @@ describe('SessionRecording', () => {
 
             // Should fall back to persisted config and start recording
             expect(loadScriptMock).toHaveBeenCalled()
-            expect(sessionRecording.status).toBe('active')
+            expect(matchedStatus()).toBe('active')
         })
 
         it('does not start recording when config fetch fails and no persisted config exists', () => {

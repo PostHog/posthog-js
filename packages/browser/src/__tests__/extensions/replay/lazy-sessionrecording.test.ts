@@ -38,6 +38,7 @@ import {
     SessionRecordingOptions,
 } from '../../../types'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { SessionRecordingStatus } from '../../../extensions/replay/external/triggerMatching'
 import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
@@ -218,6 +219,12 @@ describe('Lazy SessionRecording', () => {
     let windowIdGeneratorMock: Mock
     let onFeatureFlagsCallback: ((flags: string[], variants: Record<string, string | boolean>) => void) | null
     let removePageviewCaptureHookMock: Mock
+
+    // the status trigger matching decided, before the held overlay that `status` reports.
+    // Tests about matching read this one; tests about what is uploading read `status`.
+    function matchedStatus(): SessionRecordingStatus {
+        return sessionRecording['_lazyLoadedSessionRecording']['_matchedStatus']
+    }
 
     // staging for tests that are not about hold semantics: drop the fresh-start interaction hold
     function releaseInteractionHold(): void {
@@ -1063,7 +1070,7 @@ describe('Lazy SessionRecording', () => {
                     })
                 )
                 sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
-                expect(sessionRecording.status).toEqual('active')
+                expect(matchedStatus()).toEqual('active')
 
                 startingTimestamp = sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp']
                 expect(startingTimestamp).toBeGreaterThan(0)
@@ -1561,7 +1568,10 @@ describe('Lazy SessionRecording', () => {
                     emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
                     takeFullSnapshot.mockClear()
 
-                    Object.defineProperty(lazyRecording, 'status', { get: () => 'buffering', configurable: true })
+                    Object.defineProperty(lazyRecording, '_matchedStatus', {
+                        get: () => 'buffering',
+                        configurable: true,
+                    })
                     const pendingSpy = vi
                         .spyOn(lazyRecording['_strategy']!, 'hasPendingTriggers')
                         .mockReturnValue(hasPendingTriggers)
@@ -2227,7 +2237,7 @@ describe('Lazy SessionRecording', () => {
 
                         // guard against a vacuous pass: 'sampled' is only reachable once a group's
                         // trigger status is 'trigger_activated' (triggerGroupsMatchSessionRecordingStatus)
-                        expect(sessionRecording.status).toBe('sampled')
+                        expect(matchedStatus()).toBe('sampled')
 
                         vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
 
@@ -2242,7 +2252,7 @@ describe('Lazy SessionRecording', () => {
                         const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
 
                         simpleEventEmitter.emit('eventCaptured', { event: '$exception', properties: {} })
-                        expect(sessionRecording.status).toBe('active')
+                        expect(matchedStatus()).toBe('active')
 
                         vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
                         emitActiveEvent(startingTimestamp + 100)
@@ -2320,13 +2330,13 @@ describe('Lazy SessionRecording', () => {
                 })
 
                 describe('reporting the hold', () => {
-                    // a held epoch reads as 'active' but uploads nothing, so the hold has to
-                    // report itself or support cannot tell it from a working recording
+                    // a held epoch uploads nothing, so it has to report itself as held or
+                    // support cannot tell it from a working recording
                     const holdReason = () =>
                         sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties
                             .$sdk_debug_replay_flush_hold_reason
 
-                    it('names a fresh-start hold on captured events while the status still reads active', () => {
+                    it('reports a held status and names a fresh-start hold on captured events', () => {
                         vi.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
                         emitInactiveEvent(startingTimestamp + 100, 'unknown')
                         vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
@@ -2336,7 +2346,8 @@ describe('Lazy SessionRecording', () => {
                             expect.anything(),
                             expect.anything()
                         )
-                        expect(sessionRecording.status).toEqual('active')
+                        expect(sessionRecording.status).toEqual('held')
+                        expect(matchedStatus()).toEqual('active')
                         expect(holdReason()).toEqual('no_interaction_since_recording_started')
                     })
 
@@ -2346,10 +2357,13 @@ describe('Lazy SessionRecording', () => {
 
                         expect(holdReason()).toEqual('no_interaction_since_session_rotated')
 
+                        expect(sessionRecording.status).toEqual('held')
+
                         emitActiveEvent(rotationTimestamp + 200)
                         vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
 
                         expect(holdReason()).toBeUndefined()
+                        expect(sessionRecording.status).toEqual('active')
                     })
 
                     it('logs the hold reason once per held epoch', () => {
@@ -5427,7 +5441,7 @@ describe('Lazy SessionRecording', () => {
 
             const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
             releaseInteractionHold()
-            expect(sessionRecording.status).toBe('active')
+            expect(matchedStatus()).toBe('active')
             const getStatus = vi.spyOn(lazyRecorder['_strategy']!, 'getStatus')
 
             lazyRecorder['_flushBuffer']()
@@ -5974,7 +5988,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
 
-            expect(sessionRecording.status).toBe('active')
+            expect(matchedStatus()).toBe('active')
         })
 
         it('stores excluded session when excluded', () => {
@@ -6060,7 +6074,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
 
-            expect(sessionRecording.status).toBe(expectedStatus)
+            expect(matchedStatus()).toBe(expectedStatus)
             expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(expectedIsSampled())
             expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(expectedSampleRate)
         })
@@ -6103,7 +6117,7 @@ describe('Lazy SessionRecording', () => {
             fakeNavigateTo('https://test.com/start-on-me')
             _emit(createFullSnapshot())
 
-            expect(sessionRecording.status).toBe('sampled')
+            expect(matchedStatus()).toBe('sampled')
             expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
 
             sessionRecording.stopRecording()
@@ -6187,7 +6201,7 @@ describe('Lazy SessionRecording', () => {
 
             // then check that a session is no longer sampled out (i.e. storage is cleared not false)
             expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(undefined)
-            expect(sessionRecording.status).toBe('active')
+            expect(matchedStatus()).toBe('active')
         })
 
         describe('legacy boolean true in persistence', () => {
@@ -6209,7 +6223,7 @@ describe('Lazy SessionRecording', () => {
 
                     // legacy true should be treated as unknown and a fresh decision made
                     expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).not.toBe(true)
-                    expect(sessionRecording.status).toBe(expectedStatus)
+                    expect(matchedStatus()).toBe(expectedStatus)
                 }
             )
 
@@ -6248,7 +6262,7 @@ describe('Lazy SessionRecording', () => {
 
                 // at 100% the fresh decision for this session is sampled in,
                 // proving the stale value was not reused
-                expect(sessionRecording.status).toBe('sampled')
+                expect(matchedStatus()).toBe('sampled')
                 expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(sessionId)
             })
         })
@@ -6264,7 +6278,7 @@ describe('Lazy SessionRecording', () => {
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.50' } })
                 )
-                expect(sessionRecording.status).toBe('sampled')
+                expect(matchedStatus()).toBe('sampled')
 
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
 
@@ -6288,7 +6302,7 @@ describe('Lazy SessionRecording', () => {
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.50' } })
                 )
-                expect(sessionRecording.status).toBe('sampled')
+                expect(matchedStatus()).toBe('sampled')
 
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
 
@@ -6727,7 +6741,7 @@ describe('Lazy SessionRecording', () => {
                 )
 
                 onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'literally-anything' })
-                expect(sessionRecording.status).toBe('active')
+                expect(matchedStatus()).toBe('active')
 
                 vi.advanceTimersByTime(30_000)
                 expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
@@ -6750,7 +6764,7 @@ describe('Lazy SessionRecording', () => {
                 )
 
                 onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
-                expect(sessionRecording.status).toBe('active')
+                expect(matchedStatus()).toBe('active')
 
                 // flags reload repeatedly while the linked flag stays truthy; this must not
                 // restart the interval and starve the periodic full snapshot
@@ -6781,7 +6795,7 @@ describe('Lazy SessionRecording', () => {
 
             onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
             expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
-            expect(sessionRecording.status).toEqual('active')
+            expect(matchedStatus()).toEqual('active')
 
             onFeatureFlagsCallback?.(['different', 'keys'], { different: true, keys: true })
             expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
@@ -6820,7 +6834,7 @@ describe('Lazy SessionRecording', () => {
 
             onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'test-a' })
             expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
-            expect(sessionRecording.status).toEqual('active')
+            expect(matchedStatus()).toEqual('active')
 
             onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'control' })
             expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
@@ -6845,7 +6859,7 @@ describe('Lazy SessionRecording', () => {
 
             onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'literally-anything' })
             expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
-            expect(sessionRecording.status).toEqual('active')
+            expect(matchedStatus()).toEqual('active')
 
             onFeatureFlagsCallback?.(['not-the-flag-key'], { 'not-the-flag-key': 'literally-anything' })
             expect(sessionRecording['_lazyLoadedSessionRecording']['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
@@ -7172,7 +7186,7 @@ describe('Lazy SessionRecording', () => {
                     sessionRecording: { minimumDurationMilliseconds: 1500 },
                 })
             )
-            expect(sessionRecording.status).toBe('active')
+            expect(matchedStatus()).toBe('active')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
             expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionDuration']).toBe(100)
@@ -7192,7 +7206,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
 
-            expect(sessionRecording.status).toBe('active')
+            expect(matchedStatus()).toBe('active')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
 
             // if we have some data in the buffer and the buffer has a session id but then the session id changes
@@ -7217,7 +7231,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
 
-            expect(sessionRecording.status).toBe('active')
+            expect(matchedStatus()).toBe('active')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
             expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionDuration']).toBe(100)
@@ -8766,7 +8780,7 @@ describe('Lazy SessionRecording', () => {
 
             // Should immediately trigger without needing any events
             // Status should be sampled (not buffering)
-            expect(sessionRecording.status).toBe('sampled')
+            expect(matchedStatus()).toBe('sampled')
 
             // Verify session properties were registered
             expect(registerSpy).toHaveBeenCalledWith(
@@ -8802,7 +8816,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
 
-            expect(sessionRecording.status).toBe('sampled')
+            expect(matchedStatus()).toBe('sampled')
             expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
                 sessionId,
                 sampleRate: 1,
@@ -8895,7 +8909,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
 
-            expect(sessionRecording.status).toBe('sampled')
+            expect(matchedStatus()).toBe('sampled')
             expect(posthog.get_property(SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX + group.id)).toEqual({
                 sessionId,
                 sampleRate: 1,
