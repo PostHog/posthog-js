@@ -47,6 +47,36 @@ private func isReactNativeFatalJsError(_ event: PostHogEvent) -> Bool {
     }
 }
 
+/// Carries the ids JS holds into `beforeSend` for the length of `PostHogSDK.setup(_:)`.
+///
+/// `setup()` installs the push-open integration, which replays a tap that cold-launched the app
+/// synchronously — before `setIdentify` can mirror those ids into native storage, so the replayed
+/// event would carry whatever identity the previous launch left behind. posthog-ios offers no seam
+/// to seed identity earlier (its storage manager is created inside `setup()`, with an internal
+/// initializer), and disabling the integration to delay the replay discards the held tap instead of
+/// deferring it — so the id is applied on the way out instead. Cleared once storage agrees, after
+/// which every event resolves its identity from storage as before.
+private final class SetupIdentity {
+    private let lock = NSLock()
+    private var distinctId: String?
+
+    init(distinctId: String) {
+        self.distinctId = distinctId.isEmpty ? nil : distinctId
+    }
+
+    var pendingDistinctId: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return distinctId
+    }
+
+    func settled() {
+        lock.lock()
+        defer { lock.unlock() }
+        distinctId = nil
+    }
+}
+
 // A nil identity token sends the request unauthenticated, which a project requiring
 // identity verification rejects server-side. Log the reason so that failure is greppable
 // and distinct from a host that deliberately returned nil.
@@ -200,10 +230,23 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             }
         #endif
 
+        let distinctId = sdkOptions["distinctId"] as? String ?? ""
+        let anonymousId = sdkOptions["anonymousId"] as? String ?? ""
+        let setupIdentity = SetupIdentity(distinctId: distinctId)
+        // Every exit below is past the point where native storage carries the ids, or past a
+        // failure that left the SDK disabled, so no path can leave the stamp armed.
+        defer { setupIdentity.settled() }
+
         // React Native rethrows fatal JS errors natively (RCTFatalException / ExceptionsManager).
         // The JS layer already captured them, so drop the native duplicate.
         config.setBeforeSend { event in
-            isReactNativeFatalJsError(event) ? nil : event
+            if isReactNativeFatalJsError(event) {
+                return nil
+            }
+            if let distinctId = setupIdentity.pendingDistinctId {
+                event.distinctId = distinctId
+            }
+            return event
         }
 
         // Surveys and session replay are iOS-only in posthog-ios, so the APIs below
@@ -253,9 +296,6 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
                 config.snapshotEndpoint = endpoint
             }
         #endif
-
-        let distinctId = sdkOptions["distinctId"] as? String ?? ""
-        let anonymousId = sdkOptions["anonymousId"] as? String ?? ""
 
         let sdkVersion = sdkOptions["sdkVersion"] as? String ?? ""
 
