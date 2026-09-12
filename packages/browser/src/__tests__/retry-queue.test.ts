@@ -108,6 +108,31 @@ describe('RetryQueue', () => {
         ])
     })
 
+    it.each([undefined, 'fetch', 'XHR'] as const)('restores transport %s after a one-attempt override', (transport) => {
+        const callback = vi.fn()
+        const data = { event: 'conversion', uuid: 'event-id' }
+        mockPosthog._send_request.mockImplementation(({ callback }) => callback({ statusCode: 503 }))
+
+        retryQueue.retriableRequest({ url: '/e', data, transport, callback }, 'sendBeacon')
+
+        expect(mockPosthog._send_request).toHaveBeenLastCalledWith(
+            expect.objectContaining({ transport: 'sendBeacon', data })
+        )
+        expect(retryQueue.length).toBe(1)
+        expect(retryQueue['_queue'][0].requestOptions.transport).toBe(transport)
+        expect(callback).not.toHaveBeenCalled()
+
+        mockPosthog._send_request.mockImplementation(({ callback }) => callback({ statusCode: 200 }))
+        fastForwardTimeAndRunTimer()
+
+        expect(mockPosthog._send_request).toHaveBeenLastCalledWith(
+            expect.objectContaining({ transport, data, url: '/e?retry_count=1' })
+        )
+        expect(retryQueue.length).toBe(0)
+        expect(callback).toHaveBeenCalledOnce()
+        expect(callback).toHaveBeenCalledWith({ statusCode: 200 })
+    })
+
     it('adds the retry_count to the url', () => {
         enqueueRequests()
         fastForwardTimeAndRunTimer(3500)
