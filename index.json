@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/4931": {
+    "key": "PostHog/posthog-js/issue/4931",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4931",
+    "url": "https://github.com/PostHog/posthog-js/issues/4931",
+    "conclusion": "Valid dead-click false-positive bug with a narrowly scoped, evidence-backed fix direction.",
+    "labels": [
+      "feature/dead-clicks",
+      "javascript",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-12T23:17:51.861Z"
+  },
   "PostHog/posthog-js/issue/4857": {
     "key": "PostHog/posthog-js/issue/4857",
     "repo": "PostHog/posthog-js",
