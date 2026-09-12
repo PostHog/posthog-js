@@ -281,8 +281,7 @@ const POSTHOG_NEW_INTENT_BLOCK_PATTERN = new RegExp(
 )
 
 // The `{` that opens MainActivity's body, or -1 when the file does not look like the templates we
-// patch. We refuse anything carrying `;`, `{` or `}` between the name and the brace, which rejects
-// the shapes we know about — a supertype list is all we expect to sit there.
+// patch: a supertype list is all we expect between the class name and that brace.
 function mainActivityBodyBraceIndex(contents: string): number {
   const declaration = /\bclass\s+MainActivity\b/.exec(contents)
   if (!declaration) {
