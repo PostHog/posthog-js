@@ -110,7 +110,8 @@ const withAndroidPlugin = (config: any, skipOnConflict = false) => {
 }
 
 // Index of the `}` matching the `{` at openBraceIndex, or -1 if unbalanced. Manual scan
-// (not regex) to avoid ReDoS; counts all braces, fine for the generated gradle we target.
+// (not regex) to avoid ReDoS; counts braces inside strings and comments too, which at worst
+// reports unbalanced and makes a caller skip the file.
 function matchingBraceIndex(s: string, openBraceIndex: number): number {
   let depth = 0
   for (let i = openBraceIndex; i < s.length; i++) {
