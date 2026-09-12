@@ -246,7 +246,7 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * - `com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED` set to `false` in `Info.plist`
    *   (Expo: `ios.infoPlist`) skips the launch hook entirely, so nothing is installed before your
    *   JS runs, and forces capture off at `setup()` even when this option is `true`. It is the
-   *   same key, with the same meaning, as posthog-flutter.
+   *   same key posthog-flutter reads.
    *
    * Not supported on web.
    *
