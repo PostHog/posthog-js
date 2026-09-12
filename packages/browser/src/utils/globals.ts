@@ -292,6 +292,8 @@ interface PostHogExtensions {
         getMutationCost?: () => MutationCost
         getDeferredStylesheetStats?: () => DeferredStylesheetStats
         getDiscardedDurationSamples?: () => number
+        // see rrweb/src/record/observer.ts
+        getObserverInitFailures?: () => string[] | undefined
         resetSnapshotCostState?: () => void
     }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }

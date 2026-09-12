@@ -989,6 +989,7 @@ function record<T = eventWithTime>(
             plugins
               ?.filter((p) => p.observer)
               ?.map((p) => ({
+                name: p.name,
                 observer: p.observer!,
                 options: p.options,
                 callback: (payload: object) =>
