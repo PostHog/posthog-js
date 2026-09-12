@@ -327,12 +327,37 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
                 // `{ statusCode: 0, error }` callback, logs, stack traces). An explicit reason makes
                 // our own request timeouts identifiable. We keep `name === 'AbortError'` so existing
                 // timeout handling (e.g. feature flag timeout detection) keeps working.
-                controller.abort(timeoutAbortReason(options.timeout))
+                try {
+                    controller.abort(timeoutAbortReason(options.timeout))
+                } catch (error) {
+                    // Reachable only when `abort()` itself throws, i.e. when a third-party script
+                    // has patched or polyfilled `AbortController.prototype.abort`. A listener the
+                    // host app or a fetch wrapper attached natively to the signal we passed cannot
+                    // get here: `abort()` fires the `abort` event through `dispatchEvent`, which
+                    // *reports* a listener's exception to the global error handler and returns
+                    // normally, so that throw still surfaces as an uncaught error with our timer
+                    // frames on the stack and no guard here can contain it. A patched `abort()`
+                    // that throws would otherwise escape this timer, so route it through the same
+                    // `{ statusCode: 0, error }` path as every other transport failure and let the
+                    // request queue retry.
+                    handleError(error)
+                }
             }, options.timeout),
         }
     }
 
+    // One request reports one outcome. Both our timeout callback and the fetch can produce a
+    // result - a patched `abort()` that throws inside the timer, and then either the fetch
+    // rejecting or, when that throw happened before the abort took effect, the still-live fetch
+    // delivering a real response - so whichever settles first reports and later results are
+    // dropped.
+    let settled = false
+
     const handleError = (error: any) => {
+        if (settled) {
+            return
+        }
+        settled = true
         // Detect our own timeout via the `timedOut` flag rather than by comparing `error`
         // against the reason we passed to `controller.abort(...)`. Not every browser propagates
         // the abort reason to the fetch rejection - some reject with a generic native
@@ -375,6 +400,13 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
         })
             .then((response) => {
                 return response.text().then((responseText) => {
+                    if (settled) {
+                        // Our timeout callback already reported a failure for this request, so the
+                        // request queue has seen `{ statusCode: 0 }` and queued a retry. Reporting
+                        // this response too would give one request two contradictory outcomes.
+                        return
+                    }
+
                     const res: RequestResponse = {
                         statusCode: response.status,
                         text: responseText,
@@ -388,6 +420,7 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
                         }
                     }
 
+                    settled = true
                     options.callback?.(res)
                 })
             })
