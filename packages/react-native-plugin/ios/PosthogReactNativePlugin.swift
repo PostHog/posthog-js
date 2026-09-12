@@ -70,10 +70,16 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
     private var pushIdentityCompletions: [String: (String?) -> Void] = [:]
 
     #if os(iOS)
-        /// Runs at launch, before JS config exists, so the Info.plist key below is the only way to skip it.
+        /// The one opt-out that reaches both halves of push-open capture, named and read exactly as in
+        /// posthog-flutter: `false` skips the launch hook below *and* forces the native config flag off
+        /// in setup(), so the JS flag can't re-enable what the plist turned off.
+        private static var plistCapturePushNotificationOpened: Bool {
+            Bundle.main.object(forInfoDictionaryKey: "com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED") as? Bool ?? true
+        }
+
+        /// Runs at launch, before JS config exists, so the Info.plist key is the only way to skip it.
         @objc static func prewarmPushNotificationOpenCapture() {
-            let key = "com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED"
-            guard Bundle.main.object(forInfoDictionaryKey: key) as? Bool ?? true else { return }
+            guard plistCapturePushNotificationOpened else { return }
             if #available(iOS 14.0, *) {
                 PostHogSDK.prewarmPushNotificationOpenCapture()
             }
@@ -281,6 +287,13 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         if let capturePushOpened = pushConfig["capturePushNotificationOpened"] as? Bool {
             config.capturePushNotificationOpened = capturePushOpened
         }
+        #if os(iOS)
+            // Only ever turns capture off: the plist is the app's build-time kill switch, so it wins
+            // over the JS flag, while a plist `true` leaves a JS opt-out alone.
+            if !PosthogReactNativePlugin.plistCapturePushNotificationOpened {
+                config.capturePushNotificationOpened = false
+            }
+        #endif
 
         // Installed only when JS asked for it: an uninvited bridging provider would change
         // how the native SDK handles a 401 on the subscription call.
