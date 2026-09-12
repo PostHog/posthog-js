@@ -1,5 +1,5 @@
 ---
-'posthog-react-native': patch
+'posthog-react-native': minor
 ---
 
-Add an Android `MainActivity.onNewIntent` override through the Expo config plugin so a notification tap is captured when the app's process was killed but its task is still in recents; opt out with `{ patchMainActivityNewIntent: false }`.
+Fix `$push_notification_opened` not being captured on Android when the app's process was killed but its task stayed in recents — the Expo config plugin now adds a `MainActivity.onNewIntent` override (opt out with `{ patchMainActivityNewIntent: false }`).

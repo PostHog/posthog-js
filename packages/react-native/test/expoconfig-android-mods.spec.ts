@@ -20,6 +20,17 @@ class MainActivity : ReactActivity() {
   override fun getMainComponentName(): String = "main"
 }
 `
+const javaMainActivity = `package com.example;
+
+import com.facebook.react.ReactActivity;
+
+public class MainActivity extends ReactActivity {
+  @Override
+  protected String getMainComponentName() {
+    return "main";
+  }
+}
+`
 
 // Use Expo's real providers/compiler so both mod-kind ordering and persisted files are exercised.
 describe.each([false, true])('Android native symbols with earlier app mod: %s', (earlierAppMod) => {
@@ -67,6 +78,10 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
     return fs.readFileSync(path.join(projectRoot, mainActivityDir, 'MainActivity.kt'), 'utf8')
   }
 
+  function warnings() {
+    return vi.mocked(console.warn).mock.calls.map((call) => call[0])
+  }
+
   it('writes both native-symbol Gradle edits and remains idempotent on another prebuild', async () => {
     await prebuild()
     const project = readGradle('build.gradle')
@@ -74,7 +89,7 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
     expect(project).toContain('classpath("com.posthog:posthog-android-gradle-plugin:')
     expect(app.split(applyLine)).toHaveLength(2)
     expect(app).toContain('posthog.gradle')
-    expect(console.warn).not.toHaveBeenCalled()
+    expect(warnings()).toEqual([expect.stringContaining('Added an onNewIntent override')])
 
     await prebuild()
     expect(readGradle('build.gradle')).toBe(project)
@@ -121,15 +136,51 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
     const patched = readMainActivity()
     expect(patched).toContain('override fun onNewIntent(intent: android.content.Intent) {')
     expect(patched).toContain('setIntent(intent)')
-    expect(console.warn).not.toHaveBeenCalled()
+    expect(warnings()).toEqual([expect.stringContaining('Added an onNewIntent override')])
 
+    vi.mocked(console.warn).mockClear()
     await prebuild()
     expect(readMainActivity()).toBe(patched)
+    expect(console.warn).not.toHaveBeenCalled()
   })
 
   it('removes the override again when opted out', async () => {
     await prebuild()
     await prebuild(true, { patchMainActivityNewIntent: false })
     expect(readMainActivity()).toBe(mainActivity)
+  })
+
+  it('writes the override into a MainActivity under src/main/kotlin', async () => {
+    fs.rmSync(path.join(projectRoot, 'android/app/src/main/java'), { recursive: true })
+    const kotlinDir = path.join(projectRoot, 'android/app/src/main/kotlin/com/example')
+    fs.mkdirSync(kotlinDir, { recursive: true })
+    fs.writeFileSync(path.join(kotlinDir, 'MainActivity.kt'), mainActivity)
+
+    await prebuild()
+
+    expect(fs.readFileSync(path.join(kotlinDir, 'MainActivity.kt'), 'utf8')).toContain(
+      'override fun onNewIntent(intent: android.content.Intent) {'
+    )
+  })
+
+  it('writes the Java form of the override into a MainActivity.java', async () => {
+    fs.rmSync(path.join(projectRoot, mainActivityDir, 'MainActivity.kt'))
+    const javaPath = path.join(projectRoot, mainActivityDir, 'MainActivity.java')
+    fs.writeFileSync(javaPath, javaMainActivity)
+
+    await prebuild()
+
+    expect(fs.readFileSync(javaPath, 'utf8')).toContain(
+      '  @Override\n  public void onNewIntent(android.content.Intent intent) {'
+    )
+  })
+
+  it('warns and writes nothing when the project has no MainActivity', async () => {
+    fs.rmSync(path.join(projectRoot, 'android/app/src'), { recursive: true })
+
+    await expect(prebuild()).resolves.toBeUndefined()
+
+    expect(fs.existsSync(path.join(projectRoot, 'android/app/src'))).toBe(false)
+    expect(warnings()).toContainEqual(expect.stringContaining('Could not find MainActivity under'))
   })
 })

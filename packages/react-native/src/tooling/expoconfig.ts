@@ -3,13 +3,14 @@
 // Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 
 const fs = require('fs')
+const path = require('path')
 
 const {
   AndroidConfig,
   withAppBuildGradle,
   withBaseMod,
+  withDangerousMod,
   withGradleProperties,
-  withMainActivity,
   withXcodeProject,
 } = require('@expo/config-plugins')
 
@@ -238,17 +239,15 @@ const POSTHOG_NEW_INTENT_MARKER = 'posthog-new-intent'
 const POSTHOG_NEW_INTENT_BEGIN = `// @generated begin ${POSTHOG_NEW_INTENT_MARKER} - posthog-react-native (DO NOT MODIFY)`
 const POSTHOG_NEW_INTENT_END = `// @generated end ${POSTHOG_NEW_INTENT_MARKER}`
 
-// Both languages carry the same explanation, so a reader of either file learns why it is there.
 // `android.content.Intent` is spelled out to keep the block self-contained: adding an import is a
 // second, riskier edit, and the templates we patch do not already import Intent.
 const NEW_INTENT_DOC = `  /**
-   * Records the intent that reopened the app so getIntent() returns it for the rest of the process.
+   * Records the intent that reopened the app so getIntent() stays correct.
    *
-   * React Native drops an intent that arrives while its React context is still starting
-   * (ReactHostImpl.onNewIntent ignores it when getCurrentReactContext() is null) and never calls
-   * setIntent, so a notification tap on a process Android had killed - while its task stayed in
-   * recents - is invisible to every library in the app. Recording it before delegating repairs
-   * PostHog's push-open capture, Firebase Messaging's getInitialNotification() and deep links alike.
+   * Works around a React Native defect that drops notification taps and deep links arriving while
+   * the React context is still starting. Managed by the posthog-react-native Expo config plugin;
+   * remove it with { patchMainActivityNewIntent: false } in app.json.
+   * https://posthog.com/docs/workflows/push-notifications/react-native
    */`
 
 const NEW_INTENT_KOTLIN_BODY = `  override fun onNewIntent(intent: android.content.Intent) {
@@ -272,15 +271,18 @@ function escapeRegExp(value: string): string {
 }
 
 // Lazy body match so two blocks (only reachable from a hand-edited file) are removed separately
-// rather than swallowing everything between them.
+// rather than swallowing everything between them. The `\r?` on both ends keeps the block removable
+// after an editor or a Windows checkout has normalized the file to CRLF.
 const POSTHOG_NEW_INTENT_BLOCK_PATTERN = new RegExp(
-  `\\n?[ \\t]*${escapeRegExp(POSTHOG_NEW_INTENT_BEGIN)}[\\s\\S]*?${escapeRegExp(POSTHOG_NEW_INTENT_END)}[ \\t]*\\n`,
+  `\\r?\\n?[ \\t]*${escapeRegExp(POSTHOG_NEW_INTENT_BEGIN)}[\\s\\S]*?${escapeRegExp(
+    POSTHOG_NEW_INTENT_END
+  )}[ \\t]*\\r?\\n`,
   'g'
 )
 
 // The `{` that opens MainActivity's body, or -1 when the file does not look like the templates we
-// patch. Only a supertype list may sit between the name and the brace, so anything carrying `;`,
-// `{` or `}` means we found some other declaration's brace and must not write into it.
+// patch. We refuse anything carrying `;`, `{` or `}` between the name and the brace, which rejects
+// the shapes we know about — a supertype list is all we expect to sit there.
 function mainActivityBodyBraceIndex(contents: string): number {
   const declaration = /\bclass\s+MainActivity\b/.exec(contents)
   if (!declaration) {
@@ -309,7 +311,9 @@ export function updateMainActivityNewIntentOverride(contents: string, language: 
     return withoutManagedBlock
   }
 
-  if (/\bonNewIntent\b/.test(withoutManagedBlock)) {
+  // A declaration, not the bare token: a comment or a string that merely mentions onNewIntent must
+  // not turn the fix off, but every real override in either language matches.
+  if (/\b(fun|void)\s+onNewIntent\s*\(/.test(withoutManagedBlock)) {
     console.warn(
       '[posthog-react-native] MainActivity already overrides onNewIntent; leaving it alone. ' +
         'Add `setIntent(intent)` as its first statement so a notification tap that arrives before ' +
@@ -335,15 +339,79 @@ export function updateMainActivityNewIntentOverride(contents: string, language: 
   )
 }
 
+// Expo's own `mainActivity` mod resolves the file with a glob over android/app/src/main/java only,
+// and asserts, so registering it turns sources under src/main/kotlin — or no MainActivity at all —
+// into a hard prebuild failure whose message never mentions PostHog. Look the file up ourselves
+// instead. Dangerous mods run before the standard android chain, so another plugin's
+// withMainActivity still reads (and re-writes) our edit.
+const MAIN_ACTIVITY_SOURCE_ROOTS = ['android/app/src/main/java', 'android/app/src/main/kotlin']
+
+function findMainActivityPath(projectRoot: string): string | undefined {
+  const walk = (dir: string): string | undefined => {
+    if (!fs.existsSync(dir)) {
+      return undefined
+    }
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const candidate = path.join(dir, entry.name)
+      if (!entry.isDirectory()) {
+        if (/^MainActivity\.(kt|java)$/.test(entry.name)) {
+          return candidate
+        }
+        continue
+      }
+      const hit = walk(candidate)
+      if (hit) {
+        return hit
+      }
+    }
+    return undefined
+  }
+
+  for (const sourceRoot of MAIN_ACTIVITY_SOURCE_ROOTS) {
+    const hit = walk(path.join(projectRoot, sourceRoot))
+    if (hit) {
+      return hit
+    }
+  }
+  return undefined
+}
+
 const withMainActivityNewIntent = (config: any, enabled: boolean) => {
-  return withMainActivity(config, (config: any) => {
-    config.modResults.contents = updateMainActivityNewIntentOverride(
-      config.modResults.contents,
-      config.modResults.language,
-      enabled
-    )
-    return config
-  })
+  return withDangerousMod(config, [
+    'android',
+    async (config: any) => {
+      const mainActivityPath = findMainActivityPath(config.modRequest.projectRoot)
+      if (!mainActivityPath) {
+        console.warn(
+          '[posthog-react-native] Could not find MainActivity under android/app/src/main/{java,kotlin}; ' +
+            'skipping the onNewIntent override. Notification taps delivered while the React context is ' +
+            'starting will be lost.'
+        )
+        return config
+      }
+
+      const contents = await fs.promises.readFile(mainActivityPath, 'utf8')
+      const updated = updateMainActivityNewIntentOverride(
+        contents,
+        mainActivityPath.endsWith('.java') ? 'java' : 'kt',
+        enabled
+      )
+      if (updated !== contents) {
+        await fs.promises.writeFile(mainActivityPath, updated)
+      }
+      // Only when the block is new, so a re-run of an already-patched project stays quiet.
+      if (!contents.includes(POSTHOG_NEW_INTENT_BEGIN) && updated.includes(POSTHOG_NEW_INTENT_BEGIN)) {
+        console.warn(
+          `[posthog-react-native] Added an onNewIntent override to ${path.relative(
+            config.modRequest.projectRoot,
+            mainActivityPath
+          )} so a notification tap that arrives before the React context is ready is not lost. ` +
+            'Set `{ patchMainActivityNewIntent: false }` on the plugin in app.json to opt out.'
+        )
+      }
+      return config
+    },
+  ])
 }
 
 type BuildPhase = { shellScript: string }
@@ -838,13 +906,10 @@ type PostHogPluginProps = {
    * `setIntent(intent)` before delegating to React Native.
    *
    * Works around a React Native defect. When Android reopens an app whose process it had killed
-   * while the task stayed in recents, the tap arrives at `onNewIntent` while the React context is
-   * still starting: `ReactHostImpl.onNewIntent` drops it because there is no context yet,
-   * `ReactDelegate.onNewIntent` still reports it handled so `ReactActivity` never calls
-   * `super.onNewIntent`, and nothing calls `setIntent`. The intent is then invisible to the whole
-   * process — PostHog captures no `$push_notification_opened`, Firebase Messaging's
-   * `getInitialNotification()` returns null, and deep links are lost. Recording the intent first
-   * makes `getIntent()` correct for every library in the app.
+   * while the task stayed in recents, the tap arrives before the React context is ready and is then
+   * invisible to the whole process — PostHog captures no `$push_notification_opened`, Firebase
+   * Messaging's `getInitialNotification()` returns null, and deep links are lost. Recording the
+   * intent first makes `getIntent()` correct for every library in the app.
    *
    * Default: true. The plugin leaves a `MainActivity` that already overrides `onNewIntent`
    * untouched and warns instead — add `setIntent(intent)` as the first statement of your own

@@ -1016,6 +1016,36 @@ describe('updateMainActivityNewIntentOverride', () => {
     expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find the MainActivity class body'))
   })
+
+  it('patches a file that only mentions onNewIntent in a comment', () => {
+    const source = kotlinMainActivity.replace(
+      '  override fun getMainComponentName',
+      '  // TODO: forward onNewIntent to the router\n  override fun getMainComponentName'
+    )
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toContain(
+      'override fun onNewIntent(intent: android.content.Intent) {'
+    )
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('still manages the block after the file is normalized to CRLF', () => {
+    const source = kotlinMainActivity.replace(/\n/g, '\r\n')
+    const patched = updateMainActivityNewIntentOverride(source, 'kt', true).replace(/\r?\n/g, '\r\n')
+
+    expect(patched).toContain('override fun onNewIntent(intent: android.content.Intent) {')
+    expect(updateMainActivityNewIntentOverride(patched, 'kt', false)).toBe(source)
+    expect(updateMainActivityNewIntentOverride(patched, 'kt', true).split('onNewIntent(')).toHaveLength(3)
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('inserts into MainActivity and not a later class in the same file', () => {
+    const source = `${kotlinMainActivity}\nclass Helper {\n  fun noop() {}\n}\n`
+    const result = updateMainActivityNewIntentOverride(source, 'kt', true)
+
+    expect(result.indexOf('onNewIntent')).toBeLessThan(result.indexOf('class Helper'))
+    expect(console.warn).not.toHaveBeenCalled()
+  })
 })
 
 describe('postHogExpoPlugin Android native symbols', () => {
@@ -1071,7 +1101,13 @@ describe('postHogExpoPlugin Android native symbols', () => {
     }
   }
 
+  beforeEach(() => {
+    // The MainActivity patch announces itself on every first prebuild.
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
   afterEach(() => {
+    vi.restoreAllMocks()
     for (const projectRoot of projectRoots.splice(0)) {
       fs.rmSync(projectRoot, { recursive: true, force: true })
     }
