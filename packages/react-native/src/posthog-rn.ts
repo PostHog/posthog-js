@@ -603,6 +603,9 @@ export class PostHog extends PostHogCore {
   setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void {
     const storage = this._storageForKey(key)
     value !== null ? storage.setItem(key, value) : storage.removeItem(key)
+    if (key === PostHogPersistedProperty.SurveysInProgress && value === null) {
+      this._events.emit('surveysReset', undefined)
+    }
     if (key === PostHogPersistedProperty.PersonProperties) {
       // Notify surveys after the in-memory write, including unsets and resets,
       // without waiting for a feature flag reload.
@@ -1047,6 +1050,7 @@ export class PostHog extends PostHogCore {
   optOut(): Promise<void> {
     // Consent must be durable. See reset()/identify().
     const result = super.optOut()
+    this.setPersistedProperty(PostHogPersistedProperty.SurveysInProgress, null)
     void this._eventsStorage.waitForPersist()
     // A device token registered before opt-out would otherwise survive consent withdrawal: the
     // native subscription handler keeps its own persisted record and retry loop. unregister is

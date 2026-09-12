@@ -543,6 +543,20 @@ describe('PostHog React Native', () => {
       await rnStorage.preloadPromise
     })
 
+    it.each(['reset', 'optOut'] as const)('clears unfinished survey storage on %s before restart', async (action) => {
+      posthog = new PostHog('1', { customStorage: storage, captureAppLifecycleEvents: false, flushInterval: 0 })
+      await posthog.ready()
+      posthog.setPersistedProperty(PostHogPersistedProperty.SurveysInProgress, [{ submissionId: 'old-user' }])
+      const resetListener = vi.fn()
+      posthog.on('surveysReset', resetListener)
+      await posthog[action]()
+      expect(resetListener).toHaveBeenCalledOnce()
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.SurveysInProgress)).toBeUndefined()
+      const restored = createEventsStorage(storage)
+      await restored.preloadPromise
+      expect(restored.getItem(PostHogPersistedProperty.SurveysInProgress)).toBeUndefined()
+    })
+
     it('should allow immediate calls without delay for stored values', async () => {
       posthog = new PostHog('1', {
         customStorage: storage,

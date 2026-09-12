@@ -128,7 +128,7 @@ it.each(['unset', 'reset properties', 'reset', 'unmatched'])(
     const ui = await mount()
     act(() => posthog.setPersonPropertiesForFlags({ language: 'es' }, false))
     expect(ui.queryByText('Pregunta 0')).not.toBeNull()
-    act(() => {
+    await act(async () => {
       if (operation === 'unset') posthog.unsetPersonProperties('language', false)
       else if (operation === 'reset properties') posthog.resetPersonPropertiesForFlags(false)
       else if (operation === 'reset') posthog.reset()
@@ -142,7 +142,9 @@ it.each(['unset', 'reset properties', 'reset', 'unmatched'])(
     const sent = vi.mocked(posthog.capture).mock.calls.find(([event]) => event === 'survey sent')
     expect(sent).toBeDefined()
     expect(sent![1]).not.toHaveProperty('$survey_language')
-    expectOnlyOneShown()
+    expect(vi.mocked(posthog.capture).mock.calls.filter(([event]) => event === 'survey shown')).toHaveLength(
+      operation === 'reset' ? 2 : 1
+    )
   }
 )
 
@@ -284,4 +286,25 @@ it('preserves a selected rating when translating', async () => {
     })
   )
   expectOnlyOneShown()
+})
+
+it('preserves answer-time question text across partial responses and language changes', async () => {
+  const ui = await mount({ ...makeSurvey(), enable_partial_responses: true })
+  fireEvent.change(ui.getByRole('textbox'), { target: { value: 'First answer' } })
+  fireEvent.click(ui.getByText('Next'))
+  act(() => posthog.setPersonPropertiesForFlags({ language: 'es' }, false))
+  fireEvent.change(ui.getByRole('textbox'), { target: { value: 'Second answer' } })
+  fireEvent.click(ui.getByText('Siguiente'))
+  const sent = vi.mocked(posthog.capture).mock.calls.filter(([event]) => event === 'survey sent')
+  expect(sent).toHaveLength(2)
+  expect(sent[0][1]).toMatchObject({ $survey_completed: false })
+  expect(sent[1][1]).toMatchObject({
+    $survey_completed: true,
+    $survey_submission_id: sent[0][1]?.$survey_submission_id,
+    $survey_language: 'es',
+    $survey_questions: [
+      { id: 'q0', question: 'Question 0', response: 'First answer' },
+      { id: 'q1', question: 'Pregunta 1', response: 'Second answer' },
+    ],
+  })
 })

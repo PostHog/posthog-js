@@ -14,6 +14,11 @@ interface EventSurveyConfig {
 export function useActivatedSurveys(posthog: PostHog, surveys: Survey[]): ReadonlySet<string> {
   const [activatedSurveys, setActivatedSurveys] = useState<ReadonlySet<string>>(new Set())
 
+  useEffect(() => {
+    setActivatedSurveys(new Set())
+    return posthog.on('surveysReset', () => setActivatedSurveys(new Set()))
+  }, [posthog])
+
   const eventMap = useMemo(() => {
     const newEventMap = new Map<string, EventSurveyConfig[]>()
     for (const survey of surveys.filter(doesSurveyActivateByEvent)) {

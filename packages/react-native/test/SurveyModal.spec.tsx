@@ -342,6 +342,27 @@ describe('SurveyModal intro screen', () => {
       />
     )
 
+  it('skips the intro when restoring an answered survey', () => {
+    const { queryByTestId } = render(
+      <SurveyModal
+        survey={baseSurvey}
+        surveyLanguage={null}
+        appearance={appearanceWithIntro}
+        onShow={vi.fn()}
+        onClose={vi.fn()}
+        initialProgress={{
+          submissionId: 'saved',
+          questionIndex: 0,
+          questionOrder: [0],
+          responses: { $survey_response_q1: 'saved' },
+          questionSnapshots: {},
+        }}
+      />
+    )
+    expect(queryByTestId('intro-stub')).toBeNull()
+    expect(queryByTestId('questions-stub')).not.toBeNull()
+  })
+
   it('renders the intro screen before the questions and advances on start', () => {
     const { queryByTestId, getByTestId } = renderWithAppearance(appearanceWithIntro)
 

@@ -3831,6 +3831,10 @@
           "name": "Surveys"
         },
         {
+          "type": "\"surveys_in_progress\"",
+          "name": "SurveysInProgress"
+        },
+        {
           "type": "\"surveys_seen\"",
           "name": "SurveysSeen"
         }
@@ -4341,6 +4345,10 @@
         {
           "type": "SurveySchedule",
           "name": "schedule"
+        },
+        {
+          "type": "boolean",
+          "name": "enable_partial_responses"
         }
       ],
       "path": "../core/src/types.ts"

@@ -9,9 +9,14 @@ import { SurveyAppearanceTheme, resolveSurveyAlignment } from '../surveys-utils'
 import { Survey, type SurveyResponses } from '@posthog/core'
 import { useOptionalSafeAreaInsets } from '../../optional/OptionalReactNativeSafeArea'
 import { Questions } from './Surveys'
+import type { SurveyProgress } from '../survey-progress'
+import type { PostHog } from '../../posthog-rn'
 
 export type SurveyModalProps = {
   survey: Survey
+  client?: PostHog
+  initialProgress?: SurveyProgress
+  onProgressChange?: (progress: SurveyProgress, completed: boolean) => boolean
   surveyLanguage: string | null
   appearance: SurveyAppearanceTheme
   onShow: () => void
@@ -34,16 +39,21 @@ const MODAL_FADE_DURATION_MS = 250
 // real onDismiss stays the primary path on the happy path.
 const IOS_DISMISS_FALLBACK_MS = 1000
 
+function shouldShowIntro(appearance: SurveyAppearanceTheme, progress?: SurveyProgress): boolean {
+  if (Object.keys(progress?.responses ?? {}).length > 0) return false
+  return (
+    Boolean(appearance.displayIntroScreen) && Boolean(appearance.introScreenHeader || appearance.introScreenDescription)
+  )
+}
+
 export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
   const { survey, surveyLanguage, appearance, onShow, onClose: onCloseProp, androidKeyboardBehavior = 'height' } = props
   const [isSurveySent, setIsSurveySent] = useState(false)
   // The intro screen is a leading page mirroring the trailing confirmation message. Dismissing it
   // only flips local state — no response is recorded and no survey event is sent. It has no
   // default header, so an intro with no copy at all is skipped instead of drawing an empty box.
-  const [showIntro, setShowIntro] = useState(
-    Boolean(appearance.displayIntroScreen) && Boolean(appearance.introScreenHeader || appearance.introScreenDescription)
-  )
-  const [responses, setResponses] = useState<SurveyResponses>({})
+  const [showIntro, setShowIntro] = useState(() => shouldShowIntro(appearance, props.initialProgress))
+  const [responses, setResponses] = useState<SurveyResponses>(props.initialProgress?.responses ?? {})
   const [isVisible, setIsVisible] = useState(true)
   // Two-step hide for RN Fabric snapshot recycling — see
   // https://github.com/facebook/react-native/issues/48245
@@ -166,10 +176,12 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
                     />
                   ) : (
                     <Questions
+                      client={props.client}
+                      initialProgress={props.initialProgress}
+                      onProgressChange={props.onProgressChange}
                       survey={survey}
                       surveyLanguage={surveyLanguage}
                       appearance={appearance}
-                      responses={responses}
                       onResponsesChange={setResponses}
                       onSubmit={() => setIsSurveySent(true)}
                     />
