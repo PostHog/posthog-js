@@ -23,6 +23,7 @@ import {
   resolveReleaseModeProp,
   updateHermesReleaseModeGradleProperties,
   updateDotenvFileGradleProperties,
+  updateMainActivityNewIntentOverride,
 } from '../src/tooling/expoconfig'
 
 const postHogExpoPlugin = (postHogExpoPluginModule as any).default
@@ -914,6 +915,139 @@ describe('resolveReleaseModeProp', () => {
   })
 })
 
+const kotlinMainActivity = `package com.example
+
+import com.facebook.react.ReactActivity
+
+class MainActivity : ReactActivity() {
+  override fun getMainComponentName(): String = "main"
+}
+`
+
+const javaMainActivity = `package com.example;
+
+import com.facebook.react.ReactActivity;
+
+public class MainActivity extends ReactActivity {
+  @Override
+  protected String getMainComponentName() {
+    return "main";
+  }
+}
+`
+
+describe('updateMainActivityNewIntentOverride', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('injects a Kotlin override into the class body', () => {
+    const result = updateMainActivityNewIntentOverride(kotlinMainActivity, 'kt', true)
+
+    expect(result).toContain('override fun onNewIntent(intent: android.content.Intent) {')
+    expect(result).toContain('    setIntent(intent)\n    super.onNewIntent(intent)')
+    expect(result.indexOf('setIntent(intent)')).toBeLessThan(result.indexOf('super.onNewIntent(intent)'))
+    expect(result.indexOf('class MainActivity')).toBeLessThan(result.indexOf('onNewIntent'))
+    expect(result).toContain('getMainComponentName')
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('injects a Java override into the class body', () => {
+    const result = updateMainActivityNewIntentOverride(javaMainActivity, 'java', true)
+
+    expect(result).toContain('  @Override\n  public void onNewIntent(android.content.Intent intent) {')
+    expect(result).toContain('    setIntent(intent);\n    super.onNewIntent(intent);')
+    expect(result).toContain('getMainComponentName')
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['kt', kotlinMainActivity],
+    ['java', javaMainActivity],
+  ])('is idempotent for %s', (language, source) => {
+    const once = updateMainActivityNewIntentOverride(source, language, true)
+    const twice = updateMainActivityNewIntentOverride(once, language, true)
+
+    expect(twice).toBe(once)
+    expect(once.split('onNewIntent(')).toHaveLength(3)
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['kt', kotlinMainActivity],
+    ['java', javaMainActivity],
+  ])('restores the original %s file when disabled', (language, source) => {
+    const patched = updateMainActivityNewIntentOverride(source, language, true)
+
+    expect(updateMainActivityNewIntentOverride(patched, language, false)).toBe(source)
+  })
+
+  it('leaves an existing override alone and explains what to add', () => {
+    const source = kotlinMainActivity.replace(
+      '  override fun getMainComponentName',
+      '  override fun onNewIntent(intent: Intent) {\n    super.onNewIntent(intent)\n  }\n\n  override fun getMainComponentName'
+    )
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it('replaces a stale managed block rather than stacking a second one', () => {
+    const patched = updateMainActivityNewIntentOverride(kotlinMainActivity, 'kt', true)
+    const stale = patched.replace('setIntent(intent)', 'setIntent(intent) // hand-edited')
+
+    expect(updateMainActivityNewIntentOverride(stale, 'kt', true)).toBe(patched)
+  })
+
+  it('skips a file with no recognizable MainActivity class body', () => {
+    const source = 'package com.example\n\nobject NotAnActivity\n'
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find the MainActivity class body'))
+  })
+
+  it('skips a file whose braces do not balance', () => {
+    const source = 'class MainActivity : ReactActivity() {\n  fun broken() {\n'
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find the MainActivity class body'))
+  })
+
+  it('patches a file that only mentions onNewIntent in a comment', () => {
+    const source = kotlinMainActivity.replace(
+      '  override fun getMainComponentName',
+      '  // TODO: forward onNewIntent to the router\n  override fun getMainComponentName'
+    )
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toContain(
+      'override fun onNewIntent(intent: android.content.Intent) {'
+    )
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('still manages the block after the file is normalized to CRLF', () => {
+    const source = kotlinMainActivity.replace(/\n/g, '\r\n')
+    const patched = updateMainActivityNewIntentOverride(source, 'kt', true).replace(/\r?\n/g, '\r\n')
+
+    expect(patched).toContain('override fun onNewIntent(intent: android.content.Intent) {')
+    expect(updateMainActivityNewIntentOverride(patched, 'kt', false)).toBe(source)
+    expect(updateMainActivityNewIntentOverride(patched, 'kt', true).split('onNewIntent(')).toHaveLength(3)
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('inserts into MainActivity and not a later class in the same file', () => {
+    const source = `${kotlinMainActivity}\nclass Helper {\n  fun noop() {}\n}\n`
+    const result = updateMainActivityNewIntentOverride(source, 'kt', true)
+
+    expect(result.indexOf('onNewIntent')).toBeLessThan(result.indexOf('class Helper'))
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+})
+
 describe('postHogExpoPlugin Android native symbols', () => {
   const projectRoots: string[] = []
   const projectBuildGradle = [
@@ -941,10 +1075,12 @@ describe('postHogExpoPlugin Android native symbols', () => {
     const androidRoot = path.join(projectRoot, 'android')
     const appRoot = path.join(androidRoot, 'app')
     projectRoots.push(projectRoot)
-    fs.mkdirSync(appRoot, { recursive: true })
+    const sourceRoot = path.join(appRoot, 'src/main/java/com/example')
+    fs.mkdirSync(sourceRoot, { recursive: true })
     fs.writeFileSync(path.join(androidRoot, 'build.gradle'), projectContents)
     fs.writeFileSync(path.join(appRoot, 'build.gradle'), appBuildGradle)
     fs.writeFileSync(path.join(androidRoot, 'gradle.properties'), '')
+    fs.writeFileSync(path.join(sourceRoot, 'MainActivity.kt'), kotlinMainActivity)
 
     const withEarlierAppGradlePlugin = withAppBuildGradle(
       { name: 'PostHog config plugin test', slug: 'posthog-config-plugin-test' } as any,
@@ -965,7 +1101,13 @@ describe('postHogExpoPlugin Android native symbols', () => {
     }
   }
 
+  beforeEach(() => {
+    // The MainActivity patch announces itself on every first prebuild.
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
   afterEach(() => {
+    vi.restoreAllMocks()
     for (const projectRoot of projectRoots.splice(0)) {
       fs.rmSync(projectRoot, { recursive: true, force: true })
     }
