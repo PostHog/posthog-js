@@ -8,8 +8,10 @@ import { cleanup, render, screen } from '@testing-library/react'
 vi.mock('react-native', async () => {
   const RealReact = await vi.importActual<typeof import('react')>('react')
   const flattenStyle = (style: any) => (Array.isArray(style) ? Object.assign({}, ...style) : style)
-  const Box = ({ children, style, ...rest }: any) =>
-    RealReact.createElement('div', { ...rest, style: flattenStyle(style) }, children)
+  const Box = ({ children, style, ...rest }: any) => {
+    delete rest.maxFontSizeMultiplier
+    return RealReact.createElement('div', { ...rest, style: flattenStyle(style) }, children)
+  }
   const Pressable = ({ children, style, onPress, ...rest }: any) =>
     RealReact.createElement('div', { ...rest, style: flattenStyle(style), onClick: onPress }, children)
 

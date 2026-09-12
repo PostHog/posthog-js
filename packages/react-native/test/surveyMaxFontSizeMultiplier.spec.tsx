@@ -1,20 +1,19 @@
-/** @jest-environment jsdom */
+/** @vitest-environment jsdom */
 import React from 'react'
 import { render, cleanup } from '@testing-library/react'
 
 // Records the props every Text/TextInput is rendered with, so a test can assert
-// which ceiling reached which node. Same minimal react-native shim as
-// SurveyModal.spec — jest-expo's full preset pulls in TurboModule code that
-// explodes under jsdom.
+// which ceiling reached which node. The minimal react-native shim keeps native
+// TurboModule code out of jsdom.
 const renderedTextProps: {
   children: unknown
   maxFontSizeMultiplier: number | undefined
   allowFontScaling: boolean | undefined
 }[] = []
 
-jest.mock('react-native', () => {
-  const RealReact = jest.requireActual('react')
-  const Box = RealReact.forwardRef(({ children, testID, ...rest }: any, ref: any) =>
+vi.mock('react-native', async () => {
+  const RealReact = await vi.importActual<typeof import('react')>('react')
+  const Box = RealReact.forwardRef(({ children, testID }: any, ref: any) =>
     RealReact.createElement('div', { ref, 'data-testid': testID }, children)
   )
   const RecordingText = RealReact.forwardRef(
@@ -31,14 +30,14 @@ jest.mock('react-native', () => {
     TouchableOpacity: Box,
     Text: RecordingText,
     TextInput: RecordingText,
-    Linking: { canOpenURL: jest.fn(), openURL: jest.fn() },
+    Linking: { canOpenURL: vi.fn(), openURL: vi.fn() },
     Platform: { OS: 'ios', select: (o: any) => o.ios ?? o.default },
     StyleSheet: { create: (s: any) => s, flatten: (s: any) => s, absoluteFill: {} },
     useWindowDimensions: () => ({ width: 375, height: 800 }),
   }
 })
 
-jest.mock('../src/optional/OptionalReactNativeSvg', () => ({ OptionalReactNativeSvg: undefined }))
+vi.mock('../src/optional/OptionalReactNativeSvg', () => ({ OptionalReactNativeSvg: undefined }))
 
 import { BottomSection } from '../src/surveys/components/BottomSection'
 import { QuestionHeader } from '../src/surveys/components/QuestionHeader'

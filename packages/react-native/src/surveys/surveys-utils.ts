@@ -94,7 +94,10 @@ export interface SurveyAppearance extends CoreSurveyAppearance {
    * maxFontSizeMultiplier: { question: 1.5, description: 1.8, ratingNumber: 1.2 }
    * ```
    *
-   * Roles left out of the object are uncapped, as they are today.
+   * Roles left out of the object are uncapped, as they are today. Use `0` for
+   * no maximum, or a value of `1` or greater to set a cap. Other values below
+   * `1` (such as `0.8`) do not shrink text and are unsupported by React Native;
+   * depending on the platform and version, they may be ignored or rejected.
    *
    * Leave it unset (the default) and survey text scales without a ceiling. That
    * is what the OS asks for, but not always what a fixed-size survey card can
