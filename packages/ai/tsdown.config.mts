@@ -36,6 +36,7 @@ const providers = [
   'otel',
   'openai-agents',
   'adk',
+  'claude-agent-sdk',
 ]
 
 export default defineConfig([

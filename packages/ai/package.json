@@ -25,6 +25,7 @@
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.15",
     "@anthropic-ai/sdk": ">=0.112.3 <0.123.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.251",
     "@google/adk": "^2.0.0",
     "@google/genai": "^1.52.0",
     "@langchain/core": "^1.2.9",
@@ -66,6 +67,7 @@
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=0.112.3 <0.123.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.251",
     "@google/adk": "^2.0.0",
     "@google/genai": "^1.52.0",
     "@langchain/core": "^1.2.3",
@@ -80,6 +82,9 @@
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "@anthropic-ai/claude-agent-sdk": {
       "optional": true
     },
     "@google/adk": {
@@ -166,6 +171,11 @@
       "require": "./dist/adk/index.cjs",
       "import": "./dist/adk/index.mjs",
       "types": "./dist/adk/index.d.ts"
+    },
+    "./claude-agent-sdk": {
+      "require": "./dist/claude-agent-sdk/index.cjs",
+      "import": "./dist/claude-agent-sdk/index.mjs",
+      "types": "./dist/claude-agent-sdk/index.d.ts"
     }
   },
   "directories": {
