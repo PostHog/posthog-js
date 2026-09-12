@@ -60,7 +60,7 @@ test.describe('network metrics', () => {
 
         await expect.poll(() => metricsPayloads.length).toBe(1)
         const metrics = metricsPayloads[0].resourceMetrics.flatMap((r) => r.scopeMetrics.flatMap((s) => s.metrics))
-        const durations = metrics.filter((m) => m.name === 'http.client.request.duration')
+        const durations = metrics.filter((m) => m.name === 'http.client.request.duration_ms')
         expect(durations).toHaveLength(1)
 
         const dataPoints = durations[0].histogram!.dataPoints

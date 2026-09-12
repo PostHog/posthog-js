@@ -5,11 +5,12 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import type { PostHog } from '../posthog-core'
 import type { MetricAttributes, NetworkMetricsConfig, NetworkMetricsRequest } from '../types'
+import { isMarkedPostHogRequest } from '../utils/request-tracking'
 import { patch } from './replay/rrweb-plugins/patch'
 
 const logger = createLogger('[NetworkMetrics]')
 
-const DEFAULT_METRIC_NAME = 'http.client.request.duration'
+const DEFAULT_METRIC_NAME = 'http.client.request.duration_ms'
 
 // oxlint-disable-next-line compat/compat
 const now = (): number => (window?.performance?.now ? window.performance.now() : Date.now())
@@ -34,10 +35,13 @@ const toRequest = (method: unknown, url: unknown): NetworkMetricsRequest => ({
 })
 
 // `api_host` may be a relative proxy path like `/ingest`, so resolve it the same way as the request url.
-// The match stops at a path boundary: with `api_host: '/ingest'`, `/ingest/e/` belongs to PostHog but the
-// application's own `/ingestion-status` does not. A host root matches that whole origin, which is what the
-// subdomain and cloud setups need.
+// The match stops at a path boundary. Host roots are handled by the request-layer marker instead of matching
+// the entire origin, which keeps same-origin proxy traffic observable.
 const isUnderEndpoint = (url: string, endpoint: string): boolean => {
+    const parsedEndpoint = convertToURL(endpoint)
+    if (!parsedEndpoint || (parsedEndpoint.pathname === '/' && !parsedEndpoint.search && !parsedEndpoint.hash)) {
+        return false
+    }
     const base = toAbsoluteUrl(endpoint).replace(/\/$/, '')
     return url === base || url.indexOf(base + '/') === 0 || url.indexOf(base + '?') === 0
 }
@@ -45,6 +49,7 @@ const isUnderEndpoint = (url: string, endpoint: string): boolean => {
 const isPostHogRequest = (instance: PostHog, url: string): boolean => {
     const router = instance.requestRouter
     return (
+        isMarkedPostHogRequest(url) ||
         isUnderEndpoint(url, router.endpointFor('api')) ||
         isUnderEndpoint(url, router.endpointFor('flags')) ||
         // the asset host serves the remote config JSON fallback, which travels over fetch or XHR
@@ -103,9 +108,18 @@ const patchFetch = (instance: PostHog): (() => void) => {
                     (init as RequestInit | undefined)?.method ?? (input as Request)?.method ?? 'GET',
                     (input as Request)?.url ?? input
                 )
-                result.then(
-                    (response: Response) => record(instance, request, response?.status, start),
-                    () => record(instance, request, undefined, start)
+                if (isPostHogRequest(instance, request.url) || !isFunction(result?.then)) {
+                    return result
+                }
+                return result.then(
+                    (response: Response) => {
+                        record(instance, request, response?.status, start)
+                        return response
+                    },
+                    (error: unknown) => {
+                        record(instance, request, undefined, start)
+                        throw error
+                    }
                 )
             } catch (e) {
                 logger.error('Failed to observe fetch', e)
@@ -138,10 +152,13 @@ const patchXHR = (instance: PostHog): (() => void) => {
                 const request = requests.get(this)
                 if (request) {
                     const start = now()
+                    const shouldRecord = !isPostHogRequest(instance, request.url)
                     const onLoadEnd = () => {
                         this.removeEventListener('loadend', onLoadEnd)
                         // XHR reports status 0 when no response arrived, which the callback contract calls `undefined`.
-                        record(instance, request, this.status || undefined, start)
+                        if (shouldRecord) {
+                            record(instance, request, this.status || undefined, start)
+                        }
                     }
                     addEventListener(this as unknown as Element, 'loadend', onLoadEnd)
                 }
@@ -160,8 +177,9 @@ const patchXHR = (instance: PostHog): (() => void) => {
 
 /**
  * Records a duration histogram for every `fetch` and `XMLHttpRequest`.
- * Observation only: the wrappers never change the arguments or the result,
- * and every failure inside them is caught and logged.
+ * Observation only: the wrappers never change the request arguments or its
+ * settlement. Fetch returns a derived promise so rejected requests remain
+ * observable to the caller and to the browser's unhandled-rejection handling.
  *
  * Each transport is measured to the boundary its API exposes: a `fetch` promise
  * settles when the response headers arrive, and `loadend` fires after the whole

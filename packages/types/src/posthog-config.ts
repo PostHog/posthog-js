@@ -1133,14 +1133,15 @@ export interface NetworkMetricsResponse {
 
 /**
  * Options for automatic `fetch` and `XMLHttpRequest` duration metrics.
- * Recording never changes the request or its result.
+ * Recording never changes the request or its settlement. Fetch returns a derived
+ * promise so rejected requests remain observable to the caller.
  */
 export interface NetworkMetricsConfig {
     /**
      * The metric name. A string is used for every request. A function is
      * called once per request; return a falsy value to skip that request.
      *
-     * @default 'http.client.request.duration'
+     * @default 'http.client.request.duration_ms'
      */
     name?: string | ((request: NetworkMetricsRequest) => string | null | undefined)
     /**

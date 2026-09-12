@@ -6,6 +6,7 @@ import { createPosthogInstance } from './helpers/posthog-instance'
 import * as fflate from 'fflate'
 import { extendURLParams, request } from '../request'
 import { Compression, RequestWithOptions } from '../types'
+import { isMarkedPostHogRequest } from '../utils/request-tracking'
 import { logger } from '@posthog/browser-common/utils/logger'
 
 vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => ({
@@ -156,6 +157,10 @@ describe('request', () => {
         )
 
         it('performs the request with default params', () => {
+            let markedDuringTransport = false
+            mockedXHR.open.mockImplementation((_: string, url: string) => {
+                markedDuringTransport = isMarkedPostHogRequest(url)
+            })
             request(
                 createRequest({
                     url: 'https://any.posthog-instance.com/',
@@ -164,6 +169,8 @@ describe('request', () => {
                     },
                 })
             )
+            expect(markedDuringTransport).toBe(true)
+            expect(isMarkedPostHogRequest('https://any.posthog-instance.com/')).toBe(false)
             expect(mockedXHR.open).toHaveBeenCalledWith('GET', 'https://any.posthog-instance.com/', true)
 
             expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('x-header', 'value')
@@ -236,6 +243,14 @@ describe('request', () => {
         })
 
         it('performs the request with default params', () => {
+            let markedDuringTransport = false
+            mockedFetch.mockImplementation((url: string) => {
+                markedDuringTransport = isMarkedPostHogRequest(url)
+                return Promise.resolve({
+                    status: 200,
+                    text: () => Promise.resolve('{ "a": 1 }'),
+                }) as any
+            })
             request(
                 createRequest({
                     headers: {
@@ -244,6 +259,8 @@ describe('request', () => {
                 })
             )
 
+            expect(markedDuringTransport).toBe(true)
+            expect(isMarkedPostHogRequest('https://any.posthog-instance.com')).toBe(false)
             const headers = mockedFetch.mock.calls[0][1].headers as Headers
             expect(headers.get('x-header')).toEqual('value')
             expect(mockedFetch).toHaveBeenCalledWith(
