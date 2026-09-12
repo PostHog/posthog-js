@@ -24,6 +24,7 @@ import {
     isNativeAsyncGzipReadError,
     isUndefined,
 } from '@posthog/core'
+import { markPostHogRequest, unmarkPostHogRequest } from './utils/request-tracking'
 
 export { jsonStringify }
 
@@ -256,39 +257,44 @@ const xhr = (options: RequestWithOptions) => {
 
     const req = new XMLHttpRequest!()
     const { url, encodedBody } = encodedRequest
-    req.open(options.method || 'GET', url, true)
-    const { contentType, body } = encodedBody ?? {}
+    markPostHogRequest(url)
+    try {
+        req.open(options.method || 'GET', url, true)
+        const { contentType, body } = encodedBody ?? {}
 
-    each(options.headers, function (headerValue, headerName) {
-        req.setRequestHeader(headerName, headerValue)
-    })
+        each(options.headers, function (headerValue, headerName) {
+            req.setRequestHeader(headerName, headerValue)
+        })
 
-    if (contentType) {
-        req.setRequestHeader('Content-Type', contentType)
-    }
-
-    if (options.timeout) {
-        req.timeout = options.timeout
-    }
-    req.onreadystatechange = () => {
-        // XMLHttpRequest.DONE == 4, except in safari 4
-        if (req.readyState === 4) {
-            const response: RequestResponse = {
-                statusCode: req.status,
-                text: req.responseText,
-            }
-            if (req.status === 200) {
-                try {
-                    response.json = JSON.parse(req.responseText)
-                } catch {
-                    // logger.error(e)
-                }
-            }
-
-            options.callback?.(response)
+        if (contentType) {
+            req.setRequestHeader('Content-Type', contentType)
         }
+
+        if (options.timeout) {
+            req.timeout = options.timeout
+        }
+        req.onreadystatechange = () => {
+            // XMLHttpRequest.DONE == 4, except in safari 4
+            if (req.readyState === 4) {
+                const response: RequestResponse = {
+                    statusCode: req.status,
+                    text: req.responseText,
+                }
+                if (req.status === 200) {
+                    try {
+                        response.json = JSON.parse(req.responseText)
+                    } catch {
+                        // logger.error(e)
+                    }
+                }
+
+                options.callback?.(response)
+            }
+        }
+        req.send(body)
+    } finally {
+        unmarkPostHogRequest(url)
     }
-    req.send(body)
 }
 
 const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) => {
@@ -356,43 +362,50 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
     }
 
     try {
-        fetch!(url, {
-            method: options?.method || 'GET',
-            headers,
-            // if body is greater than 64kb, then fetch with keepalive will error
-            // see 8:10:5 at https://fetch.spec.whatwg.org/#http-network-or-cache-fetch,
-            // but we do want to set keepalive sometimes as it can  help with success
-            // when e.g. a page is being closed
-            // so let's get the best of both worlds and only set keepalive for POST requests
-            // where the body is less than 64kb
-            // NB this is fetch keepalive and not http keepalive
-            // _keepaliveDisabled: a beacon-rejected payload would fail a keepalive fetch too (shared quota)
-            keepalive:
-                options.method === 'POST' && !options._keepaliveDisabled && (estimatedSize || 0) < KEEP_ALIVE_THRESHOLD,
-            body,
-            signal: aborter?.signal,
-            ...options.fetchOptions,
-        })
-            .then((response) => {
-                return response.text().then((responseText) => {
-                    const res: RequestResponse = {
-                        statusCode: response.status,
-                        text: responseText,
-                    }
-
-                    if (response.status === 200) {
-                        try {
-                            res.json = JSON.parse(responseText)
-                        } catch (e) {
-                            logger.error(e)
-                        }
-                    }
-
-                    options.callback?.(res)
-                })
+        markPostHogRequest(url)
+        try {
+            fetch!(url, {
+                method: options?.method || 'GET',
+                headers,
+                // if body is greater than 64kb, then fetch with keepalive will error
+                // see 8:10:5 at https://fetch.spec.whatwg.org/#http-network-or-cache-fetch,
+                // but we do want to set keepalive sometimes as it can  help with success
+                // when e.g. a page is being closed
+                // so let's get the best of both worlds and only set keepalive for POST requests
+                // where the body is less than 64kb
+                // NB this is fetch keepalive and not http keepalive
+                // _keepaliveDisabled: a beacon-rejected payload would fail a keepalive fetch too (shared quota)
+                keepalive:
+                    options.method === 'POST' &&
+                    !options._keepaliveDisabled &&
+                    (estimatedSize || 0) < KEEP_ALIVE_THRESHOLD,
+                body,
+                signal: aborter?.signal,
+                ...options.fetchOptions,
             })
-            .catch(handleError)
-            .finally(() => (aborter ? clearTimeout(aborter.timeout) : null))
+                .then((response) => {
+                    return response.text().then((responseText) => {
+                        const res: RequestResponse = {
+                            statusCode: response.status,
+                            text: responseText,
+                        }
+
+                        if (response.status === 200) {
+                            try {
+                                res.json = JSON.parse(responseText)
+                            } catch (e) {
+                                logger.error(e)
+                            }
+                        }
+
+                        options.callback?.(res)
+                    })
+                })
+                .catch(handleError)
+                .finally(() => (aborter ? clearTimeout(aborter.timeout) : null))
+        } finally {
+            unmarkPostHogRequest(url)
+        }
     } catch (error) {
         // `window.fetch` can be monkey-patched by third-party scripts (e.g. a storefront/analytics
         // wrapper) to throw *synchronously* instead of returning a rejected promise. Because we may

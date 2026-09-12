@@ -44,6 +44,14 @@ describe('shutdown()', () => {
         expect(sessionRecordingDispose).toHaveBeenCalledTimes(1)
     })
 
+    it('disposes metrics, which removes the network wrappers', async () => {
+        const metricsDispose = vi.spyOn(instance.metrics!, 'dispose')
+
+        await instance.shutdown()
+
+        expect(metricsDispose).toHaveBeenCalledTimes(1)
+    })
+
     it('disposes feature flags through the extension runtime', async () => {
         const featureFlagsDispose = vi.spyOn(instance.featureFlags!, 'dispose')
 

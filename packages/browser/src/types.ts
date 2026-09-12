@@ -150,6 +150,10 @@ export type {
     BeforeSendMetricFn,
     OtlpMetricsPayload,
     MetricsConfig,
+    BrowserMetricsConfig,
+    NetworkMetricsConfig,
+    NetworkMetricsRequest,
+    NetworkMetricsResponse,
 } from '@posthog/types'
 
 // Re-export KnownUnsafeEditableEvent from @posthog/core for backwards compatibility

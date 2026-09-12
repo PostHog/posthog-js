@@ -3772,6 +3772,7 @@ export class PostHog implements PostHogInterface {
         // so no buffered events are silently dropped when teardown is explicit.
         this.logs?.flushLogs('sendBeacon')
         void this.metrics?.flush('sendBeacon')
+        this.metrics?.dispose()
         this._requestQueue?.unload()
         this._retryQueue?.unload()
         try {
@@ -4049,6 +4050,7 @@ export class PostHog implements PostHogInterface {
 
             this.exceptionObserver?.onConfigChange()
             this.exceptions?.onConfigChange()
+            this.metrics?.onConfigChange()
 
             this.sessionRecording?.startIfEnabledOrStop()
             this.tracingHeaders?.startIfEnabledOrStop()

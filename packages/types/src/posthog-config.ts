@@ -1111,8 +1111,51 @@ export interface LogsConfig extends LogCaptureOptions {
     captureConsoleLogs?: boolean
 }
 
+/** The request a network metric describes. */
+export interface NetworkMetricsRequest {
+    /** The full request URL, including the query string. */
+    url: string
+    /** The HTTP method in upper case, e.g. 'GET'. */
+    method: string
+}
+
+/** How a network request ended. */
+export interface NetworkMetricsResponse {
+    /** The HTTP status code. `undefined` when the request failed before a response arrived. */
+    status: number | undefined
+    /**
+     * How long the request took, in milliseconds. The end boundary follows the
+     * transport: a `fetch` is measured to its response headers, an
+     * `XMLHttpRequest` to the end of its response body.
+     */
+    durationMs: number
+}
+
+/**
+ * Options for automatic `fetch` and `XMLHttpRequest` duration metrics.
+ * Recording never changes the request or its settlement. Fetch returns a derived
+ * promise so rejected requests remain observable to the caller.
+ */
+export interface NetworkMetricsConfig {
+    /**
+     * The metric name. A string is used for every request. A function is
+     * called once per request; return a falsy value to skip that request.
+     *
+     * @default 'http.client.request.duration_ms'
+     */
+    name?: string | ((request: NetworkMetricsRequest) => string | null | undefined)
+    /**
+     * Adds attributes to each recorded request. The result is merged over the
+     * default attributes (`method`, `host`, `path`, `status_class`), so it can
+     * also replace them, e.g. to set `path` to a route template.
+     * Keep attribute values low-cardinality.
+     */
+    attributes?: (request: NetworkMetricsRequest, response: NetworkMetricsResponse) => MetricAttributes | undefined
+}
+
 /**
  * Options for the posthog.metrics API (count, gauge, histogram).
+ * Shared by every SDK; browser-only options live in `BrowserMetricsConfig`.
  */
 export interface MetricsConfig {
     /**
@@ -1163,6 +1206,22 @@ export interface MetricsConfig {
      * sample (return `null` to drop) before it is aggregated.
      */
     beforeSend?: BeforeSendMetricFn | BeforeSendMetricFn[]
+}
+
+/**
+ * Metrics configuration options for the browser SDK. Adds the options that
+ * only the browser SDK implements to the shared metrics options.
+ */
+export interface BrowserMetricsConfig extends MetricsConfig {
+    /**
+     * Record the duration of every `fetch` and `XMLHttpRequest` as a histogram.
+     * `true` uses the defaults. Requests to PostHog itself are not recorded.
+     * Each transport is measured to the boundary its API exposes: a `fetch` to
+     * its response headers, an `XMLHttpRequest` to the end of its response body.
+     *
+     * @default undefined
+     */
+    network?: boolean | NetworkMetricsConfig
 }
 
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
@@ -1545,7 +1604,7 @@ export interface PostHogConfig {
      *
      * @default undefined
      */
-    metrics?: MetricsConfig
+    metrics?: BrowserMetricsConfig
 
     /**
      * Determines whether PostHog should disable all conversations functionality.

@@ -866,6 +866,7 @@
         "_stopBuffering",
         "_stopCapturing",
         "_stopConsoleRecorder",
+        "_stopNetworkMetrics",
         "_stopPolling",
         "_stopReattachWatcher",
         "_stopRecorderStartedByPersistedHint",

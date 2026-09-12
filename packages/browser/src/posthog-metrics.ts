@@ -5,6 +5,7 @@ import { PostHogMetrics as CorePostHogMetrics, resolveMetricsConfig } from '@pos
 import type { SendMetricsBatchOutcome } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { Extension } from './extensions/types'
+import { startNetworkMetrics } from './extensions/network-metrics'
 
 const METRICS_ENDPOINT = '/i/v1/metrics'
 // Safety backstop for a `_send_request` that never calls back — same policy
@@ -30,13 +31,25 @@ export class PostHogMetrics implements Extension {
     private _core: CorePostHogMetrics | undefined
     // The `metrics` config the current `_core` was built from; a change rebuilds it.
     private _resolvedFrom: PostHog['config']['metrics']
+    private _stopNetworkMetrics: (() => void) | undefined
 
     constructor(private readonly _instance: PostHog) {}
 
-    // Nothing to set up eagerly — the aggregator builds lazily on the first
-    // capture so it sees post-init config. Present so the class satisfies the
-    // weakly-typed `Extension` contract.
-    initialize(): void {}
+    // The aggregator builds lazily on the first capture so it sees post-init
+    // config; only the network wrappers need to be installed eagerly.
+    initialize(): void {
+        this.onConfigChange()
+    }
+
+    onConfigChange(): void {
+        const enabled = !!this._instance.config.metrics?.network
+        if (enabled && !this._stopNetworkMetrics) {
+            this._stopNetworkMetrics = startNetworkMetrics(this._instance)
+        } else if (!enabled && this._stopNetworkMetrics) {
+            this._stopNetworkMetrics()
+            this._stopNetworkMetrics = undefined
+        }
+    }
 
     // The extension is constructed before `init` applies config, so build the
     // core lazily and rebuild when `config.metrics` is swapped (e.g. via
@@ -91,6 +104,18 @@ export class PostHogMetrics implements Extension {
     }
 
     reset(): void {
+        this._core?.reset()
+    }
+
+    /**
+     * Stops everything this extension installed: the global `fetch` and
+     * `XMLHttpRequest` wrappers, and the aggregator's pending window and timer.
+     * `shutdown()` calls this after its final flush, so a shut down instance
+     * leaves nothing behind in the page.
+     */
+    dispose(): void {
+        this._stopNetworkMetrics?.()
+        this._stopNetworkMetrics = undefined
         this._core?.reset()
     }
 
