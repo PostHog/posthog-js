@@ -6,7 +6,7 @@ import {
   SurveyRatingDisplay,
   RatingSurveyQuestion,
   MultipleSurveyQuestion,
-  SurveyAppearance,
+  SurveyAppearance as CoreSurveyAppearance,
   SurveyPosition,
   SurveyQuestionDescriptionContentType,
 } from '@posthog/core'
@@ -75,27 +75,13 @@ export type SurveyTextRole =
   /** The validation hint under an open-text answer. */
   | 'validationHint'
 
-// textColor and inputTextColor are optional overrides (auto-calculated if not provided)
-// placeholder is optional too: open text questions only show placeholder text when the survey's
-// appearance sets one, so clearing the field in the survey editor clears it here too.
-export type SurveyAppearanceTheme = Omit<
-  Required<SurveyAppearance>,
-  | 'widgetSelector'
-  | 'widgetType'
-  | 'widgetColor'
-  | 'widgetLabel'
-  | 'shuffleQuestions'
-  | 'textColor'
-  | 'inputTextColor'
-  | 'placeholder'
-> & {
-  textColor?: string
-  inputTextColor?: string
-  placeholder?: string
+/** React Native survey appearance, including native-only text scaling options. */
+export interface SurveyAppearance extends CoreSurveyAppearance {
   /**
    * Caps how far survey text may grow under the OS text-size setting, as a
    * multiple of its base size - React Native's `maxFontSizeMultiplier`, applied
-   * to every `Text` and `TextInput` the survey renders.
+   * to every semantic `Text` and `TextInput` the survey renders. Icon-only text
+   * fallbacks do not scale because they occupy fixed-size icon boxes.
    *
    * Pass a number to cap every role at once, or an object to cap them
    * separately: a survey headline can usually take more scaling than a numeral
@@ -123,6 +109,27 @@ export type SurveyAppearanceTheme = Omit<
   maxFontSizeMultiplier?: number | Partial<Record<SurveyTextRole, number>>
 }
 
+// textColor and inputTextColor are optional overrides (auto-calculated if not provided)
+// placeholder is optional too: open text questions only show placeholder text when the survey's
+// appearance sets one, so clearing the field in the survey editor clears it here too.
+export type SurveyAppearanceTheme = Omit<
+  Required<SurveyAppearance>,
+  | 'widgetSelector'
+  | 'widgetType'
+  | 'widgetColor'
+  | 'widgetLabel'
+  | 'shuffleQuestions'
+  | 'textColor'
+  | 'inputTextColor'
+  | 'placeholder'
+  | 'maxFontSizeMultiplier'
+> & {
+  textColor?: string
+  inputTextColor?: string
+  placeholder?: string
+  maxFontSizeMultiplier?: SurveyAppearance['maxFontSizeMultiplier']
+}
+
 /**
  * The ceiling for one role, from either form of `maxFontSizeMultiplier`.
  *
@@ -131,7 +138,7 @@ export type SurveyAppearanceTheme = Omit<
  * did before this option existed.
  */
 export function getMaxFontSizeMultiplier(
-  appearance: Pick<SurveyAppearanceTheme, 'maxFontSizeMultiplier'>,
+  appearance: Pick<SurveyAppearance, 'maxFontSizeMultiplier'>,
   role: SurveyTextRole
 ): number | undefined {
   const configured = appearance.maxFontSizeMultiplier
