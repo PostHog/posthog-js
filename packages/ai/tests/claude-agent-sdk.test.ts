@@ -5,6 +5,7 @@ const queryMock = vi.fn()
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: (params: any) => queryMock(params),
+  SYSTEM_PROMPT_DYNAMIC_BOUNDARY: '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__',
 }))
 
 import { instrument, PostHogClaudeAgentProcessor, query } from '../src/claude-agent-sdk'
@@ -76,7 +77,7 @@ function assistantMessage(content: any[]): any {
   }
 }
 
-function toolResultMessage(content: any[]): any {
+function toolResultMessage(content: string | any[]): any {
   return { type: 'user', session_id: 'sess_123', message: { role: 'user', content } }
 }
 
@@ -202,13 +203,14 @@ describe('Claude Agent SDK integration', () => {
     expect(yielded).toEqual(messages)
   })
 
-  it('promotes tool results to the input of the next generation', async () => {
+  it.each([true, false])('promotes every tool result to the next generation (is_error=%s)', async (is_error) => {
     const client = createMockClient()
     queryMock.mockReturnValue(
       scriptedQuery([
         messageStart(),
         assistantMessage([{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'ls' } }]),
         toolResultMessage([{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'a.ts' }]),
+        toolResultMessage([{ type: 'tool_result', tool_use_id: 'toolu_2', content: 'b.ts', is_error }]),
         messageStop(),
         messageStart(),
         assistantMessage([{ type: 'text', text: 'One file' }]),
@@ -226,6 +228,7 @@ describe('Claude Agent SDK integration', () => {
     expect(generations[1].properties.$ai_span_name).toBe('generation_2')
     expect(generations[1].properties.$ai_input).toEqual([
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'a.ts' }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_2', content: 'b.ts', is_error }] },
     ])
   })
 
@@ -281,13 +284,15 @@ describe('Claude Agent SDK integration', () => {
     ])
   })
 
-  it('records the system prompt as the first input message', async () => {
+  it.each([
+    'You are terse',
+    ['You are ', '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__', 'terse'],
+    { type: 'preset', preset: 'claude_code', append: 'You are terse' },
+  ])('records the supplied system prompt text as the first input message (%j)', async (systemPrompt) => {
     const client = createMockClient()
     queryMock.mockReturnValue(scriptedQuery([messageStart(), messageStop(), resultMessage()]))
 
-    await drain(
-      instrument({ client }).query({ prompt: 'Hello', options: { systemPrompt: 'You are terse' } as any })
-    )
+    await drain(instrument({ client }).query({ prompt: 'Hello', options: { systemPrompt } as any }))
 
     expect(capturedEvents(client, '$ai_generation')[0].properties.$ai_input).toEqual([
       { role: 'system', content: 'You are terse' },
@@ -374,27 +379,93 @@ describe('Claude Agent SDK integration', () => {
     expect(capturedEvents(client, '$ai_generation')).toHaveLength(1)
   })
 
-  it('closes the trace when the caller stops iterating early', async () => {
-    const client = createMockClient()
-    queryMock.mockReturnValue(scriptedQuery([messageStart(), messageStop(), resultMessage()]))
+  it.each(['break', 'failure', 'return', 'throw', 'close', 'dispose'])(
+    'finalizes an unfinished generation on %s',
+    async (ending) => {
+      const client = createMockClient()
+      const failure = new Error('CLI exited')
+      const messages = [messageStart(), assistantMessage([{ type: 'text', text: 'Partial answer' }])]
+      const stream = scriptedQuery(messages, { failure: ending === 'failure' ? failure : undefined })
+      const close = vi.fn()
+      const dispose = vi.fn().mockResolvedValue(undefined)
+      queryMock.mockReturnValue(Object.assign(stream, { close, [Symbol.asyncDispose]: dispose }))
+      const running = instrument({ client }).query({ prompt: 'Hello' })
 
-    for await (const _message of instrument({ client }).query({ prompt: 'Hello' })) {
-      break
+      if (ending === 'break') {
+        for await (const _message of running) break
+      } else if (ending === 'failure') {
+        await expect(drain(running)).rejects.toThrow(failure)
+      } else {
+        await running.next()
+        if (ending === 'return') await running.return()
+        if (ending === 'throw') await expect(running.throw(failure)).rejects.toThrow(failure)
+        if (ending === 'close') {
+          running.close()
+          await vi.waitFor(() => expect(capturedEvents(client, '$ai_trace')).toHaveLength(1))
+          expect(close).toHaveBeenCalledOnce()
+        }
+        if (ending === 'dispose') {
+          await (running as any)[Symbol.asyncDispose]()
+          expect(dispose).toHaveBeenCalledOnce()
+        }
+      }
+
+      const traces = capturedEvents(client, '$ai_trace')
+      expect(traces).toHaveLength(1)
+      expect(traces[0].properties.$ai_is_error).toBe(ending === 'failure' || ending === 'throw' ? true : undefined)
+      const generations = capturedEvents(client, '$ai_generation')
+      expect(generations).toHaveLength(1)
+      expect(generations[0].properties.$ai_input_tokens).toBe(100)
+      expect(generations[0].properties.$ai_output_choices).toEqual([
+        { role: 'assistant', content: [{ type: 'text', text: 'Partial answer' }] },
+      ])
     }
+  )
 
-    expect(capturedEvents(client, '$ai_trace')).toHaveLength(1)
+  it.each(['return', 'throw'])('calls SDK cleanup on %s before the first next', async (ending) => {
+    const client = createMockClient()
+    const failure = new Error('Cancelled')
+    const cleanup = vi.fn(async () => {
+      if (ending === 'throw') throw failure
+      return { done: true, value: undefined }
+    })
+    queryMock.mockReturnValue(scriptedQuery([], { control: { [ending]: cleanup } }))
+
+    const running = instrument({ client }).query({ prompt: 'Hello' })
+    if (ending === 'throw') await expect(running.throw(failure)).rejects.toThrow(failure)
+    else await running.return()
+
+    expect(cleanup).toHaveBeenCalledOnce()
+    expect(client.capture).not.toHaveBeenCalled()
   })
 
   it('keeps the control methods of the underlying query', async () => {
     const client = createMockClient()
     const interrupt = vi.fn().mockResolvedValue(undefined)
-    queryMock.mockReturnValue(scriptedQuery([resultMessage()], { control: { interrupt } }))
+    const received: any[] = []
+    const streamInput = vi.fn(async (stream: AsyncIterable<any>) => {
+      received.push(...(await drain(stream)))
+    })
+    queryMock.mockReturnValue(
+      scriptedQuery([resultMessage(), resultMessage()], { control: { interrupt, streamInput } })
+    )
 
     const running = instrument({ client }).query({ prompt: 'Hello' })
     await running.interrupt()
+    const followup = toolResultMessage('Follow-up')
+    await running.streamInput(
+      (async function* () {
+        yield followup
+      })()
+    )
 
     expect(interrupt).toHaveBeenCalled()
+    expect(received).toEqual([followup])
     await drain(running)
+    expect(capturedEvents(client, '$ai_generation').map((event) => event.properties.$ai_input)).toEqual([
+      [{ role: 'user', content: 'Hello' }],
+      [{ role: 'user', content: 'Follow-up' }],
+    ])
   })
 
   it('redacts content in privacy mode and captures anonymously without a distinct ID', async () => {
@@ -495,4 +566,219 @@ describe('Claude Agent SDK integration', () => {
     expect(client.capture).not.toHaveBeenCalled()
     expect(client.captureImmediate).toHaveBeenCalled()
   })
+
+  it.each([true, false])('records per-turn costs from cumulative totals (streaming=%s)', async (streaming) => {
+    const client = createMockClient()
+    queryMock.mockReturnValue(
+      scriptedQuery(
+        [0.1, 0.3, 0.05].flatMap((total_cost_usd) => [
+          ...(streaming ? [messageStart(), messageStop()] : []),
+          resultMessage({ total_cost_usd }),
+        ])
+      )
+    )
+
+    await drain(instrument({ client }).query({ prompt: 'Hello' }))
+
+    for (const event of streaming ? ['$ai_trace'] : ['$ai_trace', '$ai_generation']) {
+      const costs = capturedEvents(client, event).map((capture) => capture.properties.$ai_total_cost_usd)
+      expect(costs).toHaveLength(3)
+      expect(costs[0]).toBeCloseTo(0.1)
+      expect(costs[1]).toBeCloseTo(0.2)
+      expect(costs[2]).toBeCloseTo(0.05)
+    }
+  })
+
+  it.each([false, true])('keeps output within its turn (streamed first turn=%s)', async (streaming) => {
+    const client = createMockClient()
+    queryMock.mockReturnValue(
+      scriptedQuery([
+        ...(streaming ? [messageStart(), messageStop()] : []),
+        assistantMessage([{ type: 'text', text: 'First turn' }]),
+        resultMessage(),
+        assistantMessage([{ type: 'text', text: 'Second turn' }]),
+        resultMessage(),
+      ])
+    )
+
+    await drain(instrument({ client }).query({ prompt: 'Hello' }))
+
+    const generations = capturedEvents(client, '$ai_generation')
+    expect(generations).toHaveLength(2)
+    expect(generations[1].properties.$ai_output_choices).toEqual([
+      { role: 'assistant', content: [{ type: 'text', text: 'Second turn' }] },
+    ])
+    expect(generations[1].properties.$ai_input).toEqual([])
+  })
+
+  it('keeps subagent content separate and parents nested tools to the agent tool', async () => {
+    const client = createMockClient()
+    queryMock.mockReturnValue(
+      scriptedQuery([
+        messageStart(),
+        assistantMessage([{ type: 'tool_use', id: 'agent_1', name: 'Agent', input: {} }]),
+        messageStop(),
+        {
+          ...assistantMessage([{ type: 'tool_use', id: 'nested_1', name: 'Read', input: {} }]),
+          parent_tool_use_id: 'agent_1',
+        },
+        {
+          ...toolResultMessage([{ type: 'tool_result', tool_use_id: 'nested_1', content: 'Child data' }]),
+          parent_tool_use_id: 'agent_1',
+        },
+        { ...assistantMessage([{ type: 'text', text: 'Child answer' }]), parent_tool_use_id: 'agent_1' },
+        toolResultMessage([{ type: 'tool_result', tool_use_id: 'agent_1', content: 'Summary' }]),
+        messageStart(),
+        assistantMessage([{ type: 'text', text: 'Main answer' }]),
+        messageStop(),
+        resultMessage(),
+      ])
+    )
+
+    await drain(instrument({ client }).query({ prompt: 'Delegate' }))
+
+    expect(capturedEvents(client, '$ai_span')[1].properties.$ai_parent_id).toBe('agent_1')
+    const generation = capturedEvents(client, '$ai_generation')[1].properties
+    expect(generation.$ai_input).toEqual([
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'agent_1', content: 'Summary' }] },
+    ])
+    expect(generation.$ai_output_choices).toEqual([
+      { role: 'assistant', content: [{ type: 'text', text: 'Main answer' }] },
+    ])
+  })
+
+  it.each([false, true])(
+    'keeps capture failures from corrupting later events (immediate=%s)',
+    async (captureImmediate) => {
+      const client = createMockClient()
+      const onError = vi.fn()
+      const capture = captureImmediate ? client.captureImmediate : client.capture
+      let failedTrace = false
+      capture.mockImplementation((event: any) => {
+        if (event.event === '$ai_span' || (event.event === '$ai_trace' && !failedTrace)) {
+          if (event.event === '$ai_trace') failedTrace = true
+          if (captureImmediate) return Promise.reject(new Error('capture failed'))
+          throw new Error('capture failed')
+        }
+        return captureImmediate ? Promise.resolve() : undefined
+      })
+      queryMock.mockReturnValue(
+        scriptedQuery(
+          [0.1, 0.3].flatMap((total_cost_usd) => [
+            messageStart(),
+            assistantMessage([
+              { type: 'text', text: 'Reading' },
+              { type: 'tool_use', id: 'tool_1', name: 'Read', input: {} },
+              { type: 'tool_use', id: 'tool_2', name: 'Read', input: {} },
+            ]),
+            messageStop(),
+            resultMessage({ total_cost_usd }),
+          ])
+        )
+      )
+
+      await drain(instrument({ client, captureImmediate, onError }).query({ prompt: 'Hello' }))
+
+      const events = capture.mock.calls.map(([event]: any[]) => event)
+      const generations = events.filter((event: any) => event.event === '$ai_generation')
+      const traces = events.filter((event: any) => event.event === '$ai_trace')
+      expect(traces).toHaveLength(2)
+      expect(traces[1].properties.$ai_trace_id).not.toBe(traces[0].properties.$ai_trace_id)
+      expect(traces[1].properties.$ai_total_cost_usd).toBeCloseTo(0.2)
+      expect(generations.map((event: any) => event.properties.$ai_span_name)).toEqual(['generation_1', 'generation_1'])
+      expect(generations[0].properties.$ai_output_choices[0].content).toHaveLength(3)
+      expect(events.filter((event: any) => event.event === '$ai_span')).toHaveLength(4)
+      expect(onError).toHaveBeenCalledTimes(5)
+    }
+  )
+
+  it.each([
+    { subtype: 'error_during_execution', errors: ['CLI failed', 'Try again'] },
+    { subtype: 'success', result: 'The request was rejected' },
+  ])('captures error result details (%j)', async (errorResult) => {
+    const client = createMockClient()
+    queryMock.mockReturnValue(scriptedQuery([resultMessage({ ...errorResult, is_error: true })]))
+
+    await drain(instrument({ client }).query({ prompt: 'Hello' }))
+
+    for (const event of ['$ai_generation', '$ai_trace']) {
+      const properties = capturedEvents(client, event)[0].properties
+      expect(properties.$ai_is_error).toBe(true)
+      expect(properties.$ai_error).toContain(errorResult.errors?.[0] ?? errorResult.result)
+    }
+  })
+
+  it('includes SDK time to first token in generation latency', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'performance'] })
+    try {
+      const client = createMockClient()
+      queryMock.mockReturnValue(
+        (async function* () {
+          yield { ...messageStart(), ttft_ms: 1200 }
+          vi.advanceTimersByTime(200)
+          vi.setSystemTime(Date.now() - 5000)
+          yield messageStop()
+          yield resultMessage()
+        })()
+      )
+
+      await drain(instrument({ client }).query({ prompt: 'Hello' }))
+
+      const generation = capturedEvents(client, '$ai_generation')[0].properties
+      expect(generation.$ai_latency).toBeCloseTo(1.4)
+      expect(generation.$ai_time_to_first_token).toBe(1.2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each([false, true])(
+    'captures queued input per turn and preserves reply correlation (partials=%s)',
+    async (includePartialMessages) => {
+      const client = createMockClient()
+      const prompts = [
+        { ...toolResultMessage('Context'), shouldQuery: false },
+        { ...toolResultMessage('First prompt'), uuid: 'prompt_1' },
+        { ...toolResultMessage('Second prompt'), uuid: 'prompt_2' },
+      ]
+      const received: any[] = []
+      const replies = [
+        assistantMessage([{ type: 'text', text: 'First answer' }]),
+        assistantMessage([{ type: 'text', text: 'Second answer' }]),
+      ]
+      queryMock.mockImplementation(({ prompt }) =>
+        (async function* () {
+          for await (const message of prompt) received.push(message)
+          for (const index of [0, 1]) {
+            yield { ...prompts[index + 1], isReplay: true }
+            yield { ...messageStart(), user_message_uuid: `prompt_${index + 1}` }
+            yield replies[index]
+            yield messageStop()
+            yield resultMessage()
+          }
+        })()
+      )
+      const prompt = (async function* () {
+        yield* prompts
+      })()
+
+      const yielded = await drain(
+        instrument({ client }).query({ prompt, options: { includePartialMessages, systemPrompt: 'System' } })
+      )
+
+      expect(received).toEqual(prompts)
+      received.forEach((message, index) => expect(message).toBe(prompts[index]))
+      const generations = capturedEvents(client, '$ai_generation')
+      expect(generations[0].properties.$ai_input).toEqual([
+        { role: 'system', content: 'System' },
+        { role: 'user', content: 'Context' },
+        { role: 'user', content: 'First prompt' },
+      ])
+      expect(generations[1].properties.$ai_input).toEqual([{ role: 'user', content: 'Second prompt' }])
+      expect(
+        yielded.filter((message) => message.type === 'assistant').map((message) => message.user_message_uuid)
+      ).toEqual(includePartialMessages ? [undefined, undefined] : ['prompt_1', 'prompt_2'])
+      expect(replies[0].user_message_uuid).toBeUndefined()
+    }
+  )
 })

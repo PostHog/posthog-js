@@ -80,6 +80,7 @@ interface GenerationData {
   input?: FormattedMessage[]
   startTime: number
   endTime?: number
+  timeToFirstToken?: number
   model?: string
   usage: TokenUsage
   stopReason?: string
@@ -105,12 +106,16 @@ class GenerationTracker {
     this._pendingInput = input
   }
 
+  appendPendingInput(input: FormattedMessage[]): void {
+    this._pendingInput = [...(this._pendingInput ?? []), ...input]
+  }
+
   /** The queued input, still waiting for its model call. */
   get pendingInput(): FormattedMessage[] | undefined {
     return this._pendingInput
   }
 
-  processStreamEvent(event: StreamEvent): void {
+  processStreamEvent(event: StreamEvent, ttftMs?: number): void {
     this._sawStreamEvents = true
 
     if (event.type === 'message_start') {
@@ -118,7 +123,8 @@ class GenerationTracker {
       this._current = {
         spanId: uuidv4(),
         input: this._pendingInput,
-        startTime: Date.now(),
+        startTime: performance.now() - (ttftMs ?? 0),
+        timeToFirstToken: ttftMs != null ? ttftMs / 1000 : undefined,
         model: event.message.model,
         usage: readUsage(usage),
       }
@@ -134,8 +140,14 @@ class GenerationTracker {
       if (event.delta?.stop_reason != null) {
         this._current.stopReason = event.delta.stop_reason
       }
-    } else if (event.type === 'message_stop' && this._current) {
-      this._current.endTime = Date.now()
+    } else if (event.type === 'message_stop') {
+      this.finishCurrent()
+    }
+  }
+
+  finishCurrent(): void {
+    if (this._current) {
+      this._current.endTime = performance.now()
       this._completed.push(this._current)
       this._lastModel = this._current.model
       this._current = undefined
@@ -171,12 +183,17 @@ interface QueryState {
   tracker: GenerationTracker
   traceId: string
   turnStart: number
-  // Set once the turn captured a generation or a span, so a turn that ended
-  // without a result message is only traced when it has children.
+  // Subagent tool spans can arrive outside a main-agent generation.
   turnCaptured: boolean
+  turnActive: boolean
+  pendingPrompts: SDKUserMessage[]
+  userMessageUuid?: string
+  failure?: unknown
   generationIndex: number
   lastGenerationSpanId?: string
   sessionId?: string
+  totalCost: number
+  turnCost?: number
   // One model call can deliver its blocks over several assistant messages, so
   // the content of a turn accumulates until the turn closes.
   pendingOutput: ClaudeAgentContentItem[]
@@ -222,9 +239,10 @@ export class PostHogClaudeAgentProcessor {
   }
 
   /**
-   * Drop-in replacement for `query()` from the Claude Agent SDK. Every message
-   * is yielded unchanged and the control methods (`interrupt`,
-   * `setPermissionMode`, …) keep working.
+   * Drop-in replacement for `query()` from the Claude Agent SDK. Hidden partial
+   * messages pass their reply correlation to the first assistant message.
+   * Other messages and the control methods (`interrupt`,
+   * `setPermissionMode`, …) retain the SDK behavior.
    */
   query({ prompt, options, posthog }: ClaudeAgentQueryParams): Query {
     const trace: ClaudeAgentTraceOptions = {
@@ -239,16 +257,53 @@ export class PostHogClaudeAgentProcessor {
     // Partial messages carry the per-generation metrics, so they are always
     // requested. Callers who did not ask for them never see them.
     const forwardStreamEvents = options?.includePartialMessages === true
-    const inner = originalQuery({ prompt, options: { ...options, includePartialMessages: true } })
     const state = this._createState(prompt, options, trace)
+    const inner = originalQuery({
+      prompt: typeof prompt === 'string' ? prompt : this._observePrompt(prompt, state),
+      options: { ...options, includePartialMessages: true },
+    })
 
     const instrumented = this._instrument(inner, state, trace, forwardStreamEvents)
     // A `for await` loop reads `next` once per message, so the iteration
     // methods are bound once rather than on every read.
     const iteration: Record<string | symbol, unknown> = {
       next: instrumented.next.bind(instrumented),
-      return: instrumented.return.bind(instrumented),
-      throw: instrumented.throw.bind(instrumented),
+      streamInput: (stream: AsyncIterable<SDKUserMessage>) => inner.streamInput(this._observePrompt(stream, state)),
+      // The SDK starts its subprocess before the first next(), so cleanup must reach it directly.
+      return: async (value?: void) => {
+        try {
+          return await inner.return(value)
+        } finally {
+          await instrumented.return()
+        }
+      },
+      throw: async (error?: unknown) => {
+        state.failure = error
+        try {
+          return await inner.throw(error)
+        } finally {
+          await instrumented.return()
+        }
+      },
+      close: () => {
+        try {
+          inner.close()
+        } finally {
+          void instrumented.return().catch((error) => this._handleError(error))
+        }
+      },
+      [Symbol.asyncDispose]: async () => {
+        try {
+          const dispose = Reflect.get(inner, Symbol.asyncDispose)
+          if (typeof dispose === 'function') {
+            await dispose.call(inner)
+          } else {
+            await inner.return()
+          }
+        } finally {
+          await instrumented.return()
+        }
+      },
       [Symbol.asyncIterator]: () => wrapper,
     }
 
@@ -273,7 +328,6 @@ export class PostHogClaudeAgentProcessor {
     trace: ClaudeAgentTraceOptions,
     forwardStreamEvents: boolean
   ): AsyncGenerator<SDKMessage, void> {
-    let failure: unknown
     try {
       for await (const message of inner) {
         try {
@@ -282,17 +336,50 @@ export class PostHogClaudeAgentProcessor {
           this._handleError(error)
         }
         if (message.type !== 'stream_event' || forwardStreamEvents) {
-          yield message
+          if (
+            !forwardStreamEvents &&
+            message.type === 'assistant' &&
+            !message.parent_tool_use_id &&
+            state.userMessageUuid
+          ) {
+            const userMessageUuid = state.userMessageUuid
+            state.userMessageUuid = undefined
+            yield { ...message, user_message_uuid: message.user_message_uuid ?? userMessageUuid }
+          } else {
+            yield message
+          }
         }
       }
     } catch (error) {
-      failure = error
+      state.failure = error
       throw error
     } finally {
+      const failure = state.failure
       // An aborted query, or a caller that stops iterating, never delivers a
       // result message. The turn is still closed so its generations and spans
       // have a trace.
-      if (state.turnCaptured) {
+      if (state.turnActive || state.turnCaptured || failure !== undefined) {
+        try {
+          state.tracker.finishCurrent()
+          await this._captureCompletedGenerations(state, trace, failure)
+          if (!state.tracker.sawStreamEvents && state.pendingOutput.length > 0) {
+            state.generationIndex += 1
+            await this._captureGeneration(
+              {
+                spanId: uuidv4(),
+                input: state.tracker.pendingInput,
+                startTime: state.turnStart,
+                endTime: performance.now(),
+                usage: {},
+              },
+              state,
+              trace,
+              failure !== undefined ? { $ai_is_error: true, $ai_error: stringifyError(failure) } : {}
+            )
+          }
+        } catch (error) {
+          this._handleError(error)
+        }
         try {
           await this._captureTrace(state, trace, undefined, failure)
         } catch (error) {
@@ -312,9 +399,6 @@ export class PostHogClaudeAgentProcessor {
     if (systemPrompt) {
       initialInput.push({ role: 'system', content: systemPrompt })
     }
-    if (typeof prompt === 'string') {
-      initialInput.push({ role: 'user', content: prompt })
-    }
 
     const tracker = new GenerationTracker()
     tracker.setPendingInput(initialInput.length > 0 ? initialInput : undefined)
@@ -322,10 +406,51 @@ export class PostHogClaudeAgentProcessor {
     return {
       tracker,
       traceId: trace.traceId ?? uuidv4(),
-      turnStart: Date.now(),
+      turnStart: performance.now(),
       turnCaptured: false,
+      turnActive: false,
+      pendingPrompts:
+        typeof prompt === 'string'
+          ? [{ type: 'user', message: { role: 'user', content: prompt }, parent_tool_use_id: null }]
+          : [],
       generationIndex: 0,
       pendingOutput: [],
+      totalCost: 0,
+    }
+  }
+
+  private async *_observePrompt(
+    prompt: AsyncIterable<SDKUserMessage>,
+    state: QueryState
+  ): AsyncGenerator<SDKUserMessage> {
+    for await (const message of prompt) {
+      state.pendingPrompts.push(message)
+      yield message
+    }
+  }
+
+  private _beginTurn(state: QueryState, userMessageUuid?: string): void {
+    if (state.turnActive) {
+      return
+    }
+    state.turnActive = true
+
+    // The SDK can read ahead or prioritize a later prompt before answering it.
+    let end = userMessageUuid ? state.pendingPrompts.findIndex((message) => message.uuid === userMessageUuid) : -1
+    if (end < 0) {
+      end = state.pendingPrompts.findIndex((message) => message.shouldQuery !== false)
+    }
+    if (end < 0) {
+      return
+    }
+    let start = end
+    while (start > 0 && state.pendingPrompts[start - 1].shouldQuery === false) {
+      start -= 1
+    }
+    for (const message of state.pendingPrompts.splice(start, end - start + 1)) {
+      state.tracker.appendPendingInput([
+        { role: 'user', content: formatUserContent(message.message.content, this._client) },
+      ])
     }
   }
 
@@ -335,26 +460,41 @@ export class PostHogClaudeAgentProcessor {
     }
 
     if (message.type === 'stream_event') {
-      state.tracker.processStreamEvent(message.event)
-      let generation = state.tracker.popCompleted()
-      while (generation) {
-        state.generationIndex += 1
-        state.lastGenerationSpanId = generation.spanId
-        state.turnCaptured = true
-        await this._captureGeneration(generation, state, trace)
-        state.pendingOutput = []
-        generation = state.tracker.popCompleted()
+      if (message.parent_tool_use_id) {
+        return
       }
+      if (message.user_message_uuid) {
+        state.userMessageUuid = message.user_message_uuid
+      }
+      if (message.event.type === 'message_start') {
+        this._beginTurn(state, message.user_message_uuid)
+      }
+      state.tracker.processStreamEvent(message.event, message.ttft_ms)
+      await this._captureCompletedGenerations(state, trace)
     } else if (message.type === 'assistant') {
+      if (!message.parent_tool_use_id) {
+        this._beginTurn(state, message.user_message_uuid)
+      }
       await this._handleAssistantMessage(message, state, trace)
     } else if (message.type === 'user') {
+      if (message.parent_tool_use_id || ('isReplay' in message && message.isReplay)) {
+        return
+      }
       // A user message carries the tool results of the model call that asked
       // for them, so it becomes the input of the next model call.
       const content = formatUserContent(message.message?.content, this._client)
       if (typeof content === 'string' || (Array.isArray(content) && content.length > 0)) {
-        state.tracker.setPendingInput([{ role: 'user', content }])
+        state.tracker.appendPendingInput([{ role: 'user', content }])
       }
     } else if (message.type === 'result') {
+      this._beginTurn(state, message.user_message_uuid)
+      state.tracker.finishCurrent()
+      await this._captureCompletedGenerations(state, trace, resultError(message))
+      if (message.total_cost_usd != null) {
+        // The SDK reports cumulative cost and can reset it when the session is cleared.
+        state.turnCost = message.total_cost_usd - (message.total_cost_usd >= state.totalCost ? state.totalCost : 0)
+        state.totalCost = message.total_cost_usd
+      }
       // Without partial messages there is no per-call metric, so the result's
       // aggregate becomes one generation.
       if (!state.tracker.sawStreamEvents) {
@@ -364,17 +504,42 @@ export class PostHogClaudeAgentProcessor {
     }
   }
 
+  private async _captureCompletedGenerations(
+    state: QueryState,
+    trace: ClaudeAgentTraceOptions,
+    failure?: unknown
+  ): Promise<void> {
+    let generation = state.tracker.popCompleted()
+    while (generation) {
+      state.generationIndex += 1
+      state.lastGenerationSpanId = generation.spanId
+      state.turnCaptured = true
+      await this._captureGeneration(
+        generation,
+        state,
+        trace,
+        failure !== undefined ? { $ai_is_error: true, $ai_error: stringifyError(failure) } : {}
+      )
+      state.pendingOutput = []
+      generation = state.tracker.popCompleted()
+    }
+  }
+
   private async _handleAssistantMessage(
     message: SDKAssistantMessage,
     state: QueryState,
     trace: ClaudeAgentTraceOptions
   ): Promise<void> {
-    state.tracker.setModel(message.message?.model)
+    if (!message.parent_tool_use_id) {
+      state.tracker.setModel(message.message?.model)
+    }
 
     // An assistant message arrives before its `message_stop`, so the generation
     // in progress is the parent of its tool calls.
-    const parentSpanId = state.tracker.currentSpanId ?? state.lastGenerationSpanId
-    const blocks = Array.isArray(message.message?.content) ? (message.message.content as Array<Record<string, any>>) : []
+    const parentSpanId = message.parent_tool_use_id ?? state.tracker.currentSpanId ?? state.lastGenerationSpanId
+    const blocks = Array.isArray(message.message?.content)
+      ? (message.message.content as Array<Record<string, any>>)
+      : []
     for (const block of blocks) {
       if (block?.type === 'tool_use') {
         state.turnCaptured = true
@@ -382,7 +547,9 @@ export class PostHogClaudeAgentProcessor {
       }
     }
 
-    state.pendingOutput.push(...formatAssistantBlocks(message.message?.content, this._client))
+    if (!message.parent_tool_use_id) {
+      state.pendingOutput.push(...formatAssistantBlocks(message.message?.content, this._client))
+    }
   }
 
   private async _captureGeneration(
@@ -400,7 +567,8 @@ export class PostHogClaudeAgentProcessor {
       baseURL: null,
       input: generation.input ?? [],
       output: formatOutput(state.pendingOutput),
-      latency: generation.endTime ? (generation.endTime - generation.startTime) / 1000 : undefined,
+      latency: generation.endTime != null ? (generation.endTime - generation.startTime) / 1000 : undefined,
+      timeToFirstToken: generation.timeToFirstToken,
       usage: generation.usage,
       stopReason: generation.stopReason,
       groups: trace.groups,
@@ -428,12 +596,13 @@ export class PostHogClaudeAgentProcessor {
     trace: ClaudeAgentTraceOptions
   ): Promise<void> {
     state.generationIndex += 1
+    const endTime = performance.now()
 
     const generation: GenerationData = {
       spanId: uuidv4(),
       input: state.tracker.pendingInput ?? [],
-      startTime: Date.now() - (result.duration_api_ms ?? 0),
-      endTime: Date.now(),
+      startTime: endTime - (result.duration_api_ms ?? 0),
+      endTime,
       usage: readUsage(result.usage as AnthropicUsage | undefined),
       stopReason: result.stop_reason ?? undefined,
     }
@@ -443,8 +612,9 @@ export class PostHogClaudeAgentProcessor {
       state,
       trace,
       {
-        ...(result.total_cost_usd != null ? { $ai_total_cost_usd: result.total_cost_usd } : {}),
+        ...(state.turnCost != null ? { $ai_total_cost_usd: state.turnCost } : {}),
         ...(result.is_error ? { $ai_is_error: true } : {}),
+        ...(result.is_error ? { $ai_error: resultError(result) } : {}),
       },
       result
     )
@@ -471,24 +641,34 @@ export class PostHogClaudeAgentProcessor {
     result?: SDKResultMessage,
     failure?: unknown
   ): Promise<void> {
-    const latency = result?.duration_ms ? result.duration_ms / 1000 : (Date.now() - state.turnStart) / 1000
+    const latency =
+      result?.duration_ms != null ? result.duration_ms / 1000 : (performance.now() - state.turnStart) / 1000
     const isError = failure !== undefined || result?.is_error === true
+    const error = failure !== undefined ? stringifyError(failure) : result && resultError(result)
 
-    await this._captureLifecycleEvent('$ai_trace', resolveDistinctId(trace.distinctId, result), state, trace, {
-      $ai_trace_name: 'claude_agent_sdk_query',
-      $ai_latency: latency,
-      ...(result?.total_cost_usd != null ? { $ai_total_cost_usd: result.total_cost_usd } : {}),
-      ...(isError ? { $ai_is_error: true } : {}),
-      ...(failure !== undefined ? { $ai_error: stringifyError(failure) } : {}),
-    })
-
-    // A streaming-input session produces one result per turn. Each turn becomes
-    // its own trace unless the caller pinned a trace ID for the whole session.
-    state.traceId = trace.traceId ?? uuidv4()
-    state.turnStart = Date.now()
-    state.turnCaptured = false
-    state.generationIndex = 0
-    state.lastGenerationSpanId = undefined
+    try {
+      await this._captureLifecycleEvent('$ai_trace', resolveDistinctId(trace.distinctId, result), state, trace, {
+        $ai_trace_name: 'claude_agent_sdk_query',
+        $ai_latency: latency,
+        ...(state.turnCost != null ? { $ai_total_cost_usd: state.turnCost } : {}),
+        ...(isError ? { $ai_is_error: true } : {}),
+        ...(error !== undefined ? { $ai_error: error } : {}),
+      })
+    } finally {
+      // A streaming-input session produces one result per turn. Each turn becomes
+      // its own trace unless the caller pinned a trace ID for the whole session.
+      state.traceId = trace.traceId ?? uuidv4()
+      state.turnStart = performance.now()
+      state.turnCaptured = false
+      state.turnActive = false
+      state.userMessageUuid = undefined
+      state.failure = undefined
+      state.generationIndex = 0
+      state.lastGenerationSpanId = undefined
+      state.turnCost = undefined
+      state.tracker = new GenerationTracker()
+      state.pendingOutput = []
+    }
   }
 
   private async _captureLifecycleEvent(
@@ -515,10 +695,14 @@ export class PostHogClaudeAgentProcessor {
       groups: trace.groups,
     }
 
-    if (this._captureImmediate) {
-      await captureAiEventImmediate(this._client, message)
-    } else {
-      captureAiEvent(this._client, message)
+    try {
+      if (this._captureImmediate) {
+        await captureAiEventImmediate(this._client, message)
+      } else {
+        captureAiEvent(this._client, message)
+      }
+    } catch (error) {
+      this._handleError(error)
     }
   }
 
@@ -533,6 +717,13 @@ export class PostHogClaudeAgentProcessor {
 
 function formatOutput(content: ClaudeAgentContentItem[]): FormattedMessage[] {
   return content.length > 0 ? [{ role: 'assistant', content }] : []
+}
+
+function resultError(result: SDKResultMessage): string | undefined {
+  if (!result.is_error) {
+    return undefined
+  }
+  return result.subtype === 'success' ? result.result : result.errors.join('\n')
 }
 
 function readUsage(usage: AnthropicUsage | undefined): TokenUsage {

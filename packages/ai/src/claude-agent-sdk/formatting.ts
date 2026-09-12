@@ -1,4 +1,5 @@
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
+import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from '@anthropic-ai/claude-agent-sdk'
 import type { PostHog } from 'posthog-node'
 import { isFullAiCaptureEnabled } from '../captureAiEvent'
 import { sanitizeAnthropic } from '../sanitization'
@@ -25,6 +26,7 @@ interface FormattedToolResult {
   type: 'tool_result'
   tool_use_id: string
   content: unknown
+  is_error?: boolean
 }
 
 function capStrings(value: unknown, max: number): unknown {
@@ -53,13 +55,9 @@ export function extractSystemPrompt(options: Options | undefined): string | unde
     return systemPrompt
   }
   if (Array.isArray(systemPrompt)) {
-    return systemPrompt.join('')
+    return systemPrompt.filter((part) => part !== SYSTEM_PROMPT_DYNAMIC_BOUNDARY).join('')
   }
-  if (systemPrompt && typeof systemPrompt === 'object' && 'prompt' in systemPrompt) {
-    const prompt = (systemPrompt as { prompt?: string | string[] }).prompt
-    return Array.isArray(prompt) ? prompt.join('') : prompt
-  }
-  return undefined
+  return systemPrompt?.append
 }
 
 /** Convert Anthropic assistant content blocks into PostHog content items. */
@@ -112,6 +110,7 @@ export function formatUserContent(content: unknown, client: PostHog): FormattedC
         type: 'tool_result',
         tool_use_id: block.tool_use_id,
         content: formatToolResultContent(block.content, client),
+        ...(typeof block.is_error === 'boolean' ? { is_error: block.is_error } : {}),
       })
     } else if (typeof block.text === 'string') {
       formatted.push({ type: 'text', text: block.text })
