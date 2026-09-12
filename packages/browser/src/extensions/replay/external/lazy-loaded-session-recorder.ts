@@ -548,6 +548,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // restart) must survive the next start(), whose fresh-start hold would otherwise swallow it
     private _suppressNextFreshStartHold = false
     private _rrwebError = false
+    private _allowStaleRemoteConfig = false
     private _rrwebStartAttempted = false
     private _maxDepthExceeded = false
     /**
@@ -1139,6 +1140,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return !!this._stopRrweb
     }
 
+    /**
+     * The caller could not refresh the config and chose to record under the persisted one.
+     * Without this, an expired cache is dropped and the page cannot record at all.
+     */
+    allowStaleRemoteConfig(): void {
+        this._allowStaleRemoteConfig = true
+    }
+
     get _remoteConfig(): SessionRecordingPersistedConfig | undefined {
         const persistedConfig: any = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)
         if (!persistedConfig) {
@@ -1157,7 +1166,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Only check TTL if recording hasn't started yet
         // Once started, trust the config until a hard page load
         // A rotation restart is briefly not-started between stop() and start(); it keeps that trust
-        if (!this.isStarted && !this._isRestartingForSessionIdChange) {
+        if (!this.isStarted && !this._isRestartingForSessionIdChange && !this._allowStaleRemoteConfig) {
             // default to now so that configs persisted by older SDK versions
             // (which never set cache_timestamp) are treated as fresh
             const cacheTimestamp = parsedConfig.cache_timestamp ?? Date.now()
