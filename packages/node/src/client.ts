@@ -814,6 +814,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * posthog-node and posthog-edge are server runtimes, so `/flags` requests declare
+   * `evaluation_runtime: 'server'` and receive `server` and `all` flags. This matches what the
+   * server already infers from a recognized `posthog-node` / `posthog-edge` User-Agent, but
+   * does not depend on that header surviving proxies, gateways, or edge runtimes.
+   */
+  protected override getEvaluationRuntime(): 'server' {
+    return 'server'
+  }
+
+  /**
    * Returns the common properties attached to every captured event.
    *
    * @remarks
