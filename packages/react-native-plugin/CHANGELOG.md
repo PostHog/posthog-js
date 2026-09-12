@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.8.1
+
+### Patch Changes
+
+- [#4925](https://github.com/PostHog/posthog-js/pull/4925) [`ffea9f7`](https://github.com/PostHog/posthog-js/commit/ffea9f76ac434ce0c335d92c83f8110c19ccc5ba) Thanks [@aramslegit](https://github.com/aramslegit)! - Require posthog-ios 3.73.3 so React Native apps get the session replay masking fixes shipped in posthog-ios 3.73.2 and 3.73.3.
+  (2026-09-12)
+
 ## 2.8.0
 
 ### Minor Changes
