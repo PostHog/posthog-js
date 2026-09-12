@@ -1,0 +1,11 @@
+{
+    "extends": ["../.oxlintrc.json"],
+    "env": { "node": true },
+    "rules": {
+        "typescript/no-require-imports": "off",
+        "compat/compat": "off",
+        "no-console": "off",
+        "posthog-js/no-direct-undefined-check": "off",
+        "posthog-js/no-direct-array-check": "off"
+    }
+}
