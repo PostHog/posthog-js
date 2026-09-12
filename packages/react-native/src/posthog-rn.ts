@@ -236,6 +236,18 @@ export interface PostHogOptions extends PostHogCoreOptions {
    *
    * The native SDK builds and sends this event, so JS `before_send` never sees it.
    *
+   * On iOS a tap can reach the app before your JS runs, so the SDK installs a hook at launch to
+   * catch a tap that cold-launches the app. Two switches gate capture there, and `false` on
+   * either one means no `$push_notification_opened` is ever sent:
+   *
+   * - This option set to `false` turns capture off when `setup()` runs and releases the launch
+   *   hook, dropping the tap it was holding. The hook is still installed for the window between
+   *   launch and `setup()`.
+   * - `com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED` set to `false` in `Info.plist`
+   *   (Expo: `ios.infoPlist`) skips the launch hook entirely, so nothing is installed before your
+   *   JS runs, and forces capture off at `setup()` even when this option is `true`. It is the
+   *   same key posthog-flutter reads.
+   *
    * Not supported on web.
    *
    * @default true
