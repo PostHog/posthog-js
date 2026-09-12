@@ -178,6 +178,7 @@ class PosthogReactNativePluginModule(
 
               sessionReplay = sessionReplayEnabled
               sessionReplayConfig.screenshot = true
+              sessionReplayConfig.captureTouches = getBoolean(sdkReplayConfig, "captureTouches", true)
               sessionReplayConfig.captureLogcat = captureLog
               sessionReplayConfig.throttleDelayMs = throttleDelayMs.toLong()
               sessionReplayConfig.maskAllImages = maskAllImages
