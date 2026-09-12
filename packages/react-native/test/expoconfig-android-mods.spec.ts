@@ -11,6 +11,15 @@ const projectGradle =
   'buildscript {\n    dependencies {\n        classpath("com.android.tools.build:gradle")\n    }\n}\n'
 const appGradle = 'apply plugin: "com.android.application"\n\nandroid {\n    namespace "com.example"\n}\n'
 const applyLine = 'apply plugin: "com.posthog.android"'
+const mainActivityDir = 'android/app/src/main/java/com/example'
+const mainActivity = `package com.example
+
+import com.facebook.react.ReactActivity
+
+class MainActivity : ReactActivity() {
+  override fun getMainComponentName(): String = "main"
+}
+`
 
 // Use Expo's real providers/compiler so both mod-kind ordering and persisted files are exercised.
 describe.each([false, true])('Android native symbols with earlier app mod: %s', (earlierAppMod) => {
@@ -20,10 +29,11 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
     vi.useRealTimers()
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-expo-android-'))
-    fs.mkdirSync(path.join(projectRoot, 'android/app'), { recursive: true })
+    fs.mkdirSync(path.join(projectRoot, mainActivityDir), { recursive: true })
     fs.writeFileSync(path.join(projectRoot, 'android/build.gradle'), projectGradle)
     fs.writeFileSync(path.join(projectRoot, 'android/app/build.gradle'), appGradle)
     fs.writeFileSync(path.join(projectRoot, 'android/gradle.properties'), '')
+    fs.writeFileSync(path.join(projectRoot, mainActivityDir, 'MainActivity.kt'), mainActivity)
   })
 
   afterEach(() => {
@@ -32,14 +42,14 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
     vi.useFakeTimers()
   })
 
-  async function prebuild(uploadNativeSymbols = true) {
+  async function prebuild(uploadNativeSymbols = true, props: Record<string, unknown> = {}) {
     let config: any = { name: 'Test', slug: 'test' }
     const appMod = vi.fn((config) => config)
     const projectMod = vi.fn((config) => config)
     if (earlierAppMod) {
       config = withAppBuildGradle(config, appMod)
     }
-    config = postHogExpoPlugin(config, { uploadNativeSymbols })
+    config = postHogExpoPlugin(config, { uploadNativeSymbols, ...props })
     if (!earlierAppMod) {
       config = withAppBuildGradle(config, appMod)
     }
@@ -51,6 +61,10 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
 
   function readGradle(file: string) {
     return fs.readFileSync(path.join(projectRoot, 'android', file), 'utf8')
+  }
+
+  function readMainActivity() {
+    return fs.readFileSync(path.join(projectRoot, mainActivityDir, 'MainActivity.kt'), 'utf8')
   }
 
   it('writes both native-symbol Gradle edits and remains idempotent on another prebuild', async () => {
@@ -100,5 +114,22 @@ describe.each([false, true])('Android native symbols with earlier app mod: %s', 
     expect(readGradle('build.gradle')).toBe(projectGradle)
     expect(readGradle('app/build.gradle')).not.toContain(applyLine)
     expect(readGradle('app/build.gradle')).toContain('posthog.gradle')
+  })
+
+  it('writes the MainActivity onNewIntent override and remains idempotent on another prebuild', async () => {
+    await prebuild()
+    const patched = readMainActivity()
+    expect(patched).toContain('override fun onNewIntent(intent: android.content.Intent) {')
+    expect(patched).toContain('setIntent(intent)')
+    expect(console.warn).not.toHaveBeenCalled()
+
+    await prebuild()
+    expect(readMainActivity()).toBe(patched)
+  })
+
+  it('removes the override again when opted out', async () => {
+    await prebuild()
+    await prebuild(true, { patchMainActivityNewIntent: false })
+    expect(readMainActivity()).toBe(mainActivity)
   })
 })

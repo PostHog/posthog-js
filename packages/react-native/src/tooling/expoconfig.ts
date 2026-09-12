@@ -9,6 +9,7 @@ const {
   withAppBuildGradle,
   withBaseMod,
   withGradleProperties,
+  withMainActivity,
   withXcodeProject,
 } = require('@expo/config-plugins')
 
@@ -229,6 +230,118 @@ const withAndroidNativeSymbolsPlugin = (config: any) => {
     if (contents !== appBuildGradle.contents) {
       await fs.promises.writeFile(appBuildGradle.path, contents)
     }
+    return config
+  })
+}
+
+const POSTHOG_NEW_INTENT_MARKER = 'posthog-new-intent'
+const POSTHOG_NEW_INTENT_BEGIN = `// @generated begin ${POSTHOG_NEW_INTENT_MARKER} - posthog-react-native (DO NOT MODIFY)`
+const POSTHOG_NEW_INTENT_END = `// @generated end ${POSTHOG_NEW_INTENT_MARKER}`
+
+// Both languages carry the same explanation, so a reader of either file learns why it is there.
+// `android.content.Intent` is spelled out to keep the block self-contained: adding an import is a
+// second, riskier edit, and the templates we patch do not already import Intent.
+const NEW_INTENT_DOC = `  /**
+   * Records the intent that reopened the app so getIntent() returns it for the rest of the process.
+   *
+   * React Native drops an intent that arrives while its React context is still starting
+   * (ReactHostImpl.onNewIntent ignores it when getCurrentReactContext() is null) and never calls
+   * setIntent, so a notification tap on a process Android had killed - while its task stayed in
+   * recents - is invisible to every library in the app. Recording it before delegating repairs
+   * PostHog's push-open capture, Firebase Messaging's getInitialNotification() and deep links alike.
+   */`
+
+const NEW_INTENT_KOTLIN_BODY = `  override fun onNewIntent(intent: android.content.Intent) {
+    setIntent(intent)
+    super.onNewIntent(intent)
+  }`
+
+const NEW_INTENT_JAVA_BODY = `  @Override
+  public void onNewIntent(android.content.Intent intent) {
+    setIntent(intent);
+    super.onNewIntent(intent);
+  }`
+
+function newIntentOverrideBlock(language: string): string {
+  const body = language === 'java' ? NEW_INTENT_JAVA_BODY : NEW_INTENT_KOTLIN_BODY
+  return `\n  ${POSTHOG_NEW_INTENT_BEGIN}\n${NEW_INTENT_DOC}\n${body}\n  ${POSTHOG_NEW_INTENT_END}\n`
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// Lazy body match so two blocks (only reachable from a hand-edited file) are removed separately
+// rather than swallowing everything between them.
+const POSTHOG_NEW_INTENT_BLOCK_PATTERN = new RegExp(
+  `\\n?[ \\t]*${escapeRegExp(POSTHOG_NEW_INTENT_BEGIN)}[\\s\\S]*?${escapeRegExp(POSTHOG_NEW_INTENT_END)}[ \\t]*\\n`,
+  'g'
+)
+
+// The `{` that opens MainActivity's body, or -1 when the file does not look like the templates we
+// patch. Only a supertype list may sit between the name and the brace, so anything carrying `;`,
+// `{` or `}` means we found some other declaration's brace and must not write into it.
+function mainActivityBodyBraceIndex(contents: string): number {
+  const declaration = /\bclass\s+MainActivity\b/.exec(contents)
+  if (!declaration) {
+    return -1
+  }
+  const searchFrom = declaration.index + declaration[0].length
+  const braceIndex = contents.indexOf('{', searchFrom)
+  if (braceIndex === -1 || !/^[^;{}]*$/.test(contents.slice(searchFrom, braceIndex))) {
+    return -1
+  }
+  // Unbalanced braces mean we cannot tell where the body ends, so the file is not ours to edit.
+  return matchingBraceIndex(contents, braceIndex) === -1 ? -1 : braceIndex
+}
+
+/**
+ * Adds (or, when disabled, removes) the managed `onNewIntent` override in MainActivity.
+ *
+ * Idempotent: the block is delimited by generated markers and rewritten in place, so repeated
+ * prebuilds never stack copies. An app that already overrides `onNewIntent` keeps its own — a
+ * second override would not compile, and the one-line `setIntent(intent)` belongs at the top of
+ * theirs instead.
+ */
+export function updateMainActivityNewIntentOverride(contents: string, language: string, enabled: boolean): string {
+  const withoutManagedBlock = contents.replace(POSTHOG_NEW_INTENT_BLOCK_PATTERN, '')
+  if (!enabled) {
+    return withoutManagedBlock
+  }
+
+  if (/\bonNewIntent\b/.test(withoutManagedBlock)) {
+    console.warn(
+      '[posthog-react-native] MainActivity already overrides onNewIntent; leaving it alone. ' +
+        'Add `setIntent(intent)` as its first statement so a notification tap that arrives before ' +
+        'the React context is ready is not lost, or set `{ patchMainActivityNewIntent: false }` ' +
+        'on the plugin to silence this.'
+    )
+    return withoutManagedBlock
+  }
+
+  const braceIndex = mainActivityBodyBraceIndex(withoutManagedBlock)
+  if (braceIndex === -1) {
+    console.warn(
+      '[posthog-react-native] Could not find the MainActivity class body; skipping the onNewIntent ' +
+        'override. Notification taps delivered while the React context is starting will be lost.'
+    )
+    return withoutManagedBlock
+  }
+
+  return (
+    withoutManagedBlock.slice(0, braceIndex + 1) +
+    newIntentOverrideBlock(language) +
+    withoutManagedBlock.slice(braceIndex + 1)
+  )
+}
+
+const withMainActivityNewIntent = (config: any, enabled: boolean) => {
+  return withMainActivity(config, (config: any) => {
+    config.modResults.contents = updateMainActivityNewIntentOverride(
+      config.modResults.contents,
+      config.modResults.language,
+      enabled
+    )
     return config
   })
 }
@@ -719,6 +832,26 @@ type PostHogPluginProps = {
    * posthog.gradle: update them and this line together.
    */
   releaseMode?: PostHogReleaseMode
+
+  /**
+   * Whether to give Android's `MainActivity` an `onNewIntent` override that calls
+   * `setIntent(intent)` before delegating to React Native.
+   *
+   * Works around a React Native defect. When Android reopens an app whose process it had killed
+   * while the task stayed in recents, the tap arrives at `onNewIntent` while the React context is
+   * still starting: `ReactHostImpl.onNewIntent` drops it because there is no context yet,
+   * `ReactDelegate.onNewIntent` still reports it handled so `ReactActivity` never calls
+   * `super.onNewIntent`, and nothing calls `setIntent`. The intent is then invisible to the whole
+   * process — PostHog captures no `$push_notification_opened`, Firebase Messaging's
+   * `getInitialNotification()` returns null, and deep links are lost. Recording the intent first
+   * makes `getIntent()` correct for every library in the app.
+   *
+   * Default: true. The plugin leaves a `MainActivity` that already overrides `onNewIntent`
+   * untouched and warns instead — add `setIntent(intent)` as the first statement of your own
+   * override. Set to false to skip the injection entirely (and remove one a previous prebuild
+   * wrote); bare React Native apps that do not run `expo prebuild` need the same override by hand.
+   */
+  patchMainActivityNewIntent?: boolean
 }
 
 // Normalizes the uploadNativeSymbols prop (boolean | { includeSource }) into a
@@ -807,6 +940,7 @@ const withPostHogPlugin = (config: any, rawProps: PostHogPluginProps = {}) => {
   config = withAndroidPlugin(config, props.skipOnConflict === true)
   // Runs unconditionally so removing the prop also removes the managed entry.
   config = withPostHogGradleProperties(config, props.dotenvFile, props.releaseMode)
+  config = withMainActivityNewIntent(config, props.patchMainActivityNewIntent !== false)
   return withIosPlugin(config, props)
 }
 
@@ -835,3 +969,4 @@ module.exports.updateDotenvFileGradleProperties = updateDotenvFileGradleProperti
 module.exports.POSTHOG_RELEASE_MODES = POSTHOG_RELEASE_MODES
 module.exports.resolveReleaseModeProp = resolveReleaseModeProp
 module.exports.updateHermesReleaseModeGradleProperties = updateHermesReleaseModeGradleProperties
+module.exports.updateMainActivityNewIntentOverride = updateMainActivityNewIntentOverride
