@@ -5,11 +5,7 @@ import { PostHogExceptions } from '../posthog-exceptions'
 import { PostHogPersistence } from '../posthog-persistence'
 import { ErrorTracking } from '@posthog/core'
 
-// Synthetic fixtures, not device recordings. Facebook exact messages are documented in
-// https://github.com/getsentry/sentry-javascript/issues/15065 and Sentry's eventFilters.ts
-// at dca0166eee9be6e9633b92bc2eab88725f78a30a.
-// The two postMessage-prefixed messages are transcribed from the report in
-// https://github.com/getsentry/sentry-javascript/issues/23733 (not independently verified).
+// Synthetic fixtures, not device recordings.
 // iOS controls come from posthog-exceptions.test.ts. Application near misses are invented
 // to constrain the filter: mentioning a Java error is not proof of WebView noise.
 const facebookMessages = [

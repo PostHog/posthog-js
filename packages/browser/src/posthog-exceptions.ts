@@ -39,8 +39,6 @@ const INJECTED_BROWSER_SCRIPT_GLOBALS = ['__firefox__', '__gCrWeb']
 
 // Facebook's WebView can report these Java bridge errors against the page URL.
 // Match only the known messages, not application errors that add their own context.
-// https://github.com/getsentry/sentry-javascript/issues/15065
-// https://github.com/getsentry/sentry-javascript/issues/23733
 const FACEBOOK_WEBVIEW_EXCEPTION_VALUES = [
     'Java exception was raised during method invocation',
     'Java object is gone',
