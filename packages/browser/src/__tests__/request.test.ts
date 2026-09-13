@@ -253,6 +253,7 @@ describe('request', () => {
                     headers: new Headers(),
                     keepalive: false,
                     method: 'GET',
+                    referrerPolicy: 'no-referrer',
                 })
             )
         })
@@ -782,7 +783,18 @@ describe('request', () => {
                 expect.objectContaining({
                     cache: 'force-cache',
                     next: { revalidate: 0, tags: ['test'] },
+                    referrerPolicy: 'no-referrer',
                 })
+            )
+        })
+
+        it('preserves runtime fetchOptions precedence over the default referrer policy', () => {
+            // Extra runtime fields already pass through, even though referrerPolicy is not a public config option.
+            const fetchOptions: RequestInit = { cache: 'no-store', referrerPolicy: 'origin' }
+            request(createRequest({ fetchOptions }))
+
+            expect(mockedFetch.mock.calls[0][1]).toEqual(
+                expect.objectContaining({ cache: 'no-store', referrerPolicy: 'origin' })
             )
         })
 
@@ -835,6 +847,7 @@ describe('request', () => {
                             headers: new Headers(),
                             keepalive: expectedKeepAlive,
                             method,
+                            referrerPolicy: 'no-referrer',
                         })
                     )
                 }
@@ -847,7 +860,10 @@ describe('request', () => {
                         disableTransport: ['sendBeacon'],
                     })
                 )
-                expect(mockedFetch).toHaveBeenCalled()
+                expect(mockedFetch).toHaveBeenCalledWith(
+                    expect.anything(),
+                    expect.objectContaining({ referrerPolicy: 'no-referrer' })
+                )
             })
         })
 
@@ -1297,6 +1313,7 @@ describe('request', () => {
                     expect(warnSpy).toHaveBeenCalledTimes(4)
                     for (const call of mockedFetch.mock.calls) {
                         expect(call[1].keepalive).toBe(false)
+                        expect(call[1].referrerPolicy).toBe('no-referrer')
                     }
                 })
 
@@ -1316,6 +1333,7 @@ describe('request', () => {
                     expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(1)
                     expect(mockedFetch).toHaveBeenCalledTimes(1)
                     expect(mockedFetch.mock.calls[0][1].keepalive).toBe(false)
+                    expect(mockedFetch.mock.calls[0][1].referrerPolicy).toBe('no-referrer')
                 })
             })
 

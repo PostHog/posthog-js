@@ -359,6 +359,9 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
         fetch!(url, {
             method: options?.method || 'GET',
             headers,
+            // Body masking does not remove the HTTP Referer. This only hardens Fetch;
+            // native XHR and sendBeacon still follow the document's referrer policy.
+            referrerPolicy: 'no-referrer',
             // if body is greater than 64kb, then fetch with keepalive will error
             // see 8:10:5 at https://fetch.spec.whatwg.org/#http-network-or-cache-fetch,
             // but we do want to set keepalive sometimes as it can  help with success
