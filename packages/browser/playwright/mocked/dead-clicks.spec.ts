@@ -77,6 +77,63 @@ test.describe('Dead clicks', () => {
         expect(deadClicks).toHaveLength(0)
     })
 
+    for (const stopPropagation of [false, true]) {
+        test(`observes synchronous DOM updates before bubbling handlers${stopPropagation ? ' with stopped propagation' : ''}`, async ({
+            page,
+            context,
+        }) => {
+            await context.addInitScript(() => {
+                // oxlint-disable-next-line posthog-js/no-add-event-listener
+                window.addEventListener('click', () => {
+                    // Separate the native mutation callback and the detector's bubble listener timestamps.
+                    const until = performance.now() + 8
+                    while (performance.now() < until) {}
+                })
+            })
+            await start(startOptions, page, context)
+            await page.waitForFunction(() => {
+                const win = window as any
+                return !!win.posthog?.deadClicksAutocapture?.lazyLoadedDeadClicksAutocapture
+            })
+            await page.evaluate((stopPropagation) => {
+                const working = document.createElement('button')
+                working.id = 'working-control'
+                working.textContent = 'Working control'
+                const broken = document.createElement('button')
+                broken.id = 'broken-control'
+                broken.textContent = 'Broken control'
+                const result = document.createElement('article')
+                result.id = 'control-result'
+                result.textContent = 'Initial content'
+                // oxlint-disable-next-line posthog-js/no-add-event-listener
+                working.addEventListener('click', (event) => {
+                    result.textContent = 'Updated content'
+                    if (stopPropagation) {
+                        event.stopPropagation()
+                    }
+                })
+                // oxlint-disable-next-line posthog-js/no-add-event-listener
+                broken.addEventListener('click', (event) => {
+                    if (stopPropagation) {
+                        event.stopPropagation()
+                    }
+                })
+                document.body.append(working, broken, result)
+            }, stopPropagation)
+            await page.waitForTimeout(1100)
+            await page.resetCapturedEvents()
+
+            await page.locator('#working-control').click()
+            await expect(page.locator('#control-result')).toHaveText('Updated content')
+            await page.waitForTimeout(3500)
+            expect((await page.capturedEvents()).filter((event) => event.event === '$dead_click')).toHaveLength(0)
+
+            await page.locator('#broken-control').click()
+            await pollUntilEventCaptured(page, '$dead_click')
+            expect((await page.capturedEvents()).filter((event) => event.event === '$dead_click')).toHaveLength(1)
+        })
+    }
+
     test('captures dead swipes when configured to', async ({ page, context }) => {
         await start(startOptions, page, context)
 
