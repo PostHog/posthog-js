@@ -1,4 +1,4 @@
-import { expect, test } from './utils/posthog-playwright-test-base'
+import { expect, test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
 import { pollUntilEventCaptured } from './utils/event-capture-utils'
 
@@ -28,6 +28,88 @@ test.describe('Dead clicks', () => {
         expect(deadClick.properties.$dead_click_scroll_timeout).toBe(false)
         expect(deadClick.properties.$dead_click_mutation_timeout).toBe(false)
         expect(deadClick.properties.$dead_click_absolute_timeout).toBe(true)
+    })
+
+    test('does not report synchronous DOM updates before a window bubble listener as dead clicks', async ({
+        page,
+        context,
+    }) => {
+        await context.addInitScript(() => {
+            window.onclick = () => {
+                const started = performance.now()
+                while (performance.now() - started < 8) {
+                    // Keep the earlier bubble listener busy for a deterministic ordering regression.
+                }
+            }
+        })
+        await start(
+            {
+                ...startOptions,
+                options: { capture_dead_clicks: { mutation_threshold_ms: 300 } },
+            },
+            page,
+            context
+        )
+        await page.waitForFunction(
+            () => !!(window as WindowWithPostHog).posthog?.deadClicksAutocapture?.lazyLoadedDeadClicksAutocapture
+        )
+        await page.evaluate(() => {
+            const button = document.createElement('button')
+            button.id = 'mutating-button'
+            button.textContent = 'Next day'
+            const label = document.createElement('span')
+            label.id = 'mutating-label'
+            label.textContent = 'Day 1'
+            button.onclick = () => {
+                label.textContent = 'Day 2'
+            }
+            document.body.append(button, label)
+        })
+        await page.waitForTimeout(1100)
+        await page.resetCapturedEvents()
+
+        await page.locator('#mutating-button').click()
+        await expect(page.locator('#mutating-label')).toHaveText('Day 2')
+        await page.waitForTimeout(1500)
+        expect((await page.capturedEvents()).filter((event) => event.event === '$dead_click')).toHaveLength(0)
+
+        await page.locator('[data-cy-not-an-order-button]').click()
+        await pollUntilEventCaptured(page, '$dead_click')
+        expect((await page.capturedEvents()).filter((event) => event.event === '$dead_click')).toHaveLength(1)
+    })
+
+    test('stops capturing dead clicks while disabled and captures once after restarting', async ({ page, context }) => {
+        await start(
+            {
+                ...startOptions,
+                options: { capture_dead_clicks: { mutation_threshold_ms: 300 } },
+            },
+            page,
+            context
+        )
+        await page.waitForFunction(
+            () => !!(window as WindowWithPostHog).posthog?.deadClicksAutocapture?.lazyLoadedDeadClicksAutocapture
+        )
+        await page.evaluate(() => {
+            ;(window as WindowWithPostHog).posthog?.set_config({ capture_dead_clicks: false })
+        })
+        await page.waitForTimeout(1100)
+        await page.resetCapturedEvents()
+
+        await page.locator('[data-cy-not-an-order-button]').click()
+        await page.waitForTimeout(1500)
+        expect((await page.capturedEvents()).filter((event) => event.event === '$dead_click')).toHaveLength(0)
+
+        await page.evaluate(() => {
+            const posthog = (window as WindowWithPostHog).posthog
+            posthog?.set_config({ capture_dead_clicks: { mutation_threshold_ms: 300 } })
+            posthog?.set_config({ capture_dead_clicks: false })
+            posthog?.set_config({ capture_dead_clicks: { mutation_threshold_ms: 300 } })
+        })
+        await page.locator('[data-cy-not-an-order-button]').click()
+        await pollUntilEventCaptured(page, '$dead_click')
+        await page.waitForTimeout(1500)
+        expect((await page.capturedEvents()).filter((event) => event.event === '$dead_click')).toHaveLength(1)
     })
 
     test('does not capture a dead click when a fallback observer sees a DOM update', async ({ page, context }) => {

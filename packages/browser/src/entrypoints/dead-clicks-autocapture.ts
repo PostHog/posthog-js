@@ -217,7 +217,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     stop() {
         this._mutationObserver?.disconnect()
         this._mutationObserver = undefined
-        assignableWindow.removeEventListener('click', this._onClick)
+        assignableWindow.removeEventListener('click', this._onClick, { capture: true })
         assignableWindow.removeEventListener('mousedown', this._onMouseDown, { capture: true })
         assignableWindow.removeEventListener('mouseup', this._onMouseUp, { capture: true })
         assignableWindow.removeEventListener('mouseout', this._onMouseOut, { capture: true })
@@ -243,7 +243,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _startClickObserver() {
-        addEventListener(assignableWindow, 'click', this._onClick)
+        addEventListener(assignableWindow, 'click', this._onClick, { capture: true })
         addEventListener(assignableWindow, 'mousedown', this._onMouseDown, { capture: true })
         addEventListener(assignableWindow, 'mouseup', this._onMouseUp, { capture: true })
         addEventListener(assignableWindow, 'mouseout', this._onMouseOut, { capture: true })
