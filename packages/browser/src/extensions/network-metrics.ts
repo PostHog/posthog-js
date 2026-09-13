@@ -39,20 +39,18 @@ const observe = (method: unknown, url: unknown): Observed => ({
     url: String(url),
 })
 
-type IsActive = () => boolean
+// The config while the wrapper should observe requests, `undefined` once it is stopped or turned off.
+type Enabled = () => NetworkMetricsConfig | undefined
 
 const record = (
     instance: PostHog,
     observed: Observed,
     status: number | undefined,
     start: number,
-    isActive: IsActive
+    enabled: Enabled
 ): void => {
-    if (!isActive()) {
-        return
-    }
     try {
-        const config = networkConfig(instance)
+        const config = enabled()
         if (!config) {
             return
         }
@@ -85,7 +83,7 @@ const record = (
 
 const noop = (): void => {}
 
-const patchFetch = (instance: PostHog, isActive: IsActive): (() => void) => {
+const patchFetch = (instance: PostHog, enabled: Enabled): (() => void) => {
     if (!isFunction(window?.fetch)) {
         return noop
     }
@@ -93,6 +91,9 @@ const patchFetch = (instance: PostHog, isActive: IsActive): (() => void) => {
         return function (this: unknown, ...args: unknown[]) {
             const start = now()
             const result = originalFetch.apply(this, args)
+            if (!enabled()) {
+                return result
+            }
             try {
                 const [input, init] = args
                 const observed = observe(
@@ -101,11 +102,11 @@ const patchFetch = (instance: PostHog, isActive: IsActive): (() => void) => {
                 )
                 return result.then(
                     (response: Response) => {
-                        record(instance, observed, response?.status, start, isActive)
+                        record(instance, observed, response?.status, start, enabled)
                         return response
                     },
                     (error: unknown) => {
-                        record(instance, observed, undefined, start, isActive)
+                        record(instance, observed, undefined, start, enabled)
                         throw error
                     }
                 )
@@ -117,7 +118,7 @@ const patchFetch = (instance: PostHog, isActive: IsActive): (() => void) => {
     })
 }
 
-const patchXHR = (instance: PostHog, isActive: IsActive): (() => void) => {
+const patchXHR = (instance: PostHog, enabled: Enabled): (() => void) => {
     const prototype = window?.XMLHttpRequest?.prototype
     if (!prototype) {
         return noop
@@ -141,11 +142,11 @@ const patchXHR = (instance: PostHog, isActive: IsActive): (() => void) => {
             let onLoadEnd: (() => void) | undefined
             try {
                 const observed = requests.get(this)
-                if (observed) {
+                if (observed && enabled()) {
                     const start = now()
                     onLoadEnd = () => {
                         this.removeEventListener('loadend', onLoadEnd!)
-                        record(instance, observed, this.status, start, isActive)
+                        record(instance, observed, this.status, start, enabled)
                     }
                     addEventListener(this as unknown as Element, 'loadend', onLoadEnd)
                 }
@@ -181,13 +182,15 @@ const patchXHR = (instance: PostHog, isActive: IsActive): (() => void) => {
  * XHR response body. Aligning them would mean reading the fetch response body,
  * which an observer must not do.
  *
- * The returned function removes the wrappers. If another wrapper was layered on
- * top and ours cannot be spliced out, it stays in place but records nothing.
+ * While `metrics.network` is off the wrappers pass every request straight
+ * through. The returned function removes them; if another wrapper was layered
+ * on top and ours cannot be spliced out, it stays in place as a pass-through.
  */
 export const startNetworkMetrics = (instance: PostHog): (() => void) => {
     let active = true
-    const restoreFetch = patchFetch(instance, () => active)
-    const restoreXHR = patchXHR(instance, () => active)
+    const enabled: Enabled = () => (active ? networkConfig(instance) : undefined)
+    const restoreFetch = patchFetch(instance, enabled)
+    const restoreXHR = patchXHR(instance, enabled)
     return () => {
         active = false
         restoreFetch()

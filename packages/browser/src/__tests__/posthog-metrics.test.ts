@@ -204,17 +204,17 @@ describe('posthog-metrics', () => {
             expect(isFetchWrapped()).toBe(false)
         })
 
-        it('installs the wrapper once when the config turns network metrics on', () => {
+        it.each([
+            [[true, false], false],
+            [[true, false, true], true],
+            [[false, true], true],
+        ])('after network config changes %j fetch is wrapped: %s', (changes, wrapped) => {
             metrics.initialize()
-            expect(isFetchWrapped()).toBe(false)
-            ;(mockPostHog.config as any).metrics = { network: true }
-            metrics.onConfigChange()
-            const wrapped = window.fetch
-            ;(mockPostHog.config as any).metrics = { network: false }
-            metrics.onConfigChange()
-            ;(mockPostHog.config as any).metrics = { network: true }
-            metrics.onConfigChange()
-            expect(window.fetch).toBe(wrapped)
+            for (const network of changes) {
+                ;(mockPostHog.config as any).metrics = { network }
+                metrics.onConfigChange()
+            }
+            expect(isFetchWrapped()).toBe(wrapped)
         })
     })
 })

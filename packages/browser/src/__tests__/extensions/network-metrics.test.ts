@@ -410,12 +410,30 @@ describe('network metrics', () => {
             })
         })
 
-        it('records nothing when network metrics are turned off after start', async () => {
+        it('passes fetch through untouched when network metrics are turned off after start', async () => {
+            const original = Promise.resolve({ status: 200 })
+            setWindowFetch(() => original)
             start()
             mockPostHog.config.metrics = { network: false }
 
-            await window.fetch('https://api.example.com/things')
+            const result = window.fetch('https://api.example.com/things')
 
+            expect(result).toBe(original)
+            await result
+            expect(recorded()).toEqual([])
+        })
+
+        it('adds no XHR listener when network metrics are turned off after start', () => {
+            start()
+            mockPostHog.config.metrics = { network: false }
+            const xhr = new window.XMLHttpRequest() as unknown as FakeXHR
+            const addListener = vi.spyOn(xhr, 'addEventListener')
+
+            xhr.open('GET', 'https://api.example.com/things')
+            xhr.send()
+            xhr.respond(200)
+
+            expect(addListener).not.toHaveBeenCalled()
             expect(recorded()).toEqual([])
         })
 
