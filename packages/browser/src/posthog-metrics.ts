@@ -39,9 +39,7 @@ export class PostHogMetrics implements Extension {
     // The aggregator builds lazily on the first capture so it sees post-init
     // config; only the network wrappers need to be installed eagerly.
     initialize(): void {
-        if (!this._disposed) {
-            this.onConfigChange()
-        }
+        this.onConfigChange()
     }
 
     onConfigChange(): void {
