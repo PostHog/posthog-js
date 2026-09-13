@@ -310,12 +310,21 @@ test.describe('ErrorTracking autocapture', () => {
                 console.error('[PostHog.js] [Legacy extension]', new Error('internal failure'))
                 // oxlint-disable-next-line no-console
                 console.error('customer console error')
+                // oxlint-disable-next-line no-console
+                console.error('[PostHog.js] customer message')
+                // oxlint-disable-next-line no-console
+                console.error('rrweb logger error:')
                 ph.captureException(new Error('[PostHog.js] explicitly reported error'))
             })
 
-            await expect.poll(() => events.countByName('$exception')).toBe(2)
+            await expect.poll(() => events.countByName('$exception')).toBe(4)
             expect(events.filterByName('$exception').map((event) => event.properties.$exception_list[0].value)).toEqual(
-                ['customer console error', '[PostHog.js] explicitly reported error']
+                [
+                    'customer console error',
+                    '[PostHog.js] customer message',
+                    'rrweb logger error:',
+                    '[PostHog.js] explicitly reported error',
+                ]
             )
             expect(consoleErrors.some((message) => message.includes('[PostHog.js]'))).toBe(true)
             expect(consoleErrors).toContain('customer console error')

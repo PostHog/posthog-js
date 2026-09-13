@@ -73,6 +73,11 @@ describe('internal console diagnostics', () => {
     )
 
     it.each([
+        ['[PostHog.js]'],
+        ['[PostHog.js] customer message'],
+        ['[PostHog.js] [Surveys]'],
+        ['[PostHog.js] [Surveys] customer message'],
+        ['rrweb logger error:'],
         ['[PostHog.js-extra] customer message'],
         ['[PostHogXjs] customer message'],
         ['customer message mentioning [PostHog.js]'],

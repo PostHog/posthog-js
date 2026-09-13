@@ -121,9 +121,12 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
 
     con.error = function (...args: any[]): void {
         // Check before selecting an Error argument, which loses the diagnostic prefix.
-        // These prefixes also identify loggers in older, independently loaded bundles.
+        // SDK loggers pass the prefix and diagnostic separately, including in older bundles.
         const isInternalDiagnostic = safely(
-            () => isString(args[0]) && (/^\[PostHog\.js\](?: |$)/.test(args[0]) || args[0] === 'rrweb logger error:'),
+            () =>
+                args.length > 1 &&
+                isString(args[0]) &&
+                (/^\[PostHog\.js\](?: |$)/.test(args[0]) || args[0] === 'rrweb logger error:'),
             false
         )
         if (!isInternalDiagnostic) {
