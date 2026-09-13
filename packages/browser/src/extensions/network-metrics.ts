@@ -58,7 +58,18 @@ const networkConfig = (instance: PostHog): NetworkMetricsConfig | undefined => {
     return network === true ? {} : network || undefined
 }
 
-const record = (instance: PostHog, request: NetworkMetricsRequest, status: number | undefined, start: number): void => {
+type IsActive = () => boolean
+
+const record = (
+    instance: PostHog,
+    request: NetworkMetricsRequest,
+    status: number | undefined,
+    start: number,
+    isActive: IsActive
+): void => {
+    if (!isActive()) {
+        return
+    }
     try {
         const durationMs = now() - start
         const config = networkConfig(instance)
@@ -89,7 +100,7 @@ const record = (instance: PostHog, request: NetworkMetricsRequest, status: numbe
 
 const noop = (): void => {}
 
-const patchFetch = (instance: PostHog): (() => void) => {
+const patchFetch = (instance: PostHog, isActive: IsActive): (() => void) => {
     if (!isFunction(window?.fetch)) {
         return noop
     }
@@ -105,11 +116,11 @@ const patchFetch = (instance: PostHog): (() => void) => {
                 )
                 return result.then(
                     (response: Response) => {
-                        record(instance, request, response?.status, start)
+                        record(instance, request, response?.status, start, isActive)
                         return response
                     },
                     (error: unknown) => {
-                        record(instance, request, undefined, start)
+                        record(instance, request, undefined, start, isActive)
                         throw error
                     }
                 )
@@ -121,7 +132,7 @@ const patchFetch = (instance: PostHog): (() => void) => {
     })
 }
 
-const patchXHR = (instance: PostHog): (() => void) => {
+const patchXHR = (instance: PostHog, isActive: IsActive): (() => void) => {
     const prototype = window?.XMLHttpRequest?.prototype
     if (!prototype) {
         return noop
@@ -140,21 +151,30 @@ const patchXHR = (instance: PostHog): (() => void) => {
     })
     const restoreSend = patch(prototype, 'send', (originalSend: any) => {
         return function (this: XMLHttpRequest, ...args: unknown[]) {
+            let onLoadEnd: (() => void) | undefined
             try {
                 const request = requests.get(this)
                 if (request) {
                     const start = now()
-                    const onLoadEnd = () => {
-                        this.removeEventListener('loadend', onLoadEnd)
+                    const loadEndListener = () => {
+                        this.removeEventListener('loadend', loadEndListener)
                         // XHR reports status 0 when no response arrived, which the callback contract calls `undefined`.
-                        record(instance, request, this.status || undefined, start)
+                        record(instance, request, this.status || undefined, start, isActive)
                     }
-                    addEventListener(this as unknown as Element, 'loadend', onLoadEnd)
+                    onLoadEnd = loadEndListener
+                    addEventListener(this as unknown as Element, 'loadend', loadEndListener)
                 }
             } catch (e) {
                 logger.error('Failed to observe XHR send', e)
             }
-            return originalSend.apply(this, args)
+            try {
+                return originalSend.apply(this, args)
+            } catch (e) {
+                if (onLoadEnd) {
+                    this.removeEventListener('loadend', onLoadEnd)
+                }
+                throw e
+            }
         }
     })
 
@@ -176,9 +196,11 @@ const patchXHR = (instance: PostHog): (() => void) => {
  * which an observer must not do.
  */
 export const startNetworkMetrics = (instance: PostHog): (() => void) => {
-    const restoreFetch = patchFetch(instance)
-    const restoreXHR = patchXHR(instance)
+    let active = true
+    const restoreFetch = patchFetch(instance, () => active)
+    const restoreXHR = patchXHR(instance, () => active)
     return () => {
+        active = false
         restoreFetch()
         restoreXHR()
     }

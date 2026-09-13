@@ -291,6 +291,23 @@ describe('network metrics', () => {
 
             xhr.open('GET', 'https://api.example.com/things')
             expect(() => xhr.send()).toThrow(error)
+
+            xhr.send()
+            xhr.respond(200)
+
+            expect(recorded()).toHaveLength(1)
+        })
+
+        it('does not record an in-flight request after stop', () => {
+            start()
+            const xhr = new window.XMLHttpRequest() as unknown as FakeXHR
+
+            xhr.open('GET', 'https://api.example.com/things')
+            xhr.send()
+            stop?.()
+            stop = undefined
+            xhr.respond(200)
+
             expect(recorded()).toEqual([])
         })
     })

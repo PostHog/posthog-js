@@ -187,6 +187,15 @@ describe('posthog-metrics', () => {
             expect(isFetchWrapped()).toBe(false)
         })
 
+        it('does not reinstall wrappers when initialize runs after dispose', () => {
+            ;(mockPostHog.config as any).metrics = { network: true }
+
+            metrics.dispose()
+            metrics.initialize()
+
+            expect(isFetchWrapped()).toBe(false)
+        })
+
         it('starts and stops wrapping when the config changes', () => {
             ;(mockPostHog.config as any).metrics = { network: true }
             metrics.initialize()

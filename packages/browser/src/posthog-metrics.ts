@@ -32,16 +32,22 @@ export class PostHogMetrics implements Extension {
     // The `metrics` config the current `_core` was built from; a change rebuilds it.
     private _resolvedFrom: PostHog['config']['metrics']
     private _stopNetworkMetrics: (() => void) | undefined
+    private _disposed = false
 
     constructor(private readonly _instance: PostHog) {}
 
     // The aggregator builds lazily on the first capture so it sees post-init
     // config; only the network wrappers need to be installed eagerly.
     initialize(): void {
-        this.onConfigChange()
+        if (!this._disposed) {
+            this.onConfigChange()
+        }
     }
 
     onConfigChange(): void {
+        if (this._disposed) {
+            return
+        }
         const enabled = !!this._instance.config.metrics?.network
         if (enabled && !this._stopNetworkMetrics) {
             this._stopNetworkMetrics = startNetworkMetrics(this._instance)
@@ -114,6 +120,7 @@ export class PostHogMetrics implements Extension {
      * leaves nothing behind in the page.
      */
     dispose(): void {
+        this._disposed = true
         this._stopNetworkMetrics?.()
         this._stopNetworkMetrics = undefined
         this._core?.reset()
