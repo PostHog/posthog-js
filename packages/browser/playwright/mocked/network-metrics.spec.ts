@@ -74,4 +74,75 @@ test.describe('network metrics', () => {
             },
         ])
     })
+
+    test('preserves every supported fetch body through a downstream Request-forwarding wrapper', async ({
+        page,
+        context,
+        browserName,
+    }) => {
+        await context.route('**/__network_metrics_test/body/**', async (route: Route) => {
+            await route.fulfill({ status: 200, contentType: 'text/plain', body: 'ok' })
+        })
+
+        await start(
+            {
+                options: { metrics: { network: true }, disable_compression: true },
+                url: '/playground/cypress/index.html',
+            },
+            page,
+            context
+        )
+
+        const responses = await page.evaluate(async () => {
+            const networkMetricsFetch = window.fetch
+            window.fetch = function (this: Window, input: RequestInfo | URL, init?: RequestInit) {
+                const forwardedRequest = new Request(input, init)
+                return networkMetricsFetch.call(this, forwardedRequest)
+            }
+
+            const encoder = new TextEncoder()
+            const stream = () =>
+                new ReadableStream({
+                    start(controller) {
+                        controller.enqueue(encoder.encode('stream body'))
+                        controller.close()
+                    },
+                })
+            const formData = new FormData()
+            formData.set('field', 'form body')
+
+            const requests: Array<{ path: string; init: RequestInit }> = [
+                { path: 'string', init: { method: 'POST', body: 'string body' } },
+                { path: 'form-data', init: { method: 'POST', body: formData } },
+                { path: 'blob', init: { method: 'POST', body: new Blob(['blob body'], { type: 'text/plain' }) } },
+                { path: 'array-buffer', init: { method: 'POST', body: encoder.encode('array buffer').buffer } },
+                { path: 'url-search-params', init: { method: 'POST', body: new URLSearchParams('field=url params') } },
+            ]
+            // WebKit currently rejects ReadableStream uploads before fetch reaches the network.
+            // Chromium and Firefox exercise it below; all body types accepted by WebKit still
+            // pass through the same downstream Request wrapper here.
+            if (navigator.userAgent.includes('Chrome') || navigator.userAgent.includes('Firefox')) {
+                requests.push({
+                    path: 'readable-stream',
+                    init: { method: 'POST', body: stream(), duplex: 'half' } as RequestInit,
+                })
+            }
+
+            const results: Array<{ path: string; status: number; text: string }> = []
+            for (const { path, init } of requests) {
+                const response = await fetch(`/__network_metrics_test/body/${path}`, init)
+                results.push({ path, status: response.status, text: await response.text() })
+            }
+            return results
+        })
+
+        expect(responses).toEqual([
+            { path: 'string', status: 200, text: 'ok' },
+            { path: 'form-data', status: 200, text: 'ok' },
+            { path: 'blob', status: 200, text: 'ok' },
+            { path: 'array-buffer', status: 200, text: 'ok' },
+            { path: 'url-search-params', status: 200, text: 'ok' },
+            ...(browserName === 'webkit' ? [] : [{ path: 'readable-stream', status: 200, text: 'ok' }]),
+        ])
+    })
 })

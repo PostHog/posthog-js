@@ -22,8 +22,9 @@ interface PatchLayer {
     next: (...args: any[]) => any
 }
 
-const noop = () => {
+const noop = (): boolean => {
     //
+    return false
 }
 
 const spliceableLayer = (method: unknown): PatchLayer | undefined => {
@@ -37,7 +38,7 @@ export function patch(
     source: { [key: string]: any },
     name: string,
     replacement: (...args: unknown[]) => unknown
-): () => void {
+): () => boolean {
     try {
         if (!(name in source)) {
             return noop
@@ -81,7 +82,7 @@ export function patch(
             // the `original` we captured at install time).
             if (source[name] === wrapped) {
                 source[name] = layer.next
-                return
+                return true
             }
 
             // Otherwise newer wrappers sit on top of us. Find the layer directly above us
@@ -95,7 +96,7 @@ export function patch(
             while (currentLayer) {
                 if (currentLayer.next === wrapped) {
                     currentLayer.next = layer.next
-                    return
+                    return true
                 }
                 current = currentLayer.next
                 currentLayer = spliceableLayer(current)
@@ -104,6 +105,7 @@ export function patch(
             // If we get here we're buried under a non-posthog wrapper that closed over
             // us directly, or we've already been removed / replaced wholesale. There's
             // nothing safe to do, so leave the chain untouched.
+            return false
         }
     } catch {
         return noop
