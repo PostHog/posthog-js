@@ -503,7 +503,7 @@ export class PostHogClaudeAgentProcessor {
     } else if (message.type === 'result') {
       this._beginTurn(state, message.user_message_uuid)
       state.tracker.finishCurrent()
-      await this._captureCompletedGenerations(state, trace, resultError(message))
+      await this._captureCompletedGenerations(state, trace, resultError(message), message)
       if (message.total_cost_usd != null) {
         // The SDK reports cumulative cost and can reset it when the session is cleared.
         state.turnCost = message.total_cost_usd - (message.total_cost_usd >= state.totalCost ? state.totalCost : 0)
@@ -521,7 +521,8 @@ export class PostHogClaudeAgentProcessor {
   private async _captureCompletedGenerations(
     state: QueryState,
     trace: ClaudeAgentTraceOptions,
-    failure?: unknown
+    failure?: unknown,
+    result?: SDKResultMessage
   ): Promise<void> {
     let generation = state.tracker.popCompleted()
     while (generation) {
@@ -532,7 +533,8 @@ export class PostHogClaudeAgentProcessor {
         generation,
         state,
         trace,
-        failure !== undefined ? { $ai_is_error: true, $ai_error: stringifyError(failure) } : {}
+        failure !== undefined ? { $ai_is_error: true, $ai_error: stringifyError(failure) } : {},
+        result
       )
       state.pendingOutput = []
       generation = state.tracker.popCompleted()
@@ -579,6 +581,7 @@ export class PostHogClaudeAgentProcessor {
       model: generation.model ?? state.tracker.lastModel,
       provider: PROVIDER,
       baseURL: null,
+      httpStatus: result?.subtype === 'success' ? (result.api_error_status ?? undefined) : undefined,
       input: generation.input ?? [],
       // Complete assistant messages replace the streamed prefix, leaving only unfinished blocks to append.
       output: formatOutput([
@@ -671,6 +674,9 @@ export class PostHogClaudeAgentProcessor {
         ...(state.turnCost != null ? { $ai_total_cost_usd: state.turnCost } : {}),
         ...(isError ? { $ai_is_error: true } : {}),
         ...(error !== undefined ? { $ai_error: error } : {}),
+        ...(result?.subtype === 'success' && result.api_error_status != null
+          ? { $ai_http_status: result.api_error_status }
+          : {}),
       })
     } finally {
       // A streaming-input session produces one result per turn. Each turn becomes

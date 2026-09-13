@@ -881,6 +881,30 @@ describe('Claude Agent SDK integration', () => {
     }
   })
 
+  it.each(
+    ['fallback', 'unfinished', 'completed'].flatMap((mode) =>
+      [429, 500, null, undefined].map((status) => ({ mode, status }))
+    )
+  )('captures reported API status without relabeling completed generations (%j)', async ({ mode, status }) => {
+    const client = createMockClient()
+    queryMock.mockReturnValue(
+      scriptedQuery([
+        ...(mode !== 'fallback' ? [messageStart()] : []),
+        ...(mode === 'completed' ? [messageStop()] : []),
+        resultMessage({ is_error: true, result: 'Request failed', api_error_status: status }),
+      ])
+    )
+
+    await drain(instrument({ client }).query({ prompt: 'Hello' }))
+
+    const generation = capturedEvents(client, '$ai_generation')[0].properties
+    const trace = capturedEvents(client, '$ai_trace')[0].properties
+    expect(generation.$ai_http_status).toBe(mode === 'completed' ? 200 : (status ?? 200))
+    expect(trace.$ai_http_status).toBe(status ?? undefined)
+    expect(trace.$ai_is_error).toBe(true)
+    expect(trace.$ai_error).toBe('Request failed')
+  })
+
   it('includes SDK time to first token in generation latency', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'performance'] })
     try {
