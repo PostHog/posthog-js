@@ -8,6 +8,7 @@ import { isArray, isNumber } from '@posthog/core'
 const logger = createLogger('[RateLimiter]')
 
 const ONE_MINUTE_IN_MILLISECONDS = 60 * 1000
+const RATE_LIMIT_EVENT = '$$client_ingestion_warning'
 const DEFAULT_EVENTS_PER_SECOND = 10
 const BURST_LIMIT_MULTIPLIER = 10
 
@@ -110,6 +111,8 @@ export class RateLimiter {
         const page = this._triggeringPage()
         const sessionId = this._isPropertyAllowed('$session_id') ? this.instance.get_session_id?.() : undefined
 
+        // Ingestion currently retains only this message for client ingestion warnings. Keep the
+        // diagnostics here instead of adding structured properties that the backend discards.
         const context = [
             `${droppedSinceLastWarning} event(s) dropped since the last warning`,
             page ? `triggered on ${page}` : undefined,
@@ -118,8 +121,14 @@ export class RateLimiter {
             .filter(Boolean)
             .join(', ')
 
-        return !!this.instance._captureClientIngestionWarning(
-            `posthog-js client rate limited: ${context}. Config is set to ${captureEventsPerSecond} events per second and ${captureEventsBurstLimit} events burst limit.`
+        return !!this.instance.capture(
+            RATE_LIMIT_EVENT,
+            {
+                $$client_ingestion_warning_message: `posthog-js client rate limited: ${context}. Config is set to ${captureEventsPerSecond} events per second and ${captureEventsBurstLimit} events burst limit.`,
+            },
+            {
+                skip_client_rate_limiting: true,
+            }
         )
     }
 

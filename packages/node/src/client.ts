@@ -73,42 +73,23 @@ const WAITUNTIL_DEBOUNCE_MS = 50
 const WAITUNTIL_MAX_WAIT_MS = 500
 const DEFAULT_NODE_HOST = 'https://us.i.posthog.com'
 
-// Process-wide dedup for always-surfacing warnings — without this, a deprecated method or a
-// misused argument inside a loop would spam logs. Matches Python's `warnings.warn` default-dedup
-// behavior. `console.warn` rather than `this._logger.warn`, which is gated on debug mode.
-const _emittedWarnings = new Set<string>()
+// Process-wide dedup for deprecation warnings — without this, calling a deprecated
+// method in a loop would spam logs. Matches Python's `warnings.warn` default-dedup behavior.
+const _emittedDeprecations = new Set<string>()
 
-function warnOnce(id: string, message: string): void {
-  if (_emittedWarnings.has(id)) {
+function emitDeprecationWarningOnce(id: string, message: string): void {
+  if (_emittedDeprecations.has(id)) {
     return
   }
-  _emittedWarnings.add(id)
+  _emittedDeprecations.add(id)
   console.warn(`[PostHog] ${message}`)
 }
 
-// Every warning id is a fixed literal except `identify`'s, which carries caller-supplied property
-// names. Those names are tracked here and capped: past the cap every further combination shares a
-// single id, so an app that spreads varying keys next to `$set` can neither grow the dedup set for
-// the process lifetime nor defeat the warn-once guard by warning on every call.
-const MAX_IDENTIFY_WARNING_IDS = 50
-const _identifyWarningNames = new Set<string>()
-
-function identifyDroppedPropertiesWarningId(names: string): string {
-  if (!_identifyWarningNames.has(names)) {
-    if (_identifyWarningNames.size >= MAX_IDENTIFY_WARNING_IDS) {
-      return 'identify-dropped-properties'
-    }
-    _identifyWarningNames.add(names)
-  }
-  return `identify-dropped-properties:${names}`
-}
-
 /**
- * @internal — clears the process-wide warning dedup sets. Test-only.
+ * @internal — clears the process-wide deprecation dedup set. Test-only.
  */
 export function _resetDeprecationWarningsForTests(): void {
-  _emittedWarnings.clear()
-  _identifyWarningNames.clear()
+  _emittedDeprecations.clear()
 }
 
 function normalizeApiKey(value?: unknown): string {
@@ -907,30 +888,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * `properties` accepts either a flat bag of person properties or the nested `$set` / `$set_once`
-   * form, never a mix: when `$set` is present, sibling keys are not person properties and are
-   * dropped. Warn about that drop, because it is otherwise indistinguishable from a broken pipeline.
-   */
-  private _identifyEventProperties(properties: Record<string | number, any>): Record<string, any> {
-    const { $set, $set_once, $anon_distinct_id, ...rest } = properties
-    const droppedKeys = $set ? Object.keys(rest).sort() : []
-    if (droppedKeys.length > 0) {
-      // Keyed on the dropped names, so a second broken call site is still reported. Sorted first,
-      // so the same names in a different order are one call site rather than two.
-      warnOnce(
-        identifyDroppedPropertiesWarningId(droppedKeys.join(',')),
-        `identify() ignored the top-level properties ${droppedKeys.join(', ')} because $set was also given. ` +
-          `Move them inside $set (or $set_once) to store them on the person.`
-      )
-    }
-    return {
-      $set: $set || rest,
-      $set_once: $set_once || {},
-      $anon_distinct_id: $anon_distinct_id ?? undefined,
-    }
-  }
-
-  /**
    * Identify a user and set their properties.
    *
    * @example
@@ -964,7 +921,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @param data - The identify data containing distinctId and properties
    */
   identify({ distinctId, properties = {}, disableGeoip }: IdentifyMessage): void {
-    const eventProperties = this._identifyEventProperties(properties)
+    // Catch properties passed as $set and move them to the top level
+    const { $set, $set_once, $anon_distinct_id, ...rest } = properties
+    // if no $set is provided we assume all rest properties are $set
+    const setProps = $set || rest
+    const setOnceProps = $set_once || {}
+    const eventProperties = {
+      $set: setProps,
+      $set_once: setOnceProps,
+      $anon_distinct_id: $anon_distinct_id ?? undefined,
+    }
     this._sendPreparedEvent(
       'identify',
       { distinctId, event: '$identify', properties: eventProperties, disableGeoip },
@@ -994,7 +960,16 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when the identify is processed
    */
   async identifyImmediate({ distinctId, properties = {}, disableGeoip }: IdentifyMessage): Promise<void> {
-    const eventProperties = this._identifyEventProperties(properties)
+    // Catch properties passed as $set and move them to the top level
+    const { $set, $set_once, $anon_distinct_id, ...rest } = properties
+    // if no $set is provided we assume all rest properties are $set
+    const setProps = $set || rest
+    const setOnceProps = $set_once || {}
+    const eventProperties = {
+      $set: setProps,
+      $set_once: setOnceProps,
+      $anon_distinct_id: $anon_distinct_id ?? undefined,
+    }
     await this._sendPreparedEvent(
       'identify',
       { distinctId, event: '$identify', properties: eventProperties, disableGeoip },
@@ -1500,7 +1475,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<FeatureFlagValue | undefined> {
-    warnOnce(
+    emitDeprecationWarningOnce(
       'getFeatureFlag',
       '`getFeatureFlag` is deprecated and will be removed in a future major version. ' +
         'Use `posthog.evaluateFlags(distinctId, ...)` and call `flags.getFlag(key)` instead — ' +
@@ -1572,7 +1547,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<JsonType | undefined> {
-    warnOnce(
+    emitDeprecationWarningOnce(
       'getFeatureFlagPayload',
       '`getFeatureFlagPayload` is deprecated and will be removed in a future major version. ' +
         'Use `posthog.evaluateFlags(distinctId, ...)` and call `flags.getFlagPayload(key)` instead — ' +
@@ -1761,7 +1736,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       disableGeoip?: boolean
     }
   ): Promise<boolean | undefined> {
-    warnOnce(
+    emitDeprecationWarningOnce(
       'isFeatureEnabled',
       '`isFeatureEnabled` is deprecated and will be removed in a future major version. ' +
         'Use `posthog.evaluateFlags(distinctId, ...)` and call `flags.isEnabled(key)` instead — ' +
@@ -3046,7 +3021,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         }
 
         if (sendFeatureFlags) {
-          warnOnce(
+          emitDeprecationWarningOnce(
             'sendFeatureFlags',
             '`sendFeatureFlags` is deprecated and will be removed in a future major version. ' +
               'Pass a `flags` snapshot from `posthog.evaluateFlags(...)` instead — it avoids a ' +
