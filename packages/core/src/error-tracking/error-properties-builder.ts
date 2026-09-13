@@ -1,4 +1,4 @@
-import { isArray } from '@/utils'
+import { isArray, isError } from '@/utils'
 import { getFilenameToChunkIdMap } from './chunk-ids'
 import {
   ErrorProperties,
@@ -18,6 +18,17 @@ import {
 } from './types'
 
 const MAX_CAUSE_RECURSION = 4
+// Count visits, including cyclic members, rather than only emitted exceptions.
+const MAX_AGGREGATE_VISITS = 100
+
+// Internal collections only: the event remains a flat ExceptionList.
+interface ExceptionWithChildren extends ExceptionLike {
+  errors?: ExceptionWithChildren[]
+}
+
+interface ParsedExceptionWithChildren extends ParsedException {
+  errors?: ParsedExceptionWithChildren[]
+}
 
 export class ErrorPropertiesBuilder {
   constructor(
@@ -61,7 +72,7 @@ export class ErrorPropertiesBuilder {
     }
   }
 
-  private parseStacktrace(err: ExceptionLike, ctx: ParsingContext): ParsedException {
+  private parseStacktrace(err: ExceptionWithChildren, ctx: ParsingContext): ParsedExceptionWithChildren {
     let cause: ParsedException | undefined = undefined
     if (err.cause != null) {
       cause = this.parseStacktrace(err.cause, ctx)
@@ -70,7 +81,7 @@ export class ErrorPropertiesBuilder {
     if (err.stack != '' && err.stack != null) {
       stack = this.applyChunkIds(this.stackParser(err.stack, err.synthetic ? ctx.skipFirstLines : 0), ctx.chunkIdMap)
     }
-    return { ...err, cause, stack }
+    return { ...err, cause, stack, errors: err.errors?.map((child) => this.parseStacktrace(child, ctx)) }
   }
 
   private applyChunkIds(frames: StackFrame[], chunkIdMap?: ChunkIdMapType): StackFrame[] {
@@ -99,7 +110,7 @@ export class ErrorPropertiesBuilder {
     return newFrames
   }
 
-  private convertToExceptionList(exceptionWithStack: ParsedException, mechanism: Mechanism): ExceptionList {
+  private convertToExceptionList(exceptionWithStack: ParsedExceptionWithChildren, mechanism: Mechanism): ExceptionList {
     const currentException: Exception = {
       type: exceptionWithStack.type,
       value: exceptionWithStack.value,
@@ -125,6 +136,11 @@ export class ErrorPropertiesBuilder {
         })
       )
     }
+    // Aggregate members have already been caught and combined, like cause errors.
+    // Keep them separate internally and append them after the ordinary cause chain.
+    for (const child of exceptionWithStack.errors ?? []) {
+      exceptionList.push(...this.convertToExceptionList(child, { ...mechanism, handled: true }))
+    }
     return exceptionList
   }
 
@@ -136,29 +152,73 @@ export class ErrorPropertiesBuilder {
     return context
   }
 
+  private getAggregateErrors(input: unknown): unknown[] | undefined {
+    try {
+      if (isError(input)) {
+        const errors = (input as Error & { errors?: unknown }).errors
+        return isArray(errors) ? errors : undefined
+      }
+    } catch {
+      // A malformed errors accessor must not discard the root exception.
+    }
+    return undefined
+  }
+
   public buildCoercingContext(mechanism: Mechanism, hint: EventHint, depth: number = 0): CoercingContext {
-    const coerce = (input: unknown, depth: number) => {
-      if (depth <= MAX_CAUSE_RECURSION) {
-        const ctx = this.buildCoercingContext(mechanism, hint, depth)
-        return this.applyCoercers(input, ctx)
-      } else {
+    let visits = 0
+    let hasAggregate = false
+    const ancestors: unknown[] = []
+    const coerce = (input: unknown, depth: number): ExceptionWithChildren | undefined => {
+      if (depth > MAX_CAUSE_RECURSION || (hasAggregate && visits >= MAX_AGGREGATE_VISITS)) {
         return undefined
       }
+      visits++
+      const errors = this.getAggregateErrors(input)
+      hasAggregate ||= !!errors
+      // Ordinary cause-only errors retain their existing depth-limited behavior.
+      // Track the current path, not all seen errors, so shared siblings are retained.
+      if (hasAggregate && ancestors.indexOf(input) !== -1) {
+        return undefined
+      }
+      const ctx = createContext(depth)
+      ancestors.push(input)
+      try {
+        const exception = this.applyCoercers(input, ctx)
+        if (!exception || !errors || depth === MAX_CAUSE_RECURSION) {
+          return exception
+        }
+        const children: ExceptionWithChildren[] = []
+        for (let index = 0; visits < MAX_AGGREGATE_VISITS && index < errors.length; index++) {
+          let child: ExceptionWithChildren | undefined
+          try {
+            child = ctx.next(errors[index])
+          } catch {
+            // Unreadable members use the same fallback as unsupported inputs.
+            visits++
+            child = this.coerceFallback(createContext(depth + 1))
+          }
+          if (child) {
+            children.push(child)
+          }
+        }
+        return { ...exception, errors: children }
+      } catch (error) {
+        if (!hasAggregate) {
+          throw error
+        }
+        return this.coerceFallback(ctx)
+      } finally {
+        ancestors.pop()
+      }
     }
-    const context: CoercingContext = {
+    const createContext = (depth: number): CoercingContext => ({
       ...hint,
       // Do not propagate synthetic exception as it doesn't make sense
       syntheticException: depth == 0 ? hint.syntheticException : undefined,
       mechanism,
-      // `coerce` only widens to `undefined` past MAX_CAUSE_RECURSION; `apply` reuses this
-      // context's depth, which was already validated when the context was built
-      apply: (input: unknown) => {
-        return coerce(input, depth) as ExceptionLike
-      },
-      next: (input: unknown) => {
-        return coerce(input, depth + 1)
-      },
-    }
-    return context
+      apply: (input: unknown) => coerce(input, depth) ?? this.coerceFallback(createContext(depth)),
+      next: (input: unknown) => coerce(input, depth + 1),
+    })
+    return createContext(depth)
   }
 }

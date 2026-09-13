@@ -370,6 +370,54 @@ describe('exception autocapture', () => {
     expect(result.stderr).toBe('')
   })
 
+  it('captures aggregate children in one event with Node frame modifiers', async () => {
+    const ph = new PostHog('TEST_API_KEY', { host: 'http://example.com' })
+    const child = new TypeError('alternative')
+    const aggregate = new AggregateError([child], 'group')
+    // Fixed frames make the source-context and relative-path assertions deterministic.
+    child.stack = `TypeError: alternative\n    at child (${__filename}:1:1)`
+    aggregate.stack = `AggregateError: group\n    at root (${__filename}:2:1)`
+    const capture = vi.spyOn(ph, '_capturePreparedEvent').mockResolvedValue(undefined)
+    try {
+      ph.captureException(aggregate)
+      await ph.flush()
+
+      expect(capture).toHaveBeenCalledTimes(1)
+      const event = capture.mock.calls[0][0]
+      expect(event.event).toBe('$exception')
+      expect(event.properties?.$exception_list).toMatchObject([
+        {
+          value: 'group',
+          stacktrace: {
+            frames: [
+              {
+                filename: relative(process.cwd(), __filename),
+                lineno: 2,
+                context_line: expect.any(String),
+                module: expect.any(String),
+              },
+            ],
+          },
+        },
+        {
+          value: 'alternative',
+          stacktrace: {
+            frames: [
+              {
+                filename: relative(process.cwd(), __filename),
+                lineno: 1,
+                context_line: expect.any(String),
+                module: expect.any(String),
+              },
+            ],
+          },
+        },
+      ])
+    } finally {
+      await ph.shutdown()
+    }
+  })
+
   it('should rate limit when more than 10 of the same exception are caught', async () => {
     vi.spyOn(ErrorTracking, 'buildEventMessage').mockResolvedValue({
       event: '$exception',
