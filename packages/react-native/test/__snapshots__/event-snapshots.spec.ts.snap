@@ -164,6 +164,7 @@ exports[`PostHog React Native event and request snapshots > snapshots complete e
           "$app_build": "42",
           "$app_name": "Snapshot App",
           "$app_namespace": "com.posthog.snapshot",
+          "$app_state": "active",
           "$app_version": "1.2.3",
           "$device_manufacturer": "PostHog",
           "$device_name": "Snapshot Phone",

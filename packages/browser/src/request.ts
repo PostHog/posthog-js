@@ -502,32 +502,37 @@ const addSentAtToCaptureBody = (data: NonNullable<RequestWithOptions['data']>): 
     }
 }
 
-const AVAILABLE_TRANSPORTS: {
-    transport: RequestWithOptions['transport']
-    method: (options: RequestWithOptions) => void
-}[] = []
+// Keep initialization local and pure so importing URL helpers does not retain transports and compression.
+const AVAILABLE_TRANSPORTS = /* @__PURE__ */ (() => {
+    const transports: {
+        transport: RequestWithOptions['transport']
+        method: (options: RequestWithOptions) => void
+    }[] = []
 
-// We add the transports in order of preference
-if (fetch) {
-    AVAILABLE_TRANSPORTS.push({
-        transport: 'fetch',
-        method: _fetch,
-    })
-}
+    // We add the transports in order of preference
+    if (fetch) {
+        transports.push({
+            transport: 'fetch',
+            method: _fetch,
+        })
+    }
 
-if (XMLHttpRequest) {
-    AVAILABLE_TRANSPORTS.push({
-        transport: 'XHR',
-        method: xhr,
-    })
-}
+    if (XMLHttpRequest) {
+        transports.push({
+            transport: 'XHR',
+            method: xhr,
+        })
+    }
 
-if (navigator?.sendBeacon) {
-    AVAILABLE_TRANSPORTS.push({
-        transport: 'sendBeacon',
-        method: _sendBeacon,
-    })
-}
+    if (navigator?.sendBeacon) {
+        transports.push({
+            transport: 'sendBeacon',
+            method: _sendBeacon,
+        })
+    }
+
+    return transports
+})()
 
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
 export const request = (_options: RequestWithOptions) => {

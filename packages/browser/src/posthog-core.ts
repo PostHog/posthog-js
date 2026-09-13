@@ -950,9 +950,7 @@ export class PostHog implements PostHogInterface {
         const initialDistinctId = config.bootstrap?.distinctID
         this._hasStableInitialDistinctId = !!initialDistinctId && !isEmptyString(initialDistinctId)
 
-        // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
-        // oxlint-disable-next-line posthog-js/no-direct-undefined-check
-        if (config.bootstrap?.distinctID !== undefined) {
+        if (config.bootstrap?.distinctID) {
             const bootstrapDistinctId = config.bootstrap.distinctID
             const existingDistinctId = this.get_distinct_id()
             const existingUserState = this.persistence.get_property(USER_STATE)
@@ -1871,6 +1869,7 @@ export class PostHog implements PostHogInterface {
             compression: 'best-available',
             timestampMode: isSessionRecording ? 'body' : 'capture-body',
             batchKey: options?._batchKey,
+            ...(isSessionRecording && data.properties?.$session_id ? { batchGroup: data.properties.$session_id } : {}),
             ...(options?.transport ? { transport: options.transport } : {}),
             ...(fbcToConfirm
                 ? {
@@ -3693,9 +3692,7 @@ export class PostHog implements PostHogInterface {
             )
 
             if (bootstrap) {
-                // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
-                // oxlint-disable-next-line posthog-js/no-direct-undefined-check
-                if (bootstrap.distinctID !== undefined && !this._inCookielessMode()) {
+                if (bootstrap.distinctID && !this._inCookielessMode()) {
                     this.persistence?.set_property(
                         USER_STATE,
                         bootstrap.isIdentifiedID ? USER_STATE_IDENTIFIED : USER_STATE_ANONYMOUS
@@ -3706,7 +3703,7 @@ export class PostHog implements PostHogInterface {
                 this.featureFlags?.initialize()
 
                 if (
-                    !isUndefined(bootstrapSessionID) &&
+                    !isNullish(bootstrapSessionID) &&
                     !this.sessionManager?.setBootstrapSessionId(bootstrapSessionID, true)
                 ) {
                     const bootstrapWithoutSessionID = { ...bootstrap }

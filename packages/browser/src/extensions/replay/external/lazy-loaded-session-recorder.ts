@@ -1166,7 +1166,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     cacheTimestamp,
                     persistedConfig,
                 })
-                this._instance.persistence?.unregister(SESSION_RECORDING_REMOTE_CONFIG)
+                // Core needs the persisted config to reach its refresh path when recording restarts.
                 return undefined
             }
         }

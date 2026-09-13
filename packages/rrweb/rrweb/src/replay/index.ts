@@ -2061,6 +2061,15 @@ export class Replayer {
       for (const attributeName in mutation.attributes) {
         if (typeof attributeName === 'string') {
           const value = mutation.attributes[attributeName];
+          // rebuild forces autocomplete="off" on inputs and textareas so the
+          // viewer's browser never offers autofill inside the replay; a
+          // recorded change to that attribute must not undo it
+          if (
+            attributeName === 'autocomplete' &&
+            (target.nodeName === 'INPUT' || target.nodeName === 'TEXTAREA')
+          ) {
+            continue;
+          }
           if (value === null) {
             (target as Element | RRElement).removeAttribute(attributeName);
             if (attributeName === 'open')

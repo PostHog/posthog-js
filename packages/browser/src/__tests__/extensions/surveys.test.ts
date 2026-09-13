@@ -26,6 +26,7 @@ import {
 } from '../../posthog-surveys-types'
 
 import { beforeEach } from 'vitest'
+import Config from '@posthog/browser-common/config'
 import '@testing-library/jest-dom'
 import * as Preact from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
@@ -986,6 +987,49 @@ describe('SurveyManager', () => {
                 expect(surveyManager.checkSurveyDisplayEligibility(mockSurveys[0]).eligible).toBe(true)
                 expect(handlePopoverSurveyMock).toHaveBeenCalled()
             })
+        })
+    })
+
+    describe('warns when advanced_disable_feature_flags hides a survey', () => {
+        const makeFlagGatedSurvey = (): Survey => ({
+            ...mockSurveys[0],
+            id: 'flag-gated-survey',
+            targeting_flag_key: 'survey-targeting-flag-key2',
+        })
+
+        let consoleWarn: ReturnType<typeof vi.spyOn>
+
+        beforeEach(() => {
+            Config.DEBUG = true
+            consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        })
+
+        afterEach(() => {
+            Config.DEBUG = false
+            consoleWarn.mockRestore()
+        })
+
+        it('names the survey-only escape hatch, once per instance', () => {
+            mockPostHog.config.advanced_disable_feature_flags = true
+
+            expect(surveyManager.checkSurveyEligibility(makeFlagGatedSurvey()).eligible).toBe(false)
+            surveyManager.checkSurveyEligibility(makeFlagGatedSurvey())
+
+            expect(consoleWarn).toHaveBeenCalledTimes(1)
+            expect(consoleWarn.mock.calls[0].join(' ')).toContain('advanced_only_evaluate_survey_feature_flags')
+        })
+
+        it('stays quiet when debug logging is disabled', () => {
+            Config.DEBUG = false
+            mockPostHog.config.advanced_disable_feature_flags = true
+
+            expect(surveyManager.checkSurveyEligibility(makeFlagGatedSurvey()).eligible).toBe(false)
+            expect(consoleWarn).not.toHaveBeenCalled()
+        })
+
+        it('stays quiet when a survey flag is false and flags are enabled', () => {
+            expect(surveyManager.checkSurveyEligibility(makeFlagGatedSurvey()).eligible).toBe(false)
+            expect(consoleWarn).not.toHaveBeenCalled()
         })
     })
 

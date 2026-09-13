@@ -7,20 +7,46 @@ import { StackFrame } from '../types'
 
 export const UNKNOWN_FUNCTION = '?'
 
-// Safari replaces the URL of scripts it will not attribute to the page with this placeholder.
-// Web extension content scripts are the common source, but blob:, eval'd and injected code can
-// be masked the same way, so the filename alone cannot tell us which one we are looking at.
-// Either way it is not the page's own code, so keep the frame -- it is still useful context --
-// but do not let it count as in_app and pull the issue into the site's own stack.
-const MASKED_URL_PREFIX = 'webkit-masked-url://'
-
-// Chromium's counterpart: a script with no URL at all -- code injected by an extension
-// (`chrome.scripting.executeScript`), pasted into devtools, or evaluated from a string -- shows
-// up as a bare `<anonymous>:line:col` frame. The page's own eval'd code is *not* affected: V8
-// reports it as `eval at <anonymous> (https://site/app.js:1:2)` and the chrome parser already
-// rewrites that to the site URL. A bare `<anonymous>` can never be symbolicated, so treating it
-// as in_app only ever pulled an unresolvable frame into the site's own stack.
+// Chromium reports a script with no URL at all -- code injected by an extension
+// (`chrome.scripting.executeScript`), pasted into devtools, or evaluated from a string -- as a bare
+// `<anonymous>:line:col` frame. The page's own eval'd code is *not* affected: V8 reports it as
+// `eval at <anonymous> (https://site/app.js:1:2)` and the chrome parser already rewrites that to
+// the site URL. A bare `<anonymous>` can never be symbolicated.
 const ANONYMOUS_FILENAME = '<anonymous>'
+
+// A leading `scheme:` in a filename, needing two characters or more so that a Windows drive letter
+// such as `C:` does not read as one.
+const URL_SCHEME = /^([a-z][a-z0-9.+-]+):/i
+
+// The schemes an app is served over. Everything else names code the container put into the page
+// rather than code the app loaded: Safari masks extension content scripts as `webkit-masked-url://`,
+// Chromium serves them from `chrome-extension://`, and Android in-app browsers serve their native
+// bridge from schemes such as `iabjs://`. Listing every injector's scheme never keeps up with the
+// next one, so accept the schemes an app is served over and reject the rest.
+const APP_URL_SCHEMES = [
+  'http',
+  'https',
+  'file',
+  'blob',
+  'app',
+  'capacitor',
+  'ionic',
+  'webpack',
+  'webpack-internal',
+  'ng',
+]
+
+// Is this filename a script the app itself loaded? A filename with no scheme is one: React Native
+// names its own bundle `index.android.bundle`, and a bundler can report a bare path.
+function isAppFilename(filename: string): boolean {
+  if (!filename || filename === ANONYMOUS_FILENAME) {
+    return false
+  }
+
+  const scheme = URL_SCHEME.exec(filename)
+
+  return !scheme || APP_URL_SCHEMES.includes((scheme[1] as string).toLowerCase())
+}
 
 export function createFrame(
   platform: StackFrame['platform'],
@@ -34,12 +60,9 @@ export function createFrame(
     platform,
     filename,
     function: func === '<anonymous>' ? UNKNOWN_FUNCTION : func,
-    // Browser frames are considered in_app unless the runtime has masked or dropped their origin.
-    // A frame with no filename at all is the third case: the runtime reports a function name, a
-    // line and a column, but no script URL. Android in-app browsers report their injected native
-    // bridge scripts this way. Such a frame can never be symbolicated either, so it must not
-    // count as the page's own code.
-    in_app: !!filename && !filename.startsWith(MASKED_URL_PREFIX) && filename !== ANONYMOUS_FILENAME,
+    // Keep a frame the app did not load -- it is still useful context -- but do not let it count as
+    // in_app and pull the issue into the app's own stack.
+    in_app: isAppFilename(filename),
   }
 
   if (!isUndefined(lineno)) {

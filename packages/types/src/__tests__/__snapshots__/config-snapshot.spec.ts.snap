@@ -789,23 +789,28 @@ exports[`config > snapshot > for PostHogConfig 1`] = `
   \\"bootstrap\\": {
     \\"distinctID\\": [
       \\"undefined\\",
+      \\"null\\",
       \\"string\\"
     ],
     \\"isIdentifiedID\\": [
       \\"undefined\\",
+      \\"null\\",
       \\"false\\",
       \\"true\\"
     ],
     \\"featureFlags\\": [
       \\"undefined\\",
+      \\"null\\",
       \\"Record<string, string | boolean>\\"
     ],
     \\"featureFlagPayloads\\": [
       \\"undefined\\",
+      \\"null\\",
       \\"Record<string, JsonType>\\"
     ],
     \\"sessionID\\": [
       \\"undefined\\",
+      \\"null\\",
       \\"string\\"
     ]
   },

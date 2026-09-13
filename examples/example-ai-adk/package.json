@@ -3,7 +3,7 @@
     "version": "0.1.0",
     "private": true,
     "type": "module",
-    "packageManager": "pnpm@10.15.0",
+    "packageManager": "pnpm@10.33.0",
     "scripts": {
         "chat": "tsx --require dotenv/config chat.ts",
         "typecheck": "tsc --noEmit"

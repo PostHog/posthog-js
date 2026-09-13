@@ -625,8 +625,8 @@ describe('Lazy SessionRecording', () => {
                     expect(result?.enabled).toBe(true)
                 } else {
                     expect(result).toBeUndefined()
-                    expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBeUndefined()
                 }
+                expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toEqual(persistedConfig)
             })
 
             it('treats legacy config without cache_timestamp as fresh', () => {
@@ -8306,6 +8306,38 @@ describe('Lazy SessionRecording', () => {
                 expect.anything()
             )
         })
+    })
+
+    describe('stale config reads while stopped', () => {
+        it.each(['status', 'sdkDebugProperties'] as const)(
+            'preserves config and refreshes before restarting after a %s read',
+            (read) => {
+                addRRwebToWindow()
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                expect(sessionRecording.started).toBe(true)
+                sessionRecording.stopRecording()
+                expect(sessionRecording.started).toBe(false)
+
+                const staleConfig = {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS - 1,
+                }
+                posthog.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: staleConfig })
+                mockRemoteConfigLoad.mockClear()
+
+                void sessionRecording[read]
+
+                expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toEqual(staleConfig)
+                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.startIfEnabledOrStop()
+                expect(mockRemoteConfigLoad).toHaveBeenCalledTimes(1)
+                expect(sessionRecording.started).toBe(false)
+
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                expect(sessionRecording.started).toBe(true)
+            }
+        )
     })
 
     describe('wait for fresh config before starting', () => {

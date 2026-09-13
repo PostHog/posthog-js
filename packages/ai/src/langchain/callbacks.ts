@@ -507,6 +507,13 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
   ): void {
     const latency = run.endTime ? (run.endTime - run.startTime) / 1000 : 0
     warnIfPostHogAiGateway(run.baseUrl)
+    // The served tier comes from the response; a requested tier can be refused.
+    let modelParams = run.modelParams
+    const servedTier = output instanceof Error ? undefined : this._extractServedServiceTier(output)
+    if (servedTier != null) {
+      modelParams = { ...modelParams, service_tier: servedTier }
+    }
+    const eventPropertiesServedTier = servedTier != null ? { $ai_service_tier: String(servedTier) } : {}
     const eventProperties: Record<string, any> = {
       $ai_lib: 'posthog-ai',
       $ai_lib_version: version,
@@ -515,12 +522,13 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_span_name: run.name,
       $ai_provider: run.provider,
       $ai_model: run.model,
-      $ai_model_parameters: run.modelParams,
+      $ai_model_parameters: modelParams,
       $ai_input: withPrivacyMode(this.client, this.privacyMode, run.input),
       $ai_http_status: 200,
       $ai_latency: latency,
       $ai_base_url: run.baseUrl,
       $ai_framework: 'langchain',
+      ...eventPropertiesServedTier,
     }
     if (parentRunId) {
       eventProperties['$ai_parent_id'] = parentRunId
@@ -702,6 +710,14 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
 
     // Sanitize the message content to redact base64 images
     return sanitizeLangChain(messageDict, this.client) as Record<string, any>
+  }
+
+  private _extractServedServiceTier(output: LLMResult): string | undefined {
+    const gen = output.generations?.[output.generations.length - 1]?.[0] as any
+    const fromResponsesAdapter = gen?.message?.response_metadata?.service_tier
+    const fromCompletionsAdapter = gen?.generationInfo?.service_tier
+    const tier = fromResponsesAdapter ?? fromCompletionsAdapter
+    return tier == null ? undefined : String(tier)
   }
 
   private _extractStopReason(output: LLMResult): string | undefined {

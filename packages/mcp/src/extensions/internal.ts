@@ -226,15 +226,26 @@ export async function resolveEventProperties(
   }
 }
 
+/**
+ * Names what a request is about, for `$identify`. `resources/read` addresses its
+ * subject by `uri` rather than `name`, so an identify published from a read used
+ * to report `Unknown`.
+ */
 function getRequestResourceName(request: unknown): string {
   if (!request || typeof request !== 'object' || !('params' in request)) {
     return 'Unknown'
   }
 
   const params = request.params
-  if (!params || typeof params !== 'object' || !('name' in params)) {
+  if (!params || typeof params !== 'object') {
     return 'Unknown'
   }
 
-  return typeof params.name === 'string' ? params.name : 'Unknown'
+  for (const key of ['name', 'uri'] as const) {
+    const value = (params as Record<string, unknown>)[key]
+    if (typeof value === 'string') {
+      return value
+    }
+  }
+  return 'Unknown'
 }

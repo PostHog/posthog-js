@@ -1,4 +1,5 @@
 import { BaseRRNode } from '@posthog/rrdom';
+import { performance } from 'perf_hooks';
 import { RRDocument } from './document-nodejs';
 
 /**
@@ -8,7 +9,6 @@ import { RRDocument } from './document-nodejs';
  */
 export function polyfillPerformance(): void {
   if (typeof window !== 'undefined' || 'performance' in global) return;
-  const performance = require('perf_hooks').performance;
   ((global as Window & typeof globalThis).performance as unknown) = performance;
 }
 
