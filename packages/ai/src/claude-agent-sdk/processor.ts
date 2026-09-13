@@ -84,6 +84,7 @@ interface GenerationData {
   model?: string
   usage: TokenUsage
   stopReason?: string
+  streamedOutput?: ClaudeAgentContentItem[]
 }
 
 /**
@@ -115,7 +116,7 @@ class GenerationTracker {
     return this._pendingInput
   }
 
-  processStreamEvent(event: StreamEvent, ttftMs?: number): void {
+  processStreamEvent(event: StreamEvent, client: PostHog, ttftMs?: number): void {
     this._sawStreamEvents = true
 
     if (event.type === 'message_start') {
@@ -127,8 +128,21 @@ class GenerationTracker {
         timeToFirstToken: ttftMs != null ? ttftMs / 1000 : undefined,
         model: event.message.model,
         usage: readUsage(usage),
+        streamedOutput: [],
       }
       this._pendingInput = undefined
+    } else if (event.type === 'content_block_start' && this._current?.streamedOutput) {
+      this._current.streamedOutput[event.index] = formatAssistantBlocks([event.content_block], client)[0]
+    } else if (event.type === 'content_block_delta') {
+      const block = this._current?.streamedOutput?.[event.index]
+      if (event.delta.type === 'text_delta' && block?.type === 'text') {
+        block.text += event.delta.text
+      } else if (event.delta.type === 'thinking_delta' && block?.type === 'reasoning') {
+        block.text += event.delta.thinking
+      } else if (event.delta.type === 'input_json_delta' && block?.type === 'function') {
+        const previous = block.function.arguments
+        block.function.arguments = (typeof previous === 'string' ? previous : '') + event.delta.partial_json
+      }
     } else if (event.type === 'message_delta' && this._current) {
       const usage = event.usage as AnthropicUsage | undefined
       // `message_delta` reports the cumulative counts of the call so far.
@@ -469,7 +483,7 @@ export class PostHogClaudeAgentProcessor {
       if (message.event.type === 'message_start') {
         this._beginTurn(state, message.user_message_uuid)
       }
-      state.tracker.processStreamEvent(message.event, message.ttft_ms)
+      state.tracker.processStreamEvent(message.event, this._client, message.ttft_ms)
       await this._captureCompletedGenerations(state, trace)
     } else if (message.type === 'assistant') {
       if (!message.parent_tool_use_id) {
@@ -566,7 +580,11 @@ export class PostHogClaudeAgentProcessor {
       provider: PROVIDER,
       baseURL: null,
       input: generation.input ?? [],
-      output: formatOutput(state.pendingOutput),
+      // Complete assistant messages replace the streamed prefix, leaving only unfinished blocks to append.
+      output: formatOutput([
+        ...state.pendingOutput,
+        ...(generation.streamedOutput?.slice(state.pendingOutput.length).filter(Boolean) ?? []),
+      ]),
       latency: generation.endTime != null ? (generation.endTime - generation.startTime) / 1000 : undefined,
       timeToFirstToken: generation.timeToFirstToken,
       usage: generation.usage,

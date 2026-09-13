@@ -69,6 +69,14 @@ function messageStop(): any {
   return { type: 'stream_event', session_id: 'sess_123', event: { type: 'message_stop' } }
 }
 
+function contentBlockStart(index: number, content_block: Record<string, any>): any {
+  return { type: 'stream_event', session_id: 'sess_123', event: { type: 'content_block_start', index, content_block } }
+}
+
+function contentBlockDelta(index: number, delta: Record<string, any>): any {
+  return { type: 'stream_event', session_id: 'sess_123', event: { type: 'content_block_delta', index, delta } }
+}
+
 function assistantMessage(content: any[]): any {
   return {
     type: 'assistant',
@@ -422,6 +430,118 @@ describe('Claude Agent SDK integration', () => {
     }
   )
 
+  it.each(['break', 'return', 'failure', 'hidden-partials'])('retains streamed text on %s', async (ending) => {
+    const client = createMockClient()
+    const failure = new Error('Stream interrupted')
+    const shouldFail = ending === 'failure' || ending === 'hidden-partials'
+    queryMock.mockReturnValue(
+      scriptedQuery(
+        [
+          messageStart(),
+          contentBlockStart(0, { type: 'text', text: '' }),
+          contentBlockDelta(0, { type: 'text_delta', text: 'Already ' }),
+          contentBlockDelta(0, { type: 'text_delta', text: 'delivered' }),
+        ],
+        { failure: shouldFail ? failure : undefined }
+      )
+    )
+    const running = instrument({ client }).query({
+      prompt: 'Hello',
+      options: { includePartialMessages: ending !== 'hidden-partials' },
+    })
+
+    if (shouldFail) {
+      await expect(drain(running)).rejects.toThrow(failure)
+    } else {
+      let deltas = 0
+      for await (const message of running) {
+        if (message.type === 'stream_event' && message.event.type === 'content_block_delta' && ++deltas === 2) {
+          if (ending === 'return') await running.return()
+          break
+        }
+      }
+    }
+
+    const generations = capturedEvents(client, '$ai_generation')
+    expect(generations).toHaveLength(1)
+    expect(generations[0].properties.$ai_output_choices).toEqual([
+      { role: 'assistant', content: [{ type: 'text', text: 'Already delivered' }] },
+    ])
+    expect(generations[0].properties.$ai_is_error).toBe(shouldFail ? true : undefined)
+    expect(capturedEvents(client, '$ai_trace')).toHaveLength(1)
+  })
+
+  it.each([false, true])(
+    'replaces streamed blocks with complete assistant blocks (completed=%s)',
+    async (completed) => {
+      const client = createMockClient()
+      queryMock.mockReturnValue(
+        scriptedQuery([
+          messageStart(),
+          contentBlockStart(0, { type: 'text', text: '' }),
+          contentBlockDelta(0, { type: 'text_delta', text: 'Draft' }),
+          assistantMessage([{ type: 'text', text: 'Final text' }]),
+          contentBlockStart(1, { type: 'thinking', thinking: '', signature: '' }),
+          contentBlockDelta(1, { type: 'thinking_delta', thinking: 'Let me ' }),
+          contentBlockDelta(1, { type: 'thinking_delta', thinking: 'check' }),
+          ...(completed
+            ? [
+                assistantMessage([{ type: 'thinking', thinking: 'Let me check', signature: 'sig' }]),
+                messageStop(),
+                resultMessage(),
+                messageStart(),
+                messageStop(),
+                resultMessage(),
+              ]
+            : []),
+        ])
+      )
+
+      await drain(instrument({ client }).query({ prompt: 'Think' }))
+
+      const generations = capturedEvents(client, '$ai_generation')
+      expect(generations).toHaveLength(completed ? 2 : 1)
+      expect(generations[0].properties.$ai_output_choices).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'Final text' },
+            { type: 'reasoning', text: 'Let me check' },
+          ],
+        },
+      ])
+      if (completed) expect(generations[1].properties.$ai_output_choices).toEqual([])
+    }
+  )
+
+  it.each([false, true])('retains partial tool arguments and respects privacy (privacy=%s)', async (privacyMode) => {
+    const client = createMockClient()
+    queryMock.mockReturnValue(
+      scriptedQuery([
+        messageStart(),
+        contentBlockStart(0, { type: 'tool_use', id: 'tool_1', name: 'Read', input: {} }),
+        contentBlockDelta(0, { type: 'input_json_delta', partial_json: '{"file_path":' }),
+        contentBlockDelta(0, { type: 'input_json_delta', partial_json: '"/tmp' }),
+      ])
+    )
+
+    await drain(instrument({ client, privacyMode }).query({ prompt: 'Read a file' }))
+
+    expect(capturedEvents(client, '$ai_generation')[0].properties.$ai_output_choices).toEqual(
+      privacyMode
+        ? null
+        : [
+            {
+              role: 'assistant',
+              content: [
+                { type: 'function', id: 'tool_1', function: { name: 'Read', arguments: '{"file_path":"/tmp' } },
+              ],
+            },
+          ]
+    )
+    expect(capturedEvents(client, '$ai_span')).toHaveLength(0)
+  })
+
   it.each(['return', 'throw'])('calls SDK cleanup on %s before the first next', async (ending) => {
     const client = createMockClient()
     const failure = new Error('Cancelled')
@@ -514,6 +634,59 @@ describe('Claude Agent SDK integration', () => {
     const generation = capturedEvents(client, '$ai_generation')[0]
     expect(generation.properties.$process_person_profile).toBe(false)
     expect(generation.properties.environment).toBe('production')
+  })
+
+  it.each([
+    { enableFullAiCapture: false, privacyMode: false },
+    { enableFullAiCapture: true, privacyMode: false },
+    { enableFullAiCapture: true, privacyMode: true },
+  ])('preserves multimodal prompts using the capture policy (%j)', async ({ enableFullAiCapture, privacyMode }) => {
+    const client = createMockClient()
+    client.enableFullAiCapture = enableFullAiCapture
+    const image = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' } }
+    const document = {
+      type: 'document',
+      source: { type: 'text', media_type: 'text/plain', data: 'Quarterly revenue: 123' },
+    }
+    const content = [{ type: 'text', text: 'Summarize these' }, image, document]
+    const prompt = toolResultMessage(content)
+    const received: any[] = []
+    queryMock.mockImplementation(({ prompt: stream }) =>
+      (async function* () {
+        received.push(...(await drain(stream)))
+        yield messageStart()
+        yield messageStop()
+        yield resultMessage()
+      })()
+    )
+
+    await drain(
+      instrument({ client, privacyMode }).query({
+        prompt: (async function* () {
+          yield prompt
+        })(),
+      })
+    )
+
+    expect(received).toEqual([prompt])
+    expect(received[0]).toBe(prompt)
+    expect(image.source.data).toBe('iVBORw0KGgo=')
+    expect(capturedEvents(client, '$ai_generation')[0].properties.$ai_input).toEqual(
+      privacyMode
+        ? null
+        : [
+            {
+              role: 'user',
+              content: [
+                content[0],
+                enableFullAiCapture
+                  ? image
+                  : { ...image, source: { ...image.source, data: '[base64 image/png redacted]' } },
+                document,
+              ],
+            },
+          ]
+    )
   })
 
   it('truncates long tool results', async () => {

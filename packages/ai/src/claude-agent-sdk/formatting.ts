@@ -21,14 +21,6 @@ interface FormattedReasoningContent {
 
 export type ClaudeAgentContentItem = FormattedContentItem | FormattedReasoningContent
 
-/** A tool result block queued as input for the next generation. */
-interface FormattedToolResult {
-  type: 'tool_result'
-  tool_use_id: string
-  content: unknown
-  is_error?: boolean
-}
-
 function capStrings(value: unknown, max: number): unknown {
   if (typeof value === 'string') {
     return value.length > max ? `${value.slice(0, max)}... [truncated]` : value
@@ -100,7 +92,7 @@ export function formatUserContent(content: unknown, client: PostHog): FormattedC
     return []
   }
 
-  const formatted: Array<ClaudeAgentContentItem | FormattedToolResult> = []
+  const formatted: unknown[] = []
   for (const block of content as Array<Record<string, any>>) {
     if (block == null) {
       continue
@@ -114,6 +106,8 @@ export function formatUserContent(content: unknown, client: PostHog): FormattedC
       })
     } else if (typeof block.text === 'string') {
       formatted.push({ type: 'text', text: block.text })
+    } else {
+      formatted.push(sanitizeAnthropic(block, client))
     }
   }
   return formatted
