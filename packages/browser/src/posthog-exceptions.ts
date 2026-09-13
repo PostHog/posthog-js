@@ -37,6 +37,17 @@ const EXTENSION_URL_PREFIXES = [
 // exception value instead. No page or SDK code references these names.
 const INJECTED_BROWSER_SCRIPT_GLOBALS = ['__firefox__', '__gCrWeb']
 
+// Facebook's WebView can report these Java bridge errors against the page URL.
+// Match only the known messages, not application errors that add their own context.
+// https://github.com/getsentry/sentry-javascript/issues/15065
+// https://github.com/getsentry/sentry-javascript/issues/23733
+const FACEBOOK_WEBVIEW_EXCEPTION_VALUES = [
+    'Java exception was raised during method invocation',
+    'Java object is gone',
+    'Error invoking postMessage: Java exception was raised during method invocation',
+    'Error invoking postMessage: Java object is gone',
+]
+
 export function buildErrorPropertiesBuilder() {
     return new ErrorTracking.ErrorPropertiesBuilder(
         [
@@ -334,7 +345,11 @@ export class PostHogExceptions implements Extension {
 
     private _isInjectedBrowserScriptException(exceptionList: ErrorTracking.ExceptionList): boolean {
         return exceptionList.some(({ value }) => {
-            return isString(value) && INJECTED_BROWSER_SCRIPT_GLOBALS.some((global) => value.includes(global))
+            return (
+                isString(value) &&
+                (INJECTED_BROWSER_SCRIPT_GLOBALS.some((global) => value.includes(global)) ||
+                    FACEBOOK_WEBVIEW_EXCEPTION_VALUES.some((signature) => value === signature))
+            )
         })
     }
 
