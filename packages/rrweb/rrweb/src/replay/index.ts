@@ -645,6 +645,8 @@ export class Replayer {
     }
 
     this.pause();
+    // Live playback does not handle PAUSE, so destroy must clear its timer explicitly.
+    this.timer.clear();
 
     // Remove all tracked emitter handlers
     this.emitterHandlers.forEach(({ event, handler }) => {
