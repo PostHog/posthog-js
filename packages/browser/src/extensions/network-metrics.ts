@@ -5,7 +5,6 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import type { PostHog } from '../posthog-core'
 import type { MetricAttributes, NetworkMetricsConfig, NetworkMetricsRequest } from '../types'
-import { isMarkedPostHogRequest } from '../utils/request-tracking'
 import { patch } from './replay/rrweb-plugins/patch'
 
 const logger = createLogger('[NetworkMetrics]')
@@ -35,13 +34,10 @@ const toRequest = (method: unknown, url: unknown): NetworkMetricsRequest => ({
 })
 
 // `api_host` may be a relative proxy path like `/ingest`, so resolve it the same way as the request url.
-// The match stops at a path boundary. Host roots are handled by the request-layer marker instead of matching
-// the entire origin, which keeps same-origin proxy traffic observable.
+// The match stops at a path boundary: with `api_host: '/ingest'`, `/ingest/e/` belongs to PostHog but the
+// application's own `/ingestion-status` does not. A host root matches that whole origin, which is what the
+// subdomain and cloud setups need.
 const isUnderEndpoint = (url: string, endpoint: string): boolean => {
-    const parsedEndpoint = convertToURL(endpoint)
-    if (!parsedEndpoint || (parsedEndpoint.pathname === '/' && !parsedEndpoint.search && !parsedEndpoint.hash)) {
-        return false
-    }
     const base = toAbsoluteUrl(endpoint).replace(/\/$/, '')
     return url === base || url.indexOf(base + '/') === 0 || url.indexOf(base + '?') === 0
 }
@@ -49,7 +45,6 @@ const isUnderEndpoint = (url: string, endpoint: string): boolean => {
 const isPostHogRequest = (instance: PostHog, url: string): boolean => {
     const router = instance.requestRouter
     return (
-        isMarkedPostHogRequest(url) ||
         isUnderEndpoint(url, router.endpointFor('api')) ||
         isUnderEndpoint(url, router.endpointFor('flags')) ||
         // the asset host serves the remote config JSON fallback, which travels over fetch or XHR
@@ -108,9 +103,6 @@ const patchFetch = (instance: PostHog): (() => void) => {
                     (init as RequestInit | undefined)?.method ?? (input as Request)?.method ?? 'GET',
                     (input as Request)?.url ?? input
                 )
-                if (isPostHogRequest(instance, request.url) || !isFunction(result?.then)) {
-                    return result
-                }
                 return result.then(
                     (response: Response) => {
                         record(instance, request, response?.status, start)
@@ -123,8 +115,8 @@ const patchFetch = (instance: PostHog): (() => void) => {
                 )
             } catch (e) {
                 logger.error('Failed to observe fetch', e)
+                return result
             }
-            return result
         }
     })
 }
@@ -152,13 +144,10 @@ const patchXHR = (instance: PostHog): (() => void) => {
                 const request = requests.get(this)
                 if (request) {
                     const start = now()
-                    const shouldRecord = !isPostHogRequest(instance, request.url)
                     const onLoadEnd = () => {
                         this.removeEventListener('loadend', onLoadEnd)
                         // XHR reports status 0 when no response arrived, which the callback contract calls `undefined`.
-                        if (shouldRecord) {
-                            record(instance, request, this.status || undefined, start)
-                        }
+                        record(instance, request, this.status || undefined, start)
                     }
                     addEventListener(this as unknown as Element, 'loadend', onLoadEnd)
                 }

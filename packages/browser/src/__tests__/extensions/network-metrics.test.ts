@@ -1,7 +1,6 @@
 import { startNetworkMetrics } from '../../extensions/network-metrics'
 import { PostHog } from '../../posthog-core'
 import type { NetworkMetricsConfig } from '../../types'
-import { markPostHogRequest, unmarkPostHogRequest } from '../../utils/request-tracking'
 
 vi.mock('@posthog/browser-common/utils/logger', () => ({
     createLogger: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() })),
@@ -38,15 +37,6 @@ describe('network metrics', () => {
     }
 
     const recorded = (): any[] => histogram.mock.calls
-
-    const fetchAsPostHog = async (url: string): Promise<void> => {
-        markPostHogRequest(url)
-        try {
-            await window.fetch(url)
-        } finally {
-            unmarkPostHogRequest(url)
-        }
-    }
 
     const sendXHR = (method: string, url: string, status: number): void => {
         const xhr = new window.XMLHttpRequest() as unknown as FakeXHR
@@ -98,9 +88,7 @@ describe('network metrics', () => {
             })
             start()
 
-            const result = window.fetch('https://api.example.com/things')
-            expect(result).not.toBe(original)
-            await expect(result).resolves.toEqual({ status: 200 })
+            await expect(window.fetch('https://api.example.com/things')).resolves.toEqual({ status: 200 })
             await original
             expect(calls).toEqual([['https://api.example.com/things']])
         })
@@ -187,45 +175,9 @@ describe('network metrics', () => {
         ])('does not record requests to PostHog itself: %s', async (url) => {
             start()
 
-            await fetchAsPostHog(url)
+            await window.fetch(url)
 
             expect(recorded()).toEqual([])
-        })
-
-        it('records application requests when api_host is the page origin', async () => {
-            ;(mockPostHog.requestRouter.endpointFor as vi.Mock).mockReturnValue(window.location.origin)
-            start()
-
-            await window.fetch('/customer-api')
-
-            expect(recorded()).toHaveLength(1)
-        })
-
-        it('ignores a marked upload from another named PostHog instance', async () => {
-            const otherHistogram = vi.fn()
-            const other = {
-                config: { metrics: { network: true } },
-                metrics: { histogram: otherHistogram },
-                requestRouter: {
-                    endpointFor: vi.fn(() => 'https://other.example.com'),
-                    isIngestionEndpoint: vi.fn(() => false),
-                },
-            } as unknown as PostHog
-            const firstStop = startNetworkMetrics(mockPostHog)
-            const secondStop = startNetworkMetrics(other)
-            const url = 'https://other.example.com/i/v1/metrics?token=other'
-
-            markPostHogRequest(url)
-            try {
-                await window.fetch(url)
-            } finally {
-                unmarkPostHogRequest(url)
-                firstStop()
-                secondStop()
-            }
-
-            expect(histogram).not.toHaveBeenCalled()
-            expect(otherHistogram).not.toHaveBeenCalled()
         })
 
         it.each([['/ingest/e/?ip=1'], ['http://localhost/ingest/i/v1/metrics']])(
