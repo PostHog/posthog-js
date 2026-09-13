@@ -1,6 +1,5 @@
 ---
 '@posthog/core': patch
-'posthog-node': patch
 ---
 
-Reject failed immediate deliveries and require 2xx write responses.
+Require final 2xx responses for successful writes while preserving immediate-call error handling.

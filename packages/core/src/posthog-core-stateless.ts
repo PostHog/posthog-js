@@ -1317,7 +1317,6 @@ export abstract class PostHogCoreStateless {
       await this.sendBatch([message], undefined, explicitRoute ?? this.getQueueRouteKey(message))
     } catch (err) {
       this._events.emit('error', err)
-      throw err
     }
   }
 
@@ -1998,17 +1997,7 @@ export abstract class PostHogCoreStateless {
 
     const doShutdown = async (): Promise<void> => {
       try {
-        while (this.promiseQueue.length > 0) {
-          try {
-            await this.promiseQueue.join()
-          } catch (e) {
-            if (!isPostHogFetchError(e)) {
-              throw e
-            }
-            // A failed immediate request must not skip other pending work or the queued events below.
-            await logFlushError(e)
-          }
-        }
+        await this.promiseQueue.join()
 
         while (true) {
           const hasQueuedEvents = this.getActiveQueueRoutes().some((route) => this.getRouteQueue(route).length > 0)
