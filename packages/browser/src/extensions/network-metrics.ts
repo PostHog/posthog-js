@@ -49,6 +49,8 @@ const isPostHogRequest = (instance: PostHog, url: string): boolean => {
         isUnderEndpoint(url, router.endpointFor('flags')) ||
         // the asset host serves the remote config JSON fallback, which travels over fetch or XHR
         isUnderEndpoint(url, router.endpointFor('assets')) ||
+        // the toolbar talks to the ui host directly; that traffic belongs to PostHog staff tooling, not the customer's app
+        isUnderEndpoint(url, router.endpointFor('ui')) ||
         router.isIngestionEndpoint(url)
     )
 }
@@ -71,6 +73,9 @@ const record = (
         return
     }
     try {
+        // A status of 0 means no response arrived (fetch's opaque no-cors responses report it too),
+        // which the callback contract calls `undefined`. Normalised once here for both transports.
+        const normalisedStatus = status || undefined
         const durationMs = now() - start
         const config = networkConfig(instance)
         if (!config || isPostHogRequest(instance, request.url)) {
@@ -89,8 +94,8 @@ const record = (
             method: request.method,
             host: url?.hostname ?? '',
             path: url ? templatePath(url.pathname) : '',
-            status_class: statusClass(status),
-            ...config.attributes?.(request, { status, durationMs }),
+            status_class: statusClass(normalisedStatus),
+            ...config.attributes?.(request, { status: normalisedStatus, durationMs }),
         }
         instance.metrics?.histogram(name, durationMs, { unit: 'ms', attributes })
     } catch (e) {
@@ -158,8 +163,7 @@ const patchXHR = (instance: PostHog, isActive: IsActive): (() => void) => {
                     const start = now()
                     const loadEndListener = () => {
                         this.removeEventListener('loadend', loadEndListener)
-                        // XHR reports status 0 when no response arrived, which the callback contract calls `undefined`.
-                        record(instance, request, this.status || undefined, start, isActive)
+                        record(instance, request, this.status, start, isActive)
                     }
                     onLoadEnd = loadEndListener
                     addEventListener(this as unknown as Element, 'loadend', loadEndListener)

@@ -63,6 +63,9 @@ describe('network metrics', () => {
                     if (target === 'assets') {
                         return 'https://us-assets.i.posthog.com'
                     }
+                    if (target === 'ui') {
+                        return 'https://us.posthog.com'
+                    }
                     return 'https://us.i.posthog.com'
                 }),
                 isIngestionEndpoint: vi.fn(() => false),
@@ -172,6 +175,7 @@ describe('network metrics', () => {
             ['https://us.i.posthog.com/e/?ip=1'],
             ['https://flags.example.com/flags/?v=2'],
             ['https://us-assets.i.posthog.com/array/phc_token/config'],
+            ['https://us.posthog.com/toolbar/decide'],
         ])('does not record requests to PostHog itself: %s', async (url) => {
             start()
 
@@ -356,6 +360,19 @@ describe('network metrics', () => {
                 path: '/api/things/{id}',
                 status_class: '4xx',
                 route: '/tasks/$taskId',
+            })
+        })
+
+        it('normalises a fetch status of 0 to undefined for the attributes function', async () => {
+            fetchMock.mockResolvedValue({ status: 0 })
+            const attributes = vi.fn(() => ({}))
+            start({ attributes })
+
+            await window.fetch('https://api.example.com/things')
+
+            expect(attributes).toHaveBeenCalledWith(expect.anything(), {
+                status: undefined,
+                durationMs: expect.any(Number),
             })
         })
 
