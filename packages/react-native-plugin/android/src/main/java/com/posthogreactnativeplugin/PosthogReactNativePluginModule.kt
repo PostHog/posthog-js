@@ -17,6 +17,8 @@ import com.posthog.PostHog
 import com.posthog.PostHogConfig
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
+import com.posthog.android.replay.PostHogScreenshotColorMode
+import com.posthog.android.replay.PostHogSessionReplayConfig
 import com.posthog.internal.PostHogPreferences
 import com.posthog.internal.PostHogPreferences.Companion.ANONYMOUS_ID
 import com.posthog.internal.PostHogPreferences.Companion.DISTINCT_ID
@@ -183,6 +185,7 @@ class PosthogReactNativePluginModule(
               sessionReplayConfig.sampleRate = getDoubleOrNull(sdkReplayConfig, "sampleRate")
               sessionReplayConfig.verifyScreenshotMaskAlignment =
                 getBoolean(sdkReplayConfig, "verifyScreenshotMaskAlignment", false)
+              applyScreenshotConfig(sdkReplayConfig, sessionReplayConfig)
 
               val endpoint = getString(decideReplayConfig, "endpoint", "")
               if (endpoint.isNotEmpty()) {
@@ -399,22 +402,11 @@ class PosthogReactNativePluginModule(
       }
     }.getOrNull()
 
-  private fun getString(
-    map: ReadableMap?,
-    key: String,
-    default: String,
-  ): String = runCatching { if (hasKey(map, key)) map?.getString(key) ?: default else default }.getOrDefault(default)
-
   private fun getInt(
     map: ReadableMap?,
     key: String,
     default: Int,
   ): Int = runCatching { if (hasKey(map, key)) map?.getInt(key) ?: default else default }.getOrDefault(default)
-
-  private fun getDoubleOrNull(
-    map: ReadableMap?,
-    key: String,
-  ): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
 
   private fun logError(
     method: String,
@@ -660,3 +652,32 @@ internal fun getBoolean(
   key: String,
   default: Boolean,
 ): Boolean = runCatching { if (hasKey(map, key)) map?.getBoolean(key) ?: default else default }.getOrDefault(default)
+
+private fun getString(
+  map: ReadableMap?,
+  key: String,
+  default: String,
+): String = runCatching { if (hasKey(map, key)) map?.getString(key) ?: default else default }.getOrDefault(default)
+
+private fun getDoubleOrNull(
+  map: ReadableMap?,
+  key: String,
+): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
+
+internal fun applyScreenshotConfig(
+  map: ReadableMap?,
+  config: PostHogSessionReplayConfig,
+) {
+  getDoubleOrNull(map, "screenshotScale")?.let { scale ->
+    // Keep finite values within Float range; the native setter clamps to its supported range.
+    val floatMax = Float.MAX_VALUE.toDouble()
+    config.screenshotScale = if (scale.isFinite()) scale.coerceIn(-floatMax, floatMax).toFloat() else 1f
+  }
+  getDoubleOrNull(map, "screenshotCompressionQuality")?.takeIf { it.isFinite() }?.let { quality ->
+    config.screenshotCompressionQuality = quality.toInt()
+  }
+  when (getString(map, "screenshotColorMode", "")) {
+    "ARGB_8888" -> config.screenshotColorMode = PostHogScreenshotColorMode.ARGB_8888
+    "RGB_565" -> config.screenshotColorMode = PostHogScreenshotColorMode.RGB_565
+  }
+}

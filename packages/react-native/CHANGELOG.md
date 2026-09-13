@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.71.0
+
+### Minor Changes
+
+- [#4907](https://github.com/PostHog/posthog-js/pull/4907) [`fa6381b`](https://github.com/PostHog/posthog-js/commit/fa6381b072f2411460ff305aa7b9b230f351efa4) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add experimental Android-only `screenshotScale`, `screenshotCompressionQuality`, and `screenshotColorMode` options to `sessionReplayConfig`, and bump `com.posthog:posthog-android` to 3.63.1.
+  (2026-09-11)
+
+### Patch Changes
+
+- Updated dependencies [[`fa6381b`](https://github.com/PostHog/posthog-js/commit/fa6381b072f2411460ff305aa7b9b230f351efa4)]:
+  - @posthog/react-native-plugin@2.8.0
+
 ## 4.70.0
 
 ### Minor Changes
