@@ -36,7 +36,7 @@ const templateSegment = (segment: string): string => {
 
 const templatePath = (pathname: string): string => pathname.split('/').map(templateSegment).join('/')
 
-const statusClass = (status: number | undefined): string => (status ? `${Math.floor(status / 100)}xx` : 'error')
+const statusClass = (status: number | undefined): string => (status ? `${Math.floor(status / 100)}xx` : 'missing')
 
 const toAbsoluteUrl = (url: string): string => convertToURL(url)?.href || url
 

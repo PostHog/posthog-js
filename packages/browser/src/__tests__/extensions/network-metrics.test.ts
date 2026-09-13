@@ -153,7 +153,7 @@ describe('network metrics', () => {
             [302, '3xx'],
             [404, '4xx'],
             [503, '5xx'],
-            [0, 'error'],
+            [0, 'missing'],
         ])('maps status %s to status class %s', async (status, statusClass) => {
             fetchMock.mockResolvedValue({ status })
             start()
@@ -163,14 +163,14 @@ describe('network metrics', () => {
             expect(recorded()[0][2].attributes.status_class).toBe(statusClass)
         })
 
-        it('records a rejected fetch as an error and leaves the rejection for the caller', async () => {
+        it('records a rejected fetch as a missing status and leaves the rejection for the caller', async () => {
             const failure = new TypeError('Failed to fetch')
             fetchMock.mockRejectedValue(failure)
             start()
 
             await expect(window.fetch('https://api.example.com/things')).rejects.toBe(failure)
 
-            expect(recorded()[0][2].attributes.status_class).toBe('error')
+            expect(recorded()[0][2].attributes.status_class).toBe('missing')
         })
 
         it.each([
@@ -304,7 +304,7 @@ describe('network metrics', () => {
         it.each([
             ['get', 200, 'GET', '2xx'],
             ['POST', 500, 'POST', '5xx'],
-            ['delete', 0, 'DELETE', 'error'],
+            ['delete', 0, 'DELETE', 'missing'],
         ])('records %s with status %s', (method, status, expectedMethod, statusClass) => {
             start()
 
