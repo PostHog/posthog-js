@@ -2,4 +2,4 @@
 '@posthog/nuxt': patch
 ---
 
-Strip query strings and fragments from Nitro 2 server exception request paths.
+Strip queries from Nuxt server exception paths and honor serverConfig.disable_capture_url_hashes for fragments.

@@ -140,23 +140,8 @@ assert.equal(
   }),
   nitro3Promise
 )
-assert.deepEqual(nitro3Request, { path: '/v3', method: 'POST' })
 
-// Nitro 2 receives relative request targets, including absolute-form proxy requests.
-for (const [path, expected] of [
-  ['/account?token=synthetic-query#synthetic-fragment', '/account'],
-  ['/account#synthetic-fragment?token=synthetic-query', '/account'],
-  ['https://example.invalid/account?token=synthetic-query#synthetic-fragment', '/account'],
-  ['account?token=synthetic-query', '/account'],
-  ['/a/../b/%2e%2e/c%2Fd//?token=synthetic-query', '/c%2Fd//'],
-  ['//account/settings?token=synthetic-query', '//account/settings'],
-  ['/account%3Ftoken%23fragment?token=synthetic-query', '/account%3Ftoken%23fragment'],
-  ['/synthetic-path-credential', '/synthetic-path-credential'],
-  ['http://[invalid/account?token=synthetic-query', undefined],
-]) {
-  assert.equal(nitro2.adapterHandlers.error(error, { event: { path, method: 'POST' } }), nitro2Promise)
-  assert.deepEqual(nitro2Request, { path: expected, method: 'POST' }, path)
-}
+assert.deepEqual(nitro3Request, { path: 'https://example.com/v3?query=ignored', method: 'POST' })
 
 for (const [adapter, promise, getRequest] of [
   [nitro2, nitro2Promise, () => nitro2Request],
@@ -164,4 +149,82 @@ for (const [adapter, promise, getRequest] of [
 ]) {
   assert.equal(adapter.adapterHandlers.error(backgroundError, {}), promise)
   assert.equal(getRequest(), undefined)
+}
+
+// Fragments are simulated here; browsers do not normally send them in HTTP requests.
+for (const [filename, defineName, makeEvent] of [
+  ['nitro-plugin-v2.ts', 'defineNitroPlugin', (path) => ({ path, method: 'POST' })],
+  ['nitro-plugin-v3.ts', 'definePlugin', (url) => ({ req: { url, method: 'POST' } })],
+]) {
+  for (const disableCaptureUrlHashes of [false, true, undefined]) {
+    const adapter = loadAdapter(filename, defineName)
+    const serverConfig = {
+      enableExceptionAutocapture: true,
+      ...(disableCaptureUrlHashes === undefined ? {} : { disable_capture_url_hashes: disableCaptureUrlHashes }),
+    }
+    setupPostHogNitroPlugin({
+      ...adapter.bindings,
+      useRuntimeConfig: () => ({
+        public: {
+          posthog: { publicKey: 'phc_test', host: 'https://us.i.posthog.com' },
+          posthogClientConfig: { disable_capture_url_hashes: !disableCaptureUrlHashes, defaults: '2026-06-25' },
+        },
+        posthogServerConfig: serverConfig,
+      }),
+    })
+    assert.deepEqual(calls.at(-1), ['constructor', 'phc_test', { host: 'https://us.i.posthog.com', ...serverConfig }])
+
+    // Nitro 2 supports relative and absolute-form targets. Both adapters share safe parsing.
+    for (const [path, pathname, hash = ''] of [
+      ['/account?token=synthetic-query#synthetic-fragment', '/account', '#synthetic-fragment'],
+      ['/account#synthetic-fragment?token=fragment-value', '/account', '#synthetic-fragment?token=fragment-value'],
+      ['https://example.invalid/account?token=synthetic-query#synthetic-fragment', '/account', '#synthetic-fragment'],
+      ['https://example.invalid/account#fragment?fragment-value', '/account', '#fragment?fragment-value'],
+      ['account?token=synthetic-query#fragment', '/account', '#fragment'],
+      ['/a/../b/%2e%2e/c%2Fd//?token=synthetic-query#fragment', '/c%2Fd//', '#fragment'],
+      ['//account/settings?token=synthetic-query#fragment', '//account/settings', '#fragment'],
+      [
+        '/account%3Ftoken%23fragment?token=synthetic-query#encoded%3F%23',
+        '/account%3Ftoken%23fragment',
+        '#encoded%3F%23',
+      ],
+      ['/synthetic-path-credential', '/synthetic-path-credential'],
+      ['/account?token=synthetic-query', '/account'],
+      ['/account#fragment', '/account', '#fragment'],
+      ['http://[invalid/account?token=synthetic-query#fragment', undefined],
+      ['', undefined],
+      [undefined, undefined],
+    ]) {
+      const expected = pathname === undefined ? undefined : pathname + (disableCaptureUrlHashes ? '' : hash)
+      const before = calls.length
+      const result = adapter.adapterHandlers.error(error, { event: makeEvent(path) })
+      assert.equal(typeof result?.then, 'function')
+      await result
+      assert.deepEqual(
+        calls.slice(before),
+        [
+          [
+            'captureException',
+            error,
+            'event-id',
+            {
+              $process_person_profile: false,
+              ...(expected === undefined ? {} : { path: expected }),
+              method: 'POST',
+            },
+          ],
+          ['flush'],
+        ],
+        `${filename}, disable_capture_url_hashes=${disableCaptureUrlHashes}, target=${path}`
+      )
+    }
+    const before = calls.length
+    await adapter.adapterHandlers.error(backgroundError, {})
+    await adapter.adapterHandlers.close()
+    assert.deepEqual(calls.slice(before), [
+      ['captureException', backgroundError, 'event-id', { $process_person_profile: false }],
+      ['flush'],
+      ['shutdown'],
+    ])
+  }
 }
