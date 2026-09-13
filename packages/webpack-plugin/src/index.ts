@@ -23,9 +23,34 @@ const DEBUG_IDS_MIN_MAJOR = 5
 const DEBUG_IDS_MIN_MINOR = 104
 const JS_CHUNK_REGEX = /\.[mc]?js$/
 
-// Keep hashbangs and directive prologues ahead of the runtime snippet (as in the Rollup plugin).
-const PROLOGUE_REGEX =
-    /^(?:#![^\n]*\n)?(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$)|(?:"[^"\\\n]*"|'[^'\\\n]*')(?:\s*(?:\/\*[\s\S]*?\*\/\s*)*;|[^\S\n]*(?:\/\*[^\n]*?\*\/[^\S\n]*)*(?:\/\/[^\n]*)?\n(?!\s*(?:!=|[+\-*/%.,([?:<>=&|^~`]|in\b|instanceof\b))))*/
+// Keep hashbangs and directives ahead of the snippet, including ASI line breaks inside comments.
+function findSnippetInsertionPoint(code: string): number {
+    const trivia = /^(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\r\n\u2028\u2029]*(?:[\r\n\u2028\u2029]|$))*/
+    let offset = code.match(/^#![^\r\n]*(?:\r\n|[\r\n]|$)/)?.[0].length ?? 0
+    while (true) {
+        offset += code.slice(offset).match(trivia)![0].length
+        const literal = code
+            .slice(offset)
+            .match(
+                /^(?:"(?:[^"\\\r\n\u2028\u2029]|\\(?:\r\n|[\s\S]))*"|'(?:[^'\\\r\n\u2028\u2029]|\\(?:\r\n|[\s\S]))*')/
+            )
+        if (!literal) return offset
+        const end = offset + literal[0].length
+        const trailing = code.slice(end).match(trivia)![0]
+        const next = code.slice(end + trailing.length)
+        if (next.startsWith(';')) {
+            offset = end + trailing.length + 1
+        } else if (
+            next.length === 0 ||
+            (/[\r\n\u2028\u2029]/.test(trailing) &&
+                !/^(?:!=|\+(?!\+)|-(?!-)|[*/%.,([?:<>=&|^`]|in\b|instanceof\b)/.test(next))
+        ) {
+            offset = end + trailing.length
+        } else {
+            return offset
+        }
+    }
+}
 
 function webpackSupportsDebugIds(version: string | undefined): boolean {
     if (!version) {
@@ -123,8 +148,8 @@ export class PosthogWebpackPlugin {
                                         new compiler.webpack.sources.SourceMapSource(code, file, map)
                                     )
                                     source.insert(
-                                        code.match(PROLOGUE_REGEX)?.[0].length ?? 0,
-                                        createChunkIdSnippet(chunkId, releaseId)
+                                        findSnippetInsertionPoint(code),
+                                        `\n${createChunkIdSnippet(chunkId, releaseId)}`
                                     )
                                     const injected = new compiler.webpack.sources.ConcatSource(
                                         source,

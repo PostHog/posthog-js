@@ -194,12 +194,16 @@ describe('PosthogWebpackPlugin emitted integrity', () => {
             '"use strict" /* multiline\ncomment */;',
             '"use strict" /* comment */\n',
             '"use strict" // comment\n',
+            '"use strict" /* multiline\ncomment */\n',
+            '"use strict" /* multiline\ncomment */',
+            '"use strict" /* comment */\r',
+            '"other\\"directive"; "use strict" /* multiline\ncomment */',
         ]
         const files = Object.fromEntries(
             directives.map((directive, index) => [
                 `directive-${index}.js`,
                 {
-                    code: `${directive}\nmodule.exports = (function() { return this })() === undefined;\n`,
+                    code: `${directive}module.exports = (function() { return this })() === undefined;\n`,
                     mapped: true,
                 },
             ])
@@ -213,6 +217,28 @@ describe('PosthogWebpackPlugin emitted integrity', () => {
             expect(context.module.exports).toBe(true)
             expect(hash(uploaded.code)).toBe(hashes.get(file))
         }
+    })
+
+    it('does not turn continued string expressions into directives', async () => {
+        await build(false, 'symbol-set', {
+            plugins: [
+                emitChunks({
+                    'expression.js': {
+                        code: '"use strict"\n/* comment */ + "suffix";\nmodule.exports = (function() { return this })() === undefined;',
+                        mapped: true,
+                    },
+                    'trailing-comment.js': { code: '"use strict" // final comment', mapped: true },
+                }),
+            ],
+        })
+        const expression = uploads.find((upload) => upload.file.endsWith('/expression.js'))!
+        const context = vm.createContext({ module: {} })
+        vm.runInContext(expression.code, context)
+        expect(context.module.exports).toBe(false)
+        const comment = uploads.find((upload) => upload.file.endsWith('/trailing-comment.js'))!
+        const commentContext = vm.createContext({})
+        vm.runInContext(comment.code, commentContext)
+        expect(commentContext._posthogChunkIds).toBeTruthy()
     })
 
     it('does not mutate or upload unmapped, remote-map or inline-map chunks', async () => {
