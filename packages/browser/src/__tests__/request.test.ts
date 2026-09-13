@@ -176,6 +176,17 @@ describe('request', () => {
             expect(isPostHogXHR({} as XMLHttpRequest)).toBe(false)
         })
 
+        it('loads in a browser without WeakSet, such as IE11', async () => {
+            vi.stubGlobal('WeakSet', undefined)
+            vi.resetModules()
+            try {
+                await expect(import('../request')).resolves.toBeDefined()
+            } finally {
+                vi.unstubAllGlobals()
+                vi.resetModules()
+            }
+        })
+
         it('calls the on callback handler when successful', async () => {
             mockedXHR.status = 200
             request(createRequest())

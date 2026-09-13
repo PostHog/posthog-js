@@ -35,8 +35,9 @@ export const SUPPORTS_REQUEST = !!XMLHttpRequest || !!fetch
 
 // The SDK's fetch is the one captured at load, so page-level fetch wrappers never see it.
 // Every XMLHttpRequest shares one prototype, so the SDK's own XHRs are marked instead
-// and observers such as network metrics skip them.
-const posthogXHRs = new WeakSet<XMLHttpRequest>()
+// and observers such as network metrics skip them. A WeakMap, not a WeakSet: this runs
+// at load and IE11 has no WeakSet.
+const posthogXHRs = new WeakMap<XMLHttpRequest, true>()
 export const isPostHogXHR = (xhr: XMLHttpRequest): boolean => posthogXHRs.has(xhr)
 
 const CONTENT_TYPE_PLAIN = 'text/plain'
@@ -261,7 +262,7 @@ const xhr = (options: RequestWithOptions) => {
     }
 
     const req = new XMLHttpRequest!()
-    posthogXHRs.add(req)
+    posthogXHRs.set(req, true)
     const { url, encodedBody } = encodedRequest
     req.open(options.method || 'GET', url, true)
     const { contentType, body } = encodedBody ?? {}
