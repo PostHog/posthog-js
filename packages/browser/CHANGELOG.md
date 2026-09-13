@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.430.3
+
+### Patch Changes
+
+- [#4923](https://github.com/PostHog/posthog-js/pull/4923) [`2ae0f26`](https://github.com/PostHog/posthog-js/commit/2ae0f26a513d2da87aded38bca6c81c8f04baa6c) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix session recording failing to restart after capturing events while stopped with expired config.
+  (2026-09-12)
+
 ## 1.430.2
 
 ### Patch Changes
