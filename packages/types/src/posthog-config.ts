@@ -1150,11 +1150,10 @@ export interface NetworkMetricsConfig {
      * also replace them, e.g. to set `path` to a route template.
      * Keep attribute values low-cardinality.
      *
-     * The default `path` replaces id-like segments with `:id`: all-digit or
-     * uuid-like segments, on their own (`/orders/123`), after a `-` or `_`
-     * prefix (`/customers/cus_a1b2c3d4e5`), or before a file extension
-     * (`/invoices/38217.pdf`). Other id shapes stay as they are, so return
-     * your own `path` for those routes.
+     * The default `path` replaces each all-digit or uuid-like segment with
+     * `:id`. Ids that carry a prefix or suffix, such as `order-123` or
+     * `38217.pdf`, are kept as they are, so return your own `path` for
+     * those routes.
      *
      * `status_class` is `2xx`, `3xx`, `4xx` or `5xx`, or `missing` when no
      * response arrived.

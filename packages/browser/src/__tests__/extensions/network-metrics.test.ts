@@ -1,6 +1,9 @@
 import { startNetworkMetrics } from '../../extensions/network-metrics'
 import { PostHog } from '../../posthog-core'
+import { isPostHogXHR } from '../../request'
 import type { NetworkMetricsConfig } from '../../types'
+
+vi.mock('../../request', () => ({ isPostHogXHR: vi.fn(() => false) }))
 
 vi.mock('@posthog/browser-common/utils/logger', () => ({
     createLogger: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() })),
@@ -55,21 +58,6 @@ describe('network metrics', () => {
         mockPostHog = {
             config: { metrics: {} },
             metrics: { histogram },
-            requestRouter: {
-                endpointFor: vi.fn((target: string, path = '') => {
-                    if (target === 'flags') {
-                        return `https://flags.example.com${path}`
-                    }
-                    if (target === 'assets') {
-                        return `https://us-assets.i.posthog.com${path}`
-                    }
-                    if (target === 'ui') {
-                        return `https://us.posthog.com${path}`
-                    }
-                    return `https://us.i.posthog.com${path}`
-                }),
-                isIngestionEndpoint: vi.fn(() => false),
-            },
         } as unknown as PostHog
     })
 
@@ -135,12 +123,11 @@ describe('network metrics', () => {
             ['/api/things#section', '/api/things'],
             ['/api/keys/5f3a9c2e1b4d', '/api/keys/:id'],
             ['/api/skills/short-name/files/config.ts', '/api/skills/short-name/files/config.ts'],
-            ['/invoices/38217.pdf', '/invoices/:id.pdf'],
-            ['/reports/2024.csv', '/reports/:id.csv'],
-            ['/customers/cus_a1b2c3d4e5', '/customers/cus_:id'],
+            ['/invoices/38217.pdf', '/invoices/38217.pdf'],
+            ['/customers/cus_a1b2c3d4e5', '/customers/cus_a1b2c3d4e5'],
             ['/api/v2/things', '/api/v2/things'],
             ['/', '/'],
-        ])('replaces ids in the path: %s -> %s', async (url, path) => {
+        ])('replaces bare ids in the path and keeps other segments: %s -> %s', async (url, path) => {
             start()
 
             await window.fetch(url)
@@ -173,77 +160,12 @@ describe('network metrics', () => {
             expect(recorded()[0][2].attributes.status_class).toBe('missing')
         })
 
-        it.each([
-            ['https://us.i.posthog.com/i/v1/metrics?token=abc'],
-            ['https://us.i.posthog.com/e/?ip=1'],
-            ['https://flags.example.com/flags/?v=2'],
-            ['https://us-assets.i.posthog.com/array/phc_token/config'],
-            ['https://us.posthog.com/toolbar/decide'],
-        ])('does not record requests to PostHog itself: %s', async (url) => {
+        it('records a request to a PostHog host when the page itself makes it', async () => {
             start()
 
-            await window.fetch(url)
-
-            expect(recorded()).toEqual([])
-        })
-
-        it.each([['/ingest/e/?ip=1'], ['http://localhost/ingest/i/v1/metrics']])(
-            'does not record requests to a relative PostHog api_host: %s',
-            async (url) => {
-                ;(mockPostHog.requestRouter.endpointFor as vi.Mock).mockReturnValue('/ingest')
-                start()
-
-                await window.fetch(url)
-
-                expect(recorded()).toEqual([])
-            }
-        )
-
-        it.each([['/ingestion-status'], ['/ingest-batch']])(
-            'records an application path that only shares the api_host prefix: %s',
-            async (path) => {
-                ;(mockPostHog.requestRouter.endpointFor as vi.Mock).mockReturnValue('/ingest')
-                start()
-
-                await window.fetch(path)
-
-                expect(recorded()).toHaveLength(1)
-                expect(recorded()[0][2].attributes.path).toBe(path)
-            }
-        )
-
-        it('does not record requests to a proxied PostHog ingestion path', async () => {
-            ;(mockPostHog.requestRouter.isIngestionEndpoint as vi.Mock).mockReturnValue(true)
-            start()
-
-            await window.fetch('https://api.example.com/ingest/e/')
-
-            expect(recorded()).toEqual([])
-        })
-
-        it('does not record requests to the PostHog toolbar UI endpoint', async () => {
-            start()
-
-            await window.fetch('https://us.posthog.com/project/test-token/replay/session-id')
-            await window.fetch('https://us.posthog.com/toolbar/decide')
-
-            expect(recorded()).toEqual([])
-        })
-
-        it('does not suppress application requests when api_host is the page origin', async () => {
-            ;(mockPostHog.requestRouter.endpointFor as vi.Mock).mockImplementation((target: string, path = '') => {
-                if (target === 'api') {
-                    return `${window.location.origin}${path}`
-                }
-                return `https://posthog.example.com${path}`
-            })
-            start()
-
-            await window.fetch('/customer-api')
-            await window.fetch('/e/')
+            await window.fetch('https://us.i.posthog.com/api/projects/1/insights')
 
             expect(recorded()).toHaveLength(1)
-            expect(recorded()[0][2].attributes.path).toBe('/customer-api')
         })
 
         it('normalizes an opaque fetch response status to undefined for callbacks', async () => {
@@ -259,31 +181,26 @@ describe('network metrics', () => {
             })
         })
 
-        it('does not duplicate or cross-record traffic when multiple instances enable network metrics', async () => {
+        it('records once per instance when two instances enable network metrics', async () => {
             const otherHistogram = vi.fn()
             const other = {
                 config: { metrics: { network: true } },
                 metrics: { histogram: otherHistogram },
-                requestRouter: {
-                    endpointFor: vi.fn((_target: string, path = '') => `https://other.example.com${path}`),
-                    isIngestionEndpoint: vi.fn(() => false),
-                },
             } as unknown as PostHog
 
             start()
             const stopOther = startNetworkMetrics(other)
             try {
-                await window.fetch('https://other.example.com/i/v1/metrics')
                 await window.fetch('https://api.example.com/customer')
 
                 expect(recorded()).toHaveLength(1)
-                expect(otherHistogram).not.toHaveBeenCalled()
+                expect(otherHistogram).toHaveBeenCalledTimes(1)
             } finally {
                 stopOther()
             }
         })
 
-        it('reuses the observer when a third-party wrapper is above it', async () => {
+        it('records nothing after stop even when a third-party wrapper keeps it in place', async () => {
             start()
             const downstream = window.fetch
             setWindowFetch(function (...args: unknown[]) {
@@ -292,11 +209,10 @@ describe('network metrics', () => {
 
             stop?.()
             stop = undefined
-            start()
 
             await window.fetch('https://api.example.com/customer')
 
-            expect(recorded()).toHaveLength(1)
+            expect(recorded()).toEqual([])
         })
     })
 
@@ -336,6 +252,18 @@ describe('network metrics', () => {
 
             expect(openSpy).toHaveBeenCalledWith('GET', 'https://api.example.com/things', true, 'user', 'pass')
             expect(sendSpy).toHaveBeenCalledWith('body')
+        })
+
+        it("does not record the SDK's own XHRs", () => {
+            start()
+            const xhr = new window.XMLHttpRequest() as unknown as FakeXHR
+            ;(isPostHogXHR as vi.Mock).mockImplementation((candidate: unknown) => candidate === xhr)
+
+            xhr.open('POST', 'https://us.i.posthog.com/e/')
+            xhr.send()
+            xhr.respond(200)
+
+            expect(recorded()).toEqual([])
         })
 
         it('records histogram exactly once per response when an XHR instance is reused', () => {

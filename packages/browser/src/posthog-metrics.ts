@@ -42,16 +42,11 @@ export class PostHogMetrics implements Extension {
         this.onConfigChange()
     }
 
+    // The wrappers read the config on every request, so once installed they stay
+    // until dispose and simply record nothing while `metrics.network` is off.
     onConfigChange(): void {
-        if (this._disposed) {
-            return
-        }
-        const enabled = !!this._instance.config.metrics?.network
-        if (enabled && !this._stopNetworkMetrics) {
+        if (!this._disposed && !this._stopNetworkMetrics && this._instance.config.metrics?.network) {
             this._stopNetworkMetrics = startNetworkMetrics(this._instance)
-        } else if (!enabled && this._stopNetworkMetrics) {
-            this._stopNetworkMetrics()
-            this._stopNetworkMetrics = undefined
         }
     }
 

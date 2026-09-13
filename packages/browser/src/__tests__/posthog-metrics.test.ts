@@ -159,8 +159,7 @@ describe('posthog-metrics', () => {
         })
 
         afterEach(() => {
-            ;(mockPostHog.config as any).metrics = {}
-            metrics.onConfigChange()
+            metrics.dispose()
             Object.defineProperty(window, 'fetch', { configurable: true, value: originalFetch, writable: true })
         })
 
@@ -205,17 +204,17 @@ describe('posthog-metrics', () => {
             expect(isFetchWrapped()).toBe(false)
         })
 
-        it('starts and stops wrapping when the config changes', () => {
-            ;(mockPostHog.config as any).metrics = { network: true }
+        it('installs the wrapper once when the config turns network metrics on', () => {
             metrics.initialize()
-            metrics.onConfigChange()
-            expect(isFetchWrapped()).toBe(true)
-            ;(mockPostHog.config as any).metrics = { network: false }
-            metrics.onConfigChange()
             expect(isFetchWrapped()).toBe(false)
             ;(mockPostHog.config as any).metrics = { network: true }
             metrics.onConfigChange()
-            expect(isFetchWrapped()).toBe(true)
+            const wrapped = window.fetch
+            ;(mockPostHog.config as any).metrics = { network: false }
+            metrics.onConfigChange()
+            ;(mockPostHog.config as any).metrics = { network: true }
+            metrics.onConfigChange()
+            expect(window.fetch).toBe(wrapped)
         })
     })
 })
