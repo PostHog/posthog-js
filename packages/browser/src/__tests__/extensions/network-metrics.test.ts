@@ -111,7 +111,7 @@ describe('network metrics', () => {
 
             expect(recorded()).toEqual([
                 [
-                    'http.client.request.duration_ms',
+                    'http.client.request.duration',
                     expect.any(Number),
                     {
                         unit: 'ms',
@@ -227,7 +227,7 @@ describe('network metrics', () => {
 
             expect(recorded()).toEqual([
                 [
-                    'http.client.request.duration_ms',
+                    'http.client.request.duration',
                     expect.any(Number),
                     {
                         unit: 'ms',

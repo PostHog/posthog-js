@@ -9,7 +9,7 @@ import { patch } from './replay/rrweb-plugins/patch'
 
 const logger = createLogger('[NetworkMetrics]')
 
-const DEFAULT_METRIC_NAME = 'http.client.request.duration_ms'
+const DEFAULT_METRIC_NAME = 'http.client.request.duration'
 
 // oxlint-disable-next-line compat/compat
 const now = (): number => (window?.performance?.now ? window.performance.now() : Date.now())

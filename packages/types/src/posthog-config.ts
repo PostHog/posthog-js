@@ -1141,7 +1141,7 @@ export interface NetworkMetricsConfig {
      * The metric name. A string is used for every request. A function is
      * called once per request; return a falsy value to skip that request.
      *
-     * @default 'http.client.request.duration_ms'
+     * @default 'http.client.request.duration'
      */
     name?: string | ((request: NetworkMetricsRequest) => string | null | undefined)
     /**
