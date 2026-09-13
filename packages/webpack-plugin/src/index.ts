@@ -25,7 +25,7 @@ const JS_CHUNK_REGEX = /\.[mc]?js$/
 
 // Keep hashbangs and directive prologues ahead of the runtime snippet (as in the Rollup plugin).
 const PROLOGUE_REGEX =
-    /^(?:#![^\n]*\n)?(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$)|(?:"[^"\\\n]*"|'[^'\\\n]*')(?:\s*;|[^\S\n]*\n(?!\s*(?:!=|[+\-*/%.,([?:<>=&|^~`]|in\b|instanceof\b))))*/
+    /^(?:#![^\n]*\n)?(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$)|(?:"[^"\\\n]*"|'[^'\\\n]*')(?:\s*(?:\/\*[\s\S]*?\*\/\s*)*;|[^\S\n]*(?:\/\*[^\n]*?\*\/[^\S\n]*)*(?:\/\/[^\n]*)?\n(?!\s*(?:!=|[+\-*/%.,([?:<>=&|^~`]|in\b|instanceof\b))))*/
 
 function webpackSupportsDebugIds(version: string | undefined): boolean {
     if (!version) {

@@ -188,6 +188,33 @@ describe('PosthogWebpackPlugin emitted integrity', () => {
         expect(hash(injected.code)).toBe(hashes.get('prologue.cjs'))
     })
 
+    it('preserves strict directives with comments before their terminators', async () => {
+        const directives = [
+            '"use strict" /* comment */;',
+            '"use strict" /* multiline\ncomment */;',
+            '"use strict" /* comment */\n',
+            '"use strict" // comment\n',
+        ]
+        const files = Object.fromEntries(
+            directives.map((directive, index) => [
+                `directive-${index}.js`,
+                {
+                    code: `${directive}\nmodule.exports = (function() { return this })() === undefined;\n`,
+                    mapped: true,
+                },
+            ])
+        )
+        const hashes = await build(false, 'symbol-set', { plugins: [emitChunks(files)] })
+        for (const [file, { code }] of Object.entries(files)) {
+            const uploaded = uploads.find((upload) => upload.file.endsWith(`/${file}`))!
+            expect(uploaded.code.startsWith(code.split('module.exports')[0])).toBe(true)
+            const context = vm.createContext({ module: {} })
+            vm.runInContext(uploaded.code, context)
+            expect(context.module.exports).toBe(true)
+            expect(hash(uploaded.code)).toBe(hashes.get(file))
+        }
+    })
+
     it('does not mutate or upload unmapped, remote-map or inline-map chunks', async () => {
         const files = {
             'missing.js': { code: 'console.log(1);\n//# sourceMappingURL=missing.js.map', mapped: false },
