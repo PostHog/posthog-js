@@ -1,4 +1,4 @@
-import { isFunction, isString } from '@posthog/core'
+import { isFunction, isString, isUndefined } from '@posthog/core'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { convertToURL } from '@posthog/browser-common/utils/request-utils'
 import { window } from '@posthog/browser-common/utils/globals'
@@ -284,9 +284,9 @@ const stopSharedNetworkMetrics = (state: NetworkMetricsState): void => {
 }
 
 const sharedNetworkMetricsIsDetached = (state: NetworkMetricsState): boolean =>
-    (state.opaqueFetchSource !== undefined && window?.fetch !== state.opaqueFetchSource) ||
-    (state.opaqueXHROpenSource !== undefined && window?.XMLHttpRequest?.prototype.open !== state.opaqueXHROpenSource) ||
-    (state.opaqueXHRSendSource !== undefined && window?.XMLHttpRequest?.prototype.send !== state.opaqueXHRSendSource)
+    (!isUndefined(state.opaqueFetchSource) && window?.fetch !== state.opaqueFetchSource) ||
+    (!isUndefined(state.opaqueXHROpenSource) && window?.XMLHttpRequest?.prototype.open !== state.opaqueXHROpenSource) ||
+    (!isUndefined(state.opaqueXHRSendSource) && window?.XMLHttpRequest?.prototype.send !== state.opaqueXHRSendSource)
 
 /**
  * Records a duration histogram for every `fetch` and `XMLHttpRequest`.
