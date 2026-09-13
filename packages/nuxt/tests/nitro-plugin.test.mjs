@@ -141,3 +141,27 @@ assert.equal(
   nitro3Promise
 )
 assert.deepEqual(nitro3Request, { path: '/v3', method: 'POST' })
+
+// Nitro 2 receives relative request targets, including absolute-form proxy requests.
+for (const [path, expected] of [
+  ['/account?token=synthetic-query#synthetic-fragment', '/account'],
+  ['/account#synthetic-fragment?token=synthetic-query', '/account'],
+  ['https://example.invalid/account?token=synthetic-query#synthetic-fragment', '/account'],
+  ['account?token=synthetic-query', '/account'],
+  ['/a/../b/%2e%2e/c%2Fd//?token=synthetic-query', '/c%2Fd//'],
+  ['//account/settings?token=synthetic-query', '//account/settings'],
+  ['/account%3Ftoken%23fragment?token=synthetic-query', '/account%3Ftoken%23fragment'],
+  ['/synthetic-path-credential', '/synthetic-path-credential'],
+  ['http://[invalid/account?token=synthetic-query', undefined],
+]) {
+  assert.equal(nitro2.adapterHandlers.error(error, { event: { path, method: 'POST' } }), nitro2Promise)
+  assert.deepEqual(nitro2Request, { path: expected, method: 'POST' }, path)
+}
+
+for (const [adapter, promise, getRequest] of [
+  [nitro2, nitro2Promise, () => nitro2Request],
+  [nitro3, nitro3Promise, () => nitro3Request],
+]) {
+  assert.equal(adapter.adapterHandlers.error(backgroundError, {}), promise)
+  assert.equal(getRequest(), undefined)
+}
