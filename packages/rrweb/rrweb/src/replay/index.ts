@@ -639,8 +639,8 @@ export class Replayer {
    * Memory occupation can be released by removing all references to this replayer.
    */
   public destroy(): void {
-    // Make destroy() idempotent - return early if already destroyed
-    if (!this.wrapper || !this.wrapper.parentNode) {
+    // Teardown clears this subscription; a missing DOM parent does not mean destroyed.
+    if (!this.serviceSubscription) {
       return;
     }
 
@@ -686,7 +686,7 @@ export class Replayer {
     this.resetCache();
 
     // Remove DOM elements
-    this.config.root.removeChild(this.wrapper);
+    this.wrapper.parentNode?.removeChild(this.wrapper);
 
     // Emit destroy event last
     this.emitter.emit(ReplayerEvents.Destroy);
