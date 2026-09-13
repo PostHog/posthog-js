@@ -1,5 +1,7 @@
 import { request } from '../request'
-import { Compression, RequestWithOptions } from '../types'
+import { Compression, OtlpLogsPayload, RequestWithOptions } from '../types'
+import { PostHogLogs } from '../posthog-logs'
+import type { PostHog } from '../posthog-core'
 import { fetch, navigator } from '@posthog/browser-common/utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
@@ -74,6 +76,102 @@ describe('request fetch aggregate keepalive', () => {
         expect(callback).toHaveBeenCalledWith({ statusCode: 200, text: '{"ok":true}', json: { ok: true } })
         send()
         expect(keepalives()).toEqual([true, false, false, false, true])
+    })
+
+    it.each(['success', 'reject', 'sync throw', 'text reject', 'text throw'])(
+        'releases before a callback starts the next request on %s',
+        async (outcome) => {
+            const error = new TypeError('Failed to fetch')
+            const callback = vi.fn(() => send())
+            if (outcome === 'sync throw') {
+                mockedFetch.mockImplementationOnce(() => {
+                    throw error
+                })
+            }
+            send({ callback })
+            if (outcome === 'reject') {
+                pending[0].reject(error)
+            } else if (outcome !== 'sync throw') {
+                pending[0].resolve({
+                    status: 200,
+                    text: () => {
+                        if (outcome === 'text throw') {
+                            throw error
+                        }
+                        return outcome === 'text reject' ? Promise.reject(error) : Promise.resolve('{}')
+                    },
+                } as Response)
+            }
+            await tick()
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith(
+                outcome === 'success' ? { statusCode: 200, text: '{}', json: {} } : { statusCode: 0, error }
+            )
+            // The callback's request is still pending: repeated cleanup must not release its bytes.
+            send()
+            expect(keepalives()).toEqual([true, true, false])
+        }
+    )
+
+    it('releases before the logs batch promise resumes sequential sends', async () => {
+        const logs = new PostHogLogs({
+            config: { token: 'test-token' },
+            requestRouter: { endpointFor: () => 'https://example.com/i/v1/logs' },
+            // Exercise the real logs callback/Promise bridge with uncompressed request bodies.
+            _send_request: (options: RequestWithOptions) => request({ ...options, compression: undefined }),
+        } as unknown as PostHog)
+        const payload: OtlpLogsPayload = {
+            resourceLogs: [
+                {
+                    resource: { attributes: [] },
+                    scopeLogs: [
+                        {
+                            scope: { name: 'test' },
+                            logRecords: [
+                                {
+                                    timeUnixNano: '1',
+                                    observedTimeUnixNano: '1',
+                                    severityNumber: 9,
+                                    severityText: 'INFO',
+                                    body: { stringValue: data },
+                                    attributes: [],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+        try {
+            const sendBatches = async () => {
+                for (let i = 0; i < 3; i++) {
+                    await logs['_sendLogsBatch'](payload)
+                }
+            }
+            const sent = sendBatches()
+            for (let i = 0; i < 3; i++) {
+                pending[i].resolve({ status: 200, text: () => Promise.resolve('{}') } as Response)
+                await tick()
+            }
+            await sent
+            expect(keepalives()).toEqual([true, true, true])
+        } finally {
+            logs.dispose()
+        }
+    })
+
+    it('preserves callback error handling without releasing the next request twice', async () => {
+        const error = new Error('callback failed')
+        const callback = vi.fn().mockImplementationOnce(() => {
+            send()
+            throw error
+        })
+        send({ callback })
+        pending[0].resolve({ status: 200, text: () => Promise.resolve('{}') } as Response)
+        await tick()
+        expect(callback.mock.calls).toEqual([[{ statusCode: 200, text: '{}', json: {} }], [{ statusCode: 0, error }]])
+        send()
+        expect(keepalives()).toEqual([true, true, false])
     })
 
     it.each([undefined, Compression.Base64, Compression.GZipJS])('uses encoded bytes for %s', (compression) => {

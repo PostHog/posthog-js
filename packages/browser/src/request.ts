@@ -405,10 +405,15 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
                         }
                     }
 
+                    // A callback can start the next batch immediately, including by resolving a promise.
+                    cleanup()
                     options.callback?.(res)
                 })
             })
-            .catch(handleError)
+            .catch((error) => {
+                cleanup()
+                handleError(error)
+            })
             .finally(cleanup)
     } catch (error) {
         // `window.fetch` can be monkey-patched by third-party scripts (e.g. a storefront/analytics
