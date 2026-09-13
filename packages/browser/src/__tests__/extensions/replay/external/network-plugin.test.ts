@@ -604,6 +604,73 @@ describe('network plugin', () => {
             })
         })
 
+        describe('fetch capture teardown', () => {
+            const OriginalRequest = global.Request
+            let cleanupObserver: (() => void) | undefined
+
+            afterEach(() => {
+                cleanupObserver?.()
+                global.Request = OriginalRequest
+            })
+
+            function deferredBody() {
+                let resolve!: (body: string) => void
+                const promise = new Promise<string>((r) => {
+                    resolve = r
+                })
+                return { promise, resolve }
+            }
+
+            function instrument(fetch: () => Promise<any>, requestBody: Promise<string>, callback: any) {
+                const { mockWindow } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                mockWindow.performance.now = () => 10
+                mockWindow.performance.getEntriesByName = () => [
+                    createResourceTimingEntry('https://example.com/', 'server', 1),
+                ]
+                global.Request = class {
+                    url = 'https://example.com/'
+                    method = 'POST'
+                    headers = { forEach: () => {} }
+                    clone() {
+                        return { text: () => requestBody }
+                    }
+                } as any
+                mockWindow.fetch = fetch
+                const plugin = getRecordNetworkPlugin()
+                cleanupObserver = plugin.observer(callback, mockWindow, {
+                    recordBody: true,
+                    maskRequestFn: (entry: CapturedNetworkRequest) => {
+                        if (entry.requestBody) entry.requestBody = 'redacted'
+                        if (entry.responseBody) entry.responseBody = 'redacted'
+                        return entry
+                    },
+                })
+                return mockWindow.fetch
+            }
+
+            it('drops old pending captures after repeated teardown without silencing a restarted observer', async () => {
+                const oldBody = deferredBody()
+                const response = {
+                    status: 204,
+                    headers: { forEach: () => {}, get: () => null },
+                    clone: () => ({ text: async () => '' }),
+                }
+                const oldCallback = vi.fn()
+                const oldFetch = instrument(async () => response, oldBody.promise, oldCallback)
+                const oldHostFetch = oldFetch('https://example.com/')
+                cleanupObserver?.()
+                cleanupObserver?.()
+                const newCallback = vi.fn()
+                const newFetch = instrument(async () => response, Promise.resolve('new body'), newCallback)
+                await expect(newFetch('https://example.com/')).resolves.toBe(response)
+                oldBody.resolve('old body')
+                await expect(oldHostFetch).resolves.toBe(response)
+                await vi.waitFor(() => expect(newCallback).toHaveBeenCalledOnce())
+                expect(oldCallback).not.toHaveBeenCalled()
+            })
+        })
+
         describe('instrumentation failures degrade gracefully', () => {
             // instrumentation runs before we delegate to the host's open/fetch, so if it throws we must
             // not let the exception escape and misattribute a failure to session replay
