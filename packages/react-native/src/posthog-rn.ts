@@ -21,6 +21,7 @@ import {
   maybeAdd,
   patchFetchForTracingHeaders,
   raceWithTimeout,
+  safeSetTimeout,
   FeatureFlagValue,
   FeatureFlagResultOptions,
   IsFeatureEnabledOptions,
@@ -72,6 +73,13 @@ function mapAppStateForLogs(state: AppStateStatus | undefined): 'foreground' | '
 // native setup happens before it — so it can be tight enough that a stuck call doesn't strand
 // the queue for the process lifetime.
 const NATIVE_CALL_TIMEOUT_MS = 10_000
+const MANUAL_RECORDING_START_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000]
+
+type ManualRecordingStartRequest = {
+  pending: boolean
+  retryCount: number
+  timer?: ReturnType<typeof setTimeout>
+}
 
 export interface PostHogOptions extends PostHogCoreOptions {
   /**
@@ -259,8 +267,7 @@ export class PostHog extends PostHogCore {
   private _sessionReplayMacOSWarned: boolean = false
   // Last applied recording state; the native bridge is only crossed on a change.
   private _sessionReplayRecordingActive?: boolean
-  // A startSessionRecording() the native SDK refused, waiting for the next flags load to retry.
-  private _manualRecordingStartPending: boolean = false
+  private _manualRecordingStartRequest?: ManualRecordingStartRequest
   // Serializes re-arm evaluations so concurrent flags reloads don't interleave.
   private _sessionReplayEvalChain: Promise<void> = Promise.resolve()
   // Serializes every JS->native command (identity, consent, push) so they reach native in
@@ -526,11 +533,10 @@ export class PostHog extends PostHogCore {
       void this.startSessionReplay(options, cachedRemoteConfig ?? undefined)
 
       // Re-evaluate session replay on every flags load/reload so the linked flag
-      // gates recording without an app restart. Registered even with replay disabled, where
-      // the only recording is a manual startSessionRecording() the native SDK refused: flags
-      // have just loaded, so native has likely loaded its own remote config too.
+      // gates recording without an app restart. A pending manual start can also retry here,
+      // even when replay was disabled at setup.
       this.onFeatureFlags(() => {
-        if (this._isEnableSessionReplay() || this._manualRecordingStartPending) {
+        if (this._isEnableSessionReplay() || this._manualRecordingStartRequest?.pending) {
           void this._evaluateAndStartSessionReplay()
         }
       })
@@ -625,6 +631,7 @@ export class PostHog extends PostHogCore {
    * SLA so a hung storage backend can't run past it.
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    this._cancelManualRecordingStart()
     this._errorTracking.clearExceptionSteps()
     const start = Date.now()
     const logsBudgetMs = Math.min(shutdownTimeoutMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
@@ -780,10 +787,8 @@ export class PostHog extends PostHogCore {
       PostHogPersistedProperty.DeviceId,
     ]
 
-    // Same policy as SessionReplayEventTriggerActivatedSession below, for the in-memory
-    // equivalent: a refused manual start is this user's recording intent, so drop it before
-    // super.reset() emits the flags load that would retry it for the next, anonymous user.
-    this._manualRecordingStartPending = false
+    // Cancel before super.reset() emits flags for the next, anonymous user.
+    this._cancelManualRecordingStart()
 
     // RemoteConfig, SessionReplay, and Surveys are project-level config, not user data:
     // always preserve them so replay can re-arm against the new user's flags. The
@@ -1037,6 +1042,7 @@ export class PostHog extends PostHogCore {
    * @public
    */
   optOut(): Promise<void> {
+    this._cancelManualRecordingStart()
     // Consent must be durable. See reset()/identify().
     const result = super.optOut()
     void this._eventsStorage.waitForPersist()
@@ -1601,7 +1607,7 @@ export class PostHog extends PostHogCore {
    * // Keep `enableSessionReplay` off at setup, then start recording where you want it.
    * const started = await posthog.startSessionRecording()
    * if (!started) {
-   *   // Recording is not running. PostHog retries on the next feature flags load.
+   *   // Recording is not running. PostHog retries briefly while native config loads.
    * }
    * ```
    *
@@ -1612,9 +1618,14 @@ export class PostHog extends PostHogCore {
    * @returns Whether the native recorder is running. It is `false` when recording did not
    * start: PostHog is disabled, the platform has no replay support, the native plugin is
    * missing or too old, or the native SDK refused the start because its own remote config is
-   * not loaded yet. A refused start is retried on the next feature flags load.
+   * not loaded yet. A refused start is retried after 1, 2, 4, 8, and 16 seconds, and on
+   * subsequent feature flags loads while pending. Stop, reset, opt-out, and shutdown cancel
+   * pending starts.
    */
   async startSessionRecording(resumeCurrent: boolean = true): Promise<boolean> {
+    this._cancelManualRecordingStart()
+    const request: ManualRecordingStartRequest = { pending: false, retryCount: 0 }
+    this._manualRecordingStartRequest = request
     let started = false
     // Chained here, not in _startSessionRecording (which _evaluateAndStartSessionReplayInternal
     // also calls from inside this chain — re-chaining there deadlocks), so two callers can't
@@ -1622,13 +1633,67 @@ export class PostHog extends PostHogCore {
     this._sessionReplayEvalChain = this._sessionReplayEvalChain
       .catch(() => {})
       .then(async () => {
-        started = await this._startSessionRecording(resumeCurrent)
-        // A refused start is retried by the flags listener, always with resumeCurrent true:
-        // this attempt already started the new session if one was asked for.
-        this._manualRecordingStartPending = !started
+        started = await this._attemptManualRecordingStart(request, resumeCurrent)
       })
     await this._sessionReplayEvalChain
     return started
+  }
+
+  private _cancelManualRecordingStart(): void {
+    clearTimeout(this._manualRecordingStartRequest?.timer)
+    this._manualRecordingStartRequest = undefined
+  }
+
+  private async _attemptManualRecordingStart(
+    request: ManualRecordingStartRequest,
+    resumeCurrent: boolean
+  ): Promise<boolean> {
+    if (this._manualRecordingStartRequest !== request) {
+      return false
+    }
+    if (this.isDisabled || this.optedOut) {
+      this._cancelManualRecordingStart()
+      return false
+    }
+
+    const started = await this._startSessionRecording(resumeCurrent)
+    // Cancellation is synchronous; a bridge call already in flight can still finish later.
+    // Do not let its result revive the old request or leave its recorder running.
+    if (this._manualRecordingStartRequest !== request) {
+      if (started) {
+        await this._stopSessionRecording()
+      }
+      return false
+    }
+    if (started) {
+      this._cancelManualRecordingStart()
+    } else {
+      request.pending = true
+      this._scheduleManualRecordingStartRetry(request)
+    }
+    return started
+  }
+
+  private _scheduleManualRecordingStartRetry(request: ManualRecordingStartRequest): void {
+    const delay = MANUAL_RECORDING_START_RETRY_DELAYS_MS[request.retryCount]
+    if (
+      request.timer !== undefined ||
+      delay === undefined ||
+      !this._sessionReplayNativeInitialized ||
+      !OptionalReactNativePlugin?.startRecording
+    ) {
+      return
+    }
+    request.retryCount++
+    request.timer = safeSetTimeout(() => {
+      request.timer = undefined
+      this._sessionReplayEvalChain = this._sessionReplayEvalChain
+        .catch(() => {})
+        .then(async () => {
+          // The original attempt already rotated the session if resumeCurrent was false.
+          await this._attemptManualRecordingStart(request, true)
+        })
+    }, delay)
   }
 
   // Shared start path. Also called by the flags-driven evaluation, which runs inside
@@ -1688,7 +1753,7 @@ export class PostHog extends PostHogCore {
       if (!started) {
         this._logger.warn(
           'The native SDK refused to start session recording, usually because its remote config is not loaded yet. ' +
-            'The next feature flags load retries the start.'
+            'A pending manual start retries with bounded backoff and on the next feature flags load.'
         )
         return false
       }
@@ -1720,16 +1785,12 @@ export class PostHog extends PostHogCore {
    * or when the native plugin is missing or too old.
    */
   async stopSessionRecording(): Promise<boolean> {
+    this._cancelManualRecordingStart()
     let stopped = false
-    // Chained like startSessionRecording(), so an in-flight flags-driven retry settles before
-    // the stop: unchained, the retry's own write lands after this one and revives the pending
-    // start, or its startRecording() lands after the stop and leaves the recorder running.
+    // Let an in-flight native start settle before stopping its recorder.
     this._sessionReplayEvalChain = this._sessionReplayEvalChain
       .catch(() => {})
       .then(async () => {
-        // Drops a pending retry: the caller asked for no recording, so an earlier refused start
-        // must not start one on the next flags load.
-        this._manualRecordingStartPending = false
         stopped = await this._stopSessionRecording()
       })
     await this._sessionReplayEvalChain
@@ -2789,10 +2850,9 @@ export class PostHog extends PostHogCore {
       if (enableNativeErrorTracking || enablePush) {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
-      // Replay is off, so manual control is the only way to record: retry a start the native
-      // SDK refused. It stays pending while native keeps refusing, so a later load retries.
-      if (this._manualRecordingStartPending) {
-        this._manualRecordingStartPending = !(await this._startSessionRecording(true))
+      const request = this._manualRecordingStartRequest
+      if (request?.pending) {
+        await this._attemptManualRecordingStart(request, true)
       }
       return
     }

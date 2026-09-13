@@ -53,7 +53,7 @@ describe('PostHog RN manual session recording controls', () => {
     nativeRecording = false
 
     replay.start.mockClear()
-    replay.startRecording.mockClear()
+    replay.startRecording.mockReset()
     replay.stopRecording.mockClear()
     replay.isEnabled.mockClear()
     replay.isEnabled.mockImplementation(async () => nativeRecording)
@@ -88,6 +88,7 @@ describe('PostHog RN manual session recording controls', () => {
 
   afterEach(async () => {
     await posthog.shutdown()
+    vi.useRealTimers()
     warnSpy.mockRestore()
     logSpy.mockRestore()
     errorSpy.mockRestore()
@@ -124,7 +125,7 @@ describe('PostHog RN manual session recording controls', () => {
       warnings().some(
         (line) =>
           line.includes('native SDK refused to start session recording') &&
-          line.includes('next feature flags load retries the start')
+          line.includes('retries with bounded backoff and on the next feature flags load')
       )
     ).toBe(true)
   })
@@ -223,6 +224,171 @@ describe('PostHog RN manual session recording controls', () => {
 
     expect(replay.startRecording).toHaveBeenCalledTimes(attempts)
     expect(await posthog.isSessionReplayActive()).toBe(false)
+  })
+
+  describe('automatic manual-start retries', () => {
+    beforeEach(async () => {
+      nativeAccepts = false
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+      await wait(20)
+      vi.useFakeTimers()
+    })
+
+    it('starts after native becomes ready without another flags load', async () => {
+      expect(await posthog.startSessionRecording()).toBe(false)
+      const fetches = vi.mocked(window.fetch).mock.calls.length
+      nativeAccepts = true
+
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(await posthog.isSessionReplayActive()).toBe(true)
+      expect(window.fetch).toHaveBeenCalledTimes(fetches)
+      expect(replay.startRecording).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(60000)
+      expect(replay.startRecording).toHaveBeenCalledTimes(2)
+    })
+
+    it('backs off and stops scheduling after five retries', async () => {
+      await posthog.startSessionRecording(false)
+      const sessionId = posthog.getSessionId()
+      for (const [index, delay] of [1000, 2000, 4000, 8000, 16000].entries()) {
+        await vi.advanceTimersByTimeAsync(delay - 1)
+        expect(replay.startRecording).toHaveBeenCalledTimes(index + 1)
+        await vi.advanceTimersByTimeAsync(1)
+        expect(replay.startRecording).toHaveBeenCalledTimes(index + 2)
+      }
+      expect(replay.startRecording.mock.calls.map(([resume]) => resume)).toEqual([false, true, true, true, true, true])
+      expect(posthog.getSessionId()).toBe(sessionId)
+      await vi.advanceTimersByTimeAsync(60000)
+      expect(replay.startRecording).toHaveBeenCalledTimes(6)
+
+      nativeAccepts = true
+      await posthog.reloadFeatureFlagsAsync()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(await posthog.isSessionReplayActive()).toBe(true)
+    })
+
+    it('cancels the timer when a flags-driven retry succeeds', async () => {
+      await posthog.startSessionRecording()
+      nativeAccepts = true
+      await posthog.reloadFeatureFlagsAsync()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(await posthog.isSessionReplayActive()).toBe(true)
+      const attempts = replay.startRecording.mock.calls.length
+      await vi.advanceTimersByTimeAsync(60000)
+      expect(replay.startRecording).toHaveBeenCalledTimes(attempts)
+    })
+
+    const cancel = (action: string): void | Promise<unknown> => {
+      switch (action) {
+        case 'stop':
+          return posthog.stopSessionRecording()
+        case 'reset':
+          return posthog.reset()
+        case 'optOut':
+          return posthog.optOut()
+        case 'shutdown':
+          return posthog.shutdown()
+      }
+    }
+
+    it.each(['stop', 'reset', 'optOut', 'shutdown'])('cancels pending retries on %s', async (action) => {
+      await posthog.startSessionRecording()
+      await cancel(action)
+      nativeAccepts = true
+      await vi.advanceTimersByTimeAsync(60000)
+      await posthog.reloadFeatureFlagsAsync()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(replay.startRecording).toHaveBeenCalledTimes(1)
+      expect(await posthog.isSessionReplayActive()).toBe(false)
+    })
+
+    it.each(['stop', 'reset', 'optOut', 'shutdown'])(
+      'does not revive a queued manual start after %s',
+      async (action) => {
+        const starting = posthog.startSessionRecording()
+        const cancelling = cancel(action)
+        await starting
+        await cancelling
+        nativeAccepts = true
+        await vi.advanceTimersByTimeAsync(60000)
+        await posthog.reloadFeatureFlagsAsync()
+        await vi.advanceTimersByTimeAsync(0)
+        expect(replay.startRecording).not.toHaveBeenCalled()
+        expect(await posthog.isSessionReplayActive()).toBe(false)
+      }
+    )
+
+    it.each(['stop', 'reset', 'optOut', 'shutdown'])('does not revive an in-flight retry after %s', async (action) => {
+      await posthog.startSessionRecording()
+      let release!: () => void
+      const held = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      replay.startRecording.mockImplementationOnce(async () => {
+        await held
+        nativeRecording = true
+      })
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(replay.startRecording).toHaveBeenCalledTimes(2)
+
+      const cancelling = cancel(action)
+      release()
+      await cancelling
+      await vi.advanceTimersByTimeAsync(0)
+      expect(await posthog.isSessionReplayActive()).toBe(false)
+      const attempts = replay.startRecording.mock.calls.length
+      nativeAccepts = true
+      await vi.advanceTimersByTimeAsync(60000)
+      await posthog.reloadFeatureFlagsAsync()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(replay.startRecording).toHaveBeenCalledTimes(attempts)
+    })
+
+    it('gives a new manual request its own retry budget', async () => {
+      await posthog.startSessionRecording()
+      await vi.advanceTimersByTimeAsync(60000)
+      expect(replay.startRecording).toHaveBeenCalledTimes(6)
+      await posthog.startSessionRecording()
+      nativeAccepts = true
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(replay.startRecording).toHaveBeenCalledTimes(8)
+      expect(await posthog.isSessionReplayActive()).toBe(true)
+    })
+
+    it('does not cancel a newer start when stopping an in-flight retry', async () => {
+      await posthog.startSessionRecording()
+      let release!: () => void
+      const held = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      replay.startRecording.mockImplementationOnce(async () => {
+        await held
+        nativeRecording = true
+      })
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(replay.startRecording).toHaveBeenCalledTimes(2)
+      const stopping = posthog.stopSessionRecording()
+      nativeAccepts = true
+      const restarting = posthog.startSessionRecording()
+      release()
+      await stopping
+      expect(await restarting).toBe(true)
+      expect(await posthog.isSessionReplayActive()).toBe(true)
+      await vi.advanceTimersByTimeAsync(60000)
+      expect(replay.startRecording).toHaveBeenCalledTimes(3)
+    })
+
+    it('does not remember a start requested while opted out', async () => {
+      await posthog.optOut()
+      expect(await posthog.startSessionRecording()).toBe(false)
+      await posthog.optIn()
+      nativeAccepts = true
+      await vi.advanceTimersByTimeAsync(60000)
+      expect(replay.startRecording).not.toHaveBeenCalled()
+    })
   })
 
   it('reports failure when the plugin is too old to control recording', async () => {
