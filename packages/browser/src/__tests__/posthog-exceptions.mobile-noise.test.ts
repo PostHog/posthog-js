@@ -122,3 +122,70 @@ describe.each(['message-only onerror', 'Error-object onerror'] as const)('mobile
         })
     })
 })
+
+describe('mobile noise: chained exceptions', () => {
+    let exceptions: PostHogExceptions
+    let capture: ReturnType<typeof vi.fn>
+    let config: ReturnType<typeof defaultConfig>
+
+    beforeEach(() => {
+        config = defaultConfig()
+        capture = vi.fn()
+        exceptions = new PostHogExceptions({ config, capture, get_property: () => undefined } as unknown as PostHog)
+    })
+
+    function buildChain(outerValue: string, causeValue: string) {
+        const error = (value: string) => {
+            const result = new Error(value)
+            result.stack = `Error: ${value}\n    at checkout (https://example.com/checkout.js:37:42346)`
+            return result
+        }
+        const properties = exceptions.buildProperties(Object.assign(error(outerValue), { cause: error(causeValue) }))
+        expect(properties.$exception_list.map(({ value }) => value)).toEqual([outerValue, causeValue])
+        expect(properties.$exception_list).toHaveLength(2)
+        return { ...properties, checkout_id: 'checkout-123' }
+    }
+
+    function expectCapturedIntact(properties: ReturnType<typeof buildChain>) {
+        const original = JSON.parse(JSON.stringify(properties))
+        exceptions.sendExceptionEvent(properties)
+        expect(capture).toHaveBeenCalledTimes(1)
+        expect(capture.mock.calls[0][1]).toBe(properties)
+        expect(capture.mock.calls[0][1]).toEqual(original)
+    }
+
+    describe.each([
+        ...facebookMessages,
+        "Can't find variable: __firefox__",
+        "undefined is not an object (evaluating 'window.__gCrWeb.something')",
+    ])('injected noise: %s', (noise) => {
+        it('preserves an application error with an injected-noise cause', () => {
+            expectCapturedIntact(buildChain('Checkout failed: payment token is missing', noise))
+        })
+
+        it('preserves an injected-noise error with an application cause', () => {
+            expectCapturedIntact(buildChain(noise, 'Checkout failed: payment token is missing'))
+        })
+
+        it('drops a chain containing only injected noise', () => {
+            exceptions.sendExceptionEvent(buildChain(noise, facebookMessages[0]))
+            expect(capture).not.toHaveBeenCalled()
+        })
+    })
+
+    it.each(applicationMessages)('preserves a near miss chained with noise: %s', (nearMiss) => {
+        expectCapturedIntact(buildChain(facebookMessages[0], nearMiss))
+    })
+
+    it('captures an empty exception list', () => {
+        const properties = { $exception_list: [], checkout_id: 'checkout-123' }
+        exceptions.sendExceptionEvent(properties)
+        expect(capture).toHaveBeenCalledTimes(1)
+        expect(capture.mock.calls[0][1]).toBe(properties)
+    })
+
+    it('preserves a noise-only chain when explicitly enabled', () => {
+        config.error_tracking.captureExtensionExceptions = true
+        expectCapturedIntact(buildChain(facebookMessages[0], facebookMessages[1]))
+    })
+})

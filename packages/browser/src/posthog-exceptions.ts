@@ -342,7 +342,12 @@ export class PostHogExceptions implements Extension {
     }
 
     private _isInjectedBrowserScriptException(exceptionList: ErrorTracking.ExceptionList): boolean {
-        return exceptionList.some(({ value }) => {
+        if (exceptionList.length === 0) {
+            return false
+        }
+
+        // Keep mixed chains intact: one injected error must not hide an application error.
+        return exceptionList.every(({ value }) => {
             return (
                 isString(value) &&
                 (INJECTED_BROWSER_SCRIPT_GLOBALS.some((global) => value.includes(global)) ||
