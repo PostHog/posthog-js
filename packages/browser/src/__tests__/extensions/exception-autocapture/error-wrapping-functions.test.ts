@@ -272,7 +272,7 @@ describe('error wrapping functions', () => {
                 expect.objectContaining({
                     type: 'Error',
                     value,
-                    mechanism: { handled: true, type: 'onconsole', synthetic },
+                    mechanism: { handled: true, type: 'onconsole', synthetic, exception_id: 0 },
                     stacktrace: { type: 'raw', frames: expect.any(Array) },
                 }),
             ])
