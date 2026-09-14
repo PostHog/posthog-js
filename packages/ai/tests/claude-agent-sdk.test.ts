@@ -123,6 +123,123 @@ describe('Claude Agent SDK integration', () => {
     queryMock.mockReset()
   })
 
+  it('preserves prototype methods and getters on the SDK Query', async () => {
+    class SDKQuery {
+      #value = 'ready'
+      get status() {
+        return this.#value
+      }
+      interrupt() {
+        return this.#value
+      }
+      async *[Symbol.asyncIterator]() {
+        yield resultMessage()
+      }
+    }
+    const inner = new SDKQuery()
+    queryMock.mockReturnValue(inner)
+    const running = instrument({ client: createMockClient() }).query({ prompt: 'Hello' })
+
+    expect(running.constructor).toBe(SDKQuery)
+    expect((running as any).status).toBe('ready')
+    const interrupt = running.interrupt
+    expect(interrupt()).toBe('ready')
+    expect(await drain(running)).toHaveLength(1)
+  })
+
+  it('keeps generated identity when caller properties contain reserved IDs', async () => {
+    const client = createMockClient()
+    queryMock.mockReturnValue(
+      scriptedQuery([
+        messageStart(),
+        assistantMessage([{ type: 'tool_use', id: 'tool_1', name: 'Read', input: {} }]),
+        messageStop(),
+        resultMessage(),
+      ])
+    )
+    await drain(
+      instrument({
+        client,
+        traceId: 'trace_1',
+        properties: {
+          $ai_trace_id: 'wrong',
+          $ai_span_id: 'wrong',
+          $ai_parent_id: 'wrong',
+          environment: 'test',
+        },
+      }).query({ prompt: 'Hello' })
+    )
+
+    const generation = capturedEvents(client, '$ai_generation')[0].properties
+    const tool = capturedEvents(client, '$ai_span')[0].properties
+    for (const [event] of client.capture.mock.calls) {
+      expect(event.properties.$ai_trace_id).toBe('trace_1')
+      expect(event.properties.environment).toBe('test')
+      expect(event.properties.$ai_span_id).not.toBe('wrong')
+      expect(event.properties.$ai_parent_id).not.toBe('wrong')
+    }
+    expect(tool.$ai_span_id).toBe('tool_1')
+    expect(tool.$ai_parent_id).toBe(generation.$ai_span_id)
+  })
+
+  it.each([false, true])('keeps retry attempts separate (retry notification=%s)', async (notification) => {
+    const client = createMockClient()
+    queryMock.mockReturnValue(
+      scriptedQuery([
+        messageStart(),
+        assistantMessage([{ type: 'text', text: 'Interrupted' }]),
+        ...(notification ? [{ type: 'system', subtype: 'api_retry', error: 'server_error', error_status: 500 }] : []),
+        messageStart(),
+        assistantMessage([{ type: 'text', text: 'Done' }]),
+        messageStop(),
+        resultMessage(),
+      ])
+    )
+    await drain(instrument({ client }).query({ prompt: 'Hello' }))
+
+    const generations = capturedEvents(client, '$ai_generation')
+    expect(generations).toHaveLength(2)
+    expect(generations.map(({ properties }) => properties.$ai_input)).toEqual([
+      [{ role: 'user', content: 'Hello' }],
+      [{ role: 'user', content: 'Hello' }],
+    ])
+    expect(generations.map(({ properties }) => properties.$ai_output_choices[0].content)).toEqual([
+      [{ type: 'text', text: 'Interrupted' }],
+      [{ type: 'text', text: 'Done' }],
+    ])
+    expect(generations[0].properties.$ai_is_error).toBe(true)
+    expect(generations[1].properties.$ai_is_error).toBeUndefined()
+  })
+
+  it.each([false, true])('captures tool duration, output and resolved identity (error=%s)', async (is_error) => {
+    vi.useFakeTimers({ toFake: ['performance'] })
+    try {
+      const client = createMockClient()
+      const distinctId = vi.fn(() => 'person_1')
+      queryMock.mockImplementation(() =>
+        (async function* () {
+          yield messageStart()
+          yield assistantMessage([{ type: 'tool_use', id: 'tool_1', name: 'Bash', input: { command: 'true' } }])
+          yield messageStop()
+          vi.advanceTimersByTime(40000)
+          yield toolResultMessage([{ type: 'tool_result', tool_use_id: 'tool_1', content: 'Finished', is_error }])
+          yield resultMessage()
+        })()
+      )
+      await drain(instrument({ client, distinctId }).query({ prompt: 'Run' }))
+
+      const spans = capturedEvents(client, '$ai_span')
+      expect(spans).toHaveLength(1)
+      expect(spans[0].properties.$ai_latency).toBe(40)
+      expect(spans[0].properties.$ai_output_state).toBe('Finished')
+      expect(spans[0].properties.$ai_is_error).toBe(is_error)
+      for (const [event] of client.capture.mock.calls) expect(event.distinctId).toBe('person_1')
+      expect(distinctId).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('captures a generation, a tool span, and a trace for one turn', async () => {
     const client = createMockClient()
     queryMock.mockReturnValue(
@@ -387,7 +504,7 @@ describe('Claude Agent SDK integration', () => {
     expect(capturedEvents(client, '$ai_generation')).toHaveLength(1)
   })
 
-  it.each(['break', 'failure', 'return', 'throw', 'close', 'dispose'])(
+  it.each(['break', 'resolver-break', 'failure', 'return', 'throw', 'close', 'dispose'])(
     'finalizes an unfinished generation on %s',
     async (ending) => {
       const client = createMockClient()
@@ -397,9 +514,10 @@ describe('Claude Agent SDK integration', () => {
       const close = vi.fn()
       const dispose = vi.fn().mockResolvedValue(undefined)
       queryMock.mockReturnValue(Object.assign(stream, { close, [Symbol.asyncDispose]: dispose }))
-      const running = instrument({ client }).query({ prompt: 'Hello' })
+      const distinctId = ending === 'resolver-break' ? vi.fn(() => 'person_1') : undefined
+      const running = instrument({ client, distinctId }).query({ prompt: 'Hello' })
 
-      if (ending === 'break') {
+      if (ending === 'break' || ending === 'resolver-break') {
         for await (const _message of running) break
       } else if (ending === 'failure') {
         await expect(drain(running)).rejects.toThrow(failure)
@@ -423,6 +541,11 @@ describe('Claude Agent SDK integration', () => {
       expect(traces[0].properties.$ai_is_error).toBe(ending === 'failure' || ending === 'throw' ? true : undefined)
       const generations = capturedEvents(client, '$ai_generation')
       expect(generations).toHaveLength(1)
+      if (distinctId) {
+        expect(distinctId).not.toHaveBeenCalled()
+        expect(generations[0].properties.$process_person_profile).toBe(false)
+        expect(generations[0].distinctId).toBe(traces[0].distinctId)
+      }
       expect(generations[0].properties.$ai_input_tokens).toBe(100)
       expect(generations[0].properties.$ai_output_choices).toEqual([
         { role: 'assistant', content: [{ type: 'text', text: 'Partial answer' }] },
@@ -572,6 +695,7 @@ describe('Claude Agent SDK integration', () => {
 
     const running = instrument({ client }).query({ prompt: 'Hello' })
     await running.interrupt()
+    await running.next()
     const followup = toolResultMessage('Follow-up')
     await running.streamInput(
       (async function* () {
@@ -588,7 +712,11 @@ describe('Claude Agent SDK integration', () => {
     ])
   })
 
-  it('redacts content in privacy mode and captures anonymously without a distinct ID', async () => {
+  it.each([
+    [true, false],
+    [false, true],
+    [true, undefined],
+  ])('keeps privacy across per-query overrides (%s, %s)', async (privacyMode, queryPrivacyMode) => {
     const client = createMockClient()
     queryMock.mockReturnValue(
       scriptedQuery([
@@ -599,7 +727,9 @@ describe('Claude Agent SDK integration', () => {
       ])
     )
 
-    await drain(instrument({ client, privacyMode: true }).query({ prompt: 'Secret' }))
+    await drain(
+      instrument({ client, privacyMode }).query({ prompt: 'Secret', posthog: { privacyMode: queryPrivacyMode } })
+    )
 
     const generation = capturedEvents(client, '$ai_generation')[0]
     expect(generation.properties.$ai_input).toBeNull()
@@ -629,12 +759,93 @@ describe('Claude Agent SDK integration', () => {
     expect(trace.distinctId).toBe('sess_123')
     expect(trace.properties.environment).toBe('production')
     expect(trace.groups).toEqual({ organization: 'org_1' })
-    // A resolver needs the result message, so a generation captured before it
-    // stays anonymous.
     const generation = capturedEvents(client, '$ai_generation')[0]
-    expect(generation.properties.$process_person_profile).toBe(false)
+    expect(generation.distinctId).toBe('sess_123')
+    expect(generation.properties.$process_person_profile).toBeUndefined()
     expect(generation.properties.environment).toBe('production')
   })
+
+  it('rotates turn state when result processing fails before trace capture', async () => {
+    const client = createMockClient()
+    const brokenResult = resultMessage()
+    Object.defineProperty(brokenResult, 'usage', {
+      get() {
+        throw new Error('Unreadable usage')
+      },
+    })
+    queryMock.mockReturnValue(
+      scriptedQuery([
+        assistantMessage([{ type: 'text', text: 'First' }]),
+        brokenResult,
+        toolResultMessage('Next'),
+        assistantMessage([{ type: 'text', text: 'Second' }]),
+        resultMessage(),
+      ])
+    )
+    const onError = vi.fn()
+    await drain(instrument({ client, onError }).query({ prompt: 'Hello' }))
+
+    const traces = capturedEvents(client, '$ai_trace')
+    expect(traces).toHaveLength(2)
+    expect(traces[1].properties.$ai_trace_id).not.toBe(traces[0].properties.$ai_trace_id)
+    expect(capturedEvents(client, '$ai_generation')[0].properties.$ai_output_choices).toEqual([
+      { role: 'assistant', content: [{ type: 'text', text: 'Second' }] },
+    ])
+    expect(onError).toHaveBeenCalledOnce()
+  })
+
+  it('flushes anonymously after a resolver error and resolves the next turn independently', async () => {
+    const client = createMockClient()
+    const distinctId = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error('Resolver failed')
+      })
+      .mockReturnValue('person_2')
+    const onError = vi.fn()
+    queryMock.mockReturnValue(
+      scriptedQuery([messageStart(), messageStop(), resultMessage(), messageStart(), messageStop(), resultMessage()])
+    )
+    await drain(instrument({ client, distinctId, onError }).query({ prompt: 'Hello' }))
+    const generations = capturedEvents(client, '$ai_generation')
+    expect(generations).toHaveLength(2)
+    expect(generations[0].properties.$process_person_profile).toBe(false)
+    expect(generations[1].distinctId).toBe('person_2')
+    expect(capturedEvents(client, '$ai_trace')[1].distinctId).toBe('person_2')
+    expect(distinctId).toHaveBeenCalledTimes(2)
+    expect(onError).toHaveBeenCalledOnce()
+  })
+
+  it.each([undefined, 'cancelled'])(
+    'does not guess input for an unmatched queued reply (%s)',
+    async (user_message_uuid) => {
+      const client = createMockClient()
+      const prompts = [
+        { ...toolResultMessage('Older prompt'), uuid: 'old' },
+        { ...toolResultMessage('Urgent prompt'), uuid: 'urgent', priority: 'now' },
+      ]
+      queryMock.mockImplementation(({ prompt }) =>
+        (async function* () {
+          await drain(prompt)
+          yield { ...messageStart(), user_message_uuid }
+          yield messageStop()
+          yield resultMessage()
+          yield { ...messageStart(), user_message_uuid: 'urgent' }
+          yield messageStop()
+          yield resultMessage({ queued_turn_count: 0 })
+        })()
+      )
+      await drain(
+        instrument({ client }).query({
+          prompt: (async function* () {
+            yield* prompts
+          })(),
+        })
+      )
+      const inputs = capturedEvents(client, '$ai_generation').map(({ properties }) => properties.$ai_input)
+      expect(inputs).toEqual([[], [{ role: 'user', content: 'Urgent prompt' }]])
+    }
+  )
 
   it.each([
     { enableFullAiCapture: false, privacyMode: false },
@@ -689,13 +900,16 @@ describe('Claude Agent SDK integration', () => {
     )
   })
 
-  it('truncates long tool results', async () => {
+  it.each([
+    ['a file line\n'.repeat(900), `${'a file line\n'.repeat(900).slice(0, 5000)}... [truncated]`],
+    ['!'.repeat(4999) + '😀', `${'!'.repeat(4999)}... [truncated]`],
+  ])('truncates long tool results safely', async (content, expected) => {
     const client = createMockClient()
     queryMock.mockReturnValue(
       scriptedQuery([
         messageStart(),
         assistantMessage([{ type: 'tool_use', id: 'toolu_1', name: 'Read', input: {} }]),
-        toolResultMessage([{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'a file line\n'.repeat(900) }]),
+        toolResultMessage([{ type: 'tool_result', tool_use_id: 'toolu_1', content }]),
         messageStop(),
         messageStart(),
         messageStop(),
@@ -706,7 +920,39 @@ describe('Claude Agent SDK integration', () => {
     await drain(instrument({ client }).query({ prompt: 'Read it' }))
 
     const input = capturedEvents(client, '$ai_generation')[1].properties.$ai_input
-    expect(input[0].content[0].content).toBe(`${'a file line\n'.repeat(900).slice(0, 5000)}... [truncated]`)
+    expect(input[0].content[0].content).toBe(expected)
+  })
+
+  it.each([false, true])('bounds deep content and applies argument capture policy (full=%s)', async (full) => {
+    const client = createMockClient()
+    client.enableFullAiCapture = full
+    let nested: any = 'leaf'
+    for (let depth = 0; depth < 4000; depth++) nested = { nested }
+    const input = {
+      body: 'some file content\n'.repeat(20000),
+      nested,
+      image: { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' } },
+    }
+    queryMock.mockReturnValue(
+      scriptedQuery([
+        messageStart(),
+        assistantMessage([{ type: 'tool_use', id: 'tool_1', name: 'Write', input }]),
+        messageStop(),
+        toolResultMessage([{ type: 'tool_result', tool_use_id: 'tool_1', content: nested }]),
+        messageStart(),
+        messageStop(),
+        resultMessage(),
+      ])
+    )
+    const onError = vi.fn()
+    await drain(instrument({ client, onError }).query({ prompt: 'Write' }))
+    const generations = capturedEvents(client, '$ai_generation')
+    const args = generations[0].properties.$ai_output_choices[0].content[0].function.arguments
+    expect(args.body.length).toBe(full ? input.body.length : 200000 + '... [truncated]'.length)
+    expect(args.image.source.data).toBe(full ? input.image.source.data : '[base64 image/png redacted]')
+    expect(JSON.stringify(args.nested)).toContain('[Truncated]')
+    expect(JSON.stringify(generations[1].properties.$ai_input)).toContain('[Truncated]')
+    expect(onError).not.toHaveBeenCalled()
   })
 
   it('reports instrumentation failures through onError without breaking the query', async () => {
@@ -744,7 +990,8 @@ describe('Claude Agent SDK integration', () => {
     const client = createMockClient()
     queryMock.mockReturnValue(
       scriptedQuery(
-        [0.1, 0.3, 0.05].flatMap((total_cost_usd) => [
+        [0.1, 0.3, 0.05, 0.4].flatMap((total_cost_usd, index) => [
+          ...(index === 3 ? [{ type: 'conversation_reset', new_conversation_id: 'new_session' }] : []),
           ...(streaming ? [messageStart(), messageStop()] : []),
           resultMessage({ total_cost_usd }),
         ])
@@ -755,10 +1002,11 @@ describe('Claude Agent SDK integration', () => {
 
     for (const event of streaming ? ['$ai_trace'] : ['$ai_trace', '$ai_generation']) {
       const costs = capturedEvents(client, event).map((capture) => capture.properties.$ai_total_cost_usd)
-      expect(costs).toHaveLength(3)
+      expect(costs).toHaveLength(4)
       expect(costs[0]).toBeCloseTo(0.1)
       expect(costs[1]).toBeCloseTo(0.2)
       expect(costs[2]).toBeCloseTo(0.05)
+      expect(costs[3]).toBeCloseTo(0.4)
     }
   })
 
@@ -810,7 +1058,9 @@ describe('Claude Agent SDK integration', () => {
 
     await drain(instrument({ client }).query({ prompt: 'Delegate' }))
 
-    expect(capturedEvents(client, '$ai_span')[1].properties.$ai_parent_id).toBe('agent_1')
+    const nested = capturedEvents(client, '$ai_span').find(({ properties }) => properties.$ai_span_id === 'nested_1')
+    expect(nested.properties.$ai_parent_id).toBe('agent_1')
+    expect(nested.properties.$ai_output_state).toBe('Child data')
     const generation = capturedEvents(client, '$ai_generation')[1].properties
     expect(generation.$ai_input).toEqual([
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'agent_1', content: 'Summary' }] },
@@ -870,6 +1120,7 @@ describe('Claude Agent SDK integration', () => {
     { subtype: 'success', result: 'The request was rejected' },
   ])('captures error result details (%j)', async (errorResult) => {
     const client = createMockClient()
+    client.options = { enableExceptionAutocapture: true }
     queryMock.mockReturnValue(scriptedQuery([resultMessage({ ...errorResult, is_error: true })]))
 
     await drain(instrument({ client }).query({ prompt: 'Hello' }))
@@ -879,6 +1130,10 @@ describe('Claude Agent SDK integration', () => {
       expect(properties.$ai_is_error).toBe(true)
       expect(properties.$ai_error).toContain(errorResult.errors?.[0] ?? errorResult.result)
     }
+    const generation = capturedEvents(client, '$ai_generation')[0].properties
+    expect(generation.$ai_error).toBe(capturedEvents(client, '$ai_trace')[0].properties.$ai_error)
+    expect(generation.$ai_http_status).toBe(500)
+    expect(generation.$exception_event_id).toBe(client.captureException.mock.calls[0][3])
   })
 
   it.each(
@@ -899,10 +1154,10 @@ describe('Claude Agent SDK integration', () => {
 
     const generation = capturedEvents(client, '$ai_generation')[0].properties
     const trace = capturedEvents(client, '$ai_trace')[0].properties
-    expect(generation.$ai_http_status).toBe(mode === 'completed' ? 200 : (status ?? 200))
+    expect(generation.$ai_http_status).toBe(mode === 'completed' ? 200 : (status ?? 500))
     expect(trace.$ai_http_status).toBe(status ?? undefined)
     expect(trace.$ai_is_error).toBe(true)
-    expect(trace.$ai_error).toBe('Request failed')
+    expect(trace.$ai_error).toBe(JSON.stringify('Request failed'))
   })
 
   it('includes SDK time to first token in generation latency', async () => {
@@ -971,7 +1226,10 @@ describe('Claude Agent SDK integration', () => {
         { role: 'user', content: 'Context' },
         { role: 'user', content: 'First prompt' },
       ])
-      expect(generations[1].properties.$ai_input).toEqual([{ role: 'user', content: 'Second prompt' }])
+      expect(generations[1].properties.$ai_input).toEqual([
+        { role: 'system', content: 'System' },
+        { role: 'user', content: 'Second prompt' },
+      ])
       expect(
         yielded.filter((message) => message.type === 'assistant').map((message) => message.user_message_uuid)
       ).toEqual(includePartialMessages ? [undefined, undefined] : ['prompt_1', 'prompt_2'])

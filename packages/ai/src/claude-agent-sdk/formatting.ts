@@ -1,9 +1,10 @@
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
 import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from '@anthropic-ai/claude-agent-sdk'
 import type { PostHog } from 'posthog-node'
+import { toJsonSafeValue } from '@posthog/core'
 import { isFullAiCaptureEnabled } from '../captureAiEvent'
 import { sanitizeAnthropic } from '../sanitization'
-import { toContentString } from '../utils'
+import { MAX_OUTPUT_SIZE, toContentString, truncate } from '../utils'
 import type { FormattedContent, FormattedContentItem } from '../types'
 
 /**
@@ -23,7 +24,7 @@ export type ClaudeAgentContentItem = FormattedContentItem | FormattedReasoningCo
 
 function capStrings(value: unknown, max: number): unknown {
   if (typeof value === 'string') {
-    return value.length > max ? `${value.slice(0, max)}... [truncated]` : value
+    return truncate(value, undefined, max)
   }
   if (Array.isArray(value)) {
     return value.map((item) => capStrings(item, max))
@@ -34,10 +35,10 @@ function capStrings(value: unknown, max: number): unknown {
   return value
 }
 
-/** Redact binary content from a tool result and cap its strings. */
-export function formatToolResultContent(content: unknown, client: PostHog): unknown {
-  const redacted = sanitizeAnthropic(content, client)
-  return isFullAiCaptureEnabled(client) ? redacted : capStrings(redacted, TOOL_RESULT_MAX_STRING_LENGTH)
+export function formatContent(content: unknown, client: PostHog, maxBytes = MAX_OUTPUT_SIZE): unknown {
+  // boffin: Bound JSON traversal before the binary redactor walks it.
+  const redacted = sanitizeAnthropic(toJsonSafeValue(content), client)
+  return isFullAiCaptureEnabled(client) ? redacted : capStrings(redacted, maxBytes)
 }
 
 /** Read the system prompt out of the SDK options, whatever shape it takes. */
@@ -59,7 +60,7 @@ export function formatAssistantBlocks(blocks: unknown, client: PostHog): ClaudeA
   }
 
   const content: ClaudeAgentContentItem[] = []
-  for (const block of blocks as Array<Record<string, any>>) {
+  for (const block of formatContent(blocks, client) as Array<Record<string, any>>) {
     if (block == null) {
       continue
     }
@@ -77,7 +78,7 @@ export function formatAssistantBlocks(blocks: unknown, client: PostHog): ClaudeA
     } else if (typeof block.text === 'string') {
       content.push({ type: 'text', text: block.text })
     } else {
-      content.push({ type: 'text', text: toContentString(sanitizeAnthropic(block, client)) })
+      content.push({ type: 'text', text: toContentString(block) })
     }
   }
   return content
@@ -101,13 +102,13 @@ export function formatUserContent(content: unknown, client: PostHog): FormattedC
       formatted.push({
         type: 'tool_result',
         tool_use_id: block.tool_use_id,
-        content: formatToolResultContent(block.content, client),
+        content: formatContent(block.content, client, TOOL_RESULT_MAX_STRING_LENGTH),
         ...(typeof block.is_error === 'boolean' ? { is_error: block.is_error } : {}),
       })
     } else if (typeof block.text === 'string') {
       formatted.push({ type: 'text', text: block.text })
     } else {
-      formatted.push(sanitizeAnthropic(block, client))
+      formatted.push(formatContent(block, client))
     }
   }
   return formatted
