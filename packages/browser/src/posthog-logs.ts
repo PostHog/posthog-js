@@ -370,6 +370,12 @@ export class PostHogLogs implements Extension {
         // live argument graphs rather than serialized records, so the ceiling is core's
         // flush threshold rather than its eviction cap.
         const maxBufferSize = resolveLogsConfig(this._instance?.config?.logs).maxBufferSize
+        // Foreign wrappers can retain this installation after stop. Restarting the
+        // instance must not reactivate those older recorder closures.
+        let active = true
+        this._consoleRecorderUnpatchers.push(() => {
+            active = false
+        })
         for (const level of BUFFERED_CONSOLE_LEVELS) {
             let trueOriginal: any
             try {
@@ -386,7 +392,9 @@ export class PostHogLogs implements Extension {
                 patch(assignableWindow.console, level, (next: any) => {
                     const wrapped = (...args: any[]) => {
                         try {
-                            this._recordConsoleEntry(level, args, maxBufferSize)
+                            if (active) {
+                                this._recordConsoleEntry(level, args, maxBufferSize)
+                            }
                         } catch {
                             // Recording must never break the page's own console output.
                         }

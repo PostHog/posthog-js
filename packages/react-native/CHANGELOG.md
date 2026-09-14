@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.72.0
+
+### Minor Changes
+
+- [#4928](https://github.com/PostHog/posthog-js/pull/4928) [`c7e592f`](https://github.com/PostHog/posthog-js/commit/c7e592fdedd1dc0f6378a3cf80d5f9801e72f591) Thanks [@marandaneto](https://github.com/marandaneto)! - Add initialization-only `sessionReplayConfig.captureTouches` to disable replay touch coordinates without stopping screenshots on Android and iOS.
+  (2026-09-14)
+
+### Patch Changes
+
+- Updated dependencies [[`c7e592f`](https://github.com/PostHog/posthog-js/commit/c7e592fdedd1dc0f6378a3cf80d5f9801e72f591)]:
+  - @posthog/react-native-plugin@2.9.0
+
 ## 4.71.0
 
 ### Minor Changes
