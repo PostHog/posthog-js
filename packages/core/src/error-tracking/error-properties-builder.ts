@@ -19,6 +19,7 @@ import {
 
 const MAX_EXCEPTIONS = 50
 const MAX_AGGREGATE_MEMBER_INSPECTIONS = 1000
+const MAX_ERROR_PROTOTYPE_DEPTH = 100
 // Forwarding wrappers do not represent tree edges or consume exception slots.
 const MAX_WRAPPER_RECURSION = 4
 
@@ -161,11 +162,19 @@ export class ErrorPropertiesBuilder {
   private getAggregateErrors(input: unknown): unknown[] | undefined {
     try {
       if (isError(input)) {
-        const errors = (input as Error & { errors?: unknown }).errors
-        return isArray(errors) ? errors : undefined
+        // AggregateError shares Error's toString tag; instanceof misses other realms.
+        let prototype = Object.getPrototypeOf(input)
+        for (let depth = 0; prototype && depth < MAX_ERROR_PROTOTYPE_DEPTH; depth++) {
+          const constructor = Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value
+          if (typeof constructor === 'function' && constructor.name === 'AggregateError') {
+            const errors = (input as Error & { errors?: unknown }).errors
+            return isArray(errors) ? errors : undefined
+          }
+          prototype = Object.getPrototypeOf(prototype)
+        }
       }
     } catch {
-      // A malformed errors accessor must not discard the root exception.
+      // Malformed prototypes or accessors must not discard the root exception.
     }
     return undefined
   }

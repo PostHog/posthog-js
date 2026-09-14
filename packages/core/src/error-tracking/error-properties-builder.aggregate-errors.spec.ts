@@ -58,6 +58,81 @@ describe('ErrorPropertiesBuilder AggregateError children', () => {
     expect(exceptions).toContainEqual(expect.objectContaining({ type: 'TypeError', value: 'cross-realm alternative' }))
   })
 
+  it.each(['ValidationError', 'AggregateError'])('does not treat a domain error named %s as an aggregate', (name) => {
+    const cause = new Error('underlying cause')
+    const domainError = Object.assign(new Error('invalid input', { cause }), {
+      name,
+      errors: [{ path: 'email', message: 'invalid email' }, new Error('validation detail')],
+    })
+    const exceptions = builder.buildFromUnknown(domainError).$exception_list
+
+    expect(exceptions.map((exception) => exception.value)).toEqual(['invalid input', 'underlying cause'])
+    expect(exceptions[1].mechanism).toMatchObject({ exception_id: 1, parent_id: 0, source: 'cause' })
+  })
+
+  it('does not read the errors accessor of an ordinary error', () => {
+    const domainError = new Error('invalid input')
+    const getErrors = vi.fn(() => [new Error('validation detail')])
+    Object.defineProperty(domainError, 'errors', { get: getErrors })
+
+    expect(builder.buildFromUnknown(domainError).$exception_list).toHaveLength(1)
+    expect(getErrors).not.toHaveBeenCalled()
+  })
+
+  it('does not traverse domain-error details inside a native aggregate', () => {
+    const domainError = Object.assign(new Error('invalid input'), { errors: [new Error('validation detail')] })
+    const aggregate = new AggregateError([domainError, new Error('next member')], 'group')
+    const exceptions = builder.buildFromUnknown(aggregate).$exception_list
+
+    expect(exceptions.map((exception) => exception.value)).toEqual(['group', 'invalid input', 'next member'])
+    expect(exceptions[2].mechanism).toMatchObject({ exception_id: 2, parent_id: 0, source: 'member' })
+  })
+
+  it('does not treat cross-realm validation errors as aggregates', () => {
+    const domainError = runInNewContext(`(() => {
+      class ValidationError extends Error {
+        errors = [{ message: 'invalid email' }]
+      }
+      return new ValidationError('invalid input')
+    })()`)
+
+    expect(domainError).not.toBeInstanceOf(Error)
+    expect(builder.buildFromUnknown(domainError).$exception_list).toHaveLength(1)
+  })
+
+  it('preserves custom-named cross-realm aggregate subclasses', () => {
+    const aggregate = runInNewContext(`(() => {
+      class CustomGroupError extends AggregateError {}
+      const error = new CustomGroupError([new Error('member')], 'group')
+      error.name = 'CustomGroupError'
+      return error
+    })()`)
+    const exceptions = builder.buildFromUnknown(aggregate).$exception_list
+
+    expect(aggregate).not.toBeInstanceOf(AggregateError)
+    expect(exceptions.map((exception) => exception.value)).toEqual(['group', 'member'])
+    expect(exceptions[1].mechanism).toMatchObject({ exception_id: 1, parent_id: 0, source: 'member' })
+  })
+
+  it('bounds aggregate detection of a cyclic proxy prototype without losing the root', () => {
+    const errorBuilder = new ErrorPropertiesBuilder(
+      [new ErrorCoercer()],
+      createStackParser('web:javascript', chromeStackLineParser)
+    )
+    let inspections = 0
+    const input: Error = new Proxy(new Error('malformed prototype'), {
+      get: (target, key) => (key === Symbol.toStringTag ? 'Error' : Reflect.get(target, key)),
+      getPrototypeOf: () => {
+        inspections++
+        return input
+      },
+    })
+
+    expect(errorBuilder.buildFromUnknown(input).$exception_list).toMatchObject([{ value: 'malformed prototype' }])
+    expect(inspections).toBeGreaterThan(0)
+    expect(inspections).toBeLessThanOrEqual(101)
+  })
+
   it('retains both the ordinary cause and aggregate alternatives', () => {
     const aggregate = new AggregateError([new Error('alternative')], 'group', { cause: new Error('cause') })
     const exceptions = builder.buildFromUnknown(aggregate, {
