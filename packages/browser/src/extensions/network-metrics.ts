@@ -34,10 +34,13 @@ const networkConfig = (instance: PostHog): NetworkMetricsConfig | undefined => {
 
 type Observed = { method: string; url: string }
 
-const observe = (method: unknown, url: unknown): Observed => ({
-    method: String(method).toUpperCase(),
-    url: String(url),
-})
+const observe = (method: unknown, url: unknown): Observed => {
+    const observedUrl = String(url)
+    return {
+        method: String(method).toUpperCase(),
+        url: convertToURL(observedUrl)?.href || observedUrl,
+    }
+}
 
 // The config while the wrapper should observe requests, `undefined` once it is stopped or turned off.
 type Enabled = () => NetworkMetricsConfig | undefined
@@ -59,6 +62,9 @@ const record = (
         const normalisedStatus = status || undefined
         const durationMs = now() - start
         const url = convertToURL(observed.url)
+        if (url?.protocol === 'data:') {
+            return
+        }
         const request: NetworkMetricsRequest = { url: url?.href || observed.url, method: observed.method }
         const name = isFunction(config.name)
             ? config.name(request)

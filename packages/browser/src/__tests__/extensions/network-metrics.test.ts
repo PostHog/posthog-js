@@ -69,6 +69,33 @@ describe('network metrics', () => {
         vi.restoreAllMocks()
     })
 
+    it.each(['fetch', 'XMLHttpRequest'] as const)(
+        'resolves a relative %s URL when the request begins',
+        async (transport) => {
+            const originalUrl = window.location.href
+            window.history.replaceState(null, '', '/original/page/')
+            start()
+
+            try {
+                if (transport === 'fetch') {
+                    const request = window.fetch('orders')
+                    window.history.replaceState(null, '', '/other/')
+                    await request
+                } else {
+                    const xhr = new window.XMLHttpRequest() as unknown as FakeXHR
+                    xhr.open('GET', 'orders')
+                    window.history.replaceState(null, '', '/other/')
+                    xhr.send()
+                    xhr.respond(200)
+                }
+
+                expect(recorded()[0][2].attributes.path).toBe('/original/page/orders')
+            } finally {
+                window.history.replaceState(null, '', originalUrl)
+            }
+        }
+    )
+
     describe('fetch', () => {
         it('returns a promise that mirrors the original fetch result', async () => {
             const original = Promise.resolve({ status: 200 })
@@ -115,6 +142,14 @@ describe('network metrics', () => {
                     },
                 ],
             ])
+        })
+
+        it('does not record data URLs', async () => {
+            start()
+
+            await window.fetch('data:text/plain,inline-content')
+
+            expect(recorded()).toEqual([])
         })
 
         it.each([
