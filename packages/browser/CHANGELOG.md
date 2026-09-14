@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.433.1
+
+### Patch Changes
+
+- [#4949](https://github.com/PostHog/posthog-js/pull/4949) [`8f11f5f`](https://github.com/PostHog/posthog-js/commit/8f11f5f099a75889e1dd61a7ff7ef7240b2770b0) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect autocapture attribute masks for link URLs and legacy class properties.
+  (2026-09-14)
+
 ## 1.433.0
 
 ### Minor Changes
