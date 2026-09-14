@@ -247,6 +247,62 @@ describe('CanvasManager FPS observer', () => {
     expect(vi.mocked(createImageBitmap)).toHaveBeenCalled();
   });
 
+  it('should warn once when snapshotting a canvas fails every frame', async () => {
+    const fakeCanvas = {
+      width: 300,
+      height: 150,
+      clientWidth: 300,
+      clientHeight: 150,
+      getContext: vi.fn(),
+    } as unknown as HTMLCanvasElement;
+
+    const mirror = createMirror();
+    // @ts-expect-error -- using internal method to set up mirror state
+    mirror.add(fakeCanvas, { id: 77 });
+
+    const win = {
+      document: {
+        querySelectorAll: vi.fn((selector: string) =>
+          selector === 'canvas' ? [fakeCanvas] : [],
+        ),
+      },
+      OffscreenCanvas: class {},
+      HTMLCanvasElement: { prototype: { getContext: vi.fn() } },
+    };
+
+    new CanvasManager({
+      recordCanvas: true,
+      mutationCb: vi.fn(),
+      win,
+      blockClass: 'rr-block',
+      blockSelector: null,
+      mirror,
+      sampling: 4,
+      dataURLOptions: {},
+    });
+
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn().mockRejectedValue(new Error('GPU context lost')),
+    );
+
+    flushRaf(1000);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // a canvas that never encodes must say why, with the underlying error
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('snapshot failed'),
+      expect.objectContaining({ message: 'GPU context lost' }),
+    );
+
+    flushRaf(2000);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // latched: a canvas failing on every frame logs once per recording, not once per frame
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(workerControl.instances[0].postMessage).not.toHaveBeenCalled();
+  });
+
   it('should skip WebGL canvases while the GL context is lost', async () => {
     const isContextLost = vi.fn().mockReturnValue(true);
     const getContextAttributes = vi.fn();

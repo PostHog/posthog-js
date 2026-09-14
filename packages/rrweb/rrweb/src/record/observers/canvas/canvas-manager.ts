@@ -288,6 +288,7 @@ export class CanvasManager {
     };
 
     let maskSkipWarned = false;
+    let snapshotFailureWarned = false;
     const timeBetweenSnapshots = 1000 / fps;
     let lastSnapshotTime = 0;
     let rafId: number;
@@ -422,7 +423,14 @@ export class CanvasManager {
               },
               [bitmap],
             );
-          } catch {
+          } catch (error) {
+            if (!snapshotFailureWarned) {
+              snapshotFailureWarned = true;
+              warnCanvasCapture(
+                'dropped a frame because the snapshot failed. A canvas that fails every frame records no canvas frames at all',
+                error,
+              );
+            }
             snapshotInProgressMap.set(id, false);
           }
         });
