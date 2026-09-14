@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Default Fetch requests to no-referrer without changing native XHR or beacon behavior.
+Default Fetch requests to strict-origin so referrers omit page paths and query strings.

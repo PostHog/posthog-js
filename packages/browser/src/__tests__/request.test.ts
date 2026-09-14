@@ -253,7 +253,7 @@ describe('request', () => {
                     headers: new Headers(),
                     keepalive: false,
                     method: 'GET',
-                    referrerPolicy: 'no-referrer',
+                    referrerPolicy: 'strict-origin',
                 })
             )
         })
@@ -783,18 +783,18 @@ describe('request', () => {
                 expect.objectContaining({
                     cache: 'force-cache',
                     next: { revalidate: 0, tags: ['test'] },
-                    referrerPolicy: 'no-referrer',
+                    referrerPolicy: 'strict-origin',
                 })
             )
         })
 
         it('preserves runtime fetchOptions precedence over the default referrer policy', () => {
             // Extra runtime fields already pass through, even though referrerPolicy is not a public config option.
-            const fetchOptions: RequestInit = { cache: 'no-store', referrerPolicy: 'origin' }
+            const fetchOptions: RequestInit = { cache: 'no-store', referrerPolicy: 'no-referrer' }
             request(createRequest({ fetchOptions }))
 
             expect(mockedFetch.mock.calls[0][1]).toEqual(
-                expect.objectContaining({ cache: 'no-store', referrerPolicy: 'origin' })
+                expect.objectContaining({ cache: 'no-store', referrerPolicy: 'no-referrer' })
             )
         })
 
@@ -847,7 +847,7 @@ describe('request', () => {
                             headers: new Headers(),
                             keepalive: expectedKeepAlive,
                             method,
-                            referrerPolicy: 'no-referrer',
+                            referrerPolicy: 'strict-origin',
                         })
                     )
                 }
@@ -862,7 +862,7 @@ describe('request', () => {
                 )
                 expect(mockedFetch).toHaveBeenCalledWith(
                     expect.anything(),
-                    expect.objectContaining({ referrerPolicy: 'no-referrer' })
+                    expect.objectContaining({ referrerPolicy: 'strict-origin' })
                 )
             })
         })
@@ -1313,7 +1313,7 @@ describe('request', () => {
                     expect(warnSpy).toHaveBeenCalledTimes(4)
                     for (const call of mockedFetch.mock.calls) {
                         expect(call[1].keepalive).toBe(false)
-                        expect(call[1].referrerPolicy).toBe('no-referrer')
+                        expect(call[1].referrerPolicy).toBe('strict-origin')
                     }
                 })
 
@@ -1333,7 +1333,7 @@ describe('request', () => {
                     expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(1)
                     expect(mockedFetch).toHaveBeenCalledTimes(1)
                     expect(mockedFetch.mock.calls[0][1].keepalive).toBe(false)
-                    expect(mockedFetch.mock.calls[0][1].referrerPolicy).toBe('no-referrer')
+                    expect(mockedFetch.mock.calls[0][1].referrerPolicy).toBe('strict-origin')
                 })
             })
 
