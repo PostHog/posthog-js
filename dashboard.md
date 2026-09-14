@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4920](https://github.com/PostHog/posthog-js/issues/4920) | Valid Node delivery-semantics bug; the terminal-3xx portion is already fixed in shared core, but immediate calls still suppress transport failures. | node, team/client-libraries |  | no | 2026-09-14T08:12:46.087Z |
 | PostHog/posthog-js | [issue 4931](https://github.com/PostHog/posthog-js/issues/4931) | Valid dead-click false-positive bug with a narrowly scoped, evidence-backed fix direction. | feature/dead-clicks, javascript, web |  | no | 2026-09-12T23:17:51.861Z |
 | PostHog/posthog-js | [issue 4857](https://github.com/PostHog/posthog-js/issues/4857) | Valid Android React Native push-open capture gap; automatic warm-start handling is absent in the current plugin. | react-native, feature/mobile, team/client-libraries |  | no | 2026-09-09T02:28:28.988Z |
 | PostHog/posthog-js | [issue 4856](https://github.com/PostHog/posthog-js/issues/4856) | Valid publisher-intent and licensing-provenance question; it needs an authoritative maintainer/legal response rather than a speculative code fix. | team/client-libraries |  | no | 2026-09-09T01:07:15.889Z |
