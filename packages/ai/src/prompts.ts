@@ -300,6 +300,17 @@ export class Prompts {
       resolvedRows.push(row)
     }
 
+    if (rows.length > 0 && resolvedRows.length === 0) {
+      // Every returned row was skipped as moved. One moved label is a
+      // mid-request race, but all of them means the server most likely
+      // ignored the label param and served latest versions.
+      throw new Error(
+        `[PostHog Prompts] The server returned prompts, but none resolve label "${label}". ` +
+          'It may not support fetching prompts by label on the list endpoint yet. ' +
+          'Upgrade PostHog, or fetch prompts one by one with get().'
+      )
+    }
+
     const now = Date.now()
     // Collected in a Map first: prompt names like __proto__ are valid, and
     // assigning them into a plain object would change its prototype instead of
