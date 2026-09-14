@@ -399,6 +399,8 @@ const _fetch = (options: TransportRequestOptions & { _keepaliveDisabled?: boolea
         const fetchOptions: RequestInit = {
             method: options?.method || 'GET',
             headers,
+            // Keep the referring origin for domain checks without sending the page path or query.
+            referrerPolicy: 'strict-origin',
             body,
             signal: aborter?.signal,
             ...options.fetchOptions,
