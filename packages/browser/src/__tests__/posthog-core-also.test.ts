@@ -14,7 +14,7 @@ import {
     USER_STATE,
 } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
-import { PostHogConfig, Properties, RemoteConfig } from '../types'
+import { CaptureResult, PostHogConfig, Properties, RemoteConfig } from '../types'
 import { configRenames, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
@@ -402,34 +402,48 @@ describe('posthog core', () => {
             )
         })
 
-        it('carries the explicit session/window batch group onto the request', () => {
+        it.each(['timer', 'unload'])('keeps different windows of one session in separate %s uploads', (flushMode) => {
+            const posthog = posthogWith({ capture_pageview: false, request_batching: true }, defaultOverrides)
+            const sendRequest = vi.fn()
+            const queue = new RequestQueue(sendRequest)
+            posthog._requestQueue = queue
+
+            for (const windowId of ['window-one', 'window-two', 'window-one']) {
+                posthog.capture(
+                    '$snapshot',
+                    { $session_id: 'session-one', $window_id: windowId },
+                    { _url: 'https://app.posthog.com/s/', _batchKey: 'recordings' }
+                )
+            }
+
+            if (flushMode === 'timer') {
+                queue.enable()
+                vi.advanceTimersByTime(3000)
+            } else {
+                queue.unload()
+            }
+
+            const requests = sendRequest.mock.calls.map(([request]) => request)
+            expect(
+                requests.map((request) => request.data.map((event: CaptureResult) => event.properties.$window_id))
+            ).toEqual([['window-one', 'window-one'], ['window-two']])
+            for (const request of requests) {
+                expect(request).toMatchObject({ batchKey: 'recordings', timestampMode: 'body' })
+            }
+        })
+
+        it.each([
+            ['recordings', 'window-1', 'session-1-window-1'],
+            ['recordings', undefined, 'session-1'],
+            [undefined, 'window-1', undefined],
+        ])('groups requests with batchKey %s and window %s', (batchKey, windowId, batchGroup) => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
 
             posthog.capture(
                 '$snapshot',
-                { $session_id: 'session-one', $window_id: 'window-one' },
-                {
-                    _url: 'https://app.posthog.com/s/',
-                    _batchKey: 'recordings',
-                    _batchGroup: 'session-one-window-one',
-                }
+                { $session_id: 'session-1', $window_id: windowId },
+                batchKey ? { _batchKey: batchKey } : undefined
             )
-
-            expect(posthog._send_request).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    batchKey: 'recordings',
-                    batchGroup: 'session-one-window-one',
-                })
-            )
-        })
-
-        it.each([
-            ['recordings', 'session-1'],
-            [undefined, undefined],
-        ])('groups requests with batchKey %s by session id', (batchKey, batchGroup) => {
-            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
-
-            posthog.capture('$snapshot', { $session_id: 'session-1' }, batchKey ? { _batchKey: batchKey } : undefined)
 
             expect(vi.mocked(posthog._send_request).mock.calls[0][0].batchGroup).toEqual(batchGroup)
         })

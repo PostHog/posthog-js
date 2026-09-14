@@ -16,7 +16,7 @@ import {
     META_EVENT_TYPE,
 } from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
-import { Property, RemoteConfig, RemoteConfigResult } from '../../../types'
+import { CaptureResult, Property, QueuedRequestWithOptions, RemoteConfig, RemoteConfigResult } from '../../../types'
 import { assignableWindow } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import { EventType, type eventWithTime, IncrementalSource } from '../../../extensions/replay/types/rrweb-types'
@@ -286,7 +286,8 @@ function shippedBySession(h: Harness): Map<string, eventWithTime[]> {
 
 function checkInvariants(
     h: Harness,
-    state: { rotated: boolean; lastInteractionAt: number; rotations: number }
+    state: { rotated: boolean; lastInteractionAt: number; rotations: number },
+    requests: QueuedRequestWithOptions[]
 ): string[] {
     const violations: string[] = []
     for (const [sessionId, events] of shippedBySession(h)) {
@@ -333,11 +334,15 @@ function checkInvariants(
     // would ship their snapshots in one upload and the player reads the later epoch's Meta and
     // FullSnapshot as a late initial snapshot
     const epochByBatchGroup = new Map<string, string>()
-    h.capture.mock.calls
-        .filter(([name]) => name === '$snapshot')
-        .forEach(([, props, options]) => {
-            const batchGroup = String(options?._batchGroup)
+    requests
+        .filter(({ data }) => (data as CaptureResult).event === '$snapshot')
+        .forEach(({ data, batchGroup }) => {
+            const props = (data as CaptureResult).properties
             const epoch = `${props.$session_id}/${props.$window_id}`
+            if (isUndefined(batchGroup)) {
+                violations.push(`(6) epoch ${epoch} has no batch group`)
+                return
+            }
             const seen = epochByBatchGroup.get(batchGroup)
             if (isUndefined(seen)) {
                 epochByBatchGroup.set(batchGroup, epoch)
@@ -363,6 +368,18 @@ function recordCoverage(h: Harness, rotations: number): void {
 
 function replay(actions: Action[], track = false): Failure | null {
     const h = createHarness()
+    const captureClient = new PostHog().init('rotation-invariants', {
+        persistence: 'memory',
+        request_batching: true,
+        capture_pageview: false,
+        autocapture: false,
+        disable_session_recording: true,
+        disable_surveys: true,
+        disable_conversations: true,
+        advanced_disable_feature_flags: true,
+    })
+    const enqueue = vi.spyOn(captureClient._requestQueue!, 'enqueue').mockImplementation(() => {})
+    h.capture.mockImplementation((name, props, options) => captureClient.capture(name, props, options))
     const state = { rotated: false, lastInteractionAt: Date.now(), rotations: 0 }
     try {
         let sessionId = h.lazy._sessionId
@@ -376,7 +393,11 @@ function replay(actions: Action[], track = false): Failure | null {
                 state.rotations++
                 sessionId = h.lazy._sessionId
             }
-            const violations = checkInvariants(h, state)
+            const violations = checkInvariants(
+                h,
+                state,
+                enqueue.mock.calls.map(([request]) => request)
+            )
             if (violations.length > 0) {
                 return { index: i, message: violations.join('\n') }
             }
@@ -387,6 +408,7 @@ function replay(actions: Action[], track = false): Failure | null {
             recordCoverage(h, state.rotations)
         }
         h.sessionRecording.stopRecording()
+        void captureClient.shutdown()
         vi.useRealTimers()
         vi.clearAllMocks()
     }

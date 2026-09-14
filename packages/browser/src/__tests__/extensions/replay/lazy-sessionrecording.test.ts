@@ -1403,7 +1403,6 @@ describe('Lazy SessionRecording', () => {
                     },
                     {
                         _batchKey: 'recordings',
-                        _batchGroup: expect.stringContaining(firstSessionId),
                         _noTruncate: true,
                         _url: 'https://test.com/s/',
                         skip_client_rate_limiting: true,
@@ -1693,7 +1692,6 @@ describe('Lazy SessionRecording', () => {
                     },
                     {
                         _batchKey: 'recordings',
-                        _batchGroup: expect.stringContaining(firstSessionId),
                         _noTruncate: true,
                         _url: 'https://test.com/s/',
                         skip_client_rate_limiting: true,
@@ -1723,7 +1721,6 @@ describe('Lazy SessionRecording', () => {
                     },
                     {
                         _batchKey: 'recordings',
-                        _batchGroup: expect.stringContaining(firstSessionId),
                         _noTruncate: true,
                         _url: 'https://test.com/s/',
                         skip_client_rate_limiting: true,
@@ -3539,14 +3536,12 @@ describe('Lazy SessionRecording', () => {
         })
 
         describe('when compression is active', () => {
-            // sessionId is only minted in beforeEach, so read it per assertion
-            const captureOptions = () => ({
+            const captureOptions = {
                 _batchKey: 'recordings',
-                _batchGroup: `${sessionId}-windowId`,
                 _noTruncate: true,
                 _url: 'https://test.com/s/',
                 skip_client_rate_limiting: true,
-            })
+            }
 
             beforeEach(async () => {
                 posthog.config.session_recording.compress_events = true
@@ -3592,7 +3587,7 @@ describe('Lazy SessionRecording', () => {
                         $lib_version: '0.0.1',
                         $snapshot_host: 'localhost',
                     },
-                    captureOptions()
+                    captureOptions
                 )
             })
 
@@ -3635,7 +3630,7 @@ describe('Lazy SessionRecording', () => {
                         $lib_version: '0.0.1',
                         $snapshot_host: 'localhost',
                     },
-                    captureOptions()
+                    captureOptions
                 )
             })
 
@@ -3668,7 +3663,7 @@ describe('Lazy SessionRecording', () => {
                         $lib_version: '0.0.1',
                         $snapshot_host: 'localhost',
                     },
-                    captureOptions()
+                    captureOptions
                 )
             })
 
@@ -3702,7 +3697,7 @@ describe('Lazy SessionRecording', () => {
                         $lib_version: '0.0.1',
                         $snapshot_host: 'localhost',
                     },
-                    captureOptions()
+                    captureOptions
                 )
             })
 
@@ -3724,7 +3719,7 @@ describe('Lazy SessionRecording', () => {
                         $lib_version: '0.0.1',
                         $snapshot_host: 'localhost',
                     },
-                    captureOptions()
+                    captureOptions
                 )
             })
 
@@ -3756,7 +3751,7 @@ describe('Lazy SessionRecording', () => {
                         $lib_version: '0.0.1',
                         $snapshot_host: 'localhost',
                     },
-                    captureOptions()
+                    captureOptions
                 )
             })
 
@@ -3782,7 +3777,7 @@ describe('Lazy SessionRecording', () => {
                         $lib_version: '0.0.1',
                         $snapshot_host: 'localhost',
                     },
-                    captureOptions()
+                    captureOptions
                 )
             })
         })
@@ -4351,7 +4346,6 @@ describe('Lazy SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
-                    _batchGroup: `${sessionId}-windowId`,
                     skip_client_rate_limiting: true,
                 }
             )
@@ -4360,7 +4354,7 @@ describe('Lazy SessionRecording', () => {
             expect([
                 captureArguments[0],
                 { ...captureArguments[1], $session_id: '<generated-session-id>' },
-                { ...captureArguments[2], _batchGroup: '<generated-session-id>-windowId' },
+                captureArguments[2],
             ]).toMatchSnapshot()
         })
 
@@ -4583,7 +4577,6 @@ describe('Lazy SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
-                    _batchGroup: `${sessionId}-windowId`,
                     skip_client_rate_limiting: true,
                 }
             )
@@ -4690,7 +4683,6 @@ describe('Lazy SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
-                    _batchGroup: 'otherSessionId-windowId',
                     skip_client_rate_limiting: true,
                 }
             )

@@ -1869,7 +1869,13 @@ export class PostHog implements PostHogInterface {
             compression: 'best-available',
             timestampMode: isSessionRecording ? 'body' : 'capture-body',
             batchKey: options?._batchKey,
-            batchGroup: options?._batchGroup ?? (isSessionRecording ? data.properties?.$session_id : undefined),
+            ...(isSessionRecording && data.properties?.$session_id
+                ? {
+                      batchGroup:
+                          data.properties.$session_id +
+                          (data.properties.$window_id ? `-${data.properties.$window_id}` : ''),
+                  }
+                : {}),
             ...(options?.transport ? { transport: options.transport } : {}),
             ...(fbcToConfirm
                 ? {
