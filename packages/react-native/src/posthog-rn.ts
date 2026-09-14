@@ -124,7 +124,7 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * This option is read once, at setup. To record only some sessions, either gate recording
    * from your project settings (sampling, a linked flag, or event triggers), or leave this
    * option off and drive the recorder from your app with `startSessionRecording()` and
-   * `stopSessionRecording()`. Both report whether the native recorder changed state.
+   * `stopSessionRecording()`.
    *
    * @default false
    */
@@ -1611,6 +1611,12 @@ export class PostHog extends PostHogCore {
    * Starts session recording.
    * This method will have no effect if PostHog is not enabled, or if session replay is disabled in your project settings.
    *
+   * A refused manual start is retried with successive delays of 1, 2, 4, 8, and 16 seconds,
+   * and on subsequent feature flags loads while pending. This promise resolves after the
+   * initial attempt, without waiting for retries or guaranteeing recording is active.
+   * A newer start supersedes an unfinished request. Stop, reset, opt-out, and shutdown
+   * cancel pending starts. Use `isSessionReplayActive()` to check the current recording state.
+   *
    * Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
    *
    * Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
@@ -1629,44 +1635,23 @@ export class PostHog extends PostHogCore {
    * await posthog.startSessionRecording(false)
    * ```
    *
-   * @example
-   * ```js
-   * // Record only some sessions
-   * // Keep `enableSessionReplay` off at setup, then start recording where you want it.
-   * const started = await posthog.startSessionRecording()
-   * if (!started) {
-   *   // This request did not start recording. Pending starts retry briefly while native config loads.
-   * }
-   * ```
-   *
    * @public
    *
    * @param resumeCurrent - Whether to resume recording of current session (true) or start a new session (false). Defaults to true.
-   *
-   * @returns Whether this request started the native recorder. It is `false` when PostHog is
-   * disabled or opted out, replay is unsupported, the native plugin is unavailable, or the
-   * native start fails or is refused. A newer start supersedes an unfinished request, which
-   * returns `false` even if the newer request starts recording. If the native start completes
-   * but its state cannot be checked, PostHog logs a warning and returns `true`.
-   * A refused manual start is retried with successive delays of 1, 2, 4, 8, and 16 seconds,
-   * and on subsequent feature flags loads while pending. The returned result does not wait
-   * for these retries. Stop, reset, opt-out, and shutdown cancel pending starts.
    */
-  async startSessionRecording(resumeCurrent: boolean = true): Promise<boolean> {
+  async startSessionRecording(resumeCurrent: boolean = true): Promise<void> {
     this._cancelManualRecordingStart()
     const request: ManualRecordingStartRequest = { pending: false, retryCount: 0 }
     this._manualRecordingStartRequest = request
-    let started = false
     // Chained here, not in _startSessionRecording (which _evaluateAndStartSessionReplayInternal
     // also calls from inside this chain — re-chaining there deadlocks), so two callers can't
     // both enter initializeNativePlugin() and race their pluginConfigs.
     this._sessionReplayEvalChain = this._sessionReplayEvalChain
       .catch(() => {})
       .then(async () => {
-        started = await this._attemptManualRecordingStart(request, resumeCurrent)
+        await this._attemptManualRecordingStart(request, resumeCurrent)
       })
     await this._sessionReplayEvalChain
-    return started
   }
 
   private _cancelManualRecordingStart(): void {
@@ -1810,22 +1795,16 @@ export class PostHog extends PostHogCore {
    * await posthog.stopSessionRecording()
    * ```
    * @public
-   *
-   * @returns Whether the native stop call completed. It is `true` even if nothing was recording.
-   * It is `false` when PostHog is disabled, the native plugin is missing or too old, or the
-   * native stop call fails.
    */
-  async stopSessionRecording(): Promise<boolean> {
+  async stopSessionRecording(): Promise<void> {
     this._cancelManualRecordingStart()
-    let stopped = false
     // Let an in-flight native start settle before stopping its recorder.
     this._sessionReplayEvalChain = this._sessionReplayEvalChain
       .catch(() => {})
       .then(async () => {
-        stopped = await this._stopSessionRecording()
+        await this._stopSessionRecording()
       })
     await this._sessionReplayEvalChain
-    return stopped
   }
 
   // Shared stop path, also called by the flags-driven evaluation.

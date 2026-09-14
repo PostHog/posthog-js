@@ -106,11 +106,24 @@ describe('PostHog RN manual session recording controls', () => {
     return client
   }
 
-  it('reports success when the native recorder starts', async () => {
+  it('preserves the Promise<void> public recording control contract', async () => {
     posthog = newPostHog()
     await posthog.ready()
 
-    expect(await posthog.startSessionRecording()).toBe(true)
+    const starting: Promise<void> = posthog.startSessionRecording()
+    expect(await starting).toBeUndefined()
+    expect(await posthog.isSessionReplayActive()).toBe(true)
+
+    const stopping: Promise<void> = posthog.stopSessionRecording()
+    expect(await stopping).toBeUndefined()
+    expect(await posthog.isSessionReplayActive()).toBe(false)
+  })
+
+  it('starts the native recorder without returning a result', async () => {
+    posthog = newPostHog()
+    await posthog.ready()
+
+    expect(await posthog.startSessionRecording()).toBeUndefined()
     expect(await posthog.isSessionReplayActive()).toBe(true)
   })
 
@@ -122,19 +135,19 @@ describe('PostHog RN manual session recording controls', () => {
     const first = posthog.startSessionRecording(false)
     const second = posthog.startSessionRecording()
 
-    expect(await Promise.all([first, second])).toEqual([false, true])
+    expect(await Promise.all([first, second])).toEqual([undefined, undefined])
     expect(replay.startRecording).toHaveBeenCalledTimes(1)
     expect(replay.startRecording).toHaveBeenCalledWith(true)
     expect(posthog.getSessionId()).toBe(sessionId)
     expect(await posthog.isSessionReplayActive()).toBe(true)
   })
 
-  it('reports a completed native stop even when recording is already inactive', async () => {
+  it('completes a native stop without a result when recording is already inactive', async () => {
     posthog = newPostHog()
     await posthog.ready()
     expect(await posthog.isSessionReplayActive()).toBe(false)
 
-    expect(await posthog.stopSessionRecording()).toBe(true)
+    expect(await posthog.stopSessionRecording()).toBeUndefined()
     expect(replay.stopRecording).toHaveBeenCalledTimes(1)
     expect(await posthog.isSessionReplayActive()).toBe(false)
   })
@@ -176,12 +189,12 @@ describe('PostHog RN manual session recording controls', () => {
     await waitForExpect(2000, async () => expect(await posthog.isSessionReplayActive()).toBe(true))
   })
 
-  it('reports failure and warns when the native SDK refuses the start', async () => {
+  it('warns without returning a result when the native SDK refuses the start', async () => {
     nativeAccepts = false
     posthog = newPostHog()
     await posthog.ready()
 
-    expect(await posthog.startSessionRecording()).toBe(false)
+    expect(await posthog.startSessionRecording()).toBeUndefined()
     expect(await posthog.isSessionReplayActive()).toBe(false)
     expect(
       warnings().some(
@@ -197,7 +210,8 @@ describe('PostHog RN manual session recording controls', () => {
     posthog = newPostHog()
     await posthog.ready()
 
-    expect(await posthog.startSessionRecording()).toBe(false)
+    await posthog.startSessionRecording()
+    expect(await posthog.isSessionReplayActive()).toBe(false)
     const attempts = replay.startRecording.mock.calls.length
 
     // Native has loaded its own remote config by the time the next flags load lands.
@@ -214,7 +228,7 @@ describe('PostHog RN manual session recording controls', () => {
     await posthog.ready()
 
     await posthog.startSessionRecording()
-    expect(await posthog.stopSessionRecording()).toBe(true)
+    expect(await posthog.stopSessionRecording()).toBeUndefined()
     const attempts = replay.startRecording.mock.calls.length
 
     nativeAccepts = true
@@ -254,7 +268,7 @@ describe('PostHog RN manual session recording controls', () => {
     // Long enough for an unserialized stop to run to completion ahead of the retry.
     await wait(20)
     releaseRetry()
-    expect(await stopping).toBe(true)
+    expect(await stopping).toBeUndefined()
 
     // Native accepts now, so a revived pending start would record the flow the app excluded.
     nativeAccepts = true
@@ -275,7 +289,8 @@ describe('PostHog RN manual session recording controls', () => {
     posthog = newPostHog()
     await posthog.ready()
 
-    expect(await posthog.startSessionRecording()).toBe(false)
+    await posthog.startSessionRecording()
+    expect(await posthog.isSessionReplayActive()).toBe(false)
     const attempts = replay.startRecording.mock.calls.length
 
     // Native has had its remote config for a while by logout, so a leaked pending start
@@ -299,7 +314,8 @@ describe('PostHog RN manual session recording controls', () => {
     })
 
     it('starts after native becomes ready without another flags load', async () => {
-      expect(await posthog.startSessionRecording()).toBe(false)
+      expect(await posthog.startSessionRecording()).toBeUndefined()
+      expect(await posthog.isSessionReplayActive()).toBe(false)
       const fetches = vi.mocked(window.fetch).mock.calls.length
       nativeAccepts = true
 
@@ -437,7 +453,7 @@ describe('PostHog RN manual session recording controls', () => {
       const restarting = posthog.startSessionRecording()
       release()
       await stopping
-      expect(await restarting).toBe(true)
+      expect(await restarting).toBeUndefined()
       expect(await posthog.isSessionReplayActive()).toBe(true)
       await vi.advanceTimersByTimeAsync(60000)
       expect(replay.startRecording).toHaveBeenCalledTimes(3)
@@ -445,7 +461,7 @@ describe('PostHog RN manual session recording controls', () => {
 
     it('does not remember a start requested while opted out', async () => {
       await posthog.optOut()
-      expect(await posthog.startSessionRecording()).toBe(false)
+      expect(await posthog.startSessionRecording()).toBeUndefined()
       await posthog.optIn()
       nativeAccepts = true
       await vi.advanceTimersByTimeAsync(60000)
@@ -453,14 +469,15 @@ describe('PostHog RN manual session recording controls', () => {
     })
   })
 
-  it('reports failure when the plugin is too old to control recording', async () => {
+  it('warns without returning a result when the plugin is too old to control recording', async () => {
     const startRecording = replay.startRecording
     delete (replay as any).startRecording
     try {
       posthog = newPostHog()
       await posthog.ready()
 
-      expect(await posthog.startSessionRecording()).toBe(false)
+      expect(await posthog.startSessionRecording()).toBeUndefined()
+      expect(await posthog.isSessionReplayActive()).toBe(false)
       expect(warnings().some((line) => line.includes('startRecording is not available'))).toBe(true)
     } finally {
       ;(replay as any).startRecording = startRecording

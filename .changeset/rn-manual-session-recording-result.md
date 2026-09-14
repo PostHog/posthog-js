@@ -1,5 +1,5 @@
 ---
-'posthog-react-native': minor
+'posthog-react-native': patch
 ---
 
-fix(react-native): report whether manual session recording started and retry refused starts without waiting for feature flags to reload
+fix(react-native): retry refused manual session recording starts without waiting for feature flags to reload
