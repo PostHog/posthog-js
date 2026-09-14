@@ -1,9 +1,13 @@
 /* oxlint-disable no-console */
 
 import * as React from 'react'
-import { render } from '@testing-library/react'
+import { act, fireEvent, render } from '@testing-library/react'
 import type { Mock } from 'vitest'
-import { __POSTHOG_ERROR_MESSAGES, PostHogErrorBoundary } from '../PostHogErrorBoundary'
+import {
+    __POSTHOG_ERROR_MESSAGES,
+    PostHogErrorBoundary,
+    PostHogErrorBoundaryFallbackProps,
+} from '../PostHogErrorBoundary'
 import posthog from 'posthog-js'
 import { setDefaultPostHogInstance } from '../../context/posthog-default'
 
@@ -90,6 +94,74 @@ describe('PostHogErrorBoundary component', () => {
     it('should render children without errors', () => {
         const { container } = renderWithoutError()
         expect(container.innerHTML).toBe('<div>Amazing content</div>')
+    })
+
+    it('should recover through the fallback without changing the boundary instance', () => {
+        const boundary = React.createRef<PostHogErrorBoundary>()
+        let resetError: (() => void) | undefined
+        const Fallback = (props: PostHogErrorBoundaryFallbackProps) => {
+            resetError = props.resetError
+            return <button onClick={props.resetError}>Retry</button>
+        }
+        const tree = (broken: boolean) => (
+            <PostHogErrorBoundary ref={boundary} fallback={Fallback}>
+                {broken ? <ComponentWithError message="Recoverable error" /> : <div>Recovered</div>}
+            </PostHogErrorBoundary>
+        )
+        const view = render(tree(false))
+        const originalBoundary = boundary.current
+
+        for (let cycle = 1; cycle <= 2; cycle++) {
+            view.rerender(tree(true))
+            expect(posthog.captureException).toHaveBeenCalledTimes(cycle)
+            expect(resetError).toEqual(expect.any(Function))
+
+            view.rerender(tree(false))
+            expect(view.queryByText('Recovered')).toBeNull()
+            fireEvent.click(view.getByText('Retry'))
+
+            expect(view.getByText('Recovered')).toBeTruthy()
+            expect(boundary.current).toBe(originalBoundary)
+            expect(boundary.current?.state).toEqual({ error: null, componentStack: null, exceptionEvent: null })
+            expect(posthog.captureException).toHaveBeenCalledTimes(cycle)
+
+            act(() => {
+                resetError?.()
+                resetError?.()
+            })
+            expect(view.getByText('Recovered')).toBeTruthy()
+            expect(posthog.captureException).toHaveBeenCalledTimes(cycle)
+        }
+    })
+
+    it('should capture a persistent error again with fresh diagnostics after reset', () => {
+        const firstEvent = { uuid: 'first' }
+        const nextEvent = { uuid: 'next' }
+        ;(posthog.captureException as Mock).mockReturnValueOnce(firstEvent).mockReturnValueOnce(nextEvent)
+        const additionalProperties = vi.fn(() => ({ team_id: '1234' }))
+        const fallback = vi.fn((props: PostHogErrorBoundaryFallbackProps) => (
+            <button onClick={props.resetError}>Retry</button>
+        ))
+        const view = render(
+            <PostHogErrorBoundary fallback={fallback} additionalProperties={additionalProperties}>
+                <ComponentWithError message="Persistent error" />
+            </PostHogErrorBoundary>
+        )
+        const firstProps = fallback.mock.calls[fallback.mock.calls.length - 1][0]
+        expect(firstProps.resetError).toEqual(expect.any(Function))
+        expect(firstProps.exceptionEvent).toBe(firstEvent)
+
+        fireEvent.click(view.getByText('Retry'))
+
+        expect(posthog.captureException).toHaveBeenCalledTimes(2)
+        expect(additionalProperties).toHaveBeenCalledTimes(2)
+        const nextProps = fallback.mock.calls[fallback.mock.calls.length - 1][0]
+        expect(nextProps.error).not.toBe(firstProps.error)
+        expect(nextProps.error).toEqual(expect.objectContaining({ message: 'Persistent error' }))
+        expect(nextProps.exceptionEvent).toBe(nextEvent)
+        expect(nextProps.componentStack).toContain('ComponentWithError')
+        expect(nextProps.resetError).toBe(firstProps.resetError)
+        expect(view.getByText('Retry')).toBeTruthy()
     })
 })
 
