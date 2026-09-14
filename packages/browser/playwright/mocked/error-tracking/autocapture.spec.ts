@@ -343,6 +343,106 @@ test.describe('ErrorTracking autocapture', () => {
             }
         })
 
+        test('should exclude SDK console diagnostics without losing customer exceptions', async ({
+            posthog,
+            network,
+            page,
+            events,
+        }) => {
+            const consoleErrors: string[] = []
+            page.on('console', (message) => {
+                if (message.type() === 'error') {
+                    consoleErrors.push(message.text())
+                }
+            })
+            await posthog.init({
+                debug: true,
+                capture_exceptions: { capture_console_errors: true },
+                error_tracking: { __capturePostHogExceptions: true },
+            })
+            await network.waitForFlags()
+            // oxlint-disable-next-line no-console
+            await page.waitForFunction(() => (console.error as any).__POSTHOG_INSTRUMENTED__)
+
+            await posthog.evaluate((ph) => {
+                for (let i = 0; i < 15; i++) {
+                    ph.identify('null')
+                    ph.capture('')
+                }
+                // oxlint-disable-next-line no-console
+                console.error('[PostHog.js] [Legacy extension]', new Error('internal failure'))
+                // oxlint-disable-next-line no-console
+                console.error('customer console error')
+                // oxlint-disable-next-line no-console
+                console.error('[PostHog.js] customer message')
+                // oxlint-disable-next-line no-console
+                console.error('rrweb logger error:')
+                ph.captureException(new Error('[PostHog.js] explicitly reported error'))
+            })
+
+            await expect.poll(() => events.countByName('$exception')).toBe(4)
+            expect(events.filterByName('$exception').map((event) => event.properties.$exception_list[0].value)).toEqual(
+                [
+                    'customer console error',
+                    '[PostHog.js] customer message',
+                    'rrweb logger error:',
+                    '[PostHog.js] explicitly reported error',
+                ]
+            )
+            expect(consoleErrors.some((message) => message.includes('[PostHog.js]'))).toBe(true)
+            expect(consoleErrors).toContain('customer console error')
+        })
+
+        test('should exclude SDK diagnostics on a persisted cold start before remote config arrives', async ({
+            posthog,
+            network,
+            page,
+            events,
+        }) => {
+            const config = {
+                capture_exceptions: { capture_console_errors: true },
+                strict_script_versioning: false as const,
+                error_tracking: { __capturePostHogExceptions: true },
+            }
+            await network.mockFlags({ autocaptureExceptions: true })
+            await posthog.init(config)
+            await network.waitForFlags()
+            expect(await posthog.evaluate((ph) => ph.get_property('$exception_capture_enabled_server_side'))).toBe(true)
+            await page.reloadIdle()
+            events.clear()
+
+            let releaseConfig!: () => void
+            const configReady = new Promise<void>((resolve) => {
+                releaseConfig = resolve
+            })
+            let pendingConfigRequests = 0
+            await page.route(/\/(?:array\/[^/]+\/config|flags\/|decide\/)/, async (route) => {
+                pendingConfigRequests++
+                await configReady
+                await route.fallback()
+            })
+            const initialized = posthog.init(config)
+            try {
+                // oxlint-disable-next-line no-console
+                await page.waitForFunction(() => (console.error as any).__POSTHOG_INSTRUMENTED__)
+                await expect.poll(() => pendingConfigRequests).toBeGreaterThan(0)
+                await posthog.evaluate((ph) => {
+                    ph.identify('null')
+                    // oxlint-disable-next-line no-console
+                    console.error('[PostHog.js] [Legacy extension]', new Error('internal cold-start failure'))
+                    // oxlint-disable-next-line no-console
+                    console.error('customer cold-start error')
+                })
+                await events.waitForEvent('$exception')
+                expect(
+                    events.filterByName('$exception').map((event) => event.properties.$exception_list[0].value)
+                ).toEqual(['customer cold-start error'])
+            } finally {
+                releaseConfig()
+                await initialized
+            }
+        })
+
         test('should capture console errors', async ({ posthog, network, page, events }) => {
             await posthog.init({
                 capture_exceptions: {

@@ -120,20 +120,31 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
     const originalConsoleError = safely(() => con.error, undefined)
 
     con.error = function (...args: any[]): void {
-        safelyBuildAndCapture(captureFn, () => {
-            let event
-            if (args.length == 1) {
-                event = args[0]
-            } else {
-                event = args.join(' ')
-            }
-            const error = args.find((arg) => arg instanceof Error)
-            return errorPropertiesBuilder.buildFromUnknown(error || event, {
-                mechanism: { handled: true, type: 'onconsole' },
-                syntheticException: new Error('PostHog syntheticException'),
-                skipFirstLines: 2,
+        // Check before selecting an Error argument, which loses the diagnostic prefix.
+        // SDK loggers pass the prefix and diagnostic separately, including in older bundles.
+        const isInternalDiagnostic = safely(
+            () =>
+                args.length > 1 &&
+                isString(args[0]) &&
+                (/^\[PostHog\.js\](?: |$)/.test(args[0]) || args[0] === 'rrweb logger error:'),
+            false
+        )
+        if (!isInternalDiagnostic) {
+            safelyBuildAndCapture(captureFn, () => {
+                let event
+                if (args.length == 1) {
+                    event = args[0]
+                } else {
+                    event = args.join(' ')
+                }
+                const error = args.find((arg) => arg instanceof Error)
+                return errorPropertiesBuilder.buildFromUnknown(error || event, {
+                    mechanism: { handled: true, type: 'onconsole' },
+                    syntheticException: new Error('PostHog syntheticException'),
+                    skipFirstLines: 2,
+                })
             })
-        })
+        }
         if (isReachableFunction(originalConsoleError)) {
             originalConsoleError(...args)
         }

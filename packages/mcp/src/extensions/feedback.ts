@@ -184,7 +184,13 @@ function parseSentiment(value: unknown): FeedbackSentiment | undefined {
  */
 function matchesExtraSchema(value: unknown, schema: FeedbackExtraPropertySchema): boolean {
   const type = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value
-  if (schema.type !== type && !(schema.type === 'integer' && typeof value === 'number')) {
+  if (schema.type === 'integer') {
+    // A JSON Schema `integer` accepts a whole-valued number (`3`, `3.0`) but
+    // not a fractional one (`3.5`) — `typeof` alone can't tell them apart.
+    if (!Number.isInteger(value)) {
+      return false
+    }
+  } else if (schema.type !== type) {
     return false
   }
   return !Array.isArray(schema.enum) || schema.enum.includes(value as string)
@@ -341,8 +347,10 @@ export async function handleFeedback(
       if (typeof reply === 'string' && reply.trim()) {
         return { content: [{ type: 'text' as const, text: reply }] }
       }
-    } catch (error) {
-      logger(`Warning: onFeedback handler threw; returning the default acknowledgement - ${error}`)
+    } catch {
+      // The whole thrown value is host-controlled and mutable. Do not log any
+      // part of it because it can contain PII or log-forging newlines.
+      logger('Warning: onFeedback handler threw; returning the default acknowledgement')
     }
   }
   return sendFeedbackResult()

@@ -1,5 +1,33 @@
 # posthog-js
 
+## 1.431.1
+
+### Patch Changes
+
+- [#4934](https://github.com/PostHog/posthog-js/pull/4934) [`b15ae1f`](https://github.com/PostHog/posthog-js/commit/b15ae1f8e998ae9c9100dc1f137c145d9ee402e7) Thanks [@marandaneto](https://github.com/marandaneto)! - Exclude internal SDK console diagnostics from exception autocapture and report recoverable recorder diagnostics as warnings.
+  (2026-09-14)
+
+## 1.431.0
+
+### Minor Changes
+
+- [#4918](https://github.com/PostHog/posthog-js/pull/4918) [`c666606`](https://github.com/PostHog/posthog-js/commit/c666606dede10251d4335d406eae063f1cd38278) Thanks [@pauldambra](https://github.com/pauldambra)! - Add `metrics.network` config to record HTTP and HTTPS `fetch` and `XMLHttpRequest` durations as histograms, with an optional custom metric name and attributes.
+  (2026-09-14)
+
+### Patch Changes
+
+- [#4894](https://github.com/PostHog/posthog-js/pull/4894) [`d81541b`](https://github.com/PostHog/posthog-js/commit/d81541b4f02b7cecd4751529f5c10b6bbbc600ca) Thanks [@posthog](https://github.com/apps/posthog)! - Contain replay errors during playback and seeking so a failed event does not stall the remaining events.
+  (2026-09-14)
+- Updated dependencies [[`c666606`](https://github.com/PostHog/posthog-js/commit/c666606dede10251d4335d406eae063f1cd38278)]:
+  - @posthog/types@1.412.0
+
+## 1.430.4
+
+### Patch Changes
+
+- [#4946](https://github.com/PostHog/posthog-js/pull/4946) [`aeaea15`](https://github.com/PostHog/posthog-js/commit/aeaea15010ad25ed4c04d4a1dff74e008a1ada83) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix console capture continuing after stop or duplicating after restart when another library wraps the console.
+  (2026-09-14)
+
 ## 1.430.3
 
 ### Patch Changes

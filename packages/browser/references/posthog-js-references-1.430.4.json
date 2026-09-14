@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "<version>",
+    "version": "1.430.4",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -3147,7 +3147,7 @@
         },
         {
           "description": "Metrics-specific configuration options for the posthog.metrics API.",
-          "type": "BrowserMetricsConfig",
+          "type": "MetricsConfig",
           "name": "metrics"
         },
         {
