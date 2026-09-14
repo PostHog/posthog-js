@@ -1309,14 +1309,37 @@ describe('request', () => {
             isolatedCompression = (await import('../types')).Compression
         })
 
-        it('does not let a transport that throws outside its own guard escape the async gzip chain as an unhandled rejection', async () => {
-            // `_fetch` has its own try/catch around the `fetch(...)` call itself, but building the
-            // request (e.g. `new Headers()`) happens before that guard. A third-party script (a
-            // Shopify storefront listener, an ad blocker) can monkey-patch `Headers` to throw
-            // synchronously, and that throw is not caught by `_fetch`'s internal guard. Inside the
-            // async-gzip promise chain, calling `transportMethod` without its own try/catch means
-            // such a throw rejects with no further `.catch` attached, becoming an unhandled
-            // rejection that error tracking's global handler picks up.
+        it.each([true, false, undefined])('respects preferSyncCompression: %p before starting fetch', async (sync) => {
+            mockedIsolatedGzipCompress.mockReturnValue(new Promise(() => {}))
+            const data = { event: 'test event', properties: { token: 'testtoken' } }
+
+            isolatedRequestModule.request({
+                url: 'https://any.posthog-instance.com/e/',
+                data,
+                method: 'POST',
+                transport: 'fetch',
+                compression: isolatedCompression.GZipJS,
+                preferSyncCompression: sync,
+            })
+
+            if (sync) {
+                expect(mockedIsolatedGzipCompress).not.toHaveBeenCalled()
+                expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
+                const options = mockedIsolatedFetch.mock.calls[0][1]
+                expect(options.keepalive).toBe(true)
+                expect(options.headers.get('Content-Type')).toBe('text/plain')
+                expect(JSON.parse(fflate.strFromU8(fflate.gunzipSync(new Uint8Array(options.body))))).toEqual(data)
+            } else {
+                expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
+                expect(mockedIsolatedFetch).not.toHaveBeenCalled()
+            }
+
+            await flushPromises()
+        })
+
+        it.each([false, true])('reports transport errors with preferSyncCompression: %p', async (sync) => {
+            // A patched global can throw before _fetch reaches its own try/catch.
+            // Both compression paths must report the failure instead of throwing.
             const networkError = new TypeError('Failed to fetch')
             const OriginalHeaders = globalThis.Headers
             // @ts-expect-error simulating a third-party monkey-patch of the global constructor
@@ -1341,6 +1364,7 @@ describe('request', () => {
                     transport: 'fetch',
                     method: 'POST',
                     compression: isolatedCompression.GZipJS,
+                    preferSyncCompression: sync,
                 })
 
                 await flushPromises()

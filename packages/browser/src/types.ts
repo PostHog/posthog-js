@@ -246,6 +246,7 @@ export interface RequestWithOptions {
     noRetries?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
     compression?: Compression | 'best-available'
+    preferSyncCompression?: boolean
     /** Used when best-available compression negotiation does not select a format. */
     compressionFallback?: Compression
     /**

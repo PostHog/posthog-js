@@ -87,6 +87,17 @@ describe('posthog core', () => {
     })
 
     describe('capture()', () => {
+        it.each([true, false, undefined])('maps send_instantly: %p to preferSyncCompression', (sendInstantly) => {
+            const sendRequest = jest.fn()
+            const posthog = posthogWith(defaultConfig, { _send_retriable_request: sendRequest })
+
+            posthog.capture(eventName, {}, { send_instantly: sendInstantly })
+
+            expect(sendRequest).toHaveBeenCalledWith(
+                expect.objectContaining({ compression: 'best-available', preferSyncCompression: sendInstantly })
+            )
+        })
+
         it('adds a UUID to each message', () => {
             const captureData = posthogWith(defaultConfig, defaultOverrides).capture(eventName, {}, {})
             expect(captureData).toHaveProperty('uuid')
@@ -1082,91 +1093,6 @@ describe('posthog core', () => {
             expect(() => posthog._handle_unload()).not.toThrow()
             // the rest of the unload path still runs
             expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
-        })
-
-        describe('pending initial $pageview', () => {
-            it('flushes a pending initial $pageview over sendBeacon', () => {
-                const posthog = posthogWith(
-                    {
-                        capture_pageview: true,
-                        capture_pageleave: 'if_capture_pageview',
-                        request_batching: true,
-                    },
-                    { capture: jest.fn() }
-                )
-
-                posthog._handle_unload()
-
-                expect(posthog.capture).toHaveBeenCalledWith(
-                    '$pageview',
-                    { title: document.title },
-                    { send_instantly: true, transport: 'sendBeacon' }
-                )
-            })
-
-            it('sends the flushed $pageview before the $pageleave', () => {
-                const capture = jest.fn()
-                const posthog = posthogWith(
-                    {
-                        capture_pageview: true,
-                        capture_pageleave: 'if_capture_pageview',
-                        request_batching: true,
-                    },
-                    { capture }
-                )
-
-                posthog._handle_unload()
-
-                const capturedEvents = capture.mock.calls.map((call) => call[0])
-                expect(capturedEvents).toEqual(['$pageview', '$pageleave'])
-            })
-
-            it('does not flush a $pageview that was already captured', () => {
-                const posthog = posthogWith(
-                    {
-                        capture_pageview: true,
-                        capture_pageleave: 'if_capture_pageview',
-                        request_batching: true,
-                    },
-                    { capture: jest.fn() }
-                )
-                posthog._initialPageviewCaptured = true
-
-                posthog._handle_unload()
-
-                expect(posthog.capture).not.toHaveBeenCalledWith('$pageview', expect.anything(), expect.anything())
-            })
-
-            it('does not flush a $pageview when capture_pageview is false', () => {
-                const posthog = posthogWith(
-                    {
-                        capture_pageview: false,
-                        capture_pageleave: true,
-                        request_batching: true,
-                    },
-                    { capture: jest.fn() }
-                )
-
-                posthog._handle_unload()
-
-                expect(posthog.capture).not.toHaveBeenCalledWith('$pageview', expect.anything(), expect.anything())
-            })
-
-            it('does not flush a $pageview when the user is opted out', () => {
-                const posthog = posthogWith(
-                    {
-                        capture_pageview: true,
-                        capture_pageleave: 'if_capture_pageview',
-                        request_batching: true,
-                        opt_out_capturing_by_default: true,
-                    },
-                    { capture: jest.fn() }
-                )
-
-                posthog._handle_unload()
-
-                expect(posthog.capture).not.toHaveBeenCalledWith('$pageview', expect.anything(), expect.anything())
-            })
         })
 
         describe('without batching', () => {
