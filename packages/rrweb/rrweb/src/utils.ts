@@ -93,29 +93,29 @@ const DEPARTED_MIRROR_ACCESS_WARNING =
 export let _mirror: DeprecatedMirror = {
   map: {},
   getId() {
-    console.error(DEPARTED_MIRROR_ACCESS_WARNING);
+    console.warn(DEPARTED_MIRROR_ACCESS_WARNING);
     return -1;
   },
   getNode() {
-    console.error(DEPARTED_MIRROR_ACCESS_WARNING);
+    console.warn(DEPARTED_MIRROR_ACCESS_WARNING);
     return null;
   },
   removeNodeFromMap() {
-    console.error(DEPARTED_MIRROR_ACCESS_WARNING);
+    console.warn(DEPARTED_MIRROR_ACCESS_WARNING);
   },
   has() {
-    console.error(DEPARTED_MIRROR_ACCESS_WARNING);
+    console.warn(DEPARTED_MIRROR_ACCESS_WARNING);
     return false;
   },
   reset() {
-    console.error(DEPARTED_MIRROR_ACCESS_WARNING);
+    console.warn(DEPARTED_MIRROR_ACCESS_WARNING);
   },
 };
 if (typeof window !== 'undefined' && window.Proxy && window.Reflect) {
   _mirror = new Proxy(_mirror, {
     get(target, prop, receiver) {
       if (prop === 'map') {
-        console.error(DEPARTED_MIRROR_ACCESS_WARNING);
+        console.warn(DEPARTED_MIRROR_ACCESS_WARNING);
       }
       return Reflect.get(target, prop, receiver);
     },

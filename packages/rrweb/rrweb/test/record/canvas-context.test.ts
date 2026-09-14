@@ -182,6 +182,29 @@ describe('initCanvasContextObserver', () => {
     restore();
   });
 
+  it('warns instead of logging an error when observer setup fails', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const win = {
+      get HTMLCanvasElement() {
+        throw new Error('canvas is unavailable');
+      },
+    };
+
+    const restore = initCanvasContextObserver(
+      win as unknown as Parameters<typeof initCanvasContextObserver>[0],
+      'rr-block',
+      null,
+      false,
+    );
+
+    expect(warn).toHaveBeenCalledWith(
+      'failed to patch HTMLCanvasElement.prototype.getContext',
+    );
+    expect(error).not.toHaveBeenCalled();
+    expect(restore).not.toThrow();
+  });
+
   it('leaves other contexts unchanged', () => {
     const contextAttributes: WebGLContextAttributes = {};
     const win = {

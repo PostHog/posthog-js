@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.16.1
+
+### Patch Changes
+
+- [#4915](https://github.com/PostHog/posthog-js/pull/4915) [`a5c1182`](https://github.com/PostHog/posthog-js/commit/a5c1182647cd82890d3b66dca1eeb27b8e4c0b91) Thanks [@gesh](https://github.com/gesh)! - Harden feedback validation, error handling, and tool-name collision routing.
+  (2026-09-14)
+
 ## 0.16.0
 
 ### Minor Changes

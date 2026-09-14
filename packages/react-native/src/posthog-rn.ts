@@ -2466,6 +2466,7 @@ export class PostHog extends PostHogCore {
       maskAllTextInputs = true,
       maskAllImages = true,
       maskAllSandboxedViews = true,
+      captureTouches = true,
       captureLog: localCaptureLog = true,
       captureNetworkTelemetry: localCaptureNetworkTelemetry = true,
       verifyScreenshotMaskAlignment = false,
@@ -2477,6 +2478,21 @@ export class PostHog extends PostHogCore {
       iOSdebouncerDelayMs = defaultThrottleDelayMs,
       androidDebouncerDelayMs = defaultThrottleDelayMs,
     } = options?.sessionReplayConfig ?? {}
+
+    if (captureTouches === false && !isMacOS()) {
+      const pluginVersion = OptionalReactNativePluginVersion?.match(/^(\d+)\.(\d+)\.\d+(?:\+[\w.-]+)?$/)
+      const supportsCaptureTouches =
+        pluginVersion &&
+        (Number(pluginVersion[1]) > 2 || (Number(pluginVersion[1]) === 2 && Number(pluginVersion[2]) >= 9))
+
+      if (!supportsCaptureTouches) {
+        this._logger.warn(
+          `sessionReplayConfig.captureTouches: false requires @posthog/react-native-plugin 2.9.0 or later. ` +
+            `The installed plugin (version ${OptionalReactNativePluginVersion ?? 'unknown'}) may still record touch coordinates. ` +
+            `Upgrade the plugin and rebuild your app before relying on this setting.`
+        )
+      }
+    }
 
     let throttleDelayMs = options?.sessionReplayConfig?.throttleDelayMs ?? defaultThrottleDelayMs
 
@@ -2553,6 +2569,7 @@ export class PostHog extends PostHogCore {
       maskAllTextInputs,
       maskAllImages,
       maskAllSandboxedViews,
+      captureTouches,
       captureLog,
       captureNetworkTelemetry,
       verifyScreenshotMaskAlignment,
