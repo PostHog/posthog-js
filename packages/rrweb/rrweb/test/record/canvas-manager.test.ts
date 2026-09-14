@@ -4,8 +4,12 @@ import type { CanvasMaskRegion } from '@posthog/rrweb-types';
 import { CanvasManager } from '../../src/record/observers/canvas/canvas-manager';
 import MutationBuffer from '../../src/record/mutation';
 
+// Exposes the context observer's restore function so tests can assert the
+// getContext patch is undone on every path that gives up on canvas capture.
+const contextObserverControl = vi.hoisted(() => ({ reset: vi.fn() }));
+
 vi.mock('../../src/record/observers/canvas/canvas', () => ({
-  default: () => () => {},
+  default: () => contextObserverControl.reset,
 }));
 
 vi.mock('../../src/record/observers/canvas/2d', () => ({
@@ -61,6 +65,7 @@ describe('CanvasManager FPS observer', () => {
     nextRafId = 1;
     workerControl.throwOnConstruct = false;
     workerControl.instances = [];
+    contextObserverControl.reset.mockClear();
     warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     vi.stubGlobal(
@@ -140,6 +145,20 @@ describe('CanvasManager FPS observer', () => {
       expect.stringContaining('encode worker did not start'),
       expect.anything(),
     );
+  });
+
+  it('should restore the canvas context patch when the worker fails to construct', () => {
+    workerControl.throwOnConstruct = true;
+    const win = {
+      document: { querySelectorAll: vi.fn(() => []) },
+      OffscreenCanvas: class {},
+    };
+
+    createCanvasManager(win);
+
+    // this path never assigns resetObservers, so teardown cannot undo the patch;
+    // left installed it forces preserveDrawingBuffer for the life of the page
+    expect(contextObserverControl.reset).toHaveBeenCalledTimes(1);
   });
 
   it('should stop the rAF loop when the worker fires an error event', () => {

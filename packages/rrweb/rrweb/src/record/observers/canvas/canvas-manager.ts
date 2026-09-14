@@ -224,6 +224,10 @@ export class CanvasManager {
         `disabled because the encode worker did not start. ${CSP_BLOB_HINT}`,
         error,
       );
+      // this returns before resetObservers is assigned, so teardown has nothing to
+      // call: undo the getContext patch here or it stays on the page forever,
+      // forcing preserveDrawingBuffer while nothing is being captured
+      canvasContextReset();
       return;
     }
 
