@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/4920": {
+    "key": "PostHog/posthog-js/issue/4920",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4920",
+    "url": "https://github.com/PostHog/posthog-js/issues/4920",
+    "conclusion": "Valid Node delivery-semantics bug; the terminal-3xx portion is already fixed in shared core, but immediate calls still suppress transport failures.",
+    "labels": [
+      "node",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-14T08:12:46.087Z"
+  },
   "PostHog/posthog-js/issue/4931": {
     "key": "PostHog/posthog-js/issue/4931",
     "repo": "PostHog/posthog-js",
