@@ -114,6 +114,68 @@ describe('PostHog RN manual session recording controls', () => {
     expect(await posthog.isSessionReplayActive()).toBe(true)
   })
 
+  it('lets a newer queued start supersede an earlier call without rotating the session', async () => {
+    posthog = newPostHog()
+    await posthog.ready()
+    const sessionId = posthog.getSessionId()
+
+    const first = posthog.startSessionRecording(false)
+    const second = posthog.startSessionRecording()
+
+    expect(await Promise.all([first, second])).toEqual([false, true])
+    expect(replay.startRecording).toHaveBeenCalledTimes(1)
+    expect(replay.startRecording).toHaveBeenCalledWith(true)
+    expect(posthog.getSessionId()).toBe(sessionId)
+    expect(await posthog.isSessionReplayActive()).toBe(true)
+  })
+
+  it('reports a completed native stop even when recording is already inactive', async () => {
+    posthog = newPostHog()
+    await posthog.ready()
+    expect(await posthog.isSessionReplayActive()).toBe(false)
+
+    expect(await posthog.stopSessionRecording()).toBe(true)
+    expect(replay.stopRecording).toHaveBeenCalledTimes(1)
+    expect(await posthog.isSessionReplayActive()).toBe(false)
+  })
+
+  it('warns about a flags-driven retry without promising manual backoff on an automatic resume', async () => {
+    let linkedFlag = true
+    vi.mocked(window.fetch).mockImplementation(async () => ({
+      status: 200,
+      json: async () => ({
+        featureFlags: { 'replay-flag': linkedFlag },
+        sessionRecording: { linkedFlag: 'replay-flag', endpoint: '/s/' },
+      }),
+    }))
+    posthog = new PostHog('test-token', {
+      customStorage: mockStorage,
+      enableSessionReplay: true,
+      flushInterval: 0,
+    })
+    posthog.debug(true)
+    await posthog.ready()
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
+
+    linkedFlag = false
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () => expect(replay.stopRecording).toHaveBeenCalledTimes(1))
+
+    nativeAccepts = false
+    linkedFlag = true
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, () =>
+      expect(warnings().some((line) => line.includes('native SDK refused to start session recording'))).toBe(true)
+    )
+    expect(warnings().some((line) => line.includes('PostHog retries on the next feature flags load.'))).toBe(true)
+    expect(warnings().some((line) => line.includes('manual start'))).toBe(false)
+
+    nativeAccepts = true
+    await posthog.reloadFeatureFlagsAsync()
+    await waitForExpect(2000, async () => expect(await posthog.isSessionReplayActive()).toBe(true))
+  })
+
   it('reports failure and warns when the native SDK refuses the start', async () => {
     nativeAccepts = false
     posthog = newPostHog()
@@ -125,7 +187,7 @@ describe('PostHog RN manual session recording controls', () => {
       warnings().some(
         (line) =>
           line.includes('native SDK refused to start session recording') &&
-          line.includes('retries with bounded backoff and on the next feature flags load')
+          line.includes('PostHog retries on the next feature flags load.')
       )
     ).toBe(true)
   })

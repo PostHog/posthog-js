@@ -1308,7 +1308,7 @@
             {
               "id": "record_only_some_sessions",
               "name": "Record only some sessions",
-              "code": "\n\n// Record only some sessions\n// Keep `enableSessionReplay` off at setup, then start recording where you want it.\nconst started = await posthog.startSessionRecording()\nif (!started) {\n  // Recording is not running. PostHog retries briefly while native config loads.\n}\n\n\n\n"
+              "code": "\n\n// Record only some sessions\n// Keep `enableSessionReplay` off at setup, then start recording where you want it.\nconst started = await posthog.startSessionRecording()\nif (!started) {\n  // This request did not start recording. Pending starts retry briefly while native config loads.\n}\n\n\n\n"
             }
           ],
           "releaseTag": "public",

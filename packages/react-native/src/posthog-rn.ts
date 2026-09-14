@@ -75,6 +75,8 @@ function mapAppStateForLogs(state: AppStateStatus | undefined): 'foreground' | '
 // native setup happens before it — so it can be tight enough that a stuck call doesn't strand
 // the queue for the process lifetime.
 const NATIVE_CALL_TIMEOUT_MS = 10_000
+// Native config readiness has no bridge notification, so manual starts need bounded timer
+// retries as well as flags-driven retries. JS flags can finish loading before native config.
 const MANUAL_RECORDING_START_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000]
 
 type ManualRecordingStartRequest = {
@@ -1633,7 +1635,7 @@ export class PostHog extends PostHogCore {
    * // Keep `enableSessionReplay` off at setup, then start recording where you want it.
    * const started = await posthog.startSessionRecording()
    * if (!started) {
-   *   // Recording is not running. PostHog retries briefly while native config loads.
+   *   // This request did not start recording. Pending starts retry briefly while native config loads.
    * }
    * ```
    *
@@ -1641,12 +1643,14 @@ export class PostHog extends PostHogCore {
    *
    * @param resumeCurrent - Whether to resume recording of current session (true) or start a new session (false). Defaults to true.
    *
-   * @returns Whether the native recorder is running. It is `false` when recording did not
-   * start: PostHog is disabled, the platform has no replay support, the native plugin is
-   * missing or too old, or the native SDK refused the start because its own remote config is
-   * not loaded yet. A refused start is retried after 1, 2, 4, 8, and 16 seconds, and on
-   * subsequent feature flags loads while pending. Stop, reset, opt-out, and shutdown cancel
-   * pending starts.
+   * @returns Whether this request started the native recorder. It is `false` when PostHog is
+   * disabled or opted out, replay is unsupported, the native plugin is unavailable, or the
+   * native start fails or is refused. A newer start supersedes an unfinished request, which
+   * returns `false` even if the newer request starts recording. If the native start completes
+   * but its state cannot be checked, PostHog logs a warning and returns `true`.
+   * A refused manual start is retried with successive delays of 1, 2, 4, 8, and 16 seconds,
+   * and on subsequent feature flags loads while pending. The returned result does not wait
+   * for these retries. Stop, reset, opt-out, and shutdown cancel pending starts.
    */
   async startSessionRecording(resumeCurrent: boolean = true): Promise<boolean> {
     this._cancelManualRecordingStart()
@@ -1779,7 +1783,7 @@ export class PostHog extends PostHogCore {
       if (!started) {
         this._logger.warn(
           'The native SDK refused to start session recording, usually because its remote config is not loaded yet. ' +
-            'A pending manual start retries with bounded backoff and on the next feature flags load.'
+            'PostHog retries on the next feature flags load.'
         )
         return false
       }
@@ -1807,8 +1811,9 @@ export class PostHog extends PostHogCore {
    * ```
    * @public
    *
-   * @returns Whether the native recorder was stopped. It is `false` when PostHog is disabled,
-   * or when the native plugin is missing or too old.
+   * @returns Whether the native stop call completed. It is `true` even if nothing was recording.
+   * It is `false` when PostHog is disabled, the native plugin is missing or too old, or the
+   * native stop call fails.
    */
   async stopSessionRecording(): Promise<boolean> {
     this._cancelManualRecordingStart()
