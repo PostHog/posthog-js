@@ -413,6 +413,10 @@ describe('exception autocapture', () => {
           },
         },
       ])
+      expect(event.properties?.$exception_list.map((entry: { mechanism: unknown }) => entry.mechanism)).toEqual([
+        { type: 'generic', handled: true, synthetic: false, exception_id: 0 },
+        { type: 'chained', source: 'member', synthetic: false, exception_id: 1, parent_id: 0 },
+      ])
     } finally {
       await ph.shutdown()
     }

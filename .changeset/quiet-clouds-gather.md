@@ -5,4 +5,4 @@
 'posthog-react-native': patch
 ---
 
-Capture AggregateError children in one flat exception list while preserving each child's stack.
+Capture causes and AggregateError members in one exception list with canonical relationship metadata and each child's stack.

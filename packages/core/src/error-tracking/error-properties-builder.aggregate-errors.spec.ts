@@ -12,8 +12,7 @@ import { StackFrame } from './types'
 import { ErrorPropertiesBuilder } from './error-properties-builder'
 import { chromeStackLineParser, createStackParser } from './parsers'
 
-// Aggregate children share one flat exception list. Each entry keeps its own stack;
-// no relationship metadata is added to the event.
+// Aggregate children share one flat exception list with per-entry relationship metadata.
 describe('ErrorPropertiesBuilder AggregateError children', () => {
   const builder = new ErrorPropertiesBuilder(
     [
@@ -67,7 +66,10 @@ describe('ErrorPropertiesBuilder AggregateError children', () => {
 
     expect(exceptions[0]).toMatchObject({ value: 'group', mechanism: { handled: false } })
     expect(exceptions).toContainEqual(
-      expect.objectContaining({ value: 'cause', mechanism: expect.objectContaining({ handled: true }) })
+      expect.objectContaining({
+        value: 'cause',
+        mechanism: { type: 'chained', source: 'cause', synthetic: false, exception_id: 1, parent_id: 0 },
+      })
     )
     expect(exceptions).toContainEqual(expect.objectContaining({ value: 'alternative' }))
   })
@@ -100,33 +102,45 @@ describe('ErrorPropertiesBuilder AggregateError children', () => {
     expect(properties.$exception_list.map((exception) => exception.value)).toEqual(inputs.map((input) => input.message))
     properties.$exception_list.forEach((exception, index) => {
       expect(Object.keys(exception).sort()).toEqual(['mechanism', 'stacktrace', 'type', 'value'])
-      expect(exception.mechanism).toEqual({ type: 'onunhandledrejection', handled: index !== 0, synthetic: false })
+      expect(exception.mechanism).toEqual(
+        index === 0
+          ? { type: 'onunhandledrejection', handled: false, synthetic: false, exception_id: 0 }
+          : {
+              type: 'chained',
+              source: ['cause', 'cause', 'member', 'cause', 'member', 'cause', 'member', 'member'][index - 1],
+              synthetic: false,
+              exception_id: index,
+              parent_id: [0, 1, 0, 3, 0, 5, 5, 0][index - 1],
+            }
+      )
       expect(exception.stacktrace?.frames).toEqual([
         expect.objectContaining({ filename: `https://example.com/file${index}.js`, lineno: 12, colno: 34 }),
       ])
     })
   })
 
-  it('retains the existing depth and handled behavior for ordinary cause chains and cycles', () => {
+  it('retains deep ordinary cause chains without inventing nested handled state or repeating cycles', () => {
     let error = new Error('6')
     for (let index = 5; index >= 0; index--) {
       error = new Error(String(index), { cause: error })
     }
     const exceptions = builder.buildFromUnknown(error, { mechanism: { handled: false } }).$exception_list
-    expect(exceptions.map((exception) => exception.value)).toEqual(['0', '1', '2', '3', '4'])
-    expect(exceptions.map((exception) => exception.mechanism?.handled)).toEqual([false, true, true, true, true])
-    error.cause = error
-    expect(builder.buildFromUnknown(error).$exception_list.map((exception) => exception.value)).toEqual([
-      '0',
-      '0',
-      '0',
-      '0',
-      '0',
+    expect(exceptions.map((exception) => exception.value)).toEqual(['0', '1', '2', '3', '4', '5', '6'])
+    expect(exceptions.map((exception) => exception.mechanism?.handled)).toEqual([
+      false,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
     ])
+    error.cause = error
+    expect(builder.buildFromUnknown(error).$exception_list.map((exception) => exception.value)).toEqual(['0'])
   })
 
-  it('counts child and cause edges against the same depth bound', () => {
-    const tooDeep = new AggregateError([new Error('omitted child')], 'depth4', { cause: new Error('omitted cause') })
+  it('retains cause and member edges beyond the old depth bound', () => {
+    const tooDeep = new AggregateError([new Error('deep child')], 'depth4', { cause: new Error('deep cause') })
     const depth3 = new Error('depth3', { cause: tooDeep })
     const depth2 = new AggregateError([depth3], 'depth2')
     const depth1 = new Error('depth1', { cause: depth2 })
@@ -137,11 +151,13 @@ describe('ErrorPropertiesBuilder AggregateError children', () => {
       'depth2',
       'depth3',
       'depth4',
+      'deep cause',
+      'deep child',
       'sibling',
     ])
   })
 
-  it('omits ancestor cycles but retains shared children in each original position', () => {
+  it('omits ancestor cycles and emits shared children only in their first position', () => {
     const shared = new Error('shared')
     const root = new AggregateError([], 'root')
     const nested = new AggregateError([root, shared], 'nested', { cause: root })
@@ -150,25 +166,23 @@ describe('ErrorPropertiesBuilder AggregateError children', () => {
       'root',
       'nested',
       'shared',
-      'shared',
-      'shared',
     ])
     expect(root.errors).toEqual([root, nested, shared, shared])
   })
 
-  it('bounds wide aggregate traversal to 100 visits including root and causes', () => {
+  it('bounds wide aggregate output to 50 entries including root and causes', () => {
     const children = Array.from({ length: 1000 }, (_, index) => new Error(String(index)))
     const unread = vi.fn(() => {
       throw new Error('past the traversal budget')
     })
-    Object.defineProperty(children, '98', { get: unread })
+    Object.defineProperty(children, '48', { get: unread })
     const root = new AggregateError([], 'root', { cause: new Error('cause') })
     root.errors = children
     const exceptions = builder.buildFromUnknown(root).$exception_list
     expect(exceptions.map((exception) => exception.value)).toEqual([
       'root',
       'cause',
-      ...Array.from({ length: 98 }, (_, index) => String(index)),
+      ...Array.from({ length: 48 }, (_, index) => String(index)),
     ])
     expect(unread).not.toHaveBeenCalled()
     expect(builder.buildFromUnknown(new AggregateError([new Error('next')], 'next root')).$exception_list).toHaveLength(
@@ -176,14 +190,14 @@ describe('ErrorPropertiesBuilder AggregateError children', () => {
     )
   })
 
-  it('shares the visit budget across nested groups', () => {
+  it('shares the emission budget across nested groups', () => {
     const groups = Array.from(
       { length: 100 },
       (_, index) => new AggregateError([new Error(`child ${index}`)], `group ${index}`)
     )
     const exceptions = builder.buildFromUnknown(new AggregateError(groups, 'root')).$exception_list
-    expect(exceptions).toHaveLength(100)
-    expect(exceptions.slice(-3).map((exception) => exception.value)).toEqual(['group 48', 'child 48', 'group 49'])
+    expect(exceptions).toHaveLength(50)
+    expect(exceptions.slice(-3).map((exception) => exception.value)).toEqual(['group 23', 'child 23', 'group 24'])
   })
 
   it.each(['error event', 'rejection event', 'object'])(
@@ -212,15 +226,6 @@ describe('ErrorPropertiesBuilder AggregateError children', () => {
       'Unknown error',
       'last',
     ])
-  })
-
-  it('counts cyclic child attempts against the work budget', () => {
-    const root = new AggregateError([], 'root')
-    root.errors = Array(1000).fill(root)
-    const unread = vi.fn()
-    Object.defineProperty(root.errors, '99', { get: unread })
-    expect(builder.buildFromUnknown(root).$exception_list.map((exception) => exception.value)).toEqual(['root'])
-    expect(unread).not.toHaveBeenCalled()
   })
 
   it.each([undefined, null, 'not an array', { length: 1, 0: new Error('not a child') }])(
@@ -261,7 +266,12 @@ describe('ErrorPropertiesBuilder AggregateError children', () => {
     })
     root.errors.push(malformed, new Error('last'))
     const exceptions = builder.buildFromUnknown(root, { syntheticException: new Error('capture site') }).$exception_list
-    expect(exceptions.slice(1, 6)).toEqual(values.map((value) => builder.buildFromUnknown(value).$exception_list[0]))
+    expect(exceptions.slice(1, 6)).toEqual(
+      values.map((value, index) => ({
+        ...builder.buildFromUnknown(value).$exception_list[0],
+        mechanism: { type: 'chained', source: 'member', synthetic: true, exception_id: index + 1, parent_id: 0 },
+      }))
+    )
     expect(exceptions.slice(6).map((exception) => exception.value)).toEqual(['Unknown error', 'Unknown error', 'last'])
     expect(exceptions.slice(1, 8).every((exception) => !exception.stacktrace)).toBe(true)
   })

@@ -44,8 +44,10 @@ export interface Exception {
 export type ExceptionList = Exception[]
 
 export interface Mechanism {
+  exception_id?: number
+  parent_id?: number
   handled?: boolean
-  type?: 'generic' | 'onunhandledrejection' | 'onuncaughtexception' | 'onconsole' | 'middleware'
+  type?: string
   source?: string
   synthetic?: boolean
 }

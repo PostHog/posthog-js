@@ -44,6 +44,23 @@ afterEach(async () => {
 })
 
 describe('PostHog.captureException context', () => {
+  it('captures a linked aggregate tree in one event through the shared builder', () => {
+    const client = newPostHog()
+    const cause = new Error('cause')
+    const second = new Error('second', { cause })
+    client.captureException(new AggregateError([new Error('first'), second], 'root'))
+    const events = exceptions(client)
+    expect(events).toHaveLength(1)
+    const entries = events[0].properties.$exception_list
+    expect(entries.map((entry: { value: string }) => entry.value)).toEqual(['root', 'first', 'second', 'cause'])
+    expect(entries.map((entry: { mechanism: unknown }) => entry.mechanism)).toEqual([
+      { type: 'generic', handled: true, synthetic: false, exception_id: 0 },
+      { type: 'chained', source: 'member', synthetic: false, exception_id: 1, parent_id: 0 },
+      { type: 'chained', source: 'member', synthetic: false, exception_id: 2, parent_id: 0 },
+      { type: 'chained', source: 'cause', synthetic: false, exception_id: 3, parent_id: 2 },
+    ])
+  })
+
   it('survives the real first JS exception path alongside existing app and exception metadata', () => {
     const client = newPostHog()
     expect(readUpdateId).not.toHaveBeenCalled()

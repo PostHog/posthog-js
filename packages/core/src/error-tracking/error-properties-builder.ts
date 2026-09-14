@@ -17,9 +17,9 @@ import {
   Exception,
 } from './types'
 
-const MAX_CAUSE_RECURSION = 4
-// Count visits, including cyclic members, rather than only emitted exceptions.
-const MAX_AGGREGATE_VISITS = 100
+const MAX_EXCEPTIONS = 50
+// Forwarding wrappers do not represent tree edges or consume exception slots.
+const MAX_WRAPPER_RECURSION = 4
 
 // Internal collections only: the event remains a flat ExceptionList.
 interface ExceptionWithChildren extends ExceptionLike {
@@ -111,36 +111,41 @@ export class ErrorPropertiesBuilder {
   }
 
   private convertToExceptionList(exceptionWithStack: ParsedExceptionWithChildren, mechanism: Mechanism): ExceptionList {
-    const currentException: Exception = {
-      type: exceptionWithStack.type,
-      value: exceptionWithStack.value,
-      mechanism: {
-        type: mechanism.type ?? 'generic',
-        handled: mechanism.handled ?? true,
-        synthetic: exceptionWithStack.synthetic ?? false,
-      },
-    }
-    if (exceptionWithStack.stack) {
-      currentException.stacktrace = {
-        type: 'raw',
-        frames: exceptionWithStack.stack,
+    const exceptionList: ExceptionList = []
+    const append = (exception: ParsedExceptionWithChildren, parentId?: number, source?: string): void => {
+      const exceptionId = exceptionList.length
+      const entryMechanism: Mechanism =
+        parentId === undefined
+          ? {
+              type: typeof mechanism.type === 'string' && mechanism.type.length > 0 ? mechanism.type : 'generic',
+              handled: typeof mechanism.handled === 'boolean' ? mechanism.handled : true,
+              synthetic: typeof mechanism.synthetic === 'boolean' ? mechanism.synthetic : exception.synthetic,
+              exception_id: exceptionId,
+            }
+          : {
+              type: 'chained',
+              source,
+              synthetic: exception.synthetic,
+              exception_id: exceptionId,
+              parent_id: parentId,
+            }
+      const currentException: Exception = {
+        type: exception.type,
+        value: exception.value,
+        mechanism: entryMechanism,
+      }
+      if (exception.stack) {
+        currentException.stacktrace = { type: 'raw', frames: exception.stack }
+      }
+      exceptionList.push(currentException)
+      if (exception.cause) {
+        append(exception.cause, exceptionId, 'cause')
+      }
+      for (const child of exception.errors ?? []) {
+        append(child, exceptionId, 'member')
       }
     }
-    const exceptionList: ExceptionList = [currentException]
-    if (exceptionWithStack.cause != null) {
-      // Cause errors are necessarily handled
-      exceptionList.push(
-        ...this.convertToExceptionList(exceptionWithStack.cause, {
-          ...mechanism,
-          handled: true,
-        })
-      )
-    }
-    // Aggregate members have already been caught and combined, like cause errors.
-    // Keep them separate internally and append them after the ordinary cause chain.
-    for (const child of exceptionWithStack.errors ?? []) {
-      exceptionList.push(...this.convertToExceptionList(child, { ...mechanism, handled: true }))
-    }
+    append(exceptionWithStack)
     return exceptionList
   }
 
@@ -165,36 +170,63 @@ export class ErrorPropertiesBuilder {
   }
 
   public buildCoercingContext(mechanism: Mechanism, hint: EventHint, depth: number = 0): CoercingContext {
-    let visits = 0
+    let count = 0
     let hasAggregate = false
-    const ancestors: unknown[] = []
-    const coerce = (input: unknown, depth: number): ExceptionWithChildren | undefined => {
-      if (depth > MAX_CAUSE_RECURSION || (hasAggregate && visits >= MAX_AGGREGATE_VISITS)) {
+    const seen = new Set<unknown>()
+    const wrappers: unknown[] = []
+    const skipped = {}
+    const coerce = (input: unknown, depth: number, wrapperDepth = 0): ExceptionWithChildren | undefined => {
+      const ctx = createContext(depth, wrapperDepth)
+      const forward = ctx.apply
+      ctx.apply = (nextInput) => {
+        wrappers.push(input)
+        try {
+          return forward(nextInput)
+        } finally {
+          wrappers.pop()
+        }
+      }
+      if (wrapperDepth > MAX_WRAPPER_RECURSION || (wrapperDepth > 0 && wrappers.indexOf(input) !== -1)) {
+        return this.coerceFallback(ctx)
+      }
+      const isReference = (typeof input === 'object' && input !== null) || typeof input === 'function'
+      if ((wrapperDepth === 0 && count >= MAX_EXCEPTIONS) || (isReference && seen.has(input))) {
         return undefined
       }
-      visits++
+      if (isReference) {
+        seen.add(input)
+      }
+      if (wrapperDepth === 0) {
+        count++
+      }
       const errors = this.getAggregateErrors(input)
       hasAggregate ||= !!errors
-      // Ordinary cause-only errors retain their existing depth-limited behavior.
-      // Track the current path, not all seen errors, so shared siblings are retained.
-      if (hasAggregate && ancestors.indexOf(input) !== -1) {
-        return undefined
-      }
-      const ctx = createContext(depth)
-      ancestors.push(input)
       try {
         const exception = this.applyCoercers(input, ctx)
-        if (!exception || !errors || depth === MAX_CAUSE_RECURSION) {
+        if (!exception) {
+          throw skipped
+        }
+        if (!errors || count >= MAX_EXCEPTIONS) {
+          return exception
+        }
+        // Snapshot finite array length. Skipped identities do not spend the emission
+        // budget, so finding the first 49 descendants may scan more than 49 members.
+        let length: number
+        try {
+          length = errors.length
+        } catch {
+          return exception
+        }
+        if (!Number.isInteger(length) || length < 0 || length > 0xffffffff) {
           return exception
         }
         const children: ExceptionWithChildren[] = []
-        for (let index = 0; visits < MAX_AGGREGATE_VISITS && index < errors.length; index++) {
+        for (let index = 0; count < MAX_EXCEPTIONS && index < length; index++) {
           let child: ExceptionWithChildren | undefined
           try {
             child = ctx.next(errors[index])
           } catch {
-            // Unreadable members use the same fallback as unsupported inputs.
-            visits++
+            count++
             child = this.coerceFallback(createContext(depth + 1))
           }
           if (child) {
@@ -203,22 +235,33 @@ export class ErrorPropertiesBuilder {
         }
         return { ...exception, errors: children }
       } catch (error) {
+        if (error === skipped) {
+          if (wrapperDepth === 0) {
+            count--
+          }
+          return undefined
+        }
         if (!hasAggregate) {
           throw error
         }
         return this.coerceFallback(ctx)
-      } finally {
-        ancestors.pop()
       }
     }
-    const createContext = (depth: number): CoercingContext => ({
+    const createContext = (depth: number, wrapperDepth = 0): CoercingContext => ({
       ...hint,
-      // Do not propagate synthetic exception as it doesn't make sense
+      // Capture-boundary metadata and replacement stacks belong only to the root.
       syntheticException: depth == 0 ? hint.syntheticException : undefined,
-      mechanism,
-      apply: (input: unknown) => coerce(input, depth) ?? this.coerceFallback(createContext(depth)),
+      mechanism: depth == 0 ? mechanism : {},
+      apply: (input: unknown) => {
+        const exception = coerce(input, depth, wrapperDepth + 1)
+        if (!exception) {
+          throw skipped
+        }
+        return exception
+      },
       next: (input: unknown) => coerce(input, depth + 1),
     })
-    return createContext(depth)
+    const context = createContext(depth)
+    return { ...context, apply: (input) => coerce(input, depth) ?? this.coerceFallback(context) }
   }
 }

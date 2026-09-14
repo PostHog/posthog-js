@@ -74,6 +74,10 @@ describe('ExceptionObserver', () => {
                 { value: 'group', stacktrace: { frames: [{ filename: 'https://example.com/root.js' }] } },
                 { value: 'alternative', stacktrace: { frames: [{ filename: 'https://example.com/child.js' }] } },
             ])
+            expect(event.properties.$exception_list.map((entry: { mechanism: unknown }) => entry.mechanism)).toEqual([
+                { type: 'generic', handled: true, synthetic: false, exception_id: 0 },
+                { type: 'chained', source: 'member', synthetic: false, exception_id: 1, parent_id: 0 },
+            ])
         })
 
         function captureAdditionalProperties(additionalProperties: Record<string, unknown>) {
