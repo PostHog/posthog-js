@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.431.5
+
+### Patch Changes
+
+- [#4940](https://github.com/PostHog/posthog-js/pull/4940) [`3e12f1d`](https://github.com/PostHog/posthog-js/commit/3e12f1de6d9a40e09bf930bd3834af296ba80161) Thanks [@marandaneto](https://github.com/marandaneto)! - Discard pending replay network captures after recording stops or restarts.
+  (2026-09-14)
+
 ## 1.431.4
 
 ### Patch Changes
