@@ -506,9 +506,7 @@ describe('persistence', () => {
             it.each(['$fbc_persistence', '$fbp_persistence'])(
                 'keeps %s in memory while its debounced write is pending',
                 (key) => {
-                    // The delivery state of a Meta identifier is confirmed from a request callback,
-                    // which can run before the debounced save lands. A refresh must not adopt the
-                    // stale storage in between and drop the pending value.
+                    // The request callback that confirms delivery can run before the debounced save lands.
                     const debounced = new PostHogPersistence({
                         ...makePostHogConfig('test-meta-pending', persistenceMode),
                         persistence_save_debounce_ms: 250,

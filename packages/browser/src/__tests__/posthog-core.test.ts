@@ -851,31 +851,23 @@ describe('posthog core', () => {
                 expect(beforeSendMock.mock.calls[0][0].$set?.$fbp).toBeUndefined()
             })
 
-            it('should keep the newer click when an older _fbc cookie is read on a later page', () => {
-                const now = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
-                const token = uuidv7()
-                mockURL.mockReturnValue('https://www.example.com/?fbclid=new-click')
-                const { posthog, beforeSendMock } = setup({
-                    token,
-                    persistence_name: token,
-                    persistence: 'localStorage',
-                    person_profiles: 'always',
-                })
-                vi.spyOn(posthog, '_send_retriable_request').mockImplementation((options) => {
-                    options.callback?.({ statusCode: 200 })
-                })
-                setMetaCookies('_fbc=fb.1.1600000000000.old-click')
-
-                posthog.capture('$pageview')
-                mockURL.mockReturnValue('https://www.example.com/checkout')
-                posthog.capture('purchase')
-
-                expect(beforeSendMock.mock.calls[0][0].$set.$fbc).toBe('fb.1.1700000000000.new-click')
-                expect(beforeSendMock.mock.calls[1][0].$set?.$fbc).toBeUndefined()
-                now.mockRestore()
-            })
-
-            it('should send a newer click from the _fbc cookie on a page without a click ID', () => {
+            it.each([
+                {
+                    name: 'the same click with the time the pixel recorded',
+                    cookie: 'fb.1.1699999000000.first-click',
+                    expected: 'fb.1.1699999000000.first-click',
+                },
+                {
+                    name: 'a newer click the SDK never saw',
+                    cookie: 'fb.1.1750000000000.pixel-only-click',
+                    expected: 'fb.1.1750000000000.pixel-only-click',
+                },
+                {
+                    name: 'the stored click when the cookie holds an older one',
+                    cookie: 'fb.1.1600000000000.old-click',
+                    expected: 'fb.1.1700000000000.first-click',
+                },
+            ])('should send $name on a page without a click ID', ({ cookie, expected }) => {
                 const now = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
                 const token = uuidv7()
                 mockURL.mockReturnValue('https://www.example.com/?fbclid=first-click')
@@ -887,32 +879,12 @@ describe('posthog core', () => {
                 })
 
                 posthog.capture('$pageview')
-                setMetaCookies('_fbc=fb.1.1750000000000.pixel-only-click')
+                setMetaCookies(`_fbc=${cookie}`)
                 mockURL.mockReturnValue('https://www.example.com/checkout')
                 posthog.capture('purchase')
 
                 expect(beforeSendMock.mock.calls[0][0].$set.$fbc).toBe('fb.1.1700000000000.first-click')
-                expect(beforeSendMock.mock.calls[1][0].$set.$fbc).toBe('fb.1.1750000000000.pixel-only-click')
-                now.mockRestore()
-            })
-
-            it('should replace the pageview time once the _fbc cookie holds the same click', () => {
-                const now = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
-                const token = uuidv7()
-                mockURL.mockReturnValue('https://www.example.com/?fbclid=late-cookie')
-                const { posthog, beforeSendMock } = setup({
-                    token,
-                    persistence_name: token,
-                    persistence: 'localStorage',
-                    person_profiles: 'always',
-                })
-
-                posthog.capture('$pageview')
-                setMetaCookies('_fbc=fb.1.1699999000000.late-cookie')
-                posthog.capture('$autocapture')
-
-                expect(beforeSendMock.mock.calls[0][0].$set.$fbc).toBe('fb.1.1700000000000.late-cookie')
-                expect(beforeSendMock.mock.calls[1][0].$set.$fbc).toBe('fb.1.1699999000000.late-cookie')
+                expect(beforeSendMock.mock.calls[1][0].$set.$fbc).toBe(expected)
                 now.mockRestore()
             })
 

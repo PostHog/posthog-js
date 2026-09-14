@@ -212,12 +212,7 @@ type MetaIdentifierChannel = {
     unregister: () => void
 }
 
-// Whether the _fbc cookie the Meta pixel wrote replaces the click PostHog knows. The cookie holds
-// the true click time, which the SDK can only approximate from the pageview after the click, so it
-// wins for the click the URL carries or the SDK already stored. Another click in the cookie wins
-// only when it is newer than the stored one: the pixel saw a click the SDK never did. An older
-// click means the pixel is absent or blocked, and the cookie is stale. The URL carries its click
-// on the first event after a navigation only, so every later event compares against the store.
+// The pixel's _fbc carries the true click time: it wins for a click the URL or the store holds, or for a newer one.
 const fbcCookieWins = (
     cookieFbc: string,
     urlClick: string | undefined,
@@ -1631,8 +1626,7 @@ export class PostHog implements PostHogInterface {
         return { value, pending: true }
     }
 
-    // The cookies are read under the same switches as the URL click ID: `save_campaign_params: false`
-    // turns marketing attribution off, and cookieless mode promises that no cookie is read.
+    // Read under the switches of the URL click ID: save_campaign_params off or cookieless mode skips the read.
     private _readMetaCookie(channel: MetaIdentifierChannel): string | undefined {
         if (!this.config.save_campaign_params || this._inCookielessMode()) {
             return undefined
@@ -1655,8 +1649,7 @@ export class PostHog implements PostHogInterface {
         this.persistence.refreshKey(channel.persistenceKey)
         const stored = this._getPersistedMetaIdentifier(channel)
 
-        // An unset clears the stored value for this event. The cookie belongs to the pixel, so a later
-        // event reads it again: `save_campaign_params: false` is the switch that stops the reads.
+        // An unset clears the store for this event only: the cookie stays, so a later event reads it again.
         if (unsetFbc) {
             channel.unregister()
             return undefined
@@ -1705,7 +1698,7 @@ export class PostHog implements PostHogInterface {
         this.persistence.refreshKey(channel.persistenceKey)
         const stored = this._getPersistedMetaIdentifier(channel)
 
-        // As for $fbc, an unset clears the stored value for this event, and a later event reads the cookie again.
+        // As for $fbc, an unset applies to this event only.
         if (unsetFbp) {
             channel.unregister()
             return undefined
@@ -3458,8 +3451,7 @@ export class PostHog implements PostHogInterface {
      * `capture()` call, you can remove properties with a dedicated method.
      * If `person_profiles` is set to `never`, this call is ignored.
      *
-     * The Meta identifiers the SDK reads itself, `$fbc` and `$fbp`, are unset for this call only:
-     * a later event reads the Meta cookies again. Set `save_campaign_params: false` to stop those reads.
+     * `$fbc` and `$fbp` read by the SDK are unset for this call only. `save_campaign_params: false` stops the reads.
      *
      * @example
      * ```js

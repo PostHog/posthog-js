@@ -130,8 +130,7 @@ const CROSS_TAB_FEATURE_FLAG_KEYS = [
 const isCrossTabFeatureFlagKey = (key: string): boolean =>
     (CROSS_TAB_FEATURE_FLAG_KEYS as readonly string[]).indexOf(key) !== -1
 
-// The Meta identifiers core stores for the Conversions API. Each carries a delivery state that a
-// sibling tab or a stale storage read must not roll back while a local write is still pending.
+// Meta identifier keys: a refresh must not roll back their delivery state while a local write is pending.
 const META_IDENTIFIER_PERSISTENCE_KEYS = [PERSISTENCE_FACEBOOK_CLICK_ID, PERSISTENCE_FACEBOOK_BROWSER_ID] as const
 
 const isMetaIdentifierKey = (key: string): boolean =>
