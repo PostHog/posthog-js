@@ -1890,7 +1890,7 @@
         {
           "category": "",
           "description": "Set HMAC-based identity verification.",
-          "details": "When set, products like conversations use server-verified identity (distinct_id + HMAC hash) instead of anonymous session identifiers. The hash should be computed server-side as HMAC-SHA256 of the distinct_id using the project's API secret. Any additional signed identity claims are cleared because they are bound to the previously configured distinct_id.",
+          "details": "When set, products like conversations use server-verified identity (distinct_id + HMAC hash) instead of anonymous session identifiers. The hash should be computed server-side as HMAC-SHA256 of the distinct_id, signed with the project's secret API key from Support settings. A project secret API key or a personal API key is rejected. Any additional signed identity claims are cleared because they are bound to the previously configured distinct_id.",
           "id": "setIdentity",
           "showDocs": true,
           "title": "setIdentity",
@@ -1910,7 +1910,7 @@
               "name": "distinctId"
             },
             {
-              "description": "HMAC-SHA256 of distinctId using the project API secret",
+              "description": "HMAC-SHA256 of distinctId, signed with the secret API key from Support settings",
               "isOptional": false,
               "type": "string",
               "name": "hash"
@@ -3161,7 +3161,7 @@
           "name": "identity_distinct_id"
         },
         {
-          "description": "HMAC-SHA256 of `identity_distinct_id` using the project's API secret.\nMust be provided together with `identity_distinct_id`.",
+          "description": "HMAC-SHA256 of `identity_distinct_id`, signed with the project's secret API key\nfrom Support settings. A project secret API key or a personal API key is rejected.\nMust be provided together with `identity_distinct_id`.",
           "type": "string",
           "name": "identity_hash"
         },
@@ -4837,7 +4837,7 @@
           "name": "identity_distinct_id"
         },
         {
-          "description": "HMAC-SHA256 of identity_distinct_id using team secret_api_token",
+          "description": "HMAC-SHA256 of identity_distinct_id, signed with the project's secret API key from Support settings (not a project secret API key or a personal API key)",
           "type": "string",
           "name": "identity_hash"
         },
