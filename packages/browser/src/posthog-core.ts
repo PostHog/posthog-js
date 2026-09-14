@@ -44,7 +44,7 @@ import {
 import { ProductTourEventName, ProductTourEventProperties } from './posthog-product-tours-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
-import { request, SUPPORTS_REQUEST } from './request'
+import { request, SUPPORTS_REQUEST, TransportCallback } from './request'
 import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
@@ -1381,57 +1381,7 @@ export class PostHog implements PostHogInterface {
     }
 
     _send_request(options: QueuedRequestWithOptions): void {
-        if (!this.__loaded) {
-            if (options.fireCallbackOnDrop) {
-                options.callback?.({ statusCode: 0 })
-            }
-            return
-        }
-
-        if (ENQUEUE_REQUESTS) {
-            this.__request_queue.push(options)
-            return
-        }
-
-        if (this.rateLimiter.isServerRateLimited(options.batchKey)) {
-            if (options.fireCallbackOnDrop) {
-                options.callback?.({ statusCode: 429 })
-            }
-            return
-        }
-
-        options.transport = options.transport || this.config.api_transport
-        options.headers = {
-            ...this.config.request_headers,
-            ...options.headers,
-        }
-        options.compression =
-            options.compression === 'best-available'
-                ? (this.compression ?? options.compressionFallback)
-                : options.compression
-        const disableBeacon = isUndefined(this.config.disable_beacon)
-            ? this.config.__preview_disable_beacon
-            : this.config.disable_beacon
-        if (disableBeacon) {
-            options.disableTransport = ['sendBeacon']
-        }
-
-        // Specially useful if you're doing SSR with NextJS
-        // Users must be careful when tweaking `cache` because they might get out-of-date feature flags
-        options.fetchOptions = options.fetchOptions || this.config.fetch_options
-
-        request({
-            ...options,
-            callback: (response) => {
-                this.rateLimiter.checkForLimiting(response)
-
-                if (response.statusCode >= 400) {
-                    this.config.on_request_error?.(response)
-                }
-
-                options.callback?.(response)
-            },
-        })
+        sendRequest(this, options)
     }
 
     _send_retriable_request(options: QueuedRequestWithOptions): void {
@@ -5051,6 +5001,73 @@ export class PostHog implements PostHogInterface {
         const isTrueInLocalStorage = localStore._is_supported() && localStore._get('ph_debug') === 'true'
         return explicitlyFalse ? false : isTrueInLocalStorage ? true : debugConfig
     }
+}
+
+// Internal dispatch shared by PostHog and RetryQueue. Transport metadata never enters
+// RequestResponse or the public options/callback contract.
+export function sendRequest(
+    instance: PostHog,
+    options: QueuedRequestWithOptions,
+    onResponse?: TransportCallback
+): void {
+    if (onResponse) {
+        // Drop callbacks and DOM-ready deferral retain a one-argument completion.
+        // A deferred request is drained through a fresh RetryQueue attempt, which
+        // owns the eventual transport's Retry-After delay.
+        options = { ...options, callback: (response) => onResponse(response) }
+    }
+    if (!instance.__loaded) {
+        if (options.fireCallbackOnDrop) {
+            options.callback?.({ statusCode: 0 })
+        }
+        return
+    }
+
+    if (ENQUEUE_REQUESTS) {
+        instance.__request_queue.push(options)
+        return
+    }
+
+    if (instance.rateLimiter.isServerRateLimited(options.batchKey)) {
+        if (options.fireCallbackOnDrop) {
+            options.callback?.({ statusCode: 429 })
+        }
+        return
+    }
+
+    options.transport = options.transport || instance.config.api_transport
+    options.headers = {
+        ...instance.config.request_headers,
+        ...options.headers,
+    }
+    options.compression =
+        options.compression === 'best-available'
+            ? (instance.compression ?? options.compressionFallback)
+            : options.compression
+    const disableBeacon = isUndefined(instance.config.disable_beacon)
+        ? instance.config.__preview_disable_beacon
+        : instance.config.disable_beacon
+    if (disableBeacon) {
+        options.disableTransport = ['sendBeacon']
+    }
+
+    // Specially useful if you're doing SSR with NextJS
+    // Users must be careful when tweaking `cache` because they might get out-of-date feature flags
+    options.fetchOptions = options.fetchOptions || instance.config.fetch_options
+
+    request(options, (response, retryAfterMs) => {
+        instance.rateLimiter.checkForLimiting(response)
+
+        if (response.statusCode >= 400) {
+            instance.config.on_request_error?.(response)
+        }
+
+        if (onResponse) {
+            onResponse(response, retryAfterMs)
+        } else {
+            options.callback?.(response)
+        }
+    })
 }
 
 safewrapClass(PostHog, ['identify'])

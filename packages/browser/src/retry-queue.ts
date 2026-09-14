@@ -3,7 +3,7 @@ import { RetriableRequestWithOptions } from './types'
 import { isPositiveNumber, isUndefined } from '@posthog/core'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { window } from '@posthog/browser-common/utils/globals'
-import { PostHog } from './posthog-core'
+import { PostHog, sendRequest } from './posthog-core'
 import { extendURLParams } from './request'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 
@@ -83,37 +83,37 @@ export class RetryQueue {
             options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
 
-        this._instance._send_request({
-            ...options,
-            callback: (response) => {
-                if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
-                    const maxRetries = response.statusCode === 0 ? STATUS_CODE_ZERO_MAX_RETRIES : DEFAULT_MAX_RETRIES
+        sendRequest(this._instance, options, (response, retryAfterMs) => {
+            if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
+                const maxRetries = response.statusCode === 0 ? STATUS_CODE_ZERO_MAX_RETRIES : DEFAULT_MAX_RETRIES
 
-                    if ((retriesPerformedSoFar ?? 0) < maxRetries) {
-                        this._enqueue({
+                if ((retriesPerformedSoFar ?? 0) < maxRetries) {
+                    this._enqueue(
+                        {
                             retriesPerformedSoFar,
                             ...options,
-                        })
-                        return
-                    }
-
-                    if (response.statusCode === 0) {
-                        logger.warn(
-                            `Request failed before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped retrying after ${retriesPerformedSoFar ?? 0} retries.`
-                        )
-                    }
+                        },
+                        retryAfterMs
+                    )
+                    return
                 }
 
-                options.callback?.(response)
-            },
+                if (response.statusCode === 0) {
+                    logger.warn(
+                        `Request failed before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped retrying after ${retriesPerformedSoFar ?? 0} retries.`
+                    )
+                }
+            }
+
+            options.callback?.(response)
         })
     }
 
-    private _enqueue(requestOptions: RetriableRequestWithOptions): void {
+    private _enqueue(requestOptions: RetriableRequestWithOptions, retryAfterMs?: number): void {
         const retriesPerformedSoFar = requestOptions.retriesPerformedSoFar || 0
         requestOptions.retriesPerformedSoFar = retriesPerformedSoFar + 1
 
-        const msToNextRetry = pickNextRetryDelay(retriesPerformedSoFar)
+        const msToNextRetry = Math.max(pickNextRetryDelay(retriesPerformedSoFar), retryAfterMs ?? 0)
         const retryAt = Date.now() + msToNextRetry
 
         this._queue.push({ retryAt, requestOptions })

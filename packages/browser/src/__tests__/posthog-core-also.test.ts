@@ -45,7 +45,7 @@ describe('posthog core', () => {
     const defaultConfig = {}
 
     const defaultOverrides = {
-        _send_request: vi.fn(),
+        _send_retriable_request: vi.fn(),
     }
 
     const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>): PostHog => {
@@ -334,7 +334,7 @@ describe('posthog core', () => {
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://us.i.posthog.com/e/',
                     timestampMode: 'capture-body',
@@ -348,7 +348,7 @@ describe('posthog core', () => {
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://us.i.posthog.com/i/v0/e/',
                 })
@@ -374,7 +374,7 @@ describe('posthog core', () => {
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
             const rewrittenEndpoint = 'https://us.i.posthog.com/events/'
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: rewrittenEndpoint,
                 })
@@ -394,7 +394,7 @@ describe('posthog core', () => {
                 }
             )
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
                     timestampMode: 'body',
@@ -410,7 +410,7 @@ describe('posthog core', () => {
 
             posthog.capture('$snapshot', { $session_id: 'session-1' }, batchKey ? { _batchKey: batchKey } : undefined)
 
-            expect(vi.mocked(posthog._send_request).mock.calls[0][0].batchGroup).toEqual(batchGroup)
+            expect(vi.mocked(posthog._send_retriable_request).mock.calls[0][0].batchGroup).toEqual(batchGroup)
         })
 
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
@@ -419,7 +419,7 @@ describe('posthog core', () => {
 
             posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
                     timestampMode: 'body',
@@ -434,7 +434,7 @@ describe('posthog core', () => {
 
                 posthog.capture('event-name', { foo: 'bar', length: 0 }, { transport })
 
-                expect(posthog._send_request).toHaveBeenCalledWith(
+                expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                     expect.objectContaining({
                         transport,
                     })

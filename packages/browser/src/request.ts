@@ -27,7 +27,15 @@ import {
 
 export { jsonStringify }
 
-interface RequestWithEncodedBody extends RequestWithOptions {
+// This completion is only used between the internal transport and retry queue.
+// Public callbacks are forwarded explicitly with just RequestResponse.
+export type TransportCallback = (response: RequestResponse, retryAfterMs?: number) => void
+
+interface TransportRequestOptions extends RequestWithOptions {
+    callback?: TransportCallback
+}
+
+interface RequestWithEncodedBody extends TransportRequestOptions {
     _encodedBody?: EncodedBody
 }
 
@@ -255,7 +263,33 @@ const isExpectedNetworkError = (error: unknown): boolean => {
     return err?.name === 'TypeError' && NETWORK_ERROR_MESSAGES.test(err?.message || '')
 }
 
-const xhr = (options: RequestWithOptions) => {
+// Bound only the header component to 30 seconds: longer server waits may be
+// retried early, but the queue's jittered exponential backoff is never shortened.
+const readRetryAfter = (getHeader: () => string | null): number | undefined => {
+    try {
+        const value = getHeader()?.trim()
+        if (!value) {
+            return undefined
+        }
+        // Do not let Date.parse interpret malformed seconds (e.g. "1.5") as a date.
+        let delay: number
+        if (/^\d+$/.test(value)) {
+            delay = Math.min(Number(value), 30) * 1000
+        } else if (/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,]/.test(value)) {
+            // The obsolete asctime HTTP-date format omits the timezone, but is still GMT.
+            const date = /^\w{3} \w{3} /.test(value) ? value + ' GMT' : value
+            delay = Date.parse(date) - Date.now()
+        } else {
+            return undefined
+        }
+        return isFinite(delay) && delay > 0 ? Math.min(delay, 30_000) : undefined
+    } catch {
+        // Cross-origin headers may not be exposed, or a header accessor may throw.
+        return undefined
+    }
+}
+
+const xhr = (options: TransportRequestOptions) => {
     const encodedRequest = encodeRequest(options)
     if (!encodedRequest) {
         return
@@ -293,13 +327,16 @@ const xhr = (options: RequestWithOptions) => {
                 }
             }
 
-            options.callback?.(response)
+            options.callback?.(
+                response,
+                readRetryAfter(() => req.getResponseHeader('Retry-After'))
+            )
         }
     }
     req.send(body)
 }
 
-const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) => {
+const _fetch = (options: TransportRequestOptions & { _keepaliveDisabled?: boolean }) => {
     const encodedRequest = encodeRequest(options)
     if (!encodedRequest) {
         return
@@ -396,7 +433,10 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
                         }
                     }
 
-                    options.callback?.(res)
+                    options.callback?.(
+                        res,
+                        readRetryAfter(() => response.headers.get('Retry-After'))
+                    )
                 })
             })
             .catch(handleError)
@@ -432,7 +472,7 @@ const addSentAtToBody = (
     return data.map((item) => ({ ...item, sent_at: sentAt }))
 }
 
-const _sendBeacon = (options: RequestWithOptions) => {
+const _sendBeacon = (options: TransportRequestOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
 
@@ -514,7 +554,7 @@ const addSentAtToCaptureBody = (data: NonNullable<RequestWithOptions['data']>): 
 const AVAILABLE_TRANSPORTS = /* @__PURE__ */ (() => {
     const transports: {
         transport: RequestWithOptions['transport']
-        method: (options: RequestWithOptions) => void
+        method: (options: TransportRequestOptions) => void
     }[] = []
 
     // We add the transports in order of preference
@@ -543,9 +583,12 @@ const AVAILABLE_TRANSPORTS = /* @__PURE__ */ (() => {
 })()
 
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
-export const request = (_options: RequestWithOptions) => {
+export const request = (_options: RequestWithOptions, onResponse?: TransportCallback) => {
     // Clone the options so we don't modify the original object
-    const options: RequestWithEncodedBody = { ..._options }
+    const options: RequestWithEncodedBody = {
+        ..._options,
+        callback: onResponse ?? ((response) => _options.callback?.(response)),
+    }
     options.timeout = options.timeout || 60000
 
     const transport = options.transport ?? 'fetch'

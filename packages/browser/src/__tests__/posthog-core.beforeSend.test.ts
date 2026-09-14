@@ -39,7 +39,7 @@ describe('posthog core - before send', () => {
     const posthogWith = (configOverride: Pick<Partial<PostHogConfig>, 'before_send'>): PostHog => {
         const posthog = defaultPostHog().init('testtoken', configOverride, uuidv7())
         return Object.assign(posthog, {
-            _send_request: vi.fn(),
+            _send_retriable_request: vi.fn(),
         })
     }
 
@@ -55,12 +55,12 @@ describe('posthog core - before send', () => {
         const posthog = posthogWith({
             before_send: rejectingEventFn,
         })
-        ;(posthog._send_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as vi.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
         expect(capturedData).toBeUndefined()
-        expect(posthog._send_request).not.toHaveBeenCalled()
+        expect(posthog._send_retriable_request).not.toHaveBeenCalled()
         expect(mockLogger.info).toHaveBeenCalledWith(`Event '${eventName}' was rejected in beforeSend function`)
     })
 
@@ -68,15 +68,14 @@ describe('posthog core - before send', () => {
         const posthog = posthogWith({
             before_send: editingEventFn,
         })
-        ;(posthog._send_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as vi.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
         expect(capturedData).toHaveProperty(['properties', 'edited'], true)
         expect(capturedData).toHaveProperty(['$set', 'edited'], true)
-        expect(posthog._send_request).toHaveBeenCalledWith({
+        expect(posthog._send_retriable_request).toHaveBeenCalledWith({
             batchKey: undefined,
-            callback: expect.any(Function),
             compression: 'best-available',
             data: capturedData,
             method: 'POST',
@@ -87,7 +86,7 @@ describe('posthog core - before send', () => {
 
     it('uses a valid provided uuid', () => {
         const posthog = posthogWith({})
-        ;(posthog._send_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as vi.Mock).mockClear()
         const uuid = uuidv7()
 
         const capturedData = posthog.capture(eventName, {}, { uuid })
@@ -97,7 +96,7 @@ describe('posthog core - before send', () => {
 
     it.each(invalidUuidCases)('generates a new uuid when the provided uuid is an invalid %s', (_, invalidUuid) => {
         const posthog = posthogWith({})
-        ;(posthog._send_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as vi.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, { uuid: invalidUuid })
 
@@ -109,7 +108,7 @@ describe('posthog core - before send', () => {
         const posthog = posthogWith({
             before_send: (cr) => cr && { ...cr, uuid: invalidUuid },
         })
-        ;(posthog._send_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as vi.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
@@ -136,7 +135,7 @@ describe('posthog core - before send', () => {
                 (cr) => ({ ...cr, properties: { ...cr.properties, edited_two: true } }),
             ],
         })
-        ;(posthog._send_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as vi.Mock).mockClear()
 
         const capturedData = [posthog.capture(eventName, {}, {}), posthog.capture('to reject', {}, {})]
 
@@ -144,9 +143,8 @@ describe('posthog core - before send', () => {
         expect(capturedData[0]).toHaveProperty(['properties', 'edited_one'], true)
         expect(capturedData[0]).toHaveProperty(['properties', 'second_saw_first'], true)
         expect(capturedData[0]).toHaveProperty(['properties', 'edited_two'], true)
-        expect(posthog._send_request).toHaveBeenCalledWith({
+        expect(posthog._send_retriable_request).toHaveBeenCalledWith({
             batchKey: undefined,
-            callback: expect.any(Function),
             compression: 'best-available',
             data: capturedData[0],
             method: 'POST',
@@ -167,7 +165,7 @@ describe('posthog core - before send', () => {
                 sentinel,
             ],
         })
-        ;(posthog._send_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as vi.Mock).mockClear()
         let capturedData: CaptureResult | undefined
 
         expect(() => {
@@ -176,7 +174,7 @@ describe('posthog core - before send', () => {
 
         expect(capturedData).toBeUndefined()
         expect(sentinel).not.toHaveBeenCalled()
-        expect(posthog._send_request).not.toHaveBeenCalled()
+        expect(posthog._send_retriable_request).not.toHaveBeenCalled()
         expect(mockLogger.error).toHaveBeenCalledWith(`Error in beforeSend function for event '${eventName}':`, error)
     })
 
@@ -187,14 +185,13 @@ describe('posthog core - before send', () => {
                 return cr
             },
         })
-        ;(posthog._send_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as vi.Mock).mockClear()
 
         const capturedData = posthog.capture('$set', {}, { $set: { value: 'provided' } })
 
         expect(capturedData).toHaveProperty(['$set', 'value'], 'edited')
-        expect(posthog._send_request).toHaveBeenCalledWith({
+        expect(posthog._send_retriable_request).toHaveBeenCalledWith({
             batchKey: undefined,
-            callback: expect.any(Function),
             compression: 'best-available',
             data: capturedData,
             method: 'POST',
@@ -210,14 +207,13 @@ describe('posthog core - before send', () => {
                 return cr
             },
         })
-        ;(posthog._send_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as vi.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, { value: 'provided' }, {})
 
         expect(capturedData).not.toHaveProperty(['properties', 'value'], 'provided')
-        expect(posthog._send_request).toHaveBeenCalledWith({
+        expect(posthog._send_retriable_request).toHaveBeenCalledWith({
             batchKey: undefined,
-            callback: expect.any(Function),
             compression: 'best-available',
             data: capturedData,
             method: 'POST',
@@ -233,7 +229,7 @@ describe('posthog core - before send', () => {
         const posthog = posthogWith({
             before_send: rejectingEventFn,
         })
-        ;(posthog._send_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as vi.Mock).mockClear()
         // chooses a random string from knownUnEditableEvent
         const randomUnsafeEditableEvent =
             knownUnsafeEditableEvent[Math.floor(Math.random() * knownUnsafeEditableEvent.length)]
@@ -262,12 +258,12 @@ describe('posthog core - before send', () => {
                 return cr
             },
         })
-        ;(posthog._send_request as vi.Mock).mockClear()
+        ;(posthog._send_retriable_request as vi.Mock).mockClear()
 
         const capturedData = posthog.capture(eventName, {}, {})
 
         expect(capturedData).toBeUndefined()
-        expect(posthog._send_request).not.toHaveBeenCalled()
+        expect(posthog._send_retriable_request).not.toHaveBeenCalled()
         expect(mockLogger.warn).toHaveBeenCalledWith(
             `Event '${eventName}' had its 'token' property removed in a beforeSend function. This property is required for ingestion, so the event will be dropped.`
         )
