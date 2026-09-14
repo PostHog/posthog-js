@@ -1289,7 +1289,7 @@
         },
         {
           "category": "Session Replay",
-          "description": "Starts session recording. This method will have no effect if PostHog is not enabled, or if session replay is disabled in your project settings.\nNote: This is only available on iOS and Android. On web/macOS, this is a no-op.\nRequires `posthog-react-native-session-replay` version 1.3.0 or higher.",
+          "description": "Starts session recording. This method will have no effect if PostHog is not enabled, or if session replay is disabled in your project settings.\nA refused manual start is retried with successive delays of 1, 2, 4, 8, and 16 seconds, and on subsequent feature flags loads while pending. This promise resolves after the initial attempt, without waiting for retries or guaranteeing recording is active. A newer start supersedes an unfinished request. Stop, reset, opt-out, and shutdown cancel pending starts. Use `isSessionReplayActive()` to check the current recording state.\nNote: This is only available on iOS and Android. On web/macOS, this is a no-op.\nRequires `posthog-react-native-session-replay` version 1.3.0 or higher.",
           "details": null,
           "id": "startSessionRecording",
           "showDocs": true,
@@ -3827,7 +3827,7 @@
           "name": "enablePersistSessionIdAcrossRestart"
         },
         {
-          "description": "Enable Recording of Session Replays for Android and iOS Requires Record user sessions to be enabled in the PostHog Project Settings\nfalse",
+          "description": "Enable Recording of Session Replays for Android and iOS Requires Record user sessions to be enabled in the PostHog Project Settings\nThis option is read once, at setup. To record only some sessions, either gate recording from your project settings (sampling, a linked flag, or event triggers), or leave this option off and drive the recorder from your app with `startSessionRecording()` and `stopSessionRecording()`.\nfalse",
           "type": "boolean",
           "name": "enableSessionReplay"
         },

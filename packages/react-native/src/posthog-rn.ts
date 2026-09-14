@@ -21,6 +21,7 @@ import {
   maybeAdd,
   patchFetchForTracingHeaders,
   raceWithTimeout,
+  safeSetTimeout,
   FeatureFlagValue,
   FeatureFlagResultOptions,
   IsFeatureEnabledOptions,
@@ -74,6 +75,15 @@ function mapAppStateForLogs(state: AppStateStatus | undefined): 'foreground' | '
 // native setup happens before it — so it can be tight enough that a stuck call doesn't strand
 // the queue for the process lifetime.
 const NATIVE_CALL_TIMEOUT_MS = 10_000
+// Native config readiness has no bridge notification, so manual starts need bounded timer
+// retries as well as flags-driven retries. JS flags can finish loading before native config.
+const MANUAL_RECORDING_START_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000]
+
+type ManualRecordingStartRequest = {
+  pending: boolean
+  retryCount: number
+  timer?: ReturnType<typeof setTimeout>
+}
 
 export interface PostHogOptions extends PostHogCoreOptions {
   /**
@@ -110,6 +120,11 @@ export interface PostHogOptions extends PostHogCoreOptions {
   /**
    * Enable Recording of Session Replays for Android and iOS
    * Requires Record user sessions to be enabled in the PostHog Project Settings
+   *
+   * This option is read once, at setup. To record only some sessions, either gate recording
+   * from your project settings (sampling, a linked flag, or event triggers), or leave this
+   * option off and drive the recorder from your app with `startSessionRecording()` and
+   * `stopSessionRecording()`.
    *
    * @default false
    */
@@ -272,6 +287,7 @@ export class PostHog extends PostHogCore {
   private _sessionReplayMacOSWarned: boolean = false
   // Last applied recording state; the native bridge is only crossed on a change.
   private _sessionReplayRecordingActive?: boolean
+  private _manualRecordingStartRequest?: ManualRecordingStartRequest
   // Serializes re-arm evaluations so concurrent flags reloads don't interleave.
   private _sessionReplayEvalChain: Promise<void> = Promise.resolve()
   // Serializes every JS->native command (identity, consent, push) so they reach native in
@@ -541,12 +557,13 @@ export class PostHog extends PostHogCore {
       void this.startSessionReplay(options, cachedRemoteConfig ?? undefined)
 
       // Re-evaluate session replay on every flags load/reload so the linked flag
-      // gates recording without an app restart.
-      if (options?.enableSessionReplay) {
-        this.onFeatureFlags(() => {
+      // gates recording without an app restart. A pending manual start can also retry here,
+      // even when replay was disabled at setup.
+      this.onFeatureFlags(() => {
+        if (this._isEnableSessionReplay() || this._manualRecordingStartRequest?.pending) {
           void this._evaluateAndStartSessionReplay()
-        })
-      }
+        }
+      })
 
       if (options?.addTracingHeaders && options.addTracingHeaders.length > 0) {
         patchFetchForTracingHeaders(this, options.addTracingHeaders)
@@ -638,6 +655,7 @@ export class PostHog extends PostHogCore {
    * SLA so a hung storage backend can't run past it.
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    this._cancelManualRecordingStart()
     this._errorTracking.shutdown()
     const start = Date.now()
     const logsBudgetMs = Math.min(shutdownTimeoutMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
@@ -792,6 +810,9 @@ export class PostHog extends PostHogCore {
       PostHogPersistedProperty.InstalledAppVersion,
       PostHogPersistedProperty.DeviceId,
     ]
+
+    // Cancel before super.reset() emits flags for the next, anonymous user.
+    this._cancelManualRecordingStart()
 
     // RemoteConfig, SessionReplay, and Surveys are project-level config, not user data:
     // always preserve them so replay can re-arm against the new user's flags. The
@@ -1045,6 +1066,7 @@ export class PostHog extends PostHogCore {
    * @public
    */
   optOut(): Promise<void> {
+    this._cancelManualRecordingStart()
     // Consent must be durable. See reset()/identify().
     const result = super.optOut()
     void this._eventsStorage.waitForPersist()
@@ -1589,6 +1611,12 @@ export class PostHog extends PostHogCore {
    * Starts session recording.
    * This method will have no effect if PostHog is not enabled, or if session replay is disabled in your project settings.
    *
+   * A refused manual start is retried with successive delays of 1, 2, 4, 8, and 16 seconds,
+   * and on subsequent feature flags loads while pending. This promise resolves after the
+   * initial attempt, without waiting for retries or guaranteeing recording is active.
+   * A newer start supersedes an unfinished request. Stop, reset, opt-out, and shutdown
+   * cancel pending starts. Use `isSessionReplayActive()` to check the current recording state.
+   *
    * Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
    *
    * Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
@@ -1612,18 +1640,79 @@ export class PostHog extends PostHogCore {
    * @param resumeCurrent - Whether to resume recording of current session (true) or start a new session (false). Defaults to true.
    */
   async startSessionRecording(resumeCurrent: boolean = true): Promise<void> {
+    this._cancelManualRecordingStart()
+    const request: ManualRecordingStartRequest = { pending: false, retryCount: 0 }
+    this._manualRecordingStartRequest = request
     // Chained here, not in _startSessionRecording (which _evaluateAndStartSessionReplayInternal
     // also calls from inside this chain — re-chaining there deadlocks), so two callers can't
     // both enter initializeNativePlugin() and race their pluginConfigs.
     this._sessionReplayEvalChain = this._sessionReplayEvalChain
       .catch(() => {})
       .then(async () => {
-        await this._startSessionRecording(resumeCurrent)
+        await this._attemptManualRecordingStart(request, resumeCurrent)
       })
     await this._sessionReplayEvalChain
   }
 
-  // Same as startSessionRecording, but reports success so callers can react to failures.
+  private _cancelManualRecordingStart(): void {
+    clearTimeout(this._manualRecordingStartRequest?.timer)
+    this._manualRecordingStartRequest = undefined
+  }
+
+  private async _attemptManualRecordingStart(
+    request: ManualRecordingStartRequest,
+    resumeCurrent: boolean
+  ): Promise<boolean> {
+    if (this._manualRecordingStartRequest !== request) {
+      return false
+    }
+    if (this.isDisabled || this.optedOut) {
+      this._cancelManualRecordingStart()
+      return false
+    }
+
+    const started = await this._startSessionRecording(resumeCurrent)
+    // Cancellation is synchronous; a bridge call already in flight can still finish later.
+    // Do not let its result revive the old request or leave its recorder running.
+    if (this._manualRecordingStartRequest !== request) {
+      if (started) {
+        await this._stopSessionRecording()
+      }
+      return false
+    }
+    if (started) {
+      this._cancelManualRecordingStart()
+    } else {
+      request.pending = true
+      this._scheduleManualRecordingStartRetry(request)
+    }
+    return started
+  }
+
+  private _scheduleManualRecordingStartRetry(request: ManualRecordingStartRequest): void {
+    const delay = MANUAL_RECORDING_START_RETRY_DELAYS_MS[request.retryCount]
+    if (
+      request.timer !== undefined ||
+      delay === undefined ||
+      !this._sessionReplayNativeInitialized ||
+      !OptionalReactNativePlugin?.startRecording
+    ) {
+      return
+    }
+    request.retryCount++
+    request.timer = safeSetTimeout(() => {
+      request.timer = undefined
+      this._sessionReplayEvalChain = this._sessionReplayEvalChain
+        .catch(() => {})
+        .then(async () => {
+          // The original attempt already rotated the session if resumeCurrent was false.
+          await this._attemptManualRecordingStart(request, true)
+        })
+    }, delay)
+  }
+
+  // Shared start path. Also called by the flags-driven evaluation, which runs inside
+  // _sessionReplayEvalChain and so must not re-enter it.
   private async _startSessionRecording(resumeCurrent: boolean): Promise<boolean> {
     await this._initPromise
 
@@ -1666,6 +1755,24 @@ export class PostHog extends PostHogCore {
       }
 
       await OptionalReactNativePlugin.startRecording(resumeCurrent)
+
+      // Both native SDKs refuse to start the recorder while their own remote config is not
+      // loaded (PostHog.kt, PostHogSDK.swift) and resolve the call all the same, so ask the
+      // recorder instead of reporting a success the caller cannot check.
+      const started = await OptionalReactNativePlugin.isEnabled().catch((e) => {
+        // Unknown state, so report the start rather than a failure nothing can act on.
+        this._logger.warn(`Failed to confirm the session recording started: ${e}`)
+        return true
+      })
+
+      if (!started) {
+        this._logger.warn(
+          'The native SDK refused to start session recording, usually because its remote config is not loaded yet. ' +
+            'PostHog retries on the next feature flags load.'
+        )
+        return false
+      }
+
       this._logger.info(`Session recording ${resumeCurrent ? 'resumed' : 'started'}.`)
       return true
     } catch (e) {
@@ -1690,10 +1797,17 @@ export class PostHog extends PostHogCore {
    * @public
    */
   async stopSessionRecording(): Promise<void> {
-    await this._stopSessionRecording()
+    this._cancelManualRecordingStart()
+    // Let an in-flight native start settle before stopping its recorder.
+    this._sessionReplayEvalChain = this._sessionReplayEvalChain
+      .catch(() => {})
+      .then(async () => {
+        await this._stopSessionRecording()
+      })
+    await this._sessionReplayEvalChain
   }
 
-  // Same as stopSessionRecording, but reports success so callers can react to failures.
+  // Shared stop path, also called by the flags-driven evaluation.
   private async _stopSessionRecording(): Promise<boolean> {
     await this._initPromise
 
@@ -2780,6 +2894,10 @@ export class PostHog extends PostHogCore {
       this._sessionReplayEventTriggers = []
       if (enableNativeErrorTracking || enablePush) {
         await this.initializeNativePlugin(options, remoteConfig, false)
+      }
+      const request = this._manualRecordingStartRequest
+      if (request?.pending) {
+        await this._attemptManualRecordingStart(request, true)
       }
       return
     }
