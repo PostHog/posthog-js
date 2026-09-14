@@ -10,6 +10,20 @@ import org.junit.Test
 
 class PosthogReactNativePluginModuleTest {
   @Test
+  fun `touch capture defaults to true when omitted or malformed`() {
+    for (map in listOf(null, JavaOnlyMap(), JavaOnlyMap.of("captureTouches", null), JavaOnlyMap.of("captureTouches", "false"))) {
+      assertTrue(getBoolean(map, "captureTouches", true))
+    }
+  }
+
+  @Test
+  fun `touch capture reads explicit true and false`() {
+    for (value in listOf(true, false)) {
+      assertEquals(value, getBoolean(JavaOnlyMap.of("captureTouches", value), "captureTouches", true))
+    }
+  }
+
+  @Test
   fun `screenshot mask alignment verification defaults to false when omitted`() {
     assertFalse(getBoolean(JavaOnlyMap(), "verifyScreenshotMaskAlignment", false))
   }

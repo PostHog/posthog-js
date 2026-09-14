@@ -3169,16 +3169,20 @@ export class PostHog implements PostHogInterface {
                     this.persistence._publishSuppressedCookieSnapshot()
                 }
 
-                this.capture(EVENT_IDENTIFY, identifyProperties, {
-                    $set: userPropertiesToSet || {},
-                    $set_once: userPropertiesToSetOnce || {},
-                })
-
-                this._cachedPersonProperties = getPersonPropertiesHash(
-                    new_distinct_id,
-                    userPropertiesToSet,
-                    userPropertiesToSetOnce
-                )
+                // Only remember properties that capture accepted. Caching a call that capture
+                // dropped would make the caller's retry look like a duplicate and drop it too.
+                if (
+                    this.capture(EVENT_IDENTIFY, identifyProperties, {
+                        $set: userPropertiesToSet || {},
+                        $set_once: userPropertiesToSetOnce || {},
+                    })
+                ) {
+                    this._cachedPersonProperties = getPersonPropertiesHash(
+                        new_distinct_id,
+                        userPropertiesToSet,
+                        userPropertiesToSetOnce
+                    )
+                }
 
                 // Forward the previous distinct id for default flag consistency, or clear
                 // any stale handoff when reuseAnonymousId opts out of anonymous merging.
@@ -3194,15 +3198,15 @@ export class PostHog implements PostHogInterface {
                 if (this.config.cookieWinsOnConflict) {
                     this.persistence._publishSuppressedCookieSnapshot()
                 }
-                this.capture('$set', { $set: setProperties, $set_once: setOnceProperties })
-
                 // This transition must create/update the person even when an identical property call was cached earlier.
                 // Cache only after capture so deduplication cannot suppress the transition event.
-                this._cachedPersonProperties = getPersonPropertiesHash(
-                    new_distinct_id,
-                    userPropertiesToSet,
-                    userPropertiesToSetOnce
-                )
+                if (this.capture('$set', { $set: setProperties, $set_once: setOnceProperties })) {
+                    this._cachedPersonProperties = getPersonPropertiesHash(
+                        new_distinct_id,
+                        userPropertiesToSet,
+                        userPropertiesToSetOnce
+                    )
+                }
             } else if (userPropertiesToSet || userPropertiesToSetOnce) {
                 // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
                 // and if so, send a $set event
@@ -3290,9 +3294,9 @@ export class PostHog implements PostHogInterface {
             true
         )
 
-        this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
-
-        this._cachedPersonProperties = hash
+        if (this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })) {
+            this._cachedPersonProperties = hash
+        }
     }
 
     /**
@@ -3775,6 +3779,7 @@ export class PostHog implements PostHogInterface {
         // so no buffered events are silently dropped when teardown is explicit.
         this.logs?.flushLogs('sendBeacon')
         void this.metrics?.flush('sendBeacon')
+        this.metrics?.dispose()
         this._requestQueue?.unload()
         this._retryQueue?.unload()
         try {
@@ -4052,6 +4057,7 @@ export class PostHog implements PostHogInterface {
 
             this.exceptionObserver?.onConfigChange()
             this.exceptions?.onConfigChange()
+            this.metrics?.onConfigChange()
 
             this.sessionRecording?.startIfEnabledOrStop()
             this.tracingHeaders?.startIfEnabledOrStop()

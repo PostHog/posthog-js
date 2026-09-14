@@ -22,6 +22,54 @@ describe('PostHog Core', () => {
       expect(mocks.fetch).not.toHaveBeenCalled()
     })
 
+    it.each([200, 201, 202, 204, 299])('reports HTTP %i as a successful write', async (status) => {
+      const onFlush = vi.fn()
+      const onError = vi.fn()
+      posthog.on('flush', onFlush)
+      posthog.on('error', onError)
+      mocks.fetch.mockResolvedValue(new Response(null, { status }))
+      posthog.capture('test-event')
+
+      await posthog.flush()
+
+      expect(onFlush).toHaveBeenCalledTimes(1)
+      expect(onError).not.toHaveBeenCalled()
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      expect(mocks.storage.getItem(PostHogPersistedProperty.Queue)).toEqual([])
+    })
+
+    it('preserves response consumption for HTTP 302 feature flag reads', async () => {
+      const json = vi.fn().mockResolvedValue({ featureFlags: { 'test-flag': true } })
+      mocks.fetch.mockResolvedValue({ status: 302, text: async () => '', json })
+
+      await expect(posthog.getFlags('distinct-id')).resolves.toMatchObject({
+        success: true,
+        response: { featureFlags: { 'test-flag': true } },
+      })
+      expect(json).toHaveBeenCalledTimes(1)
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([300, 302, 304])('does not report HTTP %i as a successful write', async (status) => {
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 5,
+        flushInterval: 0,
+        fetchRetryCount: 0,
+      })
+      const onFlush = vi.fn()
+      const onError = vi.fn()
+      posthog.on('flush', onFlush)
+      posthog.on('error', onError)
+      mocks.fetch.mockResolvedValue(new Response(null, { status }))
+      posthog.capture('test-event')
+
+      await expect(posthog.flush()).rejects.toMatchObject({ name: 'PostHogFetchHttpError', status })
+
+      expect(onFlush).not.toHaveBeenCalled()
+      expect(onError).toHaveBeenCalledTimes(1)
+      expect(onError.mock.calls[0][0].message).toContain(`HTTP error while fetching PostHog: status=${status}`)
+    })
+
     it('flush messages once called', async () => {
       const successfulMessages: any[] = []
 
@@ -770,6 +818,9 @@ describe('PostHog Core', () => {
     }
 
     const cases: [number, string][] = [
+      [300, 'fatal'],
+      [302, 'fatal'],
+      [304, 'fatal'],
       [408, 'retry-later'],
       [429, 'retry-later'],
       [500, 'retry-later'],
@@ -780,6 +831,19 @@ describe('PostHog Core', () => {
     ]
 
     describe.each(Object.entries(senders))('%s', (_name, send) => {
+      it.each([200, 202, 204, 299])('accepts HTTP %i without consuming a response body', async (status) => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', { preloadFeatureFlags: false })
+        const response = new Response(null, { status })
+        const json = vi.spyOn(response, 'json')
+        const text = vi.spyOn(response, 'text')
+        mocks.fetch.mockResolvedValue(response)
+
+        await expect(send(posthog)).resolves.toMatchObject({ kind: 'ok' })
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        expect(json).not.toHaveBeenCalled()
+        expect(text).not.toHaveBeenCalled()
+      })
+
       it.each(cases)('classifies an exhausted %i as %s', async (status, kind) => {
         ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
           fetchRetryCount: 0,
