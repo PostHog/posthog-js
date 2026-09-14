@@ -165,12 +165,21 @@ describe('ErrorPropertiesBuilder relationship metadata', () => {
     })
   })
 
-  it('preserves valid fields alongside invalid typed root metadata', () => {
+  it.each(['yes', null, 0, {}, []])('omits invalid handled metadata: %j', (handled) => {
     const entries = builder.buildFromUnknown(error('Error', 'root'), {
-      mechanism: { type: '', handled: 'yes', synthetic: true } as any,
+      mechanism: { type: '', handled, synthetic: true } as any,
     }).$exception_list
-    expect(entries[0].mechanism).toEqual({ type: 'generic', handled: true, synthetic: true, exception_id: 0 })
+    expect(entries[0].mechanism).toEqual({ type: 'generic', synthetic: true, exception_id: 0 })
+    expect(entries[0].mechanism).not.toHaveProperty('handled')
   })
+
+  it.each([undefined, true, false])(
+    'preserves the manual capture default and boolean handled metadata: %s',
+    (handled) => {
+      const entries = builder.buildFromUnknown(error('Error', 'root'), { mechanism: { handled } }).$exception_list
+      expect(entries[0].mechanism.handled).toBe(handled === undefined ? true : handled)
+    }
+  )
 
   it('preserves all supplied mechanism fields in the low-level coercion context', () => {
     const mechanism = {

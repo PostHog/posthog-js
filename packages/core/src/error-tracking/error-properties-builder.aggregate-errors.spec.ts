@@ -10,7 +10,7 @@ import {
 } from './coercers'
 import { StackFrame } from './types'
 import { ErrorPropertiesBuilder } from './error-properties-builder'
-import { chromeStackLineParser, createStackParser } from './parsers'
+import { chromeStackLineParser, createStackParser, nodeStackLineParser } from './parsers'
 
 // Aggregate children share one flat exception list with per-entry relationship metadata.
 describe('ErrorPropertiesBuilder AggregateError children', () => {
@@ -25,6 +25,38 @@ describe('ErrorPropertiesBuilder AggregateError children', () => {
     ],
     createStackParser('web:javascript', chromeStackLineParser)
   )
+
+  it('retains children and siblings when a member stack cannot be parsed', () => {
+    const nodeBuilder = new ErrorPropertiesBuilder(
+      [new ErrorCoercer()],
+      createStackParser('node:javascript', nodeStackLineParser)
+    )
+    const child = new AggregateError([new Error('grandchild')], 'malformed stack')
+    child.stack = 'Error: malformed stack\n    at run (/tmp/%E0%A4%A.js:1:1)'
+    const entries = nodeBuilder.buildFromUnknown(
+      new AggregateError([child, new Error('sibling')], 'root')
+    ).$exception_list
+
+    expect(entries.map((entry) => entry.value)).toEqual(['root', 'malformed stack', 'grandchild', 'sibling'])
+    expect(entries[1].stacktrace).toBeUndefined()
+    expect(entries[2].mechanism).toMatchObject({ exception_id: 2, parent_id: 1, source: 'member' })
+    expect(entries[3].stacktrace?.frames.length).toBeGreaterThan(0)
+  })
+
+  it('retains aggregate members when root coercion fails', () => {
+    const root = new AggregateError([new Error('first'), new Error('second')], 'root')
+    Object.defineProperty(root, 'message', {
+      get: () => {
+        throw new Error('unreadable message')
+      },
+    })
+    const entries = builder.buildFromUnknown(root).$exception_list
+
+    expect(entries.map((entry) => entry.value)).toEqual(['Unknown error', 'first', 'second'])
+    expect(entries[0].mechanism.synthetic).toBe(true)
+    expect(entries[1].mechanism).toMatchObject({ exception_id: 1, parent_id: 0, source: 'member' })
+    expect(entries[2].mechanism).toMatchObject({ exception_id: 2, parent_id: 0, source: 'member' })
+  })
 
   it('captures rejected alternatives and their frames from native Promise.any', async () => {
     const first = new TypeError('first alternative')

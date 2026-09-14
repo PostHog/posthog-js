@@ -81,7 +81,11 @@ export class ErrorPropertiesBuilder {
     }
     let stack: StackFrame[] | undefined = undefined
     if (err.stack != '' && err.stack != null) {
-      stack = this.applyChunkIds(this.stackParser(err.stack, err.synthetic ? ctx.skipFirstLines : 0), ctx.chunkIdMap)
+      try {
+        stack = this.applyChunkIds(this.stackParser(err.stack, err.synthetic ? ctx.skipFirstLines : 0), ctx.chunkIdMap)
+      } catch {
+        // A malformed stack must not discard this exception or its relatives.
+      }
     }
     return { ...err, cause, stack, errors: err.errors?.map((child) => this.parseStacktrace(child, ctx)) }
   }
@@ -120,7 +124,11 @@ export class ErrorPropertiesBuilder {
         parentId === undefined
           ? {
               type: typeof mechanism.type === 'string' && mechanism.type.length > 0 ? mechanism.type : 'generic',
-              handled: typeof mechanism.handled === 'boolean' ? mechanism.handled : true,
+              ...(typeof mechanism.handled === 'boolean'
+                ? { handled: mechanism.handled }
+                : mechanism.handled === undefined
+                  ? { handled: true }
+                  : {}),
               synthetic: typeof mechanism.synthetic === 'boolean' ? mechanism.synthetic : exception.synthetic,
               exception_id: exceptionId,
             }
@@ -212,44 +220,12 @@ export class ErrorPropertiesBuilder {
       }
       const errors = this.getAggregateErrors(input)
       hasAggregate ||= !!errors
+      let exception: ExceptionLike | undefined
       try {
-        const exception = this.applyCoercers(input, ctx)
+        exception = this.applyCoercers(input, ctx)
         if (!exception) {
           throw skipped
         }
-        if (!errors || count >= MAX_EXCEPTIONS) {
-          return exception
-        }
-        // Snapshot finite array length. A separate inspection budget bounds duplicate
-        // and cyclic members, which can truncate pathological inputs before 50 entries.
-        let length: number
-        try {
-          length = errors.length
-        } catch {
-          return exception
-        }
-        if (!Number.isInteger(length) || length < 0 || length > 0xffffffff) {
-          return exception
-        }
-        const children: ExceptionWithChildren[] = []
-        for (
-          let index = 0;
-          count < MAX_EXCEPTIONS && memberInspections < MAX_AGGREGATE_MEMBER_INSPECTIONS && index < length;
-          index++
-        ) {
-          memberInspections++
-          let child: ExceptionWithChildren | undefined
-          try {
-            child = ctx.next(errors[index])
-          } catch {
-            count++
-            child = this.coerceFallback(createContext(depth + 1))
-          }
-          if (child) {
-            children.push(child)
-          }
-        }
-        return { ...exception, errors: children }
       } catch (error) {
         if (error === skipped) {
           if (wrapperDepth === 0) {
@@ -260,8 +236,41 @@ export class ErrorPropertiesBuilder {
         if (!hasAggregate) {
           throw error
         }
-        return this.coerceFallback(ctx)
+        exception = this.coerceFallback(ctx)
       }
+      if (!errors || count >= MAX_EXCEPTIONS) {
+        return exception
+      }
+      // Snapshot finite array length. A separate inspection budget bounds duplicate
+      // and cyclic members, which can truncate pathological inputs before 50 entries.
+      let length: number
+      try {
+        length = errors.length
+      } catch {
+        return exception
+      }
+      if (!Number.isInteger(length) || length < 0 || length > 0xffffffff) {
+        return exception
+      }
+      const children: ExceptionWithChildren[] = []
+      for (
+        let index = 0;
+        count < MAX_EXCEPTIONS && memberInspections < MAX_AGGREGATE_MEMBER_INSPECTIONS && index < length;
+        index++
+      ) {
+        memberInspections++
+        let child: ExceptionWithChildren | undefined
+        try {
+          child = ctx.next(errors[index])
+        } catch {
+          count++
+          child = this.coerceFallback(createContext(depth + 1))
+        }
+        if (child) {
+          children.push(child)
+        }
+      }
+      return { ...exception, errors: children }
     }
     const createContext = (depth: number, wrapperDepth = 0): CoercingContext => ({
       ...hint,
