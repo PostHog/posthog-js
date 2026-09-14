@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.431.8
+
+### Patch Changes
+
+- [#4935](https://github.com/PostHog/posthog-js/pull/4935) [`6a78625`](https://github.com/PostHog/posthog-js/commit/6a78625c8d05de3404116ea9a1e4339bc89b60db) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix false dead clicks after synchronous DOM updates. Clicks stopped from bubbling are now evaluated too, which may increase dead-click counts for inert controls.
+  (2026-09-14)
+
 ## 1.431.7
 
 ### Patch Changes
