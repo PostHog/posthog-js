@@ -44,7 +44,6 @@ describe('Replayer.destroy after host children are cleared', () => {
   afterEach(() => {
     // Contain pending work even when a teardown assertion fails.
     replayer.timer.clear();
-    if (!replayer.wrapper.parentNode) root.appendChild(replayer.wrapper);
     replayer.destroy();
     root.remove();
     vi.useRealTimers();
