@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.431.2
+
+### Patch Changes
+
+- [#4938](https://github.com/PostHog/posthog-js/pull/4938) [`fea443a`](https://github.com/PostHog/posthog-js/commit/fea443a4f19bc363ad1d152c1daf05ef527e0bd5) Thanks [@marandaneto](https://github.com/marandaneto)! - Mark console-captured exceptions as handled and identify their console origin.
+  (2026-09-14)
+
 ## 1.431.1
 
 ### Patch Changes
