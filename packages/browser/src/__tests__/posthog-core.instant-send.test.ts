@@ -65,6 +65,17 @@ describe('unbatched capture transport', () => {
         }
     )
 
+    it('uses sendBeacon during unload even without a retry queue', () => {
+        posthog._retryQueue?.unload()
+        posthog._retryQueue = undefined
+        posthog._handle_unload()
+        sendRequest.mockClear()
+
+        posthog.capture('conversion', {}, { send_instantly: true })
+
+        expect(capturedTransport()).toBe('sendBeacon')
+    })
+
     it('keeps a caller-chosen transport during unload', () => {
         globalsState.fetch = undefined
         posthog._handle_unload()

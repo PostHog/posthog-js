@@ -595,7 +595,8 @@ describe('BrowserClientAdapter', () => {
                     $set: { a: 1 },
                     $set_once: { b: 2 },
                 }),
-            })
+            }),
+            undefined
         )
         await posthog.shutdown()
     })
