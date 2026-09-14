@@ -9,7 +9,7 @@ import { createPostHogMiddleware } from '../src/langchain/middleware'
 // Provider and capture doubles exercise actual instrumentation without network access.
 const serializationError = new Error('application toJSON failed')
 const cases = [
-  { name: 'plain object control', make: () => ({ city: 'London' }), unsafe: false },
+  { name: 'plain object control', make: () => ({ city: 'London' }), expected: '{"city":"London"}' },
   {
     name: 'cycle',
     make: () => {
@@ -17,9 +17,9 @@ const cases = [
       value.self = value
       return value
     },
-    unsafe: true,
+    expected: '[object Object]',
   },
-  { name: 'BigInt', make: () => ({ count: BigInt(1) }), unsafe: true },
+  { name: 'BigInt', make: () => ({ count: BigInt(1) }), expected: '[object Object]' },
   {
     name: 'throwing toJSON',
     make: () => ({
@@ -27,10 +27,64 @@ const cases = [
         throw serializationError
       },
     }),
-    unsafe: true,
+    expected: '[object Object]',
+  },
+  {
+    name: 'throwing toPrimitive after failed JSON serialization',
+    make: () => ({
+      count: BigInt(1),
+      [Symbol.toPrimitive]: () => {
+        throw new Error('application toPrimitive failed')
+      },
+    }),
+    expected: '',
+  },
+  {
+    name: 'throwing toString after failed JSON serialization',
+    make: () => ({
+      toJSON: () => {
+        throw serializationError
+      },
+      toString: () => {
+        throw new Error('application toString failed')
+      },
+    }),
+    expected: '',
+  },
+  {
+    name: 'null-prototype cycle',
+    make: () => {
+      const value: Record<string, unknown> = Object.create(null)
+      value.self = value
+      return value
+    },
+    expected: '',
+  },
+  {
+    name: 'null-prototype BigInt',
+    make: () => Object.assign(Object.create(null), { count: BigInt(1) }),
+    expected: '',
+  },
+  {
+    name: 'custom string fallback control',
+    make: () => ({ count: BigInt(1), toString: () => 'custom arguments' }),
+    expected: 'custom arguments',
+  },
+  {
+    name: 'JSON succeeds without coercion control',
+    make: () => ({
+      city: 'London',
+      [Symbol.toPrimitive]: () => {
+        throw new Error('coercion must not run')
+      },
+    }),
+    expected: '{"city":"London"}',
   },
 ]
-const vercelCases = [{ name: 'JSON string control', make: () => '{"city":"London"}', unsafe: false }, ...cases]
+const vercelCases = [
+  { name: 'JSON string control', make: () => '{"city":"London"}', expected: '{"city":"London"}' },
+  ...cases,
+]
 const client = () => ({ capture: vi.fn(), captureImmediate: vi.fn(), privacy_mode: false })
 const outcome = async <T>(call: () => T) => {
   try {
@@ -58,7 +112,7 @@ describe.each(['v2', 'v3'] as const)('Vercel %s provider invocation', (version) 
       doStream,
     }) as unknown as LanguageModelV2 | LanguageModelV3
 
-  it.each(vercelCases)('doGenerate preserves provider success: $name', async ({ make, unsafe }) => {
+  it.each(vercelCases)('doGenerate preserves provider success: $name', async ({ make, expected }) => {
     // Object-valued output arguments are off-spec for V2/V3, but explicitly
     // handled by mapVercelOutput. This probes that compatibility branch.
     const args = make()
@@ -88,7 +142,7 @@ describe.each(['v2', 'v3'] as const)('Vercel %s provider invocation', (version) 
     expect(capture.capture).toHaveBeenCalledWith(expect.objectContaining({ event: '$ai_generation' }))
     const event = capture.capture.mock.calls.find(([event]) => event.event === '$ai_generation')![0]
     const output = event.properties.$ai_output_choices[0]
-    expect(output.content[0].function.arguments).toBe(unsafe ? '[object Object]' : '{"city":"London"}')
+    expect(output.content[0].function.arguments).toBe(expected)
     expect(instrumented.status, instrumented.status === 'rejected' ? String(instrumented.reason) : '').toBe('fulfilled')
     if (instrumented.status === 'fulfilled') expect(instrumented.value).toBe(result)
   })
@@ -157,7 +211,7 @@ describe.each(['v2', 'v3'] as const)('Vercel %s provider invocation', (version) 
 })
 
 describe.each([false, true])('LangChain callback via model.invoke (raiseError=%s)', (raiseError) => {
-  it.each(cases)('preserves returned tool-call message: $name', async ({ make, unsafe }) => {
+  it.each(cases)('preserves returned tool-call message: $name', async ({ make, expected }) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const args = make()
@@ -180,9 +234,7 @@ describe.each([false, true])('LangChain callback via model.invoke (raiseError=%s
     expect(warn).not.toHaveBeenCalled()
     expect(capture.capture).toHaveBeenCalledWith(expect.objectContaining({ event: '$ai_generation' }))
     const event = capture.capture.mock.calls.find(([event]) => event.event === '$ai_generation')![0]
-    expect(event.properties.$ai_output_choices[0].tool_calls[0].function.arguments).toBe(
-      unsafe ? '[object Object]' : '{"city":"London"}'
-    )
+    expect(event.properties.$ai_output_choices[0].tool_calls[0].function.arguments).toBe(expected)
     expect(instrumented.status, instrumented.status === 'rejected' ? String(instrumented.reason) : '').toBe('fulfilled')
     if (instrumented.status === 'fulfilled') {
       expect(instrumented.value).toBe(response)
