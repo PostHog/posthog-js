@@ -260,6 +260,50 @@ describe('Express extension', () => {
       expect(events[0].properties.$response_status_code).toBe(503)
     })
 
+    it('should capture without a status after one second when the response never completes', async () => {
+      const res = createMockResponse({ statusCode: 503 })
+      createErrorHandlerMiddleware(posthog)(new Error('Unfinished response'), createMockRequest(), res, vi.fn())
+      const shutdown = posthog.shutdown()
+
+      try {
+        await vi.advanceTimersByTimeAsync(999)
+        expect(mockedFetch).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(1)
+
+        expect(res.listenerCount('finish')).toBe(0)
+        expect(res.listenerCount('close')).toBe(0)
+        await shutdown
+        const events = getLastBatchEvents()!
+        expect(events).toHaveLength(1)
+        expect(events[0].properties).not.toHaveProperty('$response_status_code')
+        expect(vi.getTimerCount()).toBe(0)
+
+        finishResponse(res, 503)
+        await vi.advanceTimersByTimeAsync(1000)
+        expect(mockedFetch).toHaveBeenCalledOnce()
+      } finally {
+        finishResponse(res, 503)
+        await shutdown
+      }
+    })
+
+    it.each(['finish', 'close'])('should cancel the timeout when the response emits %s', async (event) => {
+      const res = createMockResponse()
+      createErrorHandlerMiddleware(posthog)(new Error('Completed response'), createMockRequest(), res, vi.fn())
+      await vi.advanceTimersByTimeAsync(999)
+      res.headersSent = true
+      res.statusCode = 503
+      res.emit(event)
+      await posthog.shutdown()
+
+      expect(getLastBatchEvents()![0].properties.$response_status_code).toBe(503)
+      expect(res.listenerCount('finish')).toBe(0)
+      expect(res.listenerCount('close')).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockedFetch).toHaveBeenCalledOnce()
+    })
+
     it('should expose the final status to before_send filtering', async () => {
       await posthog.shutdown()
       const beforeSend = vi.fn((event) => (event.properties.$response_status_code < 500 ? null : event))

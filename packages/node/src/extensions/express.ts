@@ -85,11 +85,16 @@ function getResponseStatusCode(res: Response): Promise<number | undefined> {
   }
 
   return new Promise((resolve) => {
-    const onComplete = (): void => {
+    const complete = (statusCode: number | undefined): void => {
+      clearTimeout(timeout)
       res.removeListener('finish', onComplete)
       res.removeListener('close', onComplete)
-      resolve(res.headersSent ? res.statusCode : undefined)
+      resolve(statusCode)
     }
+    const onComplete = (): void => complete(res.headersSent ? res.statusCode : undefined)
+    // A downstream handler may never finish the response; do not hold the exception indefinitely.
+    const timeout = setTimeout(() => complete(undefined), 1000)
+    timeout.unref()
     res.once('finish', onComplete)
     res.once('close', onComplete)
   })
