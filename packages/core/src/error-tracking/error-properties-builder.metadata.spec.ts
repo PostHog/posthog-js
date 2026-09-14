@@ -245,4 +245,65 @@ describe('ErrorPropertiesBuilder relationship metadata', () => {
     })
     expect(builder.buildFromUnknown(root).$exception_list.map((entry) => entry.value)).toEqual(['root', 'cause'])
   })
+  it('caps huge proxy member collections before reading beyond 1000 attempts and resets between captures', () => {
+    const root = new AggregateError([], 'root')
+    const readMember = vi.fn((index: number) => {
+      // The old implementation also terminates safely: after 1000 duplicate reads,
+      // fallback entries fill its emission budget rather than scanning the huge length.
+      if (index >= 1000) throw new Error('past the inspection budget')
+      return root
+    })
+    root.errors = new Proxy([], {
+      get: (_target, key) => (key === 'length' ? 0xffffffff : readMember(Number(key))),
+    })
+    for (let capture = 0; capture < 2; capture++) {
+      readMember.mockClear()
+      expect(builder.buildFromUnknown(root).$exception_list.map((entry) => entry.value)).toEqual(['root'])
+      expect(readMember).toHaveBeenCalledTimes(1000)
+      expect(readMember).toHaveBeenLastCalledWith(999)
+    }
+    expect(
+      builder
+        .buildFromUnknown(new AggregateError([error('Error', 'fresh child')], 'fresh root'))
+        .$exception_list.map((entry) => entry.value)
+    ).toEqual(['fresh root', 'fresh child'])
+  })
+
+  it('shares attempted member inspections across groups, including throwing getters, without limiting cause edges', () => {
+    const root = new AggregateError([], 'root')
+    const first = new AggregateError(Array(600).fill(root), 'first group')
+    Object.defineProperty(first.errors, '0', {
+      get() {
+        throw new Error('unreadable member')
+      },
+    })
+    let cause = error('Error', 'cause 8')
+    for (let index = 7; index >= 0; index--) cause = error('Error', `cause ${index}`, cause)
+    const second = new AggregateError([...Array(397).fill(root), cause, error('Error', 'past budget')], 'second group')
+    const readLastRootMember = vi.fn(() => error('Error', 'unread root member'))
+    root.errors = [first, second]
+    Object.defineProperty(root.errors, '2', { get: readLastRootMember })
+    const entries = builder.buildFromUnknown(root).$exception_list
+    // 1 first-group access + 600 members + 1 second-group access + 398 members.
+    expect(entries.map((entry) => entry.value)).toEqual([
+      'root',
+      'first group',
+      'Unknown error',
+      'second group',
+      ...Array.from({ length: 9 }, (_, index) => `cause ${index}`),
+    ])
+    expect(readLastRootMember).not.toHaveBeenCalled()
+    entries.forEach((entry, index) => {
+      expect(entry.mechanism?.exception_id).toBe(index)
+      if (index > 0) {
+        expect(entry.mechanism).toEqual({
+          type: 'chained',
+          source: index > 4 ? 'cause' : 'member',
+          synthetic: index === 2,
+          exception_id: index,
+          parent_id: index === 1 || index === 3 ? 0 : index - 1,
+        })
+      }
+    })
+  })
 })

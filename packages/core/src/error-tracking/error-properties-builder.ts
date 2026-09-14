@@ -18,6 +18,7 @@ import {
 } from './types'
 
 const MAX_EXCEPTIONS = 50
+const MAX_AGGREGATE_MEMBER_INSPECTIONS = 1000
 // Forwarding wrappers do not represent tree edges or consume exception slots.
 const MAX_WRAPPER_RECURSION = 4
 
@@ -171,6 +172,7 @@ export class ErrorPropertiesBuilder {
 
   public buildCoercingContext(mechanism: Mechanism, hint: EventHint, depth: number = 0): CoercingContext {
     let count = 0
+    let memberInspections = 0
     let hasAggregate = false
     const seen = new Set<unknown>()
     const wrappers: unknown[] = []
@@ -209,8 +211,8 @@ export class ErrorPropertiesBuilder {
         if (!errors || count >= MAX_EXCEPTIONS) {
           return exception
         }
-        // Snapshot finite array length. Skipped identities do not spend the emission
-        // budget, so finding the first 49 descendants may scan more than 49 members.
+        // Snapshot finite array length. A separate inspection budget bounds duplicate
+        // and cyclic members, which can truncate pathological inputs before 50 entries.
         let length: number
         try {
           length = errors.length
@@ -221,7 +223,12 @@ export class ErrorPropertiesBuilder {
           return exception
         }
         const children: ExceptionWithChildren[] = []
-        for (let index = 0; count < MAX_EXCEPTIONS && index < length; index++) {
+        for (
+          let index = 0;
+          count < MAX_EXCEPTIONS && memberInspections < MAX_AGGREGATE_MEMBER_INSPECTIONS && index < length;
+          index++
+        ) {
+          memberInspections++
           let child: ExceptionWithChildren | undefined
           try {
             child = ctx.next(errors[index])
