@@ -1132,9 +1132,9 @@ export interface NetworkMetricsResponse {
 }
 
 /**
- * Options for automatic `fetch` and `XMLHttpRequest` duration metrics.
- * Recording never changes the request or its settlement. Fetch returns a derived
- * promise so rejected requests remain observable to the caller.
+ * Options for automatic HTTP and HTTPS `fetch` and `XMLHttpRequest` duration
+ * metrics. Recording never changes the request or its settlement. Fetch returns
+ * a derived promise so rejected requests remain observable to the caller.
  */
 export interface NetworkMetricsConfig {
     /**
@@ -1222,10 +1222,11 @@ export interface MetricsConfig {
  */
 export interface BrowserMetricsConfig extends MetricsConfig {
     /**
-     * Record the duration of every `fetch` and `XMLHttpRequest` as a histogram.
-     * `true` uses the defaults. Requests to PostHog itself are not recorded.
-     * Each transport is measured to the boundary its API exposes: a `fetch` to
-     * its response headers, an `XMLHttpRequest` to the end of its response body.
+     * Record the duration of every HTTP or HTTPS `fetch` and `XMLHttpRequest` as
+     * a histogram. `true` uses the defaults. Requests to PostHog itself and URLs
+     * with other protocols are not recorded. Each transport is measured to the
+     * boundary its API exposes: a `fetch` to its response headers, an
+     * `XMLHttpRequest` to the end of its response body.
      *
      * @default undefined
      */

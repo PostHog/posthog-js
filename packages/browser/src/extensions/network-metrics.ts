@@ -62,7 +62,7 @@ const record = (
         const normalisedStatus = status || undefined
         const durationMs = now() - start
         const url = convertToURL(observed.url)
-        if (url?.protocol === 'data:') {
+        if (url && url.protocol !== 'http:' && url.protocol !== 'https:') {
             return
         }
         const request: NetworkMetricsRequest = { url: url?.href || observed.url, method: observed.method }
@@ -177,11 +177,11 @@ const patchXHR = (instance: PostHog, enabled: Enabled): (() => void) => {
 }
 
 /**
- * Records a duration histogram for every `fetch` and `XMLHttpRequest` the page
- * makes, except the SDK's own. Observation only: the wrappers never change the
- * request arguments or its settlement. Fetch returns a derived promise so
- * rejected requests remain observable to the caller and to the browser's
- * unhandled-rejection handling.
+ * Records a duration histogram for every HTTP or HTTPS `fetch` and
+ * `XMLHttpRequest` the page makes, except the SDK's own. Observation only: the
+ * wrappers never change the request arguments or its settlement. Fetch returns
+ * a derived promise so rejected requests remain observable to the caller and to
+ * the browser's unhandled-rejection handling.
  *
  * Each transport is measured to the boundary its API exposes: a `fetch` promise
  * settles when the response headers arrive, and `loadend` fires after the whole

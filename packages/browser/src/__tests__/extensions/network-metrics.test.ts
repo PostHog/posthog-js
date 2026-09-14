@@ -144,10 +144,15 @@ describe('network metrics', () => {
             ])
         })
 
-        it('does not record data URLs', async () => {
+        it.each([
+            ['inline data', 'data:text/plain,inline-content'],
+            ['blob', 'blob:https://example.com/8a0c1f98-f708-4f6b-b70c-4293cb88b97b'],
+            ['local file', 'file:///tmp/example.txt'],
+            ['custom protocol', 'app://renderer/orders'],
+        ])('does not record %s URLs', async (_, url) => {
             start()
 
-            await window.fetch('data:text/plain,inline-content')
+            await window.fetch(url)
 
             expect(recorded()).toEqual([])
         })
@@ -523,13 +528,13 @@ describe('network metrics', () => {
             await expect(window.fetch('https://api.example.com/things')).resolves.toEqual({ status: 200 })
         })
 
-        it('when the request url cannot be parsed the fetch still runs and is recorded', async () => {
+        it('when the request URL cannot be parsed the fetch still runs but is not recorded', async () => {
             start()
 
             await window.fetch('http://[')
 
             expect(fetchMock).toHaveBeenCalledTimes(1)
-            expect(recorded()[0][2].attributes).toEqual({ method: 'GET', host: '', path: '', status_class: '2xx' })
+            expect(recorded()).toEqual([])
         })
 
         it('when the original fetch returns a non-promise it is passed through', () => {
