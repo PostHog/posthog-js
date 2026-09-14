@@ -3147,7 +3147,7 @@
         },
         {
           "description": "Metrics-specific configuration options for the posthog.metrics API.",
-          "type": "MetricsConfig",
+          "type": "BrowserMetricsConfig",
           "name": "metrics"
         },
         {
