@@ -190,11 +190,32 @@ for (const chainOnly of [false, true]) {
                 expect(
                     await page.evaluate(() => (window as WindowWithPostHog).posthog!.has_opted_out_capturing())
                 ).toBe(true)
-                // Drain any already-started transport before testing activity while opted out.
-                await page.waitForTimeout(2500)
+                let lastRequestCount = requests.length
+                let quietSince = Date.now()
+                await expect
+                    .poll(
+                        () => {
+                            if (requests.length !== lastRequestCount) {
+                                lastRequestCount = requests.length
+                                quietSince = Date.now()
+                            }
+                            return Date.now() - quietSince
+                        },
+                        { message: 'transport settles before opted-out activity', timeout: 5000, intervals: [100] }
+                    )
+                    .toBeGreaterThanOrEqual(500)
                 const countBeforeOptedOutActivity = requests.length
                 await mutate(page, 'OPTED_OUT')
-                await page.waitForTimeout(3000)
+                const optedOutWindowStarted = Date.now()
+                // Cover the recorder's 2s buffer flush; equality alone would pass immediately.
+                await expect
+                    .poll(
+                        () =>
+                            requests.length !== countBeforeOptedOutActivity ||
+                            Date.now() - optedOutWindowStarted >= 2500,
+                        { timeout: 5000, intervals: [100] }
+                    )
+                    .toBe(true)
                 expect(requests.length, 'no emitted requests during opted-out activity').toBe(
                     countBeforeOptedOutActivity
                 )
