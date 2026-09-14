@@ -1,4 +1,5 @@
 import { Page, Request } from '@playwright/test'
+import { isArray, isUndefined } from '@posthog/core'
 import { writeFile } from 'node:fs/promises'
 import { decompressSync, strFromU8 } from 'fflate'
 import { test, expect, WindowWithPostHog } from './utils/posthog-playwright-test-base'
@@ -16,7 +17,7 @@ function decodeRequest(request: Request): WireRequest {
         body = Buffer.from(new URLSearchParams(body).get('data')!, 'base64').toString()
     }
     const payload = JSON.parse(body)
-    return { url: request.url(), body, events: payload.batch ?? (Array.isArray(payload) ? payload : [payload]) }
+    return { url: request.url(), body, events: payload.batch ?? (isArray(payload) ? payload : [payload]) }
 }
 
 async function mutate(page: Page, phase: string, add = false) {
@@ -86,7 +87,7 @@ for (const chainOnly of [false, true]) {
                     .poll(
                         () =>
                             JSON.stringify(
-                                snapshots().filter((event) => snapshotType === undefined || event.type === snapshotType)
+                                snapshots().filter((event) => isUndefined(snapshotType) || event.type === snapshotType)
                             ),
                         {
                             timeout: 15_000,
@@ -102,7 +103,7 @@ for (const chainOnly of [false, true]) {
                         true
                     )
                 } else {
-                    expect(autocaptures().every((event) => Array.isArray(event.properties.$elements))).toBe(true)
+                    expect(autocaptures().every((event) => isArray(event.properties.$elements))).toBe(true)
                 }
                 if (scenario.href) {
                     expect(autocaptures().at(-1)!.properties.$external_click_url).toBe(
