@@ -154,6 +154,7 @@ describe('posthog core', () => {
                 {
                     ...defaultOverrides,
                     sessionPersistence: {
+                        props: {},
                         update_search_keyword: vi.fn(),
                         update_campaign_params: vi.fn(),
                         update_referrer_info: vi.fn(),

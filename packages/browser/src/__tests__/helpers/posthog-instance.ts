@@ -70,6 +70,7 @@ export const createMockPostHog = (overrides: Partial<PostHog> = {}): PostHog =>
         reloadFeatureFlags: vi.fn(),
         _send_request: vi.fn(),
         onFeatureFlags: vi.fn().mockReturnValue(() => {}),
+        getSessionProperty: vi.fn(() => undefined),
         ...overrides,
     }) as PostHog
 

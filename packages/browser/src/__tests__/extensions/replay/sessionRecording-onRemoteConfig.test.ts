@@ -3,11 +3,15 @@
 import '@testing-library/jest-dom'
 
 import { PostHogPersistence } from '../../../posthog-persistence'
-import { SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED, SESSION_RECORDING_REMOTE_CONFIG } from '../../../constants'
+import {
+    SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
+    SDK_DEBUG_REPLAY_DISABLED_REASON,
+    SESSION_RECORDING_REMOTE_CONFIG,
+} from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE } from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
-import { FlagsResponse, PostHogConfig, Property, RemoteConfig, RemoteConfigResult } from '../../../types'
+import { FlagsResponse, PostHogConfig, Properties, Property, RemoteConfig, RemoteConfigResult } from '../../../types'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { SessionRecording } from '../../../extensions/replay/session-recording'
 import { window } from '@posthog/browser-common/utils/globals'
@@ -70,6 +74,7 @@ describe('SessionRecording', () => {
     const _addCustomEvent = vi.fn()
     const loadScriptMock = vi.fn()
     const registerForSessionMock = vi.fn()
+    const unregisterForSessionMock = vi.fn()
     let _emit: any
     let posthog: PostHog
     let sessionRecording: SessionRecording
@@ -80,6 +85,7 @@ describe('SessionRecording', () => {
     let windowIdGeneratorMock: Mock
     let removePageviewCaptureHookMock: Mock
     let simpleEventEmitter: SimpleEventEmitter
+    let sessionRegisteredProps: Properties
 
     const addRRwebToWindow = () => {
         assignableWindow.__PosthogExtensions__.rrweb = {
@@ -137,6 +143,15 @@ describe('SessionRecording', () => {
         )
 
         simpleEventEmitter = new SimpleEventEmitter()
+        // session-registered properties outlive a recorder and are dropped when the session
+        // rotates, so the fake stores them instead of only recording that a call happened
+        sessionRegisteredProps = {}
+        registerForSessionMock.mockImplementation((properties: Properties) => {
+            Object.assign(sessionRegisteredProps, properties)
+        })
+        unregisterForSessionMock.mockImplementation((property: string) => {
+            delete sessionRegisteredProps[property]
+        })
         // TODO we really need to make this a real posthog instance :cry:
         posthog = {
             get_property: (property_key: string): Property | undefined => {
@@ -157,6 +172,8 @@ describe('SessionRecording', () => {
                 },
             } as unknown as ConsentManager,
             register_for_session: registerForSessionMock,
+            unregister_for_session: unregisterForSessionMock,
+            getSessionProperty: (property_key: string): Property | undefined => sessionRegisteredProps[property_key],
             _onRemoteConfig: vi.fn(),
             _internalEventEmitter: simpleEventEmitter,
             on: vi.fn().mockImplementation((event, cb) => {
@@ -659,6 +676,138 @@ describe('SessionRecording', () => {
             // Should have cleared buffer, not flushed it
             expect(clearBufferSpy).toHaveBeenCalled()
             expect(flushBufferSpy).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('disabled reason', () => {
+        const reportedReasons = () =>
+            registerForSessionMock.mock.calls
+                .map(([properties]) => properties[SDK_DEBUG_REPLAY_DISABLED_REASON])
+                .filter((reasons) => !!reasons)
+
+        it('stays silent while the first remote config is still in flight', () => {
+            sessionRecording.initialize()
+
+            expect(reportedReasons()).toEqual([])
+            expect(posthog.unregister_for_session).not.toHaveBeenCalled()
+        })
+
+        it('names a remote config that never arrived', () => {
+            sessionRecording.onRemoteConfig({ ok: false, error: 'failed' } as unknown as RemoteConfigResult)
+
+            expect(reportedReasons()).toEqual([['remote_config_not_received']])
+        })
+
+        it('names a remote disable', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: false }))
+
+            expect(reportedReasons()).toEqual([['remote_config_disabled']])
+        })
+
+        it('names the client config switch that stopSessionRecording flips', () => {
+            posthog.config.disable_session_recording = true
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(reportedReasons()).toEqual([['client_config_disabled']])
+        })
+
+        it('names a consent opt-out', () => {
+            vi.spyOn(posthog.consent, 'isOptedOut').mockReturnValue(true)
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(reportedReasons()).toEqual([['consent_opted_out']])
+        })
+
+        it('names every cause when more than one applies', () => {
+            posthog.config.disable_session_recording = true
+            vi.spyOn(posthog.consent, 'isOptedOut').mockReturnValue(true)
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: false }))
+
+            expect(reportedReasons()).toEqual([
+                ['client_config_disabled', 'consent_opted_out', 'remote_config_disabled'],
+            ])
+        })
+
+        it('reports each cause once while it holds', () => {
+            posthog.config.disable_session_recording = true
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(reportedReasons()).toEqual([['client_config_disabled']])
+        })
+
+        it('removes the reason once recording starts', () => {
+            posthog.config.disable_session_recording = true
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            posthog.config.disable_session_recording = false
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(reportedReasons()).toEqual([['client_config_disabled']])
+            expect(posthog.unregister_for_session).toHaveBeenCalledWith(SDK_DEBUG_REPLAY_DISABLED_REASON)
+            expect(sessionRecording.started).toBe(true)
+        })
+
+        it('reports nothing when recording starts', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(reportedReasons()).toEqual([])
+        })
+
+        it('does not read a corrupt persisted config as a project disable', () => {
+            // a legacy or external write can leave a value replay cannot parse. the other read paths
+            // for this key already ignore it, and it says nothing about what the project chose
+            posthog.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: '{not json' })
+
+            sessionRecording.onRemoteConfig({ ok: false, error: 'failed' } as unknown as RemoteConfigResult)
+
+            expect(reportedReasons()).toEqual([['remote_config_not_received']])
+        })
+
+        it('names a remote disable stored as serialized JSON', () => {
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: JSON.stringify({ enabled: false, endpoint: '/s/' }),
+            })
+
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(reportedReasons()).toEqual([['remote_config_disabled']])
+        })
+
+        it('drops a reason the session carried over from a previous page load', () => {
+            // a same-tab reload keeps the PostHog session and restores its properties, but builds a
+            // brand new recorder. the reason stored before the reload must not stay on a session
+            // that is now recording
+            sessionRegisteredProps[SDK_DEBUG_REPLAY_DISABLED_REASON] = ['client_config_disabled']
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(posthog.unregister_for_session).toHaveBeenCalledWith(SDK_DEBUG_REPLAY_DISABLED_REASON)
+            expect(sessionRegisteredProps[SDK_DEBUG_REPLAY_DISABLED_REASON]).toBeUndefined()
+            expect(sessionRecording.started).toBe(true)
+        })
+
+        it('registers the reason again when the session rotates', () => {
+            posthog.config.disable_session_recording = true
+            // posthog-core drops every session-registered property from its own session id handler,
+            // which it adds before any extension exists and so runs before the recorder's
+            sessionManager.onSessionId(() => {
+                sessionRegisteredProps = {}
+            })
+            sessionRecording.initialize()
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            expect(sessionRegisteredProps[SDK_DEBUG_REPLAY_DISABLED_REASON]).toEqual(['client_config_disabled'])
+
+            sessionManager.resetSessionId()
+            sessionManager.checkAndGetSessionAndWindowId(false, Date.now())
+
+            // a session that stays disabled must keep naming the cause, or the reason is missing
+            // from every event after the rotation
+            expect(sessionRegisteredProps[SDK_DEBUG_REPLAY_DISABLED_REASON]).toEqual(['client_config_disabled'])
         })
     })
 })

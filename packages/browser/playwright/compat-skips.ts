@@ -15,6 +15,11 @@ import { satisfies } from 'compare-versions'
  */
 export const compatSkips: { range: string; test: string; reason: string }[] = [
     {
+        range: '<1.429.6',
+        test: 'disabled reason',
+        reason: '$sdk_debug_replay_disabled_reason is registered by the core, so an older array.js reports nothing',
+    },
+    {
         range: '<1.417.0',
         test: 'already-open sibling subdomains adopt identify and reset cookie changes',
         reason: 'live cross-subdomain cookie reconciliation is added by this change',

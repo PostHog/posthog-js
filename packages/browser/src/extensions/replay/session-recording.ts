@@ -1,6 +1,7 @@
 import {
     COOKIELESS_ALWAYS,
     SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
+    SDK_DEBUG_REPLAY_DISABLED_REASON,
     RECORDING_REMOTE_CONFIG_TTL_MS,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_SAMPLE_RATE,
@@ -21,7 +22,7 @@ import {
 } from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
 
-import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
+import { isArray, isNullish, isNumber, isObject, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
@@ -35,6 +36,14 @@ import {
     TriggerType,
 } from './external/triggerMatching'
 import type { Extension } from '../types'
+
+type ReplayDisabledReason =
+    | 'client_config_disabled'
+    | 'consent_opted_out'
+    | 'remote_config_disabled'
+    | 'remote_config_not_received'
+    | 'unsupported_browser'
+    | 'unsupported_environment'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -62,8 +71,10 @@ export class SessionRecording implements Extension {
     }
 
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
+    private _syncDisabledReasonOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
     private _sessionRecordingDisposed = false
+    private _remoteConfigLoadFailed = false
     private _documentWasEverVisible = hasDocumentEverBeenVisible()
 
     private _onVisibilityChange = (): void => {
@@ -103,10 +114,17 @@ export class SessionRecording implements Extension {
 
     initialize() {
         this.startIfEnabledOrStop()
+        // the core drops every session-registered property when the session rotates, so a reason
+        // that still holds has to be written again against the new session
+        this._syncDisabledReasonOnSessionListener = this._instance.sessionManager?.onSessionId(
+            this._syncDisabledReasonProperty
+        )
     }
 
     dispose({ discardBufferedEvents = false }: { discardBufferedEvents?: boolean } = {}): void {
         this._sessionRecordingDisposed = true
+        this._syncDisabledReasonOnSessionListener?.()
+        this._syncDisabledReasonOnSessionListener = undefined
         document?.removeEventListener?.('visibilitychange', this._onVisibilityChange)
         if (discardBufferedEvents) {
             this._discardRecording(true)
@@ -115,11 +133,97 @@ export class SessionRecording implements Extension {
         }
     }
 
+    /**
+     * Names every reason replay will not run, so diagnostics can tell a `posthog.stopSessionRecording()`
+     * call apart from a remote disable, a consent opt-out, or an environment replay cannot run in.
+     * Without this all of them report the single status "disabled" and the cause can only be found
+     * by reading the customer's own code.
+     *
+     * A remote config that has not arrived yet is not a reason: it covers the first events of nearly
+     * every page load. Only a failed load is named, because that leaves replay off for the session.
+     */
+    private get _recordingDisabledReasons(): ReplayDisabledReason[] {
+        const reasons: ReplayDisabledReason[] = []
+        if (!window) {
+            reasons.push('unsupported_environment')
+        }
+        if (this._config.disable_session_recording) {
+            reasons.push('client_config_disabled')
+        }
+        if (this._instance.consent.isOptedOut()) {
+            reasons.push('consent_opted_out')
+        }
+        const remoteConfig = this._persistedRemoteConfig
+        if (remoteConfig && !remoteConfig.enabled) {
+            reasons.push('remote_config_disabled')
+        } else if (!remoteConfig && this._remoteConfigLoadFailed) {
+            reasons.push('remote_config_not_received')
+        }
+        return reasons
+    }
+
+    /**
+     * Usually an object the SDK wrote, but a legacy or external write can leave a serialized string
+     * or a value that is not a config at all, so resolve it the way the sibling read paths
+     * (`_isRemoteConfigFresh`, and the recorder's own `_remoteConfig`) already do. A value we cannot
+     * read says nothing about what the project chose, and must not be reported as a server disable.
+     * `_isRemoteConfigFresh` warns about a corrupt value on the same start path, so this read stays
+     * quiet instead of repeating that once per report.
+     */
+    private get _persistedRemoteConfig(): SessionRecordingPersistedConfig | undefined {
+        const persistedConfig: any = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+        if (!persistedConfig) {
+            return undefined
+        }
+        let config: SessionRecordingPersistedConfig
+        try {
+            config = isObject(persistedConfig) ? persistedConfig : JSON.parse(persistedConfig)
+        } catch {
+            return undefined
+        }
+        return isObject(config) ? config : undefined
+    }
+
     private get _isRecordingEnabled() {
-        const enabled_server_side = !!this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)?.enabled
-        const enabled_client_side = !this._config.disable_session_recording
-        const isDisabled = this._config.disable_session_recording || this._instance.consent.isOptedOut()
-        return window && enabled_server_side && enabled_client_side && !isDisabled
+        const enabledServerSide = !!this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)?.enabled
+        return enabledServerSide && !this._recordingDisabledReasons.length
+    }
+
+    private _disabledReasons: ReplayDisabledReason[] = []
+    private _lastLoggedDisabledReason = ''
+
+    private _reportDisabledReasons(reasons: ReplayDisabledReason[]): void {
+        this._disabledReasons = reasons
+        this._syncDisabledReasonProperty()
+
+        const reason = reasons.join(', ')
+        // log on change only, so a repeated start attempt doesn't repeat the same line
+        if (reasons.length && reason !== this._lastLoggedDisabledReason) {
+            logger.info(`not started: ${reason}`)
+        }
+        this._lastLoggedDisabledReason = reason
+    }
+
+    /**
+     * The reason is registered for the session, but the recorder holding it is not session scoped.
+     * A same-tab reload hands a fresh recorder a session that still carries the reason stored before
+     * the reload, and a session rotation drops every session property from under a live recorder.
+     * So compare the reasons that hold now against what the session actually carries, never against
+     * what this recorder last wrote: otherwise a session that is recording can keep reporting itself
+     * disabled, and a session that stays disabled can go quiet for the rest of its life.
+     */
+    private _syncDisabledReasonProperty = (): void => {
+        const registered = this._instance.getSessionProperty(SDK_DEBUG_REPLAY_DISABLED_REASON)
+        const registeredReason = isArray(registered) ? registered.join(', ') : undefined
+        if (this._disabledReasons.length) {
+            if (registeredReason !== this._disabledReasons.join(', ')) {
+                this._instance.register_for_session({
+                    [SDK_DEBUG_REPLAY_DISABLED_REASON]: this._disabledReasons,
+                })
+            }
+        } else if (!isUndefined(registered)) {
+            this._instance.unregister_for_session(SDK_DEBUG_REPLAY_DISABLED_REASON)
+        }
     }
 
     startIfEnabledOrStop(startReason?: SessionStartReason) {
@@ -139,6 +243,11 @@ export class SessionRecording implements Extension {
         // Instead, when we load "recorder.js", the first JS error is about "Object.assign" and "Array.from" being undefined.
         // Thus instead of MutationObserver, we look for this function and block recording if it's undefined.
         const canRunReplay = !isUndefined(Object.assign) && !isUndefined(Array.from)
+        const disabledReasons = this._recordingDisabledReasons
+        if (!canRunReplay) {
+            disabledReasons.push('unsupported_browser')
+        }
+        this._reportDisabledReasons(disabledReasons)
         if (this._isRecordingEnabled && canRunReplay) {
             this._lazyLoadAndStart(startReason)
             logger.info('starting')
@@ -187,6 +296,7 @@ export class SessionRecording implements Extension {
                         this._instance.sessionManager !== sessionManager
                     ) {
                         this._recordingStatus = DISABLED
+                        this._reportDisabledReasons(this._recordingDisabledReasons)
                         return
                     }
                     if (err) {
@@ -297,6 +407,7 @@ export class SessionRecording implements Extension {
     }
 
     onRemoteConfig(result: RemoteConfigResult) {
+        this._remoteConfigLoadFailed = !result.ok
         // A failed fetch and a response without a sessionRecording key behave the same:
         // no fresh server config arrived, so fall back to whatever is already persisted.
         const response = result.ok ? result.config : undefined
@@ -310,6 +421,7 @@ export class SessionRecording implements Extension {
         }
         if (response.sessionRecording === false) {
             this._persistRemoteConfig(response)
+            this._reportDisabledReasons(this._recordingDisabledReasons)
             this._discardRecording()
             return
         }
@@ -359,6 +471,7 @@ export class SessionRecording implements Extension {
     private _onScriptLoaded(startReason?: SessionStartReason) {
         if (this._sessionRecordingDisposed || !this._isRecordingEnabled || !this._instance.sessionManager) {
             this._recordingStatus = DISABLED
+            this._reportDisabledReasons(this._recordingDisabledReasons)
             return
         }
 
