@@ -22,12 +22,22 @@ const createPostHogWithAnalytics = (options: CorePostHogOptions) =>
     createPostHog({ ...options, extensions: [immediateAnalytics(), ...(options.extensions ?? [])] })
 
 describe('@posthog/browser core', () => {
-    it('requires a project token in options', async () => {
-        // @ts-expect-error Verify the runtime guard for untyped JavaScript consumers.
-        await expect(createPostHog()).rejects.toThrow('A PostHog project token is required')
-        // @ts-expect-error Verify the runtime guard for untyped JavaScript consumers.
-        await expect(createPostHog({})).rejects.toThrow('A PostHog project token is required')
-        await expect(createPostHog({ projectToken: '' })).rejects.toThrow('A PostHog project token is required')
+    it.each([createPostHog, createAutomaticPostHog])('disables clients without a project token', async (create) => {
+        const clients = [
+            // @ts-expect-error Verify untyped JavaScript consumers.
+            await create(),
+            // @ts-expect-error Verify untyped JavaScript consumers.
+            await create({}),
+            await create({ projectToken: '' }),
+        ]
+        for (const client of clients) {
+            expect(client.canCapture).toBe(false)
+            expect(() => client.capture('disabled')).not.toThrow()
+            expect(await client.sendRequest('/test')).toMatchObject({ statusCode: 0 })
+            client.optIn()
+            expect(client.canCapture).toBe(false)
+            await client.shutdown()
+        }
     })
 
     it('admits capture synchronously and returns void', async () => {
@@ -64,7 +74,7 @@ describe('@posthog/browser core', () => {
         await posthog.flush()
 
         expect(requests).toHaveLength(0)
-        expect(posthog.getExtension('analytics')).toBeUndefined()
+        expect(posthog.getExtension('analytics')).toBeDefined()
         await posthog.dispose()
     })
 

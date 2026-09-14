@@ -2,7 +2,7 @@
 
 An experimental PostHog client for modern browsers.
 
-The package root contains the capture host and a bounded in-memory analytics queue. By default, the first successfully admitted event loads first-party Capture Analytics V1 delivery through a literal dynamic import. Consent-denied, bot-filtered, and rejected events do not load it.
+The client installs one analytics extension with a bounded in-memory buffer during initialization. By default, the first successfully admitted event lazily loads its queue scheduling and Capture Analytics V1 delivery machinery. Consent-denied, bot-filtered, and rejected events do not load delivery.
 
 ```ts
 import { createPostHog } from '@posthog/browser'
@@ -12,7 +12,7 @@ posthog.capture('signed_up')
 await posthog.flush()
 ```
 
-Configure automatic scheduling or load analytics while the client initializes:
+Configure automatic scheduling or load delivery while the client initializes:
 
 ```ts
 const posthog = await createPostHog({
@@ -21,7 +21,7 @@ const posthog = await createPostHog({
 })
 ```
 
-A preinstalled analytics extension satisfies delivery without triggering a duplicate automatic load, and its constructor options apply:
+Importing `@posthog/browser/analytics` statically includes both buffering and delivery. Supplying its extension selects that instance and its constructor options instead of automatic delivery loading:
 
 ```ts
 import { analytics } from '@posthog/browser/analytics'
@@ -32,9 +32,11 @@ const posthog = await createPostHog({
 })
 ```
 
-Use `analytics: false` to keep the default entrypoint buffer-only, or import `createPostHog` from `@posthog/browser/core` for a graph with no analytics dynamic-import reference. Client-owned extensions are supplied through `extensions` when the client is created.
+Use `analytics: false` to keep the default entrypoint buffer-only, or import `createPostHog` from `@posthog/browser/core` for a graph with no delivery dynamic-import reference. Both modes retain the analytics extension and its buffer. `getExtension('analytics')` returns the same instance before and after delivery loads; its presence alone does not indicate that delivery is available. Analytics initializes before other configured extensions so they can capture during setup. Other extensions retain their configured order.
 
-`capture()` admits an event to the queue synchronously and does not wait for code or network delivery. `flush()` waits for an in-progress automatic load and retries a failed first load once when explicitly asked to flush; without available delivery it resolves without discarding unexpired queued events. Core admission retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
+`capture()` admits an event to the queue synchronously and does not wait for code or network delivery. With pending queued work, `flush()` joins an in-progress delivery load and can retry failed automatic loading; without available delivery it resolves without discarding unexpired queued events. Analytics retains at most 1,000 queued events and 8 MiB of active-plus-queued finalized analytics messages; queued work expires strictly after one hour on the next queue interaction. Queue overflow evicts the oldest queued prefix, while active bytes cannot be recalled and can cause a new event to be rejected.
+
+Queued and immediate capture omit null or undefined object properties from delivered events, including nested objects and objects inside arrays. Array positions are preserved; null and undefined array entries are sent as JSON `null`. Events with no remaining custom properties are still delivered with their SDK metadata.
 
 Use `captureImmediate()` only when the caller needs a terminal delivery outcome before continuing:
 
@@ -49,7 +51,7 @@ if (summary.error) {
 
 Immediate capture finalizes the event through the same consent, identity, session, protected-property, size, and rate-limit boundaries, then bypasses the lane and sends inline through the same Capture V1 sender. A valid `2xx` resolves to a `CaptureSummary`; `drop`, final `retry`, and missing outcomes set `allPersisted` to `false`, while `warning` counts as persisted. Terminal HTTP failures, exhausted transport retries, malformed responses, cancellation, and unavailable delivery resolve with `summary.error` and `allPersisted: false`, retaining any known partial outcomes. These failures do not reject the promise. Local non-admission resolves an empty summary, so durability-sensitive callers must check both `submitted` and `allPersisted`. Immediate requests can overtake buffered events and run concurrently with each other; they are never retained for a later `flush()`. An observed consent denial permanently cancels pending immediate dispatch and retries, even if the user opts in again; already-dispatched requests may finish.
 
-The default entrypoint loads analytics on the first admitted immediate call. The core entrypoint supports immediate capture only when `analytics()` was explicitly installed through `extensions`; otherwise it resolves with an unavailable-delivery error without adding a delivery import to the core graph.
+The default entrypoint loads delivery on the first admitted immediate call. The core entrypoint supports immediate capture only when `analytics()` was explicitly installed through `extensions`; otherwise it resolves with an unavailable-delivery error without adding a delivery import to the core graph.
 
 The analytics extension sends FIFO Capture V1 batches of at most 100 events and partitions large backlogs by exact uncompressed envelope size. `flushAt` defaults to 20 and triggers delivery by queued count; `flushInterval` defaults to 3,000 milliseconds and triggers delivery by age. Set `flushInterval: 0` to disable timer delivery. Explicit `flush()` and shutdown bypass both thresholds. Retry-exhausted transient failures remain in the bounded lane for a later interval, reconnect, or explicit flush rather than hot-looping or being discarded.
 

@@ -15,7 +15,7 @@ const forbiddenInputs = [
     /(^|\/)\.\.\/rrweb\//,
     /(^|\/)node_modules\/(posthog-js|@posthog\/core|core-js|dompurify|fflate|preact|rrweb|web-vitals)\//,
 ]
-const analyticsInput = /(^|\/)(capture-v1|analytics)\.(m?js|ts)$/
+const analyticsInput = /(^|\/)(capture-v1|analytics|automatic-analytics|analytics-delivery|lane)\.(m?js|ts)$/
 const buildOptions = {
     absWorkingDir: packageRoot,
     bundle: true,
