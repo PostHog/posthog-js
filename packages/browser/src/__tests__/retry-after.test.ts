@@ -91,6 +91,8 @@ describe.each(['fetch', 'XHR'] as const)('Retry-After through %s and RetryQueue'
     it.each([
         ['20', 20_000],
         [' 20 ', 20_000],
+        ['60, 120', 30_000],
+        ['20, 120', 20_000],
         ['Thu, 01 Jan 2026 00:00:20 GMT', 20_000],
         ['120', 30_000],
         ['Thu, 01 Jan 2026 00:02:00 GMT', 30_000],
@@ -112,6 +114,8 @@ describe.each(['fetch', 'XHR'] as const)('Retry-After through %s and RetryQueue'
         ['NaN', 3000],
         ['invalid', 3000],
         ['20 seconds', 3000],
+        ['2026-01-01T00:00:20Z', 3000],
+        ['Jan 1 2026 00:00:20 GMT', 3000],
         ['2026', 30_000],
         ['Thu, 01 Jan 2026 00:00:00 GMT', 3000],
         ['Wed, 31 Dec 2025 23:59:00 GMT', 3000],

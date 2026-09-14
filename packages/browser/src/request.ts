@@ -23,6 +23,7 @@ import {
     isNativeAsyncGzipError,
     isNativeAsyncGzipReadError,
     isUndefined,
+    parseRetryAfterMs,
 } from '@posthog/core'
 
 export { jsonStringify }
@@ -267,22 +268,8 @@ const isExpectedNetworkError = (error: unknown): boolean => {
 // retried early, but the queue's jittered exponential backoff is never shortened.
 const readRetryAfter = (getHeader: () => string | null): number | undefined => {
     try {
-        const value = getHeader()?.trim()
-        if (!value) {
-            return undefined
-        }
-        // Do not let Date.parse interpret malformed seconds (e.g. "1.5") as a date.
-        let delay: number
-        if (/^\d+$/.test(value)) {
-            delay = Math.min(Number(value), 30) * 1000
-        } else if (/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,]/.test(value)) {
-            // The obsolete asctime HTTP-date format omits the timezone, but is still GMT.
-            const date = /^\w{3} \w{3} /.test(value) ? value + ' GMT' : value
-            delay = Date.parse(date) - Date.now()
-        } else {
-            return undefined
-        }
-        return isFinite(delay) && delay > 0 ? Math.min(delay, 30_000) : undefined
+        const delay = parseRetryAfterMs(getHeader())
+        return isUndefined(delay) ? undefined : Math.min(delay, 30_000)
     } catch {
         // Cross-origin headers may not be exposed, or a header accessor may throw.
         return undefined

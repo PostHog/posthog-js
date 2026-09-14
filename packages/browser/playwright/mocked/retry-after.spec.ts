@@ -53,7 +53,14 @@ test.describe('Retry-After CORS exposure', () => {
                 res.setHeader('Access-Control-Expose-Headers', 'Retry-After')
             }
             if (!key.includes('missing')) {
-                res.setHeader('Retry-After', key.includes('date') ? new Date(Date.now() + 8000).toUTCString() : '8')
+                res.setHeader(
+                    'Retry-After',
+                    key.includes('repeated')
+                        ? ['8', '120']
+                        : key.includes('date')
+                          ? new Date(Date.now() + 8000).toUTCString()
+                          : '8'
+                )
             }
             res.statusCode = key.includes('terminal') ? 429 : times.length === 1 ? 503 : 200
             res.end(res.statusCode === 200 ? '{}' : '')
@@ -67,7 +74,15 @@ test.describe('Retry-After CORS exposure', () => {
     })
 
     for (const transport of ['fetch', 'XHR']) {
-        for (const mode of ['exposed', 'exposed-date', 'hidden', 'missing', 'terminal-exposed']) {
+        for (const mode of [
+            'exposed',
+            'exposed-date',
+            'exposed-repeated',
+            'hidden',
+            'hidden-repeated',
+            'missing',
+            'terminal-exposed',
+        ]) {
             test(`${transport}: ${mode}`, async ({ page }) => {
                 const key = `/${transport}-${mode}`
                 await page.goto('/playground/cypress/index.html')
@@ -96,7 +111,9 @@ test.describe('Retry-After CORS exposure', () => {
                     contentType: 'application/json',
                 })
                 // HTTP dates have one-second precision, unlike delta-seconds.
-                expect(delay).toBeGreaterThanOrEqual(mode === 'exposed' ? 8000 : mode === 'exposed-date' ? 7000 : 3000)
+                expect(delay).toBeGreaterThanOrEqual(
+                    mode === 'exposed-date' ? 7000 : mode.startsWith('exposed') ? 8000 : 3000
+                )
                 if (!mode.startsWith('exposed')) {
                     expect(delay).toBeLessThan(8000)
                 }

@@ -5,8 +5,8 @@ import type { PostHog } from '../posthog-core'
 import type { RequestWithOptions } from '../types'
 
 const mockTransport = vi.hoisted(() => vi.fn())
-vi.mock('../posthog-core', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('../posthog-core')>()),
+vi.mock('../request-dispatch', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../request-dispatch')>()),
     sendRequest: (_instance: PostHog, options: RequestWithOptions, callback: TransportCallback) =>
         mockTransport({ ...options, callback }),
 }))

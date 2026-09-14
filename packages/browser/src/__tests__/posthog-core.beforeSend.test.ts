@@ -1,7 +1,8 @@
 import { mockLogger } from './helpers/mock-logger'
 
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
-import { defaultPostHog } from './helpers/posthog-instance'
+import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
+import * as transport from '../request'
 import { CaptureResult, PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { knownUnsafeEditableEvent, UUID_REGEX } from '@posthog/core'
@@ -63,6 +64,48 @@ describe('posthog core - before send', () => {
         expect(posthog._send_retriable_request).not.toHaveBeenCalled()
         expect(mockLogger.info).toHaveBeenCalledWith(`Event '${eventName}' was rejected in beforeSend function`)
     })
+
+    it.each([true, false])(
+        'can collect an event without native delivery when before_send returns null (batching: %s)',
+        async (request_batching) => {
+            const collected: CaptureResult[] = []
+            const posthog = await createPosthogInstance(uuidv7(), {
+                request_batching,
+                capture_pageview: false,
+                autocapture: false,
+                disable_session_recording: true,
+                advanced_disable_feature_flags: true,
+                before_send: (event) => {
+                    collected.push(event)
+                    return null
+                },
+            })
+            const enqueue = vi.spyOn(posthog._requestQueue!, 'enqueue')
+            const retry = vi.spyOn(posthog._retryQueue!, 'retriableRequest')
+            const send = vi.spyOn(transport, 'request')
+            try {
+                expect(posthog.capture(eventName, { source: 'collector' })).toBeUndefined()
+                await vi.advanceTimersByTimeAsync(30_000)
+
+                expect(collected).toEqual([
+                    expect.objectContaining({
+                        event: eventName,
+                        uuid: expect.stringMatching(UUID_REGEX),
+                        properties: expect.objectContaining({ source: 'collector' }),
+                    }),
+                ])
+                expect(enqueue).not.toHaveBeenCalled()
+                expect(retry).not.toHaveBeenCalled()
+                expect(send).not.toHaveBeenCalled()
+            } finally {
+                enqueue.mockRestore()
+                retry.mockRestore()
+                send.mockRestore()
+                posthog._requestQueue?.unload()
+                posthog._retryQueue?.unload()
+            }
+        }
+    )
 
     it('can edit an event', () => {
         const posthog = posthogWith({
