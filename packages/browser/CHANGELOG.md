@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.431.4
+
+### Patch Changes
+
+- [#4952](https://github.com/PostHog/posthog-js/pull/4952) [`4f8076b`](https://github.com/PostHog/posthog-js/commit/4f8076b01a5d2bff228b67e2d00bb71c6848aebf) Thanks [@marandaneto](https://github.com/marandaneto)! - Support clickable `[label](url)` links in Conversations widget greetings.
+  (2026-09-14)
+
+- [#4835](https://github.com/PostHog/posthog-js/pull/4835) [`03e45b6`](https://github.com/PostHog/posthog-js/commit/03e45b6246a28909c2c7f1754203bc99a54e2c23) Thanks [@posthog](https://github.com/apps/posthog)! - Fix identical person property retries being dropped after the original capture was rejected.
+  (2026-09-14)
+
 ## 1.431.3
 
 ### Patch Changes
