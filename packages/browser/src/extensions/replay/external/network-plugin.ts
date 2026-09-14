@@ -890,7 +890,12 @@ function initNetworkObserver(
         options ? Object.assign({}, defaultNetworkOptions, options) : defaultNetworkOptions
     ) as Required<NetworkRecordOptions>
 
+    let active = true
     const cb: networkCallback = (data) => {
+        // Body reads and timing lookups can finish after this observer is replaced.
+        if (!active) {
+            return
+        }
         const requests: CapturedNetworkRequest[] = []
         let parentRequestDropped = false
         data.requests.forEach((request) => {
@@ -929,6 +934,7 @@ function initNetworkObserver(
     }
 
     initialisedHandler = () => {
+        active = false
         performanceObserver()
         xhrObserver()
         fetchObserver()
