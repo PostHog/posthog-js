@@ -3,8 +3,12 @@ import { PostHog, PostHogSessionReplayConfig } from '../src'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
 import { waitForExpect } from './test-utils'
 
+const pluginVersion = vi.hoisted(() => ({ value: undefined as string | undefined }))
+
 vi.mock('../src/optional/OptionalPlugin', () => ({
-  OptionalReactNativePluginVersion: undefined,
+  get OptionalReactNativePluginVersion() {
+    return pluginVersion.value
+  },
   OptionalReactNativePlugin: {
     start: vi.fn(async () => {}),
     startSession: vi.fn(async () => {}),
@@ -27,6 +31,7 @@ describe.each(['setup', 'start'] as const)('replay touch configuration through n
 
   beforeEach(() => {
     vi.clearAllMocks()
+    pluginVersion.value = undefined
     if (method === 'setup') {
       replay.setup = vi.fn(async () => {})
     }
@@ -84,6 +89,77 @@ describe.each(['setup', 'start'] as const)('replay touch configuration through n
     expect(replay[method]).toHaveBeenCalledTimes(1)
     const config = replay[method]!.mock.calls[0][2]
     expect((method === 'setup' ? config.sessionReplay.sdkReplayConfig : config).captureTouches).toBe(false)
+  })
+})
+
+describe.each(['setup', 'start'] as const)('replay touch compatibility warnings through native %s', (method) => {
+  vi.useRealTimers()
+  let posthog: PostHog
+  let warnSpy: vi.SpyInstance
+  let logSpy: vi.SpyInstance
+  let fetchSpy: vi.SpyInstance
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      status: 200,
+      json: async () => ({}),
+    } as Response)
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    if (method === 'setup') {
+      replay.setup = vi.fn(async () => {})
+    }
+  })
+
+  afterEach(async () => {
+    await posthog?.shutdown()
+    warnSpy.mockRestore()
+    logSpy.mockRestore()
+    fetchSpy.mockRestore()
+    pluginVersion.value = undefined
+    delete replay.setup
+  })
+
+  async function initialize(version: string | undefined, captureTouches?: boolean) {
+    pluginVersion.value = version
+    posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      disableRemoteConfig: true,
+      enableSessionReplay: true,
+      flushInterval: 0,
+      sessionReplayConfig: { captureTouches },
+    })
+    posthog.debug(true)
+    await posthog.ready()
+    await waitForExpect(2000, () => expect(replay[method]).toHaveBeenCalledTimes(1))
+    return warnSpy.mock.calls.map((args) => args.join(' ')).filter((message) => message.includes('captureTouches'))
+  }
+
+  it.each([undefined, '', 'unknown', '2.8.1', '2.8.99', '1.99.0', '2.9.0-beta.1'])(
+    'warns when disabling touch capture with plugin version %s',
+    async (version) => {
+      const warnings = await initialize(version, false)
+
+      expect(warnings).toHaveLength(1)
+      expect(warnings[0]).toContain('@posthog/react-native-plugin 2.9.0 or later')
+      expect(warnings[0]).toContain('may still record touch coordinates')
+      expect(warnings[0]).toContain('rebuild')
+      const config = replay[method]!.mock.calls[0][2]
+      expect((method === 'setup' ? config.sessionReplay.sdkReplayConfig : config).captureTouches).toBe(false)
+      expect(OptionalReactNativePlugin.stopRecording).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['2.9.0', '2.9.1', '2.10.0', '3.0.0', '2.9.0+build.1'])(
+    'does not warn for supported plugin version %s',
+    async (version) => {
+      expect(await initialize(version, false)).toEqual([])
+    }
+  )
+
+  it.each([undefined, true])('does not warn when captureTouches is %s', async (captureTouches) => {
+    expect(await initialize('2.8.1', captureTouches)).toEqual([])
   })
 })
 
