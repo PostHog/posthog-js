@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.431.3
+
+### Patch Changes
+
+- [#4948](https://github.com/PostHog/posthog-js/pull/4948) [`3acf287`](https://github.com/PostHog/posthog-js/commit/3acf2875215094163d5d3f0cf58e50d90a3e1126) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix replay cleanup when the host's children are removed before destroying the player.
+  (2026-09-14)
+
 ## 1.431.2
 
 ### Patch Changes
