@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.430.4
+
+### Patch Changes
+
+- [#4946](https://github.com/PostHog/posthog-js/pull/4946) [`aeaea15`](https://github.com/PostHog/posthog-js/commit/aeaea15010ad25ed4c04d4a1dff74e008a1ada83) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix console capture continuing after stop or duplicating after restart when another library wraps the console.
+  (2026-09-14)
+
 ## 1.430.3
 
 ### Patch Changes
