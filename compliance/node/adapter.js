@@ -5,7 +5,8 @@
  */
 
 const express = require('express')
-const { PostHog } = require('../packages/node/dist/entrypoints/index.node')
+const { gunzipSync } = require('node:zlib')
+const { PostHog } = require('../../packages/node')
 
 const app = express()
 app.use(express.json())
@@ -31,7 +32,6 @@ const state = {
     totalRetries: 0,
     lastError: null,
     requestsMade: [],
-    pendingEvents: 0,
 }
 
 async function discardClient() {
@@ -45,14 +45,13 @@ async function discardClient() {
     // Test resets should discard queued events instead of flushing them into
     // the next mock-server scenario.
     try {
-        client.clearFlushTimer?.()
         client.setPersistedProperty?.('queue', [])
         // v1 mode routes $ai_* events to a separate queue, and captureAi() events to
         // their own dedicated queue; clear both so they can't leak into the next scenario.
         client.setPersistedProperty?.('ai_queue', [])
         client.setPersistedProperty?.('ai_capture_queue', [])
         await client.shutdown(1)
-    } catch (error) {
+    } catch {
         // Ignore reset-time shutdown errors; the next test starts with a fresh client.
     }
 }
@@ -60,7 +59,7 @@ async function discardClient() {
 app.get('/health', (req, res) => {
     res.json({
         sdk_name: 'posthog-node',
-        sdk_version: require('../packages/node/package.json').version,
+        sdk_version: require('../../packages/node/package.json').version,
         adapter_version: '1.0.0',
         capabilities:
             CAPTURE_MODE === 'v1'
@@ -89,7 +88,6 @@ app.post('/init', async (req, res) => {
     state.totalRetries = 0
     state.lastError = null
     state.requestsMade = []
-    state.pendingEvents = 0
 
     // Create new client
     state.client = new PostHog(api_key, {
@@ -104,50 +102,63 @@ app.post('/init', async (req, res) => {
         // within their wait windows (the mock also sends Retry-After: 1s).
         fetchRetryDelay: CAPTURE_MODE === 'v1' ? 250 : undefined,
         disableCompression: enable_compression === undefined ? undefined : !enable_compression,
-        disableGeoip: disable_geoip ?? false,
+        disableGeoip: disable_geoip,
         historicalMigration: historical_migration ?? undefined,
         // Capture V1 opt-in is env-var-only: the SDK reads POSTHOG_CAPTURE_MODE
         // (set by docker-compose / Dockerfile.v1) itself, so no option is passed.
-        // Use before_send to track events being sent
-        before_send: (event) => {
-            // Track that event is being sent
-            // Note: This runs before the HTTP request
-            return event
-        },
-        // Override fetch to track HTTP requests
+        // Observe the real fetch without changing the request, response, or retry policy.
         fetch: async (url, options) => {
+            const started = Date.now()
             const response = await fetch(url, options)
-
-            // Track the request
+            if (new URL(url).pathname === '/flags/') return response
             try {
-                const body = options?.body ? JSON.parse(options.body) : null
-                const events = body?.batch || (body ? [body] : [])
-
+                const headers = new Headers(options.headers)
+                const bytes = Buffer.from(options.body)
+                const body = JSON.parse(
+                    (headers.get('content-encoding') === 'gzip' ? gunzipSync(bytes) : bytes).toString()
+                )
+                const events = body.batch || []
+                const uuids = events.map((event) => event.uuid)
+                const retryAttempt = headers.has('posthog-attempt')
+                    ? Number(headers.get('posthog-attempt')) - 1
+                    : Math.max(
+                          0,
+                          ...uuids.map((uuid) => state.requestsMade.filter((r) => r.uuid_list.includes(uuid)).length)
+                      )
                 state.requestsMade.push({
-                    timestamp_ms: Date.now(),
+                    timestamp_ms: started,
                     status_code: response.status,
-                    retry_attempt: 0,
+                    retry_attempt: retryAttempt,
                     event_count: events.length,
-                    uuid_list: events.map(e => e.uuid).filter(Boolean),
+                    uuid_list: uuids,
                 })
-
-                if (response.status === 200) {
-                    state.totalEventsSent += events.length
-                    state.pendingEvents -= events.length
-                    if (state.pendingEvents < 0) state.pendingEvents = 0
+                state.totalRetries += retryAttempt > 0 ? 1 : 0
+                if (response.status >= 200 && response.status < 300) {
+                    const result = await response
+                        .clone()
+                        .json()
+                        .catch(() => ({}))
+                    const accepted = result.results
+                        ? uuids.filter((uuid) => !['drop', 'retry'].includes(result.results[uuid]?.result)).length
+                        : events.length
+                    state.totalEventsSent += accepted
                 }
-            } catch (e) {
-                // Ignore parsing errors
+            } catch (error) {
+                state.lastError = `Request observation failed: ${error.message}`
             }
-
             return response
         },
+    })
+    state.client.on('capture', (message) => {
+        if (typeof message === 'object') {
+            state.totalEventsCaptured++
+        }
     })
 
     res.json({ success: true })
 })
 
-app.post('/capture', (req, res) => {
+app.post('/capture', async (req, res) => {
     if (!state.client) {
         return res.status(400).json({ error: 'SDK not initialized' })
     }
@@ -161,7 +172,7 @@ app.post('/capture', (req, res) => {
     try {
         // Translate harness EventOptions into the SDK's sentinel properties; the SDK
         // lifts them into the v1 event `options` object (no-op in v0 mode).
-        const mergedProperties = { ...(properties || {}) }
+        const mergedProperties = { ...properties }
         if (options && typeof options === 'object') {
             for (const [optionKey, sentinel] of Object.entries(OPTION_SENTINELS)) {
                 if (Object.prototype.hasOwnProperty.call(options, optionKey)) {
@@ -171,18 +182,33 @@ app.post('/capture', (req, res) => {
         }
 
         // Capture event
-        state.client.capture({
-            distinctId: distinct_id,
-            event,
-            properties: mergedProperties,
-            timestamp: timestamp ? new Date(timestamp) : undefined,
+        const captured = new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                remove()
+                reject(new Error('SDK did not enqueue the event'))
+            }, 5000)
+            const remove = state.client.on('capture', (message) => {
+                if (message?.event === event && message?.distinct_id === distinct_id) {
+                    clearTimeout(timer)
+                    remove()
+                    resolve(message.uuid)
+                }
+            })
+            try {
+                state.client.capture({
+                    distinctId: distinct_id,
+                    event,
+                    properties: mergedProperties,
+                    timestamp: timestamp ? new Date(timestamp) : undefined,
+                })
+            } catch (error) {
+                clearTimeout(timer)
+                remove()
+                reject(error)
+            }
         })
 
-        state.totalEventsCaptured++
-        state.pendingEvents++
-
-        // TODO: Get actual UUID from SDK
-        res.json({ success: true, uuid: 'generated-uuid' })
+        res.json({ success: true, uuid: await captured })
     } catch (error) {
         state.lastError = error.message
         res.status(500).json({ error: error.message })
@@ -201,7 +227,7 @@ app.post('/capture_ai', (req, res) => {
     }
 
     try {
-        const mergedProperties = { ...(properties || {}) }
+        const mergedProperties = { ...properties }
         if (options && typeof options === 'object') {
             for (const [optionKey, sentinel] of Object.entries(OPTION_SENTINELS)) {
                 if (Object.prototype.hasOwnProperty.call(options, optionKey)) {
@@ -219,9 +245,6 @@ app.post('/capture_ai', (req, res) => {
             uuid,
         })
 
-        state.totalEventsCaptured++
-        state.pendingEvents++
-
         res.json({ success: true, uuid: returnedUuid })
     } catch (error) {
         state.lastError = error.message
@@ -238,7 +261,7 @@ app.post('/flush', async (req, res) => {
 
     try {
         await state.client.flush()
-        res.json({ success: true, events_flushed: state.totalEventsSent })
+        res.json({ success: true, events_flushed: state.totalEventsSent - sentBeforeFlush })
     } catch (error) {
         // The harness deliberately configures mock-server failures for retry
         // assertions. Treat SDK flush rejections as a completed adapter action
@@ -254,7 +277,12 @@ app.post('/flush', async (req, res) => {
 
 app.get('/state', (req, res) => {
     res.json({
-        pending_events: state.pendingEvents,
+        pending_events: state.client
+            ? ['queue', 'ai_queue', 'ai_capture_queue'].reduce(
+                  (count, key) => count + (state.client.getPersistedProperty(key)?.length || 0),
+                  0
+              )
+            : 0,
         total_events_captured: state.totalEventsCaptured,
         total_events_sent: state.totalEventsSent,
         total_retries: state.totalRetries,
@@ -313,7 +341,6 @@ app.post('/reset', async (req, res) => {
     state.totalRetries = 0
     state.lastError = null
     state.requestsMade = []
-    state.pendingEvents = 0
 
     res.json({ success: true })
 })

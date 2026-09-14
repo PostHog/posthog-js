@@ -1,520 +1,201 @@
-/**
- * PostHog Browser SDK Compliance Adapter
- *
- * Wraps the posthog-js browser SDK using jsdom for testing.
- */
-
+/** Chromium controller. All capture bytes and retries belong to the built browser SDK. */
 const express = require('express')
-
-// Set up jsdom
-require('jsdom-global')()
-
-// Add localStorage polyfill if jsdom didn't provide it
-if (typeof localStorage === 'undefined') {
-    global.localStorage = {
-        _data: {},
-        getItem(key) {
-            return this._data[key] || null
-        },
-        setItem(key, value) {
-            this._data[key] = String(value)
-        },
-        removeItem(key) {
-            delete this._data[key]
-        },
-        clear() {
-            this._data = {}
-        },
-        key(index) {
-            const keys = Object.keys(this._data)
-            return keys[index] || null
-        },
-        get length() {
-            return Object.keys(this._data).length
-        }
-    }
-}
-
-// Set up state before overrides
-const state = {
-    instance: null,
-    capturedEvents: [],
-    pendingEvents: [],
-    totalEventsSent: 0,
-    requestsMade: [],
-    host: 'http://localhost:8081',
-    maxRetries: 3,
-}
+const { chromium } = require('playwright')
+const { gunzipSync } = require('node:zlib')
+const path = require('node:path')
 
 function normalizeAllowedHarnessHost(rawHost) {
-    const parsed = new URL(rawHost)
-    if (parsed.protocol !== 'http:') {
-        throw new Error('Unsupported harness host protocol')
+    const url = new URL(rawHost)
+    if (
+        url.protocol !== 'http:' ||
+        !['localhost', '127.0.0.1', 'test-harness', 'host.docker.internal'].includes(url.hostname) ||
+        url.username ||
+        url.password
+    ) {
+        throw new Error('Unsupported harness host')
     }
-
-    // Return fixed origins instead of interpolating user-controlled input into
-    // the outbound URL. The compliance harness always serves the mock API on
-    // 8081; only these known hostnames are supported by the adapter.
-    switch (parsed.hostname.toLowerCase()) {
-        case 'test-harness':
-            return 'http://test-harness:8081'
-        case 'localhost':
-            return 'http://localhost:8081'
-        case '127.0.0.1':
-            return 'http://127.0.0.1:8081'
-        case 'host.docker.internal':
-            return 'http://host.docker.internal:8081'
-        default:
-            throw new Error('Unsupported harness host')
-    }
+    return url.origin
 }
 
-// Override XMLHttpRequest to track requests BEFORE importing PostHog
-const OriginalXHR = global.XMLHttpRequest
-global.XMLHttpRequest = function() {
-    const xhr = new OriginalXHR()
-    const originalOpen = xhr.open
-    const originalSend = xhr.send
-
-    let requestUrl = ''
-    let requestBody = null
-
-    xhr.open = function(method, url, ...args) {
-        requestUrl = url
-        return originalOpen.apply(this, [method, url, ...args])
-    }
-
-    xhr.send = function(body) {
-        requestBody = body
-
-        const originalOnReadyStateChange = xhr.onreadystatechange
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === 4 && requestUrl && (requestUrl.includes('/e') || requestUrl.includes('/batch')) && !requestUrl.includes('/flags')) {
-                try {
-                    let events = []
-
-                    if (requestBody && typeof requestBody === 'string') {
-                        const parsed = JSON.parse(requestBody)
-
-                        if (Array.isArray(parsed)) {
-                            events = parsed
-                        } else if (parsed.batch) {
-                            events = parsed.batch
-                        } else {
-                            events = [parsed]
-                        }
-                    }
-
-                    const urlObj = new URL(requestUrl, 'http://dummy')
-                    const retryCount = parseInt(urlObj.searchParams.get('retry_count') || '0', 10)
-
-                    state.requestsMade.push({
-                        timestamp_ms: Date.now(),
-                        status_code: xhr.status,
-                        retry_attempt: retryCount,
-                        event_count: events.length,
-                        uuid_list: events.map(e => e.uuid).filter(Boolean),
-                    })
-
-                    if (xhr.status === 200) {
-                        state.totalEventsSent += events.length
-                    }
-                } catch (e) {
-                    // Ignore parsing errors
-                }
-            }
-
-            if (originalOnReadyStateChange) {
-                return originalOnReadyStateChange.apply(this, arguments)
-            }
-        }
-
-        return originalSend.apply(this, arguments)
-    }
-
-    return xhr
-}
-
-// Override fetch to track requests
-const originalFetch = global.fetch
-global.fetch = async (url, options) => {
-    const response = await originalFetch(url, options)
-
-    // Track requests to mock server (only /e/ or /batch/, not /flags/)
-    if ((url.includes('/batch') || url.includes('/e')) && !url.includes('/flags')) {
-        try {
-            let events = []
-
-            if (options?.body) {
-                const contentType = options.headers?.['Content-Type'] || options.headers?.get?.('Content-Type')
-
-                // Handle different content types
-                if (contentType === 'application/json' && typeof options.body === 'string') {
-                    // Plain JSON
-                    const parsed = JSON.parse(options.body)
-                    // Browser SDK sends plain arrays or single objects (not wrapped in batch/data keys)
-                    if (Array.isArray(parsed)) {
-                        events = parsed
-                    } else if (parsed.batch) {
-                        events = parsed.batch
-                    } else {
-                        events = [parsed]
-                    }
-                } else if (contentType === 'application/x-www-form-urlencoded' && typeof options.body === 'string') {
-                    // Base64 encoded in form data
-                    const match = options.body.match(/data=([^&]+)/)
-                    if (match) {
-                        const decoded = Buffer.from(decodeURIComponent(match[1]), 'base64').toString()
-                        const parsed = JSON.parse(decoded)
-                        // Browser SDK sends plain arrays or single objects
-                        if (Array.isArray(parsed)) {
-                            events = parsed
-                        } else if (parsed.batch) {
-                            events = parsed.batch
-                        } else {
-                            events = [parsed]
-                        }
-                    }
-                }
-                // Note: Blob bodies (gzipped data) are not parsed
-            }
-
-            // Extract retry count from URL if present
-            const urlObj = new URL(url)
-            const retryCount = parseInt(urlObj.searchParams.get('retry_count') || '0', 10)
-
-            state.requestsMade.push({
-                timestamp_ms: Date.now(),
-                status_code: response.status,
-                retry_attempt: retryCount,
-                event_count: events.length,
-                uuid_list: events.map(e => e.uuid).filter(Boolean),
-            })
-
-            if (response.status === 200) {
-                state.totalEventsSent += events.length
-            }
-        } catch (e) {
-            // Ignore parsing errors
-        }
-    }
-
-    return response
-}
-
-// Import the built browser SDK AFTER setting up overrides
-const PostHogModule = require('../packages/browser/dist/module')
-
-// Create a PostHog instance
-const { PostHog } = PostHogModule
-let posthog = new PostHog()
-
-function appendUrlParam(url, key, value) {
-    const separator = url.includes('?') ? '&' : '?'
-    return `${url}${separator}${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`
-}
-
-function isRetryableCaptureStatus(statusCode) {
-    return statusCode === 0 || statusCode === 408 || statusCode === 429 || statusCode >= 500
-}
-
-function retryDelayMs(statusCode, retriesPerformedSoFar) {
-    if (statusCode === 429) {
-        return 3000
-    }
-    return 1000 * 2 ** retriesPerformedSoFar
-}
-
-function normalizeEventForContract(event) {
-    if (event && typeof event === 'object' && !event.timestamp && typeof event.offset === 'number') {
-        event.timestamp = new Date(Date.now() - event.offset).toISOString()
-    }
-    return event
-}
-
-async function parseResponse(response) {
-    const text = await response.text()
-    const parsed = { statusCode: response.status, text }
-    if (response.status === 200) {
-        try {
-            parsed.json = JSON.parse(text)
-        } catch (error) {
-            // Ignore non-JSON success bodies.
-        }
-    }
-    return parsed
-}
-
-async function sendBatchAttempt(batch, retriesPerformedSoFar = 0) {
-    let url = `${state.host.replace(/\/$/, '')}/e/`
-    url = appendUrlParam(url, '_', Date.now())
-    url = appendUrlParam(url, 'ver', require('../packages/browser/package.json').version)
-    if (retriesPerformedSoFar > 0) {
-        url = appendUrlParam(url, 'retry_count', retriesPerformedSoFar)
-    }
-
-    let response
-    try {
-        const fetchResponse = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(batch),
+async function createAdapter() {
+    const browser = await chromium.launch({ headless: true })
+    let context
+    let page
+    let requests = []
+    let completed = new Set()
+    let sent = new Set()
+    let observationError = null
+    const observations = new Set()
+    const app = express()
+    app.use(express.json())
+    app.get('/', (_req, res) => res.type('html').send('<!doctype html><title>SDK compliance</title>'))
+    app.get('/sdk.js', (_req, res) => res.sendFile(path.resolve(__dirname, '../../packages/browser/dist/array.js')))
+    app.get('/health', (_req, res) =>
+        res.json({
+            sdk_name: 'posthog-js',
+            sdk_version: require('../../packages/browser/package.json').version,
+            adapter_version: '1.1.0',
+            capabilities: ['capture_v0'],
         })
-        response = await parseResponse(fetchResponse)
-    } catch (error) {
-        response = { statusCode: 0, error }
+    )
+
+    async function reset() {
+        // Closing the isolated runtime cancels its timers; do not trigger SDK unload/beacon sends.
+        if (context) await context.close()
+        await Promise.allSettled(observations)
+        context = page = undefined
+        requests = []
+        completed = new Set()
+        sent = new Set()
+        observationError = null
     }
 
-    if (response.statusCode === 200) {
-        return
-    }
-
-    if (isRetryableCaptureStatus(response.statusCode) && retriesPerformedSoFar < state.maxRetries) {
-        const timer = setTimeout(() => {
-            sendBatchAttempt(batch, retriesPerformedSoFar + 1)
-        }, retryDelayMs(response.statusCode, retriesPerformedSoFar))
-        state.instance?.__complianceRetryTimers?.push(timer)
-    }
-}
-
-function installComplianceTransport(instance) {
-    instance.__complianceRetryTimers = []
-    instance._send_request = (options) => options.callback?.({ statusCode: 200 })
-    instance._send_retriable_request = (options) => options.callback?.({ statusCode: 200 })
-}
-
-function discardInstance() {
-    if (state.instance) {
-        try {
-            state.instance.__complianceRetryTimers?.forEach(clearTimeout)
-            state.instance.__complianceRetryTimers = []
-            state.instance._send_request = (options) => options.callback?.({ statusCode: 200 })
-            state.instance._requestQueue?._clearFlushTimeout?.()
-            if (state.instance._requestQueue) {
-                state.instance._requestQueue._queue = []
-            }
-            if (state.instance._retryQueue) {
-                if (state.instance._retryQueue._poller) {
-                    clearTimeout(state.instance._retryQueue._poller)
+    app.post('/init', async (req, res) => {
+        const host = normalizeAllowedHarnessHost(req.body.host)
+        await reset()
+        context = await browser.newContext()
+        page = await context.newPage()
+        page.on('response', (response) => {
+            const request = response.request()
+            if (new URL(request.url()).pathname !== '/e/') return
+            const observation = (async () => {
+                const bytes = request.postDataBuffer()
+                const encoding = new URL(request.url()).searchParams.get('compression')
+                const contentType = request.headers()['content-type'] || ''
+                let body
+                if (encoding === 'gzip-js' || request.headers()['content-encoding'] === 'gzip')
+                    body = JSON.parse(gunzipSync(bytes).toString())
+                else if (contentType.includes('application/x-www-form-urlencoded')) {
+                    body = JSON.parse(
+                        Buffer.from(new URLSearchParams(bytes.toString()).get('data'), 'base64').toString()
+                    )
+                } else body = JSON.parse(bytes.toString())
+                const events = body.batch || (Array.isArray(body) ? body : [body])
+                const uuids = events.map((event) => event.uuid)
+                const retry = Number(new URL(request.url()).searchParams.get('retry_count') || 0)
+                const status = response.status()
+                // Wait for the real response body so the SDK can process it. Never fulfill/intercept requests.
+                await response.finished()
+                requests.push({
+                    timestamp_ms: request.timing().startTime,
+                    status_code: status,
+                    retry_attempt: retry,
+                    event_count: events.length,
+                    uuid_list: uuids,
+                })
+                if (status === 200 || (status >= 400 && status < 500) || retry >= 10) {
+                    uuids.forEach((uuid) => completed.add(uuid))
                 }
-                state.instance._retryQueue._queue = []
-                state.instance._retryQueue._isPolling = false
-                state.instance._retryQueue._poller = undefined
-            }
-            state.instance.__request_queue = []
-        } catch (error) {
-            // Best-effort cleanup only. Each test gets a fresh SDK instance below.
-        }
-    }
-    state.instance = null
-    posthog = new PostHog()
-}
-
-const app = express()
-app.use(express.json())
-
-app.get('/health', (req, res) => {
-    res.json({
-        sdk_name: 'posthog-js',
-        sdk_version: require('../packages/browser/package.json').version,
-        adapter_version: '1.0.0',
-        capabilities: ['capture_v0', 'encoding_gzip'],
-    })
-})
-
-app.post('/init', (req, res) => {
-    const { api_key, host, flush_at, flush_interval_ms, max_retries } = req.body
-
-    // Reset state
-    state.capturedEvents = []
-    state.pendingEvents = []
-    state.totalEventsSent = 0
-    state.requestsMade = []
-    try {
-        state.host = normalizeAllowedHarnessHost(host)
-    } catch (error) {
-        return res.status(400).json({ error: error.message })
-    }
-    state.maxRetries = max_retries ?? 3
-
-    discardInstance()
-    global.localStorage.clear()
-
-    posthog.init(api_key, {
-        api_host: state.host,
-        persistence: 'memory',
-        autocapture: false,
-        disable_session_recording: true,
-        disable_surveys: true,
-        advanced_disable_feature_flags: false,
-        advanced_disable_feature_flags_on_first_load: true,
-        disable_compression: true,
-        // Test-friendly settings - use request_queue_config for batching
-        request_queue_config: {
-            flush_interval_ms: flush_interval_ms ?? 100,
-            flush_at: flush_at ?? 1,
-        },
-        // Track events before sending
-        before_send: (event) => {
-            normalizeEventForContract(event)
-            state.capturedEvents.push(event)
-            state.pendingEvents.push(event)
-            return event
-        },
-    })
-
-    state.instance = posthog
-    installComplianceTransport(state.instance)
-
-    res.json({ success: true })
-})
-
-app.post('/capture', (req, res) => {
-    if (!state.instance) {
-        return res.status(400).json({ error: 'SDK not initialized' })
-    }
-
-    const { distinct_id, event, properties } = req.body
-
-    if (!distinct_id || !event) {
-        return res.status(400).json({ error: 'distinct_id and event are required' })
-    }
-
-    try {
-        // Set the current distinct_id without emitting a separate $identify event.
-        state.instance.register({ distinct_id })
-
-        // Capture event
-        state.instance.capture(event, properties)
-
-        // Get UUID from last captured event
-        const lastEvent = state.capturedEvents[state.capturedEvents.length - 1]
-
-        res.json({ success: true, uuid: lastEvent?.uuid || 'generated-uuid' })
-    } catch (error) {
-        res.status(500).json({ error: error.message })
-    }
-})
-
-app.post('/flush', async (req, res) => {
-    const batch = state.pendingEvents
-        .splice(0, state.pendingEvents.length)
-        .map((event) => normalizeEventForContract(JSON.parse(JSON.stringify(event))))
-    if (batch.length > 0) {
-        await sendBatchAttempt(batch)
-    }
-
-    res.json({ success: true, events_flushed: state.totalEventsSent })
-})
-
-app.get('/state', (req, res) => {
-    res.json({
-        pending_events: state.pendingEvents.length,
-        total_events_captured: state.capturedEvents.length,
-        total_events_sent: state.totalEventsSent,
-        total_retries: state.requestsMade.reduce((sum, request) => sum + (request.retry_attempt > 0 ? 1 : 0), 0),
-        last_error: null,
-        requests_made: state.requestsMade,
-    })
-})
-
-app.post('/get_feature_flag', async (req, res) => {
-    if (!state.instance) {
-        return res.status(400).json({ error: 'SDK not initialized' })
-    }
-
-    const {
-        key,
-        distinct_id,
-        person_properties,
-        groups,
-        group_properties,
-        // disable_geoip is not exposed per-call by the browser SDK; accepted but ignored
-        // oxlint-disable-next-line no-unused-vars
-        disable_geoip,
-        force_remote = true,
-    } = req.body || {}
-
-    if (!key) {
-        return res.status(400).json({ error: 'key is required' })
-    }
-    if (!distinct_id) {
-        return res.status(400).json({ error: 'distinct_id is required' })
-    }
-
-    try {
-        // The browser SDK is stateful; configure the instance for this user
-        // before evaluating the flag.
-        if (state.instance.get_distinct_id() !== distinct_id) {
-            state.instance.identify(distinct_id)
-        }
-
-        // Apply group memberships and properties (without triggering auto reloads)
-        if (groups && typeof groups === 'object') {
-            for (const [groupType, groupKey] of Object.entries(groups)) {
-                const props = (group_properties && group_properties[groupType]) || undefined
-                // Pass false as the 4th arg so each group() call does not
-                // trigger its own reloadFeatureFlags(); we explicitly reload
-                // below when force_remote is requested.
-                state.instance.group(groupType, groupKey, props, false)
-            }
-        }
-
-        // Apply property overrides used for flag evaluation. Pass false so the
-        // SDK does not reload flags for each call; we explicitly reload below
-        // when force_remote is requested.
-        if (person_properties && typeof person_properties === 'object') {
-            state.instance.setPersonPropertiesForFlags(person_properties, false)
-        }
-        if (group_properties && typeof group_properties === 'object') {
-            state.instance.setGroupPropertiesForFlags(group_properties, false)
-        }
-
-        if (force_remote) {
-            // Wait for the next /flags response. addFeatureFlagsHandler does
-            // not fire immediately when flags are already loaded, so the
-            // promise resolves only after the reload we trigger below
-            // completes. Reject after 10s if the reload errors silently so
-            // the request does not hang forever.
-            await new Promise((resolve, reject) => {
-                let timeoutId = null
-                const handler = () => {
-                    if (timeoutId !== null) {
-                        clearTimeout(timeoutId)
-                    }
-                    state.instance.featureFlags.removeFeatureFlagsHandler(handler)
-                    resolve()
-                }
-                timeoutId = setTimeout(() => {
-                    state.instance.featureFlags.removeFeatureFlagsHandler(handler)
-                    reject(new Error('Timed out waiting for reloadFeatureFlags response'))
-                }, 10000)
-                state.instance.featureFlags.addFeatureFlagsHandler(handler)
-                state.instance.reloadFeatureFlags()
+                if (status === 200) uuids.forEach((uuid) => sent.add(uuid))
+            })().catch((error) => {
+                observationError = error.message
             })
-        }
+            observations.add(observation)
+            observation.finally(() => observations.delete(observation))
+        })
+        // The harness mock has no CORS response headers. Exercise a first-party deployment.
+        await page.goto(`${host}/`)
+        await page.addScriptTag({ url: `http://127.0.0.1:${server.address().port}/sdk.js` })
+        await page.evaluate(
+            ({ api_key, host, flush_interval_ms, enable_compression }) => {
+                window.captured = []
+                window.posthog.init(api_key, {
+                    api_host: host,
+                    persistence: 'memory',
+                    autocapture: false,
+                    opt_out_useragent_filter: true,
+                    capture_pageview: false,
+                    capture_pageleave: false,
+                    disable_session_recording: true,
+                    disable_surveys: true,
+                    advanced_disable_flags: true,
+                    disable_external_dependency_loading: true,
+                    disable_compression: enable_compression === undefined ? true : !enable_compression,
+                    request_queue_config: { flush_interval_ms: flush_interval_ms ?? 500 },
+                    before_send: (event) => {
+                        window.captured.push(event.uuid)
+                        return event
+                    },
+                })
+            },
+            { ...req.body, host }
+        )
+        res.json({ success: true })
+    })
 
-        const value = state.instance.getFeatureFlag(key)
+    app.post('/capture', async (req, res) => {
+        if (!page) return res.status(400).json({ error: 'SDK not initialized' })
+        if (!req.body.distinct_id || !req.body.event)
+            return res.status(400).json({ error: 'distinct_id and event are required' })
+        const uuid = await page.evaluate(({ distinct_id, event, properties, timestamp }) => {
+            window.posthog.register({ distinct_id })
+            // Do not pass an empty options object: that bypasses the SDK's default batching path.
+            return window.posthog.capture(event, properties, timestamp ? { timestamp: new Date(timestamp) } : undefined)
+                ?.uuid
+        }, req.body)
+        if (!uuid) return res.status(500).json({ error: 'SDK did not capture the event' })
+        res.json({ success: true, uuid })
+    })
 
-        res.json({ success: true, value })
-    } catch (error) {
-        res.status(500).json({ error: error.message })
+    app.post('/flush', async (_req, res) => {
+        if (!page) return res.status(400).json({ error: 'SDK not initialized' })
+        const before = sent.size
+        const deadline = Date.now() + 12000
+        // There is no public blocking flush. Wait for terminal observed outcomes of every
+        // captured UUID, not network idleness (which can mean a retry timer is pending).
+        do {
+            const captured = await page.evaluate(() => window.captured)
+            if (!observationError && captured.every((uuid) => completed.has(uuid))) {
+                return res.json({ success: true, events_flushed: sent.size - before })
+            }
+            await new Promise((resolve) => setTimeout(resolve, 25))
+        } while (Date.now() < deadline && !observationError)
+        res.status(504).json({
+            success: false,
+            events_flushed: sent.size - before,
+            error:
+                observationError ||
+                'Native timer/retry drain not established within 12s; browser has no public blocking flush',
+        })
+    })
+    app.get('/state', async (_req, res) => {
+        const captured = page ? await page.evaluate(() => window.captured) : []
+        res.json({
+            pending_events: captured.filter((uuid) => !completed.has(uuid)).length,
+            total_events_captured: captured.length,
+            total_events_sent: sent.size,
+            total_retries: requests.filter((request) => request.retry_attempt > 0).length,
+            last_error: observationError,
+            requests_made: requests,
+        })
+    })
+    app.post('/reset', async (_req, res) => {
+        await reset()
+        res.json({ success: true })
+    })
+    app.use((error, _req, res, _next) => res.status(500).json({ success: false, error: error.message }))
+    const server = app.listen(process.env.PORT || 8080)
+    return {
+        server,
+        close: async () => {
+            await reset()
+            await browser.close()
+            await new Promise((resolve) => server.close(resolve))
+        },
     }
-})
+}
 
-app.post('/reset', (req, res) => {
-    discardInstance()
-    global.localStorage.clear()
-
-    state.capturedEvents = []
-    state.pendingEvents = []
-    state.totalEventsSent = 0
-    state.requestsMade = []
-
-    res.json({ success: true })
-})
-
-const port = process.env.PORT || 8080
-app.listen(port, () => {
-    console.log(`PostHog Browser SDK adapter listening on port ${port}`)
-})
+if (require.main === module) {
+    createAdapter()
+        .then(({ close }) => {
+            process.on('SIGTERM', async () => {
+                await close()
+                process.exit(0)
+            })
+        })
+        .catch((error) => {
+            console.error(error)
+            process.exit(1)
+        })
+}
+module.exports = { createAdapter, normalizeAllowedHarnessHost }
