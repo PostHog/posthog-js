@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.433.2
+
+### Patch Changes
+
+- [#4846](https://github.com/PostHog/posthog-js/pull/4846) [`bd4543e`](https://github.com/PostHog/posthog-js/commit/bd4543e1f941b1f0792d6644a1f862e0ccd05b83) Thanks [@posthog](https://github.com/apps/posthog)! - Keep session recording snapshots from different windows of the same session in separate uploads to preserve their window attribution.
+  (2026-09-14)
+
+- [#4954](https://github.com/PostHog/posthog-js/pull/4954) [`3c68c08`](https://github.com/PostHog/posthog-js/commit/3c68c083dea604ee440db4c5a4f193f0947159bb) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect Retry-After, including repeated headers, up to 30 seconds on retryable browser responses without shortening exponential backoff.
+  (2026-09-14)
+- Updated dependencies [[`3c68c08`](https://github.com/PostHog/posthog-js/commit/3c68c083dea604ee440db4c5a4f193f0947159bb)]:
+  - @posthog/core@1.54.0
+
 ## 1.433.1
 
 ### Patch Changes

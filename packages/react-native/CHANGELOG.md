@@ -1,5 +1,14 @@
 # posthog-react-native
 
+## 4.72.1
+
+### Patch Changes
+
+- [#4884](https://github.com/PostHog/posthog-js/pull/4884) [`338a7de`](https://github.com/PostHog/posthog-js/commit/338a7debeccd9849eef523763f3dc1b0d76e126e) Thanks [@posthog](https://github.com/apps/posthog)! - fix(react-native): retry refused manual session recording starts without waiting for feature flags to reload
+  (2026-09-14)
+- Updated dependencies [[`3c68c08`](https://github.com/PostHog/posthog-js/commit/3c68c083dea604ee440db4c5a4f193f0947159bb)]:
+  - @posthog/core@1.54.0
+
 ## 4.72.0
 
 ### Minor Changes
