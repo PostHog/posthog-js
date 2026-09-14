@@ -4712,6 +4712,10 @@
           "name": "noRetries"
         },
         {
+          "type": "boolean",
+          "name": "preferSyncCompression"
+        },
+        {
           "type": "number",
           "name": "timeout"
         },
