@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Discard pending replay fetch captures after recording stops or restarts.
+Discard pending replay network captures after recording stops or restarts.

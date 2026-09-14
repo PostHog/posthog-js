@@ -604,6 +604,58 @@ describe('network plugin', () => {
             })
         })
 
+        describe('XHR capture teardown', () => {
+            it.each([false, true])('drops pending timing capture before masking, restart=%s', async (restart) => {
+                vi.useFakeTimers()
+                const { mockWindow } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+                const oldCallback = vi.fn()
+                const oldMask = vi.fn((request: CapturedNetworkRequest) => request)
+                const newCallback = vi.fn()
+                const newMask = vi.fn((request: CapturedNetworkRequest) => request)
+                const getEntries = vi.spyOn(mockWindow.performance, 'getEntriesByName')
+                let cleanup = getRecordNetworkPlugin().observer(oldCallback, mockWindow, {
+                    recordHeaders: true,
+                    recordInitialRequests: false,
+                    maskRequestFn: oldMask,
+                })
+                const completeRequest = (url: string) => {
+                    const xhr = new mockWindow.XMLHttpRequest()
+                    xhr.open('GET', url)
+                    xhr.send()
+                    xhr.readyState = xhr.DONE
+                    for (const listener of [...xhr.listeners.get('readystatechange')]) listener()
+                }
+                try {
+                    completeRequest('https://example.com/old-observer')
+                    expect(getEntries).toHaveBeenCalledWith('https://example.com/old-observer')
+                    expect(oldCallback).not.toHaveBeenCalled()
+                    expect(oldMask).not.toHaveBeenCalled()
+                    cleanup()
+                    if (restart) {
+                        cleanup = getRecordNetworkPlugin().observer(newCallback, mockWindow, {
+                            recordHeaders: true,
+                            recordInitialRequests: false,
+                            maskRequestFn: newMask,
+                        })
+                        completeRequest('https://example.com/new-observer')
+                    }
+                    await vi.advanceTimersByTimeAsync(3000)
+                    expect(oldMask).not.toHaveBeenCalled()
+                    expect(oldCallback).not.toHaveBeenCalled()
+                    if (restart) {
+                        expect(newMask).toHaveBeenCalledOnce()
+                        expect(newCallback).toHaveBeenCalledWith({
+                            requests: [expect.objectContaining({ name: 'https://example.com/new-observer' })],
+                        })
+                    }
+                } finally {
+                    cleanup()
+                    vi.useRealTimers()
+                }
+            })
+        })
+
         describe('fetch capture teardown', () => {
             const OriginalRequest = global.Request
             let cleanupObserver: (() => void) | undefined

@@ -758,7 +758,6 @@ function initFetchObserver(
     }
     const recordRequestHeaders = shouldRecordHeaders('request', options.recordHeaders)
     const recordResponseHeaders = shouldRecordHeaders('response', options.recordHeaders)
-    let active = true
 
     // oxlint-disable-next-line typescript/ban-ts-comment
     // @ts-ignore
@@ -844,11 +843,6 @@ function initFetchObserver(
             } finally {
                 getRequestPerformanceEntry(win, 'fetch', req.url, start, end)
                     .then((entry) => {
-                        // Teardown can happen while either body or performance timing is pending.
-                        // An old observer must not deliver into a stopped or restarted recorder.
-                        if (!active) {
-                            return
-                        }
                         const requests = prepareRequest({
                             entry,
                             method: req.method,
@@ -868,7 +862,6 @@ function initFetchObserver(
         }
     })
     return () => {
-        active = false
         restorePatch()
     }
 }
@@ -897,7 +890,12 @@ function initNetworkObserver(
         options ? Object.assign({}, defaultNetworkOptions, options) : defaultNetworkOptions
     ) as Required<NetworkRecordOptions>
 
+    let active = true
     const cb: networkCallback = (data) => {
+        // Body reads and timing lookups can finish after this observer is replaced.
+        if (!active) {
+            return
+        }
         const requests: CapturedNetworkRequest[] = []
         let parentRequestDropped = false
         data.requests.forEach((request) => {
@@ -936,6 +934,7 @@ function initNetworkObserver(
     }
 
     initialisedHandler = () => {
+        active = false
         performanceObserver()
         xhrObserver()
         fetchObserver()

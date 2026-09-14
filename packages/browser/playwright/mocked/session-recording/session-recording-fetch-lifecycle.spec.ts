@@ -3,6 +3,90 @@ import { start, waitForSessionRecordingToStart } from '../utils/setup'
 import { createServer } from 'http'
 import type { AddressInfo } from 'net'
 
+test('does not emit pending XHR timing capture after restarting recording', async ({ page, context }) => {
+    const url = 'https://xhr-lifecycle.test/old-observer'
+    const newUrl = 'https://xhr-lifecycle.test/new-observer'
+    await page.route('https://xhr-lifecycle.test/*', (route) =>
+        route.fulfill({ body: 'application response', contentType: 'text/plain' })
+    )
+    await start(
+        {
+            url: '/playground/cypress/index.html',
+            options: { session_recording: { compress_events: false } },
+            flagsResponseOverrides: {
+                sessionRecording: {
+                    endpoint: '/ses/',
+                    networkPayloadCapture: { recordBody: true, recordHeaders: true },
+                },
+                capturePerformance: true,
+                autocapture_opt_out: true,
+            },
+        },
+        page,
+        context
+    )
+    await waitForSessionRecordingToStart(page)
+    await page.locator('[data-cy-input]').fill('activity')
+    const response = await page.evaluate(async (url) => {
+        const win = window as any
+        const getEntriesByName = performance.getEntriesByName.bind(performance)
+        performance.getEntriesByName = (name, type) => {
+            if (name === url) {
+                win.oldTimingLookupStarted = true
+                if (!win.releaseOldTiming) return []
+                const entries = getEntriesByName(name, type)
+                win.oldTimingFound = entries.length > 0
+                return entries
+            }
+            return getEntriesByName(name, type)
+        }
+        return await new Promise<string>((resolve, reject) => {
+            const xhr = new XMLHttpRequest()
+            xhr.open('GET', url)
+            xhr.onload = () => resolve(xhr.responseText)
+            xhr.onerror = () => reject(new Error('Application XHR failed'))
+            xhr.send()
+        })
+    }, url)
+    expect(response).toBe('application response')
+    await page.waitForFunction(() => (window as any).oldTimingLookupStarted)
+    await page.evaluate(() => {
+        const ph = (window as WindowWithPostHog).posthog!
+        ph.stopSessionRecording()
+        ph.startSessionRecording()
+    })
+    await waitForSessionRecordingToStart(page)
+    await page.evaluate(() => {
+        ;(window as any).releaseOldTiming = true
+    })
+    expect(
+        await page.evaluate(
+            (url) =>
+                new Promise<string>((resolve, reject) => {
+                    const xhr = new XMLHttpRequest()
+                    xhr.open('GET', url)
+                    xhr.onload = () => resolve(xhr.responseText)
+                    xhr.onerror = () => reject(new Error('Application XHR failed'))
+                    xhr.send()
+                }),
+            newUrl
+        )
+    ).toBe('application response')
+    // Exhaust the resource-timing retry window and allow snapshot delivery.
+    await page.waitForTimeout(4000)
+    expect(await page.evaluate(() => (window as any).oldTimingFound)).toBe(true)
+    const requests = (await page.capturedEvents())
+        .filter((event) => event.event === '$snapshot')
+        .flatMap((event) => event.properties.$snapshot_data)
+        .filter((event) => event.type === 6 && event.data.plugin === 'rrweb/network@1')
+        .flatMap((event) => event.data.payload.requests)
+        .filter((request) => !request.isInitial)
+    expect(requests.find((request) => request.name === newUrl)).toMatchObject({
+        responseBody: 'application response',
+    })
+    expect(requests.some((request) => request.name === url)).toBe(false)
+})
+
 for (const streamNetworkBody of [false, true]) {
     for (const action of ['stop', 'restart', 'opt-out']) {
         test(`does not emit pending fetch capture after ${action}, streaming ${streamNetworkBody}`, async ({
