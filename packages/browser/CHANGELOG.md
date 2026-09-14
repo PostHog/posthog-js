@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.433.3
+
+### Patch Changes
+
+- [#4945](https://github.com/PostHog/posthog-js/pull/4945) [`79f02e7`](https://github.com/PostHog/posthog-js/commit/79f02e75ad6d566841e67c86a95e1a245a904d05) Thanks [@marandaneto](https://github.com/marandaneto)! - Default Fetch requests to strict-origin so referrers omit page paths and query strings.
+  (2026-09-14)
+
 ## 1.433.2
 
 ### Patch Changes
