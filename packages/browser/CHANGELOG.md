@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.431.6
+
+### Patch Changes
+
+- [#4936](https://github.com/PostHog/posthog-js/pull/4936) [`ee6fd02`](https://github.com/PostHog/posthog-js/commit/ee6fd0270539a16a75ebcb421431b84a51e1718e) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent buffered session replay data from crossing projects that share a persistence name during page navigation.
+  (2026-09-14)
+
 ## 1.431.5
 
 ### Patch Changes
