@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.431.1
+
+### Patch Changes
+
+- [#4934](https://github.com/PostHog/posthog-js/pull/4934) [`b15ae1f`](https://github.com/PostHog/posthog-js/commit/b15ae1f8e998ae9c9100dc1f137c145d9ee402e7) Thanks [@marandaneto](https://github.com/marandaneto)! - Exclude internal SDK console diagnostics from exception autocapture and report recoverable recorder diagnostics as warnings.
+  (2026-09-14)
+
 ## 1.431.0
 
 ### Minor Changes

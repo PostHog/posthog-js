@@ -4208,6 +4208,11 @@
       "name": "PostHogSessionReplayConfig",
       "properties": [
         {
+          "description": "Capture touch coordinates in session replay. Set to false to keep screenshots\nwithout recording taps that could reveal sensitive input on a known keypad layout.\nDoes not change masking or `PostHogProvider` touch autocapture.\nAndroid and iOS only. Requires `@posthog/react-native-plugin` 2.9.0 or later;\nolder plugins and `posthog-react-native-session-replay` ignore this option.\nSet before constructing PostHog. Changes after initialization do not update native state.",
+          "type": "boolean",
+          "name": "captureTouches"
+        },
+        {
           "description": "Enable masking of all text and text input fields",
           "type": "boolean",
           "name": "maskAllTextInputs"
