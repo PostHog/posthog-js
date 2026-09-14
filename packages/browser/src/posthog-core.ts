@@ -206,9 +206,32 @@ type PersistedMetaIdentifier = {
 type MetaIdentifierChannel = {
     property: string
     persistenceKey: string
+    cookieName: string
     pattern: RegExp
     register: (value: string, delivered: boolean) => void
     unregister: () => void
+}
+
+// Whether the _fbc cookie the Meta pixel wrote replaces the click PostHog knows. The cookie holds
+// the true click time, which the SDK can only approximate from the pageview after the click, so it
+// wins for the click the URL carries or the SDK already stored. Another click in the cookie wins
+// only when it is newer than the stored one: the pixel saw a click the SDK never did. An older
+// click means the pixel is absent or blocked, and the cookie is stale. The URL carries its click
+// on the first event after a navigation only, so every later event compares against the store.
+const fbcCookieWins = (
+    cookieFbc: string,
+    urlClick: string | undefined,
+    stored: PersistedMetaIdentifier | undefined
+): boolean => {
+    const cookie = cookieFbc.split('.')
+    if (urlClick) {
+        return cookie[3] === urlClick
+    }
+    if (!stored) {
+        return true
+    }
+    const known = stored.value.split('.')
+    return cookie[3] === known[3] || Number(cookie[2]) > Number(known[2])
 }
 
 // Transport-level keys the browser SDK carries inside event properties (unlike other SDKs,
@@ -1563,6 +1586,7 @@ export class PostHog implements PostHogInterface {
         return {
             property: FACEBOOK_CLICK_ID,
             persistenceKey: PERSISTENCE_FACEBOOK_CLICK_ID,
+            cookieName: '_fbc',
             pattern: FBC_PATTERN,
             register: (value, delivered) =>
                 this.persistence?.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: { value, delivered } }),
@@ -1574,6 +1598,7 @@ export class PostHog implements PostHogInterface {
         return {
             property: FACEBOOK_BROWSER_ID,
             persistenceKey: PERSISTENCE_FACEBOOK_BROWSER_ID,
+            cookieName: '_fbp',
             pattern: FBP_PATTERN,
             register: (value, delivered) =>
                 this.persistence?.register({ [PERSISTENCE_FACEBOOK_BROWSER_ID]: { value, delivered } }),
@@ -1606,6 +1631,16 @@ export class PostHog implements PostHogInterface {
         return { value, pending: true }
     }
 
+    // The cookies are read under the same switches as the URL click ID: `save_campaign_params: false`
+    // turns marketing attribution off, and cookieless mode promises that no cookie is read.
+    private _readMetaCookie(channel: MetaIdentifierChannel): string | undefined {
+        if (!this.config.save_campaign_params || this._inCookielessMode()) {
+            return undefined
+        }
+        const value = getCookieValue(channel.cookieName)
+        return isString(value) && channel.pattern.test(value) ? value : undefined
+    }
+
     private _updateFacebookClickId(
         fbclid: unknown,
         providedFbc: unknown,
@@ -1617,9 +1652,11 @@ export class PostHog implements PostHogInterface {
         }
 
         const channel = this._facebookClickIdChannel
-        this.persistence.refreshKey(PERSISTENCE_FACEBOOK_CLICK_ID)
+        this.persistence.refreshKey(channel.persistenceKey)
         const stored = this._getPersistedMetaIdentifier(channel)
 
+        // An unset clears the stored value for this event. The cookie belongs to the pixel, so a later
+        // event reads it again: `save_campaign_params: false` is the switch that stops the reads.
         if (unsetFbc) {
             channel.unregister()
             return undefined
@@ -1635,22 +1672,18 @@ export class PostHog implements PostHogInterface {
             return this._storeMetaIdentifier(channel, providedFbc, stored)
         }
 
-        const hasFbclid = isString(fbclid) && FBCLID_PATTERN.test(fbclid)
+        const urlClick = isString(fbclid) && FBCLID_PATTERN.test(fbclid) ? fbclid : undefined
 
-        // The Meta pixel writes the true click time into its _fbc cookie, which PostHog can only
-        // approximate from the pageview that follows the click, so the cookie wins. A cookie that
-        // holds a different click than this URL does not: there the pixel is absent or blocked, and
-        // its value is the older click.
-        const cookieFbc = getCookieValue('_fbc')
-        if (isString(cookieFbc) && FBC_PATTERN.test(cookieFbc) && (!hasFbclid || cookieFbc.split('.')[3] === fbclid)) {
+        const cookieFbc = this._readMetaCookie(channel)
+        if (cookieFbc && fbcCookieWins(cookieFbc, urlClick, stored)) {
             return this._storeMetaIdentifier(channel, cookieFbc, stored)
         }
 
-        if (hasFbclid) {
-            if (stored?.value.split('.')[3] === fbclid) {
+        if (urlClick) {
+            if (stored?.value.split('.')[3] === urlClick) {
                 return { value: stored.value, pending: !stored.delivered }
             }
-            return this._storeMetaIdentifier(channel, `fb.1.${Date.now()}.${fbclid}`, stored)
+            return this._storeMetaIdentifier(channel, `fb.1.${Date.now()}.${urlClick}`, stored)
         }
 
         return stored ? { value: stored.value, pending: !stored.delivered } : undefined
@@ -1669,8 +1702,10 @@ export class PostHog implements PostHogInterface {
         }
 
         const channel = this._facebookBrowserIdChannel
+        this.persistence.refreshKey(channel.persistenceKey)
         const stored = this._getPersistedMetaIdentifier(channel)
 
+        // As for $fbc, an unset clears the stored value for this event, and a later event reads the cookie again.
         if (unsetFbp) {
             channel.unregister()
             return undefined
@@ -1684,8 +1719,8 @@ export class PostHog implements PostHogInterface {
             return this._storeMetaIdentifier(channel, providedFbp, stored)
         }
 
-        const cookieFbp = getCookieValue('_fbp')
-        if (isString(cookieFbp) && FBP_PATTERN.test(cookieFbp)) {
+        const cookieFbp = this._readMetaCookie(channel)
+        if (cookieFbp) {
             return this._storeMetaIdentifier(channel, cookieFbp, stored)
         }
 
@@ -3422,6 +3457,9 @@ export class PostHog implements PostHogInterface {
      * counterpart to {@link setPersonProperties} — instead of hand-passing `$unset` inside a
      * `capture()` call, you can remove properties with a dedicated method.
      * If `person_profiles` is set to `never`, this call is ignored.
+     *
+     * The Meta identifiers the SDK reads itself, `$fbc` and `$fbp`, are unset for this call only:
+     * a later event reads the Meta cookies again. Set `save_campaign_params: false` to stop those reads.
      *
      * @example
      * ```js

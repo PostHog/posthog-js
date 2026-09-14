@@ -30,6 +30,7 @@ import {
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_FACEBOOK_BROWSER_ID,
     PERSISTENCE_FACEBOOK_CLICK_ID,
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     STORED_GROUP_PROPERTIES_KEY,
@@ -128,6 +129,13 @@ const CROSS_TAB_FEATURE_FLAG_KEYS = [
 
 const isCrossTabFeatureFlagKey = (key: string): boolean =>
     (CROSS_TAB_FEATURE_FLAG_KEYS as readonly string[]).indexOf(key) !== -1
+
+// The Meta identifiers core stores for the Conversions API. Each carries a delivery state that a
+// sibling tab or a stale storage read must not roll back while a local write is still pending.
+const META_IDENTIFIER_PERSISTENCE_KEYS = [PERSISTENCE_FACEBOOK_CLICK_ID, PERSISTENCE_FACEBOOK_BROWSER_ID] as const
+
+const isMetaIdentifierKey = (key: string): boolean =>
+    (META_IDENTIFIER_PERSISTENCE_KEYS as readonly string[]).indexOf(key) !== -1
 
 const isStorageValueEqual = (left: unknown, right: unknown): boolean => {
     try {
@@ -247,7 +255,7 @@ export class PostHogPersistence {
     private _storageMigrationInProgress = false
     private _localIdentityChangePending = false
     private _crossTabFeatureFlagIdentityMismatch = false
-    private _facebookClickIdChangePending = false
+    private _metaIdentifierChangePending = new Set<string>()
     private readonly _crossTabFeatureFlagHandlers = new Set<() => void>()
     private _onStorage?: (event: StorageEvent) => void
 
@@ -1200,7 +1208,7 @@ export class PostHogPersistence {
         if (this._disabled) {
             return
         }
-        if (prop === PERSISTENCE_FACEBOOK_CLICK_ID && this._facebookClickIdChangePending) {
+        if (this._metaIdentifierChangePending.has(prop)) {
             return
         }
         const group = this._splitStorage ? getPersistenceKeyPolicy(prop)?.storageGroup : undefined
@@ -1278,10 +1286,10 @@ export class PostHogPersistence {
         if (!forceSuppressedSnapshot) {
             this.syncCookieProperties()
             if (
-                !this._facebookClickIdChangePending &&
-                (!this._config.cookieWinsOnConflict || this._config.persistence.toLowerCase() !== 'localstorage+cookie')
+                !this._config.cookieWinsOnConflict ||
+                this._config.persistence.toLowerCase() !== 'localstorage+cookie'
             ) {
-                this.refreshKey(PERSISTENCE_FACEBOOK_CLICK_ID)
+                META_IDENTIFIER_PERSISTENCE_KEYS.forEach((key) => this.refreshKey(key))
             }
         }
 
@@ -1313,7 +1321,7 @@ export class PostHogPersistence {
         if (writeResult !== 'failed') {
             this._pendingCrossTabFeatureFlagChanges.clear()
             this._localIdentityChangePending = false
-            this._facebookClickIdChangePending = false
+            this._metaIdentifierChangePending.clear()
         }
         if (crossTabPropertiesChanged) {
             this._crossTabFeatureFlagHandlers.forEach((handler) => handler())
@@ -1339,7 +1347,7 @@ export class PostHogPersistence {
         }
         if (mainWriteResult !== 'failed') {
             this._localIdentityChangePending = false
-            this._facebookClickIdChangePending = false
+            this._metaIdentifierChangePending.clear()
             CROSS_TAB_FEATURE_FLAG_KEYS.forEach((key) => {
                 if (!getPersistenceKeyPolicy(key)?.storageGroup) {
                     this._pendingCrossTabFeatureFlagChanges.delete(key)
@@ -1876,8 +1884,8 @@ export class PostHogPersistence {
         if ((prop === DISTINCT_ID || prop === USER_STATE) && previousValue !== to) {
             this._localIdentityChangePending = true
         }
-        if (prop === PERSISTENCE_FACEBOOK_CLICK_ID && !isStorageValueEqual(previousValue, to)) {
-            this._facebookClickIdChangePending = true
+        if (isMetaIdentifierKey(prop) && !isStorageValueEqual(previousValue, to)) {
+            this._metaIdentifierChangePending.add(prop)
         }
         this._markPendingCrossTabFeatureFlagChanges(prop, previousValue, to)
         // A volatile value change never dirties its group — it changes on every
@@ -1897,8 +1905,8 @@ export class PostHogPersistence {
         if (isCrossTabFeatureFlagKey(prop)) {
             this._setCrossTabFeatureFlagChangesPending(prop, true)
         }
-        if (prop === PERSISTENCE_FACEBOOK_CLICK_ID) {
-            this._facebookClickIdChangePending = true
+        if (isMetaIdentifierKey(prop)) {
+            this._metaIdentifierChangePending.add(prop)
         }
         this._markGroupDirty(prop)
     }
