@@ -60,11 +60,19 @@ describe('ConversationsWidget', () => {
             '[FAQ](https://example.com/a(b))',
             '[outer [FAQ](https://example.com)]',
             '![FAQ](https://example.com/image.png)',
-            '\\[FAQ](https://example.com)',
         ])('preserves unsupported or plain text literally: %s', (greetingText) => {
             const { getByText, container } = renderGreeting(greetingText)
             expect(getByText(greetingText.replace(/\n/g, ''), { exact: true })).toBeInTheDocument()
             expect(container.querySelectorAll('a[href]')).toHaveLength(0)
+        })
+
+        it('removes the escape backslash without activating the escaped link', () => {
+            const { container, getByRole } = renderGreeting(
+                'Read \\[FAQ](https://example.com/faq) or [help](https://example.com/help).'
+            )
+            expect(container.textContent).toContain('Read [FAQ](https://example.com/faq) or help.')
+            expect(container.querySelectorAll('a[href]')).toHaveLength(1)
+            expect(getByRole('link', { name: 'help' })).toHaveAttribute('href', 'https://example.com/help')
         })
 
         it.each([

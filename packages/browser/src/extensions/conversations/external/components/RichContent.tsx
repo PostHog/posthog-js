@@ -336,7 +336,7 @@ function isValidTipTapDoc(doc: unknown): doc is TipTapDoc {
     return d.type === 'doc' && (isUndefined(d.content) || isArray(d.content))
 }
 
-/** Render only simple inline greeting links, leaving images, escapes and nested syntax literal. */
+/** Render only simple inline greeting links, leaving images and nested syntax literal. */
 function renderGreetingLine(text: string, styles: ReturnType<typeof getStyles>) {
     const links = /(!|\\)?\[([^\]\n]+)\]\(([^()\s]+)\)/g
     const parts: (string | preact.JSX.Element)[] = []
@@ -346,10 +346,11 @@ function renderGreetingLine(text: string, styles: ReturnType<typeof getStyles>) 
         parts.push(text.slice(lastIndex, match.index))
         const [, prefix, label, url] = match
         const safeUrl = !prefix && label.indexOf('[') === -1 && sanitizeUrl(url)
+        const literal = prefix === '\\' ? match[0].slice(1) : match[0]
         parts.push(
             safeUrl
                 ? renderTextWithMarks(label, [{ type: 'link', attrs: { href: safeUrl } }], styles, `${match.index}`)
-                : match[0]
+                : literal
         )
         lastIndex = links.lastIndex
     }
