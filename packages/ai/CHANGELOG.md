@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.11.1
+
+### Patch Changes
+
+- [#4943](https://github.com/PostHog/posthog-js/pull/4943) [`abf9123`](https://github.com/PostHog/posthog-js/commit/abf91231698de63691f22eeb928709d5c4f78f44) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent tool argument serialization failures from disrupting Vercel tracing and LangChain callbacks.
+  (2026-09-14)
+
 ## 8.11.0
 
 ### Minor Changes

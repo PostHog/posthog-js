@@ -79,35 +79,42 @@ export class RetryQueue {
         return this._queue.length
     }
 
-    retriableRequest({ retriesPerformedSoFar, ...options }: RetriableRequestWithOptions): void {
+    retriableRequest(
+        { retriesPerformedSoFar, ...options }: RetriableRequestWithOptions,
+        transportOverride?: RetriableRequestWithOptions['transport']
+    ): void {
         if (isPositiveNumber(retriesPerformedSoFar)) {
             options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
 
-        sendRequest(this._instance, options, (response, retryAfterMs) => {
-            if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
-                const maxRetries = response.statusCode === 0 ? STATUS_CODE_ZERO_MAX_RETRIES : DEFAULT_MAX_RETRIES
+        sendRequest(
+            this._instance,
+            transportOverride ? { ...options, transport: transportOverride } : options,
+            (response, retryAfterMs) => {
+                if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
+                    const maxRetries = response.statusCode === 0 ? STATUS_CODE_ZERO_MAX_RETRIES : DEFAULT_MAX_RETRIES
 
-                if ((retriesPerformedSoFar ?? 0) < maxRetries) {
-                    this._enqueue(
-                        {
-                            retriesPerformedSoFar,
-                            ...options,
-                        },
-                        retryAfterMs
-                    )
-                    return
+                    if ((retriesPerformedSoFar ?? 0) < maxRetries) {
+                        this._enqueue(
+                            {
+                                retriesPerformedSoFar,
+                                ...options,
+                            },
+                            retryAfterMs
+                        )
+                        return
+                    }
+
+                    if (response.statusCode === 0) {
+                        logger.warn(
+                            `Request failed before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped retrying after ${retriesPerformedSoFar ?? 0} retries.`
+                        )
+                    }
                 }
 
-                if (response.statusCode === 0) {
-                    logger.warn(
-                        `Request failed before receiving an HTTP response; this can happen due to network issues, CORS, browser blocking, or ad blockers. Stopped retrying after ${retriesPerformedSoFar ?? 0} retries.`
-                    )
-                }
+                options.callback?.(response)
             }
-
-            options.callback?.(response)
-        })
+        )
     }
 
     private _enqueue(requestOptions: RetriableRequestWithOptions, retryAfterMs?: number): void {

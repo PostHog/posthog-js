@@ -338,7 +338,8 @@ describe('posthog core', () => {
                 expect.objectContaining({
                     url: 'https://us.i.posthog.com/e/',
                     timestampMode: 'capture-body',
-                })
+                }),
+                undefined
             )
         })
 
@@ -351,7 +352,8 @@ describe('posthog core', () => {
             expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://us.i.posthog.com/i/v0/e/',
-                })
+                }),
+                undefined
             )
         })
 
@@ -377,7 +379,8 @@ describe('posthog core', () => {
             expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: rewrittenEndpoint,
-                })
+                }),
+                undefined
             )
             expect(posthog.requestRouter.isIngestionEndpoint(rewrittenEndpoint)).toBe(true)
         })
@@ -398,7 +401,8 @@ describe('posthog core', () => {
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
                     timestampMode: 'body',
-                })
+                }),
+                undefined
             )
         })
 
@@ -423,7 +427,8 @@ describe('posthog core', () => {
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
                     timestampMode: 'body',
-                })
+                }),
+                undefined
             )
         })
 
@@ -437,7 +442,8 @@ describe('posthog core', () => {
                 expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                     expect.objectContaining({
                         transport,
-                    })
+                    }),
+                    undefined
                 )
             }
         )

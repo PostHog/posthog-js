@@ -72,7 +72,12 @@ export function toContentString(content: unknown): string {
       return JSON.stringify(content)
     } catch {
       // Fallback for circular refs, BigInt, or objects with throwing toJSON
-      return String(content)
+      try {
+        return String(content)
+      } catch {
+        // Custom coercion can throw, and null-prototype objects may have none.
+        return ''
+      }
     }
   }
   return String(content)

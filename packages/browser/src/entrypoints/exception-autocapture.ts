@@ -139,7 +139,7 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
                 }
                 const error = args.find((arg) => arg instanceof Error)
                 return errorPropertiesBuilder.buildFromUnknown(error || event, {
-                    mechanism: { handled: false },
+                    mechanism: { handled: true, type: 'onconsole' },
                     syntheticException: new Error('PostHog syntheticException'),
                     skipFirstLines: 2,
                 })

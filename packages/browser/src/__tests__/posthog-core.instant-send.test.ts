@@ -19,7 +19,13 @@ describe('unbatched capture transport', () => {
     let posthog: PostHog
     let sendRequest: any
 
-    const capturedTransport = (): QueuedRequestWithOptions['transport'] => sendRequest.mock.calls[0][0].transport
+    const capturedTransport = (): QueuedRequestWithOptions['transport'] => {
+        const [options, transportOverride] = sendRequest.mock.calls[0]
+        if (transportOverride) {
+            expect(options.transport).toBeUndefined()
+        }
+        return transportOverride || options.transport
+    }
 
     beforeEach(async () => {
         globalsState.fetch = vi.fn()
@@ -64,6 +70,17 @@ describe('unbatched capture transport', () => {
             expect(capturedTransport()).toBeUndefined()
         }
     )
+
+    it('uses sendBeacon during unload even without a retry queue', () => {
+        posthog._retryQueue?.unload()
+        posthog._retryQueue = undefined
+        posthog._handle_unload()
+        sendRequest.mockClear()
+
+        posthog.capture('conversion', {}, { send_instantly: true })
+
+        expect(capturedTransport()).toBe('sendBeacon')
+    })
 
     it('keeps a caller-chosen transport during unload', () => {
         globalsState.fetch = undefined

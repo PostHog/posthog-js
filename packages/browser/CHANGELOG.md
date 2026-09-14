@@ -1,5 +1,69 @@
 # posthog-js
 
+## 1.432.0
+
+### Minor Changes
+
+- [#4958](https://github.com/PostHog/posthog-js/pull/4958) [`4a46fab`](https://github.com/PostHog/posthog-js/commit/4a46fabe04b9caf6e040a43dcc3294ee95fd08c1) Thanks [@marandaneto](https://github.com/marandaneto)! - Add a resetError callback to React error-boundary fallbacks so applications can retry rendering without remounting the boundary.
+  (2026-09-14)
+
+### Patch Changes
+
+- [#4927](https://github.com/PostHog/posthog-js/pull/4927) [`62fc60b`](https://github.com/PostHog/posthog-js/commit/62fc60b642170cce4a50a78c8e3a02f9f98f30e6) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix lost event retries after restoring a page from the back-forward cache.
+  (2026-09-14)
+
+## 1.431.8
+
+### Patch Changes
+
+- [#4935](https://github.com/PostHog/posthog-js/pull/4935) [`6a78625`](https://github.com/PostHog/posthog-js/commit/6a78625c8d05de3404116ea9a1e4339bc89b60db) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix false dead clicks after synchronous DOM updates. Clicks stopped from bubbling are now evaluated too, which may increase dead-click counts for inert controls.
+  (2026-09-14)
+
+## 1.431.7
+
+### Patch Changes
+
+- [#4937](https://github.com/PostHog/posthog-js/pull/4937) [`a5d094f`](https://github.com/PostHog/posthog-js/commit/a5d094f44f722935b539c346a92ae98a797e8762) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid fetch keepalive quota failures when multiple event requests are in flight.
+  (2026-09-14)
+
+## 1.431.6
+
+### Patch Changes
+
+- [#4936](https://github.com/PostHog/posthog-js/pull/4936) [`ee6fd02`](https://github.com/PostHog/posthog-js/commit/ee6fd0270539a16a75ebcb421431b84a51e1718e) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent buffered session replay data from crossing projects that share a persistence name during page navigation.
+  (2026-09-14)
+
+## 1.431.5
+
+### Patch Changes
+
+- [#4940](https://github.com/PostHog/posthog-js/pull/4940) [`3e12f1d`](https://github.com/PostHog/posthog-js/commit/3e12f1de6d9a40e09bf930bd3834af296ba80161) Thanks [@marandaneto](https://github.com/marandaneto)! - Discard pending replay network captures after recording stops or restarts.
+  (2026-09-14)
+
+## 1.431.4
+
+### Patch Changes
+
+- [#4952](https://github.com/PostHog/posthog-js/pull/4952) [`4f8076b`](https://github.com/PostHog/posthog-js/commit/4f8076b01a5d2bff228b67e2d00bb71c6848aebf) Thanks [@marandaneto](https://github.com/marandaneto)! - Support clickable `[label](url)` links in Conversations widget greetings.
+  (2026-09-14)
+
+- [#4835](https://github.com/PostHog/posthog-js/pull/4835) [`03e45b6`](https://github.com/PostHog/posthog-js/commit/03e45b6246a28909c2c7f1754203bc99a54e2c23) Thanks [@posthog](https://github.com/apps/posthog)! - Fix identical person property retries being dropped after the original capture was rejected.
+  (2026-09-14)
+
+## 1.431.3
+
+### Patch Changes
+
+- [#4948](https://github.com/PostHog/posthog-js/pull/4948) [`3acf287`](https://github.com/PostHog/posthog-js/commit/3acf2875215094163d5d3f0cf58e50d90a3e1126) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix replay cleanup when the host's children are removed before destroying the player.
+  (2026-09-14)
+
+## 1.431.2
+
+### Patch Changes
+
+- [#4938](https://github.com/PostHog/posthog-js/pull/4938) [`fea443a`](https://github.com/PostHog/posthog-js/commit/fea443a4f19bc363ad1d152c1daf05ef527e0bd5) Thanks [@marandaneto](https://github.com/marandaneto)! - Mark console-captured exceptions as handled and identify their console origin.
+  (2026-09-14)
+
 ## 1.431.1
 
 ### Patch Changes

@@ -117,14 +117,17 @@ describe('posthog core - before send', () => {
 
         expect(capturedData).toHaveProperty(['properties', 'edited'], true)
         expect(capturedData).toHaveProperty(['$set', 'edited'], true)
-        expect(posthog._send_retriable_request).toHaveBeenCalledWith({
-            batchKey: undefined,
-            compression: 'best-available',
-            data: capturedData,
-            method: 'POST',
-            timestampMode: 'capture-body',
-            url: 'https://us.i.posthog.com/e/',
-        })
+        expect(posthog._send_retriable_request).toHaveBeenCalledWith(
+            {
+                batchKey: undefined,
+                compression: 'best-available',
+                data: capturedData,
+                method: 'POST',
+                timestampMode: 'capture-body',
+                url: 'https://us.i.posthog.com/e/',
+            },
+            undefined
+        )
     })
 
     it('uses a valid provided uuid', () => {
@@ -186,14 +189,17 @@ describe('posthog core - before send', () => {
         expect(capturedData[0]).toHaveProperty(['properties', 'edited_one'], true)
         expect(capturedData[0]).toHaveProperty(['properties', 'second_saw_first'], true)
         expect(capturedData[0]).toHaveProperty(['properties', 'edited_two'], true)
-        expect(posthog._send_retriable_request).toHaveBeenCalledWith({
-            batchKey: undefined,
-            compression: 'best-available',
-            data: capturedData[0],
-            method: 'POST',
-            timestampMode: 'capture-body',
-            url: 'https://us.i.posthog.com/e/',
-        })
+        expect(posthog._send_retriable_request).toHaveBeenCalledWith(
+            {
+                batchKey: undefined,
+                compression: 'best-available',
+                data: capturedData[0],
+                method: 'POST',
+                timestampMode: 'capture-body',
+                url: 'https://us.i.posthog.com/e/',
+            },
+            undefined
+        )
     })
 
     it('fails closed when a before_send function throws', () => {
@@ -233,14 +239,17 @@ describe('posthog core - before send', () => {
         const capturedData = posthog.capture('$set', {}, { $set: { value: 'provided' } })
 
         expect(capturedData).toHaveProperty(['$set', 'value'], 'edited')
-        expect(posthog._send_retriable_request).toHaveBeenCalledWith({
-            batchKey: undefined,
-            compression: 'best-available',
-            data: capturedData,
-            method: 'POST',
-            timestampMode: 'capture-body',
-            url: 'https://us.i.posthog.com/e/',
-        })
+        expect(posthog._send_retriable_request).toHaveBeenCalledWith(
+            {
+                batchKey: undefined,
+                compression: 'best-available',
+                data: capturedData,
+                method: 'POST',
+                timestampMode: 'capture-body',
+                url: 'https://us.i.posthog.com/e/',
+            },
+            undefined
+        )
     })
 
     it('warned when making arbitrary event invalid', () => {
@@ -255,14 +264,17 @@ describe('posthog core - before send', () => {
         const capturedData = posthog.capture(eventName, { value: 'provided' }, {})
 
         expect(capturedData).not.toHaveProperty(['properties', 'value'], 'provided')
-        expect(posthog._send_retriable_request).toHaveBeenCalledWith({
-            batchKey: undefined,
-            compression: 'best-available',
-            data: capturedData,
-            method: 'POST',
-            timestampMode: 'capture-body',
-            url: 'https://us.i.posthog.com/e/',
-        })
+        expect(posthog._send_retriable_request).toHaveBeenCalledWith(
+            {
+                batchKey: undefined,
+                compression: 'best-available',
+                data: capturedData,
+                method: 'POST',
+                timestampMode: 'capture-body',
+                url: 'https://us.i.posthog.com/e/',
+            },
+            undefined
+        )
         expect(mockLogger.warn).toHaveBeenCalledWith(
             `Event '${eventName}' has no properties after beforeSend function, this is likely an error.`
         )
