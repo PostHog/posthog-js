@@ -4,7 +4,7 @@ import { TextDecoder } from 'util'
 import { runInNewContext } from 'node:vm'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import * as fflate from 'fflate'
-import { extendURLParams, request } from '../request'
+import { extendURLParams, isPostHogXHR, request } from '../request'
 import { Compression, RequestWithOptions } from '../types'
 import { logger } from '@posthog/browser-common/utils/logger'
 
@@ -169,6 +169,24 @@ describe('request', () => {
             expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('x-header', 'value')
         })
 
+        it('marks the XHR as its own so page-level observers can skip it', () => {
+            request(createRequest({}))
+
+            expect(isPostHogXHR(mockedXHR)).toBe(true)
+            expect(isPostHogXHR({} as XMLHttpRequest)).toBe(false)
+        })
+
+        it('loads in a browser without WeakSet, such as IE11', async () => {
+            vi.stubGlobal('WeakSet', undefined)
+            vi.resetModules()
+            try {
+                await expect(import('../request')).resolves.toBeDefined()
+            } finally {
+                vi.unstubAllGlobals()
+                vi.resetModules()
+            }
+        })
+
         it('calls the on callback handler when successful', async () => {
             mockedXHR.status = 200
             request(createRequest())
@@ -256,6 +274,17 @@ describe('request', () => {
                     referrerPolicy: 'strict-origin',
                 })
             )
+        })
+
+        it('uses the fetch captured at load, so a wrapper installed on window.fetch never sees it', () => {
+            const windowFetch = vi.fn()
+            vi.stubGlobal('fetch', windowFetch)
+
+            request(createRequest({}))
+
+            expect(mockedFetch).toHaveBeenCalledTimes(1)
+            expect(windowFetch).not.toHaveBeenCalled()
+            vi.unstubAllGlobals()
         })
 
         it('adds the cache-busting parameter only when requested', () => {

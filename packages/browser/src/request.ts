@@ -33,16 +33,22 @@ interface RequestWithEncodedBody extends RequestWithOptions {
 
 export const SUPPORTS_REQUEST = !!XMLHttpRequest || !!fetch
 
+// The SDK's fetch is the one captured at load, so page-level fetch wrappers never see it.
+// Every XMLHttpRequest shares one prototype, so the SDK's own XHRs are marked instead
+// and observers such as network metrics skip them. A WeakMap, not a WeakSet: this runs
+// at load and IE11 has no WeakSet.
+const posthogXHRs = new WeakMap<XMLHttpRequest, true>()
+export const isPostHogXHR = (xhr: XMLHttpRequest): boolean => posthogXHRs.has(xhr)
+
 const CONTENT_TYPE_PLAIN = 'text/plain'
 const CONTENT_TYPE_JSON = 'application/json'
 const CONTENT_TYPE_FORM = 'application/x-www-form-urlencoded'
 const SIXTY_FOUR_KILOBYTES = 64 * 1024
-/*
- fetch will fail if we request keepalive with a body greater than 64kb
- sets the threshold lower than that so that
- any overhead doesn't push over the threshold after checking here
-*/
+// Fetch's 64KiB keepalive quota is shared by outstanding requests, not per body.
+// Retain headroom, and coordinate all named clients using this module. Other SDK copies,
+// vendors and sendBeacon can still consume browser quota we cannot observe.
 const KEEP_ALIVE_THRESHOLD = SIXTY_FOUR_KILOBYTES * 0.8
+let pendingKeepaliveBytes = 0
 let nativeAsyncGzipDisabled = false
 
 const removeURLParam = (url: string, param: string): string => {
@@ -255,6 +261,7 @@ const xhr = (options: RequestWithOptions) => {
     }
 
     const req = new XMLHttpRequest!()
+    posthogXHRs.set(req, true)
     const { url, encodedBody } = encodedRequest
     req.open(options.method || 'GET', url, true)
     const { contentType, body } = encodedBody ?? {}
@@ -355,26 +362,44 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
         options.callback?.({ statusCode: 0, error })
     }
 
+    let reservedBytes = 0
+    const cleanup = () => {
+        pendingKeepaliveBytes -= reservedBytes
+        reservedBytes = 0
+        if (aborter) {
+            clearTimeout(aborter.timeout)
+        }
+    }
+
     try {
-        fetch!(url, {
+        const fetchOptions: RequestInit = {
             method: options?.method || 'GET',
             headers,
             // Keep the referring origin for domain checks without sending the page path or query.
             referrerPolicy: 'strict-origin',
-            // if body is greater than 64kb, then fetch with keepalive will error
-            // see 8:10:5 at https://fetch.spec.whatwg.org/#http-network-or-cache-fetch,
-            // but we do want to set keepalive sometimes as it can  help with success
-            // when e.g. a page is being closed
-            // so let's get the best of both worlds and only set keepalive for POST requests
-            // where the body is less than 64kb
-            // NB this is fetch keepalive and not http keepalive
-            // _keepaliveDisabled: a beacon-rejected payload would fail a keepalive fetch too (shared quota)
-            keepalive:
-                options.method === 'POST' && !options._keepaliveDisabled && (estimatedSize || 0) < KEEP_ALIVE_THRESHOLD,
             body,
             signal: aborter?.signal,
             ...options.fetchOptions,
-        })
+        }
+        const requestSize = estimatedSize ?? (isUndefined(body) ? 0 : undefined)
+        // Respect runtime opt-out, but do not let untyped options override the safety budget
+        // or beacon-rejection fallback. A replaced body has no trustworthy encoded size.
+        fetchOptions.keepalive =
+            fetchOptions.method === 'POST' &&
+            !options._keepaliveDisabled &&
+            fetchOptions.keepalive !== false &&
+            fetchOptions.body === body &&
+            !isUndefined(requestSize) &&
+            requestSize >= 0 &&
+            pendingKeepaliveBytes + requestSize < KEEP_ALIVE_THRESHOLD
+        if (fetchOptions.keepalive) {
+            reservedBytes = requestSize!
+            pendingKeepaliveBytes += reservedBytes
+        }
+        // Reserve immediately before dispatch (after async encoding). Fetch resolves at headers:
+        // retain bytes through body consumption, including while timeout/abort is still pending.
+        // A patched abort that does not terminate fetch must not replenish the budget.
+        fetch!(url, fetchOptions)
             .then((response) => {
                 return response.text().then((responseText) => {
                     const res: RequestResponse = {
@@ -390,11 +415,16 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
                         }
                     }
 
+                    // A callback can start the next batch immediately, including by resolving a promise.
+                    cleanup()
                     options.callback?.(res)
                 })
             })
-            .catch(handleError)
-            .finally(() => (aborter ? clearTimeout(aborter.timeout) : null))
+            .catch((error) => {
+                cleanup()
+                handleError(error)
+            })
+            .finally(cleanup)
     } catch (error) {
         // `window.fetch` can be monkey-patched by third-party scripts (e.g. a storefront/analytics
         // wrapper) to throw *synchronously* instead of returning a rejected promise. Because we may
@@ -403,9 +433,7 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
         // pollute error tracking. Route it through the same handling as an async rejection so the
         // request queue just retries. `.finally()` never runs when the call throws synchronously,
         // so clear the timeout here too.
-        if (aborter) {
-            clearTimeout(aborter.timeout)
-        }
+        cleanup()
         handleError(error)
     }
 

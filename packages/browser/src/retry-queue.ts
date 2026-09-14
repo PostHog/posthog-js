@@ -78,13 +78,17 @@ export class RetryQueue {
         return this._queue.length
     }
 
-    retriableRequest({ retriesPerformedSoFar, ...options }: RetriableRequestWithOptions): void {
+    retriableRequest(
+        { retriesPerformedSoFar, ...options }: RetriableRequestWithOptions,
+        transportOverride?: RetriableRequestWithOptions['transport']
+    ): void {
         if (isPositiveNumber(retriesPerformedSoFar)) {
             options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
 
         this._instance._send_request({
             ...options,
+            ...(transportOverride ? { transport: transportOverride } : {}),
             callback: (response) => {
                 if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
                     const maxRetries = response.statusCode === 0 ? STATUS_CODE_ZERO_MAX_RETRIES : DEFAULT_MAX_RETRIES

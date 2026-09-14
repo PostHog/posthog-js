@@ -660,11 +660,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._eventTriggerMatching = new EventTriggerMatching(this._instance)
 
         this._buffer = this._clearBuffer()
-        // the sessionid manager's key scheme, repeated rather than read from it because this
-        // recorder is loaded from the CDN and can run against a core that does not expose it.
-        // Two apps on one origin park separately, as they already do for the window id
+        // A shared persistence_name also shares session/window IDs, but must not share replay
+        // data across project tokens. Encode the pair without ambiguous separators and use a
+        // distinct key shape: legacy parked buffers have no token and cannot be safely restored.
         const persistenceName = this._instance.config.persistence_name || this._instance.config.token
-        this._pendingBufferStorageKey = 'ph_' + persistenceName + PENDING_BUFFER_STORAGE_SUFFIX
+        this._pendingBufferStorageKey =
+            'ph' + PENDING_BUFFER_STORAGE_SUFFIX + '_' + JSON.stringify([persistenceName, this._instance.config.token])
 
         if (this._sessionIdleThresholdMilliseconds >= this._sessionManager.sessionTimeoutMs) {
             logger.warn(

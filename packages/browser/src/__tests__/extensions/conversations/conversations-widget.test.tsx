@@ -17,6 +17,104 @@ describe('ConversationsWidget', () => {
         Element.prototype.scrollIntoView = vi.fn()
     })
 
+    describe('greeting links', () => {
+        function renderGreeting(greetingText: string) {
+            return render(
+                <ConversationsWidget
+                    config={{ ...config, greetingText }}
+                    initialState="open"
+                    onSendMessage={vi.fn().mockResolvedValue(undefined)}
+                />
+            )
+        }
+
+        it('renders explicit links using the reply link styling and new-tab protections', () => {
+            const { getByRole, getByText } = renderGreeting(
+                'Welcome! Read [FAQ](https://example.com/faq?q=help&lang=en) or [contact us](mailto:help@example.com).'
+            )
+            const faq = getByRole('link', { name: 'FAQ' })
+            expect(faq).toHaveAttribute('href', 'https://example.com/faq?q=help&lang=en')
+            expect(faq).toHaveAttribute('target', '_blank')
+            expect(faq).toHaveAttribute('rel', 'noopener noreferrer')
+            expect(faq).toHaveAttribute('referrerpolicy', 'no-referrer')
+            expect(faq).toHaveStyle({ textDecoration: 'underline' })
+            expect(getByRole('link', { name: 'contact us' })).toHaveAttribute('href', 'mailto:help@example.com')
+            expect(getByText(/Welcome! Read/)).toHaveTextContent('Welcome! Read FAQ or contact us.')
+        })
+
+        it('preserves plain text and newlines around links', () => {
+            const { getByText, getByRole } = renderGreeting('Hello <friend> & welcome!\n\n[FAQ](/help)\nThank you.')
+            const greeting = getByText(/Hello <friend>/)
+            expect(greeting.textContent).toBe('Hello <friend> & welcome!FAQThank you.')
+            expect(greeting.querySelectorAll('br')).toHaveLength(3)
+            expect(getByRole('link', { name: 'FAQ' })).toHaveAttribute('href', '/help')
+        })
+
+        it.each([
+            'Hello <friend> & welcome!\nHow can we help?',
+            'Read https://example.com/faq first.',
+            '**Hello** _there_',
+            '[FAQ](https://example.com',
+            '[FAQ]()',
+            '[FAQ](https://example.com "title")',
+            '[FAQ](https://example.com/a(b))',
+            '[outer [FAQ](https://example.com)]',
+            '![FAQ](https://example.com/image.png)',
+        ])('preserves unsupported or plain text literally: %s', (greetingText) => {
+            const { getByText, container } = renderGreeting(greetingText)
+            expect(getByText(greetingText.replace(/\n/g, ''), { exact: true })).toBeInTheDocument()
+            expect(container.querySelectorAll('a[href]')).toHaveLength(0)
+        })
+
+        it('removes the escape backslash without activating the escaped link', () => {
+            const { container, getByRole } = renderGreeting(
+                'Read \\[FAQ](https://example.com/faq) or [help](https://example.com/help).'
+            )
+            expect(container.textContent).toContain('Read [FAQ](https://example.com/faq) or help.')
+            expect(container.querySelectorAll('a[href]')).toHaveLength(1)
+            expect(getByRole('link', { name: 'help' })).toHaveAttribute('href', 'https://example.com/help')
+        })
+
+        it.each([
+            'javascript:evil',
+            'JaVaScRiPt:evil',
+            'java\u0000script:evil',
+            'java\u200bscript:evil',
+            'java\tscript:evil',
+            'java script:evil',
+            'vbscript:evil',
+            'data:text/html,evil',
+            'file:///etc/passwd',
+            '//example.com',
+            'ftp://example.com',
+            'javascript&#58;evil',
+        ])('does not activate unsafe or unsupported URLs: %s', (url) => {
+            const greetingText = `[FAQ](${url})`
+            const { container } = renderGreeting(greetingText)
+            expect(container.querySelectorAll('a[href]')).toHaveLength(0)
+            expect(container.textContent).toContain(greetingText)
+        })
+
+        it('renders HTML and link labels as text, never as markup', () => {
+            const { container, getByRole } = renderGreeting(
+                '<script>alert(1)</script><img src=x onerror=alert(1)> [<b>FAQ</b>](https://example.com/"onclick="evil)'
+            )
+            expect(container.querySelectorAll('script, img, b, [onclick], [onerror]')).toHaveLength(0)
+            expect(getByRole('link', { name: '<b>FAQ</b>' })).toHaveAttribute(
+                'href',
+                'https://example.com/"onclick="evil'
+            )
+            expect(container.textContent).toContain('<script>alert(1)</script><img src=x onerror=alert(1)>')
+        })
+
+        it('does not create a greeting for an empty string', () => {
+            const { queryByText, getByPlaceholderText, container } = renderGreeting('')
+            expect(queryByText('Support')).not.toBeInTheDocument()
+            expect(getByPlaceholderText('Type your message...')).toBeInTheDocument()
+            expect(container.querySelectorAll('a[href]')).toHaveLength(0)
+        })
+    })
+
     it('should open restore request view from footer link', () => {
         const { getByText, getByPlaceholderText } = render(
             <ConversationsWidget

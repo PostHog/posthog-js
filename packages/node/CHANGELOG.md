@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.52.2
+
+### Patch Changes
+
+- [#4951](https://github.com/PostHog/posthog-js/pull/4951) [`55c5142`](https://github.com/PostHog/posthog-js/commit/55c51429d964bdb8b5814dc052bcaeacd1416d56) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix Express exception events reporting the initial response status instead of the final HTTP status.
+  (2026-09-14)
+
 ## 5.52.1
 
 ### Patch Changes

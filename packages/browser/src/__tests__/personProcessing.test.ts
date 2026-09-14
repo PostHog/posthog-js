@@ -1027,6 +1027,30 @@ describe('person processing', () => {
             expect(calls.filter((call) => call[0].event === '$set').length).toEqual(1)
         })
 
+        it('should not deduplicate a call that capture dropped', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+            // the first $set never leaves the SDK, so the retry must not look like a duplicate
+            beforeSendMock.mockImplementationOnce(() => null)
+
+            posthog.setPersonProperties({ name: 'Max Hedgehog' })
+            posthog.setPersonProperties({ name: 'Max Hedgehog' })
+
+            const calls = beforeSendMock.mock.calls
+            expect(calls.map((call) => call[0].event)).toEqual(['$set', '$set'])
+            expect(calls[1][0].properties.$set).toEqual({ name: 'Max Hedgehog' })
+        })
+
+        it('should not deduplicate an identify that capture dropped', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+            beforeSendMock.mockImplementationOnce(() => null)
+
+            posthog.identify('new-id', { name: 'Max Hedgehog' })
+            posthog.setPersonProperties({ name: 'Max Hedgehog' })
+
+            const calls = beforeSendMock.mock.calls
+            expect(calls.map((call) => call[0].event)).toEqual(['$identify', '$set'])
+        })
+
         it('should not deduplicate a call after an identity change', async () => {
             const { posthog, beforeSendMock } = await setup('always')
 

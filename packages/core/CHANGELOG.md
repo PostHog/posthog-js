@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.53.3
+
+### Patch Changes
+
+- [#4922](https://github.com/PostHog/posthog-js/pull/4922) [`3786cff`](https://github.com/PostHog/posthog-js/commit/3786cff3b92a0276f5dc6a0f0cdacdc0e3f76e78) Thanks [@Mnigos](https://github.com/Mnigos)! - Require final 2xx responses for successful writes while preserving immediate-call error handling.
+  (2026-09-14)
+
 ## 1.53.2
 
 ### Patch Changes

@@ -11,7 +11,7 @@ export default definePlugin((nitroApp) => {
           error,
           event
             ? {
-                path: new URL(event.req.url).pathname,
+                path: event.req.url,
                 method: event.req.method,
               }
             : undefined

@@ -83,6 +83,16 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(0)
         })
 
+        it('tracks clicks again after restarting without retaining the stopped listener', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            triggerMouseEvent(document.body, 'click')
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+
+            lazyLoadedDeadClicksAutocapture.start(document)
+            triggerMouseEvent(document.body, 'click')
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+        })
+
         it('sets timer when detecting clicks', () => {
             expect(lazyLoadedDeadClicksAutocapture['_checkClickTimer']).toBe(undefined)
 
