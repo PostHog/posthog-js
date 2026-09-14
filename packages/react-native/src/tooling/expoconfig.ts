@@ -281,20 +281,21 @@ const POSTHOG_NEW_INTENT_BLOCK_PATTERN = new RegExp(
   'g'
 )
 
-// The `{` that opens MainActivity's body, or -1 when the file does not look like the templates we
-// patch: a supertype list is all we expect between the class name and that brace.
-function mainActivityBodyBraceIndex(contents: string): number {
+// The span of MainActivity's body, or undefined when the file does not look like the templates we
+// patch: a supertype list is all we expect between the class name and the opening brace.
+function mainActivityBody(contents: string): { open: number; close: number } | undefined {
   const declaration = /\bclass\s+MainActivity\b/.exec(contents)
   if (!declaration) {
-    return -1
+    return undefined
   }
   const searchFrom = declaration.index + declaration[0].length
-  const braceIndex = contents.indexOf('{', searchFrom)
-  if (braceIndex === -1 || !/^[^;{}]*$/.test(contents.slice(searchFrom, braceIndex))) {
-    return -1
+  const open = contents.indexOf('{', searchFrom)
+  if (open === -1 || !/^[^;{}]*$/.test(contents.slice(searchFrom, open))) {
+    return undefined
   }
   // Unbalanced braces mean we cannot tell where the body ends, so the file is not ours to edit.
-  return matchingBraceIndex(contents, braceIndex) === -1 ? -1 : braceIndex
+  const close = matchingBraceIndex(contents, open)
+  return close === -1 ? undefined : { open, close }
 }
 
 /**
@@ -311,9 +312,19 @@ export function updateMainActivityNewIntentOverride(contents: string, language: 
     return withoutManagedBlock
   }
 
-  // A declaration, not the bare token: a comment or a string that merely mentions onNewIntent must
-  // not turn the fix off, but every real override in either language matches.
-  if (/\b(fun|void)\s+onNewIntent\s*\(/.test(withoutManagedBlock)) {
+  const body = mainActivityBody(withoutManagedBlock)
+  if (!body) {
+    console.warn(
+      '[posthog-react-native] Could not find the MainActivity class body; skipping the onNewIntent ' +
+        'override. Notification taps delivered while the React context is starting will be lost.'
+    )
+    return withoutManagedBlock
+  }
+
+  // Scoped to MainActivity's own body, and matching a declaration rather than the bare token: an
+  // onNewIntent on a helper class in the same file, or named in a comment or a string, must not
+  // turn the fix off — but every real override of it in either language matches.
+  if (/\b(fun|void)\s+onNewIntent\s*\(/.test(withoutManagedBlock.slice(body.open, body.close))) {
     console.warn(
       '[posthog-react-native] MainActivity already overrides onNewIntent; leaving it alone. ' +
         'Add `setIntent(intent)` as its first statement so a notification tap that arrives before ' +
@@ -323,19 +334,10 @@ export function updateMainActivityNewIntentOverride(contents: string, language: 
     return withoutManagedBlock
   }
 
-  const braceIndex = mainActivityBodyBraceIndex(withoutManagedBlock)
-  if (braceIndex === -1) {
-    console.warn(
-      '[posthog-react-native] Could not find the MainActivity class body; skipping the onNewIntent ' +
-        'override. Notification taps delivered while the React context is starting will be lost.'
-    )
-    return withoutManagedBlock
-  }
-
   return (
-    withoutManagedBlock.slice(0, braceIndex + 1) +
+    withoutManagedBlock.slice(0, body.open + 1) +
     newIntentOverrideBlock(language) +
-    withoutManagedBlock.slice(braceIndex + 1)
+    withoutManagedBlock.slice(body.open + 1)
   )
 }
 

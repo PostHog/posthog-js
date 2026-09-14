@@ -1046,6 +1046,14 @@ describe('updateMainActivityNewIntentOverride', () => {
     expect(result.indexOf('onNewIntent')).toBeLessThan(result.indexOf('class Helper'))
     expect(console.warn).not.toHaveBeenCalled()
   })
+
+  it('patches MainActivity when a later class in the same file overrides onNewIntent', () => {
+    const source = `${kotlinMainActivity}\nclass Helper {\n  fun onNewIntent(intent: Intent) {}\n}\n`
+    const result = updateMainActivityNewIntentOverride(source, 'kt', true)
+
+    expect(result.indexOf('setIntent(intent)')).toBeLessThan(result.indexOf('class Helper'))
+    expect(console.warn).not.toHaveBeenCalled()
+  })
 })
 
 describe('postHogExpoPlugin Android native symbols', () => {
