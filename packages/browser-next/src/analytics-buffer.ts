@@ -59,41 +59,45 @@ export const createAnalyticsExtension = (
         60 * 60 * 1000
     )
 
-    const ensureDelivery = (reason: LoadReason, retryAfterPending = true): Promise<void> => {
+    const ensureDelivery = async (reason: LoadReason, retryAfterPending = true): Promise<void> => {
         if (!load || disposed || driver) {
-            return Promise.resolve()
+            return
         }
         if (loading) {
             if (reason === 'capture' || !retryAfterPending) {
                 return loading
             }
             const previousFailures = failures
-            return loading.then(() =>
-                failures > previousFailures && buffer.hasPending() ? ensureDelivery(reason, false) : undefined
-            )
+            await loading
+            if (failures > previousFailures && buffer.hasPending()) {
+                await ensureDelivery(reason, false)
+            }
+            return
         }
         if (reason === 'capture' && failures > 0) {
-            return Promise.resolve()
+            return
         }
-        const pending = Promise.resolve()
-            .then(() => load())
-            .then((createDelivery) => {
+        const loadDelivery = async () => {
+            // Assign the shared promise before invoking a loader that can throw or reenter.
+            await Promise.resolve()
+            try {
+                const createDelivery = await load()
                 if (disposed) {
                     return
                 }
                 driver = createDelivery(buffer, client, host, scheduling)
-            })
-            .catch((error: unknown) => {
+            } catch (error: unknown) {
                 if (!driver) {
                     failures++
                     client.logger.error('Automatic analytics loading failed', error)
                 }
-            })
-            .finally(() => {
+            } finally {
                 if (loading === pending) {
                     loading = undefined
                 }
-            })
+            }
+        }
+        const pending = loadDelivery()
         loading = pending
         return pending
     }

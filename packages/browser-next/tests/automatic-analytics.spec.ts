@@ -373,6 +373,7 @@ describe('@posthog/browser automatic analytics', () => {
         posthog.capture('one')
         posthog.capture('two')
         posthog.capture('three')
+        expect(load).not.toHaveBeenCalled()
         await Promise.resolve()
         expect(load).toHaveBeenCalledTimes(1)
 
@@ -383,11 +384,17 @@ describe('@posthog/browser automatic analytics', () => {
         await posthog.shutdown()
     })
 
-    it('retains events after a load failure and retries loading on explicit flush', async () => {
+    it.each(['throw', 'reject'] as const)('retains events after a load %s and retries on flush', async (failure) => {
         const requests: SentRequest[] = []
         const load = vi
             .fn<[], Promise<AnalyticsDeliveryFactory>>()
-            .mockRejectedValueOnce(new Error('chunk unavailable'))
+            .mockImplementationOnce(() => {
+                const error = new Error('chunk unavailable')
+                if (failure === 'throw') {
+                    throw error
+                }
+                return Promise.reject(error)
+            })
             .mockResolvedValueOnce(createAnalyticsDelivery)
         const posthog = await createWithAnalytics(
             {
