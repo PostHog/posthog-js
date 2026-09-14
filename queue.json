@@ -1,4 +1,19 @@
 {
   "version": 1,
-  "items": []
+  "items": [
+    {
+      "id": "issue-4920-auto-none-no-comment-no-close-1789373462691",
+      "kind": "issue",
+      "number": 4920,
+      "mode": "auto",
+      "commandMention": "@posthog-watcher",
+      "enqueuedAt": "2026-09-14T08:11:02.691Z",
+      "source": {
+        "eventName": "issues",
+        "runId": 34821388092,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/34821388092"
+      },
+      "attempts": 0
+    }
+  ]
 }
