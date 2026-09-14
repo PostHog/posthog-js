@@ -12,9 +12,15 @@ export class RequestQueue {
     private _queue: QueuedRequestWithOptions[] = []
     private _flushTimeout?: ReturnType<typeof setTimeout>
     private _flushTimeoutMs: number
-    private _sendRequest: (req: QueuedRequestWithOptions) => void
+    private _sendRequest: (
+        req: QueuedRequestWithOptions,
+        transportOverride?: QueuedRequestWithOptions['transport']
+    ) => void
 
-    constructor(sendRequest: (req: QueuedRequestWithOptions) => void, config?: RequestQueueConfig) {
+    constructor(
+        sendRequest: (req: QueuedRequestWithOptions, transportOverride?: QueuedRequestWithOptions['transport']) => void,
+        config?: RequestQueueConfig
+    ) {
         this._flushTimeoutMs = clampToRange(
             config?.flush_interval_ms || DEFAULT_FLUSH_INTERVAL_MS,
             250,
@@ -44,7 +50,7 @@ export class RequestQueue {
             ...requestValues.filter((r) => r.url.indexOf('/e') !== 0),
         ]
         sortedRequests.map((req) => {
-            this._sendRequestSafely({ ...req, transport: 'sendBeacon' })
+            this._sendRequestSafely(req, 'sendBeacon')
         })
     }
 
@@ -68,9 +74,12 @@ export class RequestQueue {
         }, this._flushTimeoutMs)
     }
 
-    private _sendRequestSafely(req: QueuedRequestWithOptions): void {
+    private _sendRequestSafely(
+        req: QueuedRequestWithOptions,
+        transportOverride?: QueuedRequestWithOptions['transport']
+    ): void {
         try {
-            this._sendRequest(req)
+            this._sendRequest(req, transportOverride)
         } catch (error) {
             logger.error(error)
         }

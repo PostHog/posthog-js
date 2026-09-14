@@ -883,7 +883,7 @@ export class PostHog implements PostHogInterface {
         this.register({ $initialization_time: new Date().toISOString() })
 
         this._requestQueue = new RequestQueue(
-            (req) => this._send_retriable_request(req),
+            (req, transportOverride) => this._send_retriable_request(req, transportOverride),
             this.config.request_queue_config
         )
         this._retryQueue = new RetryQueue(this)

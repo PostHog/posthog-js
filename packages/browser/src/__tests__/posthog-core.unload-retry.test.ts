@@ -12,7 +12,11 @@ vi.mock('@posthog/browser-common/utils/globals', async (importOriginal) => {
     }
 })
 
-describe.each([true, false])('unload capture retries (request_batching: %s)', (request_batching) => {
+describe.each([
+    { request_batching: true, batched: false },
+    { request_batching: false, batched: false },
+    { request_batching: true, batched: true },
+])('unload retries (batching=$request_batching, batched=$batched)', ({ request_batching, batched }) => {
     let posthog: PostHog
     const mockFetch = vi.mocked(fetch!)
     const mockBeacon = vi.mocked(navigator!.sendBeacon!)
@@ -41,19 +45,38 @@ describe.each([true, false])('unload capture retries (request_batching: %s)', (r
         mockFetch.mockResolvedValue({ status, text: () => Promise.resolve('{}') } as Response)
     }
 
+    const captureDuringUnload = async (transport?: 'sendBeacon') => {
+        const capture = () => {
+            const options = batched ? { _batchKey: 'test', transport } : { send_instantly: true, transport }
+            posthog.capture('conversion', {}, options)
+            if (batched) {
+                posthog.capture('second-conversion', {}, options)
+            }
+        }
+
+        if (batched) {
+            capture()
+            expect(mockBeacon).not.toHaveBeenCalled()
+            expect(mockFetch).not.toHaveBeenCalled()
+            mockBeacon.mockReturnValueOnce(false)
+            window.dispatchEvent(new Event('pagehide'))
+        } else {
+            window.dispatchEvent(new Event('pagehide'))
+            await vi.advanceTimersByTimeAsync(0)
+            mockBeacon.mockClear().mockReturnValueOnce(false)
+            mockFetch.mockClear()
+            capture()
+        }
+        await vi.advanceTimersByTimeAsync(0)
+    }
+
     it.each([0, 503])('keeps retrying after a rejected unload beacon and status %s', async (status) => {
         if (status === 0) {
             mockFetch.mockRejectedValue(new TypeError('Failed to fetch'))
         } else {
             respondWith(status)
         }
-        window.dispatchEvent(new Event('pagehide'))
-        await vi.advanceTimersByTimeAsync(0)
-        mockBeacon.mockClear().mockReturnValueOnce(false)
-        mockFetch.mockClear()
-
-        posthog.capture('conversion', {}, { send_instantly: true })
-        await vi.advanceTimersByTimeAsync(0)
+        await captureDuringUnload()
 
         expect(mockBeacon).toHaveBeenCalledTimes(1)
         expect(mockFetch).toHaveBeenCalledTimes(1)
@@ -80,13 +103,7 @@ describe.each([true, false])('unload capture retries (request_batching: %s)', (r
 
     it('preserves a caller-selected beacon on retry', async () => {
         respondWith(503)
-        window.dispatchEvent(new Event('pagehide'))
-        await vi.advanceTimersByTimeAsync(0)
-        mockBeacon.mockClear().mockReturnValueOnce(false)
-        mockFetch.mockClear()
-
-        posthog.capture('conversion', {}, { send_instantly: true, transport: 'sendBeacon' })
-        await vi.advanceTimersByTimeAsync(0)
+        await captureDuringUnload('sendBeacon')
         expect(posthog._retryQueue?.length).toBe(1)
 
         window.dispatchEvent(new Event('pageshow'))
