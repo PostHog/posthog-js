@@ -47,7 +47,7 @@ import {
 import { ProductTourEventName, ProductTourEventProperties } from './posthog-product-tours-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
-import { request, SUPPORTS_REQUEST } from './request'
+import { sendRequest, enableRequestSending } from './request-dispatch'
 import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
@@ -235,17 +235,6 @@ const fbcCookieWins = (
 const FLAG_CALLED_TRANSPORT_PROPERTY_KEYS = ['token', 'distinct_id', COOKIELESS_MODE_FLAG_PROPERTY]
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
-
-/*
- * Dynamic... constants? Is that an oxymoron?
- */
-// http://hacks.mozilla.org/2009/07/cross-site-xmlhttprequest-with-cors/
-// https://developer.mozilla.org/en-US/docs/DOM/XMLHttpRequest#withCredentials
-
-// IE<10 does not support cross-origin XHR's but script tags
-// with defer won't block window.onload; ENQUEUE_REQUESTS
-// should only be true for Opera<12
-let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
 const getSessionRecordingDefaults = (defaults?: ConfigDefaults): PostHogConfig['session_recording'] => {
     const sessionRecording: PostHogConfig['session_recording'] = {}
@@ -1413,57 +1402,7 @@ export class PostHog implements PostHogInterface {
     }
 
     _send_request(options: QueuedRequestWithOptions): void {
-        if (!this.__loaded) {
-            if (options.fireCallbackOnDrop) {
-                options.callback?.({ statusCode: 0 })
-            }
-            return
-        }
-
-        if (ENQUEUE_REQUESTS) {
-            this.__request_queue.push(options)
-            return
-        }
-
-        if (this.rateLimiter.isServerRateLimited(options.batchKey)) {
-            if (options.fireCallbackOnDrop) {
-                options.callback?.({ statusCode: 429 })
-            }
-            return
-        }
-
-        options.transport = options.transport || this.config.api_transport
-        options.headers = {
-            ...this.config.request_headers,
-            ...options.headers,
-        }
-        options.compression =
-            options.compression === 'best-available'
-                ? (this.compression ?? options.compressionFallback)
-                : options.compression
-        const disableBeacon = isUndefined(this.config.disable_beacon)
-            ? this.config.__preview_disable_beacon
-            : this.config.disable_beacon
-        if (disableBeacon) {
-            options.disableTransport = ['sendBeacon']
-        }
-
-        // Specially useful if you're doing SSR with NextJS
-        // Users must be careful when tweaking `cache` because they might get out-of-date feature flags
-        options.fetchOptions = options.fetchOptions || this.config.fetch_options
-
-        request({
-            ...options,
-            callback: (response) => {
-                this.rateLimiter.checkForLimiting(response)
-
-                if (response.statusCode >= 400) {
-                    this.config.on_request_error?.(response)
-                }
-
-                options.callback?.(response)
-            },
-        })
+        sendRequest(this, options)
     }
 
     _send_retriable_request(
@@ -5220,7 +5159,7 @@ const add_dom_loaded_handler = function () {
         }
         ;(dom_loaded_handler as any).done = true
 
-        ENQUEUE_REQUESTS = false
+        enableRequestSending()
 
         each(instances, function (inst: PostHog) {
             inst._dom_loaded()

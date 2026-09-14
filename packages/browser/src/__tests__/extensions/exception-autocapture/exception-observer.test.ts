@@ -62,7 +62,7 @@ describe('Exception Observer', () => {
             loadExternalDependency: loadScriptMock,
         }
 
-        sendRequestSpy = vi.spyOn(posthog, '_send_request')
+        sendRequestSpy = vi.spyOn(posthog, '_send_retriable_request')
 
         exceptionObserver = new ExceptionObserver(posthog)
     })

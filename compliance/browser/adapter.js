@@ -359,7 +359,8 @@ app.post('/init', (req, res) => {
             normalizeEventForContract(event)
             state.capturedEvents.push(event)
             state.pendingEvents.push(event)
-            return event
+            // The adapter sends these events itself. Suppress native delivery through the supported hook.
+            return null
         },
     })
 

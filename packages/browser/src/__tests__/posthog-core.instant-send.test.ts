@@ -19,12 +19,18 @@ describe('unbatched capture transport', () => {
     let posthog: PostHog
     let sendRequest: any
 
-    const capturedTransport = (): QueuedRequestWithOptions['transport'] => sendRequest.mock.calls[0][0].transport
+    const capturedTransport = (): QueuedRequestWithOptions['transport'] => {
+        const [options, transportOverride] = sendRequest.mock.calls[0]
+        if (transportOverride) {
+            expect(options.transport).toBeUndefined()
+        }
+        return transportOverride || options.transport
+    }
 
     beforeEach(async () => {
         globalsState.fetch = vi.fn()
         posthog = await createPosthogInstance(uuidv7(), { request_batching: true, before_send: (event) => event })
-        sendRequest = vi.spyOn(posthog, '_send_request').mockImplementation(() => {})
+        sendRequest = vi.spyOn(posthog, '_send_retriable_request').mockImplementation(() => {})
     })
 
     it('keeps the default transport while fetch is available', () => {
@@ -93,7 +99,7 @@ describe('unbatched capture transport', () => {
                 before_send: (event) => event,
                 request_headers: { 'X-Proxy-Auth': 'proxy-value' },
             })
-            sendRequest = vi.spyOn(posthog, '_send_request').mockImplementation(() => {})
+            sendRequest = vi.spyOn(posthog, '_send_retriable_request').mockImplementation(() => {})
         })
 
         it('keeps the default transport when fetch is not available', () => {
