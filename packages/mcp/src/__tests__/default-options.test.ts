@@ -59,6 +59,20 @@ describe('MCP analytics defaults', () => {
     expect(capture.findCapturesByEvent('$mcp_tools_list')).toHaveLength(1)
   })
 
+  it.each([false, true])('caches resolved ownership when the tool owns model: %s', async (owned) => {
+    const server = fresh(undefined, owned ? { llm_model: { type: 'string' } } : {})
+    for (let call = 0; call < 2; call++) {
+      await server.request('tools/call', { llm_model: 'model-a' })
+    }
+    expect(server.listing).toHaveBeenCalledTimes(1)
+    for (const [request] of server.received.mock.calls) {
+      expect(request.params.arguments).toEqual(owned ? { llm_model: 'model-a' } : {})
+    }
+    for (const event of capture.findCapturesByEvent('$mcp_tool_call')) {
+      expect(event.properties.$mcp_llm_model).toBe(owned ? undefined : 'model-a')
+    }
+  })
+
   it('keeps explicit opt-outs inert', async () => {
     const server = fresh({ captureModel: false, enableConversationId: false, context: false })
     const result = (await server.request('tools/call', { value: 'v', llm_model: 'application-model' })) as any
@@ -87,11 +101,14 @@ describe('MCP analytics defaults', () => {
 
   it('dispatches unchanged when the raw catalog fails', async () => {
     const server = fresh()
-    server.listing.mockRejectedValue(new Error('catalog unavailable'))
+    server.listing.mockRejectedValueOnce(new Error('catalog unavailable'))
     const args = { value: 'v', llm_model: 'unresolved model' }
     const result = (await server.request('tools/call', args)) as any
     expect(result.content).toHaveLength(1)
     expect(server.received.mock.calls[0][0].params?.arguments).toEqual(args)
     expect(capture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(1)
+    await server.request('tools/call', args)
+    expect(server.listing).toHaveBeenCalledTimes(2)
+    expect(capture.findCapturesByEvent('$mcp_tool_call')[1].properties.$mcp_llm_model).toBe('unresolved model')
   })
 })

@@ -715,18 +715,21 @@ export async function resolveUnlistedToolOwnership(
   extra: CompatibleRequestHandlerExtra | undefined
 ): Promise<AnalyticsParameterOwnership | undefined> {
   const data = getServerTrackingData(server)
-  const name = request.params?.name
-  if (!data || !name) return undefined
+  const params = request.params
+  if (!data || !params?.name) return undefined
+  const { name } = params
   if (!needsToolSchema(data)) return undefined
   const cached = data.toolAnalyticsParameterOwnership.get(name)
   if (cached) return cached
   const handler = getOriginalListHandler(server)
   if (!handler) return undefined
-  return findToolOwnership(
+  const ownership = await findToolOwnership(
     name,
-    (cursor) => handler({ ...request, method: 'tools/list', params: { _meta: request.params?._meta, cursor } }, extra),
+    (cursor) => handler({ ...request, method: 'tools/list', params: { _meta: params._meta, cursor } }, extra),
     () => data.logger('Warning: Could not resolve analytics argument ownership; leaving tool arguments unchanged.')
   )
+  if (ownership) data.toolAnalyticsParameterOwnership.set(name, ownership)
+  return ownership
 }
 
 function needsToolSchema(data: MCPAnalyticsData): boolean {
