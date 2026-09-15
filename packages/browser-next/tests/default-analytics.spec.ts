@@ -2,6 +2,8 @@ import { createPostHog } from '../src'
 import { createAnalyticsExtension } from '../src/analytics-buffer'
 import { analytics } from '../src/automatic-analytics'
 import type { AutomaticAnalyticsOptions } from '../src/types'
+import { createAnalyticsDelivery } from '../src/analytics-delivery'
+import { createFetch, type SentRequest } from './helpers'
 
 vi.mock('../src/automatic-analytics', () => ({ analytics: vi.fn() }))
 
@@ -53,11 +55,33 @@ describe('default analytics selection', () => {
         await client.shutdown()
     })
 
-    it('contains an automatic analytics constructor failure', async () => {
+    it('retries a transient automatic analytics construction failure before returning the client', async () => {
+        const requests: SentRequest[] = []
+        const configuration = { load: 'lazy' as const, flushAt: 100, flushInterval: 0 }
+        vi.mocked(analytics)
+            .mockImplementationOnce(() => {
+                throw new Error('analytics temporarily unavailable')
+            })
+            .mockImplementationOnce((configuration) =>
+                createAnalyticsExtension(configuration, undefined, createAnalyticsDelivery)
+            )
+        const client = await createPostHog({ ...options, analytics: configuration, fetch: createFetch(requests) })
+        const extension = client.getExtension('analytics')
+        expect(analytics).toHaveBeenCalledTimes(2)
+        expect(vi.mocked(analytics).mock.calls.every(([value]) => value === configuration)).toBe(true)
+        client.capture('recovered')
+        await client.flush()
+        expect(requests).toHaveLength(1)
+        expect(client.getExtension('analytics')).toBe(extension)
+        await client.shutdown()
+    })
+
+    it('contains an automatic analytics constructor failure after the bounded retry', async () => {
         vi.mocked(analytics).mockImplementation(() => {
             throw new Error('analytics could not initialize')
         })
         const client = await createPostHog(options)
+        expect(analytics).toHaveBeenCalledTimes(2)
         expect(() => client.capture('buffered')).not.toThrow()
         await expect(client.flush()).resolves.toBeUndefined()
         await client.shutdown()

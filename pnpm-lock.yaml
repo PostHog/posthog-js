@@ -512,6 +512,9 @@ importers:
       '@rslib/core':
         specifier: 'catalog:'
         version: 0.23.2(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(@typescript/native-preview@7.0.0-dev.20260216.1)(core-js@3.49.0)(typescript@5.8.2)
+      '@rspack/core':
+        specifier: 2.1.10
+        version: 2.1.10(@swc/helpers@0.5.23)
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12

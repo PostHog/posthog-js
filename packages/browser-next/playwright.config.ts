@@ -19,8 +19,7 @@ export default defineConfig({
         { name: 'webkit', use: { ...devices['Desktop Safari'] } },
     ],
     webServer: {
-        command:
-            'pnpm exec esbuild playwright/fixture.ts --bundle --format=iife --platform=browser --target=es2022 --outfile=.playwright/fixture.js && node scripts/serve-browser-tests.mjs',
+        command: 'pnpm build && node scripts/build-browser-tests.mjs && node scripts/serve-browser-tests.mjs',
         env: { POSTHOG_BROWSER_NEXT_TEST_PORT: String(port) },
         url: `http://127.0.0.1:${port}`,
         reuseExistingServer: !process.env.CI,

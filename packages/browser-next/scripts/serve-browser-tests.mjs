@@ -14,6 +14,28 @@ const server = createServer((request, response) => {
         createReadStream(fixture).pipe(response)
         return
     }
+    const chunk = request.url?.match(/^\/chunks\/(rspack|esm)\/([\w.-]+\.js)$/)
+    if (chunk) {
+        const file = new URL(`../.playwright/chunks/${chunk[1]}/${chunk[2]}`, import.meta.url)
+        response.setHeader('Content-Type', 'text/javascript; charset=utf-8')
+        createReadStream(file)
+            .on('error', () => {
+                response.writeHead(404)
+                response.end()
+            })
+            .pipe(response)
+        return
+    }
+    if (request.url === '/chunks/rspack' || request.url === '/chunks/esm') {
+        response.writeHead(200, {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Content-Security-Policy': "default-src 'self'; script-src 'self'; object-src 'none'",
+        })
+        response.end(
+            `<!doctype html><html><body><script type="module" src="${request.url}/main.js"></script></body></html>`
+        )
+        return
+    }
     if (request.url === '/' || request.url === '/after') {
         response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
         response.end(request.url === '/' ? html : '<!doctype html><html><body>after</body></html>')

@@ -13,6 +13,7 @@ import {
 import type { AnalyticsOptions, AutomaticAnalyticsOptions } from './analytics-options'
 import { EventBuffer } from './event-buffer'
 import { captureFailure } from './capture-summary'
+import { createChunkLoader } from './chunk-loader'
 
 const numberOption = (read: () => number | undefined, fallback: number, minimum: number, maximum: number): number => {
     try {
@@ -46,9 +47,7 @@ export const createAnalyticsExtension = (
     let client: Client
     let host: CaptureHost
     let driver: AnalyticsDriver | undefined
-    let loading: Promise<void> | undefined
     let disposed = false
-    let failures = 0
     const buffer = new EventBuffer<AnalyticsMessage>(
         1_000,
         (total, count = 1, reason = 'overflow') =>
@@ -59,47 +58,34 @@ export const createAnalyticsExtension = (
         60 * 60 * 1000
     )
 
-    const ensureDelivery = async (reason: LoadReason, retryAfterPending = true): Promise<void> => {
-        if (!load || disposed || driver) {
-            return
-        }
-        if (loading) {
-            if (reason === 'capture' || !retryAfterPending) {
-                return loading
-            }
-            const previousFailures = failures
-            await loading
-            if (failures > previousFailures && buffer.hasPending()) {
-                await ensureDelivery(reason, false)
-            }
-            return
-        }
-        if (reason === 'capture' && failures > 0) {
-            return
-        }
-        const loadDelivery = async () => {
-            // Assign the shared promise before invoking a loader that can throw or reenter.
-            await Promise.resolve()
+    const delivery =
+        load &&
+        createChunkLoader(async () => {
             try {
                 const createDelivery = await load()
-                if (disposed) {
-                    return
+                if (!disposed) {
+                    driver = createDelivery(buffer, client, host, scheduling)
                 }
-                driver = createDelivery(buffer, client, host, scheduling)
-            } catch (error: unknown) {
-                if (!driver) {
-                    failures++
-                    client.logger.error('Automatic analytics loading failed', error)
-                }
-            } finally {
-                if (loading === pending) {
-                    loading = undefined
-                }
+            } catch (error) {
+                client.logger.error('Automatic analytics loading failed', error)
+                throw error
             }
+        })
+
+    const ensureDelivery = async (reason: LoadReason): Promise<void> => {
+        if (!delivery || disposed || driver) {
+            return
         }
-        const pending = loadDelivery()
-        loading = pending
-        return pending
+        if (reason === 'capture' && delivery.failed && !delivery.loading) {
+            return
+        }
+        const shouldRetry =
+            delivery.loading && reason !== 'capture' ? () => !disposed && buffer.hasPending() : undefined
+        try {
+            await delivery.load(shouldRetry)
+        } catch {
+            // Keep buffered work for the next explicit delivery attempt.
+        }
     }
 
     return {
@@ -125,8 +111,12 @@ export const createAnalyticsExtension = (
             if (disposed) {
                 return
             }
-            if (reason === 'shutdown' && loading) {
-                await loading
+            if (reason === 'shutdown' && delivery?.loading) {
+                try {
+                    await delivery.loading
+                } catch {
+                    // Shutdown joins the current attempt without starting another load.
+                }
             } else if (buffer.hasPending()) {
                 await ensureDelivery(reason)
             }
