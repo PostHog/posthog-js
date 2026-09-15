@@ -8,11 +8,16 @@ import {
   isObject,
   isString,
   PostHogEventProperties,
+  uuidv7,
 } from '@posthog/core'
 import { Properties } from '@posthog/types'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
 import { getRemoteConfigBool } from '../utils'
 import { OptionalReactNativePlugin } from '../optional/OptionalPlugin'
+import {
+  buildFatalJournalEntry,
+  serializeFatalJournalEntry,
+} from './journal'
 
 type LogLevel = 'debug' | 'log' | 'info' | 'warn' | 'error'
 
@@ -281,21 +286,108 @@ export class ErrorTracking {
         additionalProperties['$exception_level'] = 'fatal' as CoreErrorTracking.SeverityLevel
       }
 
-      this.instance.captureException(error, additionalProperties, hint)
-
+      let captured: { eventUuid: string; timestamp: string; additionalProperties: PostHogEventProperties } | null = null
       if (isFatal) {
-        const persisted = this.persistFatalException?.()
-        void this.instance.flush().catch(() => {
-          this.logger.critical('Failed to flush events')
-        })
-        return persisted
+        const eventUuid = uuidv7()
+        const timestampDate = new Date()
+        const instance = this.instance as unknown as {
+          captureExceptionInternal?: (
+            error: unknown,
+            additionalProperties?: PostHogEventProperties,
+            hint?: CoreErrorTracking.EventHint,
+            options?: { uuid?: string; timestamp?: Date }
+          ) => { eventUuid: string; timestamp: string; additionalProperties: PostHogEventProperties } | null
+        }
+        if (instance.captureExceptionInternal) {
+          captured = instance.captureExceptionInternal.call(instance, error, additionalProperties, hint, {
+            uuid: eventUuid,
+            timestamp: timestampDate,
+          })
+        } else {
+          this.instance.captureException(error, additionalProperties, hint)
+          captured = { eventUuid: '', timestamp: timestampDate.toISOString(), additionalProperties }
+        }
+      } else {
+        this.instance.captureException(error, additionalProperties, hint)
       }
+
+      if (!isFatal) {
+        return
+      }
+
+      const persisted = this.persistFatalException?.()
+      const journalWrite = captured
+        ? this.persistFatalReportToNative(captured, hint, error).catch(() => {})
+        : Promise.resolve()
+      void this.instance.flush().catch(() => {
+        this.logger.critical('Failed to flush events')
+      })
+      return Promise.all([persisted, journalWrite]).then(() => undefined)
     }
     try {
       this._unsubscribeUncaughtExceptions = trackUncaughtExceptions(onUncaughtException)
     } catch (err) {
       this.logger.warn('Failed to track uncaught exceptions: ', err)
     }
+  }
+
+  private async persistFatalReportToNative(
+    captured: { eventUuid: string; timestamp: string; additionalProperties: PostHogEventProperties },
+    hint: CoreErrorTracking.EventHint,
+    error: unknown
+  ): Promise<void> {
+    const bridge = OptionalReactNativePlugin?.persistFatalException
+    if (!bridge) {
+      return
+    }
+    const journalId = uuidv7()
+    const exceptionList = this._exceptionListFromError(error, hint)
+    const steps = this._exceptionStepsBuffer.getAttachable() as unknown as Array<{
+      [key: string]: JsonType
+    }> | undefined
+    const entry = buildFatalJournalEntry({
+      id: journalId,
+      eventUuid: captured.eventUuid,
+      timestamp: captured.timestamp,
+      sessionId: this.instance.getSessionId() || '',
+      distinctId: this.instance.getDistinctId() || '',
+      anonymousId: this.instance.getAnonymousId() || '',
+      deviceId:
+        (this.instance as unknown as { getDeviceId?: () => string }).getDeviceId?.() || '',
+      commonProperties: (this.instance as unknown as { getCommonEventProperties?: () => PostHogEventProperties })
+        .getCommonEventProperties?.() || {},
+      exceptionList: exceptionList as unknown as PostHogEventProperties['$exception_list'],
+      exceptionLevel: 'fatal',
+      exceptionSteps: steps as unknown as PostHogEventProperties['$exception_steps'],
+      optedOut: (this.instance as unknown as { optedOut?: boolean }).optedOut === true,
+    })
+    await bridge(serializeFatalJournalEntry(entry))
+  }
+
+  private _exceptionListFromError(
+    error: unknown,
+    hint: CoreErrorTracking.EventHint
+  ): Array<{ [key: string]: JsonType }> {
+    try {
+      const builder = (
+        this.instance as unknown as {
+          getErrorPropertiesBuilder?: () => { buildFromUnknown: (e: unknown, h: CoreErrorTracking.EventHint) => { $exception_list?: Array<{ [key: string]: JsonType }> } }
+        }
+      ).getErrorPropertiesBuilder?.()
+      const result = builder?.buildFromUnknown(error, hint)
+      if (result?.$exception_list && result.$exception_list.length > 0) {
+        return result.$exception_list
+      }
+    } catch (e) {
+      this.logger.warn('Failed to build exception list for native journal:', e)
+    }
+    return [
+      {
+        type: 'Error',
+        value: String((error as Error)?.message ?? error ?? 'Unknown error'),
+        mechanism: { type: hint?.mechanism?.type ?? 'onuncaughtexception', handled: false },
+      },
+    ]
   }
 
   private autocaptureUnhandledRejections() {
