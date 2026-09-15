@@ -265,9 +265,12 @@ export class Prompts {
    * with many prompts can call this once per cache cycle instead of making one
    * `get()` request per prompt.
    *
-   * Throws if the request fails, or if the server does not support fetching
-   * prompts by label on the list endpoint (PostHog releases from before
-   * September 2026).
+   * Unlike `get()`, there is no `fallback` option, so callers should handle
+   * the error themselves.
+   *
+   * @throws {Error} When the request fails, when the response is malformed,
+   * or when the server does not support fetching prompts by label on the list
+   * endpoint (PostHog releases from before September 2026).
    */
   async getAll(options: { label: string }): Promise<Record<string, PromptRemoteResult>> {
     const label = options.label
@@ -298,6 +301,17 @@ export class Prompts {
         continue
       }
       resolvedRows.push(row)
+    }
+
+    if (rows.length > 0 && resolvedRows.length === 0) {
+      // Every returned row was skipped as moved. One moved label is a
+      // mid-request race, but all of them means the server most likely
+      // ignored the label param and served latest versions.
+      throw new Error(
+        `[PostHog Prompts] The server returned prompts, but none resolve label "${label}". ` +
+          'It may not support fetching prompts by label on the list endpoint yet. ' +
+          'Upgrade PostHog, or fetch prompts one by one with get().'
+      )
     }
 
     const now = Date.now()
