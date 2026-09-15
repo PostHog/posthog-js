@@ -695,6 +695,21 @@ describe('extension lifecycle', () => {
             expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Surveys module not available' })
         })
 
+        it('onActiveMatchingSurveysChanged calls back with error when extension is not loaded', async () => {
+            PostHog.__defaultExtensionClasses = {}
+
+            const posthog = await createPosthogInstance(undefined, {
+                __preview_deferred_init_extensions: false,
+                capture_pageview: false,
+            })
+
+            const callback = vi.fn()
+            const unsubscribe = posthog.onActiveMatchingSurveysChanged(callback)
+
+            expect(callback).toHaveBeenCalledWith([], { isLoaded: false, error: 'Surveys module not available' })
+            expect(unsubscribe).toEqual(expect.any(Function))
+        })
+
         it('featureFlags is undefined when extension is not loaded', async () => {
             PostHog.__defaultExtensionClasses = {}
 
