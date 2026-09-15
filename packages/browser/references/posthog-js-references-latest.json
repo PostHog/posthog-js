@@ -1039,7 +1039,7 @@
         {
           "category": "Privacy",
           "description": "Checks if the user has opted into data capturing.",
-          "details": "Returns the current consent status for event tracking and data persistence.",
+          "details": "Returns the current consent status for event tracking and data persistence. With `cookieless_mode: 'always'` no consent decision applies, because that mode always captures, so this reports opted in.",
           "id": "has_opted_in_capturing",
           "showDocs": true,
           "title": "has_opted_in_capturing",
@@ -1061,7 +1061,7 @@
         {
           "category": "Privacy",
           "description": "Checks if the user has opted out of data capturing.",
-          "details": "Returns the current consent status for event tracking and data persistence.",
+          "details": "Returns the current consent status for event tracking and data persistence. With `cookieless_mode: 'always'` no consent decision applies, because that mode always captures, so this reports opted in.",
           "id": "has_opted_out_capturing",
           "showDocs": true,
           "title": "has_opted_out_capturing",

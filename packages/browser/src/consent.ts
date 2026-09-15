@@ -50,6 +50,17 @@ export class ConsentManager {
         return !this.isOptedOut()
     }
 
+    /**
+     * Whether a consent decision keeps capturing switched off.
+     *
+     * `cookieless_mode: "always"` captures unconditionally and ignores `optInOut`, so no consent
+     * decision applies to capturing there. `isOptedOut()` still reports true in that mode, because
+     * persistence, the recorder and surveys all stay off.
+     */
+    public isCaptureOptedOut() {
+        return this._config.cookieless_mode !== COOKIELESS_ALWAYS && this.isOptedOut()
+    }
+
     public isExplicitlyOptedOut() {
         return this.consent === ConsentStatus.DENIED
     }

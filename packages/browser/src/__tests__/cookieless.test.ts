@@ -93,7 +93,7 @@ describe('cookieless', () => {
             const { posthog, beforeSendMock } = await setup({
                 cookieless_mode: 'always',
             })
-            expect(posthog.has_opted_in_capturing()).toBe(false)
+            expect(posthog.has_opted_in_capturing()).toBe(true)
             posthog.capture(eventName, eventProperties)
 
             expect(beforeSendMock).toBeCalledTimes(1)
@@ -110,7 +110,39 @@ describe('cookieless', () => {
 
             // should ignore cookie consent
             posthog.opt_in_capturing()
-            expect(posthog.has_opted_in_capturing()).toBe(false)
+            expect(posthog.has_opted_in_capturing()).toBe(true)
+        })
+
+        it('reports capturing through the consent API with the default consent config', async () => {
+            const { posthog, beforeSendMock } = await setup({
+                cookieless_mode: 'always',
+                capture_pageview: false,
+            })
+
+            // Always mode has no consent decision to report, and applications gate their own
+            // capture calls on these, so they must agree with is_capturing() here.
+            expect(posthog.is_capturing()).toBe(true)
+            expect(posthog.has_opted_out_capturing()).toBe(false)
+            expect(posthog.has_opted_in_capturing()).toBe(true)
+            expect(posthog.get_explicit_consent_status()).toBe('pending')
+
+            posthog.capture(eventName, eventProperties)
+            expect(beforeSendMock).toBeCalledTimes(1)
+
+            // Opt in is ignored, so the state it reports must not change either.
+            posthog.opt_in_capturing({ captureEventName: false })
+            expect(posthog.has_opted_out_capturing()).toBe(false)
+            expect(posthog.get_explicit_consent_status()).toBe('pending')
+        })
+
+        it('still reports the opted-out state that persistence reads', async () => {
+            const { posthog } = await setup({
+                cookieless_mode: 'always',
+                capture_pageview: false,
+            })
+
+            expect(posthog.consent.isOptedOut()).toBe(true)
+            expect(posthog.persistence?._disabled).toBe(true)
         })
 
         it('emits a rate-limit warning without session context or durable storage', async () => {
@@ -145,7 +177,7 @@ describe('cookieless', () => {
                     cookieless_mode: 'always',
                     capture_pageview: capturePageview,
                 })
-                expect(posthog.has_opted_in_capturing()).toBe(false)
+                expect(posthog.has_opted_in_capturing()).toBe(true)
                 await delay(1) // wait for async pageview capture
 
                 expect(beforeSendMock).toBeCalledTimes(1)
@@ -162,7 +194,7 @@ describe('cookieless', () => {
 
                 // should ignore cookie consent
                 posthog.opt_in_capturing()
-                expect(posthog.has_opted_in_capturing()).toBe(false)
+                expect(posthog.has_opted_in_capturing()).toBe(true)
             }
         )
     })

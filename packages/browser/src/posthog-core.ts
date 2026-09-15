@@ -4831,7 +4831,9 @@ export class PostHog implements PostHogInterface {
      * {@label Privacy}
      *
      * @remarks
-     * Returns the current consent status for event tracking and data persistence.
+     * Returns the current consent status for event tracking and data persistence. With
+     * `cookieless_mode: 'always'` no consent decision applies, because that mode always captures,
+     * so this reports opted in.
      *
      * @example
      * ```js
@@ -4845,7 +4847,7 @@ export class PostHog implements PostHogInterface {
      * @returns {boolean} current opt-in status
      */
     has_opted_in_capturing(): boolean {
-        return this.consent.isOptedIn()
+        return !this.consent.isCaptureOptedOut()
     }
 
     /**
@@ -4854,7 +4856,9 @@ export class PostHog implements PostHogInterface {
      * {@label Privacy}
      *
      * @remarks
-     * Returns the current consent status for event tracking and data persistence.
+     * Returns the current consent status for event tracking and data persistence. With
+     * `cookieless_mode: 'always'` no consent decision applies, because that mode always captures,
+     * so this reports opted in.
      *
      * @example
      * ```js
@@ -4868,7 +4872,7 @@ export class PostHog implements PostHogInterface {
      * @returns {boolean} current opt-out status
      */
     has_opted_out_capturing(): boolean {
-        return this.consent.isOptedOut()
+        return this.consent.isCaptureOptedOut()
     }
 
     /**
