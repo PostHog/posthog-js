@@ -485,6 +485,12 @@ describe('posthog core', () => {
         })
 
         describe('campaign params', () => {
+            const setMetaCookies = (value: string) => {
+                ;(mockedGlobals as any).document.cookie = value
+            }
+
+            afterEach(() => setMetaCookies(''))
+
             it('should not send campaign params as null if there are no non-null ones', () => {
                 // arrange
                 const token = uuidv7()
@@ -755,6 +761,192 @@ describe('posthog core', () => {
                 expect(beforeSendMock.mock.calls[1][0]).toMatchObject({ properties: { $unset: ['$fbc'] } })
                 expect(beforeSendMock.mock.calls[1][0].$set?.$fbc).toBeUndefined()
                 expect(beforeSendMock.mock.calls[2][0].$set?.$fbc).toBeUndefined()
+            })
+
+            it('should prefer the click time in the _fbc cookie over the time of the pageview', () => {
+                const now = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/?fbclid=pixel-click')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    persistence: 'localStorage',
+                    person_profiles: 'always',
+                })
+                setMetaCookies('_fbc=fb.1.1699999000000.pixel-click')
+
+                posthog.capture('$pageview')
+
+                expect(beforeSendMock.mock.calls[0][0].$set.$fbc).toBe('fb.1.1699999000000.pixel-click')
+                now.mockRestore()
+            })
+
+            it('should send the _fbc cookie of a click that arrived before the SDK loaded', () => {
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/checkout')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    persistence: 'localStorage',
+                    person_profiles: 'always',
+                })
+                setMetaCookies('_fbc=fb.1.1699999000000.earlier-click')
+
+                posthog.capture('$pageview')
+
+                expect(beforeSendMock.mock.calls[0][0].$set.$fbc).toBe('fb.1.1699999000000.earlier-click')
+            })
+
+            it('should keep the new fbclid when the _fbc cookie holds an older click', () => {
+                const now = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/?fbclid=new-click')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    persistence: 'localStorage',
+                    person_profiles: 'always',
+                })
+                setMetaCookies('_fbc=fb.1.1600000000000.old-click')
+
+                posthog.capture('$pageview')
+
+                expect(beforeSendMock.mock.calls[0][0].$set.$fbc).toBe('fb.1.1700000000000.new-click')
+                now.mockRestore()
+            })
+
+            it('should send the _fbp cookie as $fbp once', () => {
+                const token = uuidv7()
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    persistence: 'localStorage',
+                    person_profiles: 'always',
+                })
+                vi.spyOn(posthog, '_send_retriable_request').mockImplementation((options) => {
+                    options.callback?.({ statusCode: 200 })
+                })
+                setMetaCookies('_fbp=fb.1.1699999000000.1234567890')
+
+                posthog.capture('$pageview')
+                posthog.capture('$pageview')
+
+                expect(beforeSendMock.mock.calls[0][0].$set.$fbp).toBe('fb.1.1699999000000.1234567890')
+                expect(beforeSendMock.mock.calls[0][0].properties).not.toHaveProperty('$fbp')
+                expect(beforeSendMock.mock.calls[1][0].$set?.$fbp).toBeUndefined()
+            })
+
+            it('should ignore an _fbp cookie that is not in the format Meta expects', () => {
+                const token = uuidv7()
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    persistence: 'localStorage',
+                    person_profiles: 'always',
+                })
+                setMetaCookies('_fbp=not-an-fbp-value')
+
+                posthog.capture('$pageview')
+
+                expect(beforeSendMock.mock.calls[0][0].$set?.$fbp).toBeUndefined()
+            })
+
+            it.each([
+                {
+                    name: 'the same click with the time the pixel recorded',
+                    cookie: 'fb.1.1699999000000.first-click',
+                    expected: 'fb.1.1699999000000.first-click',
+                },
+                {
+                    name: 'a newer click the SDK never saw',
+                    cookie: 'fb.1.1750000000000.pixel-only-click',
+                    expected: 'fb.1.1750000000000.pixel-only-click',
+                },
+                {
+                    name: 'the stored click when the cookie holds an older one',
+                    cookie: 'fb.1.1600000000000.old-click',
+                    expected: 'fb.1.1700000000000.first-click',
+                },
+            ])('should send $name on a page without a click ID', ({ cookie, expected }) => {
+                const now = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/?fbclid=first-click')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    persistence: 'localStorage',
+                    person_profiles: 'always',
+                })
+
+                posthog.capture('$pageview')
+                setMetaCookies(`_fbc=${cookie}`)
+                mockURL.mockReturnValue('https://www.example.com/checkout')
+                posthog.capture('purchase')
+
+                expect(beforeSendMock.mock.calls[0][0].$set.$fbc).toBe('fb.1.1700000000000.first-click')
+                expect(beforeSendMock.mock.calls[1][0].$set.$fbc).toBe(expected)
+                now.mockRestore()
+            })
+
+            it('should not read the Meta cookies when save_campaign_params is off', () => {
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/?fbclid=url-click')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    persistence: 'localStorage',
+                    person_profiles: 'always',
+                    save_campaign_params: false,
+                })
+                setMetaCookies('_fbc=fb.1.1699999000000.url-click; _fbp=fb.1.1699999000000.1234567890')
+
+                posthog.capture('$pageview')
+                posthog.setPersonProperties({ $fbp: 'fb.1.1699999000000.9876543210' })
+
+                expect(beforeSendMock.mock.calls[0][0].$set?.$fbc).toBeUndefined()
+                expect(beforeSendMock.mock.calls[0][0].$set?.$fbp).toBeUndefined()
+                expect(beforeSendMock.mock.calls[1][0]).toMatchObject({
+                    properties: { $set: { $fbp: 'fb.1.1699999000000.9876543210' } },
+                })
+            })
+
+            it('should not read the Meta cookies in cookieless mode', () => {
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    persistence: 'localStorage',
+                    person_profiles: 'always',
+                    cookieless_mode: 'always',
+                })
+                setMetaCookies('_fbc=fb.1.1699999000000.cookie-click; _fbp=fb.1.1699999000000.1234567890')
+
+                posthog.capture('$pageview')
+
+                expect(beforeSendMock.mock.calls[0][0].$set?.$fbc).toBeUndefined()
+                expect(beforeSendMock.mock.calls[0][0].$set?.$fbp).toBeUndefined()
+            })
+
+            it('should confirm $fbp delivery before the debounced save lands', () => {
+                const token = uuidv7()
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                    persistence: 'localStorage',
+                    person_profiles: 'always',
+                    persistence_save_debounce_ms: 250,
+                })
+                vi.spyOn(posthog, '_send_retriable_request').mockImplementation((options) => {
+                    options.callback?.({ statusCode: 200 })
+                })
+                setMetaCookies('_fbp=fb.1.1699999000000.1234567890')
+
+                posthog.capture('$pageview')
+                posthog.capture('$pageview')
+
+                expect(beforeSendMock.mock.calls[0][0].$set.$fbp).toBe('fb.1.1699999000000.1234567890')
+                expect(beforeSendMock.mock.calls[1][0].$set?.$fbp).toBeUndefined()
             })
         })
 

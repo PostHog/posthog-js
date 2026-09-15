@@ -23,11 +23,20 @@ import {
     isNativeAsyncGzipError,
     isNativeAsyncGzipReadError,
     isUndefined,
+    parseRetryAfterMs,
 } from '@posthog/core'
 
 export { jsonStringify }
 
-interface RequestWithEncodedBody extends RequestWithOptions {
+// This completion is only used between the internal transport and retry queue.
+// Public callbacks are forwarded explicitly with just RequestResponse.
+export type TransportCallback = (response: RequestResponse, retryAfterMs?: number) => void
+
+interface TransportRequestOptions extends RequestWithOptions {
+    callback?: TransportCallback
+}
+
+interface RequestWithEncodedBody extends TransportRequestOptions {
     _encodedBody?: EncodedBody
 }
 
@@ -44,12 +53,11 @@ const CONTENT_TYPE_PLAIN = 'text/plain'
 const CONTENT_TYPE_JSON = 'application/json'
 const CONTENT_TYPE_FORM = 'application/x-www-form-urlencoded'
 const SIXTY_FOUR_KILOBYTES = 64 * 1024
-/*
- fetch will fail if we request keepalive with a body greater than 64kb
- sets the threshold lower than that so that
- any overhead doesn't push over the threshold after checking here
-*/
+// Fetch's 64KiB keepalive quota is shared by outstanding requests, not per body.
+// Retain headroom, and coordinate all named clients using this module. Other SDK copies,
+// vendors and sendBeacon can still consume browser quota we cannot observe.
 const KEEP_ALIVE_THRESHOLD = SIXTY_FOUR_KILOBYTES * 0.8
+let pendingKeepaliveBytes = 0
 let nativeAsyncGzipDisabled = false
 
 const removeURLParam = (url: string, param: string): string => {
@@ -255,7 +263,19 @@ const isExpectedNetworkError = (error: unknown): boolean => {
     return err?.name === 'TypeError' && NETWORK_ERROR_MESSAGES.test(err?.message || '')
 }
 
-const xhr = (options: RequestWithOptions) => {
+// Bound only the header component to 30 seconds: longer server waits may be
+// retried early, but the queue's jittered exponential backoff is never shortened.
+const readRetryAfter = (getHeader: () => string | null): number | undefined => {
+    try {
+        const delay = parseRetryAfterMs(getHeader())
+        return isUndefined(delay) ? undefined : Math.min(delay, 30_000)
+    } catch {
+        // Cross-origin headers may not be exposed, or a header accessor may throw.
+        return undefined
+    }
+}
+
+const xhr = (options: TransportRequestOptions) => {
     const encodedRequest = encodeRequest(options)
     if (!encodedRequest) {
         return
@@ -293,13 +313,16 @@ const xhr = (options: RequestWithOptions) => {
                 }
             }
 
-            options.callback?.(response)
+            options.callback?.(
+                response,
+                readRetryAfter(() => req.getResponseHeader('Retry-After'))
+            )
         }
     }
     req.send(body)
 }
 
-const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) => {
+const _fetch = (options: TransportRequestOptions & { _keepaliveDisabled?: boolean }) => {
     const encodedRequest = encodeRequest(options)
     if (!encodedRequest) {
         return
@@ -363,24 +386,44 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
         options.callback?.({ statusCode: 0, error })
     }
 
+    let reservedBytes = 0
+    const cleanup = () => {
+        pendingKeepaliveBytes -= reservedBytes
+        reservedBytes = 0
+        if (aborter) {
+            clearTimeout(aborter.timeout)
+        }
+    }
+
     try {
-        fetch!(url, {
+        const fetchOptions: RequestInit = {
             method: options?.method || 'GET',
             headers,
-            // if body is greater than 64kb, then fetch with keepalive will error
-            // see 8:10:5 at https://fetch.spec.whatwg.org/#http-network-or-cache-fetch,
-            // but we do want to set keepalive sometimes as it can  help with success
-            // when e.g. a page is being closed
-            // so let's get the best of both worlds and only set keepalive for POST requests
-            // where the body is less than 64kb
-            // NB this is fetch keepalive and not http keepalive
-            // _keepaliveDisabled: a beacon-rejected payload would fail a keepalive fetch too (shared quota)
-            keepalive:
-                options.method === 'POST' && !options._keepaliveDisabled && (estimatedSize || 0) < KEEP_ALIVE_THRESHOLD,
+            // Keep the referring origin for domain checks without sending the page path or query.
+            referrerPolicy: 'strict-origin',
             body,
             signal: aborter?.signal,
             ...options.fetchOptions,
-        })
+        }
+        const requestSize = estimatedSize ?? (isUndefined(body) ? 0 : undefined)
+        // Respect runtime opt-out, but do not let untyped options override the safety budget
+        // or beacon-rejection fallback. A replaced body has no trustworthy encoded size.
+        fetchOptions.keepalive =
+            fetchOptions.method === 'POST' &&
+            !options._keepaliveDisabled &&
+            fetchOptions.keepalive !== false &&
+            fetchOptions.body === body &&
+            !isUndefined(requestSize) &&
+            requestSize >= 0 &&
+            pendingKeepaliveBytes + requestSize < KEEP_ALIVE_THRESHOLD
+        if (fetchOptions.keepalive) {
+            reservedBytes = requestSize!
+            pendingKeepaliveBytes += reservedBytes
+        }
+        // Reserve immediately before dispatch (after async encoding). Fetch resolves at headers:
+        // retain bytes through body consumption, including while timeout/abort is still pending.
+        // A patched abort that does not terminate fetch must not replenish the budget.
+        fetch!(url, fetchOptions)
             .then((response) => {
                 return response.text().then((responseText) => {
                     const res: RequestResponse = {
@@ -396,11 +439,19 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
                         }
                     }
 
-                    options.callback?.(res)
+                    // A callback can start the next batch immediately, including by resolving a promise.
+                    cleanup()
+                    options.callback?.(
+                        res,
+                        readRetryAfter(() => response.headers.get('Retry-After'))
+                    )
                 })
             })
-            .catch(handleError)
-            .finally(() => (aborter ? clearTimeout(aborter.timeout) : null))
+            .catch((error) => {
+                cleanup()
+                handleError(error)
+            })
+            .finally(cleanup)
     } catch (error) {
         // `window.fetch` can be monkey-patched by third-party scripts (e.g. a storefront/analytics
         // wrapper) to throw *synchronously* instead of returning a rejected promise. Because we may
@@ -409,9 +460,7 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
         // pollute error tracking. Route it through the same handling as an async rejection so the
         // request queue just retries. `.finally()` never runs when the call throws synchronously,
         // so clear the timeout here too.
-        if (aborter) {
-            clearTimeout(aborter.timeout)
-        }
+        cleanup()
         handleError(error)
     }
 
@@ -432,7 +481,7 @@ const addSentAtToBody = (
     return data.map((item) => ({ ...item, sent_at: sentAt }))
 }
 
-const _sendBeacon = (options: RequestWithOptions) => {
+const _sendBeacon = (options: TransportRequestOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
 
@@ -514,7 +563,7 @@ const addSentAtToCaptureBody = (data: NonNullable<RequestWithOptions['data']>): 
 const AVAILABLE_TRANSPORTS = /* @__PURE__ */ (() => {
     const transports: {
         transport: RequestWithOptions['transport']
-        method: (options: RequestWithOptions) => void
+        method: (options: TransportRequestOptions) => void
     }[] = []
 
     // We add the transports in order of preference
@@ -543,9 +592,12 @@ const AVAILABLE_TRANSPORTS = /* @__PURE__ */ (() => {
 })()
 
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
-export const request = (_options: RequestWithOptions) => {
+export const request = (_options: RequestWithOptions, onResponse?: TransportCallback) => {
     // Clone the options so we don't modify the original object
-    const options: RequestWithEncodedBody = { ..._options }
+    const options: RequestWithEncodedBody = {
+        ..._options,
+        callback: onResponse ?? ((response) => _options.callback?.(response)),
+    }
     options.timeout = options.timeout || 60000
 
     const transport = options.transport ?? 'fetch'

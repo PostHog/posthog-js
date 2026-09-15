@@ -265,6 +265,7 @@ describe('Lazy SessionRecording', () => {
                 slowestSliceMs: 0,
             })),
             getDiscardedDurationSamples: vi.fn(() => 0),
+            getObserverInitFailures: vi.fn(() => undefined),
             resetSnapshotCostState: vi.fn(),
         }
         assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = vi.fn(() => {
@@ -4442,6 +4443,21 @@ describe('Lazy SessionRecording', () => {
             })
         })
 
+        it('reports observers that failed to start in sdkDebugProperties', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            // the recorder swallows these errors and keeps every other health signal
+            // green, so this property is the only sign the frame records less than it should
+            assignableWindow.__PosthogExtensions__.rrweb.getObserverInitFailures.mockReturnValue([
+                'input',
+                'plugin:rrweb/console@1',
+            ])
+
+            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
+                $sdk_debug_replay_observer_init_failures: ['input', 'plugin:rrweb/console@1'],
+            })
+        })
+
         it('picks up the snapshot cost on a microtask when the emit-time read is stale', async () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 
@@ -7250,7 +7266,7 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('parking a held buffer across a page unload', () => {
-        const parkedBufferKey = 'ph_test-token' + PENDING_BUFFER_STORAGE_SUFFIX
+        const parkedBufferKey = 'ph' + PENDING_BUFFER_STORAGE_SUFFIX + '_["test-token","test-token"]'
         const parkedBuffer = () => JSON.parse(window!.sessionStorage.getItem(parkedBufferKey) || 'null')
 
         // the shared harness leaves recorders from earlier tests listening on the window, so drive
@@ -7414,6 +7430,61 @@ describe('Lazy SessionRecording', () => {
             )
 
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toHaveLength(0)
+        })
+
+        it.each(['test-token', 'another-token'])(
+            'isolates a shared persistence name when the next page uses %s',
+            (nextToken) => {
+                config.persistence_name = 'shared'
+                const sessionStartTimestamp = startBelowMinimumDuration()
+                const previousRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                unload()
+                expect(window!.sessionStorage.getItem(previousRecorder['_pendingBufferStorageKey'])).not.toBeNull()
+                sessionRecording.stopRecording()
+                ;(posthog.capture as Mock).mockClear()
+
+                config.token = nextToken
+                sessionRecording = new SessionRecording(posthog)
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { minimumDurationMilliseconds: 1500 } })
+                )
+                const nextRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                // Shared persistence also shares these IDs; they cannot isolate projects on their own.
+                expect(nextRecorder.sessionId).toBe(previousRecorder.sessionId)
+                expect(nextRecorder['_windowId']).toBe(previousRecorder['_windowId'])
+                _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 2000 }))
+                nextRecorder['_flushBuffer']()
+
+                const shipped = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+                expect(shipped).toHaveLength(1)
+                const timestamps = shipped[0][1].$snapshot_data.map((event: eventWithTime) => event.timestamp)
+                expect(timestamps.includes(sessionStartTimestamp + 100)).toBe(nextToken === 'test-token')
+                expect(timestamps).toContain(sessionStartTimestamp + 2000)
+            }
+        )
+
+        it('does not restore legacy parked data whose project token is unknown', () => {
+            const sessionStartTimestamp = startBelowMinimumDuration()
+            unload()
+            const key = sessionRecording['_lazyLoadedSessionRecording']['_pendingBufferStorageKey']
+            const parked = window!.sessionStorage.getItem(key)!
+            sessionRecording.stopRecording()
+            window!.sessionStorage.clear()
+            window!.sessionStorage.setItem('ph_test-token' + PENDING_BUFFER_STORAGE_SUFFIX, parked)
+            ;(posthog.capture as Mock).mockClear()
+
+            sessionRecording = new SessionRecording(posthog)
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { minimumDurationMilliseconds: 1500 } })
+            )
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 2000 }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            const shipped = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+            expect(shipped).toHaveLength(1)
+            expect(shipped[0][1].$snapshot_data.map((event: eventWithTime) => event.timestamp)).not.toContain(
+                sessionStartTimestamp + 100
+            )
         })
 
         it('does not park a buffer a flush holds while the page stays open', () => {

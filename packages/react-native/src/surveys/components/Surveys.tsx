@@ -3,14 +3,7 @@ import { StyleProp, ViewStyle } from 'react-native'
 
 import { getNextSurveyStep, SurveyAppearanceTheme } from '../surveys-utils'
 import { getDisplayOrderQuestions, shouldShuffleQuestions } from '../survey-shuffling'
-import {
-  Survey,
-  SurveyAppearance,
-  SurveyQuestion,
-  type SurveyResponses,
-  maybeAdd,
-  SurveyQuestionBranchingType,
-} from '@posthog/core'
+import { Survey, SurveyQuestion, type SurveyResponses, maybeAdd, SurveyQuestionBranchingType } from '@posthog/core'
 import {
   buildSurveyResponseProperties,
   getSurveyInteractionProperty,
@@ -159,7 +152,10 @@ export function Questions({
 
 type GetQuestionComponentProps = {
   question: SurveyQuestion
-  appearance: SurveyAppearance
+  // The question components each declare `SurveyAppearanceTheme`; typing this
+  // intermediate as the shared `SurveyAppearance` dropped every React
+  // Native-only field, which the `as any` below then hid.
+  appearance: SurveyAppearanceTheme
   styleOverrides?: StyleProp<ViewStyle>
   onSubmit: (res: string | string[] | number | null) => void
 }

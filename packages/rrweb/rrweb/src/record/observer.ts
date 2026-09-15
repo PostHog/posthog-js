@@ -1591,6 +1591,21 @@ function mergeHooks(o: observerParam, hooks: hooksParam) {
   };
 }
 
+/**
+ * Observers whose setup threw, for the lifetime of the page. An error handler that
+ * swallows the failure otherwise leaves it invisible: the recorder keeps running and
+ * reports itself as healthy while it captures less than it should. A set, because a
+ * broken host API breaks the same observer again on every restart and in every frame,
+ * and undefined while empty, so the healthy page allocates nothing.
+ */
+const observerInitFailures = new Set<string>();
+
+export function getObserverInitFailures(): string[] | undefined {
+  return observerInitFailures.size
+    ? Array.from(observerInitFailures)
+    : undefined;
+}
+
 export function initObservers(
   o: observerParam,
   hooks: hooksParam = {},
@@ -1635,50 +1650,75 @@ export function initObservers(
     }
   });
 
+  // One observer that cannot start must not silence the ones that can. A third-party
+  // script or a restricted host API breaks a single observer on some pages, and the
+  // frame must degrade to partial recording instead of no recording at all. The error
+  // still reaches the configured error handler, which decides whether to swallow it.
+  const startObserver = (
+    name: string,
+    start: () => listenerHandler | void,
+  ): void => {
+    const handler = callbackWrapper(() => {
+      try {
+        return start();
+      } catch (error) {
+        observerInitFailures.add(name);
+        throw error;
+      }
+    })();
+    if (typeof handler === 'function') {
+      handlers.push(handler);
+    }
+  };
+
   try {
     if (o.recordDOM) {
-      const result = initMutationObserver(o, o.doc);
-      mutationObserver = result.observer;
-      mutationBuffer = result.buffer;
+      startObserver('mutation', () => {
+        const result = initMutationObserver(o, o.doc);
+        mutationObserver = result.observer;
+        mutationBuffer = result.buffer;
+      });
     }
-    handlers.push(initMoveObserver(o));
-    handlers.push(initMouseInteractionObserver(o));
-    handlers.push(initScrollObserver(o));
-    handlers.push(
+    startObserver('move', () => initMoveObserver(o));
+    startObserver('mouseInteraction', () => initMouseInteractionObserver(o));
+    startObserver('scroll', () => initScrollObserver(o));
+    startObserver('viewportResize', () =>
       initViewportResizeObserver(o, {
         win: currentWindow,
       }),
     );
-    handlers.push(initInputObserver(o));
-    handlers.push(initMediaInteractionObserver(o));
+    startObserver('input', () => initInputObserver(o));
+    startObserver('mediaInteraction', () => initMediaInteractionObserver(o));
 
     if (o.recordDOM) {
       const styleSheetMutationQueue =
         createStyleSheetMutationQueue(currentWindow);
       handlers.push(styleSheetMutationQueue.reset);
-      handlers.push(
+      startObserver('styleSheet', () =>
         initStyleSheetObserver(o, {
           win: currentWindow,
           mutationQueue: styleSheetMutationQueue,
         }),
       );
-      handlers.push(initAdoptedStyleSheetObserver(o, o.doc));
-      handlers.push(
+      startObserver('adoptedStyleSheet', () =>
+        initAdoptedStyleSheetObserver(o, o.doc),
+      );
+      startObserver('styleDeclaration', () =>
         initStyleDeclarationObserver(o, {
           win: currentWindow,
           mutationQueue: styleSheetMutationQueue,
         }),
       );
       if (o.collectFonts) {
-        handlers.push(initFontObserver(o));
+        startObserver('font', () => initFontObserver(o));
       }
     }
-    handlers.push(initSelectionObserver(o));
-    handlers.push(initCustomElementObserver(o));
+    startObserver('selection', () => initSelectionObserver(o));
+    startObserver('customElement', () => initCustomElementObserver(o));
 
     // plugins
     for (const plugin of o.plugins) {
-      handlers.push(
+      startObserver(`plugin:${plugin.name}`, () =>
         plugin.observer(plugin.callback, currentWindow, plugin.options),
       );
     }

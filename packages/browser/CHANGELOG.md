@@ -1,5 +1,95 @@
 # posthog-js
 
+## 1.433.3
+
+### Patch Changes
+
+- [#4945](https://github.com/PostHog/posthog-js/pull/4945) [`79f02e7`](https://github.com/PostHog/posthog-js/commit/79f02e75ad6d566841e67c86a95e1a245a904d05) Thanks [@marandaneto](https://github.com/marandaneto)! - Default Fetch requests to strict-origin so referrers omit page paths and query strings.
+  (2026-09-14)
+
+## 1.433.2
+
+### Patch Changes
+
+- [#4846](https://github.com/PostHog/posthog-js/pull/4846) [`bd4543e`](https://github.com/PostHog/posthog-js/commit/bd4543e1f941b1f0792d6644a1f862e0ccd05b83) Thanks [@posthog](https://github.com/apps/posthog)! - Keep session recording snapshots from different windows of the same session in separate uploads to preserve their window attribution.
+  (2026-09-14)
+
+- [#4954](https://github.com/PostHog/posthog-js/pull/4954) [`3c68c08`](https://github.com/PostHog/posthog-js/commit/3c68c083dea604ee440db4c5a4f193f0947159bb) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect Retry-After, including repeated headers, up to 30 seconds on retryable browser responses without shortening exponential backoff.
+  (2026-09-14)
+- Updated dependencies [[`3c68c08`](https://github.com/PostHog/posthog-js/commit/3c68c083dea604ee440db4c5a4f193f0947159bb)]:
+  - @posthog/core@1.54.0
+
+## 1.433.1
+
+### Patch Changes
+
+- [#4949](https://github.com/PostHog/posthog-js/pull/4949) [`8f11f5f`](https://github.com/PostHog/posthog-js/commit/8f11f5f099a75889e1dd61a7ff7ef7240b2770b0) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect autocapture attribute masks for link URLs and legacy class properties.
+  (2026-09-14)
+
+## 1.433.0
+
+### Minor Changes
+
+- [#4916](https://github.com/PostHog/posthog-js/pull/4916) [`d037ea1`](https://github.com/PostHog/posthog-js/commit/d037ea11c9aca97e93aa2364636f0c1cc72a57c7) Thanks [@mayteio](https://github.com/mayteio)! - Read Meta's `_fbc` and `_fbp` cookies for the Conversions API. When the Meta pixel is on the page, its `_fbc` cookie holds the true ad click time, so that value now wins over the time PostHog stamps on the pageview that follows the click, and a click that landed before the SDK loaded is no longer lost. The `_fbp` browser ID is captured as the `$fbp` person property, which makes it available to a conversion sent later from a backend. Both cookies are read under the same switches as the URL click ID: `save_campaign_params: false` turns the reads off, and cookieless mode skips them.
+  (2026-09-14)
+
+## 1.432.0
+
+### Minor Changes
+
+- [#4958](https://github.com/PostHog/posthog-js/pull/4958) [`4a46fab`](https://github.com/PostHog/posthog-js/commit/4a46fabe04b9caf6e040a43dcc3294ee95fd08c1) Thanks [@marandaneto](https://github.com/marandaneto)! - Add a resetError callback to React error-boundary fallbacks so applications can retry rendering without remounting the boundary.
+  (2026-09-14)
+
+### Patch Changes
+
+- [#4927](https://github.com/PostHog/posthog-js/pull/4927) [`62fc60b`](https://github.com/PostHog/posthog-js/commit/62fc60b642170cce4a50a78c8e3a02f9f98f30e6) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix lost event retries after restoring a page from the back-forward cache.
+  (2026-09-14)
+
+## 1.431.8
+
+### Patch Changes
+
+- [#4935](https://github.com/PostHog/posthog-js/pull/4935) [`6a78625`](https://github.com/PostHog/posthog-js/commit/6a78625c8d05de3404116ea9a1e4339bc89b60db) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix false dead clicks after synchronous DOM updates. Clicks stopped from bubbling are now evaluated too, which may increase dead-click counts for inert controls.
+  (2026-09-14)
+
+## 1.431.7
+
+### Patch Changes
+
+- [#4937](https://github.com/PostHog/posthog-js/pull/4937) [`a5d094f`](https://github.com/PostHog/posthog-js/commit/a5d094f44f722935b539c346a92ae98a797e8762) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid fetch keepalive quota failures when multiple event requests are in flight.
+  (2026-09-14)
+
+## 1.431.6
+
+### Patch Changes
+
+- [#4936](https://github.com/PostHog/posthog-js/pull/4936) [`ee6fd02`](https://github.com/PostHog/posthog-js/commit/ee6fd0270539a16a75ebcb421431b84a51e1718e) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent buffered session replay data from crossing projects that share a persistence name during page navigation.
+  (2026-09-14)
+
+## 1.431.5
+
+### Patch Changes
+
+- [#4940](https://github.com/PostHog/posthog-js/pull/4940) [`3e12f1d`](https://github.com/PostHog/posthog-js/commit/3e12f1de6d9a40e09bf930bd3834af296ba80161) Thanks [@marandaneto](https://github.com/marandaneto)! - Discard pending replay network captures after recording stops or restarts.
+  (2026-09-14)
+
+## 1.431.4
+
+### Patch Changes
+
+- [#4952](https://github.com/PostHog/posthog-js/pull/4952) [`4f8076b`](https://github.com/PostHog/posthog-js/commit/4f8076b01a5d2bff228b67e2d00bb71c6848aebf) Thanks [@marandaneto](https://github.com/marandaneto)! - Support clickable `[label](url)` links in Conversations widget greetings.
+  (2026-09-14)
+
+- [#4835](https://github.com/PostHog/posthog-js/pull/4835) [`03e45b6`](https://github.com/PostHog/posthog-js/commit/03e45b6246a28909c2c7f1754203bc99a54e2c23) Thanks [@posthog](https://github.com/apps/posthog)! - Fix identical person property retries being dropped after the original capture was rejected.
+  (2026-09-14)
+
+## 1.431.3
+
+### Patch Changes
+
+- [#4948](https://github.com/PostHog/posthog-js/pull/4948) [`3acf287`](https://github.com/PostHog/posthog-js/commit/3acf2875215094163d5d3f0cf58e50d90a3e1126) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix replay cleanup when the host's children are removed before destroying the player.
+  (2026-09-14)
+
 ## 1.431.2
 
 ### Patch Changes

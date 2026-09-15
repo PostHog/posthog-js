@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.54.0
+
+### Minor Changes
+
+- [#4954](https://github.com/PostHog/posthog-js/pull/4954) [`3c68c08`](https://github.com/PostHog/posthog-js/commit/3c68c083dea604ee440db4c5a4f193f0947159bb) Thanks [@marandaneto](https://github.com/marandaneto)! - Export the shared Retry-After parser with safe integer caps, GMT HTTP-date handling and rejection of non-HTTP dates.
+  (2026-09-14)
+
 ## 1.53.3
 
 ### Patch Changes
