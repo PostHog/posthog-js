@@ -2413,6 +2413,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                         $lib: Config.LIB_NAME,
                         $lib_version: Config.LIB_VERSION,
                         $snapshot_host: snapshotHostname,
+                        ...(this._unstringifiableEventsDropped > 0
+                            ? { $sdk_debug_replay_unstringifiable_events_dropped: this._unstringifiableEventsDropped }
+                            : {}),
                     })
                 } catch (e) {
                     // one chunk that cannot be captured must not drop the chunks after it

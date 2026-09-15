@@ -413,6 +413,80 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         )
     })
 
+    it.each(['_onBeforeUnload', '_onPageHide'] as const)(
+        'includes the drop count in the encoded surviving snapshot on %s',
+        async (handler) => {
+            const originalSendBeacon = Object.getOwnPropertyDescriptor(navigator, 'sendBeacon')
+            const sendBeacon = vi.fn((_url: string, _body: Blob) => true)
+            Object.defineProperty(navigator, 'sendBeacon', { configurable: true, value: sendBeacon })
+
+            try {
+                const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+                    gzipSupported: true,
+                    gzipCompress: vi.fn(() => new Promise(() => {})),
+                })
+                const { RequestQueue } = await import('../../../request-queue')
+                const { request } = await import('../../../request')
+                const queue = new RequestQueue(request)
+                posthog.capture.mockImplementation((event: string, properties: any, options: any) => {
+                    queue.enqueue({
+                        url: options._url,
+                        method: 'POST',
+                        batchKey: options._batchKey,
+                        data: { event, properties },
+                    })
+                })
+
+                const originalStringify = JSON.stringify
+                const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation((value: any, ...rest: any[]) => {
+                    const serialized = originalStringify(value, ...rest)
+                    if (serialized && serialized.includes('oversized-test-event')) {
+                        throw new RangeError('Invalid string length')
+                    }
+                    return serialized
+                })
+
+                try {
+                    emit(createFullSnapshot({ content: 'oversized-test-event' }))
+                    emit(createIncrementalSnapshot(456))
+                    lazyLoadedSessionRecording[handler]()
+                    queue.unload()
+
+                    expect(sendBeacon).toHaveBeenCalledTimes(1)
+                    const body = sendBeacon.mock.calls[0][1]
+                    const encoded = await new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader()
+                        reader.onload = () => resolve(reader.result as string)
+                        reader.onerror = reject
+                        reader.readAsText(body)
+                    })
+                    const payload = JSON.parse(
+                        Buffer.from(new URLSearchParams(encoded).get('data')!, 'base64').toString('utf8')
+                    )
+                    expect(payload).toEqual([
+                        expect.objectContaining({
+                            event: '$snapshot',
+                            properties: expect.objectContaining({
+                                $sdk_debug_replay_unstringifiable_events_dropped: 1,
+                                $snapshot_data: [expect.objectContaining({ type: 3, timestamp: 456 })],
+                            }),
+                        }),
+                    ])
+                } finally {
+                    stringifySpy.mockRestore()
+                    lazyLoadedSessionRecording.discard()
+                    queue.unload()
+                }
+            } finally {
+                if (originalSendBeacon) {
+                    Object.defineProperty(navigator, 'sendBeacon', originalSendBeacon)
+                } else {
+                    Reflect.deleteProperty(navigator, 'sendBeacon')
+                }
+            }
+        }
+    )
+
     it.each(['direct', 'async', 'unload'])(
         'does not report a handled stringify failure to error tracking on the %s path',
         async (path) => {
