@@ -329,6 +329,14 @@ function record<T = eventWithTime>(
   // per-recorder, unlike its module-level siblings, so a stale recorder's stop
   // handler can't touch a newer recorder's pending deferred inlining
   let deferredStylesheetInlining: DeferredStylesheetInlining | undefined;
+  // also per-recorder: a deferred start emits before it inits, and that emit can
+  // synchronously stop this recorder and start a replacement. Removing the listener
+  // mid-dispatch doesn't abort the callback that is already running, so the stale
+  // init() would take a full snapshot through the replacement's module-level
+  // takeFullSnapshot (resetting the shared mirror mid-stream) and push a second
+  // observer set onto handlers this stop already drained - one no stop handler can
+  // remove. Every callback boundary in init() therefore re-checks this flag.
+  let stopped = false;
   const {
     emit,
     checkoutEveryNms,
@@ -1074,7 +1082,10 @@ function record<T = eventWithTime>(
     };
 
     const init = () => {
+      if (stopped) return;
       takeFullSnapshot();
+      // the snapshot emits, and that emit can stop this recorder too
+      if (stopped) return;
       const cleanup = observe(document);
       if (typeof cleanup === 'function') handlers.push(cleanup);
       handlers.push(on('fullscreenchange', emitFullscreenChange));
@@ -1110,6 +1121,9 @@ function record<T = eventWithTime>(
       );
     }
     return () => {
+      // set before any teardown, so a deferred-start callback that is mid-dispatch
+      // bails out instead of resuming into init() once this returns
+      stopped = true;
       // finish the deferred CSS while the emit path is still wired up, so the
       // sheets this recording deferred don't silently vanish with it
       try {
@@ -1142,6 +1156,7 @@ declare namespace record {
   var addCustomEvent: <T>(tag: string, payload: T) => void;
   var freezePage: () => void;
   var takeFullSnapshot: (isCheckout?: boolean) => void;
+  var isRecording: () => boolean;
   var mirror: Mirror;
 }
 
@@ -1168,6 +1183,11 @@ record.takeFullSnapshot = ((isCheckout?: boolean) => {
   }
   takeFullSnapshot(isCheckout);
 }) satisfies typeof record.takeFullSnapshot;
+
+// record() returns its stop handler synchronously, but init() can be deferred
+// until DOMContentLoaded or load. Until init() runs nothing is observed, so a
+// caller that only holds the stop handler cannot tell recording from pending.
+record.isRecording = (() => recording) satisfies typeof record.isRecording;
 
 record.mirror = mirror;
 
