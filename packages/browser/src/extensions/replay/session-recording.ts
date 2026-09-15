@@ -65,6 +65,7 @@ export class SessionRecording implements Extension {
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
     private _sessionRecordingDisposed = false
+    private _usingStaleRemoteConfig = false
     private _documentWasEverVisible = hasDocumentEverBeenVisible()
 
     private _onVisibilityChange = (): void => {
@@ -312,9 +313,15 @@ export class SessionRecording implements Extension {
         if (response.sessionRecording === false) {
             this._persistRemoteConfig(response)
             this._discardRecording()
+            this._usingStaleRemoteConfig = false
             return
         }
 
+        if (this._usingStaleRemoteConfig) {
+            // Fresh masking rules must not release data captured under the stale config.
+            this._discardRecording(true)
+            this._usingStaleRemoteConfig = false
+        }
         this._persistRemoteConfig(response)
         this.startIfEnabledOrStop()
     }
@@ -396,6 +403,7 @@ export class SessionRecording implements Extension {
             // recording nothing until the next page load, so start and flag the session.
             logger.warn('could not refresh remote config, starting under the stale persisted config')
             this._lazyLoadedSessionRecording.allowStaleRemoteConfig?.()
+            this._usingStaleRemoteConfig = true
             this._instance.register_for_session({
                 [SDK_DEBUG_REPLAY_STALE_CONFIG]: true,
             })

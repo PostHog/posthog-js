@@ -918,6 +918,7 @@
         "_urlTriggerStatus",
         "_urlTriggers",
         "_useCrossTabRefreshHardening",
+        "_usingStaleRemoteConfig",
         "_validateEmail",
         "_validateIdentifyId",
         "_validateSampleRate",
