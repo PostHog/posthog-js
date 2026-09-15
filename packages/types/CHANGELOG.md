@@ -1,5 +1,43 @@
 # @posthog/types
 
+## 1.412.1
+
+### Patch Changes
+
+- [#4962](https://github.com/PostHog/posthog-js/pull/4962) [`85b775a`](https://github.com/PostHog/posthog-js/commit/85b775a340c5a7bed3746f76f6cd7e6965e05010) Thanks [@posthog](https://github.com/apps/posthog)! - Docstrings for `identity_hash` and `setIdentity()` now say the hash is signed with the Secret API key from Support settings, not a project secret API key or a personal API key.
+  (2026-09-15)
+
+## 1.412.0
+
+### Minor Changes
+
+- [#4918](https://github.com/PostHog/posthog-js/pull/4918) [`c666606`](https://github.com/PostHog/posthog-js/commit/c666606dede10251d4335d406eae063f1cd38278) Thanks [@pauldambra](https://github.com/pauldambra)! - Add `metrics.network` config to record HTTP and HTTPS `fetch` and `XMLHttpRequest` durations as histograms, with an optional custom metric name and attributes.
+  (2026-09-14)
+
+## 1.411.1
+
+### Patch Changes
+
+- [#4860](https://github.com/PostHog/posthog-js/pull/4860) [`8207df8`](https://github.com/PostHog/posthog-js/commit/8207df8564d01977e3f9ffdcae4585d11e620ca3) Thanks [@posthog](https://github.com/apps/posthog)! - Back off automatic feature flag refreshes on idle visible pages only when `remote_config_refresh_interval_ms` is omitted, preserving explicitly configured intervals.
+  (2026-09-11)
+
+## 1.411.0
+
+### Minor Changes
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add experimental distributed tracing to `posthog-node`: `startSpan`, `withSpan` and `getActiveSpan` record spans against a new `traces` client option. A service with tracing off still forwards an inbound `traceparent`, including from spans nested inside the one that received it, so a distributed trace is not severed. A `traceparent` may be passed as the one-element array `req.headersDistinct` gives. A `beforeSpanSend` hook sees every span before it is exported and may edit or drop it, and `maxAttributesPerSpan`, `maxEventsPerSpan`, `maxAttributeValueLength`, `maxLiveSpans` and `maxSpanAgeMs` bound what a single span and a single process may hold.
+  (2026-09-10)
+
+## 1.410.1
+
+### Patch Changes
+
+- [#4878](https://github.com/PostHog/posthog-js/pull/4878) [`14ba783`](https://github.com/PostHog/posthog-js/commit/14ba783ff8b469a8bd2fe40782c985326d89e672) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Allow null bootstrap values and treat null or empty distinct IDs as missing.
+  (2026-09-10)
+
+- [#4831](https://github.com/PostHog/posthog-js/pull/4831) [`9498567`](https://github.com/PostHog/posthog-js/commit/9498567cd71f13ed8e618185075d8c5628b93cc1) Thanks [@posthog](https://github.com/apps/posthog)! - Log a console message when advanced_disable_feature_flags stops surveys from displaying
+  (2026-09-10)
+
 ## 1.410.0
 
 ### Minor Changes

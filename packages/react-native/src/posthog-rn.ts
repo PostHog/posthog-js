@@ -21,6 +21,7 @@ import {
   maybeAdd,
   patchFetchForTracingHeaders,
   raceWithTimeout,
+  safeSetTimeout,
   FeatureFlagValue,
   FeatureFlagResultOptions,
   IsFeatureEnabledOptions,
@@ -42,12 +43,14 @@ import {
   PostHogCustomAppProperties,
   PostHogCustomStorage,
   PostHogPushIdentityProvider,
+  PostHogRageClickConfig,
   PostHogSessionReplayConfig,
 } from './types'
 import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isMacOS, isValidSampleRate, isWeb } from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativePlugin, OptionalReactNativePluginVersion } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
+import { getExceptionContext } from './error-tracking/exception-context'
 
 export { PostHogPersistedProperty }
 
@@ -72,6 +75,15 @@ function mapAppStateForLogs(state: AppStateStatus | undefined): 'foreground' | '
 // native setup happens before it — so it can be tight enough that a stuck call doesn't strand
 // the queue for the process lifetime.
 const NATIVE_CALL_TIMEOUT_MS = 10_000
+// Native config readiness has no bridge notification, so manual starts need bounded timer
+// retries as well as flags-driven retries. JS flags can finish loading before native config.
+const MANUAL_RECORDING_START_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000]
+
+type ManualRecordingStartRequest = {
+  pending: boolean
+  retryCount: number
+  timer?: ReturnType<typeof setTimeout>
+}
 
 export interface PostHogOptions extends PostHogCoreOptions {
   /**
@@ -109,6 +121,11 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * Enable Recording of Session Replays for Android and iOS
    * Requires Record user sessions to be enabled in the PostHog Project Settings
    *
+   * This option is read once, at setup. To record only some sessions, either gate recording
+   * from your project settings (sampling, a linked flag, or event triggers), or leave this
+   * option off and drive the recorder from your app with `startSessionRecording()` and
+   * `stopSessionRecording()`.
+   *
    * @default false
    */
   enableSessionReplay?: boolean
@@ -131,6 +148,22 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * Error Tracking Configuration
    */
   errorTracking?: ErrorTrackingOptions
+
+  /**
+   * Configure rage click (rage tap) detection on iOS.
+   *
+   * The native iOS SDK fires a `$rageclick` event when a user taps the same
+   * area repeatedly in quick succession. The default thresholds (3 taps,
+   * 30 points, 1 second) were tuned for web and frequently produce false
+   * positives on mobile. Raise the thresholds or set `enabled: false` to
+   * suppress them.
+   *
+   * Android is unaffected — posthog-android does not have native rage click
+   * detection.
+   *
+   * Requires `@posthog/react-native-plugin` version 2.7.0 or newer.
+   */
+  rageClickConfig?: PostHogRageClickConfig
 
   /**
    * Automatically include common device and app properties in feature flag evaluation.
@@ -213,10 +246,24 @@ export interface PostHogOptions extends PostHogCoreOptions {
    *
    * Fires for pushes from any provider, not just PostHog's — but title and body are
    * attached only for PostHog's own, so third-party notification text never reaches
-   * analytics. Android sees cold starts only; call
-   * {@link PostHog.capturePushNotificationOpened} for the taps it misses.
+   * analytics. On Android, taps that launch the app and taps while it's running are both
+   * captured from `@posthog/react-native-plugin` 2.6.0 (earlier versions: cold starts
+   * only); call {@link PostHog.capturePushNotificationOpened} for the taps it misses.
    *
    * The native SDK builds and sends this event, so JS `before_send` never sees it.
+   *
+   * On iOS a tap can reach the app before your JS runs, so the SDK installs a hook at launch to
+   * catch a tap that cold-launches the app. Two switches gate automatic capture there, and
+   * `false` on either one means the SDK sends no `$push_notification_opened` of its own (an
+   * explicit {@link PostHog.capturePushNotificationOpened} call still captures):
+   *
+   * - This option set to `false` turns capture off when `setup()` runs and releases the launch
+   *   hook, dropping the tap it was holding. The hook is still installed for the window between
+   *   launch and `setup()`.
+   * - `com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED` set to `false` in `Info.plist`
+   *   (Expo: `ios.infoPlist`) skips the launch hook entirely, so nothing is installed before your
+   *   JS runs, and forces capture off at `setup()` even when this option is `true`. It is the
+   *   same key posthog-flutter reads.
    *
    * Not supported on web.
    *
@@ -254,6 +301,7 @@ export class PostHog extends PostHogCore {
   private _sessionReplayMacOSWarned: boolean = false
   // Last applied recording state; the native bridge is only crossed on a change.
   private _sessionReplayRecordingActive?: boolean
+  private _manualRecordingStartRequest?: ManualRecordingStartRequest
   // Serializes re-arm evaluations so concurrent flags reloads don't interleave.
   private _sessionReplayEvalChain: Promise<void> = Promise.resolve()
   // Serializes every JS->native command (identity, consent, push) so they reach native in
@@ -523,12 +571,13 @@ export class PostHog extends PostHogCore {
       void this.startSessionReplay(options, cachedRemoteConfig ?? undefined)
 
       // Re-evaluate session replay on every flags load/reload so the linked flag
-      // gates recording without an app restart.
-      if (options?.enableSessionReplay) {
-        this.onFeatureFlags(() => {
+      // gates recording without an app restart. A pending manual start can also retry here,
+      // even when replay was disabled at setup.
+      this.onFeatureFlags(() => {
+        if (this._isEnableSessionReplay() || this._manualRecordingStartRequest?.pending) {
           void this._evaluateAndStartSessionReplay()
-        })
-      }
+        }
+      })
 
       if (options?.addTracingHeaders && options.addTracingHeaders.length > 0) {
         patchFetchForTracingHeaders(this, options.addTracingHeaders)
@@ -623,6 +672,7 @@ export class PostHog extends PostHogCore {
    * SLA so a hung storage backend can't run past it.
    */
   async _shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
+    this._cancelManualRecordingStart()
     this._errorTracking.shutdown()
     const start = Date.now()
     const logsBudgetMs = Math.min(shutdownTimeoutMs, this._resolvedLogsConfig.terminationFlushBudgetMs)
@@ -777,6 +827,9 @@ export class PostHog extends PostHogCore {
       PostHogPersistedProperty.InstalledAppVersion,
       PostHogPersistedProperty.DeviceId,
     ]
+
+    // Cancel before super.reset() emits flags for the next, anonymous user.
+    this._cancelManualRecordingStart()
 
     // RemoteConfig, SessionReplay, and Surveys are project-level config, not user data:
     // always preserve them so replay can re-arm against the new user's flags. The
@@ -1030,6 +1083,7 @@ export class PostHog extends PostHogCore {
    * @public
    */
   optOut(): Promise<void> {
+    this._cancelManualRecordingStart()
     // Consent must be durable. See reset()/identify().
     const result = super.optOut()
     this.setPersistedProperty(PostHogPersistedProperty.SurveysInProgress, null)
@@ -1575,6 +1629,12 @@ export class PostHog extends PostHogCore {
    * Starts session recording.
    * This method will have no effect if PostHog is not enabled, or if session replay is disabled in your project settings.
    *
+   * A refused manual start is retried with successive delays of 1, 2, 4, 8, and 16 seconds,
+   * and on subsequent feature flags loads while pending. This promise resolves after the
+   * initial attempt, without waiting for retries or guaranteeing recording is active.
+   * A newer start supersedes an unfinished request. Stop, reset, opt-out, and shutdown
+   * cancel pending starts. Use `isSessionReplayActive()` to check the current recording state.
+   *
    * Note: This is only available on iOS and Android. On web/macOS, this is a no-op.
    *
    * Requires `posthog-react-native-session-replay` version 1.3.0 or higher.
@@ -1598,18 +1658,79 @@ export class PostHog extends PostHogCore {
    * @param resumeCurrent - Whether to resume recording of current session (true) or start a new session (false). Defaults to true.
    */
   async startSessionRecording(resumeCurrent: boolean = true): Promise<void> {
+    this._cancelManualRecordingStart()
+    const request: ManualRecordingStartRequest = { pending: false, retryCount: 0 }
+    this._manualRecordingStartRequest = request
     // Chained here, not in _startSessionRecording (which _evaluateAndStartSessionReplayInternal
     // also calls from inside this chain — re-chaining there deadlocks), so two callers can't
     // both enter initializeNativePlugin() and race their pluginConfigs.
     this._sessionReplayEvalChain = this._sessionReplayEvalChain
       .catch(() => {})
       .then(async () => {
-        await this._startSessionRecording(resumeCurrent)
+        await this._attemptManualRecordingStart(request, resumeCurrent)
       })
     await this._sessionReplayEvalChain
   }
 
-  // Same as startSessionRecording, but reports success so callers can react to failures.
+  private _cancelManualRecordingStart(): void {
+    clearTimeout(this._manualRecordingStartRequest?.timer)
+    this._manualRecordingStartRequest = undefined
+  }
+
+  private async _attemptManualRecordingStart(
+    request: ManualRecordingStartRequest,
+    resumeCurrent: boolean
+  ): Promise<boolean> {
+    if (this._manualRecordingStartRequest !== request) {
+      return false
+    }
+    if (this.isDisabled || this.optedOut) {
+      this._cancelManualRecordingStart()
+      return false
+    }
+
+    const started = await this._startSessionRecording(resumeCurrent)
+    // Cancellation is synchronous; a bridge call already in flight can still finish later.
+    // Do not let its result revive the old request or leave its recorder running.
+    if (this._manualRecordingStartRequest !== request) {
+      if (started) {
+        await this._stopSessionRecording()
+      }
+      return false
+    }
+    if (started) {
+      this._cancelManualRecordingStart()
+    } else {
+      request.pending = true
+      this._scheduleManualRecordingStartRetry(request)
+    }
+    return started
+  }
+
+  private _scheduleManualRecordingStartRetry(request: ManualRecordingStartRequest): void {
+    const delay = MANUAL_RECORDING_START_RETRY_DELAYS_MS[request.retryCount]
+    if (
+      request.timer !== undefined ||
+      delay === undefined ||
+      !this._sessionReplayNativeInitialized ||
+      !OptionalReactNativePlugin?.startRecording
+    ) {
+      return
+    }
+    request.retryCount++
+    request.timer = safeSetTimeout(() => {
+      request.timer = undefined
+      this._sessionReplayEvalChain = this._sessionReplayEvalChain
+        .catch(() => {})
+        .then(async () => {
+          // The original attempt already rotated the session if resumeCurrent was false.
+          await this._attemptManualRecordingStart(request, true)
+        })
+    }, delay)
+  }
+
+  // Shared start path. Also called by the flags-driven evaluation, which runs inside
+  // _sessionReplayEvalChain and so must not re-enter it.
   private async _startSessionRecording(resumeCurrent: boolean): Promise<boolean> {
     await this._initPromise
 
@@ -1652,6 +1773,24 @@ export class PostHog extends PostHogCore {
       }
 
       await OptionalReactNativePlugin.startRecording(resumeCurrent)
+
+      // Both native SDKs refuse to start the recorder while their own remote config is not
+      // loaded (PostHog.kt, PostHogSDK.swift) and resolve the call all the same, so ask the
+      // recorder instead of reporting a success the caller cannot check.
+      const started = await OptionalReactNativePlugin.isEnabled().catch((e) => {
+        // Unknown state, so report the start rather than a failure nothing can act on.
+        this._logger.warn(`Failed to confirm the session recording started: ${e}`)
+        return true
+      })
+
+      if (!started) {
+        this._logger.warn(
+          'The native SDK refused to start session recording, usually because its remote config is not loaded yet. ' +
+            'PostHog retries on the next feature flags load.'
+        )
+        return false
+      }
+
       this._logger.info(`Session recording ${resumeCurrent ? 'resumed' : 'started'}.`)
       return true
     } catch (e) {
@@ -1676,10 +1815,17 @@ export class PostHog extends PostHogCore {
    * @public
    */
   async stopSessionRecording(): Promise<void> {
-    await this._stopSessionRecording()
+    this._cancelManualRecordingStart()
+    // Let an in-flight native start settle before stopping its recorder.
+    this._sessionReplayEvalChain = this._sessionReplayEvalChain
+      .catch(() => {})
+      .then(async () => {
+        await this._stopSessionRecording()
+      })
+    await this._sessionReplayEvalChain
   }
 
-  // Same as stopSessionRecording, but reports success so callers can react to failures.
+  // Shared stop path, also called by the flags-driven evaluation.
   private async _stopSessionRecording(): Promise<boolean> {
     await this._initPromise
 
@@ -1846,6 +1992,15 @@ export class PostHog extends PostHogCore {
   /**
    * Capture a caught exception manually
    *
+   * Exceptions also include capture-time `$app_state` (active, background, inactive or extension) on any
+   * platform where React Native AppState provides a known value. On iOS and Android, optional
+   * `expo-updates` (0.25.0 or newer) adds `$expo_update_id`, `$expo_runtime_version`, `$expo_channel`
+   * and `$expo_is_embedded_launch` for enabled updates outside development mode. Unknown values
+   * are omitted.
+   * These exception-only fields are separate from the static app metadata controlled by
+   * `customAppProperties`, including the existing `$app_version` and `$app_build`.
+   * Override these fields with `additionalProperties`, or remove them using `before_send`.
+   *
    * {@label Error tracking}
    *
    * @public
@@ -1883,6 +2038,8 @@ export class PostHog extends PostHogCore {
       mechanism: { handled: true, type: 'generic' },
       syntheticException: new Error('Synthetic Error'),
     }
+
+    additionalProperties = { ...getExceptionContext(), ...additionalProperties }
 
     // Attach the rolling exception-steps buffer (no-op if the caller already provided their own).
     additionalProperties = this._errorTracking.attachExceptionSteps(additionalProperties)
@@ -2192,8 +2349,10 @@ export class PostHog extends PostHogCore {
    * Requires `@posthog/react-native-plugin`.
    *
    * Only for taps {@link PostHogOptions.capturePushNotificationOpened} cannot see itself —
-   * local notifications, plus warm-start and foreground taps on Android — or the tap is
-   * counted twice.
+   * local notifications, plus Android taps while the app is running if
+   * `@posthog/react-native-plugin` is older than 2.6.0. A notification PostHog sent is still
+   * counted once when both paths report it (same `posthog.invocation_id` and action within
+   * five minutes); one from another provider is counted twice.
    *
    * Keys of `payload`'s `posthog` entry become `$notification_<key>` properties. Leave
    * `action` unset for a plain tap; `subtitle` is iOS only. The native SDK builds and
@@ -2441,14 +2600,33 @@ export class PostHog extends PostHogCore {
       maskAllTextInputs = true,
       maskAllImages = true,
       maskAllSandboxedViews = true,
+      captureTouches = true,
       captureLog: localCaptureLog = true,
       captureNetworkTelemetry: localCaptureNetworkTelemetry = true,
       verifyScreenshotMaskAlignment = false,
+      screenshotScale,
+      screenshotCompressionQuality,
+      screenshotColorMode,
       screenshotModeBackgroundCapture = false,
       sampleRate: localSampleRate,
       iOSdebouncerDelayMs = defaultThrottleDelayMs,
       androidDebouncerDelayMs = defaultThrottleDelayMs,
     } = options?.sessionReplayConfig ?? {}
+
+    if (captureTouches === false && !isMacOS()) {
+      const pluginVersion = OptionalReactNativePluginVersion?.match(/^(\d+)\.(\d+)\.\d+(?:\+[\w.-]+)?$/)
+      const supportsCaptureTouches =
+        pluginVersion &&
+        (Number(pluginVersion[1]) > 2 || (Number(pluginVersion[1]) === 2 && Number(pluginVersion[2]) >= 9))
+
+      if (!supportsCaptureTouches) {
+        this._logger.warn(
+          `sessionReplayConfig.captureTouches: false requires @posthog/react-native-plugin 2.9.0 or later. ` +
+            `The installed plugin (version ${OptionalReactNativePluginVersion ?? 'unknown'}) may still record touch coordinates. ` +
+            `Upgrade the plugin and rebuild your app before relying on this setting.`
+        )
+      }
+    }
 
     let throttleDelayMs = options?.sessionReplayConfig?.throttleDelayMs ?? defaultThrottleDelayMs
 
@@ -2525,9 +2703,13 @@ export class PostHog extends PostHogCore {
       maskAllTextInputs,
       maskAllImages,
       maskAllSandboxedViews,
+      captureTouches,
       captureLog,
       captureNetworkTelemetry,
       verifyScreenshotMaskAlignment,
+      ...(Number.isFinite(screenshotScale) ? { screenshotScale } : {}),
+      ...(Number.isFinite(screenshotCompressionQuality) ? { screenshotCompressionQuality } : {}),
+      ...(screenshotColorMode !== undefined ? { screenshotColorMode } : {}),
       screenshotModeBackgroundCapture,
       sampleRate,
       iOSdebouncerDelayMs,
@@ -2616,6 +2798,7 @@ export class PostHog extends PostHogCore {
             capturePushNotificationOpened: options?.capturePushNotificationOpened ?? true,
             pushIdentityProviderEnabled,
           },
+          ...(options?.rageClickConfig && { rageClick: options.rageClickConfig }),
         }
         await OptionalReactNativePlugin.setup(String(sessionId), sdkOptions, pluginConfig)
         // Native resolves its own persisted opt-out over the config value passed above, so an
@@ -2731,6 +2914,10 @@ export class PostHog extends PostHogCore {
       this._sessionReplayEventTriggers = []
       if (enableNativeErrorTracking || enablePush) {
         await this.initializeNativePlugin(options, remoteConfig, false)
+      }
+      const request = this._manualRecordingStartRequest
+      if (request?.pending) {
+        await this._attemptManualRecordingStart(request, true)
       }
       return
     }

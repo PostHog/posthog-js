@@ -1,6 +1,5 @@
 import type { MetricAttributeValue, OtlpMetric, OtlpMetricsPayload } from '@posthog/types'
-import { toOtlpKeyValueList } from '../utils/otlp-any-value'
-import { buildOtlpResourceAttributes } from '../utils/otlp-resource'
+import { buildOtlpResourceAttributes, toOtlpResourceKeyValueList } from '../utils/otlp-resource'
 import type { ResolvedPostHogMetricsConfig } from './types'
 
 /**
@@ -81,7 +80,7 @@ export function buildOtlpMetricsPayload(
   return {
     resourceMetrics: [
       {
-        resource: { attributes: toOtlpKeyValueList(resourceAttributes) },
+        resource: { attributes: toOtlpResourceKeyValueList(resourceAttributes) },
         scopeMetrics: [
           {
             scope: { name: scopeName, version: scopeVersion },

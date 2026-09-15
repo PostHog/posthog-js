@@ -4,7 +4,7 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { ErrorProperties, Event, McpEvent } from '../types'
-import { redactPii, sanitizeCapturedValue } from './mcp-payloads'
+import { sanitizeCapturedValue, sanitizeFreeText } from './mcp-payloads'
 
 type SanitizedRecord = Record<string, unknown>
 
@@ -32,14 +32,22 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
     result.parameters = sanitizeParameters(result.parameters)
   }
 
+  // Every event type, not just `resources/read`: `$identify` and the `$exception`
+  // sibling carry the same name, and a tool or prompt name is free text an
+  // application can spell as a URL too.
+  if (result.resourceName != null) {
+    result.resourceName = sanitizeCapturedValue(result.resourceName) as string
+  }
+
   // The intent comes straight from an agent-narrated `context` string, so it can
   // contain a secret the LLM read aloud or personal data it narrated about the
-  // user. Redact it like any other captured value, then strip structured PII
-  // (emails, phone numbers, IPs, cards, SSNs) rather than shipping it raw as
-  // `$mcp_intent`. PII redaction is scoped to the intent only — structured tool
-  // parameters and responses often hold the same shapes as legitimate data.
+  // user. `sanitizeFreeText` adds structured PII redaction (emails, phone numbers,
+  // IPs, cards, SSNs) to the passes every captured value gets, in the one order
+  // that works — see its doc comment. PII redaction is scoped to the intent only:
+  // structured tool parameters and responses often hold the same shapes as
+  // legitimate data.
   if (result.userIntent != null) {
-    result.userIntent = redactPii(sanitizeCapturedValue(result.userIntent) as string)
+    result.userIntent = sanitizeFreeText(result.userIntent)
   }
 
   if (result.llmModel != null) {

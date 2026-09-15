@@ -41,7 +41,13 @@ test.describe('ErrorTracking captureException', () => {
             errorWithCause.cause = errorWithCause
             ph.captureException(errorWithCause)
         })
-        exceptionMatch(exception, 'Error', 'wat even am I', 5)
+        exceptionMatch(exception, 'Error', 'wat even am I', 1)
+        expect(exception.properties.$exception_list[0].mechanism).toEqual({
+            type: 'generic',
+            handled: true,
+            synthetic: false,
+            exception_id: 0,
+        })
     })
 
     test('captureException(string)', async ({ posthog, events }) => {

@@ -7,6 +7,7 @@ export * from './bucketed-rate-limiter'
 // Named rather than `export *`: the budgets, markers and `sanitizeString` are
 // shared with the OTLP encoder but are not public API.
 export { toJsonSafeValue } from './json-utils'
+export { parseRetryAfterMs } from './retry-after'
 export * from './number-utils'
 export * from './string-utils'
 export * from './type-utils'
@@ -113,6 +114,14 @@ export function currentTimestamp(): number {
 
 export function currentISOTime(): string {
   return new Date().toISOString()
+}
+
+export function trySafe<T>(fn: () => T): T | undefined {
+  try {
+    return fn()
+  } catch {
+    return undefined
+  }
 }
 
 export function safeSetTimeout(fn: () => void, timeout: number): any {

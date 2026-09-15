@@ -12,11 +12,12 @@ export class ErrorCoercer implements ErrorTrackingCoercer<Error> {
     // `TypeError`). Fall back to the synthetic exception captured at the call
     // site so the frames still point at the caller. Mark it synthetic so the
     // parser trims the SDK's own frames.
-    const synthetic = stack === undefined
+    const replacementStack = stack === undefined ? ctx.syntheticException?.stack : undefined
+    const synthetic = !!replacementStack
     return {
       type: this.getType(err),
       value: this.getMessage(err, ctx),
-      stack: stack ?? ctx.syntheticException?.stack,
+      stack: stack ?? replacementStack,
       cause: err.cause ? ctx.next(err.cause) : undefined,
       synthetic,
     }
@@ -37,6 +38,15 @@ export class ErrorCoercer implements ErrorTrackingCoercer<Error> {
   }
 
   private getStack(err: Error & { stacktrace?: string }): string | undefined {
-    return err.stacktrace || err.stack || undefined
+    try {
+      const stacktrace = err.stacktrace
+      if (typeof stacktrace === 'string' && stacktrace.length > 0) {
+        return stacktrace
+      }
+      const stack = err.stack
+      return typeof stack === 'string' && stack.length > 0 ? stack : undefined
+    } catch {
+      return undefined
+    }
   }
 }

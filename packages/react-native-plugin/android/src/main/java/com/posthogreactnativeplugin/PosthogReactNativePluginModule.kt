@@ -17,6 +17,8 @@ import com.posthog.PostHog
 import com.posthog.PostHogConfig
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
+import com.posthog.android.replay.PostHogScreenshotColorMode
+import com.posthog.android.replay.PostHogSessionReplayConfig
 import com.posthog.internal.PostHogPreferences
 import com.posthog.internal.PostHogPreferences.Companion.ANONYMOUS_ID
 import com.posthog.internal.PostHogPreferences.Companion.DISTINCT_ID
@@ -176,6 +178,7 @@ class PosthogReactNativePluginModule(
 
               sessionReplay = sessionReplayEnabled
               sessionReplayConfig.screenshot = true
+              sessionReplayConfig.captureTouches = getBoolean(sdkReplayConfig, "captureTouches", true)
               sessionReplayConfig.captureLogcat = captureLog
               sessionReplayConfig.throttleDelayMs = throttleDelayMs.toLong()
               sessionReplayConfig.maskAllImages = maskAllImages
@@ -183,6 +186,7 @@ class PosthogReactNativePluginModule(
               sessionReplayConfig.sampleRate = getDoubleOrNull(sdkReplayConfig, "sampleRate")
               sessionReplayConfig.verifyScreenshotMaskAlignment =
                 getBoolean(sdkReplayConfig, "verifyScreenshotMaskAlignment", false)
+              applyScreenshotConfig(sdkReplayConfig, sessionReplayConfig)
 
               val endpoint = getString(decideReplayConfig, "endpoint", "")
               if (endpoint.isNotEmpty()) {
@@ -217,7 +221,7 @@ class PosthogReactNativePluginModule(
 
           setIdentify(config.cachePreferences, distinctId, anonymousId)
 
-          captureColdStartPushOpenIfNeeded(config)
+          captureColdStartPushOpenIfNeeded(config, jsOptedOut = theOptOut)
         } catch (e: Throwable) {
           logError(method, e)
         } finally {
@@ -399,22 +403,11 @@ class PosthogReactNativePluginModule(
       }
     }.getOrNull()
 
-  private fun getString(
-    map: ReadableMap?,
-    key: String,
-    default: String,
-  ): String = runCatching { if (hasKey(map, key)) map?.getString(key) ?: default else default }.getOrDefault(default)
-
   private fun getInt(
     map: ReadableMap?,
     key: String,
     default: Int,
   ): Int = runCatching { if (hasKey(map, key)) map?.getInt(key) ?: default else default }.getOrDefault(default)
-
-  private fun getDoubleOrNull(
-    map: ReadableMap?,
-    key: String,
-  ): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
 
   private fun logError(
     method: String,
@@ -495,7 +488,15 @@ class PosthogReactNativePluginModule(
   // cold-start tray tap it exists for is the one creation it can never observe here. Read
   // the launch intent directly, then strip the marker so the integration (or a re-run)
   // can't capture the same tap again from this intent object.
-  private fun captureColdStartPushOpenIfNeeded(config: PostHogAndroidConfig) {
+  //
+  // jsOptedOut is the consent JS passed into this setup(). The native SDK lets the opt-out it
+  // persisted itself win over that value, so after an earlier launch opted in, config.optOut no
+  // longer says what JS said and native would capture. A tap JS considers denied is consumed
+  // here without being captured, so a later opt-in cannot resurrect it either.
+  private fun captureColdStartPushOpenIfNeeded(
+    config: PostHogAndroidConfig,
+    jsOptedOut: Boolean,
+  ) {
     if (!config.capturePushNotificationOpened) {
       return
     }
@@ -507,6 +508,10 @@ class PosthogReactNativePluginModule(
     }
     try {
       intent.getStringExtra(GOOGLE_MESSAGE_ID) ?: return
+      if (jsOptedOut) {
+        intent.removeExtra(GOOGLE_MESSAGE_ID)
+        return
+      }
       // Unmarshalling extras throws BadParcelableException on a Parcelable class this
       // classloader lacks; read before stripping the marker so a failed read leaves the
       // intent as the native integration expects it.
@@ -660,3 +665,32 @@ internal fun getBoolean(
   key: String,
   default: Boolean,
 ): Boolean = runCatching { if (hasKey(map, key)) map?.getBoolean(key) ?: default else default }.getOrDefault(default)
+
+private fun getString(
+  map: ReadableMap?,
+  key: String,
+  default: String,
+): String = runCatching { if (hasKey(map, key)) map?.getString(key) ?: default else default }.getOrDefault(default)
+
+private fun getDoubleOrNull(
+  map: ReadableMap?,
+  key: String,
+): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
+
+internal fun applyScreenshotConfig(
+  map: ReadableMap?,
+  config: PostHogSessionReplayConfig,
+) {
+  getDoubleOrNull(map, "screenshotScale")?.let { scale ->
+    // Keep finite values within Float range; the native setter clamps to its supported range.
+    val floatMax = Float.MAX_VALUE.toDouble()
+    config.screenshotScale = if (scale.isFinite()) scale.coerceIn(-floatMax, floatMax).toFloat() else 1f
+  }
+  getDoubleOrNull(map, "screenshotCompressionQuality")?.takeIf { it.isFinite() }?.let { quality ->
+    config.screenshotCompressionQuality = quality.toInt()
+  }
+  when (getString(map, "screenshotColorMode", "")) {
+    "ARGB_8888" -> config.screenshotColorMode = PostHogScreenshotColorMode.ARGB_8888
+    "RGB_565" -> config.screenshotColorMode = PostHogScreenshotColorMode.RGB_565
+  }
+}

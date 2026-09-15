@@ -195,6 +195,14 @@ test('the unit CI entry point retains built-output checks without scheduling rrw
     }
 })
 
+test('browser unit tests wait for the React output included in their package tarball', () => {
+    for (const tasks of [rootScriptGraph('test:unit'), dryRun(['run', 'test:unit', '--filter=posthog-js'])]) {
+        const dependencies = prerequisites(tasks, 'posthog-js#test:unit')
+        assert.ok(dependencies.has('posthog-js#build'))
+        assert.ok(dependencies.has('@posthog/react#build'), 'packing must not race the React build')
+    }
+})
+
 test('Node references consume the graph build without rebuilding inside the task', () => {
     const tasks = dryRun(['run', 'generate-references', '--filter=posthog-node'])
     const id = 'posthog-node#generate-references'

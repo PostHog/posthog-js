@@ -13,6 +13,7 @@ exports[`server wire snapshots > snapshots a deterministic complete captureExcep
           "$exception_list": [
             {
               "mechanism": {
+                "exception_id": 0,
                 "handled": true,
                 "synthetic": false,
                 "type": "generic",
@@ -82,6 +83,7 @@ exports[`server wire snapshots > snapshots a maximal flags request body 1`] = `
       "production",
       "backend",
     ],
+    "evaluation_runtime": "server",
     "flag_keys_to_evaluate": [
       "new-checkout",
       "billing-v2",

@@ -1,2 +1,9 @@
+minimumReleaseAge: 10080
+
+overrides:
+  '@posthog/browser-common': file:posthog-browser-common.tgz
+  '@posthog/core': file:posthog-core.tgz
+  '@posthog/types': file:posthog-types.tgz
+
 allowBuilds:
   core-js: true

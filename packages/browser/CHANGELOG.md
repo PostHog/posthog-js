@@ -1,5 +1,238 @@
 # posthog-js
 
+## 1.433.5
+
+### Patch Changes
+
+- [#4962](https://github.com/PostHog/posthog-js/pull/4962) [`85b775a`](https://github.com/PostHog/posthog-js/commit/85b775a340c5a7bed3746f76f6cd7e6965e05010) Thanks [@posthog](https://github.com/apps/posthog)! - Docstrings for `identity_hash` and `setIdentity()` now say the hash is signed with the Secret API key from Support settings, not a project secret API key or a personal API key.
+  (2026-09-15)
+- Updated dependencies [[`85b775a`](https://github.com/PostHog/posthog-js/commit/85b775a340c5a7bed3746f76f6cd7e6965e05010)]:
+  - @posthog/types@1.412.1
+
+## 1.433.4
+
+### Patch Changes
+
+- [#4941](https://github.com/PostHog/posthog-js/pull/4941) [`07c1045`](https://github.com/PostHog/posthog-js/commit/07c10451f3068abb164d8036b0731a391574455f) Thanks [@marandaneto](https://github.com/marandaneto)! - Capture causes and AggregateError members with relationship metadata and individual stacks, limiting output to 50 entries and 1,000 member inspections.
+  (2026-09-15)
+
+- [#4898](https://github.com/PostHog/posthog-js/pull/4898) [`372afba`](https://github.com/PostHog/posthog-js/commit/372afba7ae39f219fe91a85a23b940f87af7a57b) Thanks [@posthog](https://github.com/apps/posthog)! - Contain a throw from a third-party patched `AbortController.abort()` when our own fetch timeout fires, so it is retried instead of escaping as an uncaught error, and report a single outcome per request.
+  (2026-09-15)
+
+- [#4910](https://github.com/PostHog/posthog-js/pull/4910) [`38b61f9`](https://github.com/PostHog/posthog-js/commit/38b61f9fd5a2b89cfd2cbaf6821b7fce763d1587) Thanks [@posthog](https://github.com/apps/posthog)! - Keep the end of a session recording when one replay event is too large to stringify: that event is dropped and the rest of the buffer still ships, instead of the size estimate throwing and stopping the unload flush.
+  (2026-09-15)
+
+- [#4909](https://github.com/PostHog/posthog-js/pull/4909) [`5d4f1f7`](https://github.com/PostHog/posthog-js/commit/5d4f1f758593dba7fb930dca813ecc76197fe5d7) Thanks [@posthog](https://github.com/apps/posthog)! - Keep the session recording observers that started when one of them fails to initialize, and report the failed observers in the recorder debug properties.
+  (2026-09-15)
+- Updated dependencies [[`07c1045`](https://github.com/PostHog/posthog-js/commit/07c10451f3068abb164d8036b0731a391574455f)]:
+  - @posthog/core@1.54.1
+
+## 1.433.3
+
+### Patch Changes
+
+- [#4945](https://github.com/PostHog/posthog-js/pull/4945) [`79f02e7`](https://github.com/PostHog/posthog-js/commit/79f02e75ad6d566841e67c86a95e1a245a904d05) Thanks [@marandaneto](https://github.com/marandaneto)! - Default Fetch requests to strict-origin so referrers omit page paths and query strings.
+  (2026-09-14)
+
+## 1.433.2
+
+### Patch Changes
+
+- [#4846](https://github.com/PostHog/posthog-js/pull/4846) [`bd4543e`](https://github.com/PostHog/posthog-js/commit/bd4543e1f941b1f0792d6644a1f862e0ccd05b83) Thanks [@posthog](https://github.com/apps/posthog)! - Keep session recording snapshots from different windows of the same session in separate uploads to preserve their window attribution.
+  (2026-09-14)
+
+- [#4954](https://github.com/PostHog/posthog-js/pull/4954) [`3c68c08`](https://github.com/PostHog/posthog-js/commit/3c68c083dea604ee440db4c5a4f193f0947159bb) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect Retry-After, including repeated headers, up to 30 seconds on retryable browser responses without shortening exponential backoff.
+  (2026-09-14)
+- Updated dependencies [[`3c68c08`](https://github.com/PostHog/posthog-js/commit/3c68c083dea604ee440db4c5a4f193f0947159bb)]:
+  - @posthog/core@1.54.0
+
+## 1.433.1
+
+### Patch Changes
+
+- [#4949](https://github.com/PostHog/posthog-js/pull/4949) [`8f11f5f`](https://github.com/PostHog/posthog-js/commit/8f11f5f099a75889e1dd61a7ff7ef7240b2770b0) Thanks [@marandaneto](https://github.com/marandaneto)! - Respect autocapture attribute masks for link URLs and legacy class properties.
+  (2026-09-14)
+
+## 1.433.0
+
+### Minor Changes
+
+- [#4916](https://github.com/PostHog/posthog-js/pull/4916) [`d037ea1`](https://github.com/PostHog/posthog-js/commit/d037ea11c9aca97e93aa2364636f0c1cc72a57c7) Thanks [@mayteio](https://github.com/mayteio)! - Read Meta's `_fbc` and `_fbp` cookies for the Conversions API. When the Meta pixel is on the page, its `_fbc` cookie holds the true ad click time, so that value now wins over the time PostHog stamps on the pageview that follows the click, and a click that landed before the SDK loaded is no longer lost. The `_fbp` browser ID is captured as the `$fbp` person property, which makes it available to a conversion sent later from a backend. Both cookies are read under the same switches as the URL click ID: `save_campaign_params: false` turns the reads off, and cookieless mode skips them.
+  (2026-09-14)
+
+## 1.432.0
+
+### Minor Changes
+
+- [#4958](https://github.com/PostHog/posthog-js/pull/4958) [`4a46fab`](https://github.com/PostHog/posthog-js/commit/4a46fabe04b9caf6e040a43dcc3294ee95fd08c1) Thanks [@marandaneto](https://github.com/marandaneto)! - Add a resetError callback to React error-boundary fallbacks so applications can retry rendering without remounting the boundary.
+  (2026-09-14)
+
+### Patch Changes
+
+- [#4927](https://github.com/PostHog/posthog-js/pull/4927) [`62fc60b`](https://github.com/PostHog/posthog-js/commit/62fc60b642170cce4a50a78c8e3a02f9f98f30e6) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix lost event retries after restoring a page from the back-forward cache.
+  (2026-09-14)
+
+## 1.431.8
+
+### Patch Changes
+
+- [#4935](https://github.com/PostHog/posthog-js/pull/4935) [`6a78625`](https://github.com/PostHog/posthog-js/commit/6a78625c8d05de3404116ea9a1e4339bc89b60db) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix false dead clicks after synchronous DOM updates. Clicks stopped from bubbling are now evaluated too, which may increase dead-click counts for inert controls.
+  (2026-09-14)
+
+## 1.431.7
+
+### Patch Changes
+
+- [#4937](https://github.com/PostHog/posthog-js/pull/4937) [`a5d094f`](https://github.com/PostHog/posthog-js/commit/a5d094f44f722935b539c346a92ae98a797e8762) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid fetch keepalive quota failures when multiple event requests are in flight.
+  (2026-09-14)
+
+## 1.431.6
+
+### Patch Changes
+
+- [#4936](https://github.com/PostHog/posthog-js/pull/4936) [`ee6fd02`](https://github.com/PostHog/posthog-js/commit/ee6fd0270539a16a75ebcb421431b84a51e1718e) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent buffered session replay data from crossing projects that share a persistence name during page navigation.
+  (2026-09-14)
+
+## 1.431.5
+
+### Patch Changes
+
+- [#4940](https://github.com/PostHog/posthog-js/pull/4940) [`3e12f1d`](https://github.com/PostHog/posthog-js/commit/3e12f1de6d9a40e09bf930bd3834af296ba80161) Thanks [@marandaneto](https://github.com/marandaneto)! - Discard pending replay network captures after recording stops or restarts.
+  (2026-09-14)
+
+## 1.431.4
+
+### Patch Changes
+
+- [#4952](https://github.com/PostHog/posthog-js/pull/4952) [`4f8076b`](https://github.com/PostHog/posthog-js/commit/4f8076b01a5d2bff228b67e2d00bb71c6848aebf) Thanks [@marandaneto](https://github.com/marandaneto)! - Support clickable `[label](url)` links in Conversations widget greetings.
+  (2026-09-14)
+
+- [#4835](https://github.com/PostHog/posthog-js/pull/4835) [`03e45b6`](https://github.com/PostHog/posthog-js/commit/03e45b6246a28909c2c7f1754203bc99a54e2c23) Thanks [@posthog](https://github.com/apps/posthog)! - Fix identical person property retries being dropped after the original capture was rejected.
+  (2026-09-14)
+
+## 1.431.3
+
+### Patch Changes
+
+- [#4948](https://github.com/PostHog/posthog-js/pull/4948) [`3acf287`](https://github.com/PostHog/posthog-js/commit/3acf2875215094163d5d3f0cf58e50d90a3e1126) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix replay cleanup when the host's children are removed before destroying the player.
+  (2026-09-14)
+
+## 1.431.2
+
+### Patch Changes
+
+- [#4938](https://github.com/PostHog/posthog-js/pull/4938) [`fea443a`](https://github.com/PostHog/posthog-js/commit/fea443a4f19bc363ad1d152c1daf05ef527e0bd5) Thanks [@marandaneto](https://github.com/marandaneto)! - Mark console-captured exceptions as handled and identify their console origin.
+  (2026-09-14)
+
+## 1.431.1
+
+### Patch Changes
+
+- [#4934](https://github.com/PostHog/posthog-js/pull/4934) [`b15ae1f`](https://github.com/PostHog/posthog-js/commit/b15ae1f8e998ae9c9100dc1f137c145d9ee402e7) Thanks [@marandaneto](https://github.com/marandaneto)! - Exclude internal SDK console diagnostics from exception autocapture and report recoverable recorder diagnostics as warnings.
+  (2026-09-14)
+
+## 1.431.0
+
+### Minor Changes
+
+- [#4918](https://github.com/PostHog/posthog-js/pull/4918) [`c666606`](https://github.com/PostHog/posthog-js/commit/c666606dede10251d4335d406eae063f1cd38278) Thanks [@pauldambra](https://github.com/pauldambra)! - Add `metrics.network` config to record HTTP and HTTPS `fetch` and `XMLHttpRequest` durations as histograms, with an optional custom metric name and attributes.
+  (2026-09-14)
+
+### Patch Changes
+
+- [#4894](https://github.com/PostHog/posthog-js/pull/4894) [`d81541b`](https://github.com/PostHog/posthog-js/commit/d81541b4f02b7cecd4751529f5c10b6bbbc600ca) Thanks [@posthog](https://github.com/apps/posthog)! - Contain replay errors during playback and seeking so a failed event does not stall the remaining events.
+  (2026-09-14)
+- Updated dependencies [[`c666606`](https://github.com/PostHog/posthog-js/commit/c666606dede10251d4335d406eae063f1cd38278)]:
+  - @posthog/types@1.412.0
+
+## 1.430.4
+
+### Patch Changes
+
+- [#4946](https://github.com/PostHog/posthog-js/pull/4946) [`aeaea15`](https://github.com/PostHog/posthog-js/commit/aeaea15010ad25ed4c04d4a1dff74e008a1ada83) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix console capture continuing after stop or duplicating after restart when another library wraps the console.
+  (2026-09-14)
+
+## 1.430.3
+
+### Patch Changes
+
+- [#4923](https://github.com/PostHog/posthog-js/pull/4923) [`2ae0f26`](https://github.com/PostHog/posthog-js/commit/2ae0f26a513d2da87aded38bca6c81c8f04baa6c) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix session recording failing to restart after capturing events while stopped with expired config.
+  (2026-09-12)
+
+## 1.430.2
+
+### Patch Changes
+
+- [#4897](https://github.com/PostHog/posthog-js/pull/4897) [`a140fa7`](https://github.com/PostHog/posthog-js/commit/a140fa77bf74eac3d58aa93dc7d1b97eca7de5d1) Thanks [@fasyy612](https://github.com/fasyy612)! - Send each replay session's snapshots in their own request so a session rotation no longer files the new session's first snapshot under the old session.
+  (2026-09-11)
+
+## 1.430.1
+
+### Patch Changes
+
+- [#4913](https://github.com/PostHog/posthog-js/pull/4913) [`0224a83`](https://github.com/PostHog/posthog-js/commit/0224a83ee0720348285551aac8408365b3990a93) Thanks [@github-actions](https://github.com/apps/github-actions)! - Fix scroll depth metrics carrying over between pages after client-side navigation.
+  (2026-09-11)
+
+## 1.430.0
+
+### Minor Changes
+
+- [#4834](https://github.com/PostHog/posthog-js/pull/4834) [`5f2b0fe`](https://github.com/PostHog/posthog-js/commit/5f2b0fe2b42bad764327457949030dff396b7ac0) Thanks [@posthog](https://github.com/apps/posthog)! - Add `posthog-js/full`, `posthog-js/no-external` and `posthog-js/full/no-external` entry points, so desktop apps and other CSP-restricted builds can `require` a bundle instead of deep-importing an ES module from `dist/`
+  (2026-09-11)
+
+### Patch Changes
+
+- [#4860](https://github.com/PostHog/posthog-js/pull/4860) [`8207df8`](https://github.com/PostHog/posthog-js/commit/8207df8564d01977e3f9ffdcae4585d11e620ca3) Thanks [@posthog](https://github.com/apps/posthog)! - Back off automatic feature flag refreshes on idle visible pages only when `remote_config_refresh_interval_ms` is omitted, preserving explicitly configured intervals.
+  (2026-09-11)
+
+- [#4901](https://github.com/PostHog/posthog-js/pull/4901) [`65aafcc`](https://github.com/PostHog/posthog-js/commit/65aafcc52304e1ad3166430da0f1b9aaacbf95b0) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve batched event timestamps so delayed retries do not shift event times and prevent deduplication.
+  (2026-09-11)
+- Updated dependencies [[`8207df8`](https://github.com/PostHog/posthog-js/commit/8207df8564d01977e3f9ffdcae4585d11e620ca3)]:
+  - @posthog/types@1.411.1
+
+## 1.429.5
+
+### Patch Changes
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Cap the retry delay for log exports at 30 seconds, the ceiling the logs contract states. It previously doubled to 64 times the flush interval — 192s on web, 640s on React Native — so a log export now resumes within 30 seconds of a failing endpoint recovering, at the cost of more retry requests while that endpoint is down.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Keep backing off a failing log flush while new records arrive, instead of the next record resetting the retry to the flush interval.
+  (2026-09-10)
+
+- [#4579](https://github.com/PostHog/posthog-js/pull/4579) [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Logs and metrics now always send `service.name` and `telemetry.sdk.*`, even when a `resourceAttributes` value is too large to encode in full. Previously that value could crowd them out, and the records reached PostHog with no service attribution.
+  (2026-09-10)
+- Updated dependencies [[`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c), [`19e78cc`](https://github.com/PostHog/posthog-js/commit/19e78cc821b80ad2564a921344d9d63cdc58939c)]:
+  - @posthog/core@1.53.0
+  - @posthog/types@1.411.0
+
+## 1.429.4
+
+### Patch Changes
+
+- [#4862](https://github.com/PostHog/posthog-js/pull/4862) [`3278cd0`](https://github.com/PostHog/posthog-js/commit/3278cd01bfb35ce5eed79420818f42f823c71370) Thanks [@pauldambra](https://github.com/pauldambra)! - Call the original console method with the console as its receiver when recording console logs. The wrapper passed `undefined` instead, and passed no receiver at all when reporting its own failures, which a console implementation is free to reject.
+  (2026-09-10)
+
+- [#4887](https://github.com/PostHog/posthog-js/pull/4887) [`0da006c`](https://github.com/PostHog/posthog-js/commit/0da006c5eb53630c7fc7d63151fc6632d6dd49e0) Thanks [@posthog](https://github.com/apps/posthog)! - Error tracking no longer counts an injected script as your own code. A stack frame is `in_app` only when its filename names a script your app was served — `http(s)`, `file`, `blob`, `app`, `capacitor`, `ionic`, a bundler scheme, or a bare path. A frame served over any other scheme, such as an in-app browser bridge on `iabjs://` or an extension content script on `chrome-extension://`, is kept for context but no longer groups the issue under your code.
+  (2026-09-10)
+
+- [#4837](https://github.com/PostHog/posthog-js/pull/4837) [`99b4fc7`](https://github.com/PostHog/posthog-js/commit/99b4fc7d16245b419e0e7f4bf746144d091e5217) Thanks [@pauldambra](https://github.com/pauldambra)! - Stop recording `autoplay` attribute mutations on `<video>` and `<audio>` during session replay. The check compared a lowercase tag name against `Element.tagName`, which is uppercase for HTML elements, so a looping background video emitted a mutation for every `autoplay` toggle.
+  (2026-09-10)
+- Updated dependencies [[`0da006c`](https://github.com/PostHog/posthog-js/commit/0da006c5eb53630c7fc7d63151fc6632d6dd49e0)]:
+  - @posthog/core@1.52.2
+
+## 1.429.3
+
+### Patch Changes
+
+- [#4878](https://github.com/PostHog/posthog-js/pull/4878) [`14ba783`](https://github.com/PostHog/posthog-js/commit/14ba783ff8b469a8bd2fe40782c985326d89e672) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Allow null bootstrap values and treat null or empty distinct IDs as missing.
+  (2026-09-10)
+
+- [#4831](https://github.com/PostHog/posthog-js/pull/4831) [`9498567`](https://github.com/PostHog/posthog-js/commit/9498567cd71f13ed8e618185075d8c5628b93cc1) Thanks [@posthog](https://github.com/apps/posthog)! - Log a console message when advanced_disable_feature_flags stops surveys from displaying
+  (2026-09-10)
+- Updated dependencies [[`14ba783`](https://github.com/PostHog/posthog-js/commit/14ba783ff8b469a8bd2fe40782c985326d89e672), [`9498567`](https://github.com/PostHog/posthog-js/commit/9498567cd71f13ed8e618185075d8c5628b93cc1)]:
+  - @posthog/types@1.410.1
+
 ## 1.429.2
 
 ### Patch Changes

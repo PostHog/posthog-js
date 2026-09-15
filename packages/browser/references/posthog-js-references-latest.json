@@ -1890,7 +1890,7 @@
         {
           "category": "",
           "description": "Set HMAC-based identity verification.",
-          "details": "When set, products like conversations use server-verified identity (distinct_id + HMAC hash) instead of anonymous session identifiers. The hash should be computed server-side as HMAC-SHA256 of the distinct_id using the project's API secret. Any additional signed identity claims are cleared because they are bound to the previously configured distinct_id.",
+          "details": "When set, products like conversations use server-verified identity (distinct_id + HMAC hash) instead of anonymous session identifiers. The hash should be computed server-side as HMAC-SHA256 of the distinct_id, signed with the Secret API key from Support settings. Project secret API keys (project settings) and personal API keys are rejected. Any additional signed identity claims are cleared because they are bound to the previously configured distinct_id.",
           "id": "setIdentity",
           "showDocs": true,
           "title": "setIdentity",
@@ -1910,7 +1910,7 @@
               "name": "distinctId"
             },
             {
-              "description": "HMAC-SHA256 of distinctId using the project API secret",
+              "description": "HMAC-SHA256 of distinctId, signed with the Secret API key from Support settings",
               "isOptional": false,
               "type": "string",
               "name": "hash"
@@ -2226,7 +2226,7 @@
         {
           "category": "Identification",
           "description": "Removes properties from the person profile associated with the current `distinct_id`. Learn more about [identifying users](/docs/product-analytics/identify)",
-          "details": "Deletes the given person properties from the person profile in PostHog. This is the counterpart to  — instead of hand-passing `$unset` inside a `capture()` call, you can remove properties with a dedicated method. If `person_profiles` is set to `never`, this call is ignored.",
+          "details": "Deletes the given person properties from the person profile in PostHog. This is the counterpart to  — instead of hand-passing `$unset` inside a `capture()` call, you can remove properties with a dedicated method. If `person_profiles` is set to `never`, this call is ignored.\n`$fbc` and `$fbp` read by the SDK are unset for this call only. `save_campaign_params: false` stops the reads.",
           "id": "unsetPersonProperties",
           "showDocs": true,
           "title": "unsetPersonProperties",
@@ -3147,7 +3147,7 @@
         },
         {
           "description": "Metrics-specific configuration options for the posthog.metrics API.",
-          "type": "MetricsConfig",
+          "type": "BrowserMetricsConfig",
           "name": "metrics"
         },
         {
@@ -3161,7 +3161,7 @@
           "name": "identity_distinct_id"
         },
         {
-          "description": "HMAC-SHA256 of `identity_distinct_id` using the project's API secret.\nMust be provided together with `identity_distinct_id`.",
+          "description": "HMAC-SHA256 of `identity_distinct_id`, signed with the Secret API key from Support settings.\nProject secret API keys (project settings) and personal API keys are rejected.\nMust be provided together with `identity_distinct_id`.",
           "type": "string",
           "name": "identity_hash"
         },
@@ -3423,7 +3423,7 @@
           "name": "surveys_request_timeout_ms"
         },
         {
-          "description": "Controls how often feature flags are automatically refreshed in long-running sessions.\n\nBy default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side\nflag changes without requiring a page reload. This is useful for SPAs and long-running tabs.\n\n**Tradeoffs:**\n- **Shorter intervals**: Feature flag changes propagate faster, but increases network requests and server load.\n- **Longer intervals**: Reduces network traffic (better for mobile/battery), but flag changes take longer to propagate.\n- **Disabled (0 or any negative value)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.\n  Use this if you control flag updates manually or have infrequent flag changes.\n\nHidden pages skip scheduled refreshes and reload due flags when they become visible.\nThis option does not reload remote config.",
+          "description": "Controls how often feature flags are automatically refreshed in long-running sessions.\n\nThe default interval is 5 minutes (300000ms) to pick up server-side flag changes without\nrequiring a page reload. This is useful for SPAs and long-running tabs. An explicitly set\npositive interval stays fixed, even when the page gets no user interaction.\n\n**Each refresh is a billable feature flag request.** A page that stays open all day makes\nup to 288 requests per day on the default interval, and every open tab and every named\ninstance refreshes on its own timer, so they add up. Set this option to `0` to stop the\nbackground refreshes if that cost is not useful to you.\n\n**Tradeoffs:**\n- **Shorter intervals**: Feature flag changes propagate faster, but increases network requests, cost, and server load.\n- **Longer intervals**: Reduces network traffic (better for mobile/battery) and cost, but flag changes take longer to propagate.\n- **Disabled (0 or any negative value)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.\n  Use this if you control flag updates manually or have infrequent flag changes.\n\nHidden pages skip scheduled refreshes and reload due flags when they become visible.\n\nWhen this option is omitted, a visible page that gets no user interaction (such as a\ndashboard, a page being read, a video player, or a kiosk) doubles the interval after every\nrefresh, up to one hour. Automatic refreshes continue at that interval; they do not stop.\nThe next click, key press, wheel, touch, or return to visibility restores the five-minute\ndefault. Scrolling driven by a script, such as an auto-playing carousel, does not count as\nan interaction. Set this option explicitly to keep a fixed cadence, or to `0` to stop\nbackground refreshes completely.\n\nThis option does not reload remote config.",
           "type": "number",
           "name": "remote_config_refresh_interval_ms"
         },
@@ -4497,6 +4497,11 @@
       "name": "QueuedRequestWithOptions",
       "properties": [
         {
+          "description": "requests sharing a batchKey are still sent separately when this differs",
+          "type": "string",
+          "name": "batchGroup"
+        },
+        {
           "description": "key of queue, e.g. 'sessionRecording' vs 'event'",
           "type": "string",
           "name": "batchKey"
@@ -4832,7 +4837,7 @@
           "name": "identity_distinct_id"
         },
         {
-          "description": "HMAC-SHA256 of identity_distinct_id using team secret_api_token",
+          "description": "HMAC-SHA256 of identity_distinct_id, signed with the Secret API key from Support settings. Project secret API keys (project settings) and personal API keys are rejected.",
           "type": "string",
           "name": "identity_hash"
         },

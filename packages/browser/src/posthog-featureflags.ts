@@ -1,4 +1,4 @@
-import { addEventListener, entries, extend } from '@posthog/browser-common/utils/general-utils'
+import { addEventListener, eachArray, entries, extend } from '@posthog/browser-common/utils/general-utils'
 import type { ApiResponse, Client, Disposable, Extension } from '@posthog/browser-common'
 import {
     FlagsResponse,
@@ -66,6 +66,12 @@ const FLAG_TIMEOUT_MSG = '" failed. Feature flags didn\'t load in time.'
 // deterministically blocked (ad blocker, CORS, extension). Stop periodic /flags
 // refreshes after this many consecutive failures until connectivity changes.
 const MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES = 3
+
+/** Longest interval the automatic refresh backs off to while the page has no user interaction. */
+const MAX_IDLE_REFRESH_INTERVAL_MS = 60 * 60 * 1000
+// Input-origin events only: a `scroll` event also fires for scrollTo/scrollTop/scrollIntoView,
+// so an auto-scrolling carousel on a signage page would keep cancelling the idle backoff.
+const USER_INTERACTION_EVENTS = ['click', 'keydown', 'wheel', 'touchstart', 'pointerdown']
 
 type FeatureFlagsState = {
     [PERSISTENCE_ACTIVE_FEATURE_FLAGS]?: string[]
@@ -288,6 +294,8 @@ export class PostHogFeatureFlags implements Extension {
     private _consecutiveStatusZeroFailures: number = 0
     private _refreshInterval?: ReturnType<typeof setInterval>
     private _refreshIntervalMs?: number
+    private _dueRefreshIntervalMs?: number
+    private _hadUserInteraction: boolean = false
     private _lastRefreshAt?: number
     private readonly _configSource: FeatureFlagsConfigSource
     private readonly _mutableConfigSource?: MutableFeatureFlagsConfigSource
@@ -358,24 +366,48 @@ export class PostHogFeatureFlags implements Extension {
 
     private _refreshIfDue = (): void => {
         const refreshIntervalMs = this._refreshIntervalMs
+        const dueIntervalMs = this._dueRefreshIntervalMs ?? refreshIntervalMs
         if (
             isUndefined(refreshIntervalMs) ||
+            isUndefined(dueIntervalMs) ||
             this._config.remoteRequestsDisabled ||
             !document ||
             document.visibilityState === 'hidden' ||
-            Date.now() - (this._lastRefreshAt ?? 0) < refreshIntervalMs
+            Date.now() - (this._lastRefreshAt ?? 0) < dueIntervalMs
         ) {
             return
         }
 
+        // An idle page (a kiosk or a signage screen) would otherwise poll forever, so back off
+        // while nobody interacts with it and return to the configured interval when somebody does.
+        this._dueRefreshIntervalMs =
+            this._hadUserInteraction || !this._config.idleRefreshBackoff
+                ? refreshIntervalMs
+                : Math.min(dueIntervalMs * 2, MAX_IDLE_REFRESH_INTERVAL_MS)
+        this._hadUserInteraction = false
         this.reloadFeatureFlags()
         this._scheduleNextRefresh()
     }
 
+    private _onUserInteraction = (): void => {
+        if (this._hadUserInteraction && this._dueRefreshIntervalMs === this._refreshIntervalMs) {
+            return
+        }
+        this._resumeConfiguredInterval()
+    }
+
     private _onVisibilityChange = (): void => {
         if (document?.visibilityState === 'visible') {
-            this._refreshIfDue()
+            // Deliberately not through _onUserInteraction: refreshes fall due while the page is
+            // hidden, and an interaction from before it was hidden would skip the due check here.
+            this._resumeConfiguredInterval()
         }
+    }
+
+    private _resumeConfiguredInterval(): void {
+        this._hadUserInteraction = true
+        this._dueRefreshIntervalMs = this._refreshIntervalMs
+        this._refreshIfDue()
     }
 
     private _syncAutomaticRefresh(): void {
@@ -387,6 +419,9 @@ export class PostHogFeatureFlags implements Extension {
             configuredIntervalMs > 0
                 ? configuredIntervalMs
                 : undefined
+        if (!this._config.idleRefreshBackoff) {
+            this._dueRefreshIntervalMs = refreshIntervalMs
+        }
         if (refreshIntervalMs === this._refreshIntervalMs) {
             return
         }
@@ -397,9 +432,13 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         this._refreshIntervalMs = refreshIntervalMs
+        this._dueRefreshIntervalMs = refreshIntervalMs
         this._scheduleNextRefresh()
         if (document?.addEventListener) {
             addEventListener(document, DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
+            eachArray(USER_INTERACTION_EVENTS, (eventName) => {
+                addEventListener(document, eventName, this._onUserInteraction, { capture: true })
+            })
         }
     }
 
@@ -419,8 +458,13 @@ export class PostHogFeatureFlags implements Extension {
             clearInterval(this._refreshInterval)
             this._refreshInterval = undefined
             document?.removeEventListener?.(DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
+            eachArray(USER_INTERACTION_EVENTS, (eventName) => {
+                document?.removeEventListener?.(eventName, this._onUserInteraction, { capture: true })
+            })
         }
         this._refreshIntervalMs = undefined
+        this._dueRefreshIntervalMs = undefined
+        this._hadUserInteraction = false
         this._lastRefreshAt = undefined
     }
 

@@ -8,8 +8,13 @@ import { canCaptureSurvey, createSurveyProgress, SurveyProgress, SurveyProgressS
 import { getSurveyIterationKey } from '@posthog/core/surveys'
 import { useActivatedSurveys } from './useActivatedSurveys'
 import { SurveyModal } from './components/SurveyModal'
-import { defaultSurveyAppearance, getContrastingTextColor, SurveyAppearanceTheme } from './surveys-utils'
-import { Survey, SurveyAppearance, SurveyType, type SurveyResponses } from '@posthog/core'
+import {
+  defaultSurveyAppearance,
+  getContrastingTextColor,
+  SurveyAppearance,
+  SurveyAppearanceTheme,
+} from './surveys-utils'
+import { Survey, SurveyType, type SurveyResponses } from '@posthog/core'
 import { usePostHog } from '../hooks/usePostHog'
 import { useFeatureFlags } from '../hooks/useFeatureFlags'
 import { PostHog } from '../posthog-rn'
@@ -75,6 +80,10 @@ export type PostHogSurveyProviderProps = {
 
   /**
    * The default appearance for surveys when not specified in PostHog.
+   *
+   * Accepts the React Native-only appearance fields as well (e.g.
+   * `maxFontSizeMultiplier`) — they are merged into the same theme object the
+   * survey components read, and PostHog never sends them down.
    */
   defaultSurveyAppearance?: SurveyAppearance
 

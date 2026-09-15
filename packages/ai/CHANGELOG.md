@@ -1,5 +1,43 @@
 # posthog-ai
 
+## 8.12.1
+
+### Patch Changes
+
+- [#4961](https://github.com/PostHog/posthog-js/pull/4961) [`8fb9367`](https://github.com/PostHog/posthog-js/commit/8fb9367d853d6c87cb6eb90eb0f79bbbc64afe88) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - Fix `prompts.getAll` returning an empty result instead of an error on PostHog servers that do not support fetching prompts by label.
+  (2026-09-15)
+
+## 8.12.0
+
+### Minor Changes
+
+- [#4824](https://github.com/PostHog/posthog-js/pull/4824) [`7ca1cdc`](https://github.com/PostHog/posthog-js/commit/7ca1cdc327aaae75a2b6181942abb6ddade50214) Thanks [@posthog](https://github.com/apps/posthog)! - Add a Claude Agent SDK integration that captures LLM analytics for `@anthropic-ai/claude-agent-sdk` queries
+  (2026-09-15)
+
+## 8.11.2
+
+### Patch Changes
+
+- [#4955](https://github.com/PostHog/posthog-js/pull/4955) [`e88501a`](https://github.com/PostHog/posthog-js/commit/e88501ae76ace417fcb43b20de25bf3015bbce63) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates:
+  - Updated dependency [`@anthropic-ai/sdk@>=0.112.3 <0.125.0` ↗︎](https://www.npmjs.com/package/@anthropic-ai/sdk/v/0.112.3) (from `>=0.112.3 <0.123.0`, in `peerDependencies`) (2026-09-15)
+- Updated dependencies [[`07c1045`](https://github.com/PostHog/posthog-js/commit/07c10451f3068abb164d8036b0731a391574455f)]:
+  - @posthog/core@1.54.1
+  - posthog-node@5.52.3
+
+## 8.11.1
+
+### Patch Changes
+
+- [#4943](https://github.com/PostHog/posthog-js/pull/4943) [`abf9123`](https://github.com/PostHog/posthog-js/commit/abf91231698de63691f22eeb928709d5c4f78f44) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent tool argument serialization failures from disrupting Vercel tracing and LangChain callbacks.
+  (2026-09-14)
+
+## 8.11.0
+
+### Minor Changes
+
+- [#4903](https://github.com/PostHog/posthog-js/pull/4903) [`825d830`](https://github.com/PostHog/posthog-js/commit/825d8301f13a1bc8984458d030853c7799746267) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - `prompts.getAll({ label: 'production' })` fetches every prompt that carries a label in one request and stores them in the prompt cache, so later `get(name, { label })` calls are cache hits. Apps with many prompts no longer need one request per prompt per cache cycle. Against a PostHog server that does not support labels on the prompt list endpoint yet, the call fails with a clear error instead of caching wrong versions.
+  (2026-09-10)
+
 ## 8.10.4
 
 ### Patch Changes

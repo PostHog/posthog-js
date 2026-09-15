@@ -150,6 +150,10 @@ export type {
     BeforeSendMetricFn,
     OtlpMetricsPayload,
     MetricsConfig,
+    BrowserMetricsConfig,
+    NetworkMetricsConfig,
+    NetworkMetricsRequest,
+    NetworkMetricsResponse,
 } from '@posthog/types'
 
 // Re-export KnownUnsafeEditableEvent from @posthog/core for backwards compatibility
@@ -276,6 +280,8 @@ export interface RequestWithOptions {
 export interface QueuedRequestWithOptions extends RequestWithOptions {
     /** key of queue, e.g. 'sessionRecording' vs 'event' */
     batchKey?: string
+    /** requests sharing a batchKey are still sent separately when this differs */
+    batchGroup?: string
 }
 
 // Used explicitly for retriable requests

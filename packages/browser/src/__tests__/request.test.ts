@@ -4,7 +4,7 @@ import { TextDecoder } from 'util'
 import { runInNewContext } from 'node:vm'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import * as fflate from 'fflate'
-import { extendURLParams, request } from '../request'
+import { extendURLParams, isPostHogXHR, request } from '../request'
 import { Compression, RequestWithOptions } from '../types'
 import { logger } from '@posthog/browser-common/utils/logger'
 
@@ -169,6 +169,24 @@ describe('request', () => {
             expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('x-header', 'value')
         })
 
+        it('marks the XHR as its own so page-level observers can skip it', () => {
+            request(createRequest({}))
+
+            expect(isPostHogXHR(mockedXHR)).toBe(true)
+            expect(isPostHogXHR({} as XMLHttpRequest)).toBe(false)
+        })
+
+        it('loads in a browser without WeakSet, such as IE11', async () => {
+            vi.stubGlobal('WeakSet', undefined)
+            vi.resetModules()
+            try {
+                await expect(import('../request')).resolves.toBeDefined()
+            } finally {
+                vi.unstubAllGlobals()
+                vi.resetModules()
+            }
+        })
+
         it('calls the on callback handler when successful', async () => {
             mockedXHR.status = 200
             request(createRequest())
@@ -253,8 +271,20 @@ describe('request', () => {
                     headers: new Headers(),
                     keepalive: false,
                     method: 'GET',
+                    referrerPolicy: 'strict-origin',
                 })
             )
+        })
+
+        it('uses the fetch captured at load, so a wrapper installed on window.fetch never sees it', () => {
+            const windowFetch = vi.fn()
+            vi.stubGlobal('fetch', windowFetch)
+
+            request(createRequest({}))
+
+            expect(mockedFetch).toHaveBeenCalledTimes(1)
+            expect(windowFetch).not.toHaveBeenCalled()
+            vi.unstubAllGlobals()
         })
 
         it('adds the cache-busting parameter only when requested', () => {
@@ -673,6 +703,107 @@ describe('request', () => {
             errorSpy.mockRestore()
         })
 
+        it('contains a throw from a patched abort() instead of letting it escape our timer', async () => {
+            // A third-party fetch wrapper can replace `AbortController.prototype.abort` and throw
+            // out of it, which lands inside our timeout callback and would otherwise surface as an
+            // uncaught error with a posthog-js frame on top. (An `abort` listener attached natively
+            // to the signal we pass cannot produce this: `dispatchEvent` reports a listener's
+            // exception to the global error handler instead of propagating it out of `abort()`, so
+            // no guard of ours can contain that one.)
+            const listenerError = new Error('signal is aborted without reason')
+            listenerError.name = 'AbortError'
+            const abortSpy = vi.spyOn(globalThis.AbortController.prototype, 'abort').mockImplementation(() => {
+                throw listenerError
+            })
+            mockedFetch.mockImplementation(() => new Promise(() => {}))
+
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = vi.fn()
+            request(createRequest({ callback, timeout: 8000 }))
+
+            expect(() => vi.advanceTimersByTime(8000)).not.toThrow()
+            await flushPromises()
+
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: listenerError })
+            expect(warnSpy).toHaveBeenCalledWith(listenerError)
+            expect(errorSpy).not.toHaveBeenCalled()
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+            abortSpy.mockRestore()
+        })
+
+        it('reports only once when a throwing patched abort() is followed by the fetch rejection', async () => {
+            // The abort can take effect and the patched `abort()` still throw, so the fetch rejects
+            // afterwards too. The request queue must see one failure, not two.
+            const listenerError = new Error('signal is aborted without reason')
+            listenerError.name = 'AbortError'
+            const originalAbort = globalThis.AbortController.prototype.abort
+            const abortSpy = vi.spyOn(globalThis.AbortController.prototype, 'abort').mockImplementation(function (
+                this: AbortController,
+                reason?: unknown
+            ) {
+                originalAbort.call(this, reason)
+                throw listenerError
+            })
+            mockedFetch.mockImplementation((_url: string, opts: any) => {
+                return new Promise((_resolve, reject) => {
+                    // oxlint-disable-next-line posthog-js/no-add-event-listener
+                    opts.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+                })
+            })
+
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+
+            const callback = vi.fn()
+            request(createRequest({ callback, timeout: 8000 }))
+
+            vi.advanceTimersByTime(8000)
+            await flushPromises()
+
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: listenerError })
+
+            warnSpy.mockRestore()
+            abortSpy.mockRestore()
+        })
+
+        it('reports only once when a throwing patched abort() leaves the fetch alive to succeed', async () => {
+            // A patched `abort()` can throw *before* it aborts the signal, which leaves the fetch
+            // running after our timeout has already reported a failure. The late response must be
+            // dropped: the request queue has queued a retry for that failure, and a success
+            // callback on top of it would give one request two contradictory outcomes.
+            const listenerError = new Error('signal is aborted without reason')
+            listenerError.name = 'AbortError'
+            const abortSpy = vi.spyOn(globalThis.AbortController.prototype, 'abort').mockImplementation(() => {
+                throw listenerError
+            })
+            let resolveFetch: (response: any) => void = () => {}
+            mockedFetch.mockImplementation(() => new Promise((resolve) => (resolveFetch = resolve)))
+
+            const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+
+            const callback = vi.fn()
+            request(createRequest({ callback, timeout: 8000 }))
+
+            vi.advanceTimersByTime(8000)
+            await flushPromises()
+
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: listenerError })
+
+            resolveFetch({ status: 200, text: () => Promise.resolve('{ "a": 1 }') })
+            await flushPromises()
+
+            expect(callback).toHaveBeenCalledTimes(1)
+
+            warnSpy.mockRestore()
+            abortSpy.mockRestore()
+        })
+
         it.each([
             ['Failed to fetch', 'Failed to fetch'],
             ['Firefox NetworkError', 'NetworkError when attempting to fetch resource.'],
@@ -782,7 +913,18 @@ describe('request', () => {
                 expect.objectContaining({
                     cache: 'force-cache',
                     next: { revalidate: 0, tags: ['test'] },
+                    referrerPolicy: 'strict-origin',
                 })
+            )
+        })
+
+        it('preserves runtime fetchOptions precedence over the default referrer policy', () => {
+            // Extra runtime fields already pass through, even though referrerPolicy is not a public config option.
+            const fetchOptions: RequestInit = { cache: 'no-store', referrerPolicy: 'no-referrer' }
+            request(createRequest({ fetchOptions }))
+
+            expect(mockedFetch.mock.calls[0][1]).toEqual(
+                expect.objectContaining({ cache: 'no-store', referrerPolicy: 'no-referrer' })
             )
         })
 
@@ -835,6 +977,7 @@ describe('request', () => {
                             headers: new Headers(),
                             keepalive: expectedKeepAlive,
                             method,
+                            referrerPolicy: 'strict-origin',
                         })
                     )
                 }
@@ -847,7 +990,10 @@ describe('request', () => {
                         disableTransport: ['sendBeacon'],
                     })
                 )
-                expect(mockedFetch).toHaveBeenCalled()
+                expect(mockedFetch).toHaveBeenCalledWith(
+                    expect.anything(),
+                    expect.objectContaining({ referrerPolicy: 'strict-origin' })
+                )
             })
         })
 
@@ -1297,6 +1443,7 @@ describe('request', () => {
                     expect(warnSpy).toHaveBeenCalledTimes(4)
                     for (const call of mockedFetch.mock.calls) {
                         expect(call[1].keepalive).toBe(false)
+                        expect(call[1].referrerPolicy).toBe('strict-origin')
                     }
                 })
 
@@ -1316,6 +1463,7 @@ describe('request', () => {
                     expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(1)
                     expect(mockedFetch).toHaveBeenCalledTimes(1)
                     expect(mockedFetch.mock.calls[0][1].keepalive).toBe(false)
+                    expect(mockedFetch.mock.calls[0][1].referrerPolicy).toBe('strict-origin')
                 })
             })
 

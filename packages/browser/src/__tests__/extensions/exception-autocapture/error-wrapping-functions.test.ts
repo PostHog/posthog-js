@@ -253,6 +253,31 @@ describe('error wrapping functions', () => {
             expect(captureFn).toHaveBeenCalled()
         })
 
+        it.each([
+            { args: ['console message'], value: 'console message', synthetic: true },
+            { args: ['console message', 42, 'details'], value: 'console message 42 details', synthetic: true },
+            { args: [new Error('logged error')], value: 'logged error', synthetic: false },
+            { args: ['context', new Error('logged error'), 42], value: 'logged error', synthetic: false },
+        ])('captures $value as handled with console provenance', ({ args, value, synthetic }) => {
+            const original = vi.fn()
+            console.error = original
+            unwrap = wrapConsoleError(captureFn)
+
+            console.error(...args)
+
+            expect(original).toHaveBeenCalledTimes(1)
+            expect(original).toHaveBeenCalledWith(...args)
+            expect(captureFn).toHaveBeenCalledTimes(1)
+            expect(captureFn.mock.calls[0][0].$exception_list).toEqual([
+                expect.objectContaining({
+                    type: 'Error',
+                    value,
+                    mechanism: { handled: true, type: 'onconsole', synthetic, exception_id: 0 },
+                    stacktrace: { type: 'raw', frames: expect.any(Array) },
+                }),
+            ])
+        })
+
         it('still calls the original console when building exception properties throws', () => {
             const con = console as any
             const original = vi.fn()
