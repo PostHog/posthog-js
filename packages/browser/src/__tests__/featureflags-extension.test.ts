@@ -1343,6 +1343,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(posthog._getBrowserClientAdapter())
+        const captureError = vi.spyOn(featureFlags['_logger'], 'error').mockImplementation(() => {})
         const callback = vi.fn()
         featureFlags.addFeatureFlagsHandler(callback)
         vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -1367,6 +1368,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         capture.mockClear()
         featureFlags.updateEarlyAccessFeatureEnrollment('test-flag', true)
         expect(capture).toHaveBeenCalledWith('$feature_enrollment_update', expect.any(Object))
+        expect(captureError).not.toHaveBeenCalled()
         featureFlags.dispose()
     })
 

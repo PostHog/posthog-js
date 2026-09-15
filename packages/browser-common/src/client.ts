@@ -112,8 +112,8 @@ export interface Client {
     /** Whether the host currently permits data capture. */
     readonly canCapture: boolean
 
-    /** Records an analytics event through the client's normal pipeline. */
-    capture(event: string, properties?: Properties | null, options?: CaptureOptions): Promise<void>
+    /** Synchronously admits an analytics event to the client's normal pipeline. */
+    capture(event: string, properties?: Properties | null, options?: CaptureOptions): void
 
     /** Registers a synchronous producer of properties merged into every captured event. */
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable
