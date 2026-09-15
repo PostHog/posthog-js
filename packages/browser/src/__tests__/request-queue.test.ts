@@ -39,7 +39,10 @@ describe('RequestQueue', () => {
     })
 
     describe('with default config', () => {
-        let sendRequest: (options: QueuedRequestWithOptions) => void
+        let sendRequest: (
+            options: QueuedRequestWithOptions,
+            transportOverride?: QueuedRequestWithOptions['transport']
+        ) => void
         let queue: RequestQueue
 
         beforeEach(() => {
@@ -82,24 +85,124 @@ describe('RequestQueue', () => {
                     {
                         url: '/e',
                         data: [
-                            { event: 'foo', offset: 3000 },
-                            { event: 'bar', offset: 1000 },
+                            { event: 'foo', timestamp: EPOCH - 3000 },
+                            { event: 'bar', timestamp: EPOCH - 1000 },
                         ],
                         transport: 'XHR',
                     },
+                    undefined,
                 ],
                 [
                     {
                         url: '/identify',
-                        data: [{ event: '$identify', offset: 2000 }],
+                        data: [{ event: '$identify', timestamp: EPOCH - 2000 }],
                     },
+                    undefined,
                 ],
                 [
                     {
                         url: '/e',
-                        data: [{ event: 'zeta', offset: 0 }],
+                        data: [{ event: 'zeta', timestamp: EPOCH }],
                         batchKey: 'sessionRecording',
                     },
+                    undefined,
+                ],
+            ])
+        })
+
+        it('does not merge requests that share a batch key but not a batch group', () => {
+            queue.enqueue({
+                data: { event: '$snapshot', timestamp: EPOCH - 2000 },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'session-one-window-one',
+            })
+            queue.enqueue({
+                data: { event: '$snapshot', timestamp: EPOCH - 1000 },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'session-two-window-two',
+            })
+            queue.enqueue({
+                data: { event: '$snapshot', timestamp: EPOCH },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'session-one-window-one',
+            })
+
+            queue.enable()
+            vi.runOnlyPendingTimers()
+
+            expect(vi.mocked(sendRequest).mock.calls.map(([req]) => [req.batchGroup, req.data?.length])).toEqual([
+                ['session-one-window-one', 2],
+                ['session-two-window-two', 1],
+            ])
+        })
+
+        it('preserves event timestamps and leaves timestamp-free recording payloads unchanged', () => {
+            const timestamp = new Date(EPOCH - 60_000)
+            const event = { event: 'backdated', timestamp }
+            const recording = { recording_payload: 'example' }
+            queue.enqueue({ url: '/e', data: event })
+            queue.enqueue({ url: '/s', data: recording })
+            queue.enable()
+
+            vi.runOnlyPendingTimers()
+
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                1,
+                { url: '/e', data: [{ event: 'backdated', timestamp }] },
+                undefined
+            )
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                2,
+                { url: '/s', data: [{ recording_payload: 'example' }] },
+                undefined
+            )
+            expect(event.timestamp).toBe(timestamp)
+            expect(event).not.toHaveProperty('offset')
+            expect(recording).not.toHaveProperty('offset')
+        })
+
+        it('sends requests with the same batchKey but different batchGroup separately', () => {
+            queue.enqueue({
+                data: { event: 'a1', timestamp: EPOCH },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'a',
+            })
+            queue.enqueue({
+                data: { event: 'a2', timestamp: EPOCH },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'a',
+            })
+            queue.enqueue({
+                data: { event: 'b1', timestamp: EPOCH },
+                url: '/s',
+                batchKey: 'recordings',
+                batchGroup: 'b',
+            })
+
+            queue.enable()
+            vi.runOnlyPendingTimers()
+
+            expect(vi.mocked(sendRequest).mock.calls).toEqual([
+                [
+                    {
+                        url: '/s',
+                        data: [
+                            { event: 'a1', timestamp: EPOCH },
+                            { event: 'a2', timestamp: EPOCH },
+                        ],
+                        batchKey: 'recordings',
+                        batchGroup: 'a',
+                    },
+                    undefined,
+                ],
+                [
+                    { url: '/s', data: [{ event: 'b1', timestamp: EPOCH }], batchKey: 'recordings', batchGroup: 'b' },
+                    undefined,
                 ],
             ])
         })
@@ -112,25 +215,34 @@ describe('RequestQueue', () => {
             queue.unload()
 
             expect(sendRequest).toHaveBeenCalledTimes(3)
-            expect(sendRequest).toHaveBeenNthCalledWith(1, {
-                url: '/e',
-                data: [
-                    { event: 'foo', timestamp: 1_610_000_000 },
-                    { event: 'bar', timestamp: 1_630_000_000 },
-                ],
-                transport: 'sendBeacon',
-            })
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                1,
+                {
+                    url: '/e',
+                    data: [
+                        { event: 'foo', timestamp: 1_610_000_000 },
+                        { event: 'bar', timestamp: 1_630_000_000 },
+                    ],
+                },
+                'sendBeacon'
+            )
 
-            expect(sendRequest).toHaveBeenNthCalledWith(2, {
-                url: '/s',
-                data: [{ recording_payload: 'example' }],
-                transport: 'sendBeacon',
-            })
-            expect(sendRequest).toHaveBeenNthCalledWith(3, {
-                url: '/identify',
-                data: [{ event: '$identify', timestamp: 1_620_000_000 }],
-                transport: 'sendBeacon',
-            })
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                2,
+                {
+                    url: '/s',
+                    data: [{ recording_payload: 'example' }],
+                },
+                'sendBeacon'
+            )
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                3,
+                {
+                    url: '/identify',
+                    data: [{ event: '$identify', timestamp: 1_620_000_000 }],
+                },
+                'sendBeacon'
+            )
         })
 
         it('keeps flushing queued requests if one request throws', () => {
@@ -184,25 +296,35 @@ describe('RequestQueue', () => {
 
             expect(sendRequest).toHaveBeenCalledTimes(3)
 
-            expect(sendRequest).toHaveBeenNthCalledWith(1, {
-                data: [
-                    { event: 'foo', timestamp: 1610000000 },
-                    { event: 'bar', timestamp: 1630000000 },
-                ],
-                transport: 'sendBeacon',
-                url: '/e',
-            })
-            expect(sendRequest).toHaveBeenNthCalledWith(2, {
-                batchKey: 'sessionRecording',
-                data: [{ event: 'zeta', timestamp: 1640000000 }],
-                transport: 'sendBeacon',
-                url: '/e',
-            })
-            expect(sendRequest).toHaveBeenNthCalledWith(3, {
-                data: [{ event: '$identify', timestamp: 1620000000 }],
-                transport: 'sendBeacon',
-                url: '/identify',
-            })
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                1,
+                {
+                    data: [
+                        { event: 'foo', timestamp: 1610000000 },
+                        { event: 'bar', timestamp: 1630000000 },
+                    ],
+                    transport: 'XHR',
+                    url: '/e',
+                },
+                'sendBeacon'
+            )
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                2,
+                {
+                    batchKey: 'sessionRecording',
+                    data: [{ event: 'zeta', timestamp: 1640000000 }],
+                    url: '/e',
+                },
+                'sendBeacon'
+            )
+            expect(sendRequest).toHaveBeenNthCalledWith(
+                3,
+                {
+                    data: [{ event: '$identify', timestamp: 1620000000 }],
+                    url: '/identify',
+                },
+                'sendBeacon'
+            )
         })
     })
 })

@@ -46,13 +46,18 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             capture: false,
             passive: true,
         })
+        expect(addDocumentListener).toHaveBeenCalledWith('click', expect.any(Function), {
+            capture: true,
+            passive: true,
+        })
 
         featureFlags.dispose()
         featureFlags.dispose()
         expect(removeWindowListener).toHaveBeenCalledTimes(1)
         expect(removeWindowListener).toHaveBeenCalledWith('online', expect.any(Function))
-        expect(removeDocumentListener).toHaveBeenCalledTimes(1)
+        expect(removeDocumentListener).toHaveBeenCalledTimes(6)
         expect(removeDocumentListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function))
+        expect(removeDocumentListener).toHaveBeenCalledWith('click', expect.any(Function), { capture: true })
     })
 
     it('notifies feature flag handlers when a sibling tab updates enrollment state', async () => {
@@ -285,6 +290,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
     describe('automatic refresh', () => {
         const refreshIntervalMs = 60_000
         const defaultRefreshIntervalMs = 5 * 60_000
+        const maxIdleRefreshIntervalMs = 60 * 60_000
         let featureFlags: PostHogFeatureFlags | undefined
 
         const setVisibilityState = (state: DocumentVisibilityState): void => {
@@ -377,6 +383,36 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
             vi.advanceTimersByTime(1)
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+        })
+
+        it.each([refreshIntervalMs, defaultRefreshIntervalMs, maxIdleRefreshIntervalMs * 2])(
+            'keeps the explicit %s ms interval fixed on an idle page',
+            async (interval) => {
+                const featureFlags = await setupFeatureFlags(interval)
+                const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+                for (let i = 1; i <= 5; i++) {
+                    vi.advanceTimersByTime(interval)
+                    expect(reloadFeatureFlags).toHaveBeenCalledTimes(i)
+                }
+            }
+        )
+
+        it('switches from implicit backoff to an explicit interval with the same value', async () => {
+            const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+            featureFlags = posthog.featureFlags
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            vi.advanceTimersByTime(defaultRefreshIntervalMs * 3)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
+
+            posthog.set_config({ remote_config_refresh_interval_ms: defaultRefreshIntervalMs })
+            vi.advanceTimersByTime(defaultRefreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(3)
+            vi.advanceTimersByTime(defaultRefreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(4)
+
+            await posthog.shutdown()
         })
 
         it('applies an interval configured from the loaded callback', async () => {
@@ -482,6 +518,23 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
         })
 
+        it('reloads due flags on return to visibility after an earlier interaction', async () => {
+            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            vi.advanceTimersByTime(refreshIntervalMs / 2)
+            document.dispatchEvent(new Event('click'))
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+
+            setVisibilityState('hidden')
+            vi.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+
+            setVisibilityState('visible')
+            document.dispatchEvent(new Event('visibilitychange'))
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+        })
+
         it('does not reload flags when the page becomes visible before the interval elapses', async () => {
             const featureFlags = await setupFeatureFlags(refreshIntervalMs)
             const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
@@ -490,6 +543,98 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             vi.advanceTimersByTime(refreshIntervalMs - 1)
             setVisibilityState('visible')
             document.dispatchEvent(new Event('visibilitychange'))
+
+            expect(reloadFeatureFlags).not.toHaveBeenCalled()
+        })
+
+        it('backs off the implicit default while the visible page has no user interaction', async () => {
+            const refreshIntervalMs = defaultRefreshIntervalMs
+            const featureFlags = await setupFeatureFlags()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            vi.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+
+            // The second refresh now needs two intervals, the third one four.
+            vi.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            vi.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
+
+            vi.advanceTimersByTime(refreshIntervalMs * 3)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
+            vi.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(3)
+        })
+
+        it('continues refreshing at the maximum idle interval', async () => {
+            const featureFlags = await setupFeatureFlags()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            for (let i = 0; i < 20; i++) {
+                vi.advanceTimersByTime(maxIdleRefreshIntervalMs)
+            }
+            expect(featureFlags['_dueRefreshIntervalMs']).toBe(maxIdleRefreshIntervalMs)
+
+            const refreshCount = reloadFeatureFlags.mock.calls.length
+            vi.advanceTimersByTime(maxIdleRefreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(refreshCount + 1)
+        })
+
+        it('returns to the default interval after a user interaction', async () => {
+            const refreshIntervalMs = defaultRefreshIntervalMs
+            const featureFlags = await setupFeatureFlags()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            vi.advanceTimersByTime(refreshIntervalMs * 3)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
+
+            document.dispatchEvent(new Event('click'))
+            vi.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(3)
+
+            document.dispatchEvent(new Event('keydown'))
+            vi.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(4)
+        })
+
+        it('reloads due flags on a user interaction after a long idle period', async () => {
+            const refreshIntervalMs = defaultRefreshIntervalMs
+            const featureFlags = await setupFeatureFlags()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            vi.advanceTimersByTime(refreshIntervalMs * 3)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
+
+            // The next scheduled refresh is four intervals away, the interaction brings it forward.
+            vi.advanceTimersByTime(refreshIntervalMs)
+            document.dispatchEvent(new Event('wheel'))
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(3)
+        })
+
+        it('keeps backing off when only a scroll event fires', async () => {
+            const refreshIntervalMs = defaultRefreshIntervalMs
+            const featureFlags = await setupFeatureFlags()
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            vi.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+
+            // A carousel scrolling itself is not a user interaction, so the next refresh still
+            // needs two intervals.
+            document.dispatchEvent(new Event('scroll'))
+            vi.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            vi.advanceTimersByTime(refreshIntervalMs)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
+        })
+
+        it('does not reload flags on a user interaction before the interval elapses', async () => {
+            const featureFlags = await setupFeatureFlags(refreshIntervalMs)
+            const reloadFeatureFlags = vi.spyOn(featureFlags, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            vi.advanceTimersByTime(refreshIntervalMs - 1)
+            document.dispatchEvent(new Event('click'))
 
             expect(reloadFeatureFlags).not.toHaveBeenCalled()
         })

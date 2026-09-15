@@ -1,8 +1,6 @@
 name: Validate Versioning
 
-permissions:
-  contents: read
-  pull-requests: write
+permissions: {}
 
 on:
   pull_request:
@@ -14,9 +12,17 @@ concurrency:
 
 jobs:
   check-version-change-is-present-and-allowed:
+    permissions:
+      contents: read
+      pull-requests: write
     runs-on: ubuntu-latest
     
     steps:
+      - name: Audit runner egress
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -100,7 +106,7 @@ jobs:
           fi
       
       - name: Remove outdated comments
-        if: ${{ always() && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ always() && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           NO_CHANGESETS: ${{ steps.check-major.outputs.no_changesets }}
@@ -171,7 +177,7 @@ jobs:
             }
       
       - name: Comment on PR
-        if: ${{ failure() && steps.check-major.outputs.major_bump_found == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ failure() && steps.check-major.outputs.major_bump_found == 'true' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           MAJOR_FILES: ${{ steps.check-major.outputs.major_files }}
@@ -234,7 +240,7 @@ jobs:
             }
       
       - name: Comment about PR title and changeset mismatch
-        if: ${{ failure() && steps.check-major.outputs.title_mismatch_found == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ failure() && steps.check-major.outputs.title_mismatch_found == 'true' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           TITLE_MISMATCH_FILES: ${{ steps.check-major.outputs.title_mismatch_files }}
@@ -291,7 +297,7 @@ jobs:
             }
 
       - name: Comment about missing changeset
-        if: ${{ always() && steps.check-major.outputs.no_changesets == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ always() && steps.check-major.outputs.no_changesets == 'true' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -50,17 +50,17 @@ export class CanvasManager {
   // map would otherwise keep suppressing an idle canvas forever — leaving the
   // new snapshot's epoch without any frame to repaint that canvas from after
   // a seek. Called after each full snapshot so every canvas re-emits one frame.
-  public onFullSnapshot() {
+  public onFullSnapshot(): void {
     this.resetFrameDedup?.();
   }
 
   // Shared by the main document and every iframe/shadow-root observer, so reference-count
   // teardown: a single root cleaning up must not unpatch getContext / stop the FPS loop globally.
-  public acquire() {
+  public acquire(): void {
     this.refCount += 1;
   }
 
-  public reset() {
+  public reset(): void {
     if (this.refCount > 0) {
       this.refCount -= 1;
     }
@@ -87,19 +87,19 @@ export class CanvasManager {
     }
   }
 
-  public freeze() {
+  public freeze(): void {
     this.frozen = true;
   }
 
-  public unfreeze() {
+  public unfreeze(): void {
     this.frozen = false;
   }
 
-  public lock() {
+  public lock(): void {
     this.locked = true;
   }
 
-  public unlock() {
+  public unlock(): void {
     this.locked = false;
   }
 
@@ -464,7 +464,7 @@ export class CanvasManager {
     this.rafIdTimestamp = requestAnimationFrame(setLatestRAFTimestamp);
   }
 
-  flushPendingCanvasMutations() {
+  flushPendingCanvasMutations(): void {
     this.pendingCanvasMutations.forEach(
       (_values: canvasMutationCommand[], canvas: HTMLCanvasElement) => {
         const id = this.mirror.getId(canvas);
@@ -476,7 +476,7 @@ export class CanvasManager {
     );
   }
 
-  flushPendingCanvasMutationFor(canvas: HTMLCanvasElement, id: number) {
+  flushPendingCanvasMutationFor(canvas: HTMLCanvasElement, id: number): void {
     if (this.frozen || this.locked) {
       return;
     }

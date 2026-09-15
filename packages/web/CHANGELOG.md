@@ -1,5 +1,26 @@
 # posthog-js-lite
 
+## 4.12.1
+
+### Patch Changes
+
+- [#4798](https://github.com/PostHog/posthog-js/pull/4798) [`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd) Thanks [@posthog](https://github.com/apps/posthog)! - fix(error-tracking): collapse repeated frame cycles in parsed stack traces to reduce grouping differences caused by recursion depth, while preserving distinct throw locations
+  (2026-09-09)
+- Updated dependencies [[`4358915`](https://github.com/PostHog/posthog-js/commit/4358915f3c5dbad364cb9752a3b0b9473b19a3dd)]:
+  - @posthog/core@1.51.1
+
+## 4.12.0
+
+### Minor Changes
+
+- [#4809](https://github.com/PostHog/posthog-js/pull/4809) [`3a5b322`](https://github.com/PostHog/posthog-js/commit/3a5b32229a135af56d43a17350a222784d94c88d) Thanks [@marandaneto](https://github.com/marandaneto)! - Add best-effort in-app browser attribution using `$webview_app` and `$webview_app_version`, without changing existing `$browser` or `$browser_version` values. Detect explicit user-agent markers for Facebook, Facebook Lite, Messenger, Instagram, Threads, LinkedIn, Twitter, TikTok, WhatsApp, Snapchat, WeChat, LINE, Google, Bing, Pinterest, Naver, and KakaoTalk. Unknown apps and versions are omitted; missing markers do not imply a standalone browser.
+  (2026-09-07)
+
+### Patch Changes
+
+- Updated dependencies [[`3a5b322`](https://github.com/PostHog/posthog-js/commit/3a5b32229a135af56d43a17350a222784d94c88d)]:
+  - @posthog/core@1.51.0
+
 ## 4.11.0
 
 ### Minor Changes

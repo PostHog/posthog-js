@@ -3,7 +3,7 @@
     "private": true,
     "version": "0.0.0",
     "type": "module",
-    "packageManager": "pnpm@10.12.4",
+    "packageManager": "pnpm@10.33.0",
     "scripts": {
         "dev": "next dev",
         "build": "next build --no-lint",
@@ -11,7 +11,7 @@
         "lint": "next lint"
     },
     "dependencies": {
-        "next": "15.5.21",
+        "next": "15.5.24",
         "posthog-js": "*",
         "@posthog/react": "*",
         "react": "18.3.1",

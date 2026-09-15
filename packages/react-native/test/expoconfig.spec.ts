@@ -1,4 +1,4 @@
-import { withXcodeProject } from '@expo/config-plugins'
+import { compileModsAsync, withAppBuildGradle, withXcodeProject } from '@expo/config-plugins'
 import { spawnSync } from 'child_process'
 import * as fs from 'fs'
 import * as os from 'os'
@@ -911,6 +911,86 @@ describe('resolveReleaseModeProp', () => {
   it('stops the prebuild on a typo rather than falling back to the default', () => {
     expect(resolveReleaseModeProp(' event ')).toBe('event')
     expect(() => resolveReleaseModeProp('evnet')).toThrow("was 'evnet'")
+  })
+})
+
+describe('postHogExpoPlugin Android native symbols', () => {
+  const projectRoots: string[] = []
+  const projectBuildGradle = [
+    'buildscript {',
+    '    repositories {',
+    '        google()',
+    '        mavenCentral()',
+    '    }',
+    '    dependencies {',
+    '        classpath("com.android.tools.build:gradle")',
+    '    }',
+    '}',
+  ].join('\n')
+  const appBuildGradle = [
+    'apply plugin: "com.android.application"',
+    'apply plugin: "com.facebook.react"',
+    '',
+    'android {',
+    '    namespace "com.example"',
+    '}',
+  ].join('\n')
+
+  const compilePlugin = async (projectContents = projectBuildGradle) => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-expo-gradle-'))
+    const androidRoot = path.join(projectRoot, 'android')
+    const appRoot = path.join(androidRoot, 'app')
+    projectRoots.push(projectRoot)
+    fs.mkdirSync(appRoot, { recursive: true })
+    fs.writeFileSync(path.join(androidRoot, 'build.gradle'), projectContents)
+    fs.writeFileSync(path.join(appRoot, 'build.gradle'), appBuildGradle)
+    fs.writeFileSync(path.join(androidRoot, 'gradle.properties'), '')
+
+    const withEarlierAppGradlePlugin = withAppBuildGradle(
+      { name: 'PostHog config plugin test', slug: 'posthog-config-plugin-test' } as any,
+      (config) => {
+        config.modResults.contents += '\n// Added by earlier config plugin'
+        return config
+      }
+    )
+    const config = postHogExpoPlugin(withEarlierAppGradlePlugin, {
+      uploadNativeSymbols: true,
+      disableSandboxing: false,
+    })
+    await compileModsAsync(config, { projectRoot, platforms: ['android'] })
+
+    return {
+      project: fs.readFileSync(path.join(androidRoot, 'build.gradle'), 'utf8'),
+      app: fs.readFileSync(path.join(appRoot, 'build.gradle'), 'utf8'),
+    }
+  }
+
+  afterEach(() => {
+    for (const projectRoot of projectRoots.splice(0)) {
+      fs.rmSync(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('applies the Android plugin when an earlier config plugin registers appBuildGradle first', async () => {
+    const result = await compilePlugin()
+
+    expect(result.project).toContain('classpath("com.posthog:posthog-android-gradle-plugin:')
+    expect(result.app).toContain('// Added by earlier config plugin')
+    expect(result.app).toContain('apply plugin: "com.posthog.android"')
+  })
+
+  it('does not apply the Android plugin when its classpath cannot be configured', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const projectContents = 'plugins {\n    id "com.android.application"\n}'
+      const result = await compilePlugin(projectContents)
+
+      expect(result.project).toBe(projectContents)
+      expect(result.app).not.toContain('apply plugin: "com.posthog.android"')
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Could not find a buildscript dependencies block'))
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 })
 

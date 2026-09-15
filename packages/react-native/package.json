@@ -1,6 +1,6 @@
 {
   "name": "posthog-react-native",
-  "version": "4.67.1",
+  "version": "4.73.1",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -43,7 +43,7 @@
     "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
     "build": "tsc -b && babel ./dist --out-dir dist --extensions '.js'",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-    "generate-references": "pnpm exec api-extractor run --config ./api-extractor.json --local && node scripts/generate-docs.js"
+    "generate-references": "pnpm exec api-extractor run --config ./api-extractor.json --local && node scripts/generate-docs.cjs"
   },
   "dependencies": {
     "@posthog/core": "workspace:^",
@@ -69,6 +69,7 @@
     "expo-device": "^4.0.0",
     "expo-file-system": "^13.0.0",
     "expo-localization": "^11.0.0",
+    "expo-updates": "^0.25.0",
     "@testing-library/react": "catalog:",
     "metro": "0.83.1",
     "@expo/config-plugins": "10.1.2",
@@ -95,6 +96,7 @@
     "expo-device": ">= 4.0.0",
     "expo-file-system": ">= 13.0.0",
     "expo-localization": ">= 11.0.0",
+    "expo-updates": ">= 0.25.0",
     "@posthog/react-native-plugin": ">= 2.4.3",
     "posthog-react-native-session-replay": ">= 1.6.0",
     "react-native-device-info": ">= 10.0.0",
@@ -120,6 +122,9 @@
       "optional": true
     },
     "expo-localization": {
+      "optional": true
+    },
+    "expo-updates": {
       "optional": true
     },
     "react-native-device-info": {

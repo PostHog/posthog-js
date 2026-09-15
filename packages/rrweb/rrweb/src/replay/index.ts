@@ -29,7 +29,7 @@ import type {
 import * as mittProxy from 'mitt';
 import { polyfill as smoothscrollPolyfill } from './smoothscroll';
 import { applyEventsWithYield } from './fast-forward';
-import { Timer } from './timer';
+import { Timer, firstPositionTimeOffset, positionTimeOffset } from './timer';
 import {
   createPlayerService,
   createSpeedService,
@@ -123,7 +123,7 @@ export class Replayer {
 
   public service: ReturnType<typeof createPlayerService>;
   public speedService: ReturnType<typeof createSpeedService>;
-  public get timer() {
+  public get timer(): Timer {
     return this.service.state.context.timer;
   }
 
@@ -206,6 +206,7 @@ export class Replayer {
   // play/seek superseded the rebuild and its pending chunks must stop.
   private applyGeneration = 0;
   private seekRebuildInFlight = false;
+  private seekNeedsFullRebuild = false;
   private styleSheetLoadListeners: Map<HTMLLinkElement, () => void> = new Map();
 
   constructor(
@@ -398,6 +399,7 @@ export class Replayer {
 
     const timer = new Timer([], {
       speed: this.config.speed,
+      onActionError: (error) => this.warn('Exception in timer action', error),
     });
     this.service = createPlayerService(
       {
@@ -484,12 +486,12 @@ export class Replayer {
     }
   }
 
-  public on(event: string, handler: Handler) {
+  public on(event: string, handler: Handler): this {
     this.emitter.on(event, handler);
     return this;
   }
 
-  public off(event: string, handler: Handler) {
+  public off(event: string, handler: Handler): this {
     this.emitter.off(event, handler);
     return this;
   }
@@ -517,7 +519,7 @@ export class Replayer {
     return timeout;
   }
 
-  public setConfig(config: Partial<playerConfig>) {
+  public setConfig(config: Partial<playerConfig>): void {
     Object.keys(config).forEach((key) => {
       const newConfigValue = config[key as keyof playerConfig];
       (this.config as Record<keyof playerConfig, typeof newConfigValue>)[
@@ -594,11 +596,12 @@ export class Replayer {
    * and cast event after the offset asynchronously with timer.
    * @param timeOffset - number
    */
-  public play(timeOffset = 0) {
-    if (this.seekRebuildInFlight) {
-      // the superseded rebuild left the DOM with only part of
-      // lastPlayedEvent's history, so a full rebuild is needed
+  public play(timeOffset = 0): void {
+    if (this.seekRebuildInFlight || this.seekNeedsFullRebuild) {
+      // A superseded or failed rebuild is not a reliable seek delta base,
+      // even if later events were successfully applied to it.
       this.service.send({ type: 'RESET_LAST_PLAYED' });
+      this.seekNeedsFullRebuild = false;
     }
     if (this.service.state.matches('paused')) {
       this.service.send({ type: 'PLAY', payload: { timeOffset } });
@@ -612,7 +615,7 @@ export class Replayer {
     this.emitter.emit(ReplayerEvents.Start);
   }
 
-  public pause(timeOffset?: number) {
+  public pause(timeOffset?: number): void {
     if (timeOffset === undefined && this.service.state.matches('playing')) {
       this.service.send({ type: 'PAUSE' });
     }
@@ -626,7 +629,7 @@ export class Replayer {
     this.emitter.emit(ReplayerEvents.Pause);
   }
 
-  public resume(timeOffset = 0) {
+  public resume(timeOffset = 0): void {
     this.warn(
       `The 'resume' was deprecated in 1.0. Please use 'play' method which has the same interface.`,
     );
@@ -638,9 +641,9 @@ export class Replayer {
    * Totally destroy this replayer and please be careful that this operation is irreversible.
    * Memory occupation can be released by removing all references to this replayer.
    */
-  public destroy() {
-    // Make destroy() idempotent - return early if already destroyed
-    if (!this.wrapper || !this.wrapper.parentNode) {
+  public destroy(): void {
+    // Teardown clears this subscription; a missing DOM parent does not mean destroyed.
+    if (!this.serviceSubscription) {
       return;
     }
 
@@ -686,13 +689,13 @@ export class Replayer {
     this.resetCache();
 
     // Remove DOM elements
-    this.config.root.removeChild(this.wrapper);
+    this.wrapper.parentNode?.removeChild(this.wrapper);
 
     // Emit destroy event last
     this.emitter.emit(ReplayerEvents.Destroy);
   }
 
-  public startLive(baselineTime?: number) {
+  public startLive(baselineTime?: number): void {
     // cancel any chunked seek rebuild still in flight — its remaining
     // chunks would interleave stale seek-time events with live DOM writes
     this.applyGeneration++;
@@ -716,7 +719,7 @@ export class Replayer {
     this.service.send({ type: 'TO_LIVE', payload: { baselineTime } });
   }
 
-  public addEvent(rawEvent: eventWithTime | string) {
+  public addEvent(rawEvent: eventWithTime | string): void {
     const event = this.config.unpackFn
       ? this.config.unpackFn(rawEvent as string)
       : (rawEvent as eventWithTime);
@@ -734,12 +737,12 @@ export class Replayer {
     );
   }
 
-  public enableInteract() {
+  public enableInteract(): void {
     this.iframe.setAttribute('scrolling', 'auto');
     this.iframe.style.pointerEvents = 'auto';
   }
 
-  public disableInteract() {
+  public disableInteract(): void {
     this.iframe.setAttribute('scrolling', 'no');
     this.iframe.style.pointerEvents = 'none';
   }
@@ -748,7 +751,7 @@ export class Replayer {
    * Empties the replayer's cache and reclaims memory.
    * The replayer will use this cache to speed up the playback.
    */
-  public resetCache() {
+  public resetCache(): void {
     this.cache = createCache();
   }
 
@@ -870,7 +873,16 @@ export class Replayer {
     this.discardStaleFlushBuffers();
     applyEventsWithYield({
       events: events.filter(this.shouldCastInSyncMode),
-      castEvent: (event) => this.getCastFn(event, true)(),
+      castEvent: (event) => {
+        try {
+          this.getCastFn(event, true)();
+        } catch (error) {
+          if (generation === this.applyGeneration) {
+            this.seekNeedsFullRebuild = true;
+          }
+          this.warn('Exception in fast-forward event', error);
+        }
+      },
       yieldBudgetMs: this.config.seekYieldBudgetMs ?? 0,
       // addTimeout so destroy() cancels any pending continuation
       schedule: (continueApplying) => void this.addTimeout(continueApplying, 0),
@@ -1039,11 +1051,13 @@ export class Replayer {
         let finish_buffer = 50; // allow for checking whether new events aren't just about to be loaded in
         if (
           event.type === EventType.IncrementalSnapshot &&
-          event.data.source === IncrementalSource.MouseMove &&
-          event.data.positions.length
+          event.data.source === IncrementalSource.MouseMove
         ) {
-          // extend finish event if the last event is a mouse move so that the timer isn't stopped by the service before checking the last event
-          finish_buffer += Math.max(0, -event.data.positions[0].timeOffset);
+          const firstOffset = firstPositionTimeOffset(event.data);
+          if (firstOffset !== undefined) {
+            // extend finish event if the last event is a mouse move so that the timer isn't stopped by the service before checking the last event
+            finish_buffer += Math.max(0, -firstOffset);
+          }
         }
         setTimeout(finish, finish_buffer);
       }
@@ -1371,6 +1385,12 @@ export class Replayer {
     isSync: boolean,
   ) {
     const { data: d } = e;
+    // the player can be torn down while events are still queued: no document
+    // is left to apply them to, and Firefox turns its nodes into dead wrappers
+    // that throw on any access
+    if (!this.iframe.contentDocument) {
+      return;
+    }
     switch (d.source) {
       case IncrementalSource.Mutation: {
         try {
@@ -1383,6 +1403,11 @@ export class Replayer {
       case IncrementalSource.Drag:
       case IncrementalSource.TouchMove:
       case IncrementalSource.MouseMove:
+        // recordings reach the player with a malformed `positions`; skip the
+        // event rather than let it end playback (`addDelay` guards it too)
+        if (!Array.isArray(d.positions) || !d.positions.length) {
+          break;
+        }
         if (isSync) {
           const lastPosition = d.positions[d.positions.length - 1];
           this.mousePos = {
@@ -1393,12 +1418,18 @@ export class Replayer {
           };
         } else {
           d.positions.forEach((p) => {
+            const timeOffset = positionTimeOffset(p);
+            // a position with no usable offset would schedule a NaN delay: the
+            // timer never satisfies it, so it stalls at the head of the queue
+            if (timeOffset === undefined) {
+              return;
+            }
             const action = {
               doAction: () => {
                 this.moveAndHover(p.x, p.y, p.id, isSync, d);
               },
               delay:
-                p.timeOffset +
+                timeOffset +
                 e.timestamp -
                 this.service.state.context.baselineTime,
             };
@@ -1409,7 +1440,7 @@ export class Replayer {
             doAction() {
               //
             },
-            delay: e.delay! - d.positions[0]?.timeOffset,
+            delay: e.delay! - (firstPositionTimeOffset(d) ?? 0),
           });
         }
         break;
@@ -2048,6 +2079,15 @@ export class Replayer {
       for (const attributeName in mutation.attributes) {
         if (typeof attributeName === 'string') {
           const value = mutation.attributes[attributeName];
+          // rebuild forces autocomplete="off" on inputs and textareas so the
+          // viewer's browser never offers autofill inside the replay; a
+          // recorded change to that attribute must not undo it
+          if (
+            attributeName === 'autocomplete' &&
+            (target.nodeName === 'INPUT' || target.nodeName === 'TEXTAREA')
+          ) {
+            continue;
+          }
           if (value === null) {
             (target as Element | RRElement).removeAttribute(attributeName);
             if (attributeName === 'open')

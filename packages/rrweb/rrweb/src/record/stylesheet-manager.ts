@@ -54,7 +54,7 @@ export class StylesheetManager {
   private adoptedStyleSheetCb: adoptedStyleSheetCallback;
   private maskAllElementAttributes: boolean;
   private maskAttributeFn: MaskAttributeFn | undefined;
-  public styleMirror = new StyleSheetMirror();
+  public styleMirror: StyleSheetMirror = new StyleSheetMirror();
 
   constructor(options: {
     mutationCb: mutationCallBack;
@@ -71,7 +71,7 @@ export class StylesheetManager {
   public attachLinkElement(
     linkEl: HTMLLinkElement,
     childSn: serializedNodeWithId,
-  ) {
+  ): void {
     if ('_cssText' in (childSn as elementNode).attributes)
       this.mutationCb({
         adds: [],
@@ -232,7 +232,7 @@ export class StylesheetManager {
   }
 
   /** One-call variant of {@link beginDeferredLinkInlining}: the whole sheet in a single slice. */
-  public inlineDeferredLinkElement(linkEl: HTMLLinkElement, id: number) {
+  public inlineDeferredLinkElement(linkEl: HTMLLinkElement, id: number): void {
     this.beginDeferredLinkInlining(linkEl, id)?.advance(Infinity);
   }
 
@@ -264,7 +264,7 @@ export class StylesheetManager {
     });
   }
 
-  public trackLinkElement(linkEl: HTMLLinkElement) {
+  public trackLinkElement(linkEl: HTMLLinkElement): void {
     if (this.trackedLinkElements.has(linkEl)) return;
 
     this.trackedLinkElements.add(linkEl);
@@ -274,7 +274,7 @@ export class StylesheetManager {
   public adoptStyleSheets(
     sheets: CSSStyleSheet[] | readonly CSSStyleSheet[],
     hostId: number,
-  ) {
+  ): void {
     if (sheets.length === 0) return;
     const adoptedStyleSheetData: adoptedStyleSheetParam = {
       id: hostId,
@@ -319,7 +319,7 @@ export class StylesheetManager {
     this.adoptedStyleSheetCb(adoptedStyleSheetData);
   }
 
-  public reset() {
+  public reset(): void {
     this.styleMirror.reset();
     this.trackedLinkElements = new WeakSet();
     // any surviving deferral registrations belong to tasks the recorder

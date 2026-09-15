@@ -28,6 +28,9 @@ export interface CaptureAiGenerationOptions {
 
   /** Maps to `$ai_model_parameters` (temperature, max_tokens, top_p, …). */
   modelParameters?: Record<string, unknown>
+  /** The service tier the provider reported serving the request on. Response-derived only:
+   * this becomes $ai_service_tier, the explicit served-tier signal cost processing prices from. */
+  servedServiceTier?: string | null
 
   /**
    * `null` explicitly signals no base URL and omits `$ai_base_url` from the event.
@@ -205,6 +208,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       $ai_provider: options.providerOverride ?? options.provider,
       $ai_model: options.modelOverride ?? options.model,
       $ai_model_parameters: options.modelParameters ?? {},
+      ...(options.servedServiceTier != null ? { $ai_service_tier: options.servedServiceTier } : {}),
       $ai_input: safeInput,
       $ai_output_choices: safeOutput,
       $ai_http_status: httpStatus,

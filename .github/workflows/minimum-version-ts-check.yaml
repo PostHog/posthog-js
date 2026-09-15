@@ -10,8 +10,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
   unit:
+    permissions:
+      contents: read
     name: Check minimum TS version
     runs-on: ubuntu-22.04
     strategy:
@@ -40,7 +44,7 @@ jobs:
       - name: Prepare consumer fixture
         run: |
           cp -R .github/fixtures/minimum-version-ts "${RUNNER_TEMP}/minimum-version-ts"
-          PACKAGE_DEST="${RUNNER_TEMP}/minimum-version-ts" pnpm --filter=posthog-js package
+          PACKAGE_DEST="${RUNNER_TEMP}/minimum-version-ts" pnpm --filter=posthog-js --filter=@posthog/browser-common --filter=@posthog/core --filter=@posthog/types package
 
       - uses: ./.github/actions/setup
         with:

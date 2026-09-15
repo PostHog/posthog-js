@@ -1,15 +1,9 @@
 import React, { useMemo, useState } from 'react'
 import { StyleProp, ViewStyle } from 'react-native'
 
-import { getDisplayOrderQuestions, getNextSurveyStep, SurveyAppearanceTheme } from '../surveys-utils'
-import {
-  Survey,
-  SurveyAppearance,
-  SurveyQuestion,
-  type SurveyResponses,
-  maybeAdd,
-  SurveyQuestionBranchingType,
-} from '@posthog/core'
+import { getNextSurveyStep, SurveyAppearanceTheme } from '../surveys-utils'
+import { getDisplayOrderQuestions, shouldShuffleQuestions } from '../survey-shuffling'
+import { Survey, SurveyQuestion, type SurveyResponses, maybeAdd, SurveyQuestionBranchingType } from '@posthog/core'
 import {
   buildSurveyResponseProperties,
   getSurveyInteractionProperty,
@@ -20,6 +14,16 @@ import {
 import { LinkQuestion, MultipleChoiceQuestion, OpenTextQuestion, RatingQuestion } from './QuestionTypes'
 import { PostHog } from '../../posthog-rn'
 import { usePostHog } from '../../hooks/usePostHog'
+
+// Events receive the configured survey, not its shuffled display copies. Supply
+// positional indices here so legacy response properties do not depend on rendering.
+const buildConfiguredSurveyResponseProperties = (responses: SurveyResponses, survey: Survey) =>
+  buildSurveyResponseProperties(responses, {
+    questions: survey.questions.map((question, originalQuestionIndex) => ({
+      ...question,
+      originalQuestionIndex,
+    })),
+  })
 
 export const sendSurveyShownEvent = (survey: Survey, posthog: PostHog, surveyLanguage?: string | null): void => {
   posthog.capture('survey shown', {
@@ -43,7 +47,7 @@ export const sendSurveyEvent = (
     ...maybeAdd('$survey_iteration', survey.current_iteration),
     ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
     ...(surveyLanguage ? { [SURVEY_LANGUAGE_PROPERTY]: surveyLanguage } : {}),
-    ...buildSurveyResponseProperties(responses, survey),
+    ...buildConfiguredSurveyResponseProperties(responses, survey),
     $set: {
       [getSurveyInteractionProperty(survey, 'responded')]: true,
     },
@@ -63,7 +67,7 @@ export const dismissedSurveyEvent = (
     ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
     ...(surveyLanguage ? { [SURVEY_LANGUAGE_PROPERTY]: surveyLanguage } : {}),
     $survey_partially_completed: surveyHasResponses(responses),
-    ...buildSurveyResponseProperties(responses, survey),
+    ...buildConfiguredSurveyResponseProperties(responses, survey),
     $set: {
       [getSurveyInteractionProperty(survey, 'dismissed')]: true,
     },
@@ -89,18 +93,17 @@ export function Questions({
 }): JSX.Element {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
+  const questionsAreShuffled = shouldShuffleQuestions(survey)
   const posthog = usePostHog()
 
   const onNextButtonClick = ({
     res,
     originalQuestionIndex,
     questionId,
-  }: // displayQuestionIndex,
-  {
+  }: {
     res: string | string[] | number | null
     originalQuestionIndex: number
     questionId: string
-    // displayQuestionIndex: number
   }): void => {
     const responseKey = getSurveyResponseKey(questionId)
 
@@ -110,15 +113,24 @@ export function Questions({
     }
     onResponsesChange(allResponses)
 
-    // Get the next question index based on conditional logic
+    // Shuffled surveys cannot use branching and must advance through display order.
+    // Non-shuffled surveys retain the configured/original-index branching semantics.
+    if (questionsAreShuffled) {
+      if (currentQuestionIndex === surveyQuestions.length - 1) {
+        sendSurveyEvent(allResponses, survey, posthog, surveyLanguage)
+        onSubmit()
+      } else {
+        setCurrentQuestionIndex((index) => index + 1)
+      }
+      return
+    }
+
     const nextStep = getNextSurveyStep(survey, originalQuestionIndex, res)
 
     if (nextStep === SurveyQuestionBranchingType.End) {
-      // End the survey
       sendSurveyEvent(allResponses, survey, posthog, surveyLanguage)
       onSubmit()
     } else {
-      // Move to the next question
       setCurrentQuestionIndex(nextStep)
     }
   }
@@ -140,7 +152,10 @@ export function Questions({
 
 type GetQuestionComponentProps = {
   question: SurveyQuestion
-  appearance: SurveyAppearance
+  // The question components each declare `SurveyAppearanceTheme`; typing this
+  // intermediate as the shared `SurveyAppearance` dropped every React
+  // Native-only field, which the `as any` below then hid.
+  appearance: SurveyAppearanceTheme
   styleOverrides?: StyleProp<ViewStyle>
   onSubmit: (res: string | string[] | number | null) => void
 }

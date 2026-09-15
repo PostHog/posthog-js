@@ -323,6 +323,147 @@ describe('Prompts', () => {
       )
     })
 
+    it('should not refetch during the cooldown after a failed refetch', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockPromptResponse),
+        })
+        .mockRejectedValue(new Error('Network error'))
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
+      vi.advanceTimersByTime(61 * 1000)
+
+      // Fails, opens the cooldown.
+      expect((await prompts.get('test-prompt', { cacheTtlSeconds: 60 })).source).toBe('stale_cache')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      // Every later call inside the cooldown is served from cache, not from the network.
+      for (let call = 0; call < 5; call++) {
+        vi.advanceTimersByTime(1000)
+        expect((await prompts.get('test-prompt', { cacheTtlSeconds: 60 })).source).toBe('stale_cache')
+      }
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('should refetch once the cooldown expires', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockPromptResponse),
+        })
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockPromptResponse),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
+      vi.advanceTimersByTime(61 * 1000)
+      await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      vi.advanceTimersByTime(61 * 1000)
+      expect((await prompts.get('test-prompt', { cacheTtlSeconds: 60 })).source).toBe('api')
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+    })
+
+    it('should hold the cooldown for the Retry-After the server sends on a 429', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockPromptResponse),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: { get: (header: string) => (header === 'Retry-After' ? '600' : null) },
+        })
+        .mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockPromptResponse),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
+      vi.advanceTimersByTime(61 * 1000)
+      await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      // Past the default cooldown, but still inside the one the server asked for.
+      vi.advanceTimersByTime(120 * 1000)
+      expect((await prompts.get('test-prompt', { cacheTtlSeconds: 60 })).source).toBe('stale_cache')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      vi.advanceTimersByTime(500 * 1000)
+      expect((await prompts.get('test-prompt', { cacheTtlSeconds: 60 })).source).toBe('api')
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+    })
+
+    it('should preserve the longer cooldown when overlapping refetches fail', async () => {
+      let resolveRateLimited!: (response: Response) => void
+      let rejectNetworkError!: (error: Error) => void
+      mockFetch
+        .mockResolvedValueOnce(new Response(JSON.stringify(mockPromptResponse)))
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveRateLimited = resolve
+            })
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((_, reject) => {
+              rejectNetworkError = reject
+            })
+        )
+        .mockResolvedValueOnce(new Response(JSON.stringify(mockPromptResponse)))
+
+      const prompts = new Prompts({
+        personalApiKey: 'phx_test_key',
+        projectApiKey: 'phc_test_key',
+        defaultCacheTtlSeconds: 1,
+      })
+      await prompts.get('test-prompt')
+      vi.advanceTimersByTime(1001)
+
+      const rateLimited = prompts.get('test-prompt')
+      const networkError = prompts.get('test-prompt')
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+
+      resolveRateLimited(new Response(null, { status: 429, headers: new Headers({ 'Retry-After': '600' }) }))
+      expect((await rateLimited).source).toBe('stale_cache')
+      rejectNetworkError(new Error('Network error'))
+      expect((await networkError).source).toBe('stale_cache')
+
+      vi.advanceTimersByTime(61 * 1000)
+      expect((await prompts.get('test-prompt')).source).toBe('stale_cache')
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+
+      vi.advanceTimersByTime(539 * 1000 - 1)
+      expect((await prompts.get('test-prompt')).source).toBe('stale_cache')
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+
+      vi.advanceTimersByTime(1)
+      expect((await prompts.get('test-prompt')).source).toBe('api')
+      expect(mockFetch).toHaveBeenCalledTimes(4)
+      expect((await prompts.get('test-prompt')).source).toBe('cache')
+      expect(mockFetch).toHaveBeenCalledTimes(4)
+    })
+
     it('should use fallback when no cache and fetch fails with warning', async () => {
       mockFetch.mockRejectedValueOnce(new Error('Network error'))
 
@@ -1132,6 +1273,131 @@ describe('Prompts', () => {
       await expect(prompts.get('foo')).resolves.toHaveProperty('prompt', 'Foo latest refreshed')
       await expect(prompts.get('foo::bar')).resolves.toHaveProperty('prompt', 'Foo bar latest')
       expect(mockFetch).toHaveBeenCalledTimes(3)
+    })
+  })
+
+  describe('getAll()', () => {
+    const labeledRow = (name: string, version = 1, label = 'production', config: unknown = null) => ({
+      id: `id-${name}`,
+      name,
+      prompt: `Prompt for ${name}`,
+      version,
+      all_labels: [{ name: label, version }],
+      config,
+    })
+
+    const listResponse = (rows: unknown[], nextUrl: string | null = null) => ({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ count: rows.length, next: nextUrl, previous: null, results: rows }),
+    })
+
+    it('fetches all pages and seeds the cache', async () => {
+      const nextUrl =
+        'https://us.posthog.com/api/environments/@current/llm_prompts/?token=phc_test_key&label=production&content=full&limit=100&offset=100'
+      mockFetch
+        .mockResolvedValueOnce(listResponse([labeledRow('prompt-a', 1, 'production', { temperature: 0 })], nextUrl))
+        .mockResolvedValueOnce(listResponse([labeledRow('prompt-b', 3)]))
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+      const results = await prompts.getAll({ label: 'production' })
+
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+      expect(mockFetch.mock.calls[1][0]).toBe(nextUrl)
+      expect(results).toEqual({
+        'prompt-a': {
+          source: 'api',
+          prompt: 'Prompt for prompt-a',
+          name: 'prompt-a',
+          version: 1,
+          label: 'production',
+          config: { temperature: 0 },
+        },
+        'prompt-b': {
+          source: 'api',
+          prompt: 'Prompt for prompt-b',
+          name: 'prompt-b',
+          version: 3,
+          label: 'production',
+          config: null,
+        },
+      })
+
+      // Later labeled get() calls are cache hits, not new requests.
+      const cached = await prompts.get('prompt-b', { label: 'production' })
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+      expect(cached.source).toBe('cache')
+      expect(cached.version).toBe(3)
+    })
+
+    it('throws when the server ignores the label', async () => {
+      // An old server ignores ?label= and returns latest versions of every
+      // prompt, including prompts without the label. Even when some labels
+      // happen to point at latest, a partial result would hide the rest.
+      const looksResolved = labeledRow('prompt-a')
+      const unlabeled = { ...labeledRow('prompt-b'), all_labels: [] }
+      mockFetch.mockResolvedValueOnce(listResponse([looksResolved, unlabeled]))
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+
+      await expect(prompts.getAll({ label: 'production' })).rejects.toThrow(/does not carry label/)
+
+      // Nothing was cached: a labeled get() goes to the network.
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ...mockPromptResponse, name: 'prompt-a', label: 'production' }),
+      })
+      await prompts.get('prompt-a', { label: 'production' })
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('skips a row whose label moved and keeps the rest', async () => {
+      const moved = { ...labeledRow('prompt-a'), all_labels: [{ name: 'production', version: 2 }] }
+      mockFetch.mockResolvedValueOnce(listResponse([moved, labeledRow('prompt-b')]))
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+      const results = await prompts.getAll({ label: 'production' })
+
+      expect(Object.keys(results)).toEqual(['prompt-b'])
+      expect(consoleWarnSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('preserves a prompt named __proto__ as an own entry', async () => {
+      mockFetch.mockResolvedValueOnce(listResponse([labeledRow('__proto__')]))
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+      const results = await prompts.getAll({ label: 'production' })
+
+      expect(Object.keys(results)).toEqual(['__proto__'])
+      expect(results['__proto__'].prompt).toBe('Prompt for __proto__')
+      expect(JSON.parse(JSON.stringify(results))['__proto__']).toBeDefined()
+    })
+
+    it('throws on a malformed row instead of skipping it', async () => {
+      const malformed = { ...labeledRow('prompt-a'), prompt: 42 }
+      mockFetch.mockResolvedValueOnce(listResponse([malformed, labeledRow('prompt-b')]))
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+
+      await expect(prompts.getAll({ label: 'production' })).rejects.toThrow(/Invalid response format/)
+    })
+
+    it('refuses a pagination link off the configured host', async () => {
+      mockFetch.mockResolvedValueOnce(listResponse([labeledRow('prompt-a')], 'https://attacker.example.com/collect'))
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+
+      await expect(prompts.getAll({ label: 'production' })).rejects.toThrow(/off the configured host/)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('throws on an HTTP error', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 500, headers: { get: () => null } })
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+
+      await expect(prompts.getAll({ label: 'production' })).rejects.toThrow(/HTTP 500/)
     })
   })
 })

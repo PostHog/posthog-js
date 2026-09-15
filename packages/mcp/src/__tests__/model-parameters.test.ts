@@ -5,7 +5,7 @@ import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotoc
 import { z } from 'zod'
 import { instrument } from '../index'
 import { DEFAULT_MODEL_PARAMETER_DESCRIPTION } from '../extensions/constants'
-import { addModelParameterToTool, addModelParameterToTools } from '../extensions/model-parameters'
+import { addModelParameterToTool, addModelParameterToTools, resolveModel } from '../extensions/model-parameters'
 import { log } from '../extensions/logger'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
@@ -126,6 +126,41 @@ describe('addModelParameterToTools (batch)', () => {
   })
 })
 
+describe('resolveModel', () => {
+  it.each([
+    {
+      name: 'prefers recognized client metadata to a conflicting self-report',
+      metadata: { 'x-codex-turn-metadata': { model: '  gpt-5.6-sol  ' } },
+      argument: 'claude-opus-4-8',
+      expected: { model: 'gpt-5.6-sol', source: 'client_metadata' },
+    },
+    {
+      name: 'falls back when client metadata reports unknown',
+      metadata: { 'x-codex-turn-metadata': { model: 'unknown' } },
+      argument: 'claude-opus-4-8',
+      expected: { model: 'claude-opus-4-8', source: 'self_reported' },
+    },
+    {
+      name: 'falls back when client metadata has the wrong shape',
+      metadata: { 'x-codex-turn-metadata': 'gpt-5.6-sol' },
+      argument: 'claude-opus-4-8',
+      expected: { model: 'claude-opus-4-8', source: 'self_reported' },
+    },
+  ])('$name', ({ metadata, argument, expected }) => {
+    expect(
+      resolveModel(
+        {
+          params: {
+            _meta: metadata,
+            arguments: { llm_model: argument },
+          },
+        },
+        true
+      )
+    ).toEqual(expected)
+  })
+})
+
 /**
  * --- Integration tests: captureModel against a real MCP server ---
  */
@@ -226,7 +261,8 @@ describe('Model capture — integration with an instrumented server', () => {
       expect(reports).toHaveLength(1)
       expect(reports[0].properties.$mcp_llm_model).toBe('claude-opus-4-8')
       expect(reports[0].properties.$mcp_llm_model_source).toBe('self_reported')
-      expect((reports[0].properties.$mcp_parameters as any)?.llm_model).toBeUndefined()
+      expect(reports[0].properties.$mcp_parameters).toMatchObject({ request: { params: { arguments: {} } } })
+      expect(reports[0].properties.$mcp_parameters).not.toHaveProperty('request.params.arguments.llm_model')
     } finally {
       await capture.stop()
     }
@@ -259,7 +295,8 @@ describe('Model capture — integration with an instrumented server', () => {
       expect(reports[0].properties.$mcp_llm_model_source).toBe('self_reported')
       // The context argument is still the report; only llm_model is ours to take.
       expect(reports[0].properties.$mcp_intent).toBe('Need a SQL query tool')
-      expect((reports[0].properties.$mcp_parameters as any)?.llm_model).toBeUndefined()
+      expect(reports[0].properties.$mcp_parameters).toMatchObject({ request: { params: { arguments: {} } } })
+      expect(reports[0].properties.$mcp_parameters).not.toHaveProperty('request.params.arguments.llm_model')
     } finally {
       await capture.stop()
     }
@@ -293,7 +330,42 @@ describe('Model capture — integration with an instrumented server', () => {
       expect(toolCalls[0].properties.$mcp_llm_model).toBe('claude-opus-4-8')
       expect(toolCalls[0].properties.$mcp_llm_model_source).toBe('self_reported')
       // Stripped from the captured parameters too — it is analytics metadata, not an argument.
-      expect((toolCalls[0].properties.$mcp_parameters as any)?.llm_model).toBeUndefined()
+      expect(toolCalls[0].properties.$mcp_parameters).toMatchObject({
+        request: { params: { arguments: { text: 'buy milk' } } },
+      })
+      expect(toolCalls[0].properties.$mcp_parameters).not.toHaveProperty('request.params.arguments.llm_model')
+    } finally {
+      await capture.stop()
+    }
+  })
+
+  it('captures a Codex metadata model ahead of a conflicting self-report', async () => {
+    const capture = new EventCapture()
+    await capture.start()
+    try {
+      instrument(server, fakePostHog(), { captureModel: true })
+      await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+
+      await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            _meta: { 'x-codex-turn-metadata': { model: 'gpt-5.6-sol' } },
+            name: 'add_todo',
+            arguments: { text: 'buy milk', llm_model: 'claude-opus-4-8' },
+          },
+        },
+        CallToolResultSchema
+      )
+
+      const toolCalls = capture.findCapturesByEvent('$mcp_tool_call')
+      expect(toolCalls).toHaveLength(1)
+      expect(toolCalls[0].properties.$mcp_llm_model).toBe('gpt-5.6-sol')
+      expect(toolCalls[0].properties.$mcp_llm_model_source).toBe('client_metadata')
+      expect(toolCalls[0].properties.$mcp_parameters).toMatchObject({
+        request: { params: { arguments: { text: 'buy milk' } } },
+      })
+      expect(toolCalls[0].properties.$mcp_parameters).not.toHaveProperty('request.params.arguments.llm_model')
     } finally {
       await capture.stop()
     }
@@ -333,7 +405,11 @@ describe('Model capture — integration with an instrumented server', () => {
       await client.request(
         {
           method: 'tools/call',
-          params: { name: 'add_todo', arguments: { text: 'x' } },
+          params: {
+            _meta: { 'x-codex-turn-metadata': { model: 'gpt-5.6-sol' } },
+            name: 'add_todo',
+            arguments: { text: 'x' },
+          },
         },
         CallToolResultSchema
       )

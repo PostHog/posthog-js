@@ -127,6 +127,7 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
             <View style={[styles.modalRow, { justifyContent: horizontal }]}>
               <View style={styles.modalContent} pointerEvents="box-none">
                 <View
+                  onTouchStart={(event) => event.stopPropagation()}
                   style={[
                     styles.modalContentInner,
                     {

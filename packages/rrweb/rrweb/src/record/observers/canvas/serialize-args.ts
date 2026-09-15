@@ -138,7 +138,7 @@ export const serializeArgs = (
   win: IWindow,
   ctx: RenderingContext,
   dataURLOptions: DataURLOptions,
-) => {
+): CanvasArg[] => {
   return args.map((arg) => serializeArg(arg, win, ctx, dataURLOptions));
 };
 

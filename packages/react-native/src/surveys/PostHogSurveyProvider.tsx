@@ -6,12 +6,17 @@ import { getActiveMatchingSurveys } from './getActiveMatchingSurveys'
 import { useSurveyStorage } from './useSurveyStorage'
 import { useActivatedSurveys } from './useActivatedSurveys'
 import { SurveyModal } from './components/SurveyModal'
-import { defaultSurveyAppearance, getContrastingTextColor, SurveyAppearanceTheme } from './surveys-utils'
-import { Survey, SurveyAppearance, SurveyType, type SurveyResponses } from '@posthog/core'
+import {
+  defaultSurveyAppearance,
+  getContrastingTextColor,
+  SurveyAppearance,
+  SurveyAppearanceTheme,
+} from './surveys-utils'
+import { Survey, SurveyType, type SurveyResponses } from '@posthog/core'
 import { usePostHog } from '../hooks/usePostHog'
 import { useFeatureFlags } from '../hooks/useFeatureFlags'
 import { PostHog } from '../posthog-rn'
-import { applySurveyTranslationForUser } from './survey-translations'
+import { applySurveyTranslationForUser, detectUserLanguage } from './survey-translations'
 
 type ActiveSurveyContextType =
   | {
@@ -73,6 +78,10 @@ export type PostHogSurveyProviderProps = {
 
   /**
    * The default appearance for surveys when not specified in PostHog.
+   *
+   * Accepts the React Native-only appearance fields as well (e.g.
+   * `maxFontSizeMultiplier`) — they are merged into the same theme object the
+   * survey components read, and PostHog never sends them down.
    */
   defaultSurveyAppearance?: SurveyAppearance
 
@@ -106,13 +115,24 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
   const activatedSurveys = useActivatedSurveys(posthog, surveys)
 
   const flags = useFeatureFlags(posthog)
+  const [userLanguage, setUserLanguage] = useState(() => detectUserLanguage(posthog))
+
+  useEffect(() => {
+    const updateLanguage = () => setUserLanguage(detectUserLanguage(posthog))
+    const unsubscribe = posthog.on('personProperties', updateLanguage)
+    updateLanguage()
+    return unsubscribe
+  }, [posthog])
 
   // Load surveys once
   useEffect(() => {
     posthog
       .ready()
       .then(() => posthog._onSurveysReady())
-      .then(() => posthog.getSurveys())
+      .then(() => {
+        setUserLanguage(detectUserLanguage(posthog))
+        return posthog.getSurveys()
+      })
       .then(setSurveys)
       .catch(() => {})
   }, [posthog])
@@ -146,8 +166,8 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
   }, [activeSurvey, flags, surveys, seenSurveys, activatedSurveys])
 
   const translatedActiveSurvey = useMemo(() => {
-    return activeSurvey ? applySurveyTranslationForUser(activeSurvey, posthog) : undefined
-  }, [activeSurvey, posthog])
+    return activeSurvey ? applySurveyTranslationForUser(activeSurvey, posthog, userLanguage) : undefined
+  }, [activeSurvey, posthog, userLanguage])
 
   // Merge survey appearance so that components and hooks can use a consistent model
   const surveyAppearance = useMemo<SurveyAppearanceTheme>(() => {
@@ -180,6 +200,10 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
       survey: translatedActiveSurvey.survey,
       surveyLanguage: translatedActiveSurvey.language,
       onShow: () => {
+        // Updating translated copy changes this callback, but does not show a new survey.
+        if (shownSurveyIdRef.current === activeSurvey.id) {
+          return
+        }
         shownSurveyIdRef.current = activeSurvey.id
         sendSurveyShownEvent(translatedActiveSurvey.survey, posthog, translatedActiveSurvey.language)
         setLastSeenSurveyDate(new Date())

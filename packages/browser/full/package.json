@@ -1,0 +1,14 @@
+{
+    "name": "posthog-js-full",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Subpath entry point for the bundle that inlines the extensions PostHog otherwise loads at runtime: session replay, surveys, logs, exception autocapture, tracing headers, web vitals and dead clicks. It still installs the external script loader, so what it does not inline — product tours, conversations, the toolbar, remote config and the chat integrations — is still loaded from the CDN when used. Use posthog-js/full/no-external when no script may be loaded. Ships an ES module for bundlers and a CommonJS build for require. Types come from the canonical dist/module.d.ts: PostHog is a class with private members, so a duplicate declaration file would be a nominally incompatible type.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js",
+        "directory": "packages/browser/full"
+    },
+    "main": "../dist/module.full.cjs",
+    "module": "../dist/module.full.js",
+    "types": "../dist/module.d.ts"
+}

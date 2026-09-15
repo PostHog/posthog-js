@@ -68,6 +68,107 @@ const rotationTriggers = {
     },
 }
 
+test('waking after three days does not extend the old recording with a session ending marker', async ({
+    page,
+    context,
+}) => {
+    await page.clock.install()
+    await start(
+        {
+            ...startOptions,
+            options: {
+                ...startOptions.options,
+                debug: false,
+                autocapture: false,
+                capture_pageview: false,
+                capture_pageleave: true,
+                session_idle_timeout_seconds: 600,
+            },
+            flagsResponseOverrides: {
+                ...startOptions.flagsResponseOverrides,
+                capturePerformance: false,
+            },
+        },
+        page,
+        context
+    )
+    await waitForSessionRecordingToStart(page)
+    await page.locator('[data-cy-input]').click()
+    await expect.poll(async () => (await snapshotEvents(page)).some((e) => e.type === 2)).toBe(true)
+    const oldSessionId = await getSessionId(page)
+    const beforeSuspension = await pageNow(page)
+
+    await page.clock.setSystemTime(beforeSuspension + 3 * 24 * 60 * 60 * 1000)
+    await page.evaluate(() => {
+        document.querySelector('[data-cy-input]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await expect.poll(async () => (await snapshotEvents(page)).some((e) => e.tag === '$session_ending')).toBe(true)
+    const events = await snapshotEvents(page)
+    const ending = events.find((e) => e.sessionId === oldSessionId && e.tag === '$session_ending')!
+    expect(ending).toBeDefined()
+    expect(ending.timestamp).toBeLessThanOrEqual(beforeSuspension)
+    expect(
+        events.filter(
+            (e) => e.sessionId === oldSessionId && e.timestamp > uuidv7MintTime(oldSessionId) + 24 * 60 * 60 * 1000
+        )
+    ).toEqual([])
+    const newSessionId = await getSessionId(page)
+    expect(newSessionId).not.toEqual(oldSessionId)
+    await expect
+        .poll(async () => (await snapshotEvents(page)).some((e) => e.sessionId === newSessionId && e.type === 2))
+        .toBe(true)
+})
+
+test('waking a short recording does not bypass the non-strict minimum duration', async ({ page, context }) => {
+    await page.clock.install()
+    await start(
+        {
+            ...startOptions,
+            options: {
+                debug: false,
+                autocapture: false,
+                capture_pageview: false,
+                session_idle_timeout_seconds: 600,
+                session_recording: {
+                    compress_events: false,
+                    strictMinimumDuration: false,
+                    session_idle_threshold_ms: 10_000,
+                },
+            },
+            flagsResponseOverrides: {
+                sessionRecording: { endpoint: '/ses/', minimumDurationMilliseconds: 30_000 },
+                capturePerformance: false,
+                autocapture_opt_out: true,
+            },
+        },
+        page,
+        context
+    )
+    await waitForSessionRecordingToStart(page)
+    await page.locator('[data-cy-input]').click()
+    const oldSessionId = await getSessionId(page)
+    await page.clock.runFor(2500)
+    expect(await snapshotEvents(page)).toEqual([])
+
+    await page.clock.setSystemTime((await pageNow(page)) + 3 * 24 * 60 * 60 * 1000)
+    await page.evaluate(() => {
+        document.querySelector('[data-cy-input]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await page.clock.runFor(2500)
+    expect(await snapshotEvents(page)).toEqual([])
+    const newSessionId = await getSessionId(page)
+    expect(newSessionId).not.toEqual(oldSessionId)
+
+    await page.clock.setSystemTime((await pageNow(page)) + 31_000)
+    await page.evaluate(() => {
+        document.querySelector('[data-cy-input]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await page.clock.runFor(2500)
+    const events = await snapshotEvents(page)
+    expect(events.some((e) => e.sessionId === newSessionId && e.type === 2)).toBe(true)
+    expect(events.filter((e) => e.sessionId === oldSessionId)).toEqual([])
+})
+
 test.describe('Session rotation from the session manager callback while idle', () => {
     for (const [triggerName, trigger] of Object.entries(rotationTriggers)) {
         test(`new session starts awake with Meta and FullSnapshot when rotated via ${triggerName}`, async ({

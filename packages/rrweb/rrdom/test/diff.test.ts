@@ -5,7 +5,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as puppeteer from 'puppeteer';
 import { vi, MockInstance } from 'vitest';
-import { createMirror, Mirror as NodeMirror } from '@posthog/rrweb-snapshot';
+import {
+  buildNodeWithSN,
+  createCache,
+  createMirror,
+  Mirror as NodeMirror,
+} from '@posthog/rrweb-snapshot';
 import {
   buildFromDom,
   getDefaultSN,
@@ -524,6 +529,41 @@ describe('diff algorithm for rrdom', () => {
       expect(setAttributeSpy).toHaveBeenCalledWith('type', 'application/css');
 
       setAttributeSpy.mockRestore();
+    });
+  });
+
+  describe('a form field added while fast-forwarding', () => {
+    // Fast-forward builds the node against the RRDocument, so rebuild's
+    // autofill guard lands on an RRElement. createOrGetNode then makes a bare
+    // real element, leaving diffProps as the only thing that carries it over.
+    it('keeps autocomplete="off" on the real input', () => {
+      const rrDocument = new RRDocument();
+      const rrContainer = rrDocument.createElement('div');
+      const rrInput = buildNodeWithSN(
+        {
+          type: RRNodeType.Element,
+          tagName: 'input',
+          attributes: { type: 'text' },
+          childNodes: [],
+          id: 2,
+        } as serializedNodeWithId,
+        {
+          doc: rrDocument as unknown as Document,
+          mirror: rrDocument.mirror as unknown as NodeMirror,
+          hackCss: false,
+          cache: createCache(),
+        },
+      );
+      expect(rrInput).not.toBeNull();
+      rrContainer.appendChild(rrInput as unknown as IRRNode);
+
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      diff(container, rrContainer, replayer, rrDocument.mirror);
+
+      const input = container.querySelector('input');
+      expect(input).not.toBeNull();
+      expect(input!.getAttribute('autocomplete')).toEqual('off');
     });
   });
 

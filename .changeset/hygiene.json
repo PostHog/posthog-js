@@ -1,0 +1,5 @@
+{
+    "releasePackagePaths": {
+        "packages/rrweb/": "posthog-js"
+    }
+}

@@ -50,6 +50,7 @@ vi.mock('../src/surveys/components/Surveys', () => ({
 
 // Skip translation resolution — irrelevant to presentation gating.
 vi.mock('../src/surveys/survey-translations', () => ({
+  detectUserLanguage: () => null,
   applySurveyTranslationForUser: (survey: Survey) => ({ survey, language: null }),
 }))
 

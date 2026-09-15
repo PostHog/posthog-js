@@ -7,6 +7,7 @@ import type {
   AnalyticsParameterOwnership,
   CompatibleRequestHandlerExtra,
   CompatibleToolsListLike,
+  JsonRecord,
   MCPAnalyticsData,
   MCPRequestLike,
   MCPServerLike,
@@ -18,9 +19,9 @@ import { getAnalyticsParameterOwnership, stripOwnedAnalyticsArguments } from './
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
 import {
   addModelParameterToTools,
-  getModelArgument,
   getModelDescription,
   isCaptureModelEnabled,
+  resolveModel,
   setEventModel,
 } from './model-parameters'
 import {
@@ -44,6 +45,7 @@ import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getRequestHeaders } from './request-headers'
 import { getSessionId, getSessionInfo, isModernEraRequest, newSessionId } from './session'
 import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
+import { getFeedbackToolDescriptor, resolveCollectFeedbackOptions, SEND_FEEDBACK_TOOL_NAME } from './feedback'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
 
@@ -70,16 +72,29 @@ interface TraceToolCallParams {
   parameterOwnership?: AnalyticsParameterOwnership
   /**
    * Event type to capture. Defaults to a tool call; the `get_more_tools` virtual
-   * tool passes `mcpMissingCapability` so it records a capability gap rather than
-   * a tool invocation.
+   * tool passes `mcpMissingCapability` and `send_feedback` passes
+   * `mcpFeedback`, so they record a capability gap / a feedback report
+   * rather than a tool invocation.
    */
   eventType?: MCPAnalyticsEventType
   /**
    * When set, used verbatim as the captured intent (source `context_parameter`)
-   * instead of running `resolveToolCallIntent`. Used by the `get_more_tools`
-   * virtual tool, which carries its intent in the `context` argument.
+   * instead of running `resolveToolCallIntent`. Used by the virtual tools, which
+   * carry their intent in their own arguments.
    */
   explicitContextIntent?: string
+  /**
+   * Extra event properties spread onto the captured event, after the host's
+   * `eventProperties`. Used by `send_feedback` for its `$mcp_feedback_*` fields.
+   */
+  extraEventProperties?: JsonRecord
+  /**
+   * Drop the generically captured `$mcp_parameters` from the event. Used by
+   * `send_feedback`: its arguments are agent-narrated free text, so the
+   * PII-redacted `$mcp_feedback_*` properties are the captured surface — the
+   * raw arguments would bypass that redaction and record undeclared fields.
+   */
+  omitCapturedParameters?: boolean
   /**
    * Optional accessor for an error the executor captured out-of-band. The
    * high-level SDK turns thrown tool errors into `isError: true` results before
@@ -107,21 +122,28 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     parameterOwnership,
     eventType,
     explicitContextIntent,
+    extraEventProperties,
+    omitCapturedParameters,
     takeCapturedError,
   } = params
   const resolvedEventType = eventType ?? MCPAnalyticsEventType.mcpToolsCall
+  // The SDK's own virtual tools carry their intent in their own arguments, so
+  // the injected `context` parameter neither exists on them nor gets read.
+  const isVirtualAnalyticsTool =
+    resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability ||
+    resolvedEventType === MCPAnalyticsEventType.mcpFeedback
   const ownership = getActiveAnalyticsParameterOwnership(
     data,
     request.params?.name,
     parameterOwnership,
-    resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
+    isVirtualAnalyticsTool
   )
   // Reading the argument and removing it are separate questions: deleting one the
   // application declared costs the customer their call, so the strip below still
   // requires positive ownership, while reading it when ownership is unresolved
   // costs at worst a mislabelled property. ADR-0011.
   const canCaptureContextIntent =
-    resolvedEventType !== MCPAnalyticsEventType.mcpMissingCapability &&
+    !isVirtualAnalyticsTool &&
     isContextEnabled(data.options.context) &&
     (ownership.context || !ownership.contextOwnershipKnown)
   const conversation = resolveConversationId(ownership.conversationId, request.params?.arguments)
@@ -144,6 +166,12 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   )
   if (preparedEvent && explicitContextIntent) {
     setExplicitContextIntent(preparedEvent.event, explicitContextIntent)
+  }
+  if (preparedEvent && extraEventProperties) {
+    preparedEvent.event.properties = { ...preparedEvent.event.properties, ...extraEventProperties }
+  }
+  if (preparedEvent && omitCapturedParameters) {
+    preparedEvent.event.parameters = undefined
   }
 
   let result: unknown
@@ -178,13 +206,13 @@ function getActiveAnalyticsParameterOwnership(
   data: MCPAnalyticsData,
   toolName: string | undefined,
   override: AnalyticsParameterOwnership | undefined,
-  isMissingCapabilityTool: boolean
+  isVirtualAnalyticsTool: boolean
 ): ActiveAnalyticsParameterOwnership {
   const listed = toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined
   const ownership = override ?? listed
   return {
     contextOwnershipKnown: ownership !== undefined,
-    context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
+    context: !isVirtualAnalyticsTool && isContextEnabled(data.options.context) && ownership?.context === true,
     conversationId: data.options.enableConversationId === true && ownership?.conversationId === true,
     llmModel: isCaptureModelEnabled(data.options.captureModel) && ownership?.llmModel === true,
     // Deliberately read off `listed`, never the override: only the advertised
@@ -271,12 +299,11 @@ async function prepareToolCallEvent(
 
     await applyResolvedMetadata(event, data, request, extra)
     setEventIntent(event, await resolveToolCallIntent(data, request, canCaptureContextIntent, extra))
-    // Unlike intent, the model is only read under positive ownership: with
-    // ownership unresolved, `llm_model` may be the application's own argument,
-    // and recording a customer value as the calling agent's model is worse
-    // than a gap in coverage.
-    if (ownership.llmModel) {
-      setEventModel(event, getModelArgument(request))
+    // Client metadata does not collide with an application's tool arguments.
+    // Self-report still requires positive ownership before we read `llm_model`.
+    if (isCaptureModelEnabled(data.options.captureModel)) {
+      const resolvedModel = resolveModel(request, ownership.llmModel)
+      setEventModel(event, resolvedModel?.model, resolvedModel?.source)
     }
     return { event, requestAttribution }
   } catch (error) {
@@ -396,6 +423,111 @@ function publishFailedToolEvent(
   }
 }
 
+type ResourceEventType = typeof MCPAnalyticsEventType.mcpResourcesList | typeof MCPAnalyticsEventType.mcpResourcesRead
+
+interface TraceRequestParams {
+  server: MCPServerLike
+  originalHandler: MCPRequestHandler
+  request: MCPRequestLike
+  extra: CompatibleRequestHandlerExtra | undefined
+  eventType: ResourceEventType
+  logger: LoggerFn
+}
+
+/** One resource request's outcome: either the handler threw, or it returned. */
+type ResourceOutcome = { error: unknown } | { result: unknown }
+
+/**
+ * Stamps a resource request's outcome onto its prepared event and publishes it.
+ *
+ * A listing's result is captured as the event response; a read's is not. What
+ * `resources/list` and `resources/templates/list` return is discovery metadata —
+ * names, uris, mime types, the next cursor — which answers "what did this client
+ * actually see?", while a read returns the resource body itself, which analytics
+ * has no business holding.
+ */
+function publishResourceEvent(
+  server: MCPServerLike,
+  preparedEvent: PreparedToolEvent | null,
+  startTime: Date,
+  params: TraceRequestParams,
+  outcome: ResourceOutcome
+): void {
+  if (!preparedEvent) {
+    return
+  }
+  const { event, requestAttribution } = preparedEvent
+  // Stamping is inside the `try` with the publish: `captureException` reads the
+  // thrown value's own `stack`, which an application error is free to define as
+  // a throwing getter. Outside, that would replace the resource error the caller
+  // is waiting on with ours.
+  try {
+    if ('error' in outcome) {
+      event.isError = true
+      event.error = captureException(outcome.error)
+    } else {
+      event.isError = false
+      if (params.eventType === MCPAnalyticsEventType.mcpResourcesList) {
+        event.response = outcome.result
+      }
+    }
+    event.duration = Date.now() - startTime.getTime()
+    captureEvent(server, event, params.logger, requestAttribution)
+  } catch (error) {
+    params.logger(`Warning: PostHog MCP analytics failed to publish ${params.request.method} analytics - ${error}`)
+  }
+}
+
+/** Builds the handler patch that captures one resource method, for either adapter. */
+export function traceResourceRequest(eventType: ResourceEventType, logger: LoggerFn): HandlerPatch {
+  return (server, originalHandler, request, extra) =>
+    captureResourceRequest({ server, originalHandler, request, extra, eventType, logger })
+}
+
+/** Captures a non-tool MCP request without changing its result or error semantics. */
+async function captureResourceRequest(params: TraceRequestParams): Promise<unknown> {
+  const { server, originalHandler, request, extra, eventType, logger } = params
+  const data = getServerTrackingData(server)
+  if (!data) {
+    logger(
+      'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using resources.'
+    )
+    return await originalHandler(request, extra)
+  }
+
+  const startTime = new Date()
+  let preparedEvent: PreparedToolEvent | null = null
+  try {
+    const sessionId = getSessionId(server, extra)
+    const sessionInfo = getSessionInfo(server, data, sessionId)
+    const event: McpEvent = {
+      sessionId,
+      eventType,
+      parameters: buildCapturedMcpParameters(request),
+      resourceName: eventType === MCPAnalyticsEventType.mcpResourcesRead ? request.params?.uri : undefined,
+      timestamp: startTime,
+    }
+    stampClientIdentity(event, request, extra, server)
+    stampTransportIdentity(event, extra)
+    const identity = await handleIdentify(server, data, sessionId, request, sessionInfo, extra)
+    await applyResolvedMetadata(event, data, request, extra)
+    preparedEvent = { event, requestAttribution: withIdentity(sessionInfo, identity) }
+  } catch (error) {
+    logger(`Warning: PostHog MCP analytics could not prepare ${request.method} analytics - ${error}`)
+  }
+
+  let result: unknown
+  try {
+    result = await originalHandler(request, extra)
+  } catch (error) {
+    publishResourceEvent(server, preparedEvent, startTime, params, { error })
+    throw error
+  }
+
+  publishResourceEvent(server, preparedEvent, startTime, params, { result })
+  return result
+}
+
 // --- tools/list -----------------------------------------------------------
 
 /**
@@ -509,26 +641,31 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
 }
 
 /**
- * Ownership for the `get_more_tools` virtual tool, resolved without the
- * `tools/list` cache.
+ * Ownership for an SDK-owned virtual tool (`get_more_tools`, `send_feedback`),
+ * resolved from its own descriptor rather than the `tools/list` cache.
  *
- * The missing-capability branch is only entered when the application does not
- * advertise a tool by this name, so the descriptor is the SDK's own and what it
- * declares is known statically. An instance that never served a listing — a
- * per-request `McpServer`/`Server`, the topology in ADR-0011 — would otherwise
- * read every injected parameter as not-ours and neither capture nor strip it.
+ * A virtual-tool branch is only entered when the application does not advertise
+ * a tool by this name, so the descriptor is the SDK's own and what it declares
+ * is known statically. An instance that never served a listing — a per-request
+ * `McpServer`/`Server`, the topology in ADR-0011 — would otherwise read every
+ * injected parameter as not-ours and neither capture nor strip it.
  *
  * `conversation_id` still comes from the cache on purpose: resolving it here too
  * would start minting a handle, and appending its prompt-back block, on
  * instances that today mint none. That changes session anchoring (ADR-0004)
  * rather than closing this gap.
+ *
+ * `virtualToolInputSchema` is required (not defaulted to one specific virtual
+ * tool's descriptor) so every call site names the tool it means; each caller
+ * passes its own descriptor's `inputSchema`.
  */
 export function getVirtualToolParameterOwnership(
   data: MCPAnalyticsData,
-  toolName: string
+  toolName: string,
+  virtualToolInputSchema: unknown
 ): AnalyticsParameterOwnership {
   return {
-    ...getAnalyticsParameterOwnership(getReportMissingToolDescriptor(toolName).inputSchema),
+    ...getAnalyticsParameterOwnership(virtualToolInputSchema),
     conversationId: data.toolAnalyticsParameterOwnership.get(toolName)?.conversationId === true,
   }
 }
@@ -700,6 +837,21 @@ async function getTracedToolsList(
           tools.push(virtualTool)
           // Cached separately because the virtual tool is added after the listing
           // was cached, and its calls need ownership like any other tool's.
+          cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, [virtualTool])
+        }
+      }
+
+      const feedbackOptions = resolveCollectFeedbackOptions(data.options.collectFeedback)
+      if (feedbackOptions) {
+        const feedbackToolName = feedbackOptions.toolName ?? SEND_FEEDBACK_TOOL_NAME
+        const alreadyPresent = tools.some((tool) => tool?.name === feedbackToolName)
+        if (alreadyPresent) {
+          data.logger(
+            `Warning: Cannot inject agent-feedback tool "${feedbackToolName}" because a real tool already uses that name. The real tool will not be intercepted.`
+          )
+        } else {
+          const virtualTool = getFeedbackToolDescriptor(feedbackOptions)
+          tools.push(virtualTool)
           cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, [virtualTool])
         }
       }

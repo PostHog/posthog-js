@@ -10,6 +10,7 @@ import { MCPAnalyticsEventType } from './event-types'
 const BUILT_IN_EVENT_NAME_BY_TYPE = {
   [MCPAnalyticsEventType.custom]: PostHogMCPAnalyticsEvent.Custom,
   [MCPAnalyticsEventType.identify]: PostHogMCPAnalyticsEvent.Identify,
+  [MCPAnalyticsEventType.mcpFeedback]: PostHogMCPAnalyticsEvent.Feedback,
   [MCPAnalyticsEventType.mcpMissingCapability]: PostHogMCPAnalyticsEvent.MissingCapability,
   [MCPAnalyticsEventType.mcpInitialize]: PostHogMCPAnalyticsEvent.Initialize,
   [MCPAnalyticsEventType.mcpPromptsGet]: PostHogMCPAnalyticsEvent.PromptGet,
@@ -170,8 +171,8 @@ function addCommonEventProperties(event: Event, properties: Record<string, unkno
   if (event.userIntentSource) {
     properties[PostHogMCPAnalyticsProperty.IntentSource] = event.userIntentSource
   }
-  // Self-reported by the calling agent (`captureModel`), so present only on the
-  // requests where the agent supplied a definite value — never inferred.
+  // Supplied by recognized client metadata or the calling agent (`captureModel`),
+  // so it is present only on requests carrying a definite value.
   if (event.llmModel) {
     properties[PostHogMCPAnalyticsProperty.LlmModel] = event.llmModel
   }

@@ -33,7 +33,8 @@ import { createRecorder, handleInspectionRoute } from './shared/posthog.mjs'
 const APP_TOOL = 'weather_app'
 const APP_URI = 'ui://weather/app.html'
 const APP_MIME_TYPE = 'text/html;profile=mcp-app'
-const MODEL = 'probe-model-2026'
+const CLIENT_METADATA_MODEL = 'probe-client-model-2026'
+const SELF_REPORTED_MODEL = 'probe-self-reported-model-2026'
 const CONTEXT = 'Showing an interactive weather result so the user can inspect the requested city forecast.'
 const RESULT_META_KEY = 'com.posthog/probe-result'
 const APP_HTML = '<!doctype html><html><body data-mcp-app="weather">Weather</body></html>'
@@ -152,8 +153,8 @@ function assertAppFlow(label, { tools, call, resources, read, recorder, protocol
   )
   check(
     `${label} · app tool call is captured with model`,
-    event?.properties?.$mcp_llm_model === MODEL &&
-      event?.properties?.$mcp_llm_model_source === 'self_reported' &&
+    event?.properties?.$mcp_llm_model === CLIENT_METADATA_MODEL &&
+      event?.properties?.$mcp_llm_model_source === 'client_metadata' &&
       event?.properties?.$mcp_intent === CONTEXT &&
       event?.properties?.$mcp_protocol_version === protocolVersion,
     JSON.stringify({
@@ -172,8 +173,15 @@ function assertAppFlow(label, { tools, call, resources, read, recorder, protocol
   const resourceEvents = recorder.events.filter((candidate) =>
     ['$mcp_resources_list', '$mcp_resource_read'].includes(candidate.event)
   )
-  console.log(
-    `  ${DIM}observed resource analytics events: ${resourceEvents.length} (tracking is a follow-up; this probe gates compatibility)${RESET}`
+  const listEvent = resourceEvents.find((candidate) => candidate.event === '$mcp_resources_list')
+  const readEvent = resourceEvents.find((candidate) => candidate.event === '$mcp_resource_read')
+  check(
+    `${label} · resource discovery and reads are captured`,
+    resourceEvents.length === 2 &&
+      listEvent?.properties?.$mcp_protocol_version === protocolVersion &&
+      readEvent?.properties?.$mcp_resource_name === APP_URI &&
+      readEvent?.properties?.$mcp_protocol_version === protocolVersion,
+    JSON.stringify(resourceEvents)
   )
 }
 
@@ -198,7 +206,11 @@ async function probeV1() {
     const call = await client.request(
       {
         method: 'tools/call',
-        params: { name: APP_TOOL, arguments: { city: 'Berlin', context: CONTEXT, llm_model: MODEL } },
+        params: {
+          _meta: { 'x-codex-turn-metadata': { model: CLIENT_METADATA_MODEL } },
+          name: APP_TOOL,
+          arguments: { city: 'Berlin', context: CONTEXT, llm_model: SELF_REPORTED_MODEL },
+        },
       },
       CallToolResultSchema
     )
@@ -212,6 +224,7 @@ async function probeV1() {
 }
 
 const MODERN_META = {
+  'x-codex-turn-metadata': { model: CLIENT_METADATA_MODEL },
   'io.modelcontextprotocol/protocolVersion': '2026-07-28',
   'io.modelcontextprotocol/clientInfo': { name: 'apps-probe', version: '1.0.0' },
   'io.modelcontextprotocol/clientCapabilities': {
@@ -255,7 +268,10 @@ async function probeV2() {
       port,
       2,
       'tools/call',
-      { name: APP_TOOL, arguments: { city: 'Berlin', context: CONTEXT, llm_model: MODEL } },
+      {
+        name: APP_TOOL,
+        arguments: { city: 'Berlin', context: CONTEXT, llm_model: SELF_REPORTED_MODEL },
+      },
       APP_TOOL
     )
     const resources = await postModern(port, 3, 'resources/list', {})

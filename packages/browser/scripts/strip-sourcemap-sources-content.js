@@ -30,7 +30,7 @@ function findMaps(dir) {
         if (entry.isDirectory()) {
             return findMaps(entryPath)
         }
-        return /\.m?js\.map$/.test(entry.name) ? [entryPath] : []
+        return /\.[cm]?js\.map$/.test(entry.name) ? [entryPath] : []
     })
 }
 

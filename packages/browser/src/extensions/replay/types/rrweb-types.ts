@@ -185,12 +185,15 @@ export type metaEvent = {
     }
 }
 
+export type customEventData<T = unknown> = {
+    tag: string
+    payload: T
+    href?: string
+}
+
 export type customEvent<T = unknown> = {
     type: typeof EventType.Custom
-    data: {
-        tag: string
-        payload: T
-    }
+    data: customEventData<T>
 }
 
 export type pluginEvent<T = unknown> = {

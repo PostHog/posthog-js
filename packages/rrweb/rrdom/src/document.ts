@@ -156,7 +156,7 @@ export abstract class BaseRRNode implements IRRNode {
     return childNodes;
   }
 
-  public contains(node: IRRNode) {
+  public contains(node: IRRNode): boolean {
     if (!(node instanceof BaseRRNode)) return false;
     else if (node.ownerDocument !== this.ownerDocument) return false;
     else if (node === this) return true;
@@ -195,7 +195,7 @@ export class BaseRRDocument extends BaseRRNode implements IRRDocument {
   public readonly nodeType: number = NodeType.DOCUMENT_NODE;
   public readonly nodeName = '#document' as const;
   public readonly compatMode: 'BackCompat' | 'CSS1Compat' = 'CSS1Compat';
-  public readonly RRNodeType = RRNodeType.Document;
+  public readonly RRNodeType: RRNodeType.Document = RRNodeType.Document;
   public textContent: string | null = null;
 
   constructor(...args: any[]) {
@@ -285,12 +285,12 @@ export class BaseRRDocument extends BaseRRNode implements IRRDocument {
     return removeChild(this, node);
   }
 
-  public open() {
+  public open(): void {
     this.firstChild = null;
     this.lastChild = null;
   }
 
-  public close() {
+  public close(): void {
     //
   }
 
@@ -300,7 +300,7 @@ export class BaseRRDocument extends BaseRRNode implements IRRDocument {
    * 1. doc.write('\<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" ""\>')
    * 2. doc.write('\<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN" ""\>')
    */
-  public write(content: string) {
+  public write(content: string): void {
     let publicId;
     if (
       content ===
@@ -372,7 +372,7 @@ export class BaseRRDocument extends BaseRRNode implements IRRDocument {
 
 export class BaseRRDocumentType extends BaseRRNode implements IRRDocumentType {
   public readonly nodeType: number = NodeType.DOCUMENT_TYPE_NODE;
-  public readonly RRNodeType = RRNodeType.DocumentType;
+  public readonly RRNodeType: RRNodeType.DocumentType = RRNodeType.DocumentType;
   declare readonly nodeName: string;
   public readonly name: string;
   public readonly publicId: string;
@@ -394,7 +394,7 @@ export class BaseRRDocumentType extends BaseRRNode implements IRRDocumentType {
 
 export class BaseRRElement extends BaseRRNode implements IRRElement {
   public readonly nodeType: number = NodeType.ELEMENT_NODE;
-  public readonly RRNodeType = RRNodeType.Element;
+  public readonly RRNodeType: RRNodeType.Element = RRNodeType.Element;
   declare readonly nodeName: string;
   public tagName: string;
   public attributes: Record<string, string> = {};
@@ -429,15 +429,15 @@ export class BaseRRElement extends BaseRRNode implements IRRElement {
     );
   }
 
-  public get id() {
+  public get id(): string {
     return this.attributes.id || '';
   }
 
-  public get className() {
+  public get className(): string {
     return this.attributes.class || '';
   }
 
-  public get style() {
+  public get style(): CSSStyleDeclaration {
     const style = (
       this.attributes.style ? parseCSSText(this.attributes.style) : {}
     ) as CSSStyleDeclaration;
@@ -470,7 +470,7 @@ export class BaseRRElement extends BaseRRNode implements IRRElement {
     return this.attributes[name];
   }
 
-  public setAttribute(name: string, attribute: string) {
+  public setAttribute(name: string, attribute: string): void {
     this.attributes[name] = attribute;
   }
 
@@ -482,7 +482,7 @@ export class BaseRRElement extends BaseRRNode implements IRRElement {
     this.setAttribute(qualifiedName, value);
   }
 
-  public removeAttribute(name: string) {
+  public removeAttribute(name: string): void {
     delete this.attributes[name];
   }
 
@@ -529,10 +529,10 @@ export class BaseRRMediaElement extends BaseRRElement {
       `RRDomException: Failed to execute 'attachShadow' on 'RRElement': This RRElement does not support attachShadow`,
     );
   }
-  public play() {
+  public play(): void {
     this.paused = false;
   }
-  public pause() {
+  public pause(): void {
     this.paused = true;
   }
 }
@@ -541,21 +541,21 @@ export class BaseRRDialogElement extends BaseRRElement {
   public readonly tagName = 'DIALOG' as const;
   public readonly nodeName = 'DIALOG' as const;
 
-  get isModal() {
+  get isModal(): boolean {
     return this.getAttribute('rr_open_mode') === 'modal';
   }
-  get open() {
+  get open(): boolean {
     return this.getAttribute('open') !== null;
   }
-  public close() {
+  public close(): void {
     this.removeAttribute('open');
     this.removeAttribute('rr_open_mode');
   }
-  public show() {
+  public show(): void {
     this.setAttribute('open', '');
     this.setAttribute('rr_open_mode', 'non-modal');
   }
-  public showModal() {
+  public showModal(): void {
     this.setAttribute('open', '');
     this.setAttribute('rr_open_mode', 'modal');
   }
@@ -564,7 +564,7 @@ export class BaseRRDialogElement extends BaseRRElement {
 export class BaseRRText extends BaseRRNode implements IRRText {
   public readonly nodeType: number = NodeType.TEXT_NODE;
   public readonly nodeName = '#text' as const;
-  public readonly RRNodeType = RRNodeType.Text;
+  public readonly RRNodeType: RRNodeType.Text = RRNodeType.Text;
   public data: string;
 
   constructor(data: string) {
@@ -589,7 +589,7 @@ export class BaseRRText extends BaseRRNode implements IRRText {
 export class BaseRRComment extends BaseRRNode implements IRRComment {
   public readonly nodeType: number = NodeType.COMMENT_NODE;
   public readonly nodeName = '#comment' as const;
-  public readonly RRNodeType = RRNodeType.Comment;
+  public readonly RRNodeType: RRNodeType.Comment = RRNodeType.Comment;
   public data: string;
 
   constructor(data: string) {
@@ -614,7 +614,7 @@ export class BaseRRComment extends BaseRRNode implements IRRComment {
 export class BaseRRCDATASection extends BaseRRNode implements IRRCDATASection {
   public readonly nodeName = '#cdata-section' as const;
   public readonly nodeType: number = NodeType.CDATA_SECTION_NODE;
-  public readonly RRNodeType = RRNodeType.CDATA;
+  public readonly RRNodeType: RRNodeType.CDATA = RRNodeType.CDATA;
   public data: string;
 
   constructor(data: string) {
@@ -651,7 +651,7 @@ export class ClassList {
     this.onChange = onChange;
   }
 
-  add = (...classNames: string[]) => {
+  add = (...classNames: string[]): void => {
     for (const item of classNames) {
       const className = String(item);
       if (this.classes.indexOf(className) >= 0) continue;
@@ -660,7 +660,7 @@ export class ClassList {
     this.onChange && this.onChange(this.classes.join(' '));
   };
 
-  remove = (...classNames: string[]) => {
+  remove = (...classNames: string[]): void => {
     this.classes = this.classes.filter(
       (item) => classNames.indexOf(item) === -1,
     );

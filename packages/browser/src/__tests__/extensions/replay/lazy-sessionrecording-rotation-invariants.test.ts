@@ -16,7 +16,7 @@ import {
     META_EVENT_TYPE,
 } from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
-import { Property, RemoteConfig, RemoteConfigResult } from '../../../types'
+import { CaptureResult, Property, QueuedRequestWithOptions, RemoteConfig, RemoteConfigResult } from '../../../types'
 import { assignableWindow } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import { EventType, type eventWithTime, IncrementalSource } from '../../../extensions/replay/types/rrweb-types'
@@ -121,7 +121,7 @@ const customEvent = (tag: string, payload: unknown): eventWithTime =>
 
 type LiveRecorder = { emit: (event: eventWithTime) => void; active: boolean }
 
-function createHarness() {
+function createHarness(sessionIdleTimeoutSeconds = 30 * 60) {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
 
@@ -138,6 +138,7 @@ function createHarness() {
         disable_session_recording: false,
         enable_recording_console_log: false,
         autocapture: false,
+        session_idle_timeout_seconds: sessionIdleTimeoutSeconds,
         session_recording: { maskAllInputs: false, compress_events: false },
         persistence: 'memory',
     })
@@ -228,7 +229,7 @@ function createHarness() {
     } as RemoteConfigResult)
     const lazy = sessionRecording['_lazyLoadedSessionRecording'] as any
 
-    return { mint, sessionManager, sessionRecording, lazy, capture, record, emitEvent }
+    return { mint, sessionManager, sessionRecording, lazy, capture, record, emitEvent, posthog }
 }
 
 type Harness = ReturnType<typeof createHarness>
@@ -285,7 +286,8 @@ function shippedBySession(h: Harness): Map<string, eventWithTime[]> {
 
 function checkInvariants(
     h: Harness,
-    state: { rotated: boolean; lastInteractionAt: number; rotations: number }
+    state: { rotated: boolean; lastInteractionAt: number; rotations: number },
+    requests: QueuedRequestWithOptions[]
 ): string[] {
     const violations: string[] = []
     for (const [sessionId, events] of shippedBySession(h)) {
@@ -328,6 +330,26 @@ function checkInvariants(
     ) {
         violations.push(`(4) idle right after rotation into ${h.lazy._sessionId} with a recent interaction`)
     }
+    // the request queue merges same-key requests into one payload, so a batch group two epochs share
+    // would ship their snapshots in one upload and the player reads the later epoch's Meta and
+    // FullSnapshot as a late initial snapshot
+    const epochByBatchGroup = new Map<string, string>()
+    requests
+        .filter(({ data }) => (data as CaptureResult).event === '$snapshot')
+        .forEach(({ data, batchGroup }) => {
+            const props = (data as CaptureResult).properties
+            const epoch = `${props.$session_id}/${props.$window_id}`
+            if (isUndefined(batchGroup)) {
+                violations.push(`(6) epoch ${epoch} has no batch group`)
+                return
+            }
+            const seen = epochByBatchGroup.get(batchGroup)
+            if (isUndefined(seen)) {
+                epochByBatchGroup.set(batchGroup, epoch)
+            } else if (seen !== epoch) {
+                violations.push(`(6) batch group ${batchGroup} shared by epochs ${seen} and ${epoch}`)
+            }
+        })
     if (h.record.mock.calls.length !== 1 + state.rotations) {
         violations.push(`(5) record called ${h.record.mock.calls.length} times for ${state.rotations} rotations`)
     }
@@ -346,6 +368,18 @@ function recordCoverage(h: Harness, rotations: number): void {
 
 function replay(actions: Action[], track = false): Failure | null {
     const h = createHarness()
+    const captureClient = new PostHog().init('rotation-invariants', {
+        persistence: 'memory',
+        request_batching: true,
+        capture_pageview: false,
+        autocapture: false,
+        disable_session_recording: true,
+        disable_surveys: true,
+        disable_conversations: true,
+        advanced_disable_feature_flags: true,
+    })
+    const enqueue = vi.spyOn(captureClient._requestQueue!, 'enqueue').mockImplementation(() => {})
+    h.capture.mockImplementation((name, props, options) => captureClient.capture(name, props, options))
     const state = { rotated: false, lastInteractionAt: Date.now(), rotations: 0 }
     try {
         let sessionId = h.lazy._sessionId
@@ -359,7 +393,11 @@ function replay(actions: Action[], track = false): Failure | null {
                 state.rotations++
                 sessionId = h.lazy._sessionId
             }
-            const violations = checkInvariants(h, state)
+            const violations = checkInvariants(
+                h,
+                state,
+                enqueue.mock.calls.map(([request]) => request)
+            )
             if (violations.length > 0) {
                 return { index: i, message: violations.join('\n') }
             }
@@ -370,6 +408,7 @@ function replay(actions: Action[], track = false): Failure | null {
             recordCoverage(h, state.rotations)
         }
         h.sessionRecording.stopRecording()
+        void captureClient.shutdown()
         vi.useRealTimers()
         vi.clearAllMocks()
     }
@@ -415,5 +454,179 @@ describe('lazy session recording rotation invariants', () => {
                 `minimal failure: ${minimalFailure?.message ?? 'did not reproduce'}`,
             ].join('\n')
         )
+    })
+})
+
+describe('suspended tab session timestamps (#4825)', () => {
+    it('reports a consistent debug session start and duration while rotating', () => {
+        const h = createHarness(600)
+        try {
+            const observations: Array<{ sessionId: string; start: number; duration: number; lastTimestamp: number }> =
+                []
+            h.capture.mockImplementation((name, props) => {
+                if (name === '$snapshot') {
+                    // Probe the getter during a flush; snapshot capture does not attach these properties itself.
+                    const debug = h.lazy.sdkDebugProperties
+                    observations.push({
+                        sessionId: props.$session_id,
+                        start: debug.$sdk_debug_session_start,
+                        duration: debug.$sdk_debug_current_session_duration,
+                        lastTimestamp: props.$snapshot_data[props.$snapshot_data.length - 1].timestamp,
+                    })
+                }
+            })
+            const startedAt = Date.now()
+            const oldSessionId = h.lazy._sessionId
+            h.emitEvent(incrementalEvent({ source: IncrementalSource.MouseInteraction }))
+            vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+            observations.length = 0
+
+            vi.setSystemTime(startedAt + 3 * 24 * 60 * 60 * 1000)
+            h.emitEvent(incrementalEvent({ source: IncrementalSource.MouseInteraction }))
+            vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+            const newSessionId = h.lazy._sessionId
+            expect(newSessionId).not.toBe(oldSessionId)
+            expect(new Set(observations.map(({ sessionId }) => sessionId))).toEqual(
+                new Set([oldSessionId, newSessionId])
+            )
+            for (const observation of observations) {
+                expect(observation.start).toBe(h.mint.get(observation.sessionId))
+                expect(observation.duration).toBe(observation.lastTimestamp - observation.start)
+            }
+        } finally {
+            h.sessionRecording.stopRecording()
+            vi.useRealTimers()
+            vi.clearAllMocks()
+        }
+    })
+
+    it.each([
+        { lastActivityMs: 0, expectedOldCaptures: 0 },
+        { lastActivityMs: 25_000, expectedOldCaptures: 1 },
+    ])(
+        'respects the non-strict minimum duration on wake after activity at $lastActivityMs ms',
+        ({ lastActivityMs, expectedOldCaptures }) => {
+            const h = createHarness(600)
+            try {
+                const startedAt = Date.now()
+                h.posthog.config.capture_pageview = false
+                h.posthog.config.session_recording.session_idle_threshold_ms = 10_000
+                h.posthog.config.session_recording.strictMinimumDuration = false
+                h.sessionRecording.onRemoteConfig({
+                    ok: true,
+                    config: { sessionRecording: { endpoint: '/s/', minimumDurationMilliseconds: 30_000 } },
+                } as RemoteConfigResult)
+                const originalSessionId = h.lazy._sessionId
+                h.emitEvent(incrementalEvent({ source: IncrementalSource.MouseInteraction }))
+                vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                expect(h.capture.mock.calls.filter(([name]) => name === '$snapshot')).toHaveLength(0)
+
+                if (lastActivityMs > 0) {
+                    vi.setSystemTime(startedAt + lastActivityMs)
+                    h.emitEvent(incrementalEvent({ source: IncrementalSource.MouseInteraction }))
+                }
+                vi.setSystemTime(startedAt + 3 * 24 * 60 * 60 * 1000)
+                h.emitEvent(incrementalEvent({ source: IncrementalSource.MouseInteraction }))
+                vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                expect(h.lazy._sessionId).not.toBe(originalSessionId)
+                const oldCaptures = h.capture.mock.calls.filter(
+                    ([name, props]) => name === '$snapshot' && props.$session_id === originalSessionId
+                )
+                expect(oldCaptures).toHaveLength(expectedOldCaptures)
+                const newSessionId = h.lazy._sessionId
+                const newCaptures = () =>
+                    h.capture.mock.calls.filter(
+                        ([name, props]) => name === '$snapshot' && props.$session_id === newSessionId
+                    )
+                expect(newCaptures()).toHaveLength(0)
+
+                vi.setSystemTime(Date.now() + 31_000)
+                h.emitEvent(incrementalEvent({ source: IncrementalSource.MouseInteraction }))
+                vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                expect(newCaptures().length).toBeGreaterThan(0)
+            } finally {
+                h.sessionRecording.stopRecording()
+                vi.useRealTimers()
+                vi.clearAllMocks()
+            }
+        }
+    )
+
+    it.each(
+        ['unknown', 'active', 'idle'].flatMap((initialState) =>
+            ['mutation', 'interaction', 'session check', 'idle timer', 'unload'].map((wake) => ({ initialState, wake }))
+        )
+    )('$initialState before suspension, $wake first on wake', ({ initialState, wake }) => {
+        const h = createHarness(600)
+        try {
+            const startedAt = Date.now()
+            const originalSessionId = h.lazy._sessionId
+            if (initialState !== 'unknown') {
+                h.emitEvent(incrementalEvent({ source: IncrementalSource.MouseInteraction }))
+                vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+            }
+            if (initialState === 'idle') {
+                vi.setSystemTime(startedAt + RECORDING_IDLE_THRESHOLD_MS + 1)
+                h.emitEvent(incrementalEvent({ source: 0, adds: [], attributes: [], removes: [], texts: [] }))
+            }
+
+            // Jump the wall clock without executing timers, as with a frozen tab.
+            const wakeAt = startedAt + 3 * 24 * 60 * 60 * 1000
+            vi.setSystemTime(wakeAt)
+            switch (wake) {
+                case 'mutation':
+                    h.emitEvent(incrementalEvent({ source: 0, adds: [], attributes: [], removes: [], texts: [] }))
+                    break
+                case 'interaction':
+                    h.emitEvent(incrementalEvent({ source: IncrementalSource.MouseInteraction }))
+                    break
+                case 'session check':
+                    h.sessionManager.checkAndGetSessionAndWindowId(true)
+                    break
+                case 'idle timer':
+                    vi.advanceTimersByTime(600 * 1000 * 1.1)
+                    break
+                case 'unload':
+                    h.lazy._onBeforeUnload()
+                    break
+            }
+            vi.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+            const shipped = h.capture.mock.calls.filter(([name]) => name === '$snapshot')
+            for (const [, props] of shipped) {
+                const mint = h.mint.get(props.$session_id)!
+                for (const event of props.$snapshot_data) {
+                    expect(
+                        event.timestamp,
+                        `${props.$session_id} ${event.data?.tag ?? event.type} before mint`
+                    ).toBeGreaterThanOrEqual(mint)
+                    expect(
+                        event.timestamp,
+                        `${props.$session_id} ${event.data?.tag ?? event.type} beyond cap`
+                    ).toBeLessThanOrEqual(mint + 24 * 60 * 60 * 1000)
+                }
+            }
+            if (wake === 'interaction' && initialState !== 'unknown') {
+                const ending = shipped
+                    .filter(([, props]) => props.$session_id === originalSessionId)
+                    .flatMap(([, props]) => props.$snapshot_data)
+                    .find((event) => event.data?.tag === '$session_ending')
+                expect(ending?.timestamp).toBe(startedAt)
+            }
+            if (['mutation', 'interaction', 'session check'].includes(wake)) {
+                expect(h.lazy._sessionId).not.toBe(originalSessionId)
+            }
+            if (wake === 'interaction') {
+                expect(shipped.some(([, props]) => props.$session_id === h.lazy._sessionId)).toBe(true)
+            } else if (wake !== 'unload') {
+                expect(shipped.filter(([, props]) => props.$session_id !== originalSessionId)).toHaveLength(0)
+            }
+        } finally {
+            h.sessionRecording.stopRecording()
+            vi.useRealTimers()
+            vi.clearAllMocks()
+        }
     })
 })

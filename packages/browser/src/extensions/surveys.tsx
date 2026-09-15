@@ -24,9 +24,11 @@ import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
     IN_APP_SURVEY_TYPES,
+    isCapturingEnabled,
     isSurveyIterationBased,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
+    SURVEY_CAPTURING_DISABLED,
 } from '../utils/survey-utils'
 import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
 import { Properties } from '../types'
@@ -143,6 +145,7 @@ export class SurveyManager {
     private _surveyTimeouts: Map<string, ReturnType<Window['setTimeout']>> = new Map()
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
+    private _renderedTabWidgets: Map<string, Survey> = new Map()
     private _renderedTargets: Map<ShadowRoot, Element> = new Map()
     private _prefillHandledSurveys: Set<string> = new Set()
     private _automaticDisplayDispose?: () => void
@@ -155,6 +158,7 @@ export class SurveyManager {
     // re-apply the same display overrides, rather than reusing the overridden survey from the
     // original render (which would go stale if the underlying survey definition changes).
     private _displayOptions: DisplaySurveyPopoverOptions | undefined
+    private _loggedFeatureFlagsDisabledWarning: boolean = false
 
     constructor(posthog: PostHog) {
         this._posthog = posthog
@@ -297,6 +301,7 @@ export class SurveyManager {
             container?.remove()
         })
         this._renderedTargets.clear()
+        this._renderedTabWidgets.clear()
         this._surveyInFocus = null
     }
 
@@ -311,6 +316,9 @@ export class SurveyManager {
         options?: DisplaySurveyPopoverOptions,
         { resumeDelayFromActivation = false }: { resumeDelayFromActivation?: boolean } = {}
     ): void => {
+        if (!isCapturingEnabled(this._posthog)) {
+            return
+        }
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(surveyParam)
         this._currentLanguage = surveyLanguage
         this._surveyPopupProps = null
@@ -401,10 +409,10 @@ export class SurveyManager {
 
         // Re-check the full display predicate, not just the URL: eligibility can change
         // while the delay runs down (e.g. identify() reloads flags and the internal targeting flag
-        // flips to false), and we must not show a survey that is no longer eligible by the
-        // time the delay elapses.
+        // flips to false, or the person opts out of capturing), and we must not show a survey that
+        // is no longer eligible by the time the delay elapses.
         const renderIfStillEligible = () => {
-            if (!this._shouldDisplaySurvey(survey)) {
+            if (!isCapturingEnabled(this._posthog) || !this._shouldDisplaySurvey(survey)) {
                 logger.info(`Survey ${survey.id} no longer eligible when its display delay elapsed; not displaying`)
                 return this._removeSurveyFromFocus(survey)
             }
@@ -444,6 +452,9 @@ export class SurveyManager {
         // Ensure widget container exists if it doesn't
         const { shadow, isNewlyCreated } = retrieveSurveyShadow(translatedSurvey, this._posthog)
         this._renderedTargets.set(shadow, shadow.host)
+        if (survey.appearance?.widgetType === SurveyWidgetType.Tab) {
+            this._renderedTabWidgets.set(survey.id, survey)
+        }
 
         // If the widget is already rendered, do nothing. Otherwise the widget will be re-rendered every second
         if (!isNewlyCreated) {
@@ -484,6 +495,19 @@ export class SurveyManager {
         }
         this._removeSurveyFromDom(survey)
         this._detachWidgetSelectorListener(survey.id)
+    }
+
+    // A tab widget draws its own trigger, so it stays on screen until something removes it. The
+    // display poll no longer matches a survey once it becomes ineligible, which leaves the trigger
+    // as a live entry point to a survey whose response would be dropped.
+    private _removeTabWidget = (survey: Survey): void => {
+        // Same deferral as the selector widget: a teardown while the survey is open would make it
+        // vanish under the person. The next display poll retries.
+        if (this._isWidgetSurveyOpen(survey)) {
+            return
+        }
+        this._removeSurveyFromDom(survey)
+        this._renderedTabWidgets.delete(survey.id)
     }
 
     private _isWidgetSurveyOpen = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): boolean => {
@@ -585,6 +609,9 @@ export class SurveyManager {
     }
 
     public renderPopover = (survey: Survey): void => {
+        if (!isCapturingEnabled(this._posthog)) {
+            return
+        }
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         const { shadow } = retrieveSurveyShadow(translatedSurvey, this._posthog)
         this._renderedTargets.set(shadow, shadow.host)
@@ -600,6 +627,9 @@ export class SurveyManager {
     }
 
     public renderSurvey = (survey: Survey, selector: Element, properties?: Properties): void => {
+        if (!isCapturingEnabled(this._posthog)) {
+            return
+        }
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         let isSurveyCompleted = false
         if (this._posthog.config?.surveys?.prefillFromUrl) {
@@ -770,7 +800,24 @@ export class SurveyManager {
             const flagVariantValue = featureFlags?.getFeatureFlag(flagKey, { send_event: false })
             flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
         }
-        return isFeatureEnabled && flagVariantCheck
+        const enabled = isFeatureEnabled && flagVariantCheck
+        if (!enabled) {
+            this._warnIfFeatureFlagsDisabled(flagKey)
+        }
+        return enabled
+    }
+
+    private _warnIfFeatureFlagsDisabled(flagKey: string): void {
+        if (this._loggedFeatureFlagsDisabledWarning || !this._posthog.config?.advanced_disable_feature_flags) {
+            return
+        }
+        this._loggedFeatureFlagsDisabledWarning = true
+        logger.warn(
+            `Survey feature flag "${flagKey}" evaluated to false because advanced_disable_feature_flags is set. ` +
+                'PostHog creates an internal targeting flag for almost every survey, so no survey can display while flags are disabled. ' +
+                'To keep surveys working, replace advanced_disable_feature_flags with advanced_only_evaluate_survey_feature_flags, ' +
+                'which evaluates survey flags only.'
+        )
     }
 
     private _isSurveyConditionMatched(survey: Survey): boolean {
@@ -812,6 +859,7 @@ export class SurveyManager {
             isSurveyIterationBased(survey) &&
             !this._featureFlags?.hasLoadedFlags
         ) {
+            this._warnIfFeatureFlagsDisabled(survey.internal_targeting_flag_key)
             return {
                 satisfied: false,
                 reason: 'Feature flags have not loaded yet; deferring internal targeting flag check',
@@ -878,17 +926,49 @@ export class SurveyManager {
     }
 
     /**
-     * Renderability = eligibility (running, type, flags, wait period, already-seen) plus the
-     * survey's event/action activation trigger. Used by the programmatic `canRenderSurvey` /
-     * `canRenderSurveyAsync` checks so they match the display loop.
+     * PostHog's capture state, as an eligibility result. This is a prerequisite for any survey the
+     * SDK renders itself, not one of the survey's display conditions: without it a person types an
+     * answer, sees the confirmation, and `capture()` drops the `survey sent` event. So
+     * `displaySurvey`'s `ignoreConditions` must not bypass it. `is_capturing()` is the same gate
+     * `capture()` uses, so cookieless `on_reject` stays eligible.
      *
-     * The trigger is intentionally kept out of `checkSurveyEligibility`: that method is also
-     * used by the explicit `displaySurvey` path, and the trigger state only lives in memory
+     * Deliberately kept out of `checkSurveyEligibility`: that also backs the public
+     * `getActiveMatchingSurveys`, which custom integrations use to discover API surveys they
+     * render themselves and record through their own backend (see `markSurveyAsSeen`). PostHog's
+     * capture state says nothing about whether such a response can be recorded, so discovery
+     * stays capture-independent.
+     */
+    public checkSurveyCaptureEligibility(): { eligible: boolean; reason?: string } {
+        if (!isCapturingEnabled(this._posthog)) {
+            return { eligible: false, reason: SURVEY_CAPTURING_DISABLED }
+        }
+        return { eligible: true }
+    }
+
+    /**
+     * Eligibility for a survey the SDK renders and captures the response for itself: everything
+     * `checkSurveyEligibility` checks, plus PostHog's capture state.
+     */
+    public checkSurveyDisplayEligibility(survey: Survey): { eligible: boolean; reason?: string } {
+        const captureEligibility = this.checkSurveyCaptureEligibility()
+        if (!captureEligibility.eligible) {
+            return captureEligibility
+        }
+        return this.checkSurveyEligibility(survey)
+    }
+
+    /**
+     * Renderability = display eligibility (running, type, flags, wait period, already-seen,
+     * capturing) plus the survey's event/action activation trigger. Used by the programmatic
+     * `canRenderSurvey` / `canRenderSurveyAsync` checks so they match the display loop.
+     *
+     * The trigger is intentionally kept out of `checkSurveyDisplayEligibility`: that method is
+     * also used by the explicit `displaySurvey` path, and the trigger state only lives in memory
      * (a reload clears it, server-side events never set it). Gating eligibility on it would
      * make explicit `displaySurvey('id')` calls silently show nothing.
      */
     public checkSurveyRenderability(survey: Survey): { eligible: boolean; reason?: string } {
-        const eligibility = this.checkSurveyEligibility(survey)
+        const eligibility = this.checkSurveyDisplayEligibility(survey)
         if (eligibility.eligible && !this._hasActionOrEventTriggeredSurvey(survey)) {
             return { eligible: false, reason: `Survey event/action trigger has not been fired yet` }
         }
@@ -932,6 +1012,10 @@ export class SurveyManager {
      * survey that became ineligible *during* the delay (e.g. an identify() reloaded flags and
      * the internal targeting flag is now false) is not shown. Note this is purely an AND gate:
      * adding it can only ever suppress a display, never cause an extra one.
+     *
+     * PostHog's capture state is not part of this: it also backs the public
+     * `getActiveMatchingSurveys` discovery result, so the paths where the SDK renders the survey
+     * itself apply that gate separately — see `checkSurveyDisplayEligibility`.
      */
     private _shouldDisplaySurvey(survey: Survey): boolean {
         return (
@@ -951,8 +1035,13 @@ export class SurveyManager {
 
     public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
         this.getActiveMatchingSurveys((surveys) => {
+            // Discovery above stays capture-independent for custom integrations; a survey the SDK
+            // shows itself must be able to record the response, so the gate lives here instead —
+            // see `checkSurveyDisplayEligibility`.
+            const canCaptureResponse = isCapturingEnabled(this._posthog)
             const inAppSurveysWithDisplayLogic = surveys.filter(
-                (survey) => survey.type === SurveyType.Popover || survey.type === SurveyType.Widget
+                (survey) =>
+                    canCaptureResponse && (survey.type === SurveyType.Popover || survey.type === SurveyType.Widget)
             )
 
             // Cancel any pending (delayed, not-yet-shown) survey whose eligibility changed since
@@ -972,11 +1061,13 @@ export class SurveyManager {
 
             // Keep track of surveys processed this cycle to remove listeners for inactive ones
             const activeSelectorSurveys = new Set<string>()
+            const activeTabWidgetSurveys = new Set<string>()
 
             inAppSurveysQueue.forEach((survey) => {
                 // Widget Type Logic
                 if (survey.type === SurveyType.Widget) {
                     if (survey.appearance?.widgetType === SurveyWidgetType.Tab) {
+                        activeTabWidgetSurveys.add(survey.id)
                         this._handleWidget(survey)
                         return
                     }
@@ -1001,6 +1092,13 @@ export class SurveyManager {
             this._widgetSelectorListeners.forEach(({ survey }) => {
                 if (!activeSelectorSurveys.has(survey.id)) {
                     this._removeWidgetSelectorListener(survey)
+                }
+            })
+
+            // Same cleanup for a tab widget, which has no listener entry to key off.
+            this._renderedTabWidgets.forEach((tabSurvey, surveyId) => {
+                if (!activeTabWidgetSurveys.has(surveyId)) {
+                    this._removeTabWidget(tabSurvey)
                 }
             })
         }, forceReload)
@@ -1645,6 +1743,7 @@ export function Questions({
         }
         return initialInProgressState?.responses || {}
     })
+    const [submissionBlocked, setSubmissionBlocked] = useState(false)
     const {
         previewPageIndex,
         onPopupSurveyDismissed,
@@ -1723,6 +1822,12 @@ export function Questions({
             logger.error('onNextButtonClick called without a PostHog instance.')
             return
         }
+
+        if (!isCapturingEnabled(posthog)) {
+            setSubmissionBlocked(true)
+            return
+        }
+        setSubmissionBlocked(false)
 
         if (!questionId) {
             logger.error('onNextButtonClick called without a questionId.')
@@ -1833,6 +1938,7 @@ export function Questions({
                 />
             )}
             <div className="survey-box" data-question-index={currentQuestionIndex}>
+                {submissionBlocked && <p role="alert">Your response could not be sent. Please try again later.</p>}
                 {getQuestionComponent({
                     question: currentQuestion,
                     forceDisableHtml,
@@ -1875,6 +1981,9 @@ export function FeedbackWidget({
     const resetTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
     const toggleSurvey = () => {
+        if (!showSurvey && posthog && !readOnly && !isCapturingEnabled(posthog)) {
+            return
+        }
         setShowSurvey(!showSurvey)
     }
 

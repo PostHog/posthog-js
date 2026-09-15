@@ -13,6 +13,7 @@ import {
   isNodeMetaEqual,
   extractFileExtension,
   attachShadowRootSafely,
+  SCRIPT_PLACEHOLDER,
 } from './utils';
 import postcss, { type Parser } from 'postcss';
 
@@ -123,6 +124,16 @@ function safeDocNode(
     cache: BuildCache;
   },
 ) {
+  // A `<script>` is rebuilt as `<noscript>` so it cannot execute (see tagMap).
+  // Its serialized content is the SCRIPT_PLACEHOLDER sentinel, never real script
+  // text. Scripting is off in the replay iframe, so `<noscript>` content renders
+  // as visible text — and the `noscript { display: none }` replay style is
+  // document-scoped, so it never reaches shadow roots. Emit an empty text node so
+  // the placeholder cannot render in any context.
+  if (n.textContent === SCRIPT_PLACEHOLDER) {
+    return options.doc.createTextNode('');
+  }
+
   let stringContent = n.textContent;
   if (n.isStyle && options.hackCss) {
     try {
@@ -424,6 +435,15 @@ function buildNode(
           }
         }
       }
+
+      // The replay iframe is a live document, so the viewer's own browser
+      // offers autofill on these fields. Accepting a suggestion would write the
+      // viewer's saved data into the replay, where it reads as the recorded
+      // user's input.
+      if (tagName === 'input' || tagName === 'textarea') {
+        node.setAttribute('autocomplete', 'off');
+      }
+
       return node;
     }
     case NodeType.Text:

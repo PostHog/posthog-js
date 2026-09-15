@@ -2,11 +2,13 @@
 // Copyright (c) 2017 Sentry
 // Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 
+const fs = require('fs')
+
 const {
+  AndroidConfig,
   withAppBuildGradle,
   withBaseMod,
   withGradleProperties,
-  withProjectBuildGradle,
   withXcodeProject,
 } = require('@expo/config-plugins')
 
@@ -182,33 +184,51 @@ export function applyPostHogAndroidGradlePlugin(appBuildGradle: string): string 
   return appBuildGradle
 }
 
-const withAndroidNativeSymbolsPlugin = (config: any) => {
-  // Couple the classpath and `apply plugin`: applying without the classpath breaks the build.
-  // Expo evaluates mods in key-insertion order, so this plugin must register before anything
-  // else touches appBuildGradle — otherwise the flag is read before projectBuildGradle sets it.
-  let classpathPresent = false
+// Expo's standard mods run their action before the previously registered action. This wrapper
+// deliberately runs its action after the rest of the project Gradle mod chain, so it can safely
+// coordinate the project classpath and app plugin edits without relying on mod-key order.
+const withFinalizedProjectBuildGradle = (config: any, action: (config: any) => any) => {
+  return withBaseMod(config, {
+    platform: 'android',
+    mod: 'projectBuildGradle',
+    skipEmptyMod: false,
+    async action(config: any) {
+      const { nextMod, ...modRequest } = config.modRequest
+      const results = await nextMod({ ...config, modRequest })
+      return action(results)
+    },
+  })
+}
 
-  config = withProjectBuildGradle(config, (config: any) => {
+const withAndroidNativeSymbolsPlugin = (config: any) => {
+  return withFinalizedProjectBuildGradle(config, async (config: any) => {
     if (config.modResults.language !== 'groovy') {
       console.warn('Cannot configure the PostHog Android Gradle plugin because the project build.gradle is not groovy')
       return config
     }
-    const result = addPostHogAndroidGradlePluginClasspath(config.modResults.contents)
-    config.modResults.contents = result.contents
-    classpathPresent = result.classpathPresent
-    return config
-  })
 
-  return withAppBuildGradle(config, (config: any) => {
-    if (config.modResults.language !== 'groovy') {
+    const result = addPostHogAndroidGradlePluginClasspath(config.modResults.contents)
+    if (result.contents !== config.modResults.contents) {
+      // Persist the classpath before applying the app plugin so a failed second write cannot
+      // leave an apply line without its matching classpath.
+      await fs.promises.writeFile(config.modResults.path, result.contents)
+      config.modResults.contents = result.contents
+    }
+    if (!result.classpathPresent) {
+      // No classpath (or no buildscript dependencies block) → applying would break the build.
+      return config
+    }
+
+    const appBuildGradle = await AndroidConfig.Paths.getAppBuildGradleAsync(config.modRequest.projectRoot)
+    if (appBuildGradle.language !== 'groovy') {
       console.warn('Cannot configure the PostHog Android Gradle plugin because the app build.gradle is not groovy')
       return config
     }
-    if (!classpathPresent) {
-      // No classpath (kts, or no buildscript dependencies block) → applying would break the build.
-      return config
+
+    const contents = applyPostHogAndroidGradlePlugin(appBuildGradle.contents)
+    if (contents !== appBuildGradle.contents) {
+      await fs.promises.writeFile(appBuildGradle.path, contents)
     }
-    config.modResults.contents = applyPostHogAndroidGradlePlugin(config.modResults.contents)
     return config
   })
 }
@@ -780,10 +800,6 @@ const withPostHogPlugin = (config: any, rawProps: PostHogPluginProps = {}) => {
     dotenvFile: resolveDotenvFileProp(rawProps.dotenvFile),
     releaseMode: resolveReleaseModeProp(rawProps.releaseMode, process.env.POSTHOG_RELEASE_MODE),
   }
-  // Must register first: it inserts the projectBuildGradle mod key ahead of appBuildGradle,
-  // and expo evaluates mods in key-insertion order. Registering withAndroidPlugin first would
-  // make appBuildGradle run before projectBuildGradle, so `classpathPresent` would still be
-  // false and `apply plugin: "com.posthog.android"` would silently never be written.
   // includeSource is iOS-only, so on Android we only care whether upload is enabled.
   if (resolveNativeSymbolUpload(props.uploadNativeSymbols).enabled) {
     config = withAndroidNativeSymbolsPlugin(config)

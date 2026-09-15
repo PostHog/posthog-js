@@ -134,6 +134,7 @@
                 "packages/openfeature-web-provider/**",
                 "packages/react-native/**",
                 "packages/node/**",
+                "packages/rrweb/rrdom-nodejs/**",
                 "packages/web/**",
                 "packages/webpack-plugin/**",
                 "packages/rollup-plugin/**",

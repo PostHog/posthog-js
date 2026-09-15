@@ -23,7 +23,7 @@ export class StackFrame {
     this.columnNumber = obj.columnNumber;
   }
 
-  toString() {
+  toString(): string {
     const lineNumber = this.lineNumber || '';
     const columnNumber = this.columnNumber || '';
     if (this.functionName)
@@ -72,7 +72,7 @@ export const ErrorStackParser = {
     }
   },
   // Separate line and column numbers from a string of the form: (URI:Line:Column)
-  extractLocation: function (urlLike: string) {
+  extractLocation: function (urlLike: string): (string | undefined)[] {
     // Fail-fast but return locations like "(native)"
     if (urlLike.indexOf(':') === -1) {
       return [urlLike];
@@ -83,7 +83,7 @@ export const ErrorStackParser = {
     if (!parts) throw new Error(`Cannot parse given url: ${urlLike}`);
     return [parts[1], parts[2] || undefined, parts[3] || undefined];
   },
-  parseV8OrIE: function (error: { stack: string }) {
+  parseV8OrIE: function (error: { stack: string }): StackFrame[] {
     const filtered = error.stack.split('\n').filter(function (line) {
       return !!line.match(CHROME_IE_STACK_REGEXP);
     }, this);
@@ -125,7 +125,7 @@ export const ErrorStackParser = {
       });
     }, this);
   },
-  parseFFOrSafari: function (error: { stack: string }) {
+  parseFFOrSafari: function (error: { stack: string }): StackFrame[] {
     const filtered = error.stack.split('\n').filter(function (line) {
       return !line.match(SAFARI_NATIVE_CODE_REGEXP);
     }, this);
@@ -178,7 +178,7 @@ export const ErrorStackParser = {
       return this.parseOpera11(e as { stack: string });
     }
   },
-  parseOpera9: function (e: { message: string }) {
+  parseOpera9: function (e: { message: string }): StackFrame[] {
     const lineRE = /Line (\d+).*script (?:in )?(\S+)/i;
     const lines = e.message.split('\n');
     const result = [];
@@ -197,7 +197,7 @@ export const ErrorStackParser = {
 
     return result;
   },
-  parseOpera10: function (e: { stacktrace: string }) {
+  parseOpera10: function (e: { stacktrace: string }): StackFrame[] {
     const lineRE = /Line (\d+).*script (?:in )?(\S+)(?:: In function (\S+))?$/i;
     const lines = e.stacktrace.split('\n');
     const result = [];
@@ -218,7 +218,7 @@ export const ErrorStackParser = {
     return result;
   },
   // Opera 10.65+ Error.stack very similar to FF/Safari
-  parseOpera11: function (error: { stack: string }) {
+  parseOpera11: function (error: { stack: string }): StackFrame[] {
     const filtered = error.stack.split('\n').filter(function (line) {
       return (
         !!line.match(FIREFOX_SAFARI_STACK_REGEXP) &&

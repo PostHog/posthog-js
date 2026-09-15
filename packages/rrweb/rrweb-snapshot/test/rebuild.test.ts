@@ -106,6 +106,67 @@ describe('rebuild', function () {
     });
   });
 
+  describe('autocomplete', function () {
+    const build = (tagName: string, attributes: Record<string, string> = {}) =>
+      buildNodeWithSN(
+        {
+          id: 1,
+          tagName,
+          type: NodeType.Element,
+          attributes,
+          childNodes: [],
+        },
+        {
+          doc: document,
+          mirror,
+          hackCss: false,
+          cache,
+        },
+      ) as HTMLElement;
+
+    it('disables autofill on rebuilt text entry fields', function () {
+      expect(build('input').getAttribute('autocomplete')).toBe('off');
+      expect(build('textarea').getAttribute('autocomplete')).toBe('off');
+    });
+
+    it('overrides the recorded autocomplete value', function () {
+      const node = build('input', { autocomplete: 'email' });
+      expect(node.getAttribute('autocomplete')).toBe('off');
+    });
+
+    it('leaves other elements alone', function () {
+      expect(build('div').hasAttribute('autocomplete')).toBe(false);
+      expect(build('select').hasAttribute('autocomplete')).toBe(false);
+    });
+  });
+
+  describe('script placeholder', function () {
+    it('rebuilds a <script> as an empty <noscript> so the placeholder never renders', function () {
+      const node = buildNodeWithSN(
+        {
+          id: 1,
+          tagName: 'script',
+          type: NodeType.Element,
+          attributes: {},
+          childNodes: [
+            {
+              id: 2,
+              type: NodeType.Text,
+              textContent: 'SCRIPT_PLACEHOLDER',
+            },
+          ],
+        },
+        { doc: document, mirror, hackCss: false, cache },
+      ) as HTMLElement;
+
+      // The script is rebuilt as <noscript> so it cannot execute, and its
+      // placeholder text is dropped so nothing renders in any context (including
+      // shadow roots, which the document-scoped replay style cannot reach).
+      expect(node.tagName).toBe('NOSCRIPT');
+      expect(node.textContent).toBe('');
+    });
+  });
+
   describe('re-add of an existing node id', function () {
     it('detaches the old node when the meta changed, so it does not duplicate', function () {
       const parent = buildNodeWithSN(

@@ -68,7 +68,7 @@ export default class CrossOriginIframeMirror
     );
   }
 
-  reset(iframe?: HTMLIFrameElement) {
+  reset(iframe?: HTMLIFrameElement): void {
     if (!iframe) {
       this.iframeRemoteIdToLocalIdMap = new WeakMap();
       this.iframeLocalIdToRemoteIdMap = new WeakMap();

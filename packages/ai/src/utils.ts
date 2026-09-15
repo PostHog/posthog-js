@@ -72,7 +72,12 @@ export function toContentString(content: unknown): string {
       return JSON.stringify(content)
     } catch {
       // Fallback for circular refs, BigInt, or objects with throwing toJSON
-      return String(content)
+      try {
+        return String(content)
+      } catch {
+        // Custom coercion can throw, and null-prototype objects may have none.
+        return ''
+      }
     }
   }
   return String(content)
@@ -133,7 +138,6 @@ export const getModelParams = (
     'language',
     'response_format',
     'timestamp_granularities',
-    'service_tier',
   ] as const
 
   for (const key of paramKeys) {
@@ -141,27 +145,12 @@ export const getModelParams = (
       modelParams[key] = (params as any)[key]
     }
   }
+  // Only the tier the provider served may appear here: a requested tier can be refused,
+  // and cost processing prices from this value.
   if (responseServiceTier != null) {
     modelParams.service_tier = responseServiceTier
   }
   return modelParams
-}
-
-/**
- * Helper to format responses (non-streaming) for consumption
- */
-export const formatResponse = (response: any, provider: string, client?: FullAiCaptureGate): FormattedMessage[] => {
-  if (!response) {
-    return []
-  }
-  if (provider === 'anthropic') {
-    return formatResponseAnthropic(response)
-  } else if (provider === 'openai') {
-    return formatResponseOpenAI(response)
-  } else if (provider === 'gemini') {
-    return formatResponseGemini(response, client)
-  }
-  return []
 }
 
 export const formatResponseAnthropic = (response: any): FormattedMessage[] => {

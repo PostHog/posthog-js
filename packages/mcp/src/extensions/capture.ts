@@ -81,8 +81,8 @@ export function captureEvent(
     response: eventInput.response,
     userIntent: eventInput.userIntent,
     userIntentSource: eventInput.userIntentSource,
-    // Self-reported per request (`captureModel`), so like the header-borne
-    // fields above there is deliberately no sessionInfo fallback.
+    // Resolved per request (`captureModel`), so like the header-borne fields
+    // above there is deliberately no sessionInfo fallback.
     llmModel: eventInput.llmModel,
     llmModelSource: eventInput.llmModelSource,
     isError: eventInput.isError,

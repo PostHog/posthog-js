@@ -1,7 +1,10 @@
+// This generator runs directly in Node as a CommonJS entrypoint.
+/* oxlint-disable typescript/no-require-imports */
 const path = require('path')
 const fs = require('fs')
 const { generateApiSpecs } = require('../../../scripts/docs/parser')
 const { HOG_REF } = require('../../../scripts/docs/constants')
+/* oxlint-enable typescript/no-require-imports */
 
 // Read package.json to get version
 const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'))
@@ -60,7 +63,7 @@ const latestOutput = { ...output, info: { ...output.info, version: '<version>' }
 
 // Always update the rolling public API reference used by CI and docs previews.
 const latestPath = path.resolve(__dirname, '../references/posthog-react-native-references-latest.json')
-fs.writeFileSync(latestPath, JSON.stringify(latestOutput, null, 2))
+fs.writeFileSync(latestPath, JSON.stringify(latestOutput, null, 2) + '\n')
 
 // Versioned references are release artifacts. Avoid writing them during normal generation
 // so PRs don't accidentally commit package-version-specific reference files.
