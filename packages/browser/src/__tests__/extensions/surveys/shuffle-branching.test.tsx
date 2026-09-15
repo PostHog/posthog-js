@@ -65,13 +65,8 @@ describe('Surveys: shuffled questions', () => {
         mockedGetInProgressSurveyState.mockReturnValue(null)
         HTMLFormElement.prototype.submit = vi.fn()
 
-        // Sort keys 5, 1, 9 shuffle [q1, q2, q3] into [q2, q1, q3].
-        randomSpy = vi
-            .spyOn(Math, 'random')
-            .mockReturnValueOnce(0.5)
-            .mockReturnValueOnce(0.1)
-            .mockReturnValueOnce(0.9)
-            .mockReturnValue(0)
+        // Keep q3 in place, then swap q1 and q2 with Fisher-Yates.
+        randomSpy = vi.spyOn(Math, 'random').mockReturnValueOnce(0.999999).mockReturnValueOnce(0).mockReturnValue(0)
     })
 
     afterEach(() => {

@@ -263,8 +263,6 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
 //   return shuffled
 // }
 
-export { getDisplayOrderChoices } from '@posthog/core/surveys'
-
 /**
  * Get the rating bucket for a response value based on the scale
  * @param responseValue The numeric rating value

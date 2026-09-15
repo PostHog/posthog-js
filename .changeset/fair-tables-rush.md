@@ -4,4 +4,4 @@
 'posthog-react-native': patch
 ---
 
-Share survey choice shuffling between web and React Native through surveys core, preserving Other-last behavior and avoiding mutation of configured choices.
+Share survey choice and question shuffling between web and React Native through surveys core. Use Fisher-Yates for web questions, preserve Other-last choice ordering, and avoid mutating configured choices.

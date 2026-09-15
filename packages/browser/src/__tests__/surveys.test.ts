@@ -1160,10 +1160,18 @@ describe('surveys', () => {
             )
         })
 
-        it('should shuffle questions if shuffleQuestions is true', () => {
-            expect(surveyWithShufflingQuestions.questions).not.toEqual(
-                getDisplayOrderQuestions(surveyWithShufflingQuestions)
-            )
+        it('shuffles questions with Fisher-Yates without mutating configured order', () => {
+            const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+            const questions = [...surveyWithShufflingQuestions.questions]
+            try {
+                expect(getDisplayOrderQuestions(surveyWithShufflingQuestions)).toEqual([
+                    ...questions.slice(1),
+                    questions[0],
+                ])
+                expect(surveyWithShufflingQuestions.questions).toEqual(questions)
+            } finally {
+                random.mockRestore()
+            }
         })
 
         const inProgress = (questionOrder?: string[]) =>

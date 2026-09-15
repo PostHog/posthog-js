@@ -1,4 +1,5 @@
 import type { MultipleSurveyQuestion } from '../types'
+import { isNull } from '../utils/type-utils'
 
 /**
  * Fisher-Yates shuffle without mutating the input array.
@@ -30,10 +31,10 @@ export const getDisplayOrderChoices = (
   }
 
   const choices = [...question.choices]
-  const openEndedChoice = question.hasOpenChoice ? choices.pop() : undefined
+  const openEndedChoice = question.hasOpenChoice ? (choices.pop() ?? null) : null
   const shuffledChoices = reverseIfUnshuffled(choices, shuffle(choices))
 
-  if (openEndedChoice !== undefined) {
+  if (!isNull(openEndedChoice)) {
     shuffledChoices.push(openEndedChoice)
   }
 

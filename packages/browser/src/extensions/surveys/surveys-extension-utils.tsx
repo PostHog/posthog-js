@@ -27,6 +27,7 @@ import {
     canSurveyActivateRepeatedly,
     getSurveyResponseKey,
     surveyHasResponses,
+    shuffle,
 } from '@posthog/core/surveys'
 
 import { propertyComparisons } from '@posthog/browser-common/utils/property-utils'
@@ -548,15 +549,6 @@ export const sendSurveyAbandonedEvent = (survey: Survey, posthog?: PostHog) => {
     })
 }
 
-// Use the Fisher-yates algorithm to shuffle this array
-// https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
-export const shuffle = (array: any[]) => {
-    return array
-        .map((a) => ({ sort: Math.floor(Math.random() * 10), value: a }))
-        .sort((a, b) => a.sort - b.sort)
-        .map((a) => a.value)
-}
-
 const reverseIfUnshuffled = (unshuffled: any[], shuffled: any[]): any[] => {
     if (unshuffled.length === shuffled.length && unshuffled.every((val, index) => val === shuffled[index])) {
         return shuffled.reverse()
@@ -565,7 +557,7 @@ const reverseIfUnshuffled = (unshuffled: any[], shuffled: any[]): any[] => {
     return shuffled
 }
 
-export { getDisplayOrderChoices } from '@posthog/core/surveys'
+export { getDisplayOrderChoices, shuffle } from '@posthog/core/surveys'
 
 const hasBranching = (survey: Survey): boolean => survey.questions.some((question) => !!question.branching?.type)
 
