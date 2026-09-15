@@ -3,4 +3,4 @@
 '@posthog/core': patch
 ---
 
-Declare `evaluation_runtime: "server"` on `/flags` requests from posthog-node and posthog-edge, so the server filters flags by a stated runtime instead of inferring one from the `User-Agent` and browser-ish headers.
+Server-side feature flags now resolve in posthog-node and posthog-edge even when a proxy rewrites the request's `User-Agent`. Flags restricted to the `client` runtime now resolve to `undefined` in these SDKs, where a rewritten `User-Agent` previously let them through.
