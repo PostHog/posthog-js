@@ -1,5 +1,14 @@
 # posthog-node
 
+## 5.52.3
+
+### Patch Changes
+
+- [#4941](https://github.com/PostHog/posthog-js/pull/4941) [`07c1045`](https://github.com/PostHog/posthog-js/commit/07c10451f3068abb164d8036b0731a391574455f) Thanks [@marandaneto](https://github.com/marandaneto)! - Capture causes and AggregateError members with relationship metadata and individual stacks, limiting output to 50 entries and 1,000 member inspections.
+  (2026-09-15)
+- Updated dependencies [[`07c1045`](https://github.com/PostHog/posthog-js/commit/07c10451f3068abb164d8036b0731a391574455f)]:
+  - @posthog/core@1.54.1
+
 ## 5.52.2
 
 ### Patch Changes

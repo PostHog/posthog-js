@@ -1,5 +1,23 @@
 # posthog-js
 
+## 1.433.4
+
+### Patch Changes
+
+- [#4941](https://github.com/PostHog/posthog-js/pull/4941) [`07c1045`](https://github.com/PostHog/posthog-js/commit/07c10451f3068abb164d8036b0731a391574455f) Thanks [@marandaneto](https://github.com/marandaneto)! - Capture causes and AggregateError members with relationship metadata and individual stacks, limiting output to 50 entries and 1,000 member inspections.
+  (2026-09-15)
+
+- [#4898](https://github.com/PostHog/posthog-js/pull/4898) [`372afba`](https://github.com/PostHog/posthog-js/commit/372afba7ae39f219fe91a85a23b940f87af7a57b) Thanks [@posthog](https://github.com/apps/posthog)! - Contain a throw from a third-party patched `AbortController.abort()` when our own fetch timeout fires, so it is retried instead of escaping as an uncaught error, and report a single outcome per request.
+  (2026-09-15)
+
+- [#4910](https://github.com/PostHog/posthog-js/pull/4910) [`38b61f9`](https://github.com/PostHog/posthog-js/commit/38b61f9fd5a2b89cfd2cbaf6821b7fce763d1587) Thanks [@posthog](https://github.com/apps/posthog)! - Keep the end of a session recording when one replay event is too large to stringify: that event is dropped and the rest of the buffer still ships, instead of the size estimate throwing and stopping the unload flush.
+  (2026-09-15)
+
+- [#4909](https://github.com/PostHog/posthog-js/pull/4909) [`5d4f1f7`](https://github.com/PostHog/posthog-js/commit/5d4f1f758593dba7fb930dca813ecc76197fe5d7) Thanks [@posthog](https://github.com/apps/posthog)! - Keep the session recording observers that started when one of them fails to initialize, and report the failed observers in the recorder debug properties.
+  (2026-09-15)
+- Updated dependencies [[`07c1045`](https://github.com/PostHog/posthog-js/commit/07c10451f3068abb164d8036b0731a391574455f)]:
+  - @posthog/core@1.54.1
+
 ## 1.433.3
 
 ### Patch Changes
