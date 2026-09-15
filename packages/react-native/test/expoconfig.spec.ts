@@ -1047,6 +1047,59 @@ describe('updateMainActivityNewIntentOverride', () => {
     expect(console.warn).not.toHaveBeenCalled()
   })
 
+  it('ignores a commented-out class MainActivity above the real one', () => {
+    const source = [
+      '// class MainActivity : ReactActivity() { }',
+      'class MainActivity : ReactActivity() {',
+      '  override fun onNewIntent(intent: android.content.Intent) {',
+      '    super.onNewIntent(intent)',
+      '  }',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it('patches when onNewIntent appears only inside a comment', () => {
+    const source = [
+      'class MainActivity : ReactActivity() {',
+      '  // override fun onNewIntent(intent: Intent) {}',
+      '  override fun getMainComponentName(): String = "main"',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toContain('setIntent(intent)')
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('refuses a file whose block comment never closes', () => {
+    const source = ['class MainActivity : ReactActivity() {', '  /* never closed', '  fun x() {}', ''].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find the MainActivity class body'))
+  })
+
+  it('leaves a Java file whose text block contains a brace', () => {
+    const source = [
+      'class MainActivity extends ReactActivity {',
+      '  String s = """',
+      '    }',
+      '    """;',
+      '  @Override',
+      '  public void onNewIntent(android.content.Intent intent) {',
+      '    super.onNewIntent(intent);',
+      '  }',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'java', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
   it('leaves a Kotlin file whose existing override sits below a nested block comment', () => {
     const source = [
       'import com.facebook.react.ReactActivity',

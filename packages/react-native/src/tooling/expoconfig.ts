@@ -378,20 +378,94 @@ function matchingBraceIndexInSource(s: string, openBraceIndex: number, language:
   return -1
 }
 
+// A copy of `source` with the inside of every comment and string/char literal replaced by spaces,
+// keeping length and line breaks so indexes still line up with the original. One pass, so the class
+// declaration, the brace scan and the existing-override check all agree on what is code: a
+// commented-out `class MainActivity`, a `"}"` field, or an `onNewIntent` inside a comment are all
+// invisible to every one of them. Kotlin nests block comments and Java does not.
+function maskCommentsAndLiterals(source: string, language: string): string {
+  const out = source.split('')
+  const blank = (from: number, to: number) => {
+    for (let j = from; j < to && j < out.length; j++) {
+      if (out[j] !== '\n') {
+        out[j] = ' '
+      }
+    }
+  }
+
+  let i = 0
+  while (i < source.length) {
+    const c = source[i]
+    if (c === '/' && source[i + 1] === '/') {
+      const end = source.indexOf('\n', i)
+      const stop = end === -1 ? source.length : end
+      blank(i, stop)
+      i = stop
+      continue
+    }
+    if (c === '/' && source[i + 1] === '*') {
+      let depth = 1
+      let j = i + 2
+      while (j < source.length && depth > 0) {
+        if (language === 'kt' && source[j] === '/' && source[j + 1] === '*') {
+          depth++
+          j += 2
+          continue
+        }
+        if (source[j] === '*' && source[j + 1] === '/') {
+          depth--
+          j += 2
+          continue
+        }
+        j++
+      }
+      blank(i, j)
+      i = j
+      continue
+    }
+    if (c === '"' || c === "'") {
+      const end = literalEnd(source, i, language)
+      if (end === -1) {
+        // Unterminated literal: blank the rest so nothing after it reads as code.
+        blank(i, source.length)
+        return out.join('')
+      }
+      blank(i, end)
+      i = end
+      continue
+    }
+    i++
+  }
+  return out.join('')
+}
+
 // The span of MainActivity's body, or undefined when the file does not look like the templates we
 // patch: a supertype list is all we expect between the class name and the opening brace.
 function mainActivityBody(contents: string, language: string): { open: number; close: number } | undefined {
-  const declaration = /\bclass\s+MainActivity\b/.exec(contents)
+  const code = maskCommentsAndLiterals(contents, language)
+  const declaration = /\bclass\s+MainActivity\b/.exec(code)
   if (!declaration) {
     return undefined
   }
   const searchFrom = declaration.index + declaration[0].length
-  const open = contents.indexOf('{', searchFrom)
-  if (open === -1 || !/^[^;{}]*$/.test(contents.slice(searchFrom, open))) {
+  const open = code.indexOf('{', searchFrom)
+  if (open === -1 || !/^[^;{}]*$/.test(code.slice(searchFrom, open))) {
     return undefined
   }
   // Unbalanced braces mean we cannot tell where the body ends, so the file is not ours to edit.
-  const close = matchingBraceIndexInSource(contents, open, language)
+  let depth = 0
+  let close = -1
+  for (let i = open; i < code.length; i++) {
+    if (code[i] === '{') {
+      depth++
+    } else if (code[i] === '}') {
+      depth--
+      if (depth === 0) {
+        close = i
+        break
+      }
+    }
+  }
   return close === -1 ? undefined : { open, close }
 }
 
@@ -421,7 +495,8 @@ export function updateMainActivityNewIntentOverride(contents: string, language: 
   // Scoped to MainActivity's own body, and matching a declaration rather than the bare token: an
   // onNewIntent on a helper class in the same file, or named in a comment or a string, must not
   // turn the fix off — but every real override of it in either language matches.
-  if (/\b(fun|void)\s+onNewIntent\s*\(/.test(withoutManagedBlock.slice(body.open, body.close))) {
+  const codeOnly = maskCommentsAndLiterals(withoutManagedBlock, language)
+  if (/\b(fun|void)\s+onNewIntent\s*\(/.test(codeOnly.slice(body.open, body.close))) {
     console.warn(
       '[posthog-react-native] MainActivity already overrides onNewIntent; leaving it alone. ' +
         'Add `setIntent(intent)` as its first statement so a notification tap that arrives before ' +
