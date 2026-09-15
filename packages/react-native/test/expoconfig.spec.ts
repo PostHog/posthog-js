@@ -1047,6 +1047,42 @@ describe('updateMainActivityNewIntentOverride', () => {
     expect(console.warn).not.toHaveBeenCalled()
   })
 
+  it('leaves a Kotlin file whose existing override sits below a nested block comment', () => {
+    const source = [
+      'import com.facebook.react.ReactActivity',
+      'class MainActivity : ReactActivity() {',
+      '  /*',
+      '  fun retiredHandler() {',
+      '    /* retired implementation */',
+      '  }',
+      '  */',
+      '  override fun onNewIntent(intent: android.content.Intent) {',
+      '    super.onNewIntent(intent)',
+      '  }',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it('treats a Java block comment as ending at the first close', () => {
+    const source = [
+      'class MainActivity extends ReactActivity {',
+      '  /* outer /* inner */',
+      '  @Override',
+      '  public void onNewIntent(android.content.Intent intent) {',
+      '    super.onNewIntent(intent);',
+      '  }',
+      '}',
+      '',
+    ].join('\n')
+
+    expect(updateMainActivityNewIntentOverride(source, 'java', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
   it('patches MainActivity when a later class in the same file overrides onNewIntent', () => {
     const source = `${kotlinMainActivity}\nclass Helper {\n  fun onNewIntent(intent: Intent) {}\n}\n`
     const result = updateMainActivityNewIntentOverride(source, 'kt', true)

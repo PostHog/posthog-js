@@ -335,11 +335,26 @@ function matchingBraceIndexInSource(s: string, openBraceIndex: number, language:
       continue
     }
     if (c === '/' && s[i + 1] === '*') {
-      const end = s.indexOf('*/', i + 2)
-      if (end === -1) {
+      // Kotlin nests block comments, Java does not: taking the first `*/` in Kotlin would end the
+      // comment early and let a commented-out `}` close the class, hiding a real override below it.
+      let depthOfComment = 1
+      i += 2
+      while (i < s.length && depthOfComment > 0) {
+        if (language === 'kt' && s[i] === '/' && s[i + 1] === '*') {
+          depthOfComment++
+          i += 2
+          continue
+        }
+        if (s[i] === '*' && s[i + 1] === '/') {
+          depthOfComment--
+          i += 2
+          continue
+        }
+        i++
+      }
+      if (depthOfComment > 0) {
         return -1
       }
-      i = end + 2
       continue
     }
     if (c === '"' || c === "'") {
