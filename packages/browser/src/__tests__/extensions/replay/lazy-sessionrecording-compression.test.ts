@@ -427,7 +427,9 @@ describe('LazyLoadedSessionRecording compression paths', () => {
                 })
                 const { RequestQueue } = await import('../../../request-queue')
                 const { request } = await import('../../../request')
-                const queue = new RequestQueue(request)
+                const queue = new RequestQueue((req, transportOverride) => {
+                    request({ ...req, transport: transportOverride ?? req.transport })
+                })
                 posthog.capture.mockImplementation((event: string, properties: any, options: any) => {
                     queue.enqueue({
                         url: options._url,
