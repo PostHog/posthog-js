@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.12.1
+
+### Patch Changes
+
+- [#4961](https://github.com/PostHog/posthog-js/pull/4961) [`8fb9367`](https://github.com/PostHog/posthog-js/commit/8fb9367d853d6c87cb6eb90eb0f79bbbc64afe88) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - Fix `prompts.getAll` returning an empty result instead of an error on PostHog servers that do not support fetching prompts by label.
+  (2026-09-15)
+
 ## 8.12.0
 
 ### Minor Changes
