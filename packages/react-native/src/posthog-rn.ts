@@ -237,8 +237,9 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * The native SDK builds and sends this event, so JS `before_send` never sees it.
    *
    * On iOS a tap can reach the app before your JS runs, so the SDK installs a hook at launch to
-   * catch a tap that cold-launches the app. Two switches gate capture there, and `false` on
-   * either one means no `$push_notification_opened` is ever sent:
+   * catch a tap that cold-launches the app. Two switches gate automatic capture there, and
+   * `false` on either one means the SDK sends no `$push_notification_opened` of its own (an
+   * explicit {@link PostHog.capturePushNotificationOpened} call still captures):
    *
    * - This option set to `false` turns capture off when `setup()` runs and releases the launch
    *   hook, dropping the tap it was holding. The hook is still installed for the window between
