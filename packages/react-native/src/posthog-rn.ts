@@ -246,10 +246,24 @@ export interface PostHogOptions extends PostHogCoreOptions {
    *
    * Fires for pushes from any provider, not just PostHog's — but title and body are
    * attached only for PostHog's own, so third-party notification text never reaches
-   * analytics. Android sees cold starts only; call
-   * {@link PostHog.capturePushNotificationOpened} for the taps it misses.
+   * analytics. On Android, taps that launch the app and taps while it's running are both
+   * captured from `@posthog/react-native-plugin` 2.6.0 (earlier versions: cold starts
+   * only); call {@link PostHog.capturePushNotificationOpened} for the taps it misses.
    *
    * The native SDK builds and sends this event, so JS `before_send` never sees it.
+   *
+   * On iOS a tap can reach the app before your JS runs, so the SDK installs a hook at launch to
+   * catch a tap that cold-launches the app. Two switches gate automatic capture there, and
+   * `false` on either one means the SDK sends no `$push_notification_opened` of its own (an
+   * explicit {@link PostHog.capturePushNotificationOpened} call still captures):
+   *
+   * - This option set to `false` turns capture off when `setup()` runs and releases the launch
+   *   hook, dropping the tap it was holding. The hook is still installed for the window between
+   *   launch and `setup()`.
+   * - `com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED` set to `false` in `Info.plist`
+   *   (Expo: `ios.infoPlist`) skips the launch hook entirely, so nothing is installed before your
+   *   JS runs, and forces capture off at `setup()` even when this option is `true`. It is the
+   *   same key posthog-flutter reads.
    *
    * Not supported on web.
    *
@@ -2331,8 +2345,10 @@ export class PostHog extends PostHogCore {
    * Requires `@posthog/react-native-plugin`.
    *
    * Only for taps {@link PostHogOptions.capturePushNotificationOpened} cannot see itself —
-   * local notifications, plus warm-start and foreground taps on Android — or the tap is
-   * counted twice.
+   * local notifications, plus Android taps while the app is running if
+   * `@posthog/react-native-plugin` is older than 2.6.0. A notification PostHog sent is still
+   * counted once when both paths report it (same `posthog.invocation_id` and action within
+   * five minutes); one from another provider is counted twice.
    *
    * Keys of `payload`'s `posthog` entry become `$notification_<key>` properties. Leave
    * `action` unset for a plain tap; `subtitle` is iOS only. The native SDK builds and

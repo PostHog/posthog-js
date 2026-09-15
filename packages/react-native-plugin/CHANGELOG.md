@@ -1,5 +1,22 @@
 # @posthog/react-native-plugin
 
+## 2.9.2
+
+### Patch Changes
+
+- [#4921](https://github.com/PostHog/posthog-js/pull/4921) [`197a212`](https://github.com/PostHog/posthog-js/commit/197a21252befe38dcd652c3fc49c5b30710adf35) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - iOS: a notification tap that launched the app is no longer captured as `$push_notification_opened` while the JS client is opted out, even if an earlier launch had opted the native SDK in.
+  (2026-09-15)
+
+- [#4921](https://github.com/PostHog/posthog-js/pull/4921) [`197a212`](https://github.com/PostHog/posthog-js/commit/197a21252befe38dcd652c3fc49c5b30710adf35) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Capture `$push_notification_opened` on iOS when a notification tap cold-launches the app, or set `com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED` to `false` in `Info.plist` to opt out before any PostHog code runs, as in posthog-flutter.
+  (2026-09-15)
+
+## 2.9.1
+
+### Patch Changes
+
+- [#4919](https://github.com/PostHog/posthog-js/pull/4919) [`61ef6a6`](https://github.com/PostHog/posthog-js/commit/61ef6a6f2d7e8387d7c316fbd88fdf447fd7de8d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Count a PostHog notification tap once when both `capturePushNotificationOpened` and automatic capture report it, using the dedupe added in `posthog-android` 3.65.0 and `posthog-ios` 3.75.0. Update the native SDKs to `posthog-android` 3.65.2 and `posthog-ios` 3.75.2.
+  (2026-09-15)
+
 ## 2.9.0
 
 ### Minor Changes
@@ -32,7 +49,7 @@
 
 ### Minor Changes
 
-- [#4858](https://github.com/PostHog/posthog-js/pull/4858) [`233f501`](https://github.com/PostHog/posthog-js/commit/233f501c039ca254dee1112596cff9c1026dde62) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Capture `$push_notification_opened` on Android when a notification is tapped while the app is already running, not just on a cold start.
+- [#4858](https://github.com/PostHog/posthog-js/pull/4858) [`233f501`](https://github.com/PostHog/posthog-js/commit/233f501c039ca254dee1112596cff9c1026dde62) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Capture `$push_notification_opened` on Android when a notification is tapped while the app is already running, not just on a cold start. Remove any manual `capturePushNotificationOpened` call you wired to `messaging().onNotificationOpenedApp` for Android: that tap is now captured automatically, so the manual call counts it a second time.
   (2026-09-10)
 
 ## 2.5.2

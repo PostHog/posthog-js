@@ -47,6 +47,50 @@ private func isReactNativeFatalJsError(_ event: PostHogEvent) -> Bool {
     }
 }
 
+/// Carries the distinct id and consent JS holds into `beforeSend` for the length of
+/// `PostHogSDK.setup(_:)`.
+///
+/// `setup()` installs the push-open integration, which replays a tap that cold-launched the app
+/// synchronously — before `setIdentify` can mirror that id into native storage, so the replayed
+/// event would carry whatever identity the previous launch left behind, and before the JS layer
+/// re-asserts its consent: the native SDK prefers the opt-out it persisted itself, so after an
+/// earlier launch opted in, `config.optOut` no longer says what JS said and the replay is captured
+/// for a user JS considers opted out. posthog-ios offers no seam for either earlier (its storage
+/// manager is created inside `setup()`, with an internal initializer, and disabling the integration
+/// to delay the replay discards the held tap instead of deferring it) — so both are applied on the
+/// way out instead: the id is stamped, and a tap JS denied is dropped, consumed so a later opt-in
+/// cannot resurrect it. Cleared once `setup()` returns, after which every event resolves its
+/// identity and consent from native state as before.
+private final class SetupWindow {
+    private let lock = NSLock()
+    private var distinctId: String?
+    private var jsOptedOut: Bool
+
+    init(distinctId: String, jsOptedOut: Bool) {
+        self.distinctId = distinctId.isEmpty ? nil : distinctId
+        self.jsOptedOut = jsOptedOut
+    }
+
+    var pendingDistinctId: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return distinctId
+    }
+
+    var dropsPushOpens: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return jsOptedOut
+    }
+
+    func settled() {
+        lock.lock()
+        defer { lock.unlock() }
+        distinctId = nil
+        jsOptedOut = false
+    }
+}
+
 // A nil identity token sends the request unauthenticated, which a project requiring
 // identity verification rejects server-side. Log the reason so that failure is greppable
 // and distinct from a host that deliberately returned nil.
@@ -68,6 +112,23 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
     // Main-thread confined, like the rest of the identity-request bookkeeping below.
     private var hasPushListeners = false
     private var pushIdentityCompletions: [String: (String?) -> Void] = [:]
+
+    #if os(iOS)
+        /// The one opt-out that reaches both halves of push-open capture, named and read exactly as in
+        /// posthog-flutter: `false` skips the launch hook below *and* forces the native config flag off
+        /// in setup(), so the JS flag can't re-enable what the plist turned off.
+        private static var plistCapturePushNotificationOpened: Bool {
+            Bundle.main.object(forInfoDictionaryKey: "com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED") as? Bool ?? true
+        }
+
+        /// Runs at launch, before JS config exists, so the Info.plist key is the only way to skip it.
+        @objc static func prewarmPushNotificationOpenCapture() {
+            guard plistCapturePushNotificationOpened else { return }
+            if #available(iOS 14.0, *) {
+                PostHogSDK.prewarmPushNotificationOpenCapture()
+            }
+        }
+    #endif
 
     public override func supportedEvents() -> [String]! {
         [PosthogReactNativePlugin.pushIdentityEvent]
@@ -183,10 +244,31 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             }
         #endif
 
+        let distinctId = sdkOptions["distinctId"] as? String ?? ""
+        let anonymousId = sdkOptions["anonymousId"] as? String ?? ""
+        let jsOptedOut = sdkOptions["optOut"] as? Bool ?? false
+        let setupWindow = SetupWindow(distinctId: distinctId, jsOptedOut: jsOptedOut)
+        // Every exit below is past the point where native storage carries the ids, or past a
+        // failure that left the SDK disabled, so no path can leave the window armed.
+        defer { setupWindow.settled() }
+
         // React Native rethrows fatal JS errors natively (RCTFatalException / ExceptionsManager).
         // The JS layer already captured them, so drop the native duplicate.
         config.setBeforeSend { event in
-            isReactNativeFatalJsError(event) ? nil : event
+            if isReactNativeFatalJsError(event) {
+                return nil
+            }
+            // Only the replayed tap. `setup()` also replays the previous launch's crash report,
+            // and that `$exception` carries the distinct id recorded at crash time, which stands.
+            if event.event == "$push_notification_opened" {
+                if setupWindow.dropsPushOpens {
+                    return nil
+                }
+                if let distinctId = setupWindow.pendingDistinctId {
+                    event.distinctId = distinctId
+                }
+            }
+            return event
         }
 
         // Surveys and session replay are iOS-only in posthog-ios, so the APIs below
@@ -238,15 +320,12 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             }
         #endif
 
-        let distinctId = sdkOptions["distinctId"] as? String ?? ""
-        let anonymousId = sdkOptions["anonymousId"] as? String ?? ""
-
         let sdkVersion = sdkOptions["sdkVersion"] as? String ?? ""
 
         let flushAt = sdkOptions["flushAt"] as? Int ?? 20
         config.flushAt = flushAt
 
-        config.optOut = sdkOptions["optOut"] as? Bool ?? false
+        config.optOut = jsOptedOut
         // JS owns flags; it tells us when the native preload would be a duplicate. posthog-ios
         // has no remoteConfig switch to mirror — it deprecated the option and always loads.
         config.preloadFeatureFlags = sdkOptions["preloadFeatureFlags"] as? Bool ?? true
@@ -271,6 +350,13 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         if let capturePushOpened = pushConfig["capturePushNotificationOpened"] as? Bool {
             config.capturePushNotificationOpened = capturePushOpened
         }
+        #if os(iOS)
+            // Only ever turns capture off: the plist is the app's build-time kill switch, so it wins
+            // over the JS flag, while a plist `true` leaves a JS opt-out alone.
+            if !PosthogReactNativePlugin.plistCapturePushNotificationOpened {
+                config.capturePushNotificationOpened = false
+            }
+        #endif
 
         // Installed only when JS asked for it: an uninvited bridging provider would change
         // how the native SDK handles a 401 on the subscription call.
