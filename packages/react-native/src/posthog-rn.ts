@@ -51,6 +51,12 @@ import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativePlugin, OptionalReactNativePluginVersion } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
 import { getExceptionContext } from './error-tracking/exception-context'
+import {
+  appendFatalJournalIngested,
+  entryToEventProperties,
+  hasFatalJournalIngested,
+  parseFatalJournalEntry,
+} from './error-tracking/journal'
 
 export { PostHogPersistedProperty }
 
@@ -297,6 +303,10 @@ export class PostHog extends PostHogCore {
   // Event names that gate session replay (remote `sessionRecording.eventTriggers`). Cached in
   // memory so the capture hot path never reads storage. Empty when replay is off or unconfigured.
   private _sessionReplayEventTriggers: string[] = []
+  // Set by the fatal-journal recovery path; consumed and cleared on the next enqueue().
+  // `distinctId` lives on its own field because capture() reads it before enrichProperties.
+  private _fatalJournalOverride?: { $session_id?: string; $device_id?: string }
+  private _fatalJournalDistinctIdOverride?: string
   private _disableSurveys: boolean
   private _errorTracking: ErrorTracking
   private _logs: PostHogLogs
@@ -1378,6 +1388,11 @@ export class PostHog extends PostHogCore {
    * @returns The current user's distinct ID
    */
   getDistinctId(): string {
+    if (this._fatalJournalDistinctIdOverride !== undefined) {
+      const override = this._fatalJournalDistinctIdOverride
+      this._fatalJournalDistinctIdOverride = undefined
+      return override
+    }
     return super.getDistinctId()
   }
 
@@ -2016,22 +2031,64 @@ export class PostHog extends PostHogCore {
     additionalProperties: PostHogEventProperties = {},
     hint?: CoreErrorTracking.EventHint
   ): void {
+    const result = this.captureExceptionInternal(error, additionalProperties, hint)
+    if (!result) {
+      return
+    }
+    if (result.additionalProperties?.$exception_level === 'fatal') {
+      void this._eventsStorage.waitForPersist()
+      void this._logsStorage.waitForPersist()
+    }
+  }
+
+  /** @internal Forwards explicit PostHogCaptureOptions (uuid + timestamp) through capture(). */
+  captureExceptionInternal(
+    error: Error | unknown,
+    additionalProperties: PostHogEventProperties = {},
+    hint?: CoreErrorTracking.EventHint,
+    options?: PostHogCaptureOptions
+  ): { eventUuid: string; timestamp: string; additionalProperties: PostHogEventProperties } | null {
     const resolvedHint: CoreErrorTracking.EventHint = hint ?? {
       mechanism: { handled: true, type: 'generic' },
       syntheticException: new Error('Synthetic Error'),
     }
 
-    additionalProperties = { ...getExceptionContext(), ...additionalProperties }
+    const merged: PostHogEventProperties = { ...getExceptionContext(), ...additionalProperties }
 
     // Attach the rolling exception-steps buffer (no-op if the caller already provided their own).
-    additionalProperties = this._errorTracking.attachExceptionSteps(additionalProperties)
+    const finalAdditional = this._errorTracking.attachExceptionSteps(merged)
 
-    super.captureException(error, additionalProperties, resolvedHint)
+    const captureOptions: PostHogCaptureOptions = {
+      ...(options || {}),
+      _originatedFromCaptureException: true,
+    }
 
-    // On a fatal crash, persist the exception + recent logs before the app may die.
-    if (additionalProperties?.$exception_level === 'fatal') {
-      void this._eventsStorage.waitForPersist()
-      void this._logsStorage.waitForPersist()
+    this.capture(
+      '$exception',
+      { ...this.buildExceptionProperties(error, resolvedHint), ...finalAdditional },
+      captureOptions
+    )
+
+    const eventUuid = captureOptions.uuid ?? ''
+    const timestamp = (captureOptions.timestamp ?? new Date()).toISOString()
+    return {
+      eventUuid,
+      timestamp,
+      additionalProperties: finalAdditional,
+    }
+  }
+
+  private buildExceptionProperties(
+    error: Error | unknown,
+    hint: CoreErrorTracking.EventHint
+  ): PostHogEventProperties {
+    try {
+      const builder = this.getErrorPropertiesBuilder()
+      const exceptionProperties = builder.buildFromUnknown(error, hint) as unknown as PostHogEventProperties
+      return exceptionProperties
+    } catch (e) {
+      this._logger.error('Error while building exception properties:', e)
+      return {}
     }
   }
 
@@ -2831,6 +2888,9 @@ export class PostHog extends PostHogCore {
         this._nativeErrorTrackingInitialized = true
         this._errorTracking.onNativeErrorTrackingReady()
         this._logger.info('Native error tracking started.')
+        // Recover any journal entries written by a crashed previous launch. No-ops when the
+        // native plugin predates the journal methods.
+        void this._drainFatalJournal()
       }
       if (enablePush) {
         this._pushNativeInitialized = true
@@ -2840,6 +2900,94 @@ export class PostHog extends PostHogCore {
     } catch (e) {
       this._logger.error(`Native PostHog plugin failed to start: ${e}.`)
       return false
+    }
+  }
+
+  private async _drainFatalJournal(): Promise<void> {
+    const get = OptionalReactNativePlugin?.getPendingFatalExceptions
+    const remove = OptionalReactNativePlugin?.removePendingFatalException
+    if (!get || !remove) {
+      return
+    }
+    let entries: Array<{ id: string; report: string }>
+    try {
+      entries = await get()
+    } catch (e) {
+      this._logger.warn(`Fatal journal drain failed (get): ${e}`)
+      return
+    }
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return
+    }
+    const ingested = this.getPersistedProperty<string[]>(PostHogPersistedProperty.FatalJournalIngested) || []
+    for (const { id, report } of entries) {
+      try {
+        await this._ingestFatalJournalEntry(id, report, ingested)
+      } catch (e) {
+        this._logger.warn(`Fatal journal entry ${id} ingest failed: ${e}`)
+      }
+    }
+  }
+
+  private async _ingestFatalJournalEntry(
+    id: string,
+    report: string,
+    ingestedSnapshot: string[]
+  ): Promise<void> {
+    const parsed = parseFatalJournalEntry(report)
+    if (!parsed) {
+      await this._removeJournalEntry(id)
+      return
+    }
+    if (ingestedSnapshot.includes(parsed.id) || hasFatalJournalIngested(ingestedSnapshot, parsed.id)) {
+      await this._removeJournalEntry(id)
+      return
+    }
+    if (this.optedOut) {
+      await this._removeJournalEntry(id)
+      return
+    }
+    const reconstructed = entryToEventProperties(parsed)
+    const captureOptions: PostHogCaptureOptions = {
+      uuid: reconstructed.uuid,
+      timestamp: new Date(reconstructed.timestamp),
+      _originatedFromCaptureException: true,
+    }
+    this._fatalJournalOverride = {
+      $session_id: parsed.sessionId || undefined,
+      $device_id: parsed.deviceId || undefined,
+    }
+    this._fatalJournalDistinctIdOverride = parsed.distinctId || ''
+    try {
+      this.capture('$exception', reconstructed.properties, captureOptions)
+    } finally {
+      this._fatalJournalOverride = undefined
+      this._fatalJournalDistinctIdOverride = undefined
+    }
+    try {
+      this._eventsStorage.persist()
+      await this._eventsStorage.waitForPersist()
+    } catch (e) {
+      this._logger.warn(`Fatal journal entry ${id} handoff failed: ${e}. Keeping entry on disk.`)
+      return
+    }
+    await this._removeJournalEntry(id)
+    const updated = appendFatalJournalIngested(
+      this.getPersistedProperty<string[]>(PostHogPersistedProperty.FatalJournalIngested) || [],
+      parsed.id
+    )
+    this.setPersistedProperty<string[]>(PostHogPersistedProperty.FatalJournalIngested, updated)
+  }
+
+  private async _removeJournalEntry(id: string): Promise<void> {
+    const remove = OptionalReactNativePlugin?.removePendingFatalException
+    if (!remove) {
+      return
+    }
+    try {
+      await remove(id)
+    } catch (e) {
+      this._logger.warn(`Fatal journal entry ${id} remove failed: ${e}`)
     }
   }
 
@@ -3001,6 +3149,16 @@ export class PostHog extends PostHogCore {
       this._maybeActivateEventTrigger(processed?.['event'])
     } catch (e) {
       this._logger.error(`Session replay event trigger check failed: ${e}.`)
+    }
+    if (processed && this._fatalJournalOverride) {
+      const override = this._fatalJournalOverride
+      this._fatalJournalOverride = undefined
+      if (override.$session_id !== undefined) {
+        processed.properties = { ...(processed.properties || {}), $session_id: override.$session_id }
+      }
+      if (override.$device_id !== undefined) {
+        processed.properties = { ...(processed.properties || {}), $device_id: override.$device_id }
+      }
     }
     return processed
   }

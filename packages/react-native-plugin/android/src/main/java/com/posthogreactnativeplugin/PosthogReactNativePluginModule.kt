@@ -11,6 +11,8 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.UiThreadUtil
+import com.facebook.react.bridge.WritableArray
+import com.facebook.react.bridge.WritableMap
 import com.facebook.react.common.JavascriptException
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.posthog.PostHog
@@ -391,6 +393,55 @@ class PosthogReactNativePluginModule(
     }
   }
 
+  @ReactMethod
+  fun persistFatalException(
+    report: String,
+    promise: Promise,
+  ) {
+    try {
+      PendingFatalExceptionStore.persist(
+        reactApplicationContext.filesDir,
+        report,
+      )
+    } catch (e: Throwable) {
+      logError("persistFatalException", e)
+    } finally {
+      promise.resolve(null)
+    }
+  }
+
+  @ReactMethod
+  fun getPendingFatalExceptions(promise: Promise) {
+    try {
+      val entries = PendingFatalExceptionStore.readAll(reactApplicationContext.filesDir)
+      val payload: WritableArray = Arguments.createArray()
+      for (entry in entries) {
+        val map: WritableMap = Arguments.createMap()
+        map.putString("id", entry.id)
+        map.putString("report", entry.report)
+        payload.pushMap(map)
+      }
+      promise.resolve(payload)
+    } catch (e: Throwable) {
+      logError("getPendingFatalExceptions", e)
+      promise.resolve(Arguments.createArray())
+    }
+  }
+
+  @ReactMethod
+  fun removePendingFatalException(
+    id: String,
+    promise: Promise,
+  ) {
+    try {
+      PendingFatalExceptionStore.remove(reactApplicationContext.filesDir, id)
+    } catch (e: Throwable) {
+      logError("removePendingFatalException", e)
+    } finally {
+      promise.resolve(null)
+    }
+  }
+
   private fun getMap(
     map: ReadableMap?,
     key: String,
@@ -680,5 +731,96 @@ internal fun applyScreenshotConfig(
   when (getString(map, "screenshotColorMode", "")) {
     "ARGB_8888" -> config.screenshotColorMode = PostHogScreenshotColorMode.ARGB_8888
     "RGB_565" -> config.screenshotColorMode = PostHogScreenshotColorMode.RGB_565
+  }
+}
+
+internal object PendingFatalExceptionStore {
+  private const val MAX_PENDING = 5
+  private const val DIR_NAME = "posthog-pending-fatal"
+  private const val TMP_SUFFIX = ".tmp"
+
+  data class Entry(val id: String, val report: String)
+
+  private fun pendingDir(filesDir: java.io.File): java.io.File {
+    val dir = java.io.File(filesDir, DIR_NAME)
+    if (!dir.exists()) {
+      dir.mkdirs()
+    }
+    return dir
+  }
+
+  private fun extractId(report: String): String? {
+    // Substring scan rather than full JSON parsing — its shape is owned by the JS layer, and
+    // re-parsing here would couple this file to internal field names.
+    val match = Regex("\"id\"\\s*:\\s*\"([^\"]+)\"").find(report) ?: return null
+    return match.groupValues.getOrNull(1)
+  }
+
+  fun persist(
+    filesDir: java.io.File,
+    report: String,
+  ) {
+    val dir = pendingDir(filesDir)
+    val id = extractId(report) ?: java.util.UUID.randomUUID().toString()
+    val finalFile = java.io.File(dir, "$id.json")
+    val tmpFile = java.io.File(dir, "$id.json$TMP_SUFFIX")
+    if (tmpFile.exists()) {
+      tmpFile.delete()
+    }
+    // Write + fsync so a power loss can't leave a renamed file with empty contents.
+    java.io.FileOutputStream(tmpFile).use { fos ->
+      fos.write(report.toByteArray(Charsets.UTF_8))
+      fos.fd.sync()
+    }
+    if (finalFile.exists()) {
+      finalFile.delete()
+    }
+    if (!tmpFile.renameTo(finalFile)) {
+      // Fallback for filesystems that refuse rename-over-existing-target.
+      finalFile.outputStream().use { it.write(report.toByteArray(Charsets.UTF_8)) }
+      tmpFile.delete()
+    }
+    evictOldest(dir)
+  }
+
+  fun readAll(filesDir: java.io.File): List<Entry> {
+    val dir = pendingDir(filesDir)
+    val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".json") } ?: return emptyList()
+    val out = ArrayList<Entry>(files.size)
+    for (f in files) {
+      val text = try {
+        f.readText(Charsets.UTF_8)
+      } catch (e: Throwable) {
+        f.delete()
+        continue
+      }
+      val id = extractId(text)
+      if (id == null) {
+        f.delete()
+        continue
+      }
+      out.add(Entry(id = id, report = text))
+    }
+    return out
+  }
+
+  fun remove(
+    filesDir: java.io.File,
+    id: String,
+  ) {
+    val dir = pendingDir(filesDir)
+    java.io.File(dir, "$id.json").takeIf { it.exists() }?.delete()
+    java.io.File(dir, "$id.json$TMP_SUFFIX").takeIf { it.exists() }?.delete()
+  }
+
+  private fun evictOldest(dir: java.io.File) {
+    val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".json") } ?: return
+    if (files.size <= MAX_PENDING) {
+      return
+    }
+    val sorted = files.sortedBy { it.lastModified() }
+    for (i in 0 until (sorted.size - MAX_PENDING)) {
+      sorted[i].delete()
+    }
   }
 }
