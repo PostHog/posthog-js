@@ -3,7 +3,11 @@
 import '@testing-library/jest-dom'
 
 import { PostHogPersistence } from '../../../posthog-persistence'
-import { SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED, SESSION_RECORDING_REMOTE_CONFIG } from '../../../constants'
+import {
+    SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED,
+    SDK_DEBUG_REPLAY_STALE_CONFIG,
+    SESSION_RECORDING_REMOTE_CONFIG,
+} from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE } from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
@@ -608,7 +612,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('awaiting_config')
         })
 
-        it('transitions to missing_config when config refresh fails', () => {
+        it('records under the stale config when the refresh fails', () => {
             posthog.persistence?.register({
                 [SESSION_RECORDING_REMOTE_CONFIG]: {
                     enabled: true,
@@ -621,13 +625,72 @@ describe('SessionRecording', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({}))
             expect(sessionRecording.status).toBe('awaiting_config')
 
-            // Second failure: refresh came back empty, now missing
+            // Second failure: the refresh came back empty, so the stale config is used rather
+            // than leaving the page unable to record at all
             sessionRecording.onRemoteConfig(makeFlagsResponse({}))
-            expect(sessionRecording.status).toBe('missing_config')
+            expect(sessionRecording.status).toBe('active')
+            expect(registerForSessionMock).toHaveBeenCalledWith({
+                [SDK_DEBUG_REPLAY_STALE_CONFIG]: true,
+            })
+            // the stale config must survive, otherwise nothing is left to record under
+            expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBeTruthy()
+        })
 
-            // Third failure: stays missing
+        it('applies a successful refresh after stale fallback without flushing the old recording', () => {
+            posthog.config.session_recording.maskAllInputs = undefined
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    masking: { maskAllInputs: false },
+                    triggerMatchType: 'any',
+                    cache_timestamp: Date.now() - RECORDING_REMOTE_CONFIG_TTL_MS - 1000,
+                },
+            })
             sessionRecording.onRemoteConfig(makeFlagsResponse({}))
-            expect(sessionRecording.status).toBe('missing_config')
+            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
+            expect(sessionRecording.status).toBe('active')
+
+            const recorder = sessionRecording['_lazyLoadedSessionRecording'] as LazyLoadedSessionRecording
+            const record = vi.mocked(assignableWindow.__PosthogExtensions__.rrweb.record)
+            expect(record).toHaveBeenLastCalledWith(expect.objectContaining({ maskAllInputs: false }))
+            _emit(createMetaSnapshot({ timestamp: Date.now() }))
+            _emit(createFullSnapshot({ timestamp: Date.now() }))
+            expect(recorder['_buffer'].data.length).toBeGreaterThan(0)
+            const flushSpy = vi.spyOn(recorder as any, '_flushBuffer')
+            const captureSpy = vi.mocked(posthog.capture)
+            captureSpy.mockClear()
+
+            const stop = vi.fn(() => _emit(createFullSnapshot({ timestamp: Date.now() })))
+            recorder['_stopRrweb'] = stop
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
+            expect(record).toHaveBeenCalledTimes(1)
+            expect(recorder['_buffer'].data.length).toBeGreaterThan(0)
+
+            const freshConfig = makeFlagsResponse({
+                sessionRecording: {
+                    endpoint: '/s/',
+                    masking: { maskAllInputs: true, maskTextSelector: '*' },
+                    triggerMatchType: 'all',
+                },
+            })
+            sessionRecording.onRemoteConfig(freshConfig)
+
+            expect(record).toHaveBeenLastCalledWith(
+                expect.objectContaining({ maskAllInputs: true, maskTextSelector: '*' })
+            )
+            expect(record).toHaveBeenCalledTimes(2)
+            expect(stop).toHaveBeenCalledOnce()
+            expect(sessionRecording['_persistFlagsOnSessionListener']).toBeDefined()
+            expect(recorder['_strategy']?.['_triggerStatusMatcher']).toBeInstanceOf(AndTriggerMatching)
+            expect(recorder['_buffer'].data).toEqual([])
+            expect(flushSpy).not.toHaveBeenCalled()
+            expect(captureSpy.mock.calls.filter(([event]) => event === '$snapshot')).toEqual([])
+            expect(sessionRecording.status).toBe('active')
+
+            sessionRecording.onRemoteConfig(freshConfig)
+            expect(record).toHaveBeenCalledTimes(2)
         })
 
         it('discards buffer on beforeunload if status is buffering', () => {
