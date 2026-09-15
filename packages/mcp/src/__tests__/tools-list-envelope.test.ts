@@ -10,6 +10,7 @@ import {
 import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { SEND_FEEDBACK_TOOL_NAME } from '../extensions/feedback'
+import { GET_MORE_TOOLS_NAME } from '../extensions/tools'
 import { EventCapture, fakePostHog } from './test-utils'
 
 /**
@@ -61,6 +62,16 @@ function setupPaginatedServer(
       await serverTransport.close?.()
     },
   }
+}
+
+/** Walk the whole enumeration, returning the names each page advertised. */
+const listBothPages = async (client: Client, cursorToken = 'page-2'): Promise<[string[], string[]]> => {
+  const firstPage = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+  const secondPage = await client.request(
+    { method: 'tools/list', params: { cursor: cursorToken } },
+    ListToolsResultSchema
+  )
+  return [firstPage.tools.map((tool) => tool.name), secondPage.tools.map((tool) => tool.name)]
 }
 
 describe('tools/list response envelope', () => {
@@ -257,16 +268,6 @@ describe('tools/list response envelope', () => {
       inputSchema: { type: 'object' as const },
     }
 
-    /** Walk the whole enumeration, returning the names each page advertised. */
-    const listBothPages = async (client: Client, cursorToken = 'page-2'): Promise<[string[], string[]]> => {
-      const firstPage = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
-      const secondPage = await client.request(
-        { method: 'tools/list', params: { cursor: cursorToken } },
-        ListToolsResultSchema
-      )
-      return [firstPage.tools.map((tool) => tool.name), secondPage.tools.map((tool) => tool.name)]
-    }
-
     it('appends the virtual tool only to the first page', async () => {
       const { server, client, connect, cleanup } = await setupPaginatedServer()
       try {
@@ -368,6 +369,58 @@ describe('tools/list response envelope', () => {
         )
         expect((result.content as { text: string }[])[0].text).toContain('recorded')
         expect(eventCapture.findEventByType(MCPAnalyticsEventType.mcpFeedback)).toBeDefined()
+      } finally {
+        await cleanup()
+      }
+    })
+  })
+
+  /** The same first-page rule, on the missing-capability virtual tool. */
+  describe('get_more_tools on a paginated catalogue', () => {
+    const REAL_MISSING_TOOL = {
+      name: GET_MORE_TOOLS_NAME,
+      description: 'A real application tool that owns the name',
+      inputSchema: { type: 'object' as const },
+    }
+
+    it('appends the virtual tool only to the first page', async () => {
+      const { server, client, connect, cleanup } = setupPaginatedServer()
+      try {
+        instrument(server, fakePostHog(), { reportMissing: true })
+        await connect()
+
+        const [pageOne, pageTwo] = await listBothPages(client)
+        expect(pageOne).toEqual(['page_one_tool', GET_MORE_TOOLS_NAME])
+        expect(pageTwo).toEqual(['page_two_tool'])
+      } finally {
+        await cleanup()
+      }
+    })
+
+    it('a real owner on a later page is shadowed, with a warning when its page is served', async () => {
+      const { server, client, connect, cleanup } = setupPaginatedServer({
+        secondPage: { tools: [REAL_MISSING_TOOL] },
+      })
+      const warnings: string[] = []
+      try {
+        instrument(server, fakePostHog(), {
+          reportMissing: true,
+          logger: (message: string) => warnings.push(message),
+        })
+        await connect()
+
+        const [pageOne, pageTwo] = await listBothPages(client)
+        expect(pageOne).toEqual(['page_one_tool', GET_MORE_TOOLS_NAME])
+        expect(pageTwo).toEqual([GET_MORE_TOOLS_NAME])
+        expect(warnings.some((message) => message.includes('is shadowed by the SDK'))).toBe(true)
+
+        // Calls to the name go to the SDK, not the real tool.
+        const result = await client.request(
+          { method: 'tools/call', params: { name: GET_MORE_TOOLS_NAME, arguments: { context: 'need bulk delete' } } },
+          CallToolResultSchema
+        )
+        expect((result.content as { text: string }[])[0].text).not.toBe(`called: ${GET_MORE_TOOLS_NAME}`)
+        expect(eventCapture.findEventByType(MCPAnalyticsEventType.mcpMissingCapability)).toBeDefined()
       } finally {
         await cleanup()
       }
