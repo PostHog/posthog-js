@@ -250,6 +250,111 @@ describe('Utilities for other modules', () => {
         vi.useRealTimers();
       }
     });
+
+    it('should defer on the timer zone.js left unpatched', async () => {
+      const zoneGlobals = window as unknown as Record<string, unknown>;
+      const originalSetTimeout = window.setTimeout;
+      const nativeSetTimeout = originalSetTimeout.bind(window);
+      const patchedSetTimeout = vi.fn((callback: () => void) =>
+        nativeSetTimeout(callback, 0),
+      );
+      const unpatchedSetTimeout = vi.fn((callback: () => void) =>
+        nativeSetTimeout(callback, 0),
+      );
+
+      zoneGlobals.Zone = {
+        __symbol__: (key: string) => `__zone_symbol__${key}`,
+      };
+      zoneGlobals.__zone_symbol__setTimeout = unpatchedSetTimeout;
+      window.setTimeout = patchedSetTimeout as unknown as typeof setTimeout;
+
+      const nativeSet = vi.fn();
+      const proto = {} as Record<string, unknown>;
+      Object.defineProperty(proto, 'value', {
+        configurable: true,
+        get() {
+          return '';
+        },
+        set: nativeSet,
+      });
+
+      const hookedSet = vi.fn();
+      const reset = hookSetter(
+        proto,
+        'value',
+        { set: hookedSet },
+        false,
+        window,
+      );
+
+      try {
+        const element = Object.create(proto) as { value: string };
+        element.value = 'test';
+
+        // a timer scheduled through the patched global keeps the Angular zone
+        // busy, so NgZone runs another change detection when it completes; a
+        // component that writes the property on every change detection then
+        // feeds itself forever
+        expect(patchedSetTimeout).not.toHaveBeenCalled();
+        expect(unpatchedSetTimeout).toHaveBeenCalledTimes(1);
+        // the page-visible write stays synchronous
+        expect(nativeSet).toHaveBeenCalledWith('test');
+
+        await new Promise((resolve) => nativeSetTimeout(resolve, 0));
+        expect(hookedSet).toHaveBeenCalledWith('test');
+      } finally {
+        reset();
+        window.setTimeout = originalSetTimeout;
+        delete zoneGlobals.Zone;
+        delete zoneGlobals.__zone_symbol__setTimeout;
+      }
+    });
+
+    it('should fall back to the window timer when no unpatched one is exposed', async () => {
+      const zoneGlobals = window as unknown as Record<string, unknown>;
+      const originalSetTimeout = window.setTimeout;
+      const nativeSetTimeout = originalSetTimeout.bind(window);
+      const windowSetTimeout = vi.fn((callback: () => void) =>
+        nativeSetTimeout(callback, 0),
+      );
+
+      zoneGlobals.Zone = {
+        __symbol__: (key: string) => `__zone_symbol__${key}`,
+      };
+      window.setTimeout = windowSetTimeout as unknown as typeof setTimeout;
+
+      const proto = {} as Record<string, unknown>;
+      Object.defineProperty(proto, 'value', {
+        configurable: true,
+        get() {
+          return '';
+        },
+        set: vi.fn(),
+      });
+
+      const hookedSet = vi.fn();
+      const reset = hookSetter(
+        proto,
+        'value',
+        { set: hookedSet },
+        false,
+        window,
+      );
+
+      try {
+        const element = Object.create(proto) as { value: string };
+        element.value = 'test';
+
+        expect(windowSetTimeout).toHaveBeenCalledTimes(1);
+
+        await new Promise((resolve) => nativeSetTimeout(resolve, 0));
+        expect(hookedSet).toHaveBeenCalledWith('test');
+      } finally {
+        reset();
+        window.setTimeout = originalSetTimeout;
+        delete zoneGlobals.Zone;
+      }
+    });
   });
 
   describe('inDom()', () => {

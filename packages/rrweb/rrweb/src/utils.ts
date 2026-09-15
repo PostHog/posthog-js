@@ -154,6 +154,42 @@ export function throttle<T>(
   };
 }
 
+type WindowWithZone = Window & {
+  Zone?: {
+    __symbol__?: (key: string) => string;
+  };
+};
+
+/*
+zone.js (Angular) patches `setTimeout`, and a timer scheduled while the Angular
+zone is current keeps that zone busy: when the timer completes NgZone reports the
+zone stable and `ApplicationRef.tick()` runs another change detection. A component
+that writes one of the hooked properties on every change detection - a common
+pattern in component libraries - then feeds itself, and the tab never settles.
+zone.js keeps the unpatched globals on the window under the names it exposes
+through `Zone.__symbol__`, the same escape hatch `@posthog/rrweb-utils` already
+uses for patched DOM prototypes. Deferring on that timer keeps the hook out of the
+zone's task bookkeeping; the forwarding to the original setter below stays
+synchronous, so the page sees no difference.
+see: https://github.com/angular/angular/issues/26948
+*/
+function getDeferral(
+  win: Window & typeof globalThis,
+): (callback: () => void) => void {
+  const unpatchedName = (win as WindowWithZone).Zone?.__symbol__?.('setTimeout');
+  const unpatched = unpatchedName
+    ? (win as unknown as Record<string, unknown>)[unpatchedName]
+    : undefined;
+  // a bare reference needs `win` as its receiver, or browsers reject the call
+  const scheduleTimeout =
+    typeof unpatched === 'function'
+      ? (unpatched as typeof setTimeout)
+      : win.setTimeout;
+  return (callback: () => void) => {
+    scheduleTimeout.call(win, callback, 0);
+  };
+}
+
 export function hookSetter<T>(
   target: T,
   key: string | number | symbol,
@@ -162,6 +198,7 @@ export function hookSetter<T>(
   win: Window & typeof globalThis = window,
 ): hookResetter {
   const original = win.Object.getOwnPropertyDescriptor(target, key);
+  const defer = getDeferral(win);
   win.Object.defineProperty(
     target,
     key,
@@ -170,7 +207,7 @@ export function hookSetter<T>(
       : {
           set(value) {
             // put hooked setter into event loop to avoid of set latency
-            setTimeout(() => {
+            defer(() => {
               // the accessors read inside `d.set` throw 'Illegal invocation'
               // when `this` is not a genuine native element (e.g. a proxy);
               // the page cannot observe this deferred call, so drop the
@@ -180,7 +217,7 @@ export function hookSetter<T>(
               } catch {
                 // noop
               }
-            }, 0);
+            });
             if (original && original.set) {
               // Runs synchronously in the page's assignment, so a throw escapes
               // to the host page. A proxy or `setPrototypeOf` fake sits on the
