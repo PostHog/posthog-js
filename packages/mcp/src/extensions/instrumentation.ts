@@ -142,11 +142,8 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   // application declared costs the customer their call, so the strip below still
   // requires positive ownership, while reading it when ownership is unresolved
   // costs at worst a mislabelled property. ADR-0011.
-  const canCaptureContextIntent =
-    !isVirtualAnalyticsTool &&
-    isContextEnabled(data.options.context) &&
-    (ownership.context || !ownership.contextOwnershipKnown)
-  const conversation = resolveConversationId(ownership.conversationId, request.params?.arguments)
+  const canCaptureContextIntent = ownership.read.context
+  const conversation = resolveConversationId(ownership.read.conversationId, request.params?.arguments)
   const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership)
 
   // Prepare the event in isolation: if identity/metadata/intent resolution
@@ -195,11 +192,13 @@ interface PreparedToolEvent {
 }
 
 /**
- * Ownership for one request, plus whether it could be resolved at all — "no
- * answer" must not read the same as "the application owns it".
+ * Ownership for one request. The inherited flags gate stripping and require
+ * positive ownership; `read` gates capture and additionally fails open where
+ * ownership could not be resolved — "no answer" must not read the same as "the
+ * application owns it". ADR-0011.
  */
 interface ActiveAnalyticsParameterOwnership extends AnalyticsParameterOwnership {
-  contextOwnershipKnown: boolean
+  read: Pick<AnalyticsParameterOwnership, 'context' | 'conversationId' | 'llmModel'>
 }
 
 function getActiveAnalyticsParameterOwnership(
@@ -210,11 +209,19 @@ function getActiveAnalyticsParameterOwnership(
 ): ActiveAnalyticsParameterOwnership {
   const listed = toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined
   const ownership = override ?? listed
+  const contextEnabled = !isVirtualAnalyticsTool && isContextEnabled(data.options.context)
+  const conversationEnabled = data.options.enableConversationId === true
+  const modelEnabled = isCaptureModelEnabled(data.options.captureModel)
+  const readable = (owned: boolean | undefined) => owned === true || ownership === undefined
   return {
-    contextOwnershipKnown: ownership !== undefined,
-    context: !isVirtualAnalyticsTool && isContextEnabled(data.options.context) && ownership?.context === true,
-    conversationId: data.options.enableConversationId === true && ownership?.conversationId === true,
-    llmModel: isCaptureModelEnabled(data.options.captureModel) && ownership?.llmModel === true,
+    context: contextEnabled && ownership?.context === true,
+    conversationId: conversationEnabled && ownership?.conversationId === true,
+    llmModel: modelEnabled && ownership?.llmModel === true,
+    read: {
+      context: contextEnabled && readable(ownership?.context),
+      conversationId: conversationEnabled && readable(ownership?.conversationId),
+      llmModel: modelEnabled && readable(ownership?.llmModel),
+    },
     // Deliberately read off `listed`, never the override: only the advertised
     // JSON Schema can say whether `tools/list` declared `_mcp_instructions` (an
     // override is built from the live registry, which holds Zod on the
@@ -222,7 +229,7 @@ function getActiveAnalyticsParameterOwnership(
     // and fails closed — writing an undeclared key fails the customer's entire
     // tool result under `additionalProperties: false`. See ADR-0004 for the
     // per-request-instance gap this leaves and the planned fix.
-    outputInstructions: data.options.enableConversationId === true && listed?.outputInstructions === true,
+    outputInstructions: conversationEnabled && listed?.outputInstructions === true,
   }
 }
 
@@ -252,7 +259,7 @@ async function prepareToolCallEvent(
   extra: CompatibleRequestHandlerExtra | undefined,
   startTime: Date,
   conversation: ConversationIdResolution,
-  ownership: AnalyticsParameterOwnership,
+  ownership: ActiveAnalyticsParameterOwnership,
   eventType: MCPAnalyticsEventType,
   canCaptureContextIntent: boolean
 ): Promise<PreparedToolEvent | null> {
@@ -300,9 +307,9 @@ async function prepareToolCallEvent(
     await applyResolvedMetadata(event, data, request, extra)
     setEventIntent(event, await resolveToolCallIntent(data, request, canCaptureContextIntent, extra))
     // Client metadata does not collide with an application's tool arguments.
-    // Self-report still requires positive ownership before we read `llm_model`.
+    // Self-report reads `llm_model` under the same fail-open rule as `context`.
     if (isCaptureModelEnabled(data.options.captureModel)) {
-      const resolvedModel = resolveModel(request, ownership.llmModel)
+      const resolvedModel = resolveModel(request, ownership.read.llmModel)
       setEventModel(event, resolvedModel?.model, resolvedModel?.source)
     }
     return { event, requestAttribution }

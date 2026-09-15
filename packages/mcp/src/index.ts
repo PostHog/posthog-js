@@ -142,7 +142,7 @@ function getLowLevelServer(server: MCPServerLike | HighLevelMCPServerLike): MCPS
 const DEFAULT_OPTIONS = {
   reportMissing: false,
   collectFeedback: false,
-  enableConversationId: false,
+  enableConversationId: true,
 } satisfies Partial<MCPAnalyticsOptions>
 
 function buildTrackingData(
@@ -161,7 +161,11 @@ function buildTrackingData(
     toolCategories: new Map<string, string>(),
     toolDescriptions: new Map<string, string>(),
     sessionInfo: getSessionInfo(lowLevelServer, undefined),
-    options: { ...DEFAULT_OPTIONS, ...options },
+    options: {
+      ...DEFAULT_OPTIONS,
+      ...options,
+      enableConversationId: options.enableConversationId ?? DEFAULT_OPTIONS.enableConversationId,
+    },
     sessionSource: 'generated',
   }
 }

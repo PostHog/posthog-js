@@ -218,7 +218,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     it('shares one session across get_more_tools and the surrounding tool calls', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, fakePostHog(), { reportMissing: true })
+      instrument(server, fakePostHog(), { enableConversationId: false, reportMissing: true })
 
       const calls = [
         { name: 'add_todo', arguments: { text: 'First', context: 'Adding first todo' } },

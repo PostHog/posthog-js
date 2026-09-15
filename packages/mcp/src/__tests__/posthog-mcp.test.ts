@@ -267,7 +267,7 @@ describe('PostHogMCP', () => {
       for (const tool of prepared) {
         expect(tool.inputSchema?.properties?.context).toMatchObject({ type: 'string' })
         expect(tool.inputSchema?.required).toContain('context')
-        expect(tool.inputSchema?.properties).not.toHaveProperty('llm_model')
+        expect(tool.inputSchema?.properties).toHaveProperty('llm_model')
       }
     })
 
@@ -282,7 +282,8 @@ describe('PostHogMCP', () => {
     })
 
     it('returns a fresh array even when nothing is added', () => {
-      const prepared = posthog.prepareToolList(tools, { context: false })
+      const client = new PostHogMCP('test', { disabled: true, captureModel: false })
+      const prepared = client.prepareToolList(tools, { context: false })
       expect(prepared).not.toBe(tools)
       expect(prepared).toEqual(tools)
     })
