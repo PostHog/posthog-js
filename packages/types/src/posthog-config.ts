@@ -164,22 +164,22 @@ export interface BootstrapConfig {
     /**
      * Distinct ID to use before the SDK has loaded persisted identity.
      */
-    distinctID?: string
+    distinctID?: string | null
 
     /**
      * Whether `distinctID` already identifies a known person profile.
      */
-    isIdentifiedID?: boolean
+    isIdentifiedID?: boolean | null
 
     /**
      * Feature flag values to use immediately until the SDK fetches fresh values.
      */
-    featureFlags?: Record<string, boolean | string>
+    featureFlags?: Record<string, boolean | string> | null
 
     /**
      * Feature flag payloads to use together with bootstrapped `featureFlags`.
      */
-    featureFlagPayloads?: Record<string, JsonType>
+    featureFlagPayloads?: Record<string, JsonType> | null
 
     /**
      * Optionally provide a sessionID, this is so that you can provide an existing sessionID here to continue a user's session across a domain or device. It MUST be:
@@ -188,7 +188,7 @@ export interface BootstrapConfig {
      * - the timestamp part must be <= the timestamp of the first event in the session
      * - the timestamp of the last event in the session must be < the timestamp part + 24 hours
      */
-    sessionID?: string
+    sessionID?: string | null
 }
 
 export interface ResetOptions {
@@ -1111,8 +1111,59 @@ export interface LogsConfig extends LogCaptureOptions {
     captureConsoleLogs?: boolean
 }
 
+/** The request a network metric describes. */
+export interface NetworkMetricsRequest {
+    /** The full request URL, including the query string. */
+    url: string
+    /** The HTTP method in upper case, e.g. 'GET'. */
+    method: string
+}
+
+/** How a network request ended. */
+export interface NetworkMetricsResponse {
+    /** The HTTP status code. `undefined` when the request failed before a response arrived. */
+    status: number | undefined
+    /**
+     * How long the request took, in milliseconds. The end boundary follows the
+     * transport: a `fetch` is measured to its response headers, an
+     * `XMLHttpRequest` to the end of its response body.
+     */
+    durationMs: number
+}
+
+/**
+ * Options for automatic HTTP and HTTPS `fetch` and `XMLHttpRequest` duration
+ * metrics. Recording never changes the request or its settlement. Fetch returns
+ * a derived promise so rejected requests remain observable to the caller.
+ */
+export interface NetworkMetricsConfig {
+    /**
+     * The metric name. A string is used for every request. A function is
+     * called once per request; return a falsy value to skip that request.
+     *
+     * @default 'http.client.request.duration'
+     */
+    name?: string | ((request: NetworkMetricsRequest) => string | null | undefined)
+    /**
+     * Adds attributes to each recorded request. The result is merged over the
+     * default attributes (`method`, `host`, `path`, `status_class`), so it can
+     * also replace them, e.g. to set `path` to a route template.
+     * Keep attribute values low-cardinality.
+     *
+     * The default `path` replaces each all-digit or uuid-like segment with
+     * `:id`. Ids that carry a prefix or suffix, such as `order-123` or
+     * `38217.pdf`, are kept as they are, so return your own `path` for
+     * those routes.
+     *
+     * `status_class` is `2xx`, `3xx`, `4xx` or `5xx`, or `missing` when no
+     * response arrived.
+     */
+    attributes?: (request: NetworkMetricsRequest, response: NetworkMetricsResponse) => MetricAttributes | undefined
+}
+
 /**
  * Options for the posthog.metrics API (count, gauge, histogram).
+ * Shared by every SDK; browser-only options live in `BrowserMetricsConfig`.
  */
 export interface MetricsConfig {
     /**
@@ -1163,6 +1214,23 @@ export interface MetricsConfig {
      * sample (return `null` to drop) before it is aggregated.
      */
     beforeSend?: BeforeSendMetricFn | BeforeSendMetricFn[]
+}
+
+/**
+ * Metrics configuration options for the browser SDK. Adds the options that
+ * only the browser SDK implements to the shared metrics options.
+ */
+export interface BrowserMetricsConfig extends MetricsConfig {
+    /**
+     * Record the duration of every HTTP or HTTPS `fetch` and `XMLHttpRequest` as
+     * a histogram. `true` uses the defaults. Requests to PostHog itself and URLs
+     * with other protocols are not recorded. Each transport is measured to the
+     * boundary its API exposes: a `fetch` to its response headers, an
+     * `XMLHttpRequest` to the end of its response body.
+     *
+     * @default undefined
+     */
+    network?: boolean | NetworkMetricsConfig
 }
 
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
@@ -1545,7 +1613,7 @@ export interface PostHogConfig {
      *
      * @default undefined
      */
-    metrics?: MetricsConfig
+    metrics?: BrowserMetricsConfig
 
     /**
      * Determines whether PostHog should disable all conversations functionality.
@@ -1942,6 +2010,11 @@ export interface PostHogConfig {
      * (e.g. /flags?v=2&config=true) without evaluating any feature flags.  Most folks use this
      * to save money on feature flag evaluation (by bootstrapping feature flags on the server side).
      *
+     * This also stops surveys from displaying. PostHog creates an internal targeting flag for
+     * almost every survey, and every flag evaluates to false while flags are disabled. If you use
+     * surveys, set `advanced_only_evaluate_survey_feature_flags` instead, which evaluates survey
+     * flags only.
+     *
      * @default false
      */
     advanced_disable_feature_flags: boolean
@@ -2058,16 +2131,31 @@ export interface PostHogConfig {
     /**
      * Controls how often feature flags are automatically refreshed in long-running sessions.
      *
-     * By default, feature flags are refreshed every 5 minutes (300000ms) to pick up server-side
-     * flag changes without requiring a page reload. This is useful for SPAs and long-running tabs.
+     * The default interval is 5 minutes (300000ms) to pick up server-side flag changes without
+     * requiring a page reload. This is useful for SPAs and long-running tabs. An explicitly set
+     * positive interval stays fixed, even when the page gets no user interaction.
+     *
+     * **Each refresh is a billable feature flag request.** A page that stays open all day makes
+     * up to 288 requests per day on the default interval, and every open tab and every named
+     * instance refreshes on its own timer, so they add up. Set this option to `0` to stop the
+     * background refreshes if that cost is not useful to you.
      *
      * **Tradeoffs:**
-     * - **Shorter intervals**: Feature flag changes propagate faster, but increases network requests and server load.
-     * - **Longer intervals**: Reduces network traffic (better for mobile/battery), but flag changes take longer to propagate.
+     * - **Shorter intervals**: Feature flag changes propagate faster, but increases network requests, cost, and server load.
+     * - **Longer intervals**: Reduces network traffic (better for mobile/battery) and cost, but flag changes take longer to propagate.
      * - **Disabled (0 or any negative value)**: No background refreshes. Flags only update on page load or manual `reloadFeatureFlags()` calls.
      *   Use this if you control flag updates manually or have infrequent flag changes.
      *
      * Hidden pages skip scheduled refreshes and reload due flags when they become visible.
+     *
+     * When this option is omitted, a visible page that gets no user interaction (such as a
+     * dashboard, a page being read, a video player, or a kiosk) doubles the interval after every
+     * refresh, up to one hour. Automatic refreshes continue at that interval; they do not stop.
+     * The next click, key press, wheel, touch, or return to visibility restores the five-minute
+     * default. Scrolling driven by a script, such as an auto-playing carousel, does not count as
+     * an interaction. Set this option explicitly to keep a fixed cadence, or to `0` to stop
+     * background refreshes completely.
+     *
      * This option does not reload remote config.
      *
      * @default 300000 (5 minutes)

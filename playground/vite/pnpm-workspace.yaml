@@ -1,5 +1,5 @@
-onlyBuiltDependencies:
-  - "@posthog/cli"
+allowBuilds:
+  "@posthog/cli": true
 pnpmfile: ../.pnpmfile.cjs
 minimumReleaseAge: 10080
 minimumReleaseAgeExclude:

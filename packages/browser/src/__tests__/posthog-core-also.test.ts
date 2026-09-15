@@ -14,7 +14,7 @@ import {
     USER_STATE,
 } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
-import { PostHogConfig, Properties, RemoteConfig } from '../types'
+import { CaptureResult, PostHogConfig, Properties, RemoteConfig } from '../types'
 import { configRenames, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
@@ -45,7 +45,7 @@ describe('posthog core', () => {
     const defaultConfig = {}
 
     const defaultOverrides = {
-        _send_request: vi.fn(),
+        _send_retriable_request: vi.fn(),
     }
 
     const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>): PostHog => {
@@ -334,11 +334,12 @@ describe('posthog core', () => {
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://us.i.posthog.com/e/',
                     timestampMode: 'capture-body',
-                })
+                }),
+                undefined
             )
         })
 
@@ -348,10 +349,11 @@ describe('posthog core', () => {
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://us.i.posthog.com/i/v0/e/',
-                })
+                }),
+                undefined
             )
         })
 
@@ -374,10 +376,11 @@ describe('posthog core', () => {
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
             const rewrittenEndpoint = 'https://us.i.posthog.com/events/'
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: rewrittenEndpoint,
-                })
+                }),
+                undefined
             )
             expect(posthog.requestRouter.isIngestionEndpoint(rewrittenEndpoint)).toBe(true)
         })
@@ -394,12 +397,59 @@ describe('posthog core', () => {
                 }
             )
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
                     timestampMode: 'body',
-                })
+                }),
+                undefined
             )
+        })
+
+        it.each(['timer', 'unload'])('keeps different windows of one session in separate %s uploads', (flushMode) => {
+            const posthog = posthogWith({ capture_pageview: false, request_batching: true }, defaultOverrides)
+            const sendRequest = vi.fn()
+            const queue = new RequestQueue(sendRequest)
+            posthog._requestQueue = queue
+
+            for (const windowId of ['window-one', 'window-two', 'window-one']) {
+                posthog.capture(
+                    '$snapshot',
+                    { $session_id: 'session-one', $window_id: windowId },
+                    { _url: 'https://app.posthog.com/s/', _batchKey: 'recordings' }
+                )
+            }
+
+            if (flushMode === 'timer') {
+                queue.enable()
+                vi.advanceTimersByTime(3000)
+            } else {
+                queue.unload()
+            }
+
+            const requests = sendRequest.mock.calls.map(([request]) => request)
+            expect(
+                requests.map((request) => request.data.map((event: CaptureResult) => event.properties.$window_id))
+            ).toEqual([['window-one', 'window-one'], ['window-two']])
+            for (const request of requests) {
+                expect(request).toMatchObject({ batchKey: 'recordings', timestampMode: 'body' })
+            }
+        })
+
+        it.each([
+            ['recordings', 'window-1', 'session-1-window-1'],
+            ['recordings', undefined, 'session-1'],
+            [undefined, 'window-1', undefined],
+        ])('groups requests with batchKey %s and window %s', (batchKey, windowId, batchGroup) => {
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
+
+            posthog.capture(
+                '$snapshot',
+                { $session_id: 'session-1', $window_id: windowId },
+                batchKey ? { _batchKey: batchKey } : undefined
+            )
+
+            expect(vi.mocked(posthog._send_retriable_request).mock.calls[0][0].batchGroup).toEqual(batchGroup)
         })
 
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
@@ -408,11 +458,12 @@ describe('posthog core', () => {
 
             posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
 
-            expect(posthog._send_request).toHaveBeenCalledWith(
+            expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
                     timestampMode: 'body',
-                })
+                }),
+                undefined
             )
         })
 
@@ -423,10 +474,11 @@ describe('posthog core', () => {
 
                 posthog.capture('event-name', { foo: 'bar', length: 0 }, { transport })
 
-                expect(posthog._send_request).toHaveBeenCalledWith(
+                expect(posthog._send_retriable_request).toHaveBeenCalledWith(
                     expect.objectContaining({
                         transport,
-                    })
+                    }),
+                    undefined
                 )
             }
         )
@@ -1155,6 +1207,19 @@ describe('posthog core', () => {
             )
         })
 
+        it.each([null, undefined, ''])('preserves the persisted identity when distinctID is %j', (distinctID) => {
+            const token = 'bootstrap-nullish-' + uuidv7()
+            const first = posthogWith({ token })
+            const posthog = posthogWith({
+                token,
+                bootstrap: { distinctID },
+            })
+
+            expect(posthog.get_distinct_id()).toBe(first.get_distinct_id())
+            expect(posthog.get_property('$device_id')).toBe(first.get_property('$device_id'))
+            expect(posthog.persistence.get_property(USER_STATE)).toBe('anonymous')
+        })
+
         it('treats identified distinctIDs appropriately', () => {
             const posthog = posthogWith(
                 {
@@ -1231,18 +1296,20 @@ describe('posthog core', () => {
             expect(posthog.getFeatureFlagPayload('undef')).toBe(undefined)
         })
 
-        it('does nothing when empty', () => {
+        it.each([
+            {},
+            { distinctID: null, isIdentifiedID: null, featureFlags: null, featureFlagPayloads: null, sessionID: null },
+        ])('does nothing when bootstrap is %j', (bootstrap) => {
             // memory persistence with an empty bootstrap is the exact volatile-identity case the init
             // warning covers, so allow that console.warn here instead of failing on it.
             const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
             const posthog = posthogWith({
-                bootstrap: {},
+                bootstrap,
                 persistence: 'memory',
             })
             warnSpy.mockRestore()
 
-            expect(posthog.get_distinct_id()).not.toBe('abcd')
-            expect(posthog.get_distinct_id()).not.toEqual(undefined)
+            expect(posthog.get_distinct_id()).toEqual(expect.any(String))
             expect(posthog.getFeatureFlag('multivariant')).toBe(undefined)
             expect(mockLogger.warn).toHaveBeenCalledWith(
                 expect.stringContaining('getFeatureFlag for key "multivariant" failed')

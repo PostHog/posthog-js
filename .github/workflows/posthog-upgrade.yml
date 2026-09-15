@@ -31,6 +31,11 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
+            - name: Audit runner egress
+              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              with:
+                egress-policy: audit
+
             - name: Get upgrader token
               id: upgrader
               uses: getsentry/action-github-app-token@5c1e90706fe007857338ac1bfbd7a4177db2f789 # v4.0.0

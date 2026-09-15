@@ -1,5 +1,26 @@
 # @posthog/mcp
 
+## 0.16.1
+
+### Patch Changes
+
+- [#4915](https://github.com/PostHog/posthog-js/pull/4915) [`a5c1182`](https://github.com/PostHog/posthog-js/commit/a5c1182647cd82890d3b66dca1eeb27b8e4c0b91) Thanks [@gesh](https://github.com/gesh)! - Harden feedback validation, error handling, and tool-name collision routing.
+  (2026-09-14)
+
+## 0.16.0
+
+### Minor Changes
+
+- [#4870](https://github.com/PostHog/posthog-js/pull/4870) [`cc6373b`](https://github.com/PostHog/posthog-js/commit/cc6373bf42ba1cd777c6f7ecb5596e18d8df1cd5) Thanks [@gesh](https://github.com/gesh)! - Add the `send_feedback` virtual tool (new `collectFeedback` option): an honest, general agent-feedback channel with missing capabilities as the priority category. Every call emits a new `$mcp_feedback` event with `$mcp_feedback_type` and the other `$mcp_feedback_*` properties. Hosts can rename the tool, replace its description, declare `extraProperties` (captured as `$mcp_feedback_<key>`), and route reports to a real backend via `onFeedback` (`instrument()` path) or `prepareToolCall().feedbackReport` + `captureFeedback()` + `sendFeedbackResult()` (custom-dispatcher path). `reportMissing` / `get_more_tools` / `$mcp_missing_capability` are unchanged; new integrations should enable only `collectFeedback`.
+  (2026-09-11)
+
+## 0.15.0
+
+### Minor Changes
+
+- [#4830](https://github.com/PostHog/posthog-js/pull/4830) [`39420d8`](https://github.com/PostHog/posthog-js/commit/39420d893556a64c2514b523dddf00b8044856a4) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Capture resource discovery and reads from instrumented MCP servers. URL credential redaction (userinfo, credential-named query and fragment parameters) now applies to every captured string, including existing `$mcp_tool_call` parameters, responses, and error messages, so URLs already flowing through tool-call data will show `%5Bredacted%5D` values after upgrading.
+  (2026-09-10)
+
 ## 0.14.1
 
 ### Patch Changes

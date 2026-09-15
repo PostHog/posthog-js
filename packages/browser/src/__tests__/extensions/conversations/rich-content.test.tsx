@@ -503,6 +503,13 @@ describe('RichContent', () => {
     })
 
     describe('Text Content Rendering', () => {
+        it('should keep markdown links literal in ordinary message fallbacks', () => {
+            const content = 'Read [FAQ](https://example.com/faq)'
+            const { container } = render(<RichContent {...defaultProps} content={content} />)
+            expect(container.textContent).toBe(content)
+            expect(container.querySelector('a')).not.toBeInTheDocument()
+        })
+
         it('should render plain text with line breaks', () => {
             const { container } = render(<RichContent {...defaultProps} content={'Line 1\nLine 2\nLine 3'} />)
 

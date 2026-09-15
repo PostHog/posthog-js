@@ -6,6 +6,7 @@ export {
   getMutationCost,
   getDeferredStylesheetStats,
   getDiscardedDurationSamples,
+  getObserverInitFailures,
   resetSnapshotCostState,
   type SnapshotCost,
   type MutationCost,
