@@ -55,22 +55,28 @@ describe('MCP analytics defaults', () => {
     expect(calls).toHaveLength(2)
     expect(calls[0].properties.$mcp_llm_model).toBe('model-a')
     expect(calls[0].properties.$session_id).toBe(calls[1].properties.$session_id)
-    expect(first.received.mock.calls[0][0].params.arguments).toEqual({ value: 'first' })
+    // A fresh instance cannot prove it owns the analytics arguments, so it strips none of them.
+    expect(first.received.mock.calls[0][0].params.arguments).toEqual({
+      value: 'first',
+      context: 'intent',
+      llm_model: 'model-a',
+    })
     expect(capture.findCapturesByEvent('$mcp_tools_list')).toHaveLength(1)
   })
 
-  it.each([false, true])('caches resolved ownership when the tool owns model: %s', async (owned) => {
-    const server = fresh(undefined, owned ? { llm_model: { type: 'string' } } : {})
-    for (let call = 0; call < 2; call++) {
-      await server.request('tools/call', { llm_model: 'model-a' })
-    }
-    expect(server.listing).toHaveBeenCalledTimes(1)
-    for (const [request] of server.received.mock.calls) {
-      expect(request.params.arguments).toEqual(owned ? { llm_model: 'model-a' } : {})
-    }
-    for (const event of capture.findCapturesByEvent('$mcp_tool_call')) {
-      expect(event.properties.$mcp_llm_model).toBe(owned ? undefined : 'model-a')
-    }
+  it('reads model and conversation handle on a cold instance without consulting the catalog', async () => {
+    const server = fresh()
+    const args = { value: 'v', llm_model: 'model-a', context: 'intent' }
+    const result = (await server.request('tools/call', args)) as any
+    expect(server.listing).not.toHaveBeenCalled()
+    // Stripping requires positive ownership, which a cold instance never has.
+    expect(server.received.mock.calls[0][0].params?.arguments).toEqual(args)
+    expect(JSON.parse(result.content[1].text).conversation_id).toBeDefined()
+    const event = capture.findCapturesByEvent('$mcp_tool_call')[0].properties
+    expect(event.$mcp_llm_model).toBe('model-a')
+    expect(event.$mcp_llm_model_source).toBe('self_reported')
+    expect(event.$mcp_intent).toBe('intent')
+    expect(event.$mcp_conversation_id).toBeDefined()
   })
 
   it('keeps explicit opt-outs inert', async () => {
@@ -81,11 +87,12 @@ describe('MCP analytics defaults', () => {
     expect(capture.findCapturesByEvent('$mcp_tool_call')[0].properties.$mcp_llm_model).toBeUndefined()
   })
 
-  it('preserves tool-owned analytics names on a cold instance', async () => {
+  it.each([false, true])('preserves tool-owned analytics names, listed: %s', async (listed) => {
     const properties = Object.fromEntries(
       ['value', 'context', 'llm_model', 'conversation_id'].map((key) => [key, { type: 'string' }])
     )
     const server = fresh(undefined, properties)
+    if (listed) await server.request('tools/list')
     const args = {
       value: 'v',
       context: 'application context',
@@ -95,20 +102,12 @@ describe('MCP analytics defaults', () => {
     await server.request('tools/call', args)
     expect(server.received.mock.calls[0][0].params?.arguments).toEqual(args)
     const event = capture.findCapturesByEvent('$mcp_tool_call')[0].properties
-    expect(event.$mcp_llm_model).toBeUndefined()
-    expect(event.$mcp_conversation_id).toBeUndefined()
-  })
-
-  it('dispatches unchanged when the raw catalog fails', async () => {
-    const server = fresh()
-    server.listing.mockRejectedValueOnce(new Error('catalog unavailable'))
-    const args = { value: 'v', llm_model: 'unresolved model' }
-    const result = (await server.request('tools/call', args)) as any
-    expect(result.content).toHaveLength(1)
-    expect(server.received.mock.calls[0][0].params?.arguments).toEqual(args)
-    expect(capture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(1)
-    await server.request('tools/call', args)
-    expect(server.listing).toHaveBeenCalledTimes(2)
-    expect(capture.findCapturesByEvent('$mcp_tool_call')[1].properties.$mcp_llm_model).toBe('unresolved model')
+    // Unresolved ownership reads fail open (ADR-0011): a cold instance records
+    // the application's values under the analytics names; a listed one does not.
+    expect(event.$mcp_llm_model).toBe(listed ? undefined : 'application model')
+    expect(event.$mcp_intent).toBe(listed ? undefined : 'application context')
+    // A non-uuidv7 handle is never trusted, so a cold instance mints one instead.
+    expect(event.$mcp_conversation_id).toEqual(listed ? undefined : expect.any(String))
+    expect(capture.findCapturesByEvent('$mcp_tools_list')).toHaveLength(listed ? 1 : 0)
   })
 })

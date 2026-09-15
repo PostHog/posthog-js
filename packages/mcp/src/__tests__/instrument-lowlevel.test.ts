@@ -582,7 +582,7 @@ describe('Low-level Server tracing (e2e)', () => {
     }
   })
 
-  it('resolves ownership from the raw catalog before the first low-level call', async () => {
+  it('reads intent and mints a handle, but strips nothing, before low-level ownership is learned from tools/list', async () => {
     const { server, client, receivedCalls, connect, cleanup } = await setupLowLevelServer()
     try {
       instrument(server, fakePostHog(), { context: true, enableConversationId: true })
@@ -599,16 +599,19 @@ describe('Low-level Server tracing (e2e)', () => {
         CallToolResultSchema
       )
 
+      // Ownership is unknown here — this instance never served a `tools/list`,
+      // which on a stateless server is every instance. Reads fail open, so the
+      // intent is kept and a session handle is minted and prompted back; strips
+      // fail closed, so every argument reaches the tool. ADR-0011.
       expect(receivedCalls.at(-1)).toEqual({
         name: 'echo',
-        arguments: { text: 'hi' },
+        arguments: { context: 'unknown context', conversation_id: 'unknown conversation', text: 'hi' },
       })
       expect(
         (result.content as { text?: string }[]).some((content) => content.text?.includes('"conversation_id"'))
       ).toBe(true)
       await new Promise((resolve) => setTimeout(resolve, 50))
       const event = eventCapture.getEvents().find((candidate) => candidate.resourceName === 'echo')
-      // No client tools/list is needed: the raw catalog establishes ownership.
       expect(event?.userIntent).toBe('unknown context')
       expect(event?.conversationId).toBeDefined()
     } finally {

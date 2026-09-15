@@ -26,7 +26,6 @@ import {
   captureToolCall,
   getVirtualToolParameterOwnership,
   isToolAdvertised,
-  resolveUnlistedToolOwnership,
   type HandlerPatch,
 } from './instrumentation'
 import { getContextArgument } from './tracing-helpers'
@@ -146,7 +145,6 @@ async function handleToolCallRequest(
     data,
     request,
     extra,
-    parameterOwnership: await resolveUnlistedToolOwnership(server, request, extra),
     execute: (downstreamRequest: MCPRequestLike) =>
       runOriginalToolHandler(originalCallToolHandler, downstreamRequest, extra),
   })
