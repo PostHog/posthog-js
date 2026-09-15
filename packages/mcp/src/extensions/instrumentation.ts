@@ -849,23 +849,22 @@ async function getTracedToolsList(
         // first page — the one every client reads, including clients that never
         // follow `nextCursor` — may carry the virtual tool. Presence, not
         // truthiness: `cursor: ""` is a continuation page.
-        if (request.params?.cursor != null) {
-          if (alreadyPresent) {
-            // Conflicts are only detected on the pages a client actually
-            // fetches; a real owner here is already shadowed by the first-page
-            // injection, so the host must rename the SDK's tool.
-            data.logger(
-              `Warning: A real tool "${feedbackToolName}" on a later tools/list page is shadowed by the SDK's agent-feedback tool. Its calls will be intercepted. Rename the SDK's tool with collectFeedback: { toolName: "..." } to keep both.`
-            )
-          }
-        } else if (alreadyPresent) {
+        const isFirstPage = request.params?.cursor == null
+        if (isFirstPage && alreadyPresent) {
           data.logger(
             `Warning: Cannot inject agent-feedback tool "${feedbackToolName}" because a real tool already uses that name. The real tool will not be intercepted. To collect feedback alongside it, rename the SDK's tool with collectFeedback: { toolName: "..." }.`
           )
-        } else {
+        } else if (isFirstPage) {
           const virtualTool = getFeedbackToolDescriptor(feedbackOptions)
           tools.push(virtualTool)
           cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, [virtualTool])
+        } else if (alreadyPresent) {
+          // Conflicts are only detected on the pages a client actually
+          // fetches; a real owner here is already shadowed by the first-page
+          // injection, so the host must rename the SDK's tool.
+          data.logger(
+            `Warning: A real tool "${feedbackToolName}" on a later tools/list page is shadowed by the SDK's agent-feedback tool. Its calls will be intercepted. Rename the SDK's tool with collectFeedback: { toolName: "..." } to keep both.`
+          )
         }
       }
 
