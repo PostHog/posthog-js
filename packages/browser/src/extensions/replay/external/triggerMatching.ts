@@ -16,6 +16,7 @@ import { getTargetingUrl } from '@posthog/browser-common/utils/url-targeting-uti
 export const DISABLED = 'disabled'
 export const SAMPLED = 'sampled'
 export const ACTIVE = 'active'
+export const HELD = 'held'
 export const BUFFERING = 'buffering'
 export const PAUSED = 'paused'
 export const LAZY_LOADING = 'lazy_loading'
@@ -81,11 +82,15 @@ function persistedTriggerStatus(
  * Once the response is received, it might be disabled, active or sampled.
  * When "sampled" that means a sample rate is set, and the last time the session ID rotated
  * the sample rate determined this session should be sent to the server.
+ * "held" is an active or sampled recording that keeps its buffer because the epoch has seen
+ * no user interaction yet. It records, but it uploads nothing until the hold is released.
+ * Trigger matching never returns it - the recorder adds it on top of the matched status.
  */
 const sessionRecordingStatuses = [
     DISABLED,
     SAMPLED,
     ACTIVE,
+    HELD,
     BUFFERING,
     PAUSED,
     LAZY_LOADING,

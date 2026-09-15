@@ -30,16 +30,16 @@ test.describe('Session recording - held epoch', () => {
         await page.resetCapturedEvents()
     })
 
-    test('names the hold on captured events while nothing is uploaded, and stops naming it after interaction', async ({
-        page,
-    }) => {
+    test('reports the hold while nothing is uploaded, and reports active after interaction', async ({ page }) => {
         await page.evaluate(() => (window as WindowWithPostHog).posthog?.capture('before_interaction'))
 
         const heldEvents = await page.capturedEvents()
         expect(heldEvents.filter((e) => e.event === '$snapshot')).toHaveLength(0)
         const held = heldEvents.find((e) => e.event === 'before_interaction')
-        expect(held?.properties.$recording_status).toEqual('active')
+        expect(held?.properties.$recording_status).toEqual('held')
         expect(held?.properties.$sdk_debug_replay_flush_hold_reason).toEqual('no_interaction_since_recording_started')
+        const heldStatus = await page.evaluate(() => (window as WindowWithPostHog).posthog?.sessionRecording?.status)
+        expect(heldStatus).toEqual('held')
 
         await page.resetCapturedEvents()
         await page.waitingForNetworkCausedBy({
@@ -55,5 +55,7 @@ test.describe('Session recording - held epoch', () => {
         const shipped = shippedEvents.find((e) => e.event === 'after_interaction')
         expect(shipped?.properties.$recording_status).toEqual('active')
         expect(shipped?.properties.$sdk_debug_replay_flush_hold_reason).toBeUndefined()
+        const shippedStatus = await page.evaluate(() => (window as WindowWithPostHog).posthog?.sessionRecording?.status)
+        expect(shippedStatus).toEqual('active')
     })
 })
