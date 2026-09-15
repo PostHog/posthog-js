@@ -1,6 +1,7 @@
 import type { PostHog, PostHogOptions } from './types'
 import { createPostHogCore } from './posthog'
 import { isAnalyticsExtension } from './analytics-internal'
+import { createChunkLoader } from './chunk-loader'
 
 /** Creates a browser client with first-party analytics delivery loaded lazily by default. */
 export const createPostHog = async (options: PostHogOptions): Promise<PostHog> => {
@@ -14,9 +15,12 @@ export const createPostHog = async (options: PostHogOptions): Promise<PostHog> =
             // Unavailable configuration uses defaults.
         }
         if (configuration !== false) {
-            try {
+            const automaticAnalytics = createChunkLoader(async () => {
                 const { analytics } = await import('./automatic-analytics')
-                extensions.unshift(analytics(configuration))
+                return analytics(configuration)
+            })
+            try {
+                extensions.unshift(await automaticAnalytics.load(() => true))
             } catch (error) {
                 loadingError = error
             }

@@ -57,6 +57,7 @@
         "@playwright/test": "1.52.0",
         "@posthog-tooling/tsconfig-base": "workspace:*",
         "@rslib/core": "catalog:",
+        "@rspack/core": "2.1.10",
         "esbuild": "^0.25.0",
         "typescript": "catalog:",
         "vitest": "catalog:"
