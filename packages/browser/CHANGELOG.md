@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.433.5
+
+### Patch Changes
+
+- [#4962](https://github.com/PostHog/posthog-js/pull/4962) [`85b775a`](https://github.com/PostHog/posthog-js/commit/85b775a340c5a7bed3746f76f6cd7e6965e05010) Thanks [@posthog](https://github.com/apps/posthog)! - Docstrings for `identity_hash` and `setIdentity()` now say the hash is signed with the Secret API key from Support settings, not a project secret API key or a personal API key.
+  (2026-09-15)
+- Updated dependencies [[`85b775a`](https://github.com/PostHog/posthog-js/commit/85b775a340c5a7bed3746f76f6cd7e6965e05010)]:
+  - @posthog/types@1.412.1
+
 ## 1.433.4
 
 ### Patch Changes
