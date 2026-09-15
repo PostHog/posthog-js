@@ -5,7 +5,6 @@ import {
   SurveyQuestionType,
   SurveyRatingDisplay,
   RatingSurveyQuestion,
-  MultipleSurveyQuestion,
   SurveyAppearance as CoreSurveyAppearance,
   SurveyPosition,
   SurveyQuestionDescriptionContentType,
@@ -264,30 +263,7 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
 //   return shuffled
 // }
 
-export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string[] => {
-  // TODO: shuffle choices
-  return question.choices
-
-  // if (!question.shuffleOptions) {
-  //   return question.choices
-  // }
-
-  // const displayOrderChoices = question.choices
-  // let openEndedChoice = ''
-  // if (question.hasOpenChoice && displayOrderChoices.length > 0) {
-  // if the question has an open-ended choice, its always the last element in the choices array.
-  // openEndedChoice = displayOrderChoices.pop()!
-  // }
-
-  // const shuffledOptions = reverseIfUnshuffled(displayOrderChoices, shuffle(displayOrderChoices))
-
-  // if (question.hasOpenChoice) {
-  //   question.choices.push(openEndedChoice)
-  //   shuffledOptions.push(openEndedChoice)
-  // }
-
-  // return shuffledOptions
-}
+export { getDisplayOrderChoices } from '@posthog/core/surveys'
 
 /**
  * Get the rating bucket for a response value based on the scale

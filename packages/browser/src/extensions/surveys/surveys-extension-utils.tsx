@@ -1,7 +1,6 @@
 import { VNode, cloneElement, createContext, type JSX } from 'preact'
 import { PostHog } from '../../posthog-core'
 import {
-    MultipleSurveyQuestion,
     Survey,
     SurveyAppearance,
     SurveyEventName,
@@ -566,27 +565,7 @@ const reverseIfUnshuffled = (unshuffled: any[], shuffled: any[]): any[] => {
     return shuffled
 }
 
-export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string[] => {
-    if (!question.shuffleOptions) {
-        return question.choices
-    }
-
-    const displayOrderChoices = question.choices
-    let openEndedChoice = ''
-    if (question.hasOpenChoice) {
-        // if the question has an open-ended choice, its always the last element in the choices array.
-        openEndedChoice = displayOrderChoices.pop()!
-    }
-
-    const shuffledOptions = reverseIfUnshuffled(displayOrderChoices, shuffle(displayOrderChoices))
-
-    if (question.hasOpenChoice) {
-        question.choices.push(openEndedChoice)
-        shuffledOptions.push(openEndedChoice)
-    }
-
-    return shuffledOptions
-}
+export { getDisplayOrderChoices } from '@posthog/core/surveys'
 
 const hasBranching = (survey: Survey): boolean => survey.questions.some((question) => !!question.branching?.type)
 
