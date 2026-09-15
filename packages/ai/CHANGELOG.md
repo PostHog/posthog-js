@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.12.0
+
+### Minor Changes
+
+- [#4824](https://github.com/PostHog/posthog-js/pull/4824) [`7ca1cdc`](https://github.com/PostHog/posthog-js/commit/7ca1cdc327aaae75a2b6181942abb6ddade50214) Thanks [@posthog](https://github.com/apps/posthog)! - Add a Claude Agent SDK integration that captures LLM analytics for `@anthropic-ai/claude-agent-sdk` queries
+  (2026-09-15)
+
 ## 8.11.2
 
 ### Patch Changes
