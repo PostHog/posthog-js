@@ -35,6 +35,7 @@ import {
   createEventsMemoryStorage,
   createLogsMemoryStorage,
 } from './storage'
+import { getOtherProjectSurveyProgress } from './surveys/survey-progress'
 import { resolveLogsConfig } from './logs-defaults'
 import { version } from './version'
 import { buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
@@ -633,9 +634,12 @@ export class PostHog extends PostHogCore {
 
   setPersistedProperty<T>(key: PostHogPersistedProperty, value: T | null): void {
     const storage = this._storageForKey(key)
-    value !== null ? storage.setItem(key, value) : storage.removeItem(key)
     if (key === PostHogPersistedProperty.SurveysInProgress && value === null) {
+      const otherProjects = getOtherProjectSurveyProgress(this)
+      otherProjects.length ? storage.setItem(key, otherProjects) : storage.removeItem(key)
       this._events.emit('surveysReset', undefined)
+    } else {
+      value !== null ? storage.setItem(key, value) : storage.removeItem(key)
     }
     if (key === PostHogPersistedProperty.PersonProperties) {
       // Notify surveys after the in-memory write, including unsets and resets,
@@ -1085,9 +1089,12 @@ export class PostHog extends PostHogCore {
   optOut(): Promise<void> {
     this._cancelManualRecordingStart()
     // Consent must be durable. See reset()/identify().
-    const result = super.optOut()
-    this.setPersistedProperty(PostHogPersistedProperty.SurveysInProgress, null)
-    void this._eventsStorage.waitForPersist()
+    void super.optOut()
+    const clearProgress = (): Promise<void> => {
+      this.setPersistedProperty(PostHogPersistedProperty.SurveysInProgress, null)
+      return this._eventsStorage.waitForPersist()
+    }
+    const result = this._isInitialized ? clearProgress() : this._initPromise.then(clearProgress)
     // A device token registered before opt-out would otherwise survive consent withdrawal: the
     // native subscription handler keeps its own persisted record and retry loop. unregister is
     // deliberately allowed while opted out.

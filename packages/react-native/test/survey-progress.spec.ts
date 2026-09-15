@@ -145,3 +145,23 @@ it.each([
   const edited = { ...original, questions: [{ ...original.questions[0], ...change }, original.questions[1]] } as Survey
   expect(store.load(edited)).toBeUndefined()
 })
+
+it.each(['save', 'remove', 'reconcile'] as const)('preserves another project on %s', async (operation) => {
+  const { open } = setup()
+  const other = open('other-project')
+  await other.storage.preloadPromise
+  const otherProgress = createSurveyProgress(survey)
+  other.store.save(survey, otherProgress)
+  await other.storage.waitForPersist()
+  const current = open()
+  await current.storage.preloadPromise
+  const progress = createSurveyProgress(survey)
+  current.store.save(survey, progress)
+  if (operation === 'remove') current.store.remove(survey)
+  if (operation === 'reconcile') current.store.reconcile([])
+  await current.storage.waitForPersist()
+  const restored = open('other-project')
+  await restored.storage.preloadPromise
+  expect(restored.store.load(survey)).toEqual(otherProgress)
+  expect(current.store.load(survey)).toEqual(operation === 'save' ? progress : undefined)
+})

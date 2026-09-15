@@ -557,6 +557,39 @@ describe('PostHog React Native', () => {
       expect(restored.getItem(PostHogPersistedProperty.SurveysInProgress)).toBeUndefined()
     })
 
+    it.each([false, true])('clears only this project on opt-out (pending preload=%s)', async (pendingPreload) => {
+      const otherProgress = { project: 'other-project', progress: { submissionId: 'other' } }
+      rnStorage.setItem(PostHogPersistedProperty.SurveysInProgress, [
+        { project: '1', progress: { submissionId: 'old-user' } },
+        otherProgress,
+      ])
+      await rnStorage.waitForPersist()
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const backend = {
+        ...storage,
+        getItem: (key: string) => {
+          const value = cache[key] ?? null
+          return pendingPreload ? gate.then(() => value) : value
+        },
+      }
+      posthog = new PostHog('1', { customStorage: backend, captureAppLifecycleEvents: false, flushInterval: 0 })
+      const resetListener = vi.fn()
+      posthog.on('surveysReset', resetListener)
+      const optedOut = posthog.optOut()
+      release()
+      await optedOut
+      await posthog.ready()
+      expect(resetListener).toHaveBeenCalledOnce()
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.SurveysInProgress)).toEqual([otherProgress])
+      const restored = createEventsStorage(storage)
+      await restored.preloadPromise
+      expect(restored.getItem(PostHogPersistedProperty.SurveysInProgress)).toEqual([otherProgress])
+      expect(restored.getItem(PostHogPersistedProperty.OptedOut)).toBe(true)
+    })
+
     it('should allow immediate calls without delay for stored values', async () => {
       posthog = new PostHog('1', {
         customStorage: storage,

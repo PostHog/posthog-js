@@ -134,6 +134,12 @@ export function canCaptureSurvey(posthog: PostHog): boolean {
   return !posthog.optedOut && !posthog.isDisabled
 }
 
+export function getOtherProjectSurveyProgress(posthog: PostHog): unknown[] {
+  const raw = posthog.getPersistedProperty<unknown>(PostHogPersistedProperty.SurveysInProgress)
+  if (!Array.isArray(raw)) return []
+  return raw.filter((entry) => isRecord(entry) && isNonEmptyString(entry.project) && entry.project !== posthog.apiKey)
+}
+
 export class SurveyProgressStore {
   constructor(private readonly posthog: PostHog) {}
 
@@ -145,6 +151,13 @@ export class SurveyProgressStore {
       .slice(0, MAX_PROGRESS)
   }
 
+  private write(entries: SavedProgress[]): void {
+    this.posthog.setPersistedProperty(PostHogPersistedProperty.SurveysInProgress, [
+      ...entries.slice(0, MAX_PROGRESS),
+      ...getOtherProjectSurveyProgress(this.posthog),
+    ])
+  }
+
   load(survey: Survey): SurveyProgress | undefined {
     const entry = this.read().find((entry) => entry.surveyKey === getSurveyIterationKey(survey))
     return entry?.shape === surveyShape(survey) && validProgress(entry.progress, survey) ? entry.progress : undefined
@@ -152,35 +165,26 @@ export class SurveyProgressStore {
 
   save(survey: Survey, progress: SurveyProgress): void {
     const surveyKey = getSurveyIterationKey(survey)
-    this.posthog.setPersistedProperty(
-      PostHogPersistedProperty.SurveysInProgress,
-      [
-        {
-          project: this.posthog.apiKey,
-          surveyKey,
-          shape: surveyShape(survey),
-          updatedAt: Date.now(),
-          progress,
-        },
-        ...this.read().filter((entry) => entry.surveyKey !== surveyKey),
-      ].slice(0, MAX_PROGRESS)
-    )
+    this.write([
+      {
+        project: this.posthog.apiKey,
+        surveyKey,
+        shape: surveyShape(survey),
+        updatedAt: Date.now(),
+        progress,
+      },
+      ...this.read().filter((entry) => entry.surveyKey !== surveyKey),
+    ])
   }
 
   remove(survey: Survey): void {
-    this.posthog.setPersistedProperty(
-      PostHogPersistedProperty.SurveysInProgress,
-      this.read().filter((entry) => entry.surveyKey !== getSurveyIterationKey(survey))
-    )
+    this.write(this.read().filter((entry) => entry.surveyKey !== getSurveyIterationKey(survey)))
   }
 
   reconcile(surveys: Survey[]): void {
     const validKeys = new Set(
       surveys.filter((survey) => survey.start_date && !survey.end_date && this.load(survey)).map(getSurveyIterationKey)
     )
-    this.posthog.setPersistedProperty(
-      PostHogPersistedProperty.SurveysInProgress,
-      this.read().filter((entry) => validKeys.has(entry.surveyKey))
-    )
+    this.write(this.read().filter((entry) => validKeys.has(entry.surveyKey)))
   }
 }
