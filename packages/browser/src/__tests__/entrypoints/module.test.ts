@@ -22,8 +22,43 @@ const moduleFullNoExternalJs = fs.readFileSync(
 const moduleSlimDts = fs.readFileSync(path.join(__dirname, '../../../dist/module.slim.d.ts'), 'utf-8')
 const extensionBundlesDts = fs.readFileSync(path.join(__dirname, '../../../dist/extension-bundles.d.ts'), 'utf-8')
 const webVitalsSoftNavsJs = fs.readFileSync(path.join(__dirname, '../../../dist/web-vitals-soft-navs.js'), 'utf-8')
+const webVitalsJs = fs.readFileSync(path.join(__dirname, '../../../dist/web-vitals.js'), 'utf-8')
+const webVitalsWithAttributionJs = fs.readFileSync(
+    path.join(__dirname, '../../../dist/web-vitals-with-attribution.js'),
+    'utf-8'
+)
+const webVitalsWithAttributionSoftNavsJs = fs.readFileSync(
+    path.join(__dirname, '../../../dist/web-vitals-with-attribution-soft-navs.js'),
+    'utf-8'
+)
 
-const evaluateBundle = (bundle: string, supportsSoftNavigations = false) => {
+// These bundles load lazily into browsers much older than our browserslist range. Babel down-levels
+// syntax only. It does not polyfill a prototype method. So a `web-vitals` bump can add a call that
+// is valid ES5 syntax but throws on an old browser. That page then captures no web vitals and files
+// a junk error tracking issue instead. `Array.prototype.at` and `Array.prototype.findLast` have each
+// done this. es-check does not catch it, because it parses the syntax and never runs the bundle.
+// So a bundle that calls one of these built-ins must also install it.
+const postBaselineBuiltins = [
+    { builtin: 'Array.prototype.at', callPattern: /\.at\(/ }, // Chrome 92, iOS Safari 15.4
+    { builtin: 'Array.prototype.findLast', callPattern: /\.findLast\(/ }, // Chrome 97, iOS Safari 15.4
+    { builtin: 'Array.prototype.findLastIndex', callPattern: /\.findLastIndex\(/ }, // Chrome 97, iOS Safari 15.4
+    { builtin: 'Array.prototype.toReversed', callPattern: /\.toReversed\(/ }, // Chrome 110, iOS Safari 16
+    { builtin: 'Array.prototype.toSorted', callPattern: /\.toSorted\(/ }, // Chrome 110, iOS Safari 16
+    { builtin: 'Object.hasOwn', callPattern: /\bObject\.hasOwn\(/ }, // Chrome 93, iOS Safari 15.4
+    { builtin: 'structuredClone', callPattern: /\bstructuredClone\(/ }, // Chrome 98, iOS Safari 15.4
+]
+
+const resolveBuiltin = (frameWindow: Window, builtin: string): [Record<string, unknown>, string] => {
+    const segments = builtin.split('.')
+    const key = segments.pop() as string
+    const owner = segments.reduce<Record<string, unknown>>(
+        (object, segment) => object[segment] as Record<string, unknown>,
+        frameWindow as unknown as Record<string, unknown>
+    )
+    return [owner, key]
+}
+
+const evaluateBundle = (bundle: string, supportsSoftNavigations = false, removedBuiltins: string[] = []) => {
     const iframe = document.createElement('iframe')
     document.body.appendChild(iframe)
     const frameWindow = iframe.contentWindow as typeof window & {
@@ -61,6 +96,10 @@ const evaluateBundle = (bundle: string, supportsSoftNavigations = false) => {
             value: MockPerformanceSoftNavigation,
             configurable: true,
         })
+    }
+    for (const builtin of removedBuiltins) {
+        const [owner, key] = resolveBuiltin(frameWindow, builtin)
+        delete owner[key]
     }
     frameWindow.eval(bundle)
     return { frameWindow, iframe }
@@ -133,6 +172,32 @@ describe('Web vitals bundles', () => {
         })
 
         expect(frameWindow.__observedEntryTypes).toEqual(expectedEntryTypes)
+    })
+
+    it.each([
+        ['web-vitals', webVitalsJs],
+        ['web-vitals-soft-navs', webVitalsSoftNavsJs],
+        ['web-vitals-with-attribution', webVitalsWithAttributionJs],
+        ['web-vitals-with-attribution-soft-navs', webVitalsWithAttributionSoftNavsJs],
+    ])('%s polyfills every built-in it calls that an old browser lacks', (_name, bundle) => {
+        const called = postBaselineBuiltins.filter(({ callPattern }) => callPattern.test(bundle))
+        expect(called.length).toBeGreaterThan(0)
+
+        // A frame without these built-ins stands in for the old browser. The bundle must evaluate
+        // there without throwing, and must leave every built-in it calls installed.
+        const { frameWindow } = evaluateBundle(
+            bundle,
+            false,
+            called.map(({ builtin }) => builtin)
+        )
+
+        const missing = called
+            .filter(({ builtin }) => {
+                const [owner, key] = resolveBuiltin(frameWindow, builtin)
+                return typeof owner[key] !== 'function'
+            })
+            .map(({ builtin }) => builtin)
+        expect(missing).toEqual([])
     })
 })
 

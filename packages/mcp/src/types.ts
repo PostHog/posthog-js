@@ -689,8 +689,11 @@ export interface PrepareToolListOptions {
 /** Options for {@link PostHogMCP.prepareToolCall}. */
 export interface PrepareToolCallOptions {
   /**
-   * The tool descriptor before PostHog preparation. Pass this on stateless or
+   * The tool descriptor before PostHog preparation, from the host's own tool
+   * list (the SDK's virtual tools never exist there). Pass this on stateless or
    * multi-replica servers so SDK argument ownership is resolved per request.
+   * Passing it also disambiguates a feedback-tool name collision: a real tool
+   * by that name is dispatched normally instead of being flagged as feedback.
    */
   originalTool?: { inputSchema?: unknown }
   /** The incoming `tools/call` request's `_meta`, used for recognized client model metadata. */
@@ -717,8 +720,10 @@ export interface PreparedToolCall {
   isMissingCapability: boolean
   /**
    * True when `name` is the `send_feedback` virtual tool AND the constructor's
-   * `collectFeedback` option is set. Always false without that opt-in, so a real
-   * tool that happens to use the name is never shadowed.
+   * `collectFeedback` option is set AND no `originalTool` was supplied. Always
+   * false without that opt-in — and a supplied `originalTool` proves a real
+   * application tool owns the name — so a real tool that happens to use the
+   * name is never shadowed.
    */
   isFeedback: boolean
   /**

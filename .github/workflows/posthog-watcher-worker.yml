@@ -37,7 +37,7 @@ jobs:
         runs-on: ubuntu-24.04
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
               with:
                 egress-policy: audit
 
@@ -57,7 +57,7 @@ jobs:
                   sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
             - name: Drain watcher queue
-              uses: PostHog/posthog-watcher-action@c14844661c889811bd633e0263320c33c100f4ee
+              uses: PostHog/posthog-watcher-action@f86289499502353b0fdfd2b2137f0e38886d1035
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   mode: drain-queue
@@ -84,7 +84,7 @@ jobs:
         runs-on: ubuntu-24.04
         steps:
             - name: Audit runner egress
-              uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+              uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
               with:
                 egress-policy: audit
 
@@ -104,7 +104,7 @@ jobs:
                   sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
             - name: Process watcher issue
-              uses: PostHog/posthog-watcher-action@c14844661c889811bd633e0263320c33c100f4ee
+              uses: PostHog/posthog-watcher-action@f86289499502353b0fdfd2b2137f0e38886d1035
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   issue-number: ${{ inputs['issue-number'] }}

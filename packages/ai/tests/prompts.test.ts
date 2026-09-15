@@ -1363,6 +1363,19 @@ describe('Prompts', () => {
       expect(consoleWarnSpy).toHaveBeenCalledTimes(1)
     })
 
+    it('throws when every row was skipped as moved', async () => {
+      // An old server can serve latest versions while every prompt's label
+      // points at an earlier version. Each row then looks like a moved label;
+      // returning {} would report no labeled prompts despite them existing.
+      const rowA = { ...labeledRow('prompt-a', 2), all_labels: [{ name: 'production', version: 1 }] }
+      const rowB = { ...labeledRow('prompt-b', 3), all_labels: [{ name: 'production', version: 2 }] }
+      mockFetch.mockResolvedValueOnce(listResponse([rowA, rowB]))
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+
+      await expect(prompts.getAll({ label: 'production' })).rejects.toThrow(/none resolve label/)
+    })
+
     it('preserves a prompt named __proto__ as an own entry', async () => {
       mockFetch.mockResolvedValueOnce(listResponse([labeledRow('__proto__')]))
 

@@ -16,9 +16,11 @@ import {
     EVENT_IDENTIFY,
     EVENT_PAGELEAVE,
     EVENT_PAGEVIEW,
+    FACEBOOK_BROWSER_ID,
     FACEBOOK_CLICK_ID,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
+    PERSISTENCE_FACEBOOK_BROWSER_ID,
     PERSISTENCE_FACEBOOK_CLICK_ID,
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
@@ -29,6 +31,7 @@ import {
     COOKIELESS_ALWAYS,
 } from './constants'
 import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '@posthog/browser-common/utils/autocapture-utils'
+import { getCookieValue } from '@posthog/browser-common/utils/cookie-utils'
 import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
@@ -44,7 +47,7 @@ import {
 import { ProductTourEventName, ProductTourEventProperties } from './posthog-product-tours-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
-import { request, SUPPORTS_REQUEST } from './request'
+import { sendRequest, enableRequestSending } from './request-dispatch'
 import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
@@ -186,15 +189,44 @@ const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
 
 const FBCLID_PATTERN = /^[A-Za-z0-9_-]{1,400}$/
 const FBC_PATTERN = /^fb\.[0-9]+\.[0-9]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/
+// `fb.<subdomainIndex>.<creationTimeMs>.<randomNumber>`, the shape of Meta's _fbp cookie.
+const FBP_PATTERN = /^fb\.[0-9]+\.[0-9]+\.[0-9]+$/
 
-type FacebookClickIdUpdate = {
+type MetaIdentifierUpdate = {
     value: string
     pending: boolean
 }
 
-type PersistedFacebookClickId = {
+type PersistedMetaIdentifier = {
     value: string
     delivered: boolean
+}
+
+// One Meta identifier PostHog keeps for the Conversions API, and how it is stored.
+type MetaIdentifierChannel = {
+    property: string
+    persistenceKey: string
+    cookieName: string
+    pattern: RegExp
+    register: (value: string, delivered: boolean) => void
+    unregister: () => void
+}
+
+// The pixel's _fbc carries the true click time: it wins for a click the URL or the store holds, or for a newer one.
+const fbcCookieWins = (
+    cookieFbc: string,
+    urlClick: string | undefined,
+    stored: PersistedMetaIdentifier | undefined
+): boolean => {
+    const cookie = cookieFbc.split('.')
+    if (urlClick) {
+        return cookie[3] === urlClick
+    }
+    if (!stored) {
+        return true
+    }
+    const known = stored.value.split('.')
+    return cookie[3] === known[3] || Number(cookie[2]) > Number(known[2])
 }
 
 // Transport-level keys the browser SDK carries inside event properties (unlike other SDKs,
@@ -203,17 +235,6 @@ type PersistedFacebookClickId = {
 const FLAG_CALLED_TRANSPORT_PROPERTY_KEYS = ['token', 'distinct_id', COOKIELESS_MODE_FLAG_PROPERTY]
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
-
-/*
- * Dynamic... constants? Is that an oxymoron?
- */
-// http://hacks.mozilla.org/2009/07/cross-site-xmlhttprequest-with-cors/
-// https://developer.mozilla.org/en-US/docs/DOM/XMLHttpRequest#withCredentials
-
-// IE<10 does not support cross-origin XHR's but script tags
-// with defer won't block window.onload; ENQUEUE_REQUESTS
-// should only be true for Opera<12
-let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
 const getSessionRecordingDefaults = (defaults?: ConfigDefaults): PostHogConfig['session_recording'] => {
     const sessionRecording: PostHogConfig['session_recording'] = {}
@@ -883,7 +904,7 @@ export class PostHog implements PostHogInterface {
         this.register({ $initialization_time: new Date().toISOString() })
 
         this._requestQueue = new RequestQueue(
-            (req) => this._send_retriable_request(req),
+            (req, transportOverride) => this._send_retriable_request(req, transportOverride),
             this.config.request_queue_config
         )
         this._retryQueue = new RetryQueue(this)
@@ -1381,64 +1402,17 @@ export class PostHog implements PostHogInterface {
     }
 
     _send_request(options: QueuedRequestWithOptions): void {
-        if (!this.__loaded) {
-            if (options.fireCallbackOnDrop) {
-                options.callback?.({ statusCode: 0 })
-            }
-            return
-        }
-
-        if (ENQUEUE_REQUESTS) {
-            this.__request_queue.push(options)
-            return
-        }
-
-        if (this.rateLimiter.isServerRateLimited(options.batchKey)) {
-            if (options.fireCallbackOnDrop) {
-                options.callback?.({ statusCode: 429 })
-            }
-            return
-        }
-
-        options.transport = options.transport || this.config.api_transport
-        options.headers = {
-            ...this.config.request_headers,
-            ...options.headers,
-        }
-        options.compression =
-            options.compression === 'best-available'
-                ? (this.compression ?? options.compressionFallback)
-                : options.compression
-        const disableBeacon = isUndefined(this.config.disable_beacon)
-            ? this.config.__preview_disable_beacon
-            : this.config.disable_beacon
-        if (disableBeacon) {
-            options.disableTransport = ['sendBeacon']
-        }
-
-        // Specially useful if you're doing SSR with NextJS
-        // Users must be careful when tweaking `cache` because they might get out-of-date feature flags
-        options.fetchOptions = options.fetchOptions || this.config.fetch_options
-
-        request({
-            ...options,
-            callback: (response) => {
-                this.rateLimiter.checkForLimiting(response)
-
-                if (response.statusCode >= 400) {
-                    this.config.on_request_error?.(response)
-                }
-
-                options.callback?.(response)
-            },
-        })
+        sendRequest(this, options)
     }
 
-    _send_retriable_request(options: QueuedRequestWithOptions): void {
+    _send_retriable_request(
+        options: QueuedRequestWithOptions,
+        transportOverride?: QueuedRequestWithOptions['transport']
+    ): void {
         if (this._retryQueue) {
-            this._retryQueue.retriableRequest(options)
+            this._retryQueue.retriableRequest(options, transportOverride)
         } else {
-            this._send_request(options)
+            this._send_request(transportOverride ? { ...options, transport: transportOverride } : options)
         }
     }
 
@@ -1543,15 +1517,64 @@ export class PostHog implements PostHogInterface {
         this._execute_array([item])
     }
 
-    private _getPersistedFacebookClickId(): PersistedFacebookClickId | undefined {
-        const stored = this.persistence?.get_property(PERSISTENCE_FACEBOOK_CLICK_ID)
-        if (isString(stored) && FBC_PATTERN.test(stored)) {
+    // The persistence keys are literal in each channel, which keeps every write to a Meta
+    // identifier behind a known key while the logic below stays shared.
+    private get _facebookClickIdChannel(): MetaIdentifierChannel {
+        return {
+            property: FACEBOOK_CLICK_ID,
+            persistenceKey: PERSISTENCE_FACEBOOK_CLICK_ID,
+            cookieName: '_fbc',
+            pattern: FBC_PATTERN,
+            register: (value, delivered) =>
+                this.persistence?.register({ [PERSISTENCE_FACEBOOK_CLICK_ID]: { value, delivered } }),
+            unregister: () => this.persistence?.unregister(PERSISTENCE_FACEBOOK_CLICK_ID),
+        }
+    }
+
+    private get _facebookBrowserIdChannel(): MetaIdentifierChannel {
+        return {
+            property: FACEBOOK_BROWSER_ID,
+            persistenceKey: PERSISTENCE_FACEBOOK_BROWSER_ID,
+            cookieName: '_fbp',
+            pattern: FBP_PATTERN,
+            register: (value, delivered) =>
+                this.persistence?.register({ [PERSISTENCE_FACEBOOK_BROWSER_ID]: { value, delivered } }),
+            unregister: () => this.persistence?.unregister(PERSISTENCE_FACEBOOK_BROWSER_ID),
+        }
+    }
+
+    private _getPersistedMetaIdentifier(channel: MetaIdentifierChannel): PersistedMetaIdentifier | undefined {
+        const stored = this.persistence?.get_property(channel.persistenceKey)
+        if (isString(stored) && channel.pattern.test(stored)) {
             return { value: stored, delivered: false }
         }
-        if (isObject(stored) && isString(stored.value) && FBC_PATTERN.test(stored.value)) {
+        if (isObject(stored) && isString(stored.value) && channel.pattern.test(stored.value)) {
             return { value: stored.value, delivered: stored.delivered === true }
         }
         return undefined
+    }
+
+    // A value equal to the stored one keeps its delivery state, so a person property the server
+    // already accepted does not ride along on every later event.
+    private _storeMetaIdentifier(
+        channel: MetaIdentifierChannel,
+        value: string,
+        stored: PersistedMetaIdentifier | undefined
+    ): MetaIdentifierUpdate {
+        if (value === stored?.value) {
+            return { value, pending: !stored.delivered }
+        }
+        channel.register(value, false)
+        return { value, pending: true }
+    }
+
+    // Read under the switches of the URL click ID: save_campaign_params off or cookieless mode skips the read.
+    private _readMetaCookie(channel: MetaIdentifierChannel): string | undefined {
+        if (!this.config.save_campaign_params || this._inCookielessMode()) {
+            return undefined
+        }
+        const value = getCookieValue(channel.cookieName)
+        return isString(value) && channel.pattern.test(value) ? value : undefined
     }
 
     private _updateFacebookClickId(
@@ -1559,16 +1582,18 @@ export class PostHog implements PostHogInterface {
         providedFbc: unknown,
         hasProvidedFbc: boolean,
         unsetFbc: boolean
-    ): FacebookClickIdUpdate | undefined {
+    ): MetaIdentifierUpdate | undefined {
         if (!this.persistence) {
             return undefined
         }
 
-        this.persistence.refreshKey(PERSISTENCE_FACEBOOK_CLICK_ID)
-        const stored = this._getPersistedFacebookClickId()
+        const channel = this._facebookClickIdChannel
+        this.persistence.refreshKey(channel.persistenceKey)
+        const stored = this._getPersistedMetaIdentifier(channel)
 
+        // An unset clears the store for this event only: the cookie stays, so a later event reads it again.
         if (unsetFbc) {
-            this.persistence.unregister(PERSISTENCE_FACEBOOK_CLICK_ID)
+            channel.unregister()
             return undefined
         }
 
@@ -1576,42 +1601,75 @@ export class PostHog implements PostHogInterface {
         // the same fbclid cannot replace its original timestamp.
         if (hasProvidedFbc) {
             if (!isString(providedFbc) || !FBC_PATTERN.test(providedFbc)) {
-                this.persistence.unregister(PERSISTENCE_FACEBOOK_CLICK_ID)
+                channel.unregister()
                 return undefined
             }
-            if (providedFbc !== stored?.value) {
-                this.persistence.register({
-                    [PERSISTENCE_FACEBOOK_CLICK_ID]: { value: providedFbc, delivered: false },
-                })
-            }
-            return { value: providedFbc, pending: providedFbc !== stored?.value || !stored.delivered }
+            return this._storeMetaIdentifier(channel, providedFbc, stored)
         }
 
-        if (isString(fbclid) && FBCLID_PATTERN.test(fbclid)) {
-            if (stored?.value.split('.')[3] === fbclid) {
+        const urlClick = isString(fbclid) && FBCLID_PATTERN.test(fbclid) ? fbclid : undefined
+
+        const cookieFbc = this._readMetaCookie(channel)
+        if (cookieFbc && fbcCookieWins(cookieFbc, urlClick, stored)) {
+            return this._storeMetaIdentifier(channel, cookieFbc, stored)
+        }
+
+        if (urlClick) {
+            if (stored?.value.split('.')[3] === urlClick) {
                 return { value: stored.value, pending: !stored.delivered }
             }
-
-            const fbc = `fb.1.${Date.now()}.${fbclid}`
-            this.persistence.register({
-                [PERSISTENCE_FACEBOOK_CLICK_ID]: { value: fbc, delivered: false },
-            })
-            return { value: fbc, pending: true }
+            return this._storeMetaIdentifier(channel, `fb.1.${Date.now()}.${urlClick}`, stored)
         }
 
         return stored ? { value: stored.value, pending: !stored.delivered } : undefined
     }
 
-    private _markFacebookClickIdDelivered(value: string): void {
+    // Meta's _fbp cookie identifies the browser rather than a click, so PostHog cannot derive it.
+    // The value comes from the cookie the pixel mints, which makes it available to a conversion the
+    // Conversions API sends later from a backend.
+    private _updateFacebookBrowserId(
+        providedFbp: unknown,
+        hasProvidedFbp: boolean,
+        unsetFbp: boolean
+    ): MetaIdentifierUpdate | undefined {
+        if (!this.persistence) {
+            return undefined
+        }
+
+        const channel = this._facebookBrowserIdChannel
+        this.persistence.refreshKey(channel.persistenceKey)
+        const stored = this._getPersistedMetaIdentifier(channel)
+
+        // As for $fbc, an unset applies to this event only.
+        if (unsetFbp) {
+            channel.unregister()
+            return undefined
+        }
+
+        if (hasProvidedFbp) {
+            if (!isString(providedFbp) || !FBP_PATTERN.test(providedFbp)) {
+                channel.unregister()
+                return undefined
+            }
+            return this._storeMetaIdentifier(channel, providedFbp, stored)
+        }
+
+        const cookieFbp = this._readMetaCookie(channel)
+        if (cookieFbp) {
+            return this._storeMetaIdentifier(channel, cookieFbp, stored)
+        }
+
+        return stored ? { value: stored.value, pending: !stored.delivered } : undefined
+    }
+
+    private _markMetaIdentifierDelivered(channel: MetaIdentifierChannel, value: string): void {
         if (!this.persistence) {
             return
         }
-        this.persistence.refreshKey(PERSISTENCE_FACEBOOK_CLICK_ID)
-        const stored = this._getPersistedFacebookClickId()
+        this.persistence.refreshKey(channel.persistenceKey)
+        const stored = this._getPersistedMetaIdentifier(channel)
         if (stored?.value === value && !stored.delivered) {
-            this.persistence.register({
-                [PERSISTENCE_FACEBOOK_CLICK_ID]: { value, delivered: true },
-            })
+            channel.register(value, true)
         }
     }
 
@@ -1752,24 +1810,51 @@ export class PostHog implements PostHogInterface {
         }
 
         const propertySet = isObject(properties?.$set) ? properties.$set : undefined
-        const hasOptionFbc = !!options?.$set && FACEBOOK_CLICK_ID in options.$set
-        const hasPropertyFbc = !!propertySet && FACEBOOK_CLICK_ID in propertySet
-        const hasProvidedFbc = hasOptionFbc || hasPropertyFbc
-        const providedFbc = hasOptionFbc ? options?.$set?.[FACEBOOK_CLICK_ID] : propertySet?.[FACEBOOK_CLICK_ID]
         const propertyUnset = isArray(properties?.$unset) ? properties.$unset : []
         const optionUnset = options?.$unset || []
-        const unsetFbc =
-            propertyUnset.indexOf(FACEBOOK_CLICK_ID) !== -1 || optionUnset.indexOf(FACEBOOK_CLICK_ID) !== -1
-        const fbc = this._updateFacebookClickId(campaignParams?.fbclid, providedFbc, hasProvidedFbc, unsetFbc)
-        if (
-            fbc &&
-            data.properties.$process_person_profile === true &&
-            fbc.pending &&
-            !hasProvidedFbc &&
-            !shouldSendMinimalFlagCalledEvent
-        ) {
-            // An explicit person property supplied by the caller wins over the SDK-derived value.
-            data.$set = { [FACEBOOK_CLICK_ID]: fbc.value, ...data.$set }
+        const callerValueFor = (property: string) => {
+            const hasOptionValue = !!options?.$set && property in options.$set
+            const hasPropertyValue = !!propertySet && property in propertySet
+            return {
+                hasProvided: hasOptionValue || hasPropertyValue,
+                provided: hasOptionValue ? options?.$set?.[property] : propertySet?.[property],
+                unset: propertyUnset.indexOf(property) !== -1 || optionUnset.indexOf(property) !== -1,
+            }
+        }
+        const fbcCallerValue = callerValueFor(FACEBOOK_CLICK_ID)
+        const fbpCallerValue = callerValueFor(FACEBOOK_BROWSER_ID)
+        const metaIdentifiers = [
+            {
+                channel: this._facebookClickIdChannel,
+                hasProvided: fbcCallerValue.hasProvided,
+                update: this._updateFacebookClickId(
+                    campaignParams?.fbclid,
+                    fbcCallerValue.provided,
+                    fbcCallerValue.hasProvided,
+                    fbcCallerValue.unset
+                ),
+            },
+            {
+                channel: this._facebookBrowserIdChannel,
+                hasProvided: fbpCallerValue.hasProvided,
+                update: this._updateFacebookBrowserId(
+                    fbpCallerValue.provided,
+                    fbpCallerValue.hasProvided,
+                    fbpCallerValue.unset
+                ),
+            },
+        ]
+        for (const { channel, hasProvided, update } of metaIdentifiers) {
+            if (
+                update &&
+                data.properties.$process_person_profile === true &&
+                update.pending &&
+                !hasProvided &&
+                !shouldSendMinimalFlagCalledEvent
+            ) {
+                // An explicit person property supplied by the caller wins over the SDK-derived value.
+                data.$set = { [channel.property]: update.value, ...data.$set }
+            }
         }
         const unsetProperties = options?.$unset
         if (unsetProperties) {
@@ -1853,10 +1938,12 @@ export class PostHog implements PostHogInterface {
             }
         }
 
-        const finalFbc =
-            data.$set?.[FACEBOOK_CLICK_ID] ??
-            (isObject(data.properties?.$set) ? data.properties.$set[FACEBOOK_CLICK_ID] : undefined)
-        const fbcToConfirm = fbc?.pending && finalFbc === fbc.value ? fbc.value : undefined
+        const metaIdentifiersToConfirm = metaIdentifiers.filter(({ channel, update }) => {
+            const finalValue =
+                data.$set?.[channel.property] ??
+                (isObject(data.properties?.$set) ? data.properties.$set[channel.property] : undefined)
+            return update?.pending && finalValue === update.value
+        })
 
         this._internalEventEmitter.emit('eventCaptured', data)
 
@@ -1869,14 +1956,22 @@ export class PostHog implements PostHogInterface {
             compression: 'best-available',
             timestampMode: isSessionRecording ? 'body' : 'capture-body',
             batchKey: options?._batchKey,
-            ...(isSessionRecording && data.properties?.$session_id ? { batchGroup: data.properties.$session_id } : {}),
+            ...(isSessionRecording && data.properties?.$session_id
+                ? {
+                      batchGroup:
+                          data.properties.$session_id +
+                          (data.properties.$window_id ? `-${data.properties.$window_id}` : ''),
+                  }
+                : {}),
             ...(options?.transport ? { transport: options.transport } : {}),
-            ...(fbcToConfirm
+            ...(metaIdentifiersToConfirm.length
                 ? {
                       fireCallbackOnDrop: true,
                       callback: (response) => {
                           if (response.statusCode >= 200 && response.statusCode < 300) {
-                              this._markFacebookClickIdDelivered(fbcToConfirm)
+                              for (const { channel, update } of metaIdentifiersToConfirm) {
+                                  this._markMetaIdentifierDelivered(channel, update!.value)
+                              }
                           }
                       },
                   }
@@ -1889,21 +1984,21 @@ export class PostHog implements PostHogInterface {
             this.config.request_batching &&
             (!options || options?._batchKey) &&
             !options?.send_instantly &&
-            !fbcToConfirm
+            !metaIdentifiersToConfirm.length
         ) {
             this._requestQueue.enqueue(requestOptions)
         } else {
-            // Keep response-capable transports on active pages so failures can be retried.
-            // During unload, prefer sendBeacon unless a response or custom headers are required.
+            let transportOverride: QueuedRequestWithOptions['transport']
+            // Keep the automatic beacon choice out of queued retries, which may run after a bfcache restore.
             if (
                 !requestOptions.transport &&
                 !requestOptions.callback &&
                 isEmptyObject(this.config.request_headers ?? {}) &&
                 this._isPageUnloading
             ) {
-                requestOptions.transport = 'sendBeacon'
+                transportOverride = 'sendBeacon'
             }
-            this._send_retriable_request(requestOptions)
+            this._send_retriable_request(requestOptions, transportOverride)
         }
 
         return data
@@ -3166,16 +3261,20 @@ export class PostHog implements PostHogInterface {
                     this.persistence._publishSuppressedCookieSnapshot()
                 }
 
-                this.capture(EVENT_IDENTIFY, identifyProperties, {
-                    $set: userPropertiesToSet || {},
-                    $set_once: userPropertiesToSetOnce || {},
-                })
-
-                this._cachedPersonProperties = getPersonPropertiesHash(
-                    new_distinct_id,
-                    userPropertiesToSet,
-                    userPropertiesToSetOnce
-                )
+                // Only remember properties that capture accepted. Caching a call that capture
+                // dropped would make the caller's retry look like a duplicate and drop it too.
+                if (
+                    this.capture(EVENT_IDENTIFY, identifyProperties, {
+                        $set: userPropertiesToSet || {},
+                        $set_once: userPropertiesToSetOnce || {},
+                    })
+                ) {
+                    this._cachedPersonProperties = getPersonPropertiesHash(
+                        new_distinct_id,
+                        userPropertiesToSet,
+                        userPropertiesToSetOnce
+                    )
+                }
 
                 // Forward the previous distinct id for default flag consistency, or clear
                 // any stale handoff when reuseAnonymousId opts out of anonymous merging.
@@ -3191,15 +3290,15 @@ export class PostHog implements PostHogInterface {
                 if (this.config.cookieWinsOnConflict) {
                     this.persistence._publishSuppressedCookieSnapshot()
                 }
-                this.capture('$set', { $set: setProperties, $set_once: setOnceProperties })
-
                 // This transition must create/update the person even when an identical property call was cached earlier.
                 // Cache only after capture so deduplication cannot suppress the transition event.
-                this._cachedPersonProperties = getPersonPropertiesHash(
-                    new_distinct_id,
-                    userPropertiesToSet,
-                    userPropertiesToSetOnce
-                )
+                if (this.capture('$set', { $set: setProperties, $set_once: setOnceProperties })) {
+                    this._cachedPersonProperties = getPersonPropertiesHash(
+                        new_distinct_id,
+                        userPropertiesToSet,
+                        userPropertiesToSetOnce
+                    )
+                }
             } else if (userPropertiesToSet || userPropertiesToSetOnce) {
                 // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
                 // and if so, send a $set event
@@ -3287,9 +3386,9 @@ export class PostHog implements PostHogInterface {
             true
         )
 
-        this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
-
-        this._cachedPersonProperties = hash
+        if (this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })) {
+            this._cachedPersonProperties = hash
+        }
     }
 
     /**
@@ -3303,6 +3402,8 @@ export class PostHog implements PostHogInterface {
      * counterpart to {@link setPersonProperties} — instead of hand-passing `$unset` inside a
      * `capture()` call, you can remove properties with a dedicated method.
      * If `person_profiles` is set to `never`, this call is ignored.
+     *
+     * `$fbc` and `$fbp` read by the SDK are unset for this call only. `save_campaign_params: false` stops the reads.
      *
      * @example
      * ```js
@@ -3772,6 +3873,7 @@ export class PostHog implements PostHogInterface {
         // so no buffered events are silently dropped when teardown is explicit.
         this.logs?.flushLogs('sendBeacon')
         void this.metrics?.flush('sendBeacon')
+        this.metrics?.dispose()
         this._requestQueue?.unload()
         this._retryQueue?.unload()
         try {
@@ -3790,12 +3892,13 @@ export class PostHog implements PostHogInterface {
      * When set, products like conversations use server-verified identity
      * (distinct_id + HMAC hash) instead of anonymous session identifiers.
      * The hash should be computed server-side as HMAC-SHA256 of the
-     * distinct_id using the project's API secret.
+     * distinct_id, signed with the Secret API key from Support settings.
+     * Project secret API keys (project settings) and personal API keys are rejected.
      * Any additional signed identity claims are cleared because they are
      * bound to the previously configured distinct_id.
      *
      * @param distinctId - The verified user distinct_id
-     * @param hash - HMAC-SHA256 of distinctId using the project API secret
+     * @param hash - HMAC-SHA256 of distinctId, signed with the Secret API key from Support settings
      *
      * @example
      * ```js
@@ -4049,6 +4152,7 @@ export class PostHog implements PostHogInterface {
 
             this.exceptionObserver?.onConfigChange()
             this.exceptions?.onConfigChange()
+            this.metrics?.onConfigChange()
 
             this.sessionRecording?.startIfEnabledOrStop()
             this.tracingHeaders?.startIfEnabledOrStop()
@@ -5062,7 +5166,7 @@ const add_dom_loaded_handler = function () {
         }
         ;(dom_loaded_handler as any).done = true
 
-        ENQUEUE_REQUESTS = false
+        enableRequestSending()
 
         each(instances, function (inst: PostHog) {
             inst._dom_loaded()

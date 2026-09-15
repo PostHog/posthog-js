@@ -62,7 +62,7 @@ describe('Exception Observer', () => {
             loadExternalDependency: loadScriptMock,
         }
 
-        sendRequestSpy = vi.spyOn(posthog, '_send_request')
+        sendRequestSpy = vi.spyOn(posthog, '_send_retriable_request')
 
         exceptionObserver = new ExceptionObserver(posthog)
     })
@@ -193,6 +193,8 @@ describe('Exception Observer', () => {
             const observer = new ExceptionObserver(posthog)
 
             window!.console.error('console error test')
+            observer['_stopCapturing']()
+            window!.console.error = originalConsoleError
 
             const captureCall = beforeSendMock.mock.calls.find(
                 (call: any) => call[0]?.properties?.$exception_list?.[0]?.value === 'console error test'
@@ -202,14 +204,66 @@ describe('Exception Observer', () => {
                 event: '$exception',
                 properties: {
                     $exception_list: [
-                        { type: 'Error', value: 'console error test', stacktrace: { frames: expect.any(Array) } },
+                        {
+                            type: 'Error',
+                            value: 'console error test',
+                            stacktrace: { frames: expect.any(Array) },
+                            mechanism: { handled: true, type: 'onconsole', synthetic: true },
+                        },
                     ],
                 },
             })
-
-            observer['_stopCapturing']()
-            window!.console.error = originalConsoleError
         })
+    })
+
+    it('preserves console provenance through reinstalls and stops capturing when disabled', () => {
+        const originalConsoleError = window!.console.error
+        const nativeConsoleError = vi.fn()
+        window!.console.error = nativeConsoleError
+        posthog.config.capture_exceptions = { capture_console_errors: true }
+        exceptionObserver.onConfigChange()
+
+        try {
+            for (let i = 0; i < 3; i++) {
+                exceptionObserver.startIfEnabledOrStop()
+                try {
+                    throw new Error(`caught error ${i}`)
+                } catch (error) {
+                    window!.console.error('caught', error)
+                }
+            }
+
+            expect(nativeConsoleError).toHaveBeenCalledTimes(3)
+            expect(beforeSendMock).toHaveBeenCalledTimes(3)
+            for (const [event] of beforeSendMock.mock.calls) {
+                expect(event.properties.$exception_list[0].mechanism).toEqual({
+                    exception_id: 0,
+                    handled: true,
+                    type: 'onconsole',
+                    synthetic: false,
+                })
+            }
+
+            posthog.config.capture_exceptions = false
+            exceptionObserver.onConfigChange()
+            exceptionObserver.startIfEnabledOrStop()
+            expect(window!.console.error).toBe(nativeConsoleError)
+            window!.console.error('disabled console capture')
+            expect(nativeConsoleError).toHaveBeenCalledTimes(4)
+            expect(beforeSendMock).toHaveBeenCalledTimes(3)
+
+            posthog.captureException(new Error('manually reported'))
+            expect(beforeSendMock).toHaveBeenCalledTimes(4)
+            expect(beforeSendMock.mock.calls[3][0].properties.$exception_list[0].mechanism).toEqual({
+                exception_id: 0,
+                handled: true,
+                type: 'generic',
+                synthetic: false,
+            })
+        } finally {
+            exceptionObserver['_stopCapturing']()
+            window!.console.error = originalConsoleError
+        }
     })
 
     describe('when there are handlers already present', () => {

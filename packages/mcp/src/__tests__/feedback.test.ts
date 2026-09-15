@@ -420,6 +420,36 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       await capture.stop()
     })
 
+    it('rejects a fractional number for a declared integer extra, accepting whole values', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      const onFeedback = vi.fn()
+      instrument(server, fakePostHog(), {
+        collectFeedback: { extraProperties: { score: { type: 'integer' } }, onFeedback },
+      })
+
+      await callTool(client, SEND_FEEDBACK, {
+        feedback_type: 'praise',
+        summary: 'Great tools.',
+        score: 3.5, // fractional — a JSON Schema `integer` does not accept it
+      })
+      await callTool(client, SEND_FEEDBACK, {
+        feedback_type: 'praise',
+        summary: 'Great tools again.',
+        score: 3, // whole — conforms
+      })
+
+      await new Promise((r) => setTimeout(r, 50))
+      const events = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)
+      expect(events[0].properties.$mcp_feedback_score).toBeUndefined()
+      expect(events[1].properties.$mcp_feedback_score).toBe(3)
+      expect(onFeedback.mock.calls[0][0].extras).toEqual({})
+      expect(onFeedback.mock.calls[0][0].raw.score).toBe(3.5)
+      expect(onFeedback.mock.calls[1][0].extras).toEqual({ score: 3 })
+
+      await capture.stop()
+    })
+
     it('redacts credential-named keys inside nested extras', async () => {
       const capture = new EventCapture()
       await capture.start()
@@ -505,10 +535,14 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
     it('falls back to the default reply when onFeedback throws, and still captures the event', async () => {
       const capture = new EventCapture()
       await capture.start()
+      const logged: string[] = []
       instrument(server, fakePostHog(), {
+        logger: (message: string) => logged.push(message),
         collectFeedback: {
           onFeedback: async () => {
-            throw new Error('backend down')
+            const error = new Error('backend down for jane@example.com')
+            error.name = 'jane@example.com\nforged log line'
+            throw error
           },
         },
       })
@@ -516,6 +550,14 @@ describe('collectFeedback (send_feedback virtual tool)', () => {
       const result = await callTool(client, SEND_FEEDBACK, { feedback_type: 'issue', summary: 'A tool failed.' })
 
       expect(result.content[0].text).toContain('recorded')
+
+      // No part of the thrown value reaches the log. Both its message and its
+      // mutable name can contain agent-controlled PII or log-forging newlines.
+      const warning = logged.find((line) => line.includes('onFeedback handler threw'))
+      expect(warning).toBe('Warning: onFeedback handler threw; returning the default acknowledgement')
+      expect(warning).not.toContain('backend down')
+      expect(warning).not.toContain('jane@example.com')
+      expect(warning).not.toContain('forged log line')
 
       await new Promise((r) => setTimeout(r, 50))
       expect(capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.Feedback)).toHaveLength(1)
@@ -697,6 +739,33 @@ describe('PostHogMCP (custom dispatcher path)', () => {
     expect(posthog.prepareToolList(myTools, { collectFeedback: true }).find((t) => t.name === SEND_FEEDBACK)).toBe(
       undefined
     )
+
+    await posthog.shutdown()
+  })
+
+  it('a supplied originalTool wins a feedback-name collision', async () => {
+    const posthog = newClient({ collectFeedback: true })
+
+    const realTools = [
+      {
+        name: SEND_FEEDBACK,
+        inputSchema: { type: 'object', properties: { note: { type: 'string' } } },
+      },
+    ]
+    const listed = posthog.prepareToolList(realTools, { collectFeedback: true })
+    expect(listed).toHaveLength(1)
+
+    // The descriptor comes from the host's original list, not the prepared list.
+    // This is stateless proof that the real application tool owns the name.
+    const originalTool = realTools.find((tool) => tool.name === SEND_FEEDBACK)
+    const collided = posthog.prepareToolCall(SEND_FEEDBACK, { note: 'hi' }, { originalTool })
+    expect(collided.isFeedback).toBe(false)
+    expect(collided.feedbackReport).toBeUndefined()
+
+    // Without originalTool the name match stands.
+    const virtual = posthog.prepareToolCall(SEND_FEEDBACK, { feedback_type: 'other', summary: 'A note.' })
+    expect(virtual.isFeedback).toBe(true)
+    expect(virtual.feedbackReport).toBeDefined()
 
     await posthog.shutdown()
   })

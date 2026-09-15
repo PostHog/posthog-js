@@ -1,6 +1,6 @@
 {
   "name": "posthog-react-native",
-  "version": "4.71.0",
+  "version": "4.73.1",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -43,7 +43,7 @@
     "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
     "build": "tsc -b && babel ./dist --out-dir dist --extensions '.js'",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-    "generate-references": "pnpm exec api-extractor run --config ./api-extractor.json --local && node scripts/generate-docs.js"
+    "generate-references": "pnpm exec api-extractor run --config ./api-extractor.json --local && node scripts/generate-docs.cjs"
   },
   "dependencies": {
     "@posthog/core": "workspace:^",

@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.9.0
+
+### Minor Changes
+
+- [#4928](https://github.com/PostHog/posthog-js/pull/4928) [`c7e592f`](https://github.com/PostHog/posthog-js/commit/c7e592fdedd1dc0f6378a3cf80d5f9801e72f591) Thanks [@marandaneto](https://github.com/marandaneto)! - Add initialization-only `sessionReplayConfig.captureTouches` to disable replay touch coordinates without stopping screenshots on Android and iOS.
+  (2026-09-14)
+
 ## 2.8.1
 
 ### Patch Changes
@@ -25,7 +32,7 @@
 
 ### Minor Changes
 
-- [#4858](https://github.com/PostHog/posthog-js/pull/4858) [`233f501`](https://github.com/PostHog/posthog-js/commit/233f501c039ca254dee1112596cff9c1026dde62) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Capture `$push_notification_opened` on Android when a notification is tapped while the app is already running, not just on a cold start.
+- [#4858](https://github.com/PostHog/posthog-js/pull/4858) [`233f501`](https://github.com/PostHog/posthog-js/commit/233f501c039ca254dee1112596cff9c1026dde62) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Capture `$push_notification_opened` on Android when a notification is tapped while the app is already running, not just on a cold start. Remove any manual `capturePushNotificationOpened` call you wired to `messaging().onNotificationOpenedApp` for Android: that tap is now captured automatically, so the manual call counts it a second time.
   (2026-09-10)
 
 ## 2.5.2

@@ -275,18 +275,46 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
     }
   )
 
+  it('captures resource failures whose stack getter throws without masking the original error', async () => {
+    const server = makeServer()
+    instrument(server, fakePostHog())
+    const error = new Error('Cannot read the guide')
+    Object.defineProperty(error, 'stack', {
+      get() {
+        throw new Error('stack getter exploded')
+      },
+    })
+    server.setRequestHandler('resources/read', (async () => {
+      throw error
+    }) as any)
+
+    await expect(dispatch(server, { method: 'resources/read', params: { uri: 'file:///guide.md' } })).rejects.toBe(
+      error
+    )
+    await vi.waitFor(() => expect(eventCapture.findCapturesByEvent('$mcp_resource_read')).toHaveLength(1))
+    const exceptions = eventCapture.findCapturesByEvent('$exception')
+    expect(exceptions).toHaveLength(1)
+    expect(exceptions[0].properties.$exception_list).toEqual([
+      {
+        type: 'Error',
+        value: 'Cannot read the guide',
+        mechanism: { type: 'generic', handled: true, synthetic: false, exception_id: 0 },
+      },
+    ])
+  })
+
   it('surfaces the resource error even when capturing it throws', async () => {
     const server = makeServer()
     const warnings: string[] = []
     instrument(server, fakePostHog(), { logger: (message: string) => warnings.push(message) })
 
-    // `captureException` reads the thrown value's own `stack`. An application is
+    // `captureException` reads the thrown value's own `message`. An application is
     // free to define that as a throwing getter, and analytics must not turn its
     // own failure into the error the caller sees.
     const error = new Error('Cannot read the guide')
-    Object.defineProperty(error, 'stack', {
+    Object.defineProperty(error, 'message', {
       get() {
-        throw new Error('stack getter exploded')
+        throw new Error('message getter exploded')
       },
     })
     server.setRequestHandler('resources/read', (async () => {
