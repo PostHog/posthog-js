@@ -1641,8 +1641,8 @@ export interface PostHogConfig {
     identity_distinct_id?: string
 
     /**
-     * HMAC-SHA256 of `identity_distinct_id`, signed with the project's secret API key
-     * from Support settings. A project secret API key or a personal API key is rejected.
+     * HMAC-SHA256 of `identity_distinct_id`, signed with the Secret API key from Support settings.
+     * Project secret API keys (project settings) and personal API keys are rejected.
      * Must be provided together with `identity_distinct_id`.
      */
     identity_hash?: string

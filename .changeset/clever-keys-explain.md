@@ -3,4 +3,4 @@
 '@posthog/types': patch
 ---
 
-Name the Support secret API key in the identity verification types, so it is clear which key signs an identity hash.
+Docstrings for `identity_hash` and `setIdentity()` now say the hash is signed with the Secret API key from Support settings, not a project secret API key or a personal API key.

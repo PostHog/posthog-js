@@ -3892,13 +3892,13 @@ export class PostHog implements PostHogInterface {
      * When set, products like conversations use server-verified identity
      * (distinct_id + HMAC hash) instead of anonymous session identifiers.
      * The hash should be computed server-side as HMAC-SHA256 of the
-     * distinct_id, signed with the project's secret API key from Support settings.
-     * A project secret API key or a personal API key is rejected.
+     * distinct_id, signed with the Secret API key from Support settings.
+     * Project secret API keys (project settings) and personal API keys are rejected.
      * Any additional signed identity claims are cleared because they are
      * bound to the previously configured distinct_id.
      *
      * @param distinctId - The verified user distinct_id
-     * @param hash - HMAC-SHA256 of distinctId, signed with the secret API key from Support settings
+     * @param hash - HMAC-SHA256 of distinctId, signed with the Secret API key from Support settings
      *
      * @example
      * ```js
