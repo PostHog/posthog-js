@@ -64,6 +64,16 @@ function setupPaginatedServer(
   }
 }
 
+/** Walk the whole enumeration, returning the names each page advertised. */
+const listBothPages = async (client: Client, cursorToken = 'page-2'): Promise<[string[], string[]]> => {
+  const firstPage = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+  const secondPage = await client.request(
+    { method: 'tools/list', params: { cursor: cursorToken } },
+    ListToolsResultSchema
+  )
+  return [firstPage.tools.map((tool) => tool.name), secondPage.tools.map((tool) => tool.name)]
+}
+
 describe('tools/list response envelope', () => {
   let eventCapture: EventCapture
 
@@ -258,16 +268,6 @@ describe('tools/list response envelope', () => {
       inputSchema: { type: 'object' as const },
     }
 
-    /** Walk the whole enumeration, returning the names each page advertised. */
-    const listBothPages = async (client: Client, cursorToken = 'page-2'): Promise<[string[], string[]]> => {
-      const firstPage = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
-      const secondPage = await client.request(
-        { method: 'tools/list', params: { cursor: cursorToken } },
-        ListToolsResultSchema
-      )
-      return [firstPage.tools.map((tool) => tool.name), secondPage.tools.map((tool) => tool.name)]
-    }
-
     it('appends the virtual tool only to the first page', async () => {
       const { server, client, connect, cleanup } = await setupPaginatedServer()
       try {
@@ -389,13 +389,9 @@ describe('tools/list response envelope', () => {
         instrument(server, fakePostHog(), { reportMissing: true })
         await connect()
 
-        const firstPage = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
-        const secondPage = await client.request(
-          { method: 'tools/list', params: { cursor: 'page-2' } },
-          ListToolsResultSchema
-        )
-        expect(firstPage.tools.map((tool) => tool.name)).toEqual(['page_one_tool', GET_MORE_TOOLS_NAME])
-        expect(secondPage.tools.map((tool) => tool.name)).toEqual(['page_two_tool'])
+        const [pageOne, pageTwo] = await listBothPages(client)
+        expect(pageOne).toEqual(['page_one_tool', GET_MORE_TOOLS_NAME])
+        expect(pageTwo).toEqual(['page_two_tool'])
       } finally {
         await cleanup()
       }
@@ -413,13 +409,9 @@ describe('tools/list response envelope', () => {
         })
         await connect()
 
-        const firstPage = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
-        const secondPage = await client.request(
-          { method: 'tools/list', params: { cursor: 'page-2' } },
-          ListToolsResultSchema
-        )
-        expect(firstPage.tools.map((tool) => tool.name)).toEqual(['page_one_tool', GET_MORE_TOOLS_NAME])
-        expect(secondPage.tools.map((tool) => tool.name)).toEqual([GET_MORE_TOOLS_NAME])
+        const [pageOne, pageTwo] = await listBothPages(client)
+        expect(pageOne).toEqual(['page_one_tool', GET_MORE_TOOLS_NAME])
+        expect(pageTwo).toEqual([GET_MORE_TOOLS_NAME])
         expect(warnings.some((message) => message.includes('is shadowed by the SDK'))).toBe(true)
 
         // Calls to the name go to the SDK, not the real tool.
