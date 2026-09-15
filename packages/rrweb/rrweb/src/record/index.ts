@@ -1142,6 +1142,7 @@ declare namespace record {
   var addCustomEvent: <T>(tag: string, payload: T) => void;
   var freezePage: () => void;
   var takeFullSnapshot: (isCheckout?: boolean) => void;
+  var isRecording: () => boolean;
   var mirror: Mirror;
 }
 
@@ -1168,6 +1169,11 @@ record.takeFullSnapshot = ((isCheckout?: boolean) => {
   }
   takeFullSnapshot(isCheckout);
 }) satisfies typeof record.takeFullSnapshot;
+
+// record() returns its stop handler synchronously, but init() can be deferred
+// until DOMContentLoaded or load. Until init() runs nothing is observed, so a
+// caller that only holds the stop handler cannot tell recording from pending.
+record.isRecording = (() => recording) satisfies typeof record.isRecording;
 
 record.mirror = mirror;
 

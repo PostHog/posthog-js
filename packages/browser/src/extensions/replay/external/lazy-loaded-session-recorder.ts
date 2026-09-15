@@ -2840,9 +2840,22 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // errors, so without this a frame that records almost nothing still reports
             // every other health signal as good
             $sdk_debug_replay_observer_init_failures: getRRWeb()?.getObserverInitFailures?.(),
-            [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
+            [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: this._rrwebAttached,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
         }
+    }
+
+    /**
+     * whether rrweb is observing the page, not merely constructed. rrweb returns its
+     * stop handler synchronously even when it defers init() to a document event, so a
+     * recorder that never observed anything would otherwise report itself as attached.
+     */
+    private get _rrwebAttached(): boolean {
+        if (!this._stopRrweb) {
+            return false
+        }
+        // recorder bundles older than isRecording can only report construction
+        return getRRWebRecord()?.isRecording?.() ?? true
     }
 
     private _startRecorder() {
@@ -2879,6 +2892,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // inert for ordinary sites. Users can raise it, or set 0 to disable.
             inlineStylesheetBudgetRules: 10_000,
             recordCrossOriginIframes: false,
+            // rrweb defaults to the window load event, which waits for every image, font
+            // and subframe, so a page whose load event is late or never fires records
+            // nothing. The DOM is all a full snapshot needs.
+            recordAfter: 'DOMContentLoaded',
             sampling: undefined,
             attributeFilter: undefined,
         }
