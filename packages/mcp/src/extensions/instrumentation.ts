@@ -845,6 +845,9 @@ async function getTracedToolsList(
           // was cached, and its calls need ownership like any other tool's.
           cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, [virtualTool])
         } else if (alreadyPresent) {
+          // Conflicts are only detected on the pages a client actually
+          // fetches; a real owner here is already shadowed by the first-page
+          // injection, so the host must rename the SDK's tool.
           data.logger(
             `Warning: A real tool "${missingToolName}" on a later tools/list page is shadowed by the SDK's missing-capability tool. Its calls will be intercepted. Rename the SDK's tool with the missingCapabilityToolName option to keep both.`
           )

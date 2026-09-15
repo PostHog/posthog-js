@@ -287,8 +287,8 @@ its virtual tools (`send_feedback` and `get_more_tools`) on the first page only 
 client reads, including clients that never follow `nextCursor` — so a compliant client's
 concatenated list carries each once. "First page" means a `tools/list` request with no cursor; an
 empty string is a valid cursor, so `cursor: ""` is a continuation page. Hosts using
-`prepareToolList()` directly own this rule themselves: pass `collectFeedback: true` only for the
-first page.
+`prepareToolList()` directly own this rule themselves: pass `reportMissing: true` and
+`collectFeedback: true` only for the first page.
 
 Name collisions are detected on the first page only. A real tool named `send_feedback` (or
 `get_more_tools`) on the first page wins: the SDK warns, skips injection, and forwards its calls. A

@@ -10,6 +10,7 @@ import {
 import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { SEND_FEEDBACK_TOOL_NAME } from '../extensions/feedback'
+import { GET_MORE_TOOLS_NAME } from '../extensions/tools'
 import { EventCapture, fakePostHog } from './test-utils'
 
 /**
@@ -376,9 +377,8 @@ describe('tools/list response envelope', () => {
 
   /** The same first-page rule, on the missing-capability virtual tool. */
   describe('get_more_tools on a paginated catalogue', () => {
-    const GET_MORE_TOOLS = 'get_more_tools'
     const REAL_MISSING_TOOL = {
-      name: GET_MORE_TOOLS,
+      name: GET_MORE_TOOLS_NAME,
       description: 'A real application tool that owns the name',
       inputSchema: { type: 'object' as const },
     }
@@ -394,7 +394,7 @@ describe('tools/list response envelope', () => {
           { method: 'tools/list', params: { cursor: 'page-2' } },
           ListToolsResultSchema
         )
-        expect(firstPage.tools.map((tool) => tool.name)).toEqual(['page_one_tool', GET_MORE_TOOLS])
+        expect(firstPage.tools.map((tool) => tool.name)).toEqual(['page_one_tool', GET_MORE_TOOLS_NAME])
         expect(secondPage.tools.map((tool) => tool.name)).toEqual(['page_two_tool'])
       } finally {
         await cleanup()
@@ -418,16 +418,16 @@ describe('tools/list response envelope', () => {
           { method: 'tools/list', params: { cursor: 'page-2' } },
           ListToolsResultSchema
         )
-        expect(firstPage.tools.map((tool) => tool.name)).toEqual(['page_one_tool', GET_MORE_TOOLS])
-        expect(secondPage.tools.map((tool) => tool.name)).toEqual([GET_MORE_TOOLS])
+        expect(firstPage.tools.map((tool) => tool.name)).toEqual(['page_one_tool', GET_MORE_TOOLS_NAME])
+        expect(secondPage.tools.map((tool) => tool.name)).toEqual([GET_MORE_TOOLS_NAME])
         expect(warnings.some((message) => message.includes('is shadowed by the SDK'))).toBe(true)
 
         // Calls to the name go to the SDK, not the real tool.
         const result = await client.request(
-          { method: 'tools/call', params: { name: GET_MORE_TOOLS, arguments: { context: 'need bulk delete' } } },
+          { method: 'tools/call', params: { name: GET_MORE_TOOLS_NAME, arguments: { context: 'need bulk delete' } } },
           CallToolResultSchema
         )
-        expect((result.content as { text: string }[])[0].text).not.toBe(`called: ${GET_MORE_TOOLS}`)
+        expect((result.content as { text: string }[])[0].text).not.toBe(`called: ${GET_MORE_TOOLS_NAME}`)
         expect(eventCapture.findEventByType(MCPAnalyticsEventType.mcpMissingCapability)).toBeDefined()
       } finally {
         await cleanup()
