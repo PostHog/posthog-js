@@ -110,8 +110,7 @@ const withAndroidPlugin = (config: any, skipOnConflict = false) => {
 }
 
 // Index of the `}` matching the `{` at openBraceIndex, or -1 if unbalanced. Manual scan
-// (not regex) to avoid ReDoS; counts braces inside strings and comments too, which at worst
-// reports unbalanced and makes a caller skip the file.
+// (not regex) to avoid ReDoS; counts all braces, fine for the generated gradle we target.
 function matchingBraceIndex(s: string, openBraceIndex: number): number {
   let depth = 0
   for (let i = openBraceIndex; i < s.length; i++) {
@@ -281,9 +280,92 @@ const POSTHOG_NEW_INTENT_BLOCK_PATTERN = new RegExp(
   'g'
 )
 
+// Index just past the string or character literal opening at `start`, or -1 when it never closes.
+// Covers `"..."` and `'...'` with backslash escapes (which end at a newline in both languages),
+// `"""..."""` raw strings and text blocks, and Kotlin `${...}` templates, whose contents are code
+// that may nest further literals.
+function literalEnd(s: string, start: number, language: string): number {
+  const quote = s[start]
+  const raw = quote === '"' && s.startsWith('"""', start)
+  let i = start + (raw ? 3 : 1)
+  while (i < s.length) {
+    const c = s[i]
+    if (raw) {
+      if (s.startsWith('"""', i)) {
+        // Kotlin closes on the last three of a longer run of quotes.
+        while (s[i] === '"') {
+          i++
+        }
+        return i
+      }
+    } else if (c === '\n') {
+      return -1
+    } else if (c === quote) {
+      return i + 1
+    }
+    if (c === '\\' && (!raw || language === 'java')) {
+      i += 2
+      continue
+    }
+    if (language === 'kt' && quote === '"' && c === '$' && s[i + 1] === '{') {
+      const close = matchingBraceIndexInSource(s, i + 1, language)
+      if (close === -1) {
+        return -1
+      }
+      i = close + 1
+      continue
+    }
+    i++
+  }
+  return -1
+}
+
+// Index of the `}` matching the `{` at openBraceIndex in Kotlin or Java source, or -1 if
+// unbalanced. Braces inside literals and comments are not structural: a `"}"` field before an
+// existing onNewIntent must not end the class early, which would hide that override from the
+// scoped check below and make us insert a duplicate the file no longer compiles with.
+function matchingBraceIndexInSource(s: string, openBraceIndex: number, language: string): number {
+  let depth = 0
+  let i = openBraceIndex
+  while (i < s.length) {
+    const c = s[i]
+    if (c === '/' && s[i + 1] === '/') {
+      const end = s.indexOf('\n', i)
+      i = end === -1 ? s.length : end
+      continue
+    }
+    if (c === '/' && s[i + 1] === '*') {
+      const end = s.indexOf('*/', i + 2)
+      if (end === -1) {
+        return -1
+      }
+      i = end + 2
+      continue
+    }
+    if (c === '"' || c === "'") {
+      const end = literalEnd(s, i, language)
+      if (end === -1) {
+        return -1
+      }
+      i = end
+      continue
+    }
+    if (c === '{') {
+      depth++
+    } else if (c === '}') {
+      depth--
+      if (depth === 0) {
+        return i
+      }
+    }
+    i++
+  }
+  return -1
+}
+
 // The span of MainActivity's body, or undefined when the file does not look like the templates we
 // patch: a supertype list is all we expect between the class name and the opening brace.
-function mainActivityBody(contents: string): { open: number; close: number } | undefined {
+function mainActivityBody(contents: string, language: string): { open: number; close: number } | undefined {
   const declaration = /\bclass\s+MainActivity\b/.exec(contents)
   if (!declaration) {
     return undefined
@@ -294,7 +376,7 @@ function mainActivityBody(contents: string): { open: number; close: number } | u
     return undefined
   }
   // Unbalanced braces mean we cannot tell where the body ends, so the file is not ours to edit.
-  const close = matchingBraceIndex(contents, open)
+  const close = matchingBraceIndexInSource(contents, open, language)
   return close === -1 ? undefined : { open, close }
 }
 
@@ -312,7 +394,7 @@ export function updateMainActivityNewIntentOverride(contents: string, language: 
     return withoutManagedBlock
   }
 
-  const body = mainActivityBody(withoutManagedBlock)
+  const body = mainActivityBody(withoutManagedBlock, language)
   if (!body) {
     console.warn(
       '[posthog-react-native] Could not find the MainActivity class body; skipping the onNewIntent ' +

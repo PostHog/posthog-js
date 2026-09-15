@@ -1054,6 +1054,76 @@ describe('updateMainActivityNewIntentOverride', () => {
     expect(result.indexOf('setIntent(intent)')).toBeLessThan(result.indexOf('class Helper'))
     expect(console.warn).not.toHaveBeenCalled()
   })
+
+  // A `"}"` field would end the class early for a scanner that counts every brace, hiding the real
+  // override from the scoped check, so the second override we then insert breaks the build.
+  it.each([
+    [
+      'kt',
+      kotlinMainActivity.replace(
+        '  override fun getMainComponentName',
+        '  private val closing = "}"\n\n  override fun onNewIntent(intent: Intent) {\n    super.onNewIntent(intent)\n  }\n\n  override fun getMainComponentName'
+      ),
+    ],
+    [
+      'java',
+      javaMainActivity.replace(
+        '  @Override\n  protected String getMainComponentName',
+        '  private final String closing = "}";\n\n  @Override\n  public void onNewIntent(Intent intent) {\n    super.onNewIntent(intent);\n  }\n\n  @Override\n  protected String getMainComponentName'
+      ),
+    ],
+  ])('keeps an existing %s override that follows a "}" string literal', (language, source) => {
+    expect(updateMainActivityNewIntentOverride(source, language, true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('already overrides onNewIntent'))
+  })
+
+  it.each([
+    [
+      'kt',
+      kotlinMainActivity.replace(
+        '  override fun getMainComponentName',
+        [
+          '  private val open = "{"',
+          "  private val char = '{'",
+          '  private val raw = """}"""',
+          '  private val template = "${ "}" }" // }',
+          '  /* { */',
+          '  override fun getMainComponentName',
+        ].join('\n')
+      ),
+    ],
+    [
+      'java',
+      javaMainActivity.replace(
+        '  @Override\n  protected String getMainComponentName',
+        [
+          '  private final String open = "{";',
+          "  private final char c = '{';",
+          '  private final String escaped = "\\\\{\\"}";',
+          '  // }',
+          '  /* { */',
+          '  @Override\n  protected String getMainComponentName',
+        ].join('\n')
+      ),
+    ],
+  ])('patches a %s file whose literals and comments contain lone braces', (language, source) => {
+    const result = updateMainActivityNewIntentOverride(source, language, true)
+
+    expect(result).toContain('setIntent(intent)')
+    expect(result.indexOf('onNewIntent')).toBeLessThan(result.indexOf('getMainComponentName'))
+    expect(updateMainActivityNewIntentOverride(result, language, false)).toBe(source)
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('skips a file with an unterminated string rather than guessing where the class ends', () => {
+    const source = kotlinMainActivity.replace(
+      '  override fun getMainComponentName',
+      '  private val broken = "}\n  override fun getMainComponentName'
+    )
+
+    expect(updateMainActivityNewIntentOverride(source, 'kt', true)).toBe(source)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find the MainActivity class body'))
+  })
 })
 
 describe('postHogExpoPlugin Android native symbols', () => {
