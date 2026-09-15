@@ -1,8 +1,10 @@
-import type { Extension } from '@posthog/browser-common'
-
 import { createPostHog as createAutomaticPostHog } from '../src'
 import { analytics } from '../src/analytics'
-import { createAnalyticsDelivery, type InternalAnalyticsExtension } from '../src/analytics-internal'
+import { createAnalyticsExtension } from '../src/analytics-buffer'
+import { createAnalyticsDelivery } from '../src/analytics-delivery'
+import type { AnalyticsDriver, AnalyticsExtension } from '../src/analytics-internal'
+import { EventBuffer } from '../src/event-buffer'
+import { Lane } from '../src/lane'
 import { createPostHog, type BrowserFetch, type CaptureOutcomeStatus, type CaptureSummary } from '../src/core'
 import type { AnalyticsMessage } from '../src/analytics-internal'
 
@@ -181,22 +183,30 @@ describe('captureImmediate', () => {
                 { status: 200 }
             )
         }
-        const extension = analytics() as InternalAnalyticsExtension
-        const delivery = extension[createAnalyticsDelivery]({
-            runtime: [
-                { api: 'https://example.com', flags: 'https://example.com', assets: 'https://example.com' },
-                'ph_test',
-                fetch,
-                undefined,
-            ],
-            libraryVersion: '1.2.3',
-            canRetry: () => true,
-            retryNow() {},
-            pause() {},
-            teardown() {},
-            reportFailure() {},
-            reportWarning() {},
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            capturePageview: false,
+            storage: false,
+            navigator: false,
+            fetch: false,
         })
+        const delivery = createAnalyticsDelivery(
+            new EventBuffer<AnalyticsMessage>(1_000, () => {}),
+            posthog,
+            {
+                runtime: [
+                    { api: 'https://example.com', flags: 'https://example.com', assets: 'https://example.com' },
+                    'ph_test',
+                    fetch,
+                    undefined,
+                ],
+                canRetry: () => true,
+                onAvailable() {},
+                reportFailure() {},
+                reportWarning() {},
+            },
+            { flushAt: 20, flushInterval: 3_000 }
+        )
         const messages = Array.from({ length: 101 }, (_, index): AnalyticsMessage => ({
             event: `event-${index}`,
             uuid: `uuid-${index}`,
@@ -213,7 +223,8 @@ describe('captureImmediate', () => {
             expect(summary.results['uuid-0']).toEqual({ result: 'ok' })
             expect(requests).toBe(2)
         } finally {
-            await extension.dispose?.()
+            await delivery.dispose()
+            await posthog.dispose()
         }
     })
 
@@ -231,22 +242,25 @@ describe('captureImmediate', () => {
         await posthog.dispose()
     })
 
-    it('resolves an empty summary for local non-admission without loading analytics', async () => {
+    it('resolves an empty summary for local non-admission without loading delivery', async () => {
         const requests: CapturedRequest[] = []
-        const posthog = await createAutomaticPostHog({
+        const load = vi.fn(async () => createAnalyticsDelivery)
+        const posthog = await createPostHog({
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
             navigator: false,
             fetch: responseFetch(requests, () => ({ result: { result: 'ok' } })),
             optOutByDefault: true,
+            extensions: [createAnalyticsExtension({ load: 'lazy' }, load)],
         })
 
         const summary = await posthog.captureImmediate('denied')
 
         expectSummary(summary, { submitted: 0, notPersisted: 0, allPersisted: true })
         expect(summary.results).toEqual({})
-        expect(posthog.getExtension('analytics')).toBeUndefined()
+        expect(posthog.getExtension('analytics')).toBeDefined()
+        expect(load).not.toHaveBeenCalled()
         expect(requests).toEqual([])
         await posthog.dispose()
     })
@@ -271,19 +285,23 @@ describe('captureImmediate', () => {
         await posthog.dispose()
     })
 
-    it('keeps ordinary delivery compatible with an older analytics capability', async () => {
+    it('keeps queued delivery working when an older driver lacks immediate support', async () => {
         const delivered: AnalyticsMessage[][] = []
-        const legacyAnalytics = {
-            name: 'analytics',
-            setup() {},
-            [createAnalyticsDelivery]: () => ({
+        const legacyAnalytics = createAnalyticsExtension({}, undefined, (buffer, _client, host) => {
+            const lane = new Lane(
+                buffer,
+                (error) => host.reportFailure(error),
+                () => host.onAvailable()
+            )
+            lane.attach({
                 flushAt: 1,
                 flushInterval: 0,
                 async deliver(events: readonly AnalyticsMessage[]) {
                     delivered.push([...events])
                 },
-            }),
-        } as Extension
+            })
+            return { flush: () => lane.flush(), dispose: () => lane.dispose() } as AnalyticsDriver
+        })
         const posthog = await createPostHog({
             projectToken: 'ph_test',
             capturePageview: false,
@@ -358,14 +376,8 @@ describe('captureImmediate', () => {
             }
             return Promise.reject(cause)
         })
-        const original = analytics() as InternalAnalyticsExtension
-        const extension: InternalAnalyticsExtension = {
-            ...original,
-            [createAnalyticsDelivery]: (context) => ({
-                ...original[createAnalyticsDelivery](context),
-                deliverImmediate,
-            }),
-        }
+        const extension = analytics() as AnalyticsExtension
+        vi.spyOn(extension, 'deliverImmediate').mockImplementation(deliverImmediate)
         const posthog = await createPostHog({
             projectToken: 'ph_test',
             capturePageview: false,

@@ -13,26 +13,24 @@ import {
 } from '@posthog/browser-common'
 import { Publisher } from '@posthog/browser-common/pubsub'
 
+import { createAnalyticsExtension } from './analytics-buffer'
 import {
-    createAnalyticsDelivery,
+    MAX_ANALYTICS_BYTES,
     isAnalyticsExtension,
-    type AnalyticsDelivery,
     type AnalyticsMessage,
+    type CaptureSink,
 } from './analytics-internal'
 import { isLikelyBot } from './bot-filter'
 import { captureFailure, EMPTY_CAPTURE_SUMMARY } from './capture-summary'
 import { ExtensionRegistry } from './extensions/registry'
 import { createId } from './id'
-import { Lane } from './lane'
 import { createLogger } from './logger'
 import { ClientRateLimiter } from './rate-limiter'
 import { sendRequest, type RequestRuntime } from './request'
 import { BrowserState, getDefaultSessionStorage, getDefaultStorage } from './state'
 import type {
-    AnalyticsOptions,
     BrowserFetch,
     CaptureSummary,
-    LoadStrategy,
     BrowserNavigator,
     CorePostHogOptions,
     NewSessionInfo,
@@ -42,18 +40,8 @@ import type {
 import { version } from './version'
 
 const CONSENT_CHANGE_EVENT = '__posthog_browser_consent_change__'
-const MAX_ANALYTICS_BYTES = 8 * 1024 * 1024
-const MAX_ANALYTICS_AGE_MS = 60 * 60 * 1000
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000
 const CLIENT_RATE_LIMIT_WARNING = '$$client_ingestion_warning'
-
-type AutomaticAnalyticsReason = 'capture' | 'immediate' | 'flush' | 'shutdown' | 'eager'
-
-export interface AutomaticAnalyticsSetup {
-    strategy: LoadStrategy
-    options: AnalyticsOptions
-    load(options: AnalyticsOptions): Promise<Extension>
-}
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -119,6 +107,7 @@ const utf8Bytes = (value: string): number => {
     return bytes
 }
 
+/** Module-private client; the top-level factory owns its initialization. */
 class PostHogBrowserClient implements PostHog {
     readonly logger: Client['logger']
     readonly kv: Client['kv']
@@ -132,56 +121,45 @@ class PostHogBrowserClient implements PostHog {
     private readonly _remoteConfigPublisher: Publisher<RemoteConfigResult>
     private readonly _eventPublisher: Publisher<CapturedEventInfo>
     private readonly _newSessionPublisher: Publisher<NewSessionInfo>
-    private readonly _registry: ExtensionRegistry
+    readonly _registry: ExtensionRegistry
+    readonly _requestRuntime: RequestRuntime
+    _captureSink: CaptureSink | undefined
     private readonly _dynamicEventProperties: Array<() => Record<string, unknown>> = []
-    private readonly _analyticsLane: Lane<AnalyticsMessage>
-    private readonly _requestRuntime: RequestRuntime
     private readonly _rateLimiter = new ClientRateLimiter()
     private readonly _state: BrowserState
     private readonly _consentObservation: Disposable
     private readonly _blocked: boolean
     private readonly _capturePageview: boolean
-    private readonly _automaticAnalytics: AutomaticAnalyticsSetup | undefined
     private readonly _remoteConfigLoader: (() => Promise<RemoteConfig | undefined>) | undefined
     private readonly _remoteConfigTimeoutMs: number
     private _remoteConfig: RemoteConfig | undefined
     private _latestRemoteConfigResult: RemoteConfigResult | undefined
     private _remoteConfigPromise: Promise<RemoteConfig | undefined> | undefined
     private _cancelRemoteConfigWait: (() => void) | undefined
-    private _automaticAnalyticsLoad: Promise<void> | undefined
-    private _analyticsDelivery: AnalyticsDelivery | undefined
     private _immediateAuthority = {}
-    private _automaticAnalyticsFailed = false
-    private _automaticAnalyticsFailures = 0
     private _closing = false
     private _disposed = false
     private _shutdownPromise: Promise<void> | undefined
     private _initialPageviewPending = true
     private _pageviewListener: [Document, EventListener] | undefined
 
-    static async create(
-        options: CorePostHogOptions,
-        automaticAnalytics?: AutomaticAnalyticsSetup
-    ): Promise<PostHogBrowserClient> {
-        const client = new PostHogBrowserClient(options, automaticAnalytics)
-        for (const extension of options.extensions ?? []) {
-            try {
-                await client._installExtension(extension, false)
-            } catch (error) {
-                client.logger.error(`Failed to install configured extension "${extension.name}"`, error)
-            }
-        }
-        await client._initializeAutomaticAnalytics()
-        client._startInitialPageview()
-        return client
+    static create(options: CorePostHogOptions, capture: CaptureSink): PostHogBrowserClient {
+        return new PostHogBrowserClient(options, capture)
     }
 
-    private constructor(options: CorePostHogOptions, automaticAnalytics?: AutomaticAnalyticsSetup) {
-        const { projectToken } = options
+    private constructor(options: CorePostHogOptions, capture: CaptureSink) {
+        let projectToken = ''
+        try {
+            projectToken = options.projectToken ?? ''
+        } catch {
+            // An unavailable token disables capture and requests.
+        }
         this.projectToken = projectToken
         this._capturePageview = options.capturePageview ?? true
-        this._automaticAnalytics = automaticAnalytics
         this.logger = createLogger('[PostHog]', options.debug ?? false)
+        if (!projectToken) {
+            this.logger.error('A PostHog project token is required')
+        }
         const initialPersonProperties = options.initialPersonProperties
         try {
             this.initialPersonProperties = initialPersonProperties
@@ -201,23 +179,12 @@ class PostHogBrowserClient implements PostHog {
         const browserFetch: BrowserFetch | undefined =
             options.fetch === false ? undefined : (options.fetch ?? getDefaultFetch())
         this._blocked =
-            !(options.disableBotDetection ?? false) && isLikelyBot(browserNavigator, options.blockedUserAgents ?? [])
+            !projectToken ||
+            (!(options.disableBotDetection ?? false) && isLikelyBot(browserNavigator, options.blockedUserAgents ?? []))
 
         const requestedStorage: StorageLike | undefined =
             options.storage === false ? undefined : (options.storage ?? getDefaultStorage())
         const storage = this._blocked ? undefined : requestedStorage
-        this._analyticsLane = new Lane(
-            1_000,
-            (error) => this.logger.error('Event delivery failed', error),
-            (total, count = 1, reason = 'overflow') =>
-                this.logger.warn(
-                    `Analytics queue dropped ${count} ${reason} event${count === 1 ? '' : 's'} (${total} total)`
-                ),
-            MAX_ANALYTICS_BYTES,
-            MAX_ANALYTICS_AGE_MS,
-            Date.now,
-            () => this._startInitialPageview()
-        )
         this._state = new BrowserState(
             projectToken,
             storage,
@@ -230,7 +197,7 @@ class PostHogBrowserClient implements PostHog {
             (consent) => {
                 if (consent === 'denied') {
                     this._immediateAuthority = {}
-                    this._analyticsLane.purge()
+                    this._captureSink?.purge()
                 }
             }
         )
@@ -280,6 +247,7 @@ class PostHogBrowserClient implements PostHog {
             (extensionName) => this._createExtensionClient(extensionName),
             this.logger
         )
+        this._captureSink = capture
     }
 
     get distinctId(): string {
@@ -327,21 +295,11 @@ class PostHogBrowserClient implements PostHog {
                 return EMPTY_CAPTURE_SUMMARY
             }
 
-            await this._ensureAutomaticAnalytics('immediate')
-            const delivery = this._analyticsDelivery
-            let deliverImmediate: AnalyticsDelivery['deliverImmediate'] | undefined
-            try {
-                deliverImmediate = delivery?.deliverImmediate
-            } catch {
-                deliverImmediate = undefined
-            }
-            if (this._immediateAuthority !== authority) {
-                return captureFailure(new Error('Immediate analytics delivery was cancelled'))
-            }
-            if (!delivery || typeof deliverImmediate !== 'function' || this._disposed) {
+            const capture = this._captureSink
+            if (!capture) {
                 return captureFailure(new Error('Immediate analytics delivery is unavailable'))
             }
-            return await deliverImmediate.call(delivery, [message], () => this._immediateAuthority === authority)
+            return await capture.deliverImmediate(message, () => this._immediateAuthority === authority)
         } catch (error) {
             return captureFailure(error)
         }
@@ -423,7 +381,12 @@ class PostHogBrowserClient implements PostHog {
                 callerProperties['$set_once'] = setOnce
             }
             const serializedProperties = JSON.stringify(callerProperties)
-            const parsedMessageProperties: unknown = JSON.parse(serializedProperties)
+            const parsedMessageProperties: unknown = JSON.parse(
+                serializedProperties,
+                function (this: unknown, _key: string, value: unknown) {
+                    return value === null && !Array.isArray(this) ? undefined : value
+                }
+            )
             const parsedObservedProperties: unknown = JSON.parse(serializedProperties)
             if (!isRecord(parsedMessageProperties) || !isRecord(parsedObservedProperties)) {
                 throw new Error('Event properties must serialize to an object')
@@ -476,7 +439,8 @@ class PostHogBrowserClient implements PostHog {
             return undefined
         }
 
-        if (immediate ? bytes > MAX_ANALYTICS_BYTES : !this._analyticsLane.enqueue(message, bytes)) {
+        const capture = this._captureSink
+        if (immediate ? bytes > MAX_ANALYTICS_BYTES : !capture?.enqueue(message, bytes)) {
             if (bytes > MAX_ANALYTICS_BYTES) {
                 this.logger.warn(`Event "${event}" (${bytes} bytes) exceeds the local analytics limit and was dropped`)
             }
@@ -484,7 +448,7 @@ class PostHogBrowserClient implements PostHog {
         }
         if (!this._state.sessionAdmitted(preparedSession)) {
             if (!immediate) {
-                this._analyticsLane.discardQueued(message)
+                capture?.discardQueued(message)
             }
             return undefined
         }
@@ -493,7 +457,7 @@ class PostHogBrowserClient implements PostHog {
         }
         this._eventPublisher.publish(deepFreeze({ event, properties: observedProperties }))
         if (!immediate) {
-            void this._ensureAutomaticAnalytics('capture')
+            capture?.admitted()
         }
         return message
     }
@@ -563,10 +527,7 @@ class PostHogBrowserClient implements PostHog {
     }
 
     async flush(): Promise<void> {
-        if (this._analyticsLane.hasPending()) {
-            await this._ensureAutomaticAnalytics('flush')
-        }
-        await this._analyticsLane.flush()
+        await this._captureSink?.flush()
     }
 
     optIn(): void {
@@ -710,108 +671,9 @@ class PostHogBrowserClient implements PostHog {
         return this._registry.get<T>(name)
     }
 
-    private async _installExtension(extension: Extension, automatic: boolean): Promise<void> {
-        const canInstall = (): boolean => !this._disposed && (automatic || !this._closing)
-        if (!canInstall()) {
-            throw new Error('PostHog extensions are disabled')
-        }
-        const installsAnalytics = isAnalyticsExtension(extension)
-        await this._registry.install(extension)
-        try {
-            if (!canInstall()) {
-                throw new Error('PostHog extensions are disabled')
-            }
-            if (installsAnalytics) {
-                const delivery = extension[createAnalyticsDelivery]({
-                    runtime: this._requestRuntime,
-                    libraryVersion: version,
-                    canRetry: () => this._canDeliver(),
-                    retryNow: () => this._analyticsLane.retryNow(),
-                    pause: () => this._analyticsLane.pause(),
-                    teardown: (maxBytes) => this._analyticsLane.teardown(maxBytes),
-                    reportFailure: (error) => this.logger.error('Event delivery failed', error),
-                    reportWarning: (message) => this.logger.warn(message),
-                })
-                if (!canInstall()) {
-                    throw new Error('PostHog extensions are disabled')
-                }
-                this._analyticsLane.attach(delivery)
-                this._analyticsDelivery = delivery
-            }
-        } catch (error) {
-            try {
-                await this._registry.rollback(extension)
-            } catch (cleanupError) {
-                this.logger.error(`Failed to dispose disabled extension "${extension.name}"`, cleanupError)
-            }
-            throw error
-        }
-    }
-
-    private async _initializeAutomaticAnalytics(): Promise<void> {
-        if (this._automaticAnalytics?.strategy === 'eager') {
-            await this._ensureAutomaticAnalytics('eager')
-        }
-    }
-
-    private _ensureAutomaticAnalytics(reason: AutomaticAnalyticsReason, retryAfterPending = true): Promise<void> {
-        const setup = this._automaticAnalytics
-        if (!setup || this._disposed || this._analyticsLane.hasDelivery()) {
-            return Promise.resolve()
-        }
-        if (this._automaticAnalyticsLoad) {
-            const pending = this._automaticAnalyticsLoad
-            const failures = this._automaticAnalyticsFailures
-            if (reason === 'capture' || !retryAfterPending) {
-                return pending
-            }
-            return pending.then(() =>
-                this._automaticAnalyticsFailures > failures && this._analyticsLane.hasPending()
-                    ? this._ensureAutomaticAnalytics(reason, false)
-                    : undefined
-            )
-        }
-        if (reason === 'capture' && this._automaticAnalyticsFailed) {
-            return Promise.resolve()
-        }
-        this._automaticAnalyticsFailed = false
-        const loading = Promise.resolve()
-            .then(() => setup.load(setup.options))
-            .then(async (extension) => {
-                if (this._analyticsLane.hasDelivery() || this._disposed) {
-                    try {
-                        await extension.dispose?.()
-                    } catch (error) {
-                        this.logger.error('Failed to dispose unused automatic analytics', error)
-                    }
-                    return
-                }
-                if (!isAnalyticsExtension(extension)) {
-                    throw new Error('The automatic analytics loader returned an incompatible extension')
-                }
-                await this._installExtension(extension, true)
-            })
-            .catch((error: unknown) => {
-                if (!this._analyticsLane.hasDelivery()) {
-                    this._automaticAnalyticsFailed = true
-                    this._automaticAnalyticsFailures++
-                    this.logger.error('Automatic analytics loading failed', error)
-                }
-            })
-            .finally(() => {
-                if (this._automaticAnalyticsLoad === loading) {
-                    this._automaticAnalyticsLoad = undefined
-                }
-            })
-        this._automaticAnalyticsLoad = loading
-        return loading
-    }
-
     shutdown(shutdownTimeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS): Promise<void> {
         if (!this._shutdownPromise) {
-            const analyticsLoad =
-                this._automaticAnalyticsLoad ??
-                (this._analyticsLane.hasPending() ? this._ensureAutomaticAnalytics('shutdown') : Promise.resolve())
+            const captureFlush = this._captureSink?.flush('shutdown') ?? Promise.resolve()
             this._closing = true
             this._removePageviewListener()
             try {
@@ -824,7 +686,7 @@ class PostHogBrowserClient implements PostHog {
             } catch {
                 // Shutdown remains bounded when timer cleanup is hostile.
             }
-            this._shutdownPromise = this._shutdown(shutdownTimeoutMs, analyticsLoad)
+            this._shutdownPromise = this._shutdown(shutdownTimeoutMs, captureFlush)
         }
         return this._shutdownPromise
     }
@@ -833,7 +695,7 @@ class PostHogBrowserClient implements PostHog {
         return this.shutdown()
     }
 
-    private async _shutdown(shutdownTimeoutMs: number, analyticsLoad: Promise<void>): Promise<void> {
+    private async _shutdown(shutdownTimeoutMs: number, captureFlush: Promise<void>): Promise<void> {
         const timeoutMs = Math.max(
             0,
             Math.floor(Number.isFinite(shutdownTimeoutMs) ? shutdownTimeoutMs : DEFAULT_SHUTDOWN_TIMEOUT_MS)
@@ -853,24 +715,19 @@ class PostHogBrowserClient implements PostHog {
         })
 
         try {
-            await Promise.race([analyticsLoad, timeout])
-            await Promise.race([
-                this._analyticsLane.flush().catch((error) => this.logger.error('Event flush failed', error)),
-                timeout,
-            ])
+            await Promise.race([captureFlush.catch((error) => this.logger.error('Event flush failed', error)), timeout])
 
             this._disposed = true
-            this._analyticsDelivery = undefined
             try {
                 this._state.dispose()
             } catch (error) {
                 this.logger.error('Failed to dispose browser state', error)
             }
 
-            const cleanup = Promise.all([
-                this._analyticsLane.dispose().catch((error) => this.logger.error('Failed to dispose analytics', error)),
-                this._registry.dispose().catch((error) => this.logger.error('Failed to dispose extensions', error)),
-            ]).then(() => undefined)
+            this._captureSink = undefined
+            const cleanup = this._registry
+                .dispose()
+                .catch((error) => this.logger.error('Failed to dispose extensions', error))
             this._remoteConfigPublisher.dispose()
             this._eventPublisher.dispose()
             this._newSessionPublisher.dispose()
@@ -892,7 +749,7 @@ class PostHogBrowserClient implements PostHog {
         }
     }
 
-    private _startInitialPageview(): void {
+    _startInitialPageview(): void {
         if (!this._capturePageview || !this._initialPageviewPending || this._closing || this._disposed) {
             return
         }
@@ -1089,18 +946,48 @@ class PostHogBrowserClient implements PostHog {
         }
     }
 
-    private _canDeliver(): boolean {
+    _canDeliver(): boolean {
         return !this._disposed && !this._blocked && !this.hasOptedOut()
     }
 }
 
 export const createPostHogCore = async (
     options: CorePostHogOptions,
-    automaticAnalytics?: AutomaticAnalyticsSetup
+    configured: readonly Extension[] = options?.extensions ?? []
 ): Promise<PostHog> => {
-    if (!options?.projectToken) {
-        throw new Error('A PostHog project token is required')
+    const analytics = configured.find(isAnalyticsExtension) ?? createAnalyticsExtension()
+    const extensions = configured.filter((extension) => extension !== analytics)
+    const client = PostHogBrowserClient.create(options ?? { projectToken: '' }, analytics)
+    let analyticsReady = false
+    try {
+        await client._registry.install(analytics)
+        analytics.initialize({
+            runtime: client._requestRuntime,
+            canRetry: () => client._canDeliver(),
+            reportFailure: (error) => client.logger.error('Event delivery failed', error),
+            reportWarning: (message) => client.logger.warn(message),
+            onAvailable: () => client._startInitialPageview(),
+        })
+        analyticsReady = true
+    } catch (error) {
+        client._captureSink = undefined
+        try {
+            await client._registry.rollback(analytics)
+        } catch (cleanupError) {
+            client.logger.error(`Failed to dispose disabled extension "${analytics.name}"`, cleanupError)
+        }
+        client.logger.error(`Failed to install configured extension "${analytics.name}"`, error)
     }
-
-    return PostHogBrowserClient.create(options, automaticAnalytics)
+    for (const extension of extensions) {
+        try {
+            await client._registry.install(extension)
+        } catch (error) {
+            client.logger.error(`Failed to install configured extension "${extension.name}"`, error)
+        }
+    }
+    if (analyticsReady) {
+        await analytics.start()
+    }
+    client._startInitialPageview()
+    return client
 }

@@ -1,12 +1,12 @@
 import type { ApiResponse } from '@posthog/browser-common'
 
-import type { AnalyticsMessage } from './analytics-internal'
+import { MAX_ANALYTICS_BATCH_EVENTS, type AnalyticsMessage } from './analytics-internal'
 import { createId } from './id'
 import type { RequestRuntime } from './request'
 
 const RETRYABLE_STATUSES = [408, 500, 502, 503, 504]
 
-export const CAPTURE_V1_MAX_BATCH_EVENTS = 100
+export const CAPTURE_V1_MAX_BATCH_EVENTS = MAX_ANALYTICS_BATCH_EVENTS
 export const CAPTURE_V1_BATCH_TARGET_BYTES = 5 * 1024 * 1024
 export const CAPTURE_V1_COMPRESSION_THRESHOLD_BYTES = 1024
 /** Conservative share of the browser's aggregate 64 KiB keepalive body quota. */
