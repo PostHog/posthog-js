@@ -283,11 +283,12 @@ both advertises both tools. Like `get_more_tools`, a real tool that already uses
 wins: the SDK warns, skips injection, and delegates calls to the real handler.
 
 On a paginated catalogue (a `tools/list` response with a `nextCursor`), `instrument()` injects
-`send_feedback` on the first page only — the page every client reads, including clients that never
-follow `nextCursor` — so a compliant client's concatenated list carries it once. "First page" means
-a `tools/list` request with no cursor; an empty string is a valid cursor, so `cursor: ""` is a
-continuation page. Hosts using `prepareToolList()` directly own this rule themselves: pass
-`collectFeedback: true` only for the first page.
+its virtual tools (`send_feedback` and `get_more_tools`) on the first page only — the page every
+client reads, including clients that never follow `nextCursor` — so a compliant client's
+concatenated list carries each once. "First page" means a `tools/list` request with no cursor; an
+empty string is a valid cursor, so `cursor: ""` is a continuation page. Hosts using
+`prepareToolList()` directly own this rule themselves: pass `collectFeedback: true` only for the
+first page.
 
 Name collisions are detected on the first page only. A real tool named `send_feedback` (or
 `get_more_tools`) on the first page wins: the SDK warns, skips injection, and forwards its calls. A
