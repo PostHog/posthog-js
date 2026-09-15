@@ -37,6 +37,17 @@ describe('exception steps', () => {
         droppedKeys: [EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE, EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP],
       })
     })
+
+    it('keeps a caller-provided $type, which the SDK does not own', () => {
+      const result = stripReservedExceptionStepFields({
+        [EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]: 'checkout',
+      })
+
+      expect(result).toEqual({
+        sanitizedProperties: { $type: 'checkout' },
+        droppedKeys: [],
+      })
+    })
   })
 
   describe('ExceptionStepsBuffer', () => {
