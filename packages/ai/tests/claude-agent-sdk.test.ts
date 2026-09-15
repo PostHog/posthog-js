@@ -1115,6 +1115,55 @@ describe('Claude Agent SDK integration', () => {
     }
   )
 
+  it.each(
+    [false, true].flatMap((captureImmediate) =>
+      [undefined, 'fixed-trace'].map((traceId) => ({ captureImmediate, traceId }))
+    )
+  )(
+    'does not duplicate a completed error trace when the SDK then throws (%j)',
+    async ({ captureImmediate, traceId }) => {
+      const client = createMockClient()
+      const failure = new Error('Claude Code returned an error result: Credit balance is too low')
+      queryMock.mockReturnValue(
+        scriptedQuery([resultMessage({ is_error: true, result: 'Credit balance is too low', api_error_status: 400 })], {
+          failure,
+        })
+      )
+
+      await expect(drain(instrument({ client, captureImmediate, traceId }).query({ prompt: 'Hello' }))).rejects.toBe(
+        failure
+      )
+
+      const capture = captureImmediate ? client.captureImmediate : client.capture
+      const events = capture.mock.calls.map(([event]: any[]) => event)
+      const traces = events.filter((event: any) => event.event === '$ai_trace')
+      expect(traces).toHaveLength(1)
+      expect(events.filter((event: any) => event.event === '$ai_generation')).toHaveLength(1)
+      expect(traces[0].properties).toMatchObject({
+        $ai_is_error: true,
+        $ai_http_status: 400,
+        $ai_error: JSON.stringify('Credit balance is too low'),
+        $ai_latency: 4,
+      })
+      if (traceId) expect(traces[0].properties.$ai_trace_id).toBe(traceId)
+    }
+  )
+
+  it.each([false, true])('captures failures outside a completed turn (previous result=%s)', async (previousResult) => {
+    const client = createMockClient()
+    const failure = new Error('Transport failed')
+    queryMock.mockReturnValue(scriptedQuery(previousResult ? [resultMessage(), messageStart()] : [], { failure }))
+
+    await expect(drain(instrument({ client }).query({ prompt: 'Hello' }))).rejects.toBe(failure)
+
+    const traces = capturedEvents(client, '$ai_trace')
+    expect(traces).toHaveLength(previousResult ? 2 : 1)
+    expect(traces[traces.length - 1].properties).toMatchObject({
+      $ai_is_error: true,
+      $ai_error: JSON.stringify({ name: 'Error', message: 'Transport failed', stack: failure.stack }),
+    })
+  })
+
   it.each([
     { subtype: 'error_during_execution', errors: ['CLI failed', 'Try again'] },
     { subtype: 'success', result: 'The request was rejected' },

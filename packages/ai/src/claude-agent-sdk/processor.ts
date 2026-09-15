@@ -214,6 +214,7 @@ interface QueryState {
   // Subagent tool spans can arrive outside a main-agent generation.
   turnCaptured: boolean
   turnActive: boolean
+  hasCapturedTrace: boolean
   pendingPrompts: SDKUserMessage[]
   userMessageUuid?: string
   failure?: unknown
@@ -390,7 +391,8 @@ export class PostHogClaudeAgentProcessor {
       // An aborted query, or a caller that stops iterating, never delivers a
       // result message. The turn is still closed so its generations and spans
       // have a trace.
-      if (state.turnActive || state.turnCaptured || failure !== undefined) {
+      // The SDK can throw after an error result already closed the last turn.
+      if (state.turnActive || state.turnCaptured || (failure !== undefined && !state.hasCapturedTrace)) {
         try {
           state.tracker.finishCurrent()
           await this._captureCompletedGenerations(state, trace, failure)
@@ -444,6 +446,7 @@ export class PostHogClaudeAgentProcessor {
       turnStart: performance.now(),
       turnCaptured: false,
       turnActive: false,
+      hasCapturedTrace: false,
       pendingPrompts:
         typeof prompt === 'string'
           ? [{ type: 'user', message: { role: 'user', content: prompt }, parent_tool_use_id: null }]
@@ -788,6 +791,7 @@ export class PostHogClaudeAgentProcessor {
     } finally {
       // A streaming-input session produces one result per turn. Each turn becomes
       // its own trace unless the caller pinned a trace ID for the whole session.
+      state.hasCapturedTrace = true
       state.traceId = trace.traceId ?? uuidv4()
       state.turnStart = performance.now()
       state.turnCaptured = false
