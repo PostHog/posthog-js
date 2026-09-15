@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.9.1
+
+### Patch Changes
+
+- [#4919](https://github.com/PostHog/posthog-js/pull/4919) [`61ef6a6`](https://github.com/PostHog/posthog-js/commit/61ef6a6f2d7e8387d7c316fbd88fdf447fd7de8d) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Count a PostHog notification tap once when both `capturePushNotificationOpened` and automatic capture report it, using the dedupe added in `posthog-android` 3.65.0 and `posthog-ios` 3.75.0. Update the native SDKs to `posthog-android` 3.65.2 and `posthog-ios` 3.75.2.
+  (2026-09-15)
+
 ## 2.9.0
 
 ### Minor Changes
