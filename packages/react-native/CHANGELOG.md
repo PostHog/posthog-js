@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.73.0
+
+### Minor Changes
+
+- [#4605](https://github.com/PostHog/posthog-js/pull/4605) [`48cfa4d`](https://github.com/PostHog/posthog-js/commit/48cfa4d714ef087430d212d32204023806dde8b3) Thanks [@safaiyeh](https://github.com/safaiyeh)! - feat(react-native): let surveys cap how far their text scales with the OS text-size setting, per text role — `appearance.maxFontSizeMultiplier` takes one number for the whole survey or an object keyed by role (`question`, `description`, `header`, `choice`, `input`, `button`, `ratingLabel`, `ratingNumber`, `validationHint`). Unset, text scales without a ceiling exactly as before.
+  (2026-09-15)
+
 ## 4.72.1
 
 ### Patch Changes
