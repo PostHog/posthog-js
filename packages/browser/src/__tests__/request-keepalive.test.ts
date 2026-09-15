@@ -160,7 +160,7 @@ describe('request fetch aggregate keepalive', () => {
         }
     })
 
-    it('preserves callback error handling without releasing the next request twice', async () => {
+    it('reports success once when its callback throws without releasing the next request twice', async () => {
         const error = new Error('callback failed')
         const callback = vi.fn().mockImplementationOnce(() => {
             send()
@@ -169,7 +169,7 @@ describe('request fetch aggregate keepalive', () => {
         send({ callback })
         pending[0].resolve({ status: 200, text: () => Promise.resolve('{}') } as Response)
         await tick()
-        expect(callback.mock.calls).toEqual([[{ statusCode: 200, text: '{}', json: {} }], [{ statusCode: 0, error }]])
+        expect(callback.mock.calls).toEqual([[{ statusCode: 200, text: '{}', json: {} }]])
         send()
         expect(keepalives()).toEqual([true, true, false])
     })
@@ -232,22 +232,32 @@ describe('request fetch aggregate keepalive', () => {
         expect(keepalives()).toEqual([true, false, true])
     })
 
-    it('does not release when a patched abort throws before terminating fetch (#4898)', async () => {
-        const error = new Error('patched abort')
-        vi.spyOn(globalThis.AbortController.prototype, 'abort').mockImplementation(() => {
-            throw error
-        })
-        send({ timeout: 10 })
-        // Containing this pre-existing throw is separate work in #4898.
-        expect(() => vi.advanceTimersByTime(10)).toThrow(error)
-        send()
-        expect(keepalives()).toEqual([true, false])
-        pending[0].resolve({ status: 200, text: () => Promise.resolve('{}') } as Response)
-        await tick()
-        send()
-        send()
-        expect(keepalives()).toEqual([true, false, true, false])
-    })
+    it.each(['success', 'reject'])(
+        'retains bytes after a patched abort throws until the fetch settles with %s',
+        async (outcome) => {
+            const error = new Error('patched abort')
+            const callback = vi.fn()
+            vi.spyOn(globalThis.AbortController.prototype, 'abort').mockImplementation(() => {
+                throw error
+            })
+            send({ timeout: 10, callback })
+            expect(() => vi.advanceTimersByTime(10)).not.toThrow()
+            expect(callback.mock.calls).toEqual([[{ statusCode: 0, error }]])
+            expect(mockedFetch.mock.calls[0][1]!.signal!.aborted).toBe(false)
+            send()
+            expect(keepalives()).toEqual([true, false])
+            if (outcome === 'success') {
+                pending[0].resolve({ status: 200, text: () => Promise.resolve('{}') } as Response)
+            } else {
+                pending[0].reject(new TypeError('Failed to fetch'))
+            }
+            await tick()
+            expect(callback.mock.calls).toEqual([[{ statusCode: 0, error }]])
+            send()
+            send()
+            expect(keepalives()).toEqual([true, false, true, false])
+        }
+    )
 
     it('handles empty bodies without poisoning the byte budget', () => {
         send({ data: undefined })
