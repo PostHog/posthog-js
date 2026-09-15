@@ -88,11 +88,15 @@ const emptyCursorListPage = (cursor) => (cursor === '' ? { tools: PAGE_TWO } : {
 
 const feedbackCount = (page) => page?.tools?.filter((t) => t.name === 'send_feedback').length ?? -1
 
+/** True once for the first page, never again — the shape every caller below checks for. */
+const feedbackOnFirstPageOnly = (firstPage, secondPage) =>
+  feedbackCount(firstPage) === 1 && feedbackCount(secondPage) === 0
+
 /** Read as "no cursor", the empty string puts the virtual tool on both pages. */
 function assertEmptyCursor(label, firstPage, secondPage) {
   check(
     `${label} · empty-string cursor · send_feedback is listed once, on the first page`,
-    feedbackCount(firstPage) === 1 && feedbackCount(secondPage) === 0,
+    feedbackOnFirstPageOnly(firstPage, secondPage),
     JSON.stringify({
       pageOne: firstPage?.tools?.map((t) => t.name),
       pageTwo: secondPage?.tools?.map((t) => t.name),
@@ -119,7 +123,7 @@ function assertEnumeration(label, firstPage, secondPage, callText, feedbackCallT
   )
   check(
     `${label} · send_feedback appears only on the first page, once`,
-    feedbackCount(firstPage) === 1 && feedbackCount(secondPage) === 0,
+    feedbackOnFirstPageOnly(firstPage, secondPage),
     JSON.stringify({ pageOne: feedbackCount(firstPage), pageTwo: feedbackCount(secondPage) })
   )
   check(
@@ -137,7 +141,7 @@ function assertEnumeration(label, firstPage, secondPage, callText, feedbackCallT
 function assertCollision(label, pages, feedbackCallText) {
   check(
     `${label} · colliding catalogue · only the real send_feedback is listed, on the first page`,
-    feedbackCount(pages[0]) === 1 && feedbackCount(pages[1]) === 0,
+    feedbackOnFirstPageOnly(pages[0], pages[1]),
     JSON.stringify(pages.map((page) => page?.tools?.map((t) => t.name)))
   )
   check(

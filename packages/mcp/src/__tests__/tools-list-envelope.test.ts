@@ -27,16 +27,20 @@ const PAGE_TWO = [{ name: 'page_two_tool', description: 'On page two', inputSche
  * enumeration. Pass `cursorToken: ''` to paginate by the empty-string cursor.
  */
 function setupPaginatedServer(
-  listResponses?: { firstPage?: Record<string, unknown>; secondPage?: Record<string, unknown> },
-  cursorToken = 'page-2'
+  options: {
+    firstPage?: Record<string, unknown>
+    secondPage?: Record<string, unknown>
+    cursorToken?: string
+  } = {}
 ) {
+  const { firstPage, secondPage, cursorToken = 'page-2' } = options
   const server = new Server({ name: 'paginated test', version: '1.0.0' }, { capabilities: { tools: {} } })
 
   server.setRequestHandler(ListToolsRequestSchema, async (request) => {
     if (request.params?.cursor === cursorToken) {
-      return listResponses?.secondPage ?? { tools: PAGE_TWO }
+      return secondPage ?? { tools: PAGE_TWO }
     }
-    return listResponses?.firstPage ?? { tools: PAGE_ONE, nextCursor: cursorToken }
+    return firstPage ?? { tools: PAGE_ONE, nextCursor: cursorToken }
   })
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => ({
@@ -295,7 +299,7 @@ describe('tools/list response envelope', () => {
     // Read as "no cursor", `''` puts the virtual tool on this page as well as
     // the first, so a client concatenating the pages sees it twice.
     it('treats an empty-string cursor as a continuation page, not the first one', async () => {
-      const { server, client, connect, cleanup } = setupPaginatedServer(undefined, '')
+      const { server, client, connect, cleanup } = setupPaginatedServer({ cursorToken: '' })
       try {
         instrument(server, fakePostHog(), { reportMissing: false, collectFeedback: true })
         await connect()
