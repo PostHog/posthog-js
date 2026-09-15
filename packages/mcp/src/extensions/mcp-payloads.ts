@@ -508,8 +508,8 @@ function sanitizeString(value: string): string {
 }
 
 /**
- * Sanitizes the agent-narrated intent: structured PII on top of the passes every
- * captured string gets.
+ * Sanitizes agent-narrated free text (`$mcp_intent`, the `send_feedback`
+ * fields): structured PII on top of the passes every captured string gets.
  *
  * Every step of the order is load-bearing. The binary gate reads the value as it
  * arrived, because splicing `[redacted]` into a blob — a Luhn-valid run inside
@@ -519,7 +519,7 @@ function sanitizeString(value: string): string {
  * URL pass, because the URL rewrite percent-encodes the `@` that the email
  * pattern anchors on.
  */
-export function sanitizeIntent(value: string): string {
+export function sanitizeFreeText(value: string): string {
   if (isBinaryBlob(value)) {
     return BINARY_REDACTED_VALUE
   }
@@ -607,16 +607,29 @@ export function redactPii(value: string): string {
 }
 
 export function sanitizeCapturedValue(value: unknown): unknown {
+  return sanitizeValueWith(value, sanitizeString)
+}
+
+/**
+ * {@link sanitizeCapturedValue} with the intent-grade string pass
+ * ({@link sanitizeFreeText}) on every string leaf, so nested agent-narrated
+ * values get structured-PII redaction in the load-bearing order too.
+ */
+export function sanitizeFreeTextValue(value: unknown): unknown {
+  return sanitizeValueWith(value, sanitizeFreeText)
+}
+
+function sanitizeValueWith(value: unknown, sanitizeStringFn: (value: string) => string): unknown {
   if (value == null) {
     return value
   }
 
   if (typeof value === 'string') {
-    return sanitizeString(value)
+    return sanitizeStringFn(value)
   }
 
   if (Array.isArray(value)) {
-    return value.map(sanitizeCapturedValue)
+    return value.map((item) => sanitizeValueWith(item, sanitizeStringFn))
   }
 
   if (value instanceof Date) {
@@ -629,7 +642,7 @@ export function sanitizeCapturedValue(value: unknown): unknown {
 
   const result: JsonRecord = {}
   for (const [key, nestedValue] of Object.entries(value)) {
-    result[key] = shouldRedactKey(key) ? REDACTED_VALUE : sanitizeCapturedValue(nestedValue)
+    result[key] = shouldRedactKey(key) ? REDACTED_VALUE : sanitizeValueWith(nestedValue, sanitizeStringFn)
   }
   return result
 }

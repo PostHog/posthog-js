@@ -80,6 +80,7 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     '$feature_flag_evaluated_at',
     '$minimal_flag_called_events',
     '$fbc_persistence',
+    '$fbp_persistence',
     '$client_session_props',
     '$capture_rate_limit',
     '$initial_campaign_params',
@@ -501,6 +502,24 @@ describe('persistence', () => {
                 expect(library.props.distinct_id).toBeUndefined()
                 expect(library.props.keep).toBe('me')
             })
+
+            it.each(['$fbc_persistence', '$fbp_persistence'])(
+                'keeps %s in memory while its debounced write is pending',
+                (key) => {
+                    // The request callback that confirms delivery can run before the debounced save lands.
+                    const debounced = new PostHogPersistence({
+                        ...makePostHogConfig('test-meta-pending', persistenceMode),
+                        persistence_save_debounce_ms: 250,
+                    })
+                    debounced.register({ [key]: { value: 'fb.1.1700000000000.pending', delivered: false } })
+                    parseSpy = vi.spyOn(debounced['_storage'], '_parse').mockReturnValue({ distinct_id: 'mine' })
+
+                    debounced.refreshKey(key)
+
+                    expect(debounced.props[key]).toEqual({ value: 'fb.1.1700000000000.pending', delivered: false })
+                    debounced.clear()
+                }
+            )
         })
 
         describe('save debounce', () => {

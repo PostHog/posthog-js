@@ -670,11 +670,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._eventTriggerMatching = new EventTriggerMatching(this._instance)
 
         this._buffer = this._clearBuffer()
-        // the sessionid manager's key scheme, repeated rather than read from it because this
-        // recorder is loaded from the CDN and can run against a core that does not expose it.
-        // Two apps on one origin park separately, as they already do for the window id
+        // A shared persistence_name also shares session/window IDs, but must not share replay
+        // data across project tokens. Encode the pair without ambiguous separators and use a
+        // distinct key shape: legacy parked buffers have no token and cannot be safely restored.
         const persistenceName = this._instance.config.persistence_name || this._instance.config.token
-        this._pendingBufferStorageKey = 'ph_' + persistenceName + PENDING_BUFFER_STORAGE_SUFFIX
+        this._pendingBufferStorageKey =
+            'ph' + PENDING_BUFFER_STORAGE_SUFFIX + '_' + JSON.stringify([persistenceName, this._instance.config.token])
 
         if (this._sessionIdleThresholdMilliseconds >= this._sessionManager.sessionTimeoutMs) {
             logger.warn(
@@ -1176,7 +1177,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     cacheTimestamp,
                     persistedConfig,
                 })
-                this._instance.persistence?.unregister(SESSION_RECORDING_REMOTE_CONFIG)
+                // Core needs the persisted config to reach its refresh path when recording restarts.
                 return undefined
             }
         }
@@ -2835,6 +2836,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // the recording that nothing else reports
             $sdk_debug_replay_unstringifiable_events_dropped: this._unstringifiableEventsDropped,
             $sdk_debug_replay_rrweb_error: this._rrwebError,
+            // observers that failed to start: the recorder's error handler swallows those
+            // errors, so without this a frame that records almost nothing still reports
+            // every other health signal as good
+            $sdk_debug_replay_observer_init_failures: getRRWeb()?.getObserverInitFailures?.(),
             [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
         }

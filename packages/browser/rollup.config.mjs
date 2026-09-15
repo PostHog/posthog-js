@@ -374,6 +374,12 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties, useBabel) => [
 const entryFilter = process.env.ENTRY
 const allEntrypoints = fs.readdirSync('./src/entrypoints')
 const entrypoints = entryFilter ? allEntrypoints.filter((file) => file.startsWith(entryFilter)) : allEntrypoints
+// Bundles published under a named subpath (full/, no-external/, full/no-external/). Node reads
+// dist/*.js as CommonJS because this package is not `type: module`, so requiring the ES module
+// output throws. Each named subpath points `main` at a real CommonJS `.cjs` build instead.
+// `posthog-js` itself already has one in dist/main.js.
+const cjsBundles = new Set(['module.full', 'module.no-external', 'module.full.no-external'])
+
 const entrypointTargets = entrypoints.map((file) => {
     const fileParts = file.split('.')
     // pop the extension
@@ -403,7 +409,15 @@ const entrypointTargets = entrypoints.map((file) => {
     // oxlint-disable-next-line no-console
     console.log(`Building ${fileName} in ${format} format`)
 
-    const outputExtensions = format === 'es' && fileName === 'module' ? ['js', 'mjs'] : ['js']
+    const outputVariants = [
+        { extension: 'js', format },
+        ...(format === 'es' && fileName === 'module' ? [{ extension: 'mjs', format: 'es' }] : []),
+        // No source map for the CommonJS twin. It would describe the same sources as the ES module
+        // map shipping beside it, and every npm install pays for both. Bundlers read `module`, so
+        // the map they chain through is the ES module one; `require` consumers get our frames
+        // ignore-listed anyway (see `sourcemapIgnoreList` below).
+        ...(format === 'es' && cjsBundles.has(fileName) ? [{ extension: 'cjs', format: 'cjs', sourcemap: false }] : []),
+    ]
 
     /** @type {import('rolldown').RolldownOptions} */
     return {
@@ -415,9 +429,9 @@ const entrypointTargets = entrypoints.map((file) => {
             // Declaring that here prevents unused barrel exports from being retained.
             moduleSideEffects: [{ test: /\/packages\/core\/dist\//, sideEffects: false }],
         },
-        output: outputExtensions.map((extension) => ({
+        output: outputVariants.map(({ extension, format: outputFormat, sourcemap = true }) => ({
             file: `dist/${fileName}.${extension}`,
-            sourcemap: true,
+            sourcemap,
             // Mark every source in our bundles as third-party so devtools skip our frames.
             // Without this, wrappers we install on globals (most visibly the console capture
             // in entrypoints/logs.ts and rrweb's console plugin) become the reported location
@@ -425,8 +439,8 @@ const entrypointTargets = entrypoints.map((file) => {
             // Rollup's default only ignore-lists paths containing node_modules, which misses
             // both our `src/` and workspace packages (they resolve through symlinks).
             sourcemapIgnoreList: () => true,
-            format,
-            ...(format === 'iife'
+            format: outputFormat,
+            ...(outputFormat === 'iife'
                 ? {
                       name: 'posthog',
                       globals: {
@@ -434,7 +448,7 @@ const entrypointTargets = entrypoints.map((file) => {
                       },
                   }
                 : {}),
-            ...(format === 'cjs' ? { exports: 'named' } : {}),
+            ...(outputFormat === 'cjs' ? { exports: 'named' } : {}),
         })),
         plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true })],
     }

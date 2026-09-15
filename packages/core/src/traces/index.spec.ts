@@ -194,6 +194,88 @@ describe('PostHogTraces', () => {
     })
   })
 
+  describe('clock basis', () => {
+    const setClocks = (wall: number, mono: number): void => {
+      vi.spyOn(Date, 'now').mockReturnValue(wall)
+      vi.spyOn(performance, 'now').mockReturnValue(mono)
+    }
+
+    const expectWithin = (inner: OtlpSpan, outer: OtlpSpan): void => {
+      expect(BigInt(inner.startTimeUnixNano)).toBeGreaterThanOrEqual(BigInt(outer.startTimeUnixNano))
+      expect(BigInt(inner.endTimeUnixNano)).toBeLessThanOrEqual(BigInt(outer.endTimeUnixNano))
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('keeps a child inside its parent when the wall clock truncates sub-millisecond starts', async () => {
+      const traces = createTraces()
+      setClocks(1_700_000_001_000, 0.9)
+      const parent = traces.startSpan('POST /checkout')
+      setClocks(1_700_000_001_001, 1)
+      const child = traces.startSpan('http.post payments', { parent })
+      setClocks(1_700_000_001_005, 5)
+      child.end()
+      setClocks(1_700_000_001_005, 5.05)
+      parent.end()
+      await traces.flush()
+
+      const [childSpan, parentSpan] = sentSpans()
+      expectWithin(childSpan, parentSpan)
+    })
+
+    it('keeps nested active spans inside their parents across a wall-clock step', async () => {
+      const traces = createTraces()
+      setClocks(1_700_000_001_000, 100)
+      traces.withSpan('root', () => {
+        setClocks(1_700_000_000_510, 110)
+        traces.withSpan('child', () => {
+          setClocks(1_700_000_000_515, 115)
+          traces.withSpan('grandchild', () => {
+            setClocks(1_700_000_000_520, 120)
+          })
+          setClocks(1_700_000_000_525, 125)
+        })
+        setClocks(1_700_000_000_530, 130)
+      })
+      await traces.flush()
+
+      const [grandchild, child, root] = sentSpans()
+      expectWithin(child, root)
+      expectWithin(grandchild, child)
+    })
+
+    it('keeps its own clock under a remote or backdated parent, or when backdated itself', async () => {
+      const traces = createTraces()
+      setClocks(1_700_000_001_000, 100)
+      const parent = traces.startSpan('parent')
+      const backdatedParent = traces.startSpan('backdated parent', { startTime: 1_700_000_000_000 })
+      setClocks(1_700_000_000_500, 110)
+      traces.startSpan('remote child', { parent: `00-${TRACE_ID}-${REMOTE_SPAN_ID}-01` }).end()
+      traces.startSpan('child of backdated', { parent: backdatedParent }).end()
+      traces.startSpan('backdated child', { parent, startTime: 1_700_000_000_200 }).end()
+      await traces.flush()
+
+      expect(sentSpans().map((span) => span.startTimeUnixNano)).toEqual([
+        '1700000000500000000',
+        '1700000000500000000',
+        '1700000000200000000',
+      ])
+    })
+
+    it('keeps an explicit startTime that equals the current time', async () => {
+      const traces = createTraces()
+      setClocks(1_700_000_001_000, 100)
+      const parent = traces.startSpan('parent')
+      setClocks(1_700_000_000_500, 110)
+      traces.startSpan('child', { parent, startTime: Date.now() }).end()
+      await traces.flush()
+
+      expect(sentSpans()[0].startTimeUnixNano).toBe('1700000000500000000')
+    })
+  })
+
   describe('trace continuation', () => {
     it('continues a remote trace from a traceparent string', async () => {
       const traces = createTraces()

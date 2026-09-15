@@ -189,7 +189,7 @@ export default function initCanvasContextObserver(
     );
     handlers.push(restoreHandler);
   } catch {
-    console.error('failed to patch HTMLCanvasElement.prototype.getContext');
+    console.warn('failed to patch HTMLCanvasElement.prototype.getContext');
   }
   return () => {
     handlers.forEach((h) => h());

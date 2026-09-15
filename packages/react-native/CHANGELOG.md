@@ -1,5 +1,69 @@
 # posthog-react-native
 
+## 4.73.0
+
+### Minor Changes
+
+- [#4605](https://github.com/PostHog/posthog-js/pull/4605) [`48cfa4d`](https://github.com/PostHog/posthog-js/commit/48cfa4d714ef087430d212d32204023806dde8b3) Thanks [@safaiyeh](https://github.com/safaiyeh)! - feat(react-native): let surveys cap how far their text scales with the OS text-size setting, per text role — `appearance.maxFontSizeMultiplier` takes one number for the whole survey or an object keyed by role (`question`, `description`, `header`, `choice`, `input`, `button`, `ratingLabel`, `ratingNumber`, `validationHint`). Unset, text scales without a ceiling exactly as before.
+  (2026-09-15)
+
+## 4.72.1
+
+### Patch Changes
+
+- [#4884](https://github.com/PostHog/posthog-js/pull/4884) [`338a7de`](https://github.com/PostHog/posthog-js/commit/338a7debeccd9849eef523763f3dc1b0d76e126e) Thanks [@posthog](https://github.com/apps/posthog)! - fix(react-native): retry refused manual session recording starts without waiting for feature flags to reload
+  (2026-09-14)
+- Updated dependencies [[`3c68c08`](https://github.com/PostHog/posthog-js/commit/3c68c083dea604ee440db4c5a4f193f0947159bb)]:
+  - @posthog/core@1.54.0
+
+## 4.72.0
+
+### Minor Changes
+
+- [#4928](https://github.com/PostHog/posthog-js/pull/4928) [`c7e592f`](https://github.com/PostHog/posthog-js/commit/c7e592fdedd1dc0f6378a3cf80d5f9801e72f591) Thanks [@marandaneto](https://github.com/marandaneto)! - Add initialization-only `sessionReplayConfig.captureTouches` to disable replay touch coordinates without stopping screenshots on Android and iOS.
+  (2026-09-14)
+
+### Patch Changes
+
+- Updated dependencies [[`c7e592f`](https://github.com/PostHog/posthog-js/commit/c7e592fdedd1dc0f6378a3cf80d5f9801e72f591)]:
+  - @posthog/react-native-plugin@2.9.0
+
+## 4.71.0
+
+### Minor Changes
+
+- [#4907](https://github.com/PostHog/posthog-js/pull/4907) [`fa6381b`](https://github.com/PostHog/posthog-js/commit/fa6381b072f2411460ff305aa7b9b230f351efa4) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add experimental Android-only `screenshotScale`, `screenshotCompressionQuality`, and `screenshotColorMode` options to `sessionReplayConfig`, and bump `com.posthog:posthog-android` to 3.63.1.
+  (2026-09-11)
+
+### Patch Changes
+
+- Updated dependencies [[`fa6381b`](https://github.com/PostHog/posthog-js/commit/fa6381b072f2411460ff305aa7b9b230f351efa4)]:
+  - @posthog/react-native-plugin@2.8.0
+
+## 4.70.0
+
+### Minor Changes
+
+- [#4886](https://github.com/PostHog/posthog-js/pull/4886) [`652a5bc`](https://github.com/PostHog/posthog-js/commit/652a5bc2b7a5c4c66d82ed886482f854c41be87d) Thanks [@itsalysialynn](https://github.com/itsalysialynn)! - Expose rageClickConfig for tuning or disabling native iOS rage click detection from React Native.
+  (2026-09-11)
+
+### Patch Changes
+
+- Updated dependencies [[`652a5bc`](https://github.com/PostHog/posthog-js/commit/652a5bc2b7a5c4c66d82ed886482f854c41be87d)]:
+  - @posthog/react-native-plugin@2.7.0
+
+## 4.69.0
+
+### Minor Changes
+
+- [#4899](https://github.com/PostHog/posthog-js/pull/4899) [`18ae6bb`](https://github.com/PostHog/posthog-js/commit/18ae6bba2c46f5e9ac2708ac7800f1c24774e628) Thanks [@marandaneto](https://github.com/marandaneto)! - Add optional Expo update metadata and app state to React Native JavaScript exceptions.
+  (2026-09-11)
+
+### Patch Changes
+
+- Updated dependencies [[`18ae6bb`](https://github.com/PostHog/posthog-js/commit/18ae6bba2c46f5e9ac2708ac7800f1c24774e628)]:
+  - @posthog/core@1.53.2
+
 ## 4.68.9
 
 ### Patch Changes

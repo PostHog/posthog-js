@@ -4,7 +4,7 @@ import { TextDecoder } from 'util'
 import { runInNewContext } from 'node:vm'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import * as fflate from 'fflate'
-import { extendURLParams, request } from '../request'
+import { extendURLParams, isPostHogXHR, request } from '../request'
 import { Compression, RequestWithOptions } from '../types'
 import { logger } from '@posthog/browser-common/utils/logger'
 
@@ -169,6 +169,24 @@ describe('request', () => {
             expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('x-header', 'value')
         })
 
+        it('marks the XHR as its own so page-level observers can skip it', () => {
+            request(createRequest({}))
+
+            expect(isPostHogXHR(mockedXHR)).toBe(true)
+            expect(isPostHogXHR({} as XMLHttpRequest)).toBe(false)
+        })
+
+        it('loads in a browser without WeakSet, such as IE11', async () => {
+            vi.stubGlobal('WeakSet', undefined)
+            vi.resetModules()
+            try {
+                await expect(import('../request')).resolves.toBeDefined()
+            } finally {
+                vi.unstubAllGlobals()
+                vi.resetModules()
+            }
+        })
+
         it('calls the on callback handler when successful', async () => {
             mockedXHR.status = 200
             request(createRequest())
@@ -253,8 +271,20 @@ describe('request', () => {
                     headers: new Headers(),
                     keepalive: false,
                     method: 'GET',
+                    referrerPolicy: 'strict-origin',
                 })
             )
+        })
+
+        it('uses the fetch captured at load, so a wrapper installed on window.fetch never sees it', () => {
+            const windowFetch = vi.fn()
+            vi.stubGlobal('fetch', windowFetch)
+
+            request(createRequest({}))
+
+            expect(mockedFetch).toHaveBeenCalledTimes(1)
+            expect(windowFetch).not.toHaveBeenCalled()
+            vi.unstubAllGlobals()
         })
 
         it('adds the cache-busting parameter only when requested', () => {
@@ -782,7 +812,18 @@ describe('request', () => {
                 expect.objectContaining({
                     cache: 'force-cache',
                     next: { revalidate: 0, tags: ['test'] },
+                    referrerPolicy: 'strict-origin',
                 })
+            )
+        })
+
+        it('preserves runtime fetchOptions precedence over the default referrer policy', () => {
+            // Extra runtime fields already pass through, even though referrerPolicy is not a public config option.
+            const fetchOptions: RequestInit = { cache: 'no-store', referrerPolicy: 'no-referrer' }
+            request(createRequest({ fetchOptions }))
+
+            expect(mockedFetch.mock.calls[0][1]).toEqual(
+                expect.objectContaining({ cache: 'no-store', referrerPolicy: 'no-referrer' })
             )
         })
 
@@ -835,6 +876,7 @@ describe('request', () => {
                             headers: new Headers(),
                             keepalive: expectedKeepAlive,
                             method,
+                            referrerPolicy: 'strict-origin',
                         })
                     )
                 }
@@ -847,7 +889,10 @@ describe('request', () => {
                         disableTransport: ['sendBeacon'],
                     })
                 )
-                expect(mockedFetch).toHaveBeenCalled()
+                expect(mockedFetch).toHaveBeenCalledWith(
+                    expect.anything(),
+                    expect.objectContaining({ referrerPolicy: 'strict-origin' })
+                )
             })
         })
 
@@ -1297,6 +1342,7 @@ describe('request', () => {
                     expect(warnSpy).toHaveBeenCalledTimes(4)
                     for (const call of mockedFetch.mock.calls) {
                         expect(call[1].keepalive).toBe(false)
+                        expect(call[1].referrerPolicy).toBe('strict-origin')
                     }
                 })
 
@@ -1316,6 +1362,7 @@ describe('request', () => {
                     expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(1)
                     expect(mockedFetch).toHaveBeenCalledTimes(1)
                     expect(mockedFetch.mock.calls[0][1].keepalive).toBe(false)
+                    expect(mockedFetch.mock.calls[0][1].referrerPolicy).toBe('strict-origin')
                 })
             })
 

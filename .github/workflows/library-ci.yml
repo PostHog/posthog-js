@@ -38,6 +38,9 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup
 
+      - name: Check dependency cooldowns
+        run: pnpm test:dependency-cooldown
+
       - name: Check task graph
         run: pnpm test:build-graph
 

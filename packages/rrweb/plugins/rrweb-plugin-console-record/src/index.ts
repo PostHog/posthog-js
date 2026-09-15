@@ -116,6 +116,7 @@ function initLogObserver(
   }
   let logCount = 0;
   let inStack = false;
+  let active = true;
   const cancelHandlers: listenerHandler[] = [];
   // add listener to thrown errors
   if (logOptions.level.includes('error')) {
@@ -172,6 +173,8 @@ function initLogObserver(
     cancelHandlers.push(replace(logger, levelType));
   }
   return () => {
+    // A foreign wrapper may retain our closure after unpatching.
+    active = false;
     cancelHandlers.forEach((h) => h());
   };
 
@@ -196,6 +199,10 @@ function initLogObserver(
           // function, so it is undefined. Native console methods can reject a
           // foreign receiver, so pass the logger the method was taken from.
           original.apply(_logger, args);
+
+          if (!active) {
+            return;
+          }
 
           if (level === 'assert' && !!args[0]) {
             // assert does not log if the first argument evaluates to true

@@ -83,7 +83,8 @@ jobs:
         # required for React Native's Android Gradle autolinking and iOS pods.
         # --frozen-lockfile keeps native builds reproducible; the committed
         # example lockfile must be kept in sync with its package.json.
-        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted
+        # The cooldown is explicit because --ignore-workspace skips the YAML policy.
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted --config.minimum-release-age=10080
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Build example and test plugin for Android
@@ -129,7 +130,8 @@ jobs:
         # required for React Native's Android Gradle autolinking and iOS pods.
         # --frozen-lockfile keeps native builds reproducible; the committed
         # example lockfile must be kept in sync with its package.json.
-        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted
+        # The cooldown is explicit because --ignore-workspace skips the YAML policy.
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted --config.minimum-release-age=10080
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Install CocoaPods
@@ -185,7 +187,8 @@ jobs:
         # required for React Native's Android Gradle autolinking and iOS pods.
         # --frozen-lockfile keeps native builds reproducible; the committed
         # example lockfile must be kept in sync with its package.json.
-        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted
+        # The cooldown is explicit because --ignore-workspace skips the YAML policy.
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted --config.minimum-release-age=10080
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Opt example into SPM resolution
@@ -326,7 +329,8 @@ jobs:
         # required for React Native's macOS autolinking and pods.
         # --frozen-lockfile keeps native builds reproducible; the committed
         # example lockfile must be kept in sync with its package.json.
-        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted
+        # The cooldown is explicit because --ignore-workspace skips the YAML policy.
+        run: pnpm install --ignore-workspace --frozen-lockfile --config.node-linker=hoisted --config.minimum-release-age=10080
         working-directory: ${{ env.EXAMPLE_DIR }}
 
       - name: Install CocoaPods

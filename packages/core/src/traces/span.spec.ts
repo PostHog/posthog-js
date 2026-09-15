@@ -985,6 +985,7 @@ describe('PostHogSpan', () => {
         parentSpanId: SPAN_ID,
         traceState: 'vendor=abc',
         traceFlags: '01',
+        clockAnchor: { wall: Date.now(), mono: performance.now() },
       })
     })
   })

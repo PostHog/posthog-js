@@ -1,5 +1,33 @@
 # @posthog/core
 
+## 1.54.0
+
+### Minor Changes
+
+- [#4954](https://github.com/PostHog/posthog-js/pull/4954) [`3c68c08`](https://github.com/PostHog/posthog-js/commit/3c68c083dea604ee440db4c5a4f193f0947159bb) Thanks [@marandaneto](https://github.com/marandaneto)! - Export the shared Retry-After parser with safe integer caps, GMT HTTP-date handling and rejection of non-HTTP dates.
+  (2026-09-14)
+
+## 1.53.3
+
+### Patch Changes
+
+- [#4922](https://github.com/PostHog/posthog-js/pull/4922) [`3786cff`](https://github.com/PostHog/posthog-js/commit/3786cff3b92a0276f5dc6a0f0cdacdc0e3f76e78) Thanks [@Mnigos](https://github.com/Mnigos)! - Require final 2xx responses for successful writes while preserving immediate-call error handling.
+  (2026-09-14)
+
+## 1.53.2
+
+### Patch Changes
+
+- [#4899](https://github.com/PostHog/posthog-js/pull/4899) [`18ae6bb`](https://github.com/PostHog/posthog-js/commit/18ae6bba2c46f5e9ac2708ac7800f1c24774e628) Thanks [@marandaneto](https://github.com/marandaneto)! - Share the trySafe utility through @posthog/core.
+  (2026-09-11)
+
+## 1.53.1
+
+### Patch Changes
+
+- [#4908](https://github.com/PostHog/posthog-js/pull/4908) [`4a3c74b`](https://github.com/PostHog/posthog-js/commit/4a3c74bff482ad626e769ff8c8ad51353b0509cd) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Child spans now share their parent's clock, so a child no longer appears to start before or end after its parent by up to a millisecond, or by more when the system clock is adjusted mid-trace.
+  (2026-09-11)
+
 ## 1.53.0
 
 ### Minor Changes

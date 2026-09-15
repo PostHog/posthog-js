@@ -8,9 +8,12 @@ describe('parseRetryAfterMs', () => {
     expect(parseRetryAfterMs('  7  ', now)).toBe(7_000)
   })
 
-  it('reads an HTTP-date as a delay from now', () => {
-    expect(parseRetryAfterMs('Tue, 01 Sep 2026 12:00:30 GMT', now)).toBe(30_000)
-  })
+  it.each(['Tue, 01 Sep 2026 12:00:30 GMT', 'Tuesday, 01-Sep-26 12:00:30 GMT'])(
+    'reads an HTTP-date as a delay from now: %s',
+    (header) => {
+      expect(parseRetryAfterMs(header, now)).toBe(30_000)
+    }
+  )
 
   it('reads the outermost hop when two proxies each append one', () => {
     // `headers.get` joins repeated headers with ", ". The date form carries a
@@ -36,6 +39,13 @@ describe('parseRetryAfterMs', () => {
     }
   })
 
+  it.each(['2026-09-01T12:00:30Z', 'Sep 1 2026 12:00:30 GMT', '09/01/2026', '1e2', 'Infinity', 'Tue, nonsense'])(
+    'ignores non-HTTP dates and malformed seconds: %s',
+    (header) => {
+      expect(parseRetryAfterMs(header, now)).toBeUndefined()
+    }
+  )
+
   it('ignores a header it cannot parse rather than guessing', () => {
     // "10 minutes" must not read as 10 seconds.
     expect(parseRetryAfterMs('10 minutes', now)).toBeUndefined()
@@ -47,6 +57,14 @@ describe('parseRetryAfterMs', () => {
 
   it('caps an unbounded value so a bogus header cannot strand a queue', () => {
     expect(parseRetryAfterMs('86400', now)).toBe(5 * 60_000)
+  })
+
+  it.each(['9'.repeat(308), '9'.repeat(400)])('caps overflowing integer seconds: %s', (header) => {
+    expect(parseRetryAfterMs(header, now)).toBe(MAX_RETRY_AFTER_MS)
+  })
+
+  it('reads the obsolete asctime HTTP-date in GMT, independent of the local timezone', () => {
+    expect(parseRetryAfterMs('Tue Sep  1 12:00:30 2026', now)).toBe(30_000)
   })
 
   it('ignores a value that is not a string', () => {

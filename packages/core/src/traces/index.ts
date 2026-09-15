@@ -19,6 +19,7 @@ import {
   runWithActiveSpan,
   truncateAttributes,
 } from './span'
+import type { ClockAnchor } from './span'
 import { newSpanId, newTraceId } from './ids'
 import { parseTraceparent, sanitizeTracestate, traceparentHeader } from './traceparent'
 import { clampEndTime, resolveStartTime, resolveSuppliedTime, sanitizeName, toEpochMs } from './sanitize'
@@ -155,6 +156,7 @@ interface ParentContext {
   traceFlags?: string
   /** True when the parent arrived as a `traceparent` header. */
   isRemote?: boolean
+  clockAnchor?: ClockAnchor
 }
 
 /**
@@ -274,6 +276,7 @@ export class PostHogTraces {
         maxAttributeValueLength: this._config.maxAttributeValueLength,
         startTime,
         backdated: startTime !== now,
+        clockAnchor: toEpochMs(options?.startTime) === undefined ? parent?.clockAnchor : undefined,
       },
       (record, autoKeys) => this._onSpanEnd(record, autoKeys),
       this._logger
