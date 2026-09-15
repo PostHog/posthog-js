@@ -1,4 +1,21 @@
 {
+  "PostHog/posthog-js/issue/4978": {
+    "key": "PostHog/posthog-js/issue/4978",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4978",
+    "url": "https://github.com/PostHog/posthog-js/issues/4978",
+    "conclusion": "Valid React Native feature gap; initial bootstrap support is feasible, but reset and runtime replacement require separate public-API decisions.",
+    "labels": [
+      "enhancement",
+      "react-native",
+      "feature/mobile",
+      "feature",
+      "feature/replay",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-15T23:42:00.762Z"
+  },
   "PostHog/posthog-js/issue/4974": {
     "key": "PostHog/posthog-js/issue/4974",
     "repo": "PostHog/posthog-js",
