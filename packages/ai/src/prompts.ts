@@ -265,9 +265,12 @@ export class Prompts {
    * with many prompts can call this once per cache cycle instead of making one
    * `get()` request per prompt.
    *
-   * Throws if the request fails, or if the server does not support fetching
-   * prompts by label on the list endpoint (PostHog releases from before
-   * September 2026).
+   * Unlike `get()`, there is no `fallback` option, so callers should handle
+   * the error themselves.
+   *
+   * @throws {Error} When the request fails, when the response is malformed,
+   * or when the server does not support fetching prompts by label on the list
+   * endpoint (PostHog releases from before September 2026).
    */
   async getAll(options: { label: string }): Promise<Record<string, PromptRemoteResult>> {
     const label = options.label
