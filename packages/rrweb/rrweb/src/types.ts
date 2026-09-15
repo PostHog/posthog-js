@@ -165,6 +165,7 @@ export type observerParam = {
   ignoreCSSAttributes: Set<string>;
   attributeFilter?: string[];
   plugins: Array<{
+    name: string;
     observer: (
       cb: (...arg: Array<unknown>) => void,
       win: IWindow,

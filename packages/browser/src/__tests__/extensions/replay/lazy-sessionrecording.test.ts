@@ -265,6 +265,7 @@ describe('Lazy SessionRecording', () => {
                 slowestSliceMs: 0,
             })),
             getDiscardedDurationSamples: vi.fn(() => 0),
+            getObserverInitFailures: vi.fn(() => undefined),
             resetSnapshotCostState: vi.fn(),
         }
         assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = vi.fn(() => {
@@ -4439,6 +4440,21 @@ describe('Lazy SessionRecording', () => {
 
             expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
                 $sdk_debug_replay_discarded_duration_samples: 3,
+            })
+        })
+
+        it('reports observers that failed to start in sdkDebugProperties', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            // the recorder swallows these errors and keeps every other health signal
+            // green, so this property is the only sign the frame records less than it should
+            assignableWindow.__PosthogExtensions__.rrweb.getObserverInitFailures.mockReturnValue([
+                'input',
+                'plugin:rrweb/console@1',
+            ])
+
+            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
+                $sdk_debug_replay_observer_init_failures: ['input', 'plugin:rrweb/console@1'],
             })
         })
 
