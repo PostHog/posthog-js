@@ -47,21 +47,28 @@ private func isReactNativeFatalJsError(_ event: PostHogEvent) -> Bool {
     }
 }
 
-/// Carries the distinct id JS holds into `beforeSend` for the length of `PostHogSDK.setup(_:)`.
+/// Carries the distinct id and consent JS holds into `beforeSend` for the length of
+/// `PostHogSDK.setup(_:)`.
 ///
 /// `setup()` installs the push-open integration, which replays a tap that cold-launched the app
 /// synchronously — before `setIdentify` can mirror that id into native storage, so the replayed
-/// event would carry whatever identity the previous launch left behind. posthog-ios offers no seam
-/// to seed identity earlier (its storage manager is created inside `setup()`, with an internal
-/// initializer), and disabling the integration to delay the replay discards the held tap instead of
-/// deferring it — so the id is applied on the way out instead. Cleared once storage agrees, after
-/// which every event resolves its identity from storage as before.
-private final class SetupIdentity {
+/// event would carry whatever identity the previous launch left behind, and before the JS layer
+/// re-asserts its consent: the native SDK prefers the opt-out it persisted itself, so after an
+/// earlier launch opted in, `config.optOut` no longer says what JS said and the replay is captured
+/// for a user JS considers opted out. posthog-ios offers no seam for either earlier (its storage
+/// manager is created inside `setup()`, with an internal initializer, and disabling the integration
+/// to delay the replay discards the held tap instead of deferring it) — so both are applied on the
+/// way out instead: the id is stamped, and a tap JS denied is dropped, consumed so a later opt-in
+/// cannot resurrect it. Cleared once `setup()` returns, after which every event resolves its
+/// identity and consent from native state as before.
+private final class SetupWindow {
     private let lock = NSLock()
     private var distinctId: String?
+    private var jsOptedOut: Bool
 
-    init(distinctId: String) {
+    init(distinctId: String, jsOptedOut: Bool) {
         self.distinctId = distinctId.isEmpty ? nil : distinctId
+        self.jsOptedOut = jsOptedOut
     }
 
     var pendingDistinctId: String? {
@@ -70,10 +77,17 @@ private final class SetupIdentity {
         return distinctId
     }
 
+    var dropsPushOpens: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return jsOptedOut
+    }
+
     func settled() {
         lock.lock()
         defer { lock.unlock() }
         distinctId = nil
+        jsOptedOut = false
     }
 }
 
@@ -232,10 +246,11 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
 
         let distinctId = sdkOptions["distinctId"] as? String ?? ""
         let anonymousId = sdkOptions["anonymousId"] as? String ?? ""
-        let setupIdentity = SetupIdentity(distinctId: distinctId)
+        let jsOptedOut = sdkOptions["optOut"] as? Bool ?? false
+        let setupWindow = SetupWindow(distinctId: distinctId, jsOptedOut: jsOptedOut)
         // Every exit below is past the point where native storage carries the ids, or past a
-        // failure that left the SDK disabled, so no path can leave the stamp armed.
-        defer { setupIdentity.settled() }
+        // failure that left the SDK disabled, so no path can leave the window armed.
+        defer { setupWindow.settled() }
 
         // React Native rethrows fatal JS errors natively (RCTFatalException / ExceptionsManager).
         // The JS layer already captured them, so drop the native duplicate.
@@ -245,8 +260,13 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
             }
             // Only the replayed tap. `setup()` also replays the previous launch's crash report,
             // and that `$exception` carries the distinct id recorded at crash time, which stands.
-            if event.event == "$push_notification_opened", let distinctId = setupIdentity.pendingDistinctId {
-                event.distinctId = distinctId
+            if event.event == "$push_notification_opened" {
+                if setupWindow.dropsPushOpens {
+                    return nil
+                }
+                if let distinctId = setupWindow.pendingDistinctId {
+                    event.distinctId = distinctId
+                }
             }
             return event
         }
@@ -304,7 +324,7 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
         let flushAt = sdkOptions["flushAt"] as? Int ?? 20
         config.flushAt = flushAt
 
-        config.optOut = sdkOptions["optOut"] as? Bool ?? false
+        config.optOut = jsOptedOut
         // JS owns flags; it tells us when the native preload would be a duplicate. posthog-ios
         // has no remoteConfig switch to mirror — it deprecated the option and always loads.
         config.preloadFeatureFlags = sdkOptions["preloadFeatureFlags"] as? Bool ?? true
