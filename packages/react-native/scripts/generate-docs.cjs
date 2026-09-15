@@ -1,7 +1,10 @@
+// This generator runs directly in Node as a CommonJS entrypoint.
+/* oxlint-disable typescript/no-require-imports */
 const path = require('path')
 const fs = require('fs')
 const { generateApiSpecs } = require('../../../scripts/docs/parser')
 const { HOG_REF } = require('../../../scripts/docs/constants')
+/* oxlint-enable typescript/no-require-imports */
 
 // Read package.json to get version
 const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'))

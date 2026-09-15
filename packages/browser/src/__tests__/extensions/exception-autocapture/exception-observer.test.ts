@@ -237,6 +237,7 @@ describe('Exception Observer', () => {
             expect(beforeSendMock).toHaveBeenCalledTimes(3)
             for (const [event] of beforeSendMock.mock.calls) {
                 expect(event.properties.$exception_list[0].mechanism).toEqual({
+                    exception_id: 0,
                     handled: true,
                     type: 'onconsole',
                     synthetic: false,
@@ -254,6 +255,7 @@ describe('Exception Observer', () => {
             posthog.captureException(new Error('manually reported'))
             expect(beforeSendMock).toHaveBeenCalledTimes(4)
             expect(beforeSendMock.mock.calls[3][0].properties.$exception_list[0].mechanism).toEqual({
+                exception_id: 0,
                 handled: true,
                 type: 'generic',
                 synthetic: false,
