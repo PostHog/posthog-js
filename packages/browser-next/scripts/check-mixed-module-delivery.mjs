@@ -55,17 +55,27 @@ const posthog = await createCorePostHog({
     navigator: false,
     extensions: [analytics()],
     fetch: async (input, init) => {
-        requests.push({ url: String(input), body: JSON.parse(init.body) })
-        return new Response('{}', { status: 200 })
+        const body = JSON.parse(init.body)
+        requests.push({ url: String(input), body })
+        const uuid = body?.batch?.[0]?.uuid
+        return new Response(JSON.stringify({ results: { [uuid]: { result: 'ok' } } }), { status: 200 })
     },
 })
 
 posthog.capture('mixed_module_event')
 await posthog.flush()
+const immediateSummary = await posthog.captureImmediate('mixed_module_immediate', undefined, {
+    uuid: 'mixed-immediate-uuid',
+})
 await posthog.dispose()
 
-if (requests.length !== 1 || requests[0].body?.batch?.[0]?.event !== 'mixed_module_event') {
-    throw new Error('Mixed CommonJS/ESM analytics delivery did not drain the queued event')
+if (
+    requests.length !== 2 ||
+    requests[0].body?.batch?.[0]?.event !== 'mixed_module_event' ||
+    requests[1].body?.batch?.[0]?.event !== 'mixed_module_immediate' ||
+    !immediateSummary.allPersisted
+) {
+    throw new Error('Mixed CommonJS/ESM analytics delivery did not support queued and immediate events')
 }
 
 const automaticRequests = []
