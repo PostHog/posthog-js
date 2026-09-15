@@ -81,6 +81,10 @@
             "dependsOn": ["^build", "build"],
             "cache": false
         },
+        "posthog-js#test:unit": {
+            "dependsOn": ["^build", "build", "@posthog/react#build"],
+            "cache": false
+        },
         "@posthog/browser#test:unit": {
             "dependsOn": ["^build"],
             "cache": false
