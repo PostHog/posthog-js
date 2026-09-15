@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/4969": {
+    "key": "PostHog/posthog-js/issue/4969",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4969",
+    "url": "https://github.com/PostHog/posthog-js/issues/4969",
+    "conclusion": "Confirmed Session Replay bug: rrweb's deferred input-setter callback can schedule zone.js-patched timers from Angular change detection, creating an unbounded change-detection loop.",
+    "labels": [
+      "feature/replay",
+      "web",
+      "performance",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-09-15T14:37:57.683Z"
+  },
   "PostHog/posthog-js/issue/4968": {
     "key": "PostHog/posthog-js/issue/4968",
     "repo": "PostHog/posthog-js",
