@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4969](https://github.com/PostHog/posthog-js/issues/4969) | Confirmed Session Replay bug: rrweb's deferred input-setter callback can schedule zone.js-patched timers from Angular change detection, creating an unbounded change-detection loop. | feature/replay, web, performance, team/client-libraries |  | no | 2026-09-15T14:37:57.683Z |
 | PostHog/posthog-js | [issue 4968](https://github.com/PostHog/posthog-js/issues/4968) | Likely a canvas FPS capture compatibility/failure-path issue, distinct from a playback-only canvas replacement fix. | feature/replay, javascript |  | no | 2026-09-15T12:38:21.539Z |
 | PostHog/posthog-js | [issue 4920](https://github.com/PostHog/posthog-js/issues/4920) | Valid Node delivery-semantics bug; the terminal-3xx portion is already fixed in shared core, but immediate calls still suppress transport failures. | node, team/client-libraries |  | no | 2026-09-14T08:12:46.087Z |
 | PostHog/posthog-js | [issue 4931](https://github.com/PostHog/posthog-js/issues/4931) | Valid dead-click false-positive bug with a narrowly scoped, evidence-backed fix direction. | feature/dead-clicks, javascript, web |  | no | 2026-09-12T23:17:51.861Z |
