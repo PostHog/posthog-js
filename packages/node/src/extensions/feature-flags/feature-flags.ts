@@ -12,7 +12,7 @@ import {
   resolveFeatureFlagPayload,
   safeSetTimeout,
 } from '@posthog/core'
-import { FlagDefinitionCacheProvider, FlagDefinitionCacheData } from './cache'
+import { FlagDefinitionCacheProvider, FlagDefinitionCacheData, FlagDefinitionCacheInput } from './cache'
 
 const SIXTY_SECONDS = 60 * 1000
 
@@ -64,7 +64,7 @@ type FeatureFlagsPollerOptions = {
    */
   onMinimalFlagCalledEvents?: (enabled: boolean) => void
   customHeaders?: { [key: string]: string }
-  cacheProvider?: FlagDefinitionCacheProvider
+  cacheProvider?: FlagDefinitionCacheProvider<FlagDefinitionCacheInput>
   strictLocalEvaluation?: boolean
   /**
    * When set, the poller keeps only flags whose evaluation contexts are empty or share at
@@ -105,7 +105,7 @@ class FeatureFlagsPoller {
   shouldBeginExponentialBackoff: boolean = false
   backOffCount: number = 0
   onLoad?: (count: number) => void
-  private cacheProvider?: FlagDefinitionCacheProvider
+  private cacheProvider?: FlagDefinitionCacheProvider<FlagDefinitionCacheInput>
   private loadingPromise?: Promise<void>
   private pollerStopped: boolean = false
   private flagsEtag?: string
@@ -671,7 +671,7 @@ class FeatureFlagsPoller {
     })
   }
 
-  private updateFlagState(flagData: FlagDefinitionCacheData): void {
+  private updateFlagState(flagData: FlagDefinitionCacheInput): void {
     const flags = this.filterFlagsByEvaluationContexts(flagData.flags)
     this.featureFlags = flags
     this.featureFlagsByKey = flags.reduce<Record<string, PostHogFeatureFlag>>(
@@ -682,11 +682,11 @@ class FeatureFlagsPoller {
     // treat them as false (mirroring the remote path) rather than as genuinely missing.
     const keptKeys = new Set(flags.map((flag) => flag.key))
     this.filteredOutFlagKeys = new Set(flagData.flags.filter((flag) => !keptKeys.has(flag.key)).map((flag) => flag.key))
-    this.groupTypeMapping = flagData.groupTypeMapping
+    this.groupTypeMapping = flagData.group_type_mapping ?? flagData.groupTypeMapping ?? {}
     this.cohorts = flagData.cohorts
     this.loadedSuccessfullyOnce = true
     // Absence of the field (older cached data, older servers) always means full events.
-    this.onMinimalFlagCalledEvents?.(flagData.minimalFlagCalledEvents === true)
+    this.onMinimalFlagCalledEvents?.((flagData.minimal_flag_called_events ?? flagData.minimalFlagCalledEvents) === true)
   }
 
   /**
@@ -934,12 +934,17 @@ class FeatureFlagsPoller {
           // Clear it if server stops sending one
           this.flagsEtag = res.headers?.get('ETag') ?? undefined
 
+          const groupTypeMapping = (responseJson.group_type_mapping as Record<string, string>) || {}
+          // Absence of the field always flips the gate off — fail safe to full events.
+          const minimalFlagCalledEvents = responseJson.minimal_flag_called_events === true
           const flagData: FlagDefinitionCacheData = {
             flags: (responseJson.flags as PostHogFeatureFlag[]) ?? [],
-            groupTypeMapping: (responseJson.group_type_mapping as Record<string, string>) || {},
+            group_type_mapping: groupTypeMapping,
             cohorts: (responseJson.cohorts as Record<string, PropertyGroup>) || {},
-            // Absence of the field always flips the gate off — fail safe to full events.
-            minimalFlagCalledEvents: responseJson.minimal_flag_called_events === true,
+            minimal_flag_called_events: minimalFlagCalledEvents,
+            // Keep existing providers and older Node SDKs compatible with newly written entries.
+            groupTypeMapping,
+            minimalFlagCalledEvents,
           }
 
           this.updateFlagState(flagData)
