@@ -21,8 +21,6 @@ import {
     SURVEY_LOGGER as logger,
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
-    inMemoryInProgressSurveyState,
-    type InProgressSurveyState,
 } from '../../utils/survey-utils'
 import { isNullish, type SurveyResponses } from '@posthog/core'
 import {
@@ -758,8 +756,39 @@ export function doesSurveyMatchSelector(survey: Survey): boolean {
     return !!document?.querySelector(survey.conditions.selector)
 }
 
+interface InProgressSurveyState {
+    surveySubmissionId: string
+    lastQuestionIndex: number
+    // Question ids in the order the persisted indices point into. Optional for backwards compat with
+    // state written before the order was recorded.
+    questionOrder?: string[]
+    // Indices the respondent has visited, in order, excluding the current one. Pushed on next, popped on back.
+    // Optional for backwards compat with state persisted before the back-navigation feature.
+    visitedIndices?: number[]
+    responses: SurveyResponses
+    surveyLanguage?: string | null
+    // Maps question id → the question text displayed when the user answered it. Used so that
+    // $survey_questions[].question in sent/dismissed events reflects the language the user saw,
+    // not the language active at event-fire time after a mid-session switch.
+    questionSnapshots?: Record<string, string>
+}
+
 const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
     return getSurveyStorageKey(SURVEY_IN_PROGRESS_PREFIX, survey)
+}
+
+// Holds the state localStorage refused to take. A document with an opaque origin (the hosted
+// survey page is served with a `sandbox` CSP that omits `allow-same-origin`) throws on every
+// access, and this state is the only channel carrying a URL-prefilled answer and its start index
+// to the question renderer. Only ever populated when a write fails, so storage stays the source
+// of truth wherever it works. Lives in the surveys extension bundle, which is the only writer —
+// the core reaches it for reset() through SurveyManager.
+const inMemoryInProgressSurveyState: Record<string, InProgressSurveyState> = {}
+
+export const clearAllInMemoryInProgressSurveyState = (): void => {
+    for (const key of Object.keys(inMemoryInProgressSurveyState)) {
+        delete inMemoryInProgressSurveyState[key]
+    }
 }
 
 export const setInProgressSurveyState = (
@@ -767,11 +796,13 @@ export const setInProgressSurveyState = (
     state: InProgressSurveyState
 ): void => {
     const key = getInProgressSurveyStateKey(survey)
-    inMemoryInProgressSurveyState[key] = state
     try {
         localStorage.setItem(key, JSON.stringify(state))
+        // The write landed, so drop any copy left by an earlier failed one.
+        delete inMemoryInProgressSurveyState[key]
     } catch (e) {
         logger.error('Error setting in-progress survey state in localStorage', e)
+        inMemoryInProgressSurveyState[key] = state
     }
 }
 
@@ -779,6 +810,12 @@ export const getInProgressSurveyState = (
     survey: Pick<Survey, 'id' | 'current_iteration'>
 ): InProgressSurveyState | null => {
     const key = getInProgressSurveyStateKey(survey)
+    // Preferred when set, because storage refused that write and so holds nothing newer. Covers
+    // modes where writes throw but reads succeed (quota reached, older Safari private browsing).
+    const inMemoryState = inMemoryInProgressSurveyState[key]
+    if (inMemoryState) {
+        return inMemoryState
+    }
     try {
         const stateString = localStorage.getItem(key)
         if (stateString) {
@@ -786,8 +823,6 @@ export const getInProgressSurveyState = (
         }
     } catch (e) {
         logger.error('Error getting in-progress survey state from localStorage', e)
-        // Only when unreadable: a successful read that finds nothing must stay empty.
-        return inMemoryInProgressSurveyState[key] ?? null
     }
     return null
 }

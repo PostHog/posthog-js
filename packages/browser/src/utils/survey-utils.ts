@@ -1,5 +1,5 @@
 import { getSurveyIterationKey } from '@posthog/core/surveys'
-import { isFunction, type SurveyResponses } from '@posthog/core'
+import { isFunction } from '@posthog/core'
 
 import type { PostHog } from '../posthog-core'
 import { DisplaySurveyOptions, Survey, SurveyType, DisplaySurveyType } from '../posthog-surveys-types'
@@ -35,35 +35,6 @@ export function doesSurveyActivateByAction(survey: Pick<Survey, 'conditions'>): 
 export const SURVEY_SEEN_PREFIX = 'seenSurvey_'
 export const SURVEY_IN_PROGRESS_PREFIX = 'inProgressSurvey_'
 export const SURVEY_ABANDONED_PREFIX = 'abandonedSurvey_'
-
-export interface InProgressSurveyState {
-    surveySubmissionId: string
-    lastQuestionIndex: number
-    // Question ids in the order the persisted indices point into. Optional for backwards compat with
-    // state written before the order was recorded.
-    questionOrder?: string[]
-    // Indices the respondent has visited, in order, excluding the current one. Pushed on next, popped on back.
-    // Optional for backwards compat with state persisted before the back-navigation feature.
-    visitedIndices?: number[]
-    responses: SurveyResponses
-    surveyLanguage?: string | null
-    // Maps question id → the question text displayed when the user answered it. Used so that
-    // $survey_questions[].question in sent/dismissed events reflects the language the user saw,
-    // not the language active at event-fire time after a mid-session switch.
-    questionSnapshots?: Record<string, string>
-}
-
-// localStorage throws outright on a document with an opaque origin (the hosted survey page is
-// served with a `sandbox` CSP that omits `allow-same-origin`), and this state is the only channel
-// carrying a URL-prefilled answer and its start index to the question renderer. Kept here rather
-// than beside the localStorage wrappers so that reset() can drop it on logout.
-export const inMemoryInProgressSurveyState: Record<string, InProgressSurveyState> = {}
-
-export const clearInMemoryInProgressSurveyState = (): void => {
-    for (const key of Object.keys(inMemoryInProgressSurveyState)) {
-        delete inMemoryInProgressSurveyState[key]
-    }
-}
 
 // Prefix namespacing is a localStorage concern, so it stays in the browser package;
 // the iteration-qualified key itself is shared with the other SDKs via @posthog/core.

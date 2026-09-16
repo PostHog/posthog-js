@@ -348,13 +348,9 @@ describe('surveys', () => {
         expect(localStorage.getItem('seenSurvey_ABC')).toBeNull()
     })
 
-    it('posthog.reset() drops in-progress answers held in memory when localStorage is unusable', () => {
-        // The in-memory copy is the only record here, and there is nothing in localStorage to remove.
-        setInProgressSurveyState({ id: 'XYZ', current_iteration: null }, {
-            surveySubmissionId: 'submission-1',
-            lastQuestionIndex: 1,
-            responses: { $survey_response_q1: 'typed but not submitted' },
-        } as any)
+    it('posthog.reset() drops in-progress answers the extension holds in memory', () => {
+        // An opaque-origin document (`sandbox` CSP without `allow-same-origin`) throws on every
+        // access, so the write below never reaches localStorage and memory is the only record.
         const throwingStorage = (['getItem', 'setItem', 'removeItem', 'key'] as const).map((method) =>
             vi.spyOn(Storage.prototype, method).mockImplementation(() => {
                 throw new Error('The document is sandboxed and lacks the allow-same-origin flag')
@@ -362,8 +358,17 @@ describe('surveys', () => {
         )
 
         try {
+            const survey = { id: 'XYZ', current_iteration: null }
+            setInProgressSurveyState(survey, {
+                surveySubmissionId: 'submission-1',
+                lastQuestionIndex: 1,
+                responses: { $survey_response_q1: 'typed but not submitted' },
+            } as any)
+            expect(getInProgressSurveyState(survey)).not.toBeNull()
+
             surveys.reset()
-            expect(getInProgressSurveyState({ id: 'XYZ', current_iteration: null })).toBeNull()
+
+            expect(getInProgressSurveyState(survey)).toBeNull()
         } finally {
             throwingStorage.forEach((spy) => spy.mockRestore())
         }

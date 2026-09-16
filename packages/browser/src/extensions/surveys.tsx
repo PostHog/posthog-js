@@ -51,6 +51,7 @@ import {
     retrieveSurveyShadow,
     defaultSurveyAppearance,
     dismissedSurveyEvent,
+    clearAllInMemoryInProgressSurveyState,
     clearInProgressSurveyState,
     doesSurveyDeviceTypesMatch,
     doesSurveyMatchSelector,
@@ -277,6 +278,15 @@ export class SurveyManager {
             this._surveyPopupProps = null
             this._displayOptions = undefined
         }
+    }
+
+    /**
+     * Drops in-progress state this bundle is holding in memory because localStorage refused it.
+     * The core calls this from reset(): survey-utils is compiled into both the core and this
+     * extension, so a core-side clear would only reach the core's never-written copy.
+     */
+    public clearInMemoryInProgressSurveyState(): void {
+        clearAllInMemoryInProgressSurveyState()
     }
 
     public setAutomaticDisplayDispose(dispose: () => void): void {
