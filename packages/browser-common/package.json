@@ -55,6 +55,15 @@
             ],
             "console-logs": [
                 "dist/console-logs.d.ts"
+            ],
+            "surveys": [
+                "dist/surveys.d.ts"
+            ],
+            "surveys-config": [
+                "dist/surveys-config.d.ts"
+            ],
+            "surveys-types": [
+                "dist/surveys-types.d.ts"
             ]
         }
     },
@@ -118,6 +127,21 @@
             "types": "./dist/console-logs.d.ts",
             "import": "./dist/console-logs.mjs",
             "require": "./dist/console-logs.js"
+        },
+        "./surveys": {
+            "types": "./dist/surveys.d.ts",
+            "import": "./dist/surveys.mjs",
+            "require": "./dist/surveys.js"
+        },
+        "./surveys-config": {
+            "types": "./dist/surveys-config.d.ts",
+            "import": "./dist/surveys-config.mjs",
+            "require": "./dist/surveys-config.js"
+        },
+        "./surveys-types": {
+            "types": "./dist/surveys-types.d.ts",
+            "import": "./dist/surveys-types.mjs",
+            "require": "./dist/surveys-types.js"
         }
     },
     "scripts": {
