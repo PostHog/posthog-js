@@ -1,0 +1,7 @@
+packages:
+    - .
+
+minimumReleaseAge: 10080
+
+allowBuilds:
+    '@swc/core': false

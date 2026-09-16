@@ -1,0 +1,21 @@
+{
+    "name": "@posthog-tooling/minifier-compatibility",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "engines": {
+        "node": "24.x"
+    },
+    "packageManager": "pnpm@11.7.0",
+    "scripts": {
+        "test": "node --test probe.test.mjs"
+    },
+    "devDependencies": {
+        "@jridgewell/sourcemap-codec": "1.5.5",
+        "@swc/core": "1.16.2",
+        "acorn": "8.15.0",
+        "oxc-minify": "0.149.0",
+        "rolldown": "1.2.4",
+        "terser": "5.48.0"
+    }
+}

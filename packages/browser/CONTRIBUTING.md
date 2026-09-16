@@ -32,6 +32,10 @@ pnpm bundle-size:array main
 
 The script bundles both versions with the same esbuild settings and reports minified, gzip, and Brotli changes. It is intended for quick percentage comparisons; the production Rolldown build will have different absolute sizes.
 
+### Evaluating minifier replacements
+
+The [minifier compatibility probe](../../scripts/minifier-compatibility/README.md) compares pinned Oxc and SWC candidates with Terser's shared property cache, reserved core/extension contracts, source maps, syntax, and runtime semantics. It has a separate dependency install and documents the blockers that currently prevent migration. Passing its tests reproduces the assessment, including known incompatibilities; it does not approve a replacement for production.
+
 ### Running TestCafe E2E tests with BrowserStack
 
 Testing on IE11 requires a bit more setup. TestCafe tests use the playground application to test the locally built `array.full.js` bundle. They also verify that the events emitted during the testing of playground are loaded into the PostHog app. By default this uses `https://us.i.posthog.com` and the project with ID `11213`. See the TestCafe tests to override these if needed. PostHog internal users can ask `@benjackwhite` or `@hazzadous` for access. You will need to set `POSTHOG_PERSONAL_API_KEY` and `POSTHOG_PROJECT_API_KEY`.
