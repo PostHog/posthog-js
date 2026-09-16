@@ -60,6 +60,17 @@ export function findLast<T>(array: Array<T>, predicate: (value: T) => boolean): 
     return undefined
 }
 
+// an `entryTypes` observation never delivers an entry that completed before it started,
+// so a recorder that starts after the document loaded must read the navigation timings itself
+function completedNavigationEntries(win: IWindow): PerformanceNavigationTiming[] {
+    // while the document still loads the observer delivers the entry when it completes,
+    // so reading it here would capture partial timings and duplicate that delivery
+    if (win.document?.readyState !== 'complete') {
+        return []
+    }
+    return win.performance.getEntriesByType('navigation').filter(isNavigationTiming)
+}
+
 function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>) {
     // if we are only observing timings then we could have a single observer for all types, with buffer true,
     // but we are going to filter by initiatorType _if we are wrapping fetch and xhr as the wrapped functions
@@ -77,6 +88,13 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
             )
         cb({
             requests: initialPerformanceEntries.flatMap((entry) =>
+                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {}, isInitial: true })
+            ),
+            isInitial: true,
+        })
+    } else if (options.performanceEntryTypeToObserve.includes('navigation')) {
+        cb({
+            requests: completedNavigationEntries(win).flatMap((entry) =>
                 prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {}, isInitial: true })
             ),
             isInitial: true,
