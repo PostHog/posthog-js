@@ -33,6 +33,15 @@ export default defineConfig({
                 replacement: fromRoot('../browser-common/src/console-logs.ts'),
             },
             { find: '@posthog/browser-common/logs', replacement: fromRoot('../browser-common/src/logs.ts') },
+            {
+                find: '@posthog/browser-common/surveys-config',
+                replacement: fromRoot('../browser-common/src/surveys-config.ts'),
+            },
+            {
+                find: '@posthog/browser-common/surveys-types',
+                replacement: fromRoot('../browser-common/src/surveys-types.ts'),
+            },
+            { find: '@posthog/browser-common/surveys', replacement: fromRoot('../browser-common/src/surveys.ts') },
             { find: '@posthog/browser-common/config', replacement: fromRoot('../browser-common/src/config.ts') },
             { find: '@posthog/browser-common/constants', replacement: fromRoot('../browser-common/src/constants.ts') },
             {
