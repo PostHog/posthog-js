@@ -142,9 +142,6 @@ export class PostHogSurveys implements Extension {
     }
 
     reset(): void {
-        // Outside the try: when localStorage throws, the extension's in-memory copy is the only
-        // record of the answers, and it must not outlive the respondent's session.
-        this._surveyManager?.clearInMemoryInProgressSurveyState?.()
         try {
             // Drop in-memory event/action activations too; they aren't in persistence (which
             // reset() has already cleared), so without this an armed-but-unshown survey would

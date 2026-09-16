@@ -781,15 +781,8 @@ const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iterat
 // survey page is served with a `sandbox` CSP that omits `allow-same-origin`) throws on every
 // access, and this state is the only channel carrying a URL-prefilled answer and its start index
 // to the question renderer. Only ever populated when a write fails, so storage stays the source
-// of truth wherever it works. Lives in the surveys extension bundle, which is the only writer —
-// the core reaches it for reset() through SurveyManager.
+// of truth wherever it works, and cleared with the survey so a finished one leaves nothing behind.
 const inMemoryInProgressSurveyState: Record<string, InProgressSurveyState> = {}
-
-export const clearAllInMemoryInProgressSurveyState = (): void => {
-    for (const key of Object.keys(inMemoryInProgressSurveyState)) {
-        delete inMemoryInProgressSurveyState[key]
-    }
-}
 
 export const setInProgressSurveyState = (
     survey: Pick<Survey, 'id' | 'current_iteration'>,

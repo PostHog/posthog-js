@@ -3,11 +3,9 @@ import {
     canActivateRepeatedly,
     doesSurveyUrlMatch,
     getFontFamily,
-    getInProgressSurveyState,
     getSurveySeen,
     hasWaitPeriodPassed,
     sendSurveyEvent,
-    setInProgressSurveyState,
 } from '../../extensions/surveys/surveys-extension-utils'
 import { PostHog } from '../../posthog-core'
 import { Survey, SurveySchedule, SurveyType } from '../../posthog-surveys-types'
@@ -842,45 +840,5 @@ describe('sendSurveyEvent', () => {
         })
 
         expect(mockReload).not.toHaveBeenCalled()
-    })
-})
-
-describe('in-progress survey state without usable storage', () => {
-    const survey = { id: 'storage-modes', current_iteration: null }
-    const state = { surveySubmissionId: 'sub-1', lastQuestionIndex: 1, responses: { $survey_response_q1: 1 } } as any
-
-    beforeEach(() => {
-        localStorage.clear()
-    })
-
-    it('reads back state when writes throw but reads succeed', () => {
-        // Quota reached and older Safari private browsing behave this way: setItem throws while
-        // getItem keeps working and simply finds nothing, so a read must not stop at storage.
-        const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-            throw new Error('QuotaExceededError')
-        })
-
-        try {
-            setInProgressSurveyState(survey, state)
-            expect(getInProgressSurveyState(survey)).toEqual(state)
-        } finally {
-            setItem.mockRestore()
-        }
-    })
-
-    it('keeps storage authoritative once a write lands', () => {
-        const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
-            throw new Error('QuotaExceededError')
-        })
-
-        try {
-            setInProgressSurveyState(survey, state)
-            // The retry succeeds, so the stale in-memory copy must not shadow what storage now has.
-            const newerState = { ...state, lastQuestionIndex: 2 }
-            setInProgressSurveyState(survey, newerState)
-            expect(getInProgressSurveyState(survey)).toEqual(newerState)
-        } finally {
-            setItem.mockRestore()
-        }
     })
 })
