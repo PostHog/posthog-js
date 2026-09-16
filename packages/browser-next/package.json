@@ -29,6 +29,11 @@
             "require": "./dist/core.js",
             "import": "./dist/core.mjs"
         },
+        "./flags": {
+            "types": "./dist/flags.d.ts",
+            "require": "./dist/flags.js",
+            "import": "./dist/flags.mjs"
+        },
         "./analytics": {
             "types": "./dist/analytics.d.ts",
             "require": "./dist/analytics.js",
@@ -51,7 +56,8 @@
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
     "dependencies": {
-        "@posthog/browser-common": "workspace:^"
+        "@posthog/browser-common": "workspace:^",
+        "@posthog/types": "workspace:^"
     },
     "devDependencies": {
         "@playwright/test": "1.52.0",
