@@ -211,13 +211,6 @@ class PostHogBrowserClient implements PostHog {
             {
                 api: apiHost,
                 flags: normalizeHost(options.flagsHost ?? apiHost),
-                assets: normalizeHost(
-                    options.assetsHost ??
-                        apiHost.replace(
-                            /^https:\/\/(app|us|eu)(?:\.i)?\.posthog\.com$/,
-                            (_, region: string) => `https://${region === 'app' ? 'us' : region}-assets.i.posthog.com`
-                        )
-                ),
             },
             projectToken,
             browserFetch,

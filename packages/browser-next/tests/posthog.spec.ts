@@ -860,7 +860,6 @@ describe('@posthog/browser core', () => {
             projectToken: 'ph_test',
             apiHost: 'https://api.example.com/',
             flagsHost: 'https://flags.example.com//',
-            assetsHost: 'https://assets.example.com///',
             capturePageview: false,
             storage: false,
             navigator: false,
@@ -874,7 +873,7 @@ describe('@posthog/browser core', () => {
 
         expect(requests.map(({ url }) => url.toString())).toEqual([
             'https://flags.example.com/decide/?token=ph_test',
-            'https://assets.example.com/static/extension.js?token=ph_test',
+            'https://api.example.com/static/extension.js?token=ph_test',
             'https://api.example.com/i/v1/analytics/events',
         ])
     })
