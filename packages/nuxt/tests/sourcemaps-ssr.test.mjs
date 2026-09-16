@@ -32,6 +32,8 @@ const executableSource = source
   .replace('defineNuxtModule<ModuleOptions>', 'defineNuxtModule')
   // Strip the specific TS annotations actually used in module.ts.
   .replace(/value\?: unknown/g, 'value')
+  .replace('(nitro: Nitro)', '(nitro)')
+  .replace('(nitroConfig: NitroConfig)', '(nitroConfig)')
   .replace(/\(directory: string, sourcemapsConfig: SourcemapsConfig\)/g, '(directory, sourcemapsConfig)')
   .replace(/\(sourcemapsConfig: SourcemapsConfig\)/g, '(sourcemapsConfig)')
   .replace(/\(args: string\[\]\)/g, '(args)')
