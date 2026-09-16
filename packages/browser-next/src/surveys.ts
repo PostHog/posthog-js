@@ -13,4 +13,4 @@ export type {
     DisplaySurveyOptions,
     SurveyRenderReason,
 } from './surveys-options'
-export { DisplaySurveyType } from '@posthog/browser-common/surveys-types'
+export { DisplaySurveyType } from '@posthog/browser-common/surveys'
