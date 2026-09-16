@@ -1,10 +1,5 @@
 import type { StylesheetPreparer } from '@posthog/browser-common/utils/stylesheet-loader'
-export type {
-    Survey,
-    SurveyCallback,
-    DisplaySurveyOptions,
-    SurveyRenderReason,
-} from '@posthog/browser-common/surveys-types'
+export type { Survey, SurveyCallback, DisplaySurveyOptions, SurveyRenderReason } from '@posthog/browser-common'
 
 export interface SurveysOptions {
     /** Automatically display matching surveys after remote configuration enables them. Defaults to true. */
