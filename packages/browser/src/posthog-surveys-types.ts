@@ -10,7 +10,7 @@ export {
     SurveyTabPosition,
     SurveyType,
     SurveyWidgetType,
-} from '@posthog/browser-common/surveys-types'
+} from '@posthog/browser-common'
 export type {
     PropertyOperator,
     PropertyFilters,
@@ -34,4 +34,4 @@ export type {
     DisplaySurveyOptions,
     SurveyConfig,
     SurveyResponseValue,
-} from '@posthog/browser-common/surveys-types'
+} from '@posthog/browser-common'

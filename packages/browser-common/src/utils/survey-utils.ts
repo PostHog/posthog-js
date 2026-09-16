@@ -1,6 +1,7 @@
 import { getSurveyIterationKey } from '@posthog/core/surveys'
 
-import { type DisplaySurveyOptions, type Survey, SurveyType, DisplaySurveyType } from '../surveys-types'
+import type { DisplaySurveyOptions, Survey } from '../types/surveys'
+import { SurveyType, DisplaySurveyType } from '../survey-constants'
 import { createLogger } from './logger'
 
 export { doesSurveyActivateByEvent, getSurveyInteractionProperty, isSurveyIterationBased } from '@posthog/core/surveys'
