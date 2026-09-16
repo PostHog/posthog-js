@@ -1,0 +1,205 @@
+import { createPostHog as createRoot } from '../src'
+import { createPostHog as createCore, type BrowserFetch, type CorePostHogOptions } from '../src/core'
+import { localRemoteConfig } from './helpers'
+
+const options: CorePostHogOptions = {
+    projectToken: 'ph_test',
+    storage: false,
+    navigator: false,
+    capturePageview: false,
+}
+
+const response = () => new Response(JSON.stringify(localRemoteConfig))
+
+// Exercise both published factory graphs, including the buffer-only core.
+describe.each([
+    ['root', createRoot],
+    ['core', createCore],
+] as const)('%s remote configuration', (_, create) => {
+    afterEach(() => {
+        vi.useRealTimers()
+        vi.unstubAllGlobals()
+    })
+
+    it.each([
+        [undefined, undefined, 'https://us-assets.i.posthog.com'],
+        ['https://eu.i.posthog.com/', undefined, 'https://eu-assets.i.posthog.com'],
+        ['https://app.posthog.com', undefined, 'https://us-assets.i.posthog.com'],
+        ['https://proxy.example.com', undefined, 'https://proxy.example.com'],
+        ['https://us.i.posthog.com', 'https://assets.example.com/', 'https://assets.example.com'],
+    ])('routes the JSON GET through the configured assets host (%s, %s)', async (apiHost, assetsHost, host) => {
+        const fetch = vi.fn(async () => response())
+        const posthog = await create({
+            ...options,
+            ...(apiHost ? { apiHost } : {}),
+            ...(assetsHost ? { assetsHost } : {}),
+            fetch,
+        })
+        await expect(posthog.getRemoteConfig()).resolves.toEqual(localRemoteConfig)
+        expect(fetch).toHaveBeenCalledTimes(1)
+        const [url, init] = fetch.mock.calls[0] as unknown as Parameters<BrowserFetch>
+        expect(String(url)).toBe(`${host}/array/ph_test/config?token=ph_test`)
+        expect(init).toMatchObject({ method: 'GET', credentials: 'omit' })
+        expect(init?.body).toBeUndefined()
+        await posthog.dispose()
+    })
+
+    it('lets inline configuration take precedence over custom and default loading', async () => {
+        const fetch = vi.fn(async () => response())
+        const loader = vi.fn(async () => localRemoteConfig)
+        const posthog = await create({ ...options, fetch, remoteConfig: localRemoteConfig, remoteConfigLoader: loader })
+        const observed = vi.fn()
+        posthog.onRemoteConfig(observed)
+        await expect(posthog.getRemoteConfig()).resolves.toBe(localRemoteConfig)
+        expect(observed).toHaveBeenCalledWith({ ok: true, config: localRemoteConfig })
+        expect(loader).not.toHaveBeenCalled()
+        expect(fetch).not.toHaveBeenCalled()
+        await posthog.dispose()
+    })
+
+    it('uses the custom loader without falling back to a request on failure', async () => {
+        const fetch = vi.fn(async () => response())
+        const loader = vi.fn(async () => undefined)
+        const posthog = await create({ ...options, fetch, remoteConfigLoader: loader })
+        await posthog.getRemoteConfig()
+        expect(loader).toHaveBeenCalledTimes(1)
+        expect(fetch).not.toHaveBeenCalled()
+        const observed = vi.fn()
+        posthog.onRemoteConfig(observed)
+        expect(observed).toHaveBeenCalledWith({ ok: false })
+        await posthog.dispose()
+    })
+
+    it('shares startup work with concurrent subscribers without awaiting it for capture or setup', async () => {
+        let finish!: (response: Response) => void
+        const fetch = vi.fn(
+            () =>
+                new Promise<Response>((resolve) => {
+                    finish = resolve
+                })
+        )
+        const first = vi.fn()
+        const second = vi.fn()
+        const posthog = await create({
+            ...options,
+            fetch,
+            extensions: [
+                {
+                    name: 'subscriber',
+                    setup(client) {
+                        client.onRemoteConfig(first)
+                        client.capture('setup')
+                    },
+                },
+            ],
+        })
+        posthog.onRemoteConfig(second)
+        posthog.capture('before config')
+        expect(posthog.session.sessionId).not.toBe('')
+        const pending = posthog.getRemoteConfig()
+        expect(fetch).toHaveBeenCalledTimes(1)
+        finish(response())
+        await expect(pending).resolves.toEqual(localRemoteConfig)
+        expect(first.mock.calls).toEqual([[{ ok: true, config: localRemoteConfig }]])
+        expect(second.mock.calls).toEqual(first.mock.calls)
+        await posthog.getRemoteConfig()
+        expect(fetch).toHaveBeenCalledTimes(1)
+        // Do not flush buffered analytics into the pending-response transport.
+        posthog.optOut()
+        await posthog.dispose()
+    })
+
+    it('loads and publishes under denial while extension requests remain gated', async () => {
+        const fetch = vi.fn(async () => response())
+        const observed = vi.fn()
+        const posthog = await create({
+            ...options,
+            fetch,
+            optOutByDefault: true,
+            extensions: [
+                {
+                    name: 'subscriber',
+                    setup(client) {
+                        client.onRemoteConfig(observed)
+                    },
+                },
+            ],
+        })
+        await posthog.getRemoteConfig()
+        expect(observed).toHaveBeenCalledWith({ ok: true, config: localRemoteConfig })
+        expect((await posthog.sendRequest('/flags/')).statusCode).toBe(0)
+        expect(fetch).toHaveBeenCalledTimes(1)
+        await posthog.dispose()
+    })
+
+    it.each([
+        ['server failure', () => new Response('{}', { status: 500 })],
+        ['malformed JSON', () => new Response('{')],
+        ['empty body', () => new Response('')],
+        ['null', () => new Response('null')],
+        ['array', () => new Response('[]')],
+        ['primitive', () => new Response('true')],
+        [
+            'network rejection',
+            () => {
+                throw new Error('offline')
+            },
+        ],
+    ])('publishes one retained failure for %s', async (_, makeResponse) => {
+        const fetch = vi.fn(async () => makeResponse())
+        const observed = vi.fn()
+        const posthog = await create({ ...options, fetch })
+        posthog.onRemoteConfig(observed)
+        await expect(posthog.getRemoteConfig()).resolves.toBeUndefined()
+        await posthog.getRemoteConfig()
+        expect(observed.mock.calls).toEqual([[{ ok: false }]])
+        const late = vi.fn()
+        posthog.onRemoteConfig(late)
+        expect(late.mock.calls).toEqual([[{ ok: false }]])
+        expect(fetch).toHaveBeenCalledTimes(1)
+        await posthog.dispose()
+    })
+
+    it.each([false, undefined] as const)('settles unavailable Fetch (%s) as failure', async (fetch) => {
+        vi.stubGlobal('fetch', undefined)
+        const posthog = await create({ ...options, ...(fetch === false ? { fetch } : {}) })
+        await expect(posthog.getRemoteConfig()).resolves.toBeUndefined()
+        const observed = vi.fn()
+        posthog.onRemoteConfig(observed)
+        expect(observed).toHaveBeenCalledWith({ ok: false })
+        await posthog.dispose()
+    })
+
+    it.each(['timeout', 'shutdown', 'timeout without AbortController'])(
+        'bounds %s and ignores late responses',
+        async (mode) => {
+            vi.useFakeTimers()
+            if (mode === 'timeout without AbortController') vi.stubGlobal('AbortController', undefined)
+            let finish!: (response: Response) => void
+            const fetch = vi.fn<Parameters<BrowserFetch>, ReturnType<BrowserFetch>>(
+                () =>
+                    new Promise((resolve) => {
+                        finish = resolve
+                    })
+            )
+            const posthog = await create({ ...options, fetch, remoteConfigTimeoutMs: 10 })
+            const observed = vi.fn()
+            posthog.onRemoteConfig(observed)
+            const pending = posthog.getRemoteConfig()
+            if (mode === 'shutdown') await posthog.dispose()
+            else await vi.advanceTimersByTimeAsync(10)
+            await expect(pending).resolves.toBeUndefined()
+            expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(
+                mode === 'timeout without AbortController' ? undefined : true
+            )
+            expect(observed.mock.calls).toEqual(mode === 'shutdown' ? [] : [[{ ok: false }]])
+            finish(response())
+            await vi.advanceTimersByTimeAsync(0)
+            expect(observed.mock.calls).toEqual(mode === 'shutdown' ? [] : [[{ ok: false }]])
+            await posthog.dispose()
+            expect(vi.getTimerCount()).toBe(0)
+            await posthog.getRemoteConfig()
+            expect(fetch).toHaveBeenCalledTimes(1)
+        }
+    )
+})

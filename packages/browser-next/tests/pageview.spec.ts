@@ -1,3 +1,4 @@
+import { localRemoteConfig } from './helpers'
 import type { Client, Extension } from '@posthog/browser-common'
 
 import { analytics as createAnalytics } from '../src/analytics'
@@ -367,6 +368,7 @@ describe('browser-next initial pageview', () => {
         setDocument(new TestDocument('visible'))
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -418,6 +420,7 @@ describe('browser-next initial pageview', () => {
         }
 
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -445,6 +448,7 @@ describe('browser-next initial pageview', () => {
         const fetch = vi.fn(() => response)
 
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -460,7 +464,7 @@ describe('browser-next initial pageview', () => {
         await posthog.dispose()
     })
 
-    it('does not wait for or start remote configuration', async () => {
+    it('starts remote configuration without waiting for it', async () => {
         setDocument(new TestDocument('visible'))
         const loader = vi.fn(() => new Promise<never>(() => {}))
 
@@ -472,8 +476,9 @@ describe('browser-next initial pageview', () => {
             remoteConfigLoader: loader,
         })
 
-        expect(loader).not.toHaveBeenCalled()
+        expect(loader).toHaveBeenCalledTimes(1)
         expect(posthog.session.sessionId).not.toBe('')
+        await posthog.dispose()
     })
 
     it('uses UTF-8 bytes for admission and does not publish rejected work or lose a pending session reason', async () => {

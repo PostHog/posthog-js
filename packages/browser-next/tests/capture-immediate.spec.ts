@@ -1,3 +1,4 @@
+import { localRemoteConfig } from './helpers'
 import { createPostHog as createAutomaticPostHog } from '../src'
 import { analytics } from '../src/analytics'
 import { createAnalyticsExtension } from '../src/analytics-buffer'
@@ -36,6 +37,7 @@ const responseFetch =
 
 const clientWithAnalytics = (fetch: BrowserFetch) =>
     createPostHog({
+        remoteConfig: localRemoteConfig,
         projectToken: 'ph_test',
         capturePageview: false,
         storage: false,
@@ -83,6 +85,7 @@ describe('captureImmediate', () => {
     it('loads default analytics lazily without adding Capture V1 to the initial graph', async () => {
         const requests: CapturedRequest[] = []
         const posthog = await createAutomaticPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
@@ -246,6 +249,7 @@ describe('captureImmediate', () => {
         const requests: CapturedRequest[] = []
         const load = vi.fn(async () => createAnalyticsDelivery)
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
