@@ -825,19 +825,32 @@ async function getTracedToolsList(
     }
 
     if (data) {
+      // A compliant client concatenates every page into one list, so only the
+      // first page — the one every client reads, including clients that never
+      // follow `nextCursor` — may carry a virtual tool. Presence, not
+      // truthiness: `cursor: ""` is a continuation page.
+      const isFirstPage = request.params?.cursor == null
+
       const missingToolName = resolveMissingCapabilityToolName(data.options)
       if (data.options.reportMissing) {
         const alreadyPresent = tools.some((tool) => tool?.name === missingToolName)
-        if (alreadyPresent) {
+        if (isFirstPage && alreadyPresent) {
           data.logger(
-            `Warning: Cannot inject missing-capability tool "${missingToolName}" because a real tool already uses that name. The real tool will not be intercepted.`
+            `Warning: Cannot inject missing-capability tool "${missingToolName}" because a real tool already uses that name. The real tool will not be intercepted. To keep missing-capability reports, rename the SDK's tool with the missingCapabilityToolName option.`
           )
-        } else {
+        } else if (isFirstPage) {
           const virtualTool = getReportMissingToolDescriptor(missingToolName)
           tools.push(virtualTool)
           // Cached separately because the virtual tool is added after the listing
           // was cached, and its calls need ownership like any other tool's.
           cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, [virtualTool])
+        } else if (alreadyPresent) {
+          // Conflicts are only detected on the pages a client actually
+          // fetches; a real owner here is already shadowed by the first-page
+          // injection, so the host must rename the SDK's tool.
+          data.logger(
+            `Warning: A real tool "${missingToolName}" on a later tools/list page is shadowed by the SDK's missing-capability tool. Its calls will be intercepted. Rename the SDK's tool with the missingCapabilityToolName option to keep both.`
+          )
         }
       }
 
@@ -845,11 +858,6 @@ async function getTracedToolsList(
       if (feedbackOptions) {
         const feedbackToolName = feedbackOptions.toolName ?? SEND_FEEDBACK_TOOL_NAME
         const alreadyPresent = tools.some((tool) => tool?.name === feedbackToolName)
-        // A compliant client concatenates every page into one list, so only the
-        // first page — the one every client reads, including clients that never
-        // follow `nextCursor` — may carry the virtual tool. Presence, not
-        // truthiness: `cursor: ""` is a continuation page.
-        const isFirstPage = request.params?.cursor == null
         if (isFirstPage && alreadyPresent) {
           data.logger(
             `Warning: Cannot inject agent-feedback tool "${feedbackToolName}" because a real tool already uses that name. The real tool will not be intercepted. To collect feedback alongside it, rename the SDK's tool with collectFeedback: { toolName: "..." }.`
