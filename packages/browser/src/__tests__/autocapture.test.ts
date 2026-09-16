@@ -16,6 +16,11 @@ import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import { PostHog } from '../posthog-core'
 import type { AutocaptureConfigSource } from '../autocapture-config'
 import { BrowserAutocapture } from '../browser-autocapture'
+import {
+    Autocapture as SharedAutocapture,
+    getDefaultProperties as sharedDefaultProperties,
+} from '@posthog/browser-common/autocapture'
+import { AutocaptureExtension } from '../extension-tokens'
 import { window } from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
@@ -105,6 +110,14 @@ describe('Autocapture system', () => {
     })
 
     describe('extension lifecycle', () => {
+        it('retains the legacy wrapper and token while sharing the implementation and helpers', () => {
+            expect(autocapture).toBeInstanceOf(BrowserAutocapture)
+            expect(autocapture).toBeInstanceOf(Autocapture)
+            expect(autocapture).toBeInstanceOf(SharedAutocapture)
+            expect(autocapture.name).toBe(AutocaptureExtension)
+            expect(getDefaultProperties).toBe(sharedDefaultProperties)
+        })
+
         it('constructs with one SDK-neutral internal config', () => {
             const configSource: AutocaptureConfigSource = {
                 refresh: (config) => {
