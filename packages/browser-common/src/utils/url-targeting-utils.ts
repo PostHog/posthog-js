@@ -45,6 +45,7 @@ export function applyUrlTargetingOverride(instance: UrlTargetingInstance | undef
  * `get_current_url` override should stay cheap.
  */
 export function getTargetingUrl(instance: UrlTargetingInstance | undefined): string | undefined {
-    const defaultUrl = typeof window !== 'undefined' ? window.location?.href : undefined
+    const win = typeof window === 'undefined' ? undefined : window
+    const defaultUrl = win?.location?.href
     return isUndefined(defaultUrl) ? undefined : applyUrlTargetingOverride(instance, defaultUrl)
 }
