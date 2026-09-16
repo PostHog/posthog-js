@@ -166,10 +166,8 @@ export type { KnownUnsafeEditableEvent } from '@posthog/core'
 
 // Import types for internal use in this file
 import type {
-    JsonType,
     Properties,
     EventName,
-    FeatureFlagDetail,
     PostHogConfig as BasePostHogConfig,
     PostHog as BasePostHogInterface,
     RequestResponse,
@@ -329,22 +327,7 @@ export type SessionRecordingPersistedConfig = Omit<
  */
 export type RemoteConfigResult = BrowserCommonRemoteConfigResult
 
-/**
- * Flags returns feature flags and their payloads
- */
-export interface FlagsResponse extends RemoteConfig {
-    featureFlags: Record<string, string | boolean>
-    featureFlagPayloads: Record<string, JsonType>
-    errorsWhileComputingFlags: boolean
-    requestId?: string
-    flags: Record<string, FeatureFlagDetail>
-    evaluatedAt?: number
-    /**
-     * Server-controlled gate for minimal `$feature_flag_called` events. `true` only when the
-     * project opted in; omitted otherwise. Absence always means full events.
-     */
-    minimalFlagCalledEvents?: boolean
-}
+export type { FlagsResponse } from '@posthog/browser-common'
 
 export type SiteAppGlobals = {
     event: {
