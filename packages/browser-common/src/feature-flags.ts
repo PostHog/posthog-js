@@ -49,10 +49,9 @@ import {
     type Logger,
 } from '@posthog/core'
 import { createLogger } from './utils/logger'
-import { getTimezone } from './utils/event-utils'
-import { document, window } from './utils/globals'
+import { getTimezone } from './utils/timezone'
 import { continueWith } from './utils/promise-utils'
-import { isStatusZeroFailureCircuitBreakerTripped, updateStatusZeroFailureCount } from './utils/request-utils'
+import { isStatusZeroFailureCircuitBreakerTripped, updateStatusZeroFailureCount } from './utils/request-reachability'
 
 const logger = createLogger('[FeatureFlags]')
 const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })
@@ -289,6 +288,8 @@ export class PostHogFeatureFlags implements Extension {
     _override_warning: boolean = false
     featureFlagEventHandlers: FeatureFlagsCallback[] = []
     $anon_distinct_id: string | undefined
+    private _window: Window | undefined
+    private _document: Document | undefined
     private _client: Client | undefined
     private _initializingClient: Client | undefined
     private _logger: Client['logger'] = logger
@@ -336,6 +337,13 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     setup(client: Client): void | Promise<void> {
+        try {
+            this._window = typeof window === 'undefined' ? undefined : window
+            this._document = typeof document === 'undefined' ? undefined : document
+        } catch {
+            this._window = undefined
+            this._document = undefined
+        }
         this._initializingClient = client
         this._logger = client.logger.createLogger('[FeatureFlags]')
         return continueWith(client.kv.initialize(), () => {
@@ -352,8 +360,8 @@ export class PostHogFeatureFlags implements Extension {
         if (this._client !== client) {
             return
         }
-        if (window) {
-            addEventListener(window, 'online', this._onOnline)
+        if (this._window) {
+            addEventListener(this._window, 'online', this._onOnline)
         }
         this._syncAutomaticRefresh()
         this._dynamicProperties = client.registerDynamicEventProperties(() =>
@@ -383,8 +391,8 @@ export class PostHogFeatureFlags implements Extension {
             isUndefined(refreshIntervalMs) ||
             isUndefined(dueIntervalMs) ||
             this._config.remoteRequestsDisabled ||
-            !document ||
-            document.visibilityState === 'hidden' ||
+            !this._document ||
+            this._document.visibilityState === 'hidden' ||
             Date.now() - (this._lastRefreshAt ?? 0) < dueIntervalMs
         ) {
             return
@@ -409,7 +417,7 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     private _onVisibilityChange = (): void => {
-        if (document?.visibilityState === 'visible') {
+        if (this._document?.visibilityState === 'visible') {
             // Deliberately not through _onUserInteraction: refreshes fall due while the page is
             // hidden, and an interaction from before it was hidden would skip the due check here.
             this._resumeConfiguredInterval()
@@ -426,7 +434,7 @@ export class PostHogFeatureFlags implements Extension {
         const configuredIntervalMs = this._config.refreshIntervalMs
         const refreshIntervalMs =
             !this._config.remoteRequestsDisabled &&
-            document &&
+            this._document &&
             !isUndefined(configuredIntervalMs) &&
             configuredIntervalMs > 0
                 ? configuredIntervalMs
@@ -446,10 +454,10 @@ export class PostHogFeatureFlags implements Extension {
         this._refreshIntervalMs = refreshIntervalMs
         this._dueRefreshIntervalMs = refreshIntervalMs
         this._scheduleNextRefresh()
-        if (document?.addEventListener) {
-            addEventListener(document, DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
+        if (this._document?.addEventListener) {
+            addEventListener(this._document, DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
             eachArray(USER_INTERACTION_EVENTS, (eventName) => {
-                addEventListener(document, eventName, this._onUserInteraction, { capture: true })
+                addEventListener(this._document, eventName, this._onUserInteraction, { capture: true })
             })
         }
     }
@@ -469,9 +477,9 @@ export class PostHogFeatureFlags implements Extension {
         if (!isUndefined(this._refreshInterval)) {
             clearInterval(this._refreshInterval)
             this._refreshInterval = undefined
-            document?.removeEventListener?.(DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
+            this._document?.removeEventListener?.(DOM_EVENT_VISIBILITYCHANGE, this._onVisibilityChange)
             eachArray(USER_INTERACTION_EVENTS, (eventName) => {
-                document?.removeEventListener?.(eventName, this._onUserInteraction, { capture: true })
+                this._document?.removeEventListener?.(eventName, this._onUserInteraction, { capture: true })
             })
         }
         this._refreshIntervalMs = undefined
@@ -502,7 +510,7 @@ export class PostHogFeatureFlags implements Extension {
         this._crossTabPersistenceUnsubscribe?.()
         this._crossTabPersistenceUnsubscribe = undefined
         this._reloadingHandlers = []
-        window?.removeEventListener('online', this._onOnline)
+        this._window?.removeEventListener('online', this._onOnline)
         this._client = undefined
     }
 
