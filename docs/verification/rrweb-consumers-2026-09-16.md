@@ -2,7 +2,7 @@
 
 Baseline: `916e16394de38e01789309ea314f23e6ad436c46`.
 Branch: `chore/tooling-rrweb-consumer-validation`.
-Worktree: `/Users/marandaneto/Github/.worktrees/tooling-modernization-20260916/rrweb-consumer-validation`.
+Worktree: a dedicated linked worktree for this branch.
 Environment: macOS arm64, Node `24.21.0`, pnpm `11.7.0`.
 
 Dependencies were installed in this worktree using the frozen lockfile; no other worktree's `node_modules` was linked.
@@ -41,9 +41,8 @@ Turbo may reuse build cache entries (the export run reported 8 of 10 tasks cache
 
 Logs are retained locally under `target/rrweb-consumer-validation/` (ignored build artifacts).
 The export suite removes its temporary installation on completion. The strict suite retains its installation,
-tarballs, lockfiles, build/pack logs, and all compiler `--listFiles` output; its exact directory is recorded below.
+tarballs, lockfiles, build/pack logs, and all compiler `--listFiles` output. Its temporary directory is recorded in the local `consumer-types.log`.
 
-Artifact directory: `/var/folders/wd/xy_50dtj5m3_zj_l5qm_n9800000gn/T/rrweb-consumer-types-jqou1Y`.
 Top-level fixture logs are also copied to `target/rrweb-consumer-validation/compiler-logs/`.
 
 A search of tracked filenames and Markdown content found no modernization backlog recording these deferred checks.
