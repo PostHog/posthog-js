@@ -1,5 +1,17 @@
 # posthog-react-native
 
+## 4.74.0
+
+### Minor Changes
+
+- [#4929](https://github.com/PostHog/posthog-js/pull/4929) [`87aadf7`](https://github.com/PostHog/posthog-js/commit/87aadf706a77bfa9d886728b1083bbb3a55d557c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `$push_notification_opened` not being captured on Android when the app's process was killed but its task stayed in recents (opt out with `{ patchMainActivityNewIntent: false }`).
+  (2026-09-15)
+
+### Patch Changes
+
+- Updated dependencies [[`87aadf7`](https://github.com/PostHog/posthog-js/commit/87aadf706a77bfa9d886728b1083bbb3a55d557c)]:
+  - @posthog/react-native-plugin@2.9.3
+
 ## 4.73.3
 
 ### Patch Changes

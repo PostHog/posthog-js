@@ -282,6 +282,22 @@ when `tools/list` and `tools/call` reach different server replicas.
 both advertises both tools. Like `get_more_tools`, a real tool that already uses the configured name
 wins: the SDK warns, skips injection, and delegates calls to the real handler.
 
+On a paginated catalogue (a `tools/list` response with a `nextCursor`), `instrument()` injects
+its virtual tools (`send_feedback` and `get_more_tools`) on the first page only — the page every
+client reads, including clients that never follow `nextCursor` — so a compliant client's
+concatenated list carries each once. "First page" means a `tools/list` request with no cursor; an
+empty string is a valid cursor, so `cursor: ""` is a continuation page. Hosts using
+`prepareToolList()` directly own this rule themselves: pass `reportMissing: true` and
+`collectFeedback: true` only for the first page.
+
+Name collisions are detected on the first page only. A real tool named `send_feedback` (or
+`get_more_tools`) on the first page wins: the SDK warns, skips injection, and forwards its calls. A
+real tool that only appears on a **later** page is not detected up front — the SDK's virtual tool is
+injected and intercepts calls to the name, so the real tool is shadowed and a concatenated listing
+carries the name twice. The SDK logs a warning when a client fetches the colliding page, but the fix
+is yours: rename the SDK's tools with `collectFeedback: { toolName: "..." }` and the
+`missingCapabilityToolName` option.
+
 ### If you switched to `instrument(server.server)`
 
 Before v2 support landed, the compatibility gate rejected high-level v2 servers, and the usual

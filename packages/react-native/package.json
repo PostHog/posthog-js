@@ -1,6 +1,6 @@
 {
   "name": "posthog-react-native",
-  "version": "4.73.3",
+  "version": "4.74.0",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -97,7 +97,7 @@
     "expo-file-system": ">= 13.0.0",
     "expo-localization": ">= 11.0.0",
     "expo-updates": ">= 0.25.0",
-    "@posthog/react-native-plugin": ">= 2.4.3",
+    "@posthog/react-native-plugin": ">= 2.9.3",
     "posthog-react-native-session-replay": ">= 1.6.0",
     "react-native-device-info": ">= 10.0.0",
     "react-native-localize": ">= 3.0.0",

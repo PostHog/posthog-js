@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.9.3
+
+### Patch Changes
+
+- [#4929](https://github.com/PostHog/posthog-js/pull/4929) [`87aadf7`](https://github.com/PostHog/posthog-js/commit/87aadf706a77bfa9d886728b1083bbb3a55d557c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Android: a notification tap that launched the app is no longer captured as `$push_notification_opened` while the JS client is opted out, even if an earlier launch had opted the native SDK in.
+  (2026-09-15)
+
 ## 2.9.2
 
 ### Patch Changes
