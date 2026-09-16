@@ -192,6 +192,7 @@ const measureLazy = async (name = 'lazy', fixture = 'fixtures/lazy.ts', automati
 }
 
 const surveyTypes = await build({
+    absWorkingDir: packageRoot,
     entryPoints: ['fixtures/survey-types.ts'],
     bundle: true,
     format: 'esm',
