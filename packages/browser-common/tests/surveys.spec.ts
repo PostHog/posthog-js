@@ -11,7 +11,8 @@ import {
     type SurveysManager,
     type SurveysEventReceiver,
 } from '../src/surveys-config'
-import { SurveyType, type Survey } from '../src/surveys-types'
+import { SurveyType } from '../src/surveys'
+import type { Survey } from '../src'
 import type { ApiResponse } from '../src/client'
 import { TestClient } from './helpers/test-client'
 
