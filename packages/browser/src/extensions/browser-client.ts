@@ -169,7 +169,7 @@ export class BrowserClientAdapter implements Client, Disposable {
         return this._runtime.getExtension<T>(name)
     }
 
-    async capture(event: string, properties?: Properties | null, options?: BrowserCommonCaptureOptions): Promise<void> {
+    capture(event: string, properties?: Properties | null, options?: BrowserCommonCaptureOptions): void {
         if (!options) {
             this.instance.capture(event as EventName, properties)
             return
