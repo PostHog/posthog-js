@@ -87,7 +87,7 @@ export interface PostHogOptions {
     extensions?: readonly Extension[]
 }
 
-/** Options for the analytics-free `@posthog/browser/core` entrypoint. */
+/** Options for the delivery-free `@posthog/browser/core` entrypoint. */
 export type CorePostHogOptions = Omit<PostHogOptions, 'analytics'>
 
 /** Capture V1's terminal verdict for one reported event. */

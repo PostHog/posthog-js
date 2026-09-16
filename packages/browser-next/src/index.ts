@@ -1,51 +1,33 @@
-import type { AnalyticsConfiguration, AnalyticsOptions, LoadStrategy, PostHog, PostHogOptions } from './types'
-import { createPostHogCore, type AutomaticAnalyticsSetup } from './posthog'
+import type { PostHog, PostHogOptions } from './types'
+import { createPostHogCore } from './posthog'
+import { isAnalyticsExtension } from './analytics-internal'
+import { analytics } from './automatic-analytics'
 
-const snapshotAutomaticAnalytics = (options: PostHogOptions): AutomaticAnalyticsSetup | undefined => {
-    let configuration: AnalyticsConfiguration | undefined
-    try {
-        configuration = options.analytics
-    } catch {
-        configuration = undefined
+/** Creates a browser client with first-party analytics delivery loaded lazily by default. */
+export const createPostHog = async (options: PostHogOptions): Promise<PostHog> => {
+    const extensions = [...(options?.extensions ?? [])]
+    let loadingError: unknown
+    if (!extensions.some(isAnalyticsExtension)) {
+        let configuration: PostHogOptions['analytics'] = { load: 'lazy' }
+        try {
+            configuration = options?.analytics ?? configuration
+        } catch {
+            // Unavailable configuration uses defaults.
+        }
+        if (configuration !== false) {
+            try {
+                extensions.unshift(analytics(configuration))
+            } catch (error) {
+                loadingError = error
+            }
+        }
     }
-    if (configuration === false) {
-        return undefined
+    const client = await createPostHogCore(options, extensions)
+    if (loadingError) {
+        client.logger.error('Automatic analytics loading failed', loadingError)
     }
-
-    let strategy: LoadStrategy = 'lazy'
-    let flushAt: number | undefined
-    let flushInterval: number | undefined
-    try {
-        strategy = configuration?.load === 'eager' ? 'eager' : 'lazy'
-    } catch {
-        // Lazy loading remains the accessible default.
-    }
-    try {
-        flushAt = configuration?.flushAt
-    } catch {
-        // The analytics constructor applies its default.
-    }
-    try {
-        flushInterval = configuration?.flushInterval
-    } catch {
-        // The analytics constructor applies its default.
-    }
-    return {
-        strategy,
-        options: {
-            ...(flushAt === undefined ? {} : { flushAt }),
-            ...(flushInterval === undefined ? {} : { flushInterval }),
-        },
-        async load(analyticsOptions: AnalyticsOptions) {
-            const { analytics } = await import('./analytics')
-            return analytics(analyticsOptions)
-        },
-    }
+    return client
 }
-
-/** Creates a browser client with first-party analytics loaded lazily by default. */
-export const createPostHog = async (options: PostHogOptions): Promise<PostHog> =>
-    createPostHogCore(options, options ? snapshotAutomaticAnalytics(options) : undefined)
 
 export { version } from './version'
 export type {
