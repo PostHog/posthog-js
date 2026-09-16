@@ -169,11 +169,11 @@ The canvas WebRTC plugin ships its SimplePeer declaration shim and legacy-compat
 
 The declaration regression tests also run through `pnpm test:unit`. When changing an entrypoint, verify its package exports and both declaration formats, and check a `pnpm dev` source edit/rebuild. Keep the shared build configs in Turbo's cache inputs.
 
-### Native TypeScript compiler trial
+### Native TypeScript declarations
 
 `packages/types` uses the pinned native TypeScript compiler for Rslib declaration generation, with semantic checking retained. Other packages keep their existing compiler backends; Next retains its separate native compiler pin.
 
-The opt-in [native TypeScript trial](scripts/native-typescript-trial/README.md) compares semantic diagnostics, emitted declarations, strict older-TypeScript consumption, and repeated CLI/Rslib timings on representative packages. Install its independent workspace separately and wait for a quiet host before benchmarking. Consult the [recorded results](scripts/native-typescript-trial/REPORT.md) before changing compiler backends; a faster isolated compiler invocation does not establish production-build or consumer compatibility.
+`pnpm turbo run test:unit --filter=@posthog/types` includes a production-build regression check comparing all TypeScript and native compiler outputs, including declarations and source maps, and verifying that both builds fail on a deliberate semantic error. The test copies sources into a temporary fixture and leaves production outputs untouched. Compiler backend changes must preserve this compatibility check; isolated compiler speed alone does not establish production-build or consumer compatibility.
 
 ### Dead code audit (Knip)
 
