@@ -385,6 +385,11 @@ export class BrowserState {
             : { sessionId: '', windowId: '', sessionStartTimestamp: 0 }
     }
 
+    /** Observe admitted session activity without starting or advancing a session. */
+    get lastActivityTimestamp(): number | undefined {
+        return this._state.session?.lastActivityTimestamp
+    }
+
     get consent(): ConsentState {
         return this.refreshConsent()
     }

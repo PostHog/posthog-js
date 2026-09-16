@@ -1,5 +1,7 @@
 import { loadRemoteConfig } from './remote-config'
 import type { BrowserClient, IdentifyInfo, GroupInfo } from './browser-client'
+import type { LogsExtension } from './logs-internal'
+import type { CaptureLogOptions } from './logs-options'
 import {
     type ApiResponse,
     type CaptureOptions,
@@ -208,6 +210,7 @@ class PostHogBrowserClient implements PostHog {
                 if (consent === 'denied') {
                     this._immediateAuthority = {}
                     this._captureSink?.purge()
+                    this._withLogs((logs) => logs.reset())
                 }
             }
         )
@@ -540,10 +543,34 @@ class PostHogBrowserClient implements PostHog {
         this._state.prepare()
         this._state.reset()
         this._resetPublisher.publish(undefined)
+        this._withLogs((logs) => logs.reset())
+    }
+
+    private _withLogs<T>(action: (logs: LogsExtension) => T): T | undefined {
+        if (this._disposed) return undefined
+        try {
+            const logs = this._registry?.get<LogsExtension>('logs')
+            return logs ? action(logs) : undefined
+        } catch (error) {
+            this.logger.error('Logs operation failed', error)
+            return undefined
+        }
+    }
+
+    captureLog(options: CaptureLogOptions): void {
+        if (!this._closing) this._withLogs((logs) => logs.captureLog(options))
+    }
+
+    private async _flushLogs(): Promise<void> {
+        try {
+            await this._withLogs((logs) => logs.flush())
+        } catch (error) {
+            this.logger.error('Logs flush failed', error)
+        }
     }
 
     async flush(): Promise<void> {
-        await this._captureSink?.flush()
+        await Promise.all([this._captureSink?.flush(), this._flushLogs()])
     }
 
     optIn(): void {
@@ -700,8 +727,8 @@ class PostHogBrowserClient implements PostHog {
 
     shutdown(shutdownTimeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS): Promise<void> {
         if (!this._shutdownPromise) {
-            const captureFlush = this._captureSink?.flush('shutdown') ?? Promise.resolve()
             this._closing = true
+            const captureFlush = Promise.all([this._captureSink?.flush('shutdown'), this._flushLogs()]).then(() => {})
             this._removePageviewListener()
             try {
                 this._consentObservation.dispose()
@@ -979,6 +1006,10 @@ class PostHogBrowserClient implements PostHog {
         }
     }
 
+    _logsLastActivity(): number | undefined {
+        return this._state.lastActivityTimestamp
+    }
+
     _canDeliver(): boolean {
         return !this._disposed && !this._blocked && !this.hasOptedOut()
     }
@@ -1014,6 +1045,13 @@ export const createPostHogCore = async (
     }
     for (const extension of extensions) {
         try {
+            if (extension.name === 'logs') {
+                ;(extension as LogsExtension).initialize?.({
+                    runtime: client._requestRuntime,
+                    canSend: () => client._canDeliver(),
+                    lastActivityTimestamp: () => client._logsLastActivity(),
+                })
+            }
             await client._registry.install(extension)
         } catch (error) {
             client.logger.error(`Failed to install configured extension "${extension.name}"`, error)

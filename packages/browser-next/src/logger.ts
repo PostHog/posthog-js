@@ -1,4 +1,5 @@
 import type { Client } from '@posthog/browser-common'
+import { originalConsoleMethod } from '@posthog/browser-common/utils/console-original'
 
 type Logger = Client['logger']
 type ConsoleLevel = 'debug' | 'log' | 'warn' | 'error'
@@ -10,7 +11,8 @@ export const createLogger = (prefix: string, enabled: boolean): Logger => {
         }
 
         try {
-            globalThis.console?.[level]?.(prefix, ...args)
+            const console = globalThis.console
+            originalConsoleMethod(console?.[level])?.call(console, prefix, ...args)
         } catch {
             // Logging must not affect the host application.
         }

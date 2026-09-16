@@ -526,6 +526,14 @@ export class PostHogLogs implements Extension {
         }
     }
 
+    /** Await both product queues without changing the legacy fire-and-forget flush API. */
+    async flush(): Promise<void> {
+        const programmatic = this._core?.flush().catch((error) => this._logFlushError(error))
+        const console = this._consoleCore?.flush().catch((error) => this._logFlushError(error))
+        await programmatic
+        await console
+    }
+
     private _logFlushError(error: unknown): void {
         if (!isHandledLogsRequestError(error)) {
             this._logger.error('PostHog logs flush failed:', error)
