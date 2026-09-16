@@ -18,8 +18,11 @@ describe('default analytics selection', () => {
         vi.mocked(analytics).mockReset().mockImplementation(createAnalyticsExtension)
     })
 
-    it('creates analytics with lazy defaults', async () => {
-        const client = await createPostHog(options)
+    it('constructs analytics synchronously with lazy defaults', async () => {
+        const pending = createPostHog(options)
+        const constructionCount = vi.mocked(analytics).mock.calls.length
+        const client = await pending
+        expect(constructionCount).toBe(1)
         expect(analytics).toHaveBeenCalledOnce()
         expect(analytics).toHaveBeenCalledWith({ load: 'lazy' })
         expect(client.getExtension('analytics')).toBe(vi.mocked(analytics).mock.results[0]?.value)

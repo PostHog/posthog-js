@@ -1,6 +1,7 @@
 import type { PostHog, PostHogOptions } from './types'
 import { createPostHogCore } from './posthog'
 import { isAnalyticsExtension } from './analytics-internal'
+import { analytics } from './automatic-analytics'
 
 /** Creates a browser client with first-party analytics delivery loaded lazily by default. */
 export const createPostHog = async (options: PostHogOptions): Promise<PostHog> => {
@@ -15,7 +16,6 @@ export const createPostHog = async (options: PostHogOptions): Promise<PostHog> =
         }
         if (configuration !== false) {
             try {
-                const { analytics } = await import('./automatic-analytics')
                 extensions.unshift(analytics(configuration))
             } catch (error) {
                 loadingError = error

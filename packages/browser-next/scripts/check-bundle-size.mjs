@@ -15,7 +15,8 @@ const forbiddenInputs = [
     /(^|\/)\.\.\/rrweb\//,
     /(^|\/)node_modules\/(posthog-js|@posthog\/core|core-js|dompurify|fflate|preact|rrweb|web-vitals)\//,
 ]
-const analyticsInput = /(^|\/)(capture-v1|analytics|automatic-analytics|analytics-delivery|lane)\.(m?js|ts)$/
+const analyticsInput = /(^|\/)(capture-v1|analytics|analytics-delivery|lane)\.(m?js|ts)$/
+const automaticAnalyticsInput = /(^|\/)automatic-analytics\.(m?js|ts)$/
 const buildOptions = {
     absWorkingDir: packageRoot,
     bundle: true,
@@ -83,6 +84,9 @@ const measureStatic = async (name, fixture, forbidAnalytics) => {
     if (!output) {
         throw new Error(`The ${name} bundle-size fixture did not produce JavaScript`)
     }
+    if (forbidAnalytics && Object.keys(result.metafile.inputs).some((input) => automaticAnalyticsInput.test(input))) {
+        throw new Error('The core bundle references automatic analytics')
+    }
     await report(name, result, [output], Object.keys(result.metafile.outputs), forbidAnalytics)
 }
 
@@ -132,6 +136,13 @@ const measureLazy = async () => {
         })
     const initialKeys = [...initial]
     const totalKeys = Object.keys(result.metafile.outputs)
+    if (
+        !initialKeys.some((key) =>
+            Object.keys(result.metafile.outputs[key].inputs).some((input) => automaticAnalyticsInput.test(input))
+        )
+    ) {
+        throw new Error('The lazy initial bundle must include the automatic analytics factory')
+    }
     await report('lazy initial', result, contents(initialKeys), initialKeys, true)
     await report('lazy total', result, contents(totalKeys), totalKeys, false)
 }
