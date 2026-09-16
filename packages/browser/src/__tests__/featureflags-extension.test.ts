@@ -60,6 +60,39 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         expect(removeDocumentListener).toHaveBeenCalledWith('click', expect.any(Function), { capture: true })
     })
 
+    it('looks up legacy persistence at setup and marks enrollment ownership before writing KV', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const flags = new PostHogFeatureFlags(posthog)
+        const originalPersistence = posthog.persistence
+        const persistence = new PostHogPersistence(posthog.config)
+        posthog.persistence = persistence
+        const unsubscribe = vi.fn()
+        const subscribe = vi.spyOn(persistence, 'onCrossTabFeatureFlagChange').mockReturnValue(unsubscribe)
+        const markChanges = vi.spyOn(persistence, 'markCrossTabFeatureFlagChanges')
+        const client = posthog._getBrowserClientAdapter()
+        const write = vi.spyOn(client.kv, 'set')
+
+        flags.setup(client)
+        flags.updateEarlyAccessFeatureEnrollment('flag', true)
+
+        expect(subscribe).toHaveBeenCalledTimes(1)
+        expect(subscribe.mock.instances[0]).toBe(persistence)
+        expect(markChanges).toHaveBeenCalledWith({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['flag'],
+            [ENABLED_FEATURE_FLAGS]: ['flag'],
+            [STORED_PERSON_PROPERTIES_KEY]: ['$feature_enrollment/flag'],
+        })
+        expect(markChanges.mock.instances[0]).toBe(persistence)
+        expect(markChanges.mock.invocationCallOrder[0]).toBeLessThan(write.mock.invocationCallOrder[0])
+        flags.dispose()
+        flags.dispose()
+        expect(unsubscribe).toHaveBeenCalledTimes(1)
+
+        posthog.persistence = originalPersistence
+        persistence.destroy()
+        await posthog.shutdown()
+    })
+
     it('notifies feature flag handlers when a sibling tab updates enrollment state', async () => {
         const token = uuidv7()
         const persistenceName = `cross-tab-flags-${token}`
