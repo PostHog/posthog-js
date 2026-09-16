@@ -95,7 +95,8 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties, useBabel) => [
             }
         },
     },
-    // Oxc cannot emit ES5, and the slim/extension ABI checks need Babel's source-map names.
+    // Oxc cannot emit ES5. Slim/extension entries retain Babel until Oxc's lowered async
+    // initializers tree-shake without retaining compression (see scripts/investigate-oxc-bundles.md).
     // Transform after tree-shaking so unused Babel helpers do not remain as side effects.
     ...(useBabel
         ? [
