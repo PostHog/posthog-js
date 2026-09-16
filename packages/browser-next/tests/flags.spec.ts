@@ -3,9 +3,10 @@ import { createPostHog as createCore } from '../src/core'
 import { flags } from '../src/flags'
 import type { FlagsOptions } from '../src/flags'
 import type { PostHog, PostHogOptions } from '../src/types'
-import { MemoryStorage } from './helpers'
+import { localRemoteConfig, MemoryStorage } from './helpers'
 
 const base = {
+    remoteConfig: localRemoteConfig,
     projectToken: 'ph_flags_test',
     capturePageview: false,
     storage: false,
