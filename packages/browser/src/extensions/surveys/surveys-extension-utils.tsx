@@ -777,12 +777,23 @@ const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iterat
     return getSurveyStorageKey(SURVEY_IN_PROGRESS_PREFIX, survey)
 }
 
+// Some pages cannot touch localStorage at all. The hosted survey page is served with a `sandbox`
+// CSP that omits `allow-same-origin`, so the document gets an opaque origin and every localStorage
+// access throws; private-mode and storage-blocking browsers behave the same way. The in-progress
+// state is the only channel that carries a URL-prefilled answer and the question index it advances
+// to from `renderSurvey` to the question renderer, so losing the write silently re-shows a question
+// that was already answered. This per-page-load copy keeps that state readable. It cannot survive a
+// reload, but neither can localStorage on those pages.
+const inMemoryInProgressSurveyState: Record<string, InProgressSurveyState> = {}
+
 export const setInProgressSurveyState = (
     survey: Pick<Survey, 'id' | 'current_iteration'>,
     state: InProgressSurveyState
 ): void => {
+    const key = getInProgressSurveyStateKey(survey)
+    inMemoryInProgressSurveyState[key] = state
     try {
-        localStorage.setItem(getInProgressSurveyStateKey(survey), JSON.stringify(state))
+        localStorage.setItem(key, JSON.stringify(state))
     } catch (e) {
         logger.error('Error setting in-progress survey state in localStorage', e)
     }
@@ -791,13 +802,17 @@ export const setInProgressSurveyState = (
 export const getInProgressSurveyState = (
     survey: Pick<Survey, 'id' | 'current_iteration'>
 ): InProgressSurveyState | null => {
+    const key = getInProgressSurveyStateKey(survey)
     try {
-        const stateString = localStorage.getItem(getInProgressSurveyStateKey(survey))
+        const stateString = localStorage.getItem(key)
         if (stateString) {
             return JSON.parse(stateString) as InProgressSurveyState
         }
     } catch (e) {
         logger.error('Error getting in-progress survey state from localStorage', e)
+        // Only fall back when localStorage is unreadable. A successful read that finds nothing
+        // means the state was never written or was cleared, and must stay empty.
+        return inMemoryInProgressSurveyState[key] ?? null
     }
     return null
 }
@@ -808,8 +823,10 @@ export const isSurveyInProgress = (survey: Pick<Survey, 'id' | 'current_iteratio
 }
 
 export const clearInProgressSurveyState = (survey: Pick<Survey, 'id' | 'current_iteration'>): void => {
+    const key = getInProgressSurveyStateKey(survey)
+    delete inMemoryInProgressSurveyState[key]
     try {
-        localStorage.removeItem(getInProgressSurveyStateKey(survey))
+        localStorage.removeItem(key)
     } catch (e) {
         logger.error('Error clearing in-progress survey state from localStorage', e)
     }
