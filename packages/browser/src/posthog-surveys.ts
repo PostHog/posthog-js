@@ -30,6 +30,7 @@ import {
     setSurveySeenOnLocalStorage,
     SURVEY_LOGGER as logger,
     SURVEY_IN_PROGRESS_PREFIX,
+    clearInMemoryInProgressSurveyState,
     SURVEY_SEEN_PREFIX,
     SURVEY_CAPTURING_DISABLED,
 } from './utils/survey-utils'
@@ -142,6 +143,10 @@ export class PostHogSurveys implements Extension {
     }
 
     reset(): void {
+        // Outside the try because this is the state that matters most when localStorage throws:
+        // on a page with no usable storage it is the only copy of a respondent's in-progress
+        // answers, and it must not outlive their session on a shared device.
+        clearInMemoryInProgressSurveyState()
         try {
             // Drop in-memory event/action activations too; they aren't in persistence (which
             // reset() has already cleared), so without this an armed-but-unshown survey would

@@ -1,5 +1,5 @@
 import { getSurveyIterationKey } from '@posthog/core/surveys'
-import { isFunction } from '@posthog/core'
+import { isFunction, type SurveyResponses } from '@posthog/core'
 
 import type { PostHog } from '../posthog-core'
 import { DisplaySurveyOptions, Survey, SurveyType, DisplaySurveyType } from '../posthog-surveys-types'
@@ -35,6 +35,43 @@ export function doesSurveyActivateByAction(survey: Pick<Survey, 'conditions'>): 
 export const SURVEY_SEEN_PREFIX = 'seenSurvey_'
 export const SURVEY_IN_PROGRESS_PREFIX = 'inProgressSurvey_'
 export const SURVEY_ABANDONED_PREFIX = 'abandonedSurvey_'
+
+export interface InProgressSurveyState {
+    surveySubmissionId: string
+    lastQuestionIndex: number
+    // Question ids in the order the persisted indices point into. Optional for backwards compat with
+    // state written before the order was recorded.
+    questionOrder?: string[]
+    // Indices the respondent has visited, in order, excluding the current one. Pushed on next, popped on back.
+    // Optional for backwards compat with state persisted before the back-navigation feature.
+    visitedIndices?: number[]
+    responses: SurveyResponses
+    surveyLanguage?: string | null
+    // Maps question id → the question text displayed when the user answered it. Used so that
+    // $survey_questions[].question in sent/dismissed events reflects the language the user saw,
+    // not the language active at event-fire time after a mid-session switch.
+    questionSnapshots?: Record<string, string>
+}
+
+/**
+ * Some pages cannot touch localStorage at all. The hosted survey page is served with a `sandbox`
+ * CSP that omits `allow-same-origin`, so the document gets an opaque origin and every localStorage
+ * access throws; private-mode and storage-blocking browsers behave the same way. The in-progress
+ * state is the only channel that carries a URL-prefilled answer, and the question index it advances
+ * to, from `renderSurvey` to the question renderer, so losing the write silently re-shows a
+ * question the link already answered. This per-page-load copy keeps that state readable. It cannot
+ * survive a reload, but neither can localStorage on those pages.
+ *
+ * It lives here rather than next to its localStorage wrappers so that `reset()` can drop it on
+ * logout: partially typed answers must not outlive the respondent's session on a shared device.
+ */
+export const inMemoryInProgressSurveyState: Record<string, InProgressSurveyState> = {}
+
+export const clearInMemoryInProgressSurveyState = (): void => {
+    for (const key of Object.keys(inMemoryInProgressSurveyState)) {
+        delete inMemoryInProgressSurveyState[key]
+    }
+}
 
 // Prefix namespacing is a localStorage concern, so it stays in the browser package;
 // the iteration-qualified key itself is shared with the other SDKs via @posthog/core.

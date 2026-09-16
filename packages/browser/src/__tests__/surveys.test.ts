@@ -9,7 +9,9 @@ import {
     canActivateRepeatedly,
     getDisplayOrderChoices,
     getDisplayOrderQuestions,
+    getInProgressSurveyState,
     getSurveyContainerClass,
+    setInProgressSurveyState,
 } from '../extensions/surveys/surveys-extension-utils'
 import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
@@ -344,6 +346,28 @@ describe('surveys', () => {
         expect(localStorage.getItem('lastSeenSurveyDate')).toBeNull()
         expect(localStorage.getItem('seenSurvey_XYZ')).toBeNull()
         expect(localStorage.getItem('seenSurvey_ABC')).toBeNull()
+    })
+
+    it('posthog.reset() drops in-progress answers held in memory when localStorage is unusable', () => {
+        // On a page with an opaque origin the in-memory copy is the only record of a respondent's
+        // answers, so a logout must clear it even though there is nothing in localStorage to remove.
+        setInProgressSurveyState({ id: 'XYZ', current_iteration: null }, {
+            surveySubmissionId: 'submission-1',
+            lastQuestionIndex: 1,
+            responses: { $survey_response_q1: 'typed but not submitted' },
+        } as any)
+        const throwingStorage = (['getItem', 'setItem', 'removeItem', 'key'] as const).map((method) =>
+            vi.spyOn(Storage.prototype, method).mockImplementation(() => {
+                throw new Error('The document is sandboxed and lacks the allow-same-origin flag')
+            })
+        )
+
+        try {
+            surveys.reset()
+            expect(getInProgressSurveyState({ id: 'XYZ', current_iteration: null })).toBeNull()
+        } finally {
+            throwingStorage.forEach((spy) => spy.mockRestore())
+        }
     })
 
     it('getSurveys registers the survey event receiver if a survey has events', async () => {
