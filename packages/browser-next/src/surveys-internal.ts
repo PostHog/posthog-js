@@ -11,6 +11,7 @@ export interface SurveysHost {
 }
 
 export interface SurveysExtension extends Extension {
+    getElementSelectors(): Set<string>
     initialize(host: SurveysHost): void
     getSurveys(callback: SurveyCallback, forceReload?: boolean): void
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload?: boolean): void

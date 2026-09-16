@@ -9,6 +9,8 @@ export interface SurveyCapturedEvent {
 export interface SurveyActionHost {
     subscribeCapture?: ((listener: (event: string, payload?: SurveyCapturedEvent) => void) => () => void) | undefined
     setElementSelectors?: ((selectors: Set<string>) => void) | undefined
+    /** Local fallback for action URL steps only; does not change captured properties. */
+    getActionUrl?: (() => string | undefined) | undefined
 }
 
 export interface SurveyEventHost extends SurveyActionHost {

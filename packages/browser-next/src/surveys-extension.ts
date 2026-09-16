@@ -1,23 +1,35 @@
 import { STORED_PERSON_PROPERTIES_KEY } from '@posthog/browser-common/constants'
-import type { Client, Disposable, KeyValueStore } from '@posthog/browser-common'
+import type { Client, Disposable, KeyValueStore, Extension } from '@posthog/browser-common'
 import { PostHogSurveys } from '@posthog/browser-common/surveys'
-import { type SurveysConfigSource, type SurveysManager } from '@posthog/browser-common/surveys-config'
+import { SURVEYS, type SurveysConfigSource, type SurveysManager } from '@posthog/browser-common/surveys-config'
 import type { SurveyRenderContext } from '@posthog/browser-common/survey-render-context'
-import { DEFAULT_DISPLAY_SURVEY_OPTIONS } from '@posthog/browser-common/utils/survey-utils'
+import {
+    DEFAULT_DISPLAY_SURVEY_OPTIONS,
+    isSurveyRunning,
+    doesSurveyActivateByEvent,
+    doesSurveyActivateByAction,
+} from '@posthog/browser-common/utils/survey-utils'
+import { SurveyEventReceiver } from '@posthog/browser-common/survey-event-receiver'
+import { getTargetingUrl } from '@posthog/browser-common/utils/url-targeting-utils'
 import type { AnalyticsExtension, AnalyticsTeardownSubscription } from './analytics-internal'
 import type { SurveysExtension, SurveysHost } from './surveys-internal'
 import {
     snapshotSurveysOptions,
     type SurveysOptions,
     type SurveyCallback,
+    type Survey,
     type SurveyRenderReason,
 } from './surveys-options'
 import { SurveysStorage } from './surveys-storage'
 
 type Renderer = { generateSurveys(host: SurveyRenderContext, enabled: boolean): SurveysManager | undefined }
+type AutocaptureSelectors = Extension & { setElementSelectors(selectors: Set<string>): void }
 
 export const createSurveys = (options: SurveysOptions, load: () => Promise<Renderer>): SurveysExtension => {
     const config = snapshotSurveysOptions(options)
+    let elementSelectors = new Set<string>()
+    let eventReceiver: SurveyEventReceiver | undefined
+    const replaceTriggers = (surveys: Survey[]) => eventReceiver?.replace(surveys)
     let host: SurveysHost | undefined
     let client: Client | undefined
     let storage: SurveysStorage | undefined
@@ -69,6 +81,29 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
         }),
     }
     const shared = new (class extends PostHogSurveys {
+        protected override _createEventReceiver(value: Client): SurveyEventReceiver {
+            eventReceiver = new SurveyEventReceiver(value, this, {
+                getActionUrl: () => (runtimeHost ? getTargetingUrl(runtimeHost) : undefined),
+                setElementSelectors: (selectors) => {
+                    elementSelectors = new Set(selectors)
+                    value
+                        .getExtension<AutocaptureSelectors>('autocapture')
+                        ?.setElementSelectors(new Set(elementSelectors))
+                },
+            })
+            const cached = storage!.kv.get<Survey[]>(SURVEYS) ?? []
+            replaceTriggers(
+                cached.filter(
+                    (survey) =>
+                        isSurveyRunning(survey) &&
+                        (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
+                )
+            )
+            return eventReceiver
+        }
+        protected override _registerSurveyTriggers(surveys: Survey[]): void {
+            replaceTriggers(surveys)
+        }
         override loadIfEnabled(): void {
             if ((remoteEnabled || manual) && typeof document !== 'undefined') super.loadIfEnabled()
         }
@@ -198,6 +233,7 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
                 },
             }
         },
+        getElementSelectors: () => new Set(elementSelectors),
         cancelPendingSurvey: (id) => {
             if (!disposed) shared.cancelPendingSurvey(id)
         },
@@ -207,7 +243,14 @@ export const createSurveys = (options: SurveysOptions, load: () => Promise<Rende
             storage?.reset()
         },
         dispose: () => {
+            if (disposed) return
             disposed = true
+            elementSelectors.clear()
+            try {
+                client?.getExtension<AutocaptureSelectors>('autocapture')?.setElementSelectors?.(new Set())
+            } catch (error) {
+                client?.logger.error('Failed to clear survey action selectors', error)
+            }
             finishDisposal()
             remoteSubscription?.dispose()
             if (typeof window !== 'undefined') window.removeEventListener('pagehide', pagehide)
