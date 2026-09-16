@@ -1,3 +1,4 @@
+import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
 import { createPostHog as createAutomaticPostHog } from '../src'
 import { analytics as createAnalytics } from '../src/analytics'
@@ -145,11 +146,13 @@ describe('@posthog/browser core', () => {
             capturePageview: false,
             storage: false,
             navigator: false,
-            fetch: async (_input, init = {}) => {
-                requests.push(init)
-                return new Response('{"results":{}}', { status: 200 })
-            },
-            remoteConfigLoader: () => remoteConfig,
+            fetch: createRemoteConfigFetch(
+                () => remoteConfig,
+                async (_input, init = {}) => {
+                    requests.push(init)
+                    return new Response('{"results":{}}', { status: 200 })
+                }
+            ),
         })
 
         await posthog.capture('before_config', { value: 'x'.repeat(2_000) })
@@ -690,8 +693,7 @@ describe('@posthog/browser core', () => {
                 capturePageview: false,
                 storage: false,
                 navigator: false,
-                fetch: false,
-                remoteConfigLoader: loader,
+                fetch: createRemoteConfigFetch(loader),
             })
             posthog.onRemoteConfig(() => {})
             await Promise.resolve()
@@ -1242,9 +1244,8 @@ describe('@posthog/browser core', () => {
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: false,
+            fetch: createRemoteConfigFetch(() => new Promise(() => {})),
             remoteConfigTimeoutMs: 1,
-            remoteConfigLoader: () => new Promise(() => {}),
         })
 
         await expect(posthog.getRemoteConfig()).resolves.toBeUndefined()
@@ -1255,10 +1256,9 @@ describe('@posthog/browser core', () => {
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: false,
-            remoteConfigLoader: () => {
+            fetch: createRemoteConfigFetch(() => {
                 throw new Error('sync failure')
-            },
+            }),
         })
 
         await expect(posthog.getRemoteConfig()).resolves.toBeUndefined()
@@ -1271,14 +1271,14 @@ describe('@posthog/browser core', () => {
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: false,
-            remoteConfigLoader: loader,
+            fetch: createRemoteConfigFetch(loader),
         })
         const changes: unknown[] = []
         posthog.onRemoteConfig((value) => changes.push(value))
 
-        await expect(posthog.getRemoteConfig()).resolves.toBe(remoteConfig)
-        await expect(posthog.getRemoteConfig()).resolves.toBe(remoteConfig)
+        const fetchedConfig = await posthog.getRemoteConfig()
+        expect(fetchedConfig).toEqual(remoteConfig)
+        await expect(posthog.getRemoteConfig()).resolves.toBe(fetchedConfig)
         expect(loader).toHaveBeenCalledTimes(1)
         expect(changes).toEqual([{ ok: true, config: remoteConfig }])
     })
@@ -1290,8 +1290,7 @@ describe('@posthog/browser core', () => {
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: false,
-            remoteConfigLoader: loader,
+            fetch: createRemoteConfigFetch(loader),
         })
 
         const notification = new Promise<unknown>((resolve) => posthog.onRemoteConfig(resolve))

@@ -1,3 +1,4 @@
+import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
 import type { Client, Extension } from '@posthog/browser-common'
 
@@ -472,8 +473,7 @@ describe('browser-next initial pageview', () => {
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: false,
-            remoteConfigLoader: loader,
+            fetch: createRemoteConfigFetch(loader),
         })
 
         expect(loader).toHaveBeenCalledTimes(1)

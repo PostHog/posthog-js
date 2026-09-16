@@ -72,8 +72,6 @@ export interface PostHogOptions {
     debug?: boolean
     /** Supply initial remote configuration without a request. */
     remoteConfig?: RemoteConfig
-    /** Override built-in JSON loading at startup. Inline `remoteConfig` takes precedence. */
-    remoteConfigLoader?: () => Promise<RemoteConfig | undefined>
     /** Stop waiting for remote configuration after this duration in milliseconds. Defaults to 10,000. */
     remoteConfigTimeoutMs?: number
     /**

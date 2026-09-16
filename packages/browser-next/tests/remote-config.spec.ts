@@ -42,29 +42,14 @@ describe.each([
         await posthog.dispose()
     })
 
-    it('lets inline configuration take precedence over custom and default loading', async () => {
+    it('uses inline configuration without a request', async () => {
         const fetch = vi.fn(async () => response())
-        const loader = vi.fn(async () => localRemoteConfig)
-        const posthog = await create({ ...options, fetch, remoteConfig: localRemoteConfig, remoteConfigLoader: loader })
+        const posthog = await create({ ...options, fetch, remoteConfig: localRemoteConfig })
         const observed = vi.fn()
         posthog.onRemoteConfig(observed)
         await expect(posthog.getRemoteConfig()).resolves.toBe(localRemoteConfig)
         expect(observed).toHaveBeenCalledWith({ ok: true, config: localRemoteConfig })
-        expect(loader).not.toHaveBeenCalled()
         expect(fetch).not.toHaveBeenCalled()
-        await posthog.dispose()
-    })
-
-    it('uses the custom loader without falling back to a request on failure', async () => {
-        const fetch = vi.fn(async () => response())
-        const loader = vi.fn(async () => undefined)
-        const posthog = await create({ ...options, fetch, remoteConfigLoader: loader })
-        await posthog.getRemoteConfig()
-        expect(loader).toHaveBeenCalledTimes(1)
-        expect(fetch).not.toHaveBeenCalled()
-        const observed = vi.fn()
-        posthog.onRemoteConfig(observed)
-        expect(observed).toHaveBeenCalledWith({ ok: false })
         await posthog.dispose()
     })
 

@@ -1,3 +1,4 @@
+import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
 import type { Client, ExtensionToken } from '@posthog/browser-common'
 
@@ -226,21 +227,20 @@ describe('@posthog/browser extensions', () => {
             await client.capture('denied-output')
             await client.sendRequest('/flags/')
         })
-        const remoteConfigLoader = vi.fn(async () => createRemoteConfig())
+        const configResponse = vi.fn(async () => createRemoteConfig())
         const denied = await createPostHog({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: createFetch(deniedRequests),
+            fetch: createRemoteConfigFetch(configResponse, createFetch(deniedRequests)),
             optOutByDefault: true,
-            remoteConfigLoader,
             extensions: [analytics(), { name: 'denied', setup: deniedSetup }],
         })
 
         await expect(denied.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
         expect(deniedSetup).toHaveBeenCalledTimes(1)
         expect(denied.getExtension('denied')).toBeDefined()
-        expect(remoteConfigLoader).toHaveBeenCalledTimes(1)
+        expect(configResponse).toHaveBeenCalledTimes(1)
         expect(deniedClient?.kv.get('private')).toBe(true)
         expect(deniedRequests).toHaveLength(0)
 
@@ -248,7 +248,7 @@ describe('@posthog/browser extensions', () => {
         denied.optIn()
         expect(denied.hasOptedOut()).toBe(false)
         await new Promise((resolve) => globalThis.setTimeout(resolve, 0))
-        expect(remoteConfigLoader).toHaveBeenCalledTimes(1)
+        expect(configResponse).toHaveBeenCalledTimes(1)
         await deniedClient?.capture('allowed-output')
         await denied.flush()
         expect(deniedRequests).toHaveLength(1)
@@ -263,11 +263,11 @@ describe('@posthog/browser extensions', () => {
             storage: false,
             navigator: { userAgent: 'Googlebot/2.1' },
             fetch: createFetch(blockedRequests),
-            remoteConfigLoader: async () => ({ supportedCompression: [] }) as never,
+            remoteConfig: createRemoteConfig(),
             extensions: [{ name: 'blocked', setup: blockedSetup }],
         })
         await expect(blocked.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
-        await expect(blocked.getRemoteConfig()).resolves.toEqual({ supportedCompression: [] })
+        await expect(blocked.getRemoteConfig()).resolves.toEqual(createRemoteConfig())
         expect(blockedSetup).toHaveBeenCalledTimes(1)
         expect(blocked.getExtension('blocked')).toBeDefined()
         expect(blockedRequests).toHaveLength(0)
@@ -282,8 +282,7 @@ describe('@posthog/browser extensions', () => {
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
-            fetch: false,
-            remoteConfigLoader: () => remoteConfig,
+            fetch: createRemoteConfigFetch(() => remoteConfig),
         })
         const configResult = posthog.getRemoteConfig()
 

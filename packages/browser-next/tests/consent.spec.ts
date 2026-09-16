@@ -1,3 +1,4 @@
+import { createRemoteConfigFetch } from './helpers'
 import { localRemoteConfig } from './helpers'
 import type { Client, Disposable, Extension } from '@posthog/browser-common'
 
@@ -945,8 +946,7 @@ describe('portable consent persistence', () => {
             projectToken: 'ph_test',
             storage,
             navigator: false,
-            fetch: false,
-            remoteConfigLoader: loader,
+            fetch: createRemoteConfigFetch(loader),
             extensions: [{ name: 'subscriber', setup: (client) => void client.onRemoteConfig(observed) }],
         })
         expect(first.hasOptedOut()).toBe(true)
@@ -979,7 +979,7 @@ describe('portable consent persistence', () => {
         expect(observer).toHaveBeenCalledWith({ ok: true, config })
     })
 
-    it('retains remote config whose loader crosses denial and grant', async () => {
+    it('retains remote config whose request crosses denial and grant', async () => {
         const storage = new MemoryStorage()
         let finishLoad: ((config: RemoteConfig) => void) | undefined
         const loaded = new Promise<RemoteConfig>((resolve) => {
@@ -990,8 +990,7 @@ describe('portable consent persistence', () => {
             projectToken: 'ph_test',
             storage,
             navigator: false,
-            fetch: false,
-            remoteConfigLoader: loader,
+            fetch: createRemoteConfigFetch(loader),
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
         const result = first.getRemoteConfig()
@@ -1001,8 +1000,9 @@ describe('portable consent persistence', () => {
         const config = {} as RemoteConfig
         finishLoad?.(config)
 
-        await expect(result).resolves.toBe(config)
-        await expect(first.getRemoteConfig()).resolves.toBe(config)
+        const fetchedConfig = await result
+        expect(fetchedConfig).toEqual(config)
+        await expect(first.getRemoteConfig()).resolves.toBe(fetchedConfig)
         expect(loader).toHaveBeenCalledTimes(1)
     })
 
@@ -1013,8 +1013,7 @@ describe('portable consent persistence', () => {
             projectToken: 'ph_test',
             storage,
             navigator: false,
-            fetch: false,
-            remoteConfigLoader: async () => config,
+            fetch: createRemoteConfigFetch(async () => config),
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
         const laterObserver = vi.fn()
@@ -1036,8 +1035,7 @@ describe('portable consent persistence', () => {
             projectToken: 'ph_test',
             storage,
             navigator: false,
-            fetch: false,
-            remoteConfigLoader: loader,
+            fetch: createRemoteConfigFetch(loader),
         })
         const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
 

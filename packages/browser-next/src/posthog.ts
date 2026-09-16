@@ -131,7 +131,6 @@ class PostHogBrowserClient implements PostHog {
     private readonly _consentObservation: Disposable
     private readonly _blocked: boolean
     private readonly _capturePageview: boolean
-    private readonly _remoteConfigLoader: (() => Promise<RemoteConfig | undefined>) | undefined
     private readonly _remoteConfigTimeoutMs: number
     private _remoteConfig: RemoteConfig | undefined
     private _latestRemoteConfigResult: RemoteConfigResult | undefined
@@ -217,7 +216,6 @@ class PostHogBrowserClient implements PostHog {
             browserNavigator,
         ]
         this._remoteConfig = options.remoteConfig
-        this._remoteConfigLoader = options.remoteConfigLoader
         this._remoteConfigTimeoutMs =
             options.remoteConfigTimeoutMs === undefined || !Number.isFinite(options.remoteConfigTimeoutMs)
                 ? 10_000
@@ -585,7 +583,6 @@ class PostHogBrowserClient implements PostHog {
         if (this._closing || this._disposed) {
             return undefined
         }
-        const loader = this._remoteConfigLoader
         if (this._remoteConfig !== undefined) {
             return this._remoteConfig
         }
@@ -619,9 +616,6 @@ class PostHogBrowserClient implements PostHog {
                     if (this._closing || this._disposed) {
                         invalidated = true
                         return undefined
-                    }
-                    if (loader) {
-                        return loader()
                     }
                     controller =
                         typeof globalThis.AbortController === 'function' ? new globalThis.AbortController() : undefined
