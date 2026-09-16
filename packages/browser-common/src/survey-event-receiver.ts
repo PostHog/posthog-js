@@ -4,6 +4,7 @@ import { SURVEYS_ACTIVATED, SURVEYS_ACTIVATED_SESSION, SURVEYS_ACTIVATED_TIMESTA
 import type { Survey } from './types/surveys'
 import { SurveyEventName } from './survey-constants'
 import type { Client } from './client'
+import type { SurveyActionHost } from './survey-event-host'
 import type { Extension } from './extension'
 import type { SurveyCapturedEvent as CaptureResult } from './survey-event-host'
 import { SURVEY_LOGGER as logger } from './utils/survey-utils'
@@ -19,6 +20,7 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
     constructor(
         private readonly _client: Client,
         private readonly _surveys: SurveyTriggerHost,
+        actions?: Pick<SurveyActionHost, 'getActionUrl' | 'setElementSelectors'>,
         onActivationChanged?: () => void
     ) {
         super({
@@ -32,14 +34,17 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
             },
             getSessionId: () => _client.session?.sessionId,
             getProperty: (key) => _client.kv.get(key),
-            setElementSelectors: (selectors, owner) =>
-                _client
-                    .getExtension<
-                        Extension & {
-                            setElementSelectors(selectors: Set<string>, owner?: object): void
-                        }
-                    >('autocapture')
-                    ?.setElementSelectors(selectors, owner),
+            getActionUrl: actions?.getActionUrl,
+            setElementSelectors:
+                actions?.setElementSelectors ??
+                ((selectors, owner) =>
+                    _client
+                        .getExtension<
+                            Extension & {
+                                setElementSelectors(selectors: Set<string>, owner?: object): void
+                            }
+                        >('autocapture')
+                        ?.setElementSelectors(selectors, owner)),
         }, onActivationChanged)
         this._subscribeSession()
     }
