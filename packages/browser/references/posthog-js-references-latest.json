@@ -4712,6 +4712,7 @@
           "name": "noRetries"
         },
         {
+          "description": "Bypasses asynchronous CompressionStream gzip in favor of synchronous compression. Used for immediate requests so compression does not delay dispatch until after a navigation or page unload.",
           "type": "boolean",
           "name": "preferSyncCompression"
         },
