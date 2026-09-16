@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.9.4
+
+### Patch Changes
+
+- [#4973](https://github.com/PostHog/posthog-js/pull/4973) [`d59ac46`](https://github.com/PostHog/posthog-js/commit/d59ac4625a9c80487d96ff483f27cd921b5aa7a2) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Stop the native SDKs keeping their own opt-out state, so the consent the JS client resolves is the one they use at setup. Requires `posthog-android` 3.66.0 and `posthog-ios` 3.76.0.
+  (2026-09-16)
+
 ## 2.9.3
 
 ### Patch Changes
