@@ -37,7 +37,8 @@ export const sendRequest = async (
     runtime: RequestRuntime,
     path: string,
     init: SendRequestInit = {},
-    canSend: () => boolean = () => true
+    canSend: () => boolean = () => true,
+    signal?: AbortSignal
 ): Promise<ApiResponse> => {
     let url: URL
     let body: string | undefined
@@ -97,7 +98,8 @@ export const sendRequest = async (
         return createFailedResponse(new Error('Fetch is not available'))
     }
 
-    const controller = typeof globalThis.AbortController === 'function' ? new globalThis.AbortController() : undefined
+    const controller =
+        !signal && typeof globalThis.AbortController === 'function' ? new globalThis.AbortController() : undefined
     const timeout =
         controller && init.timeoutMs ? globalThis.setTimeout(() => controller.abort(), init.timeoutMs) : undefined
 
@@ -110,8 +112,9 @@ export const sendRequest = async (
         if (init.transport === 'sendBeacon') {
             requestInit.keepalive = true
         }
-        if (controller) {
-            requestInit.signal = controller.signal
+        const requestSignal = signal ?? controller?.signal
+        if (requestSignal) {
+            requestInit.signal = requestSignal
         }
         if (!canSend()) {
             return createFailedResponse(new Error('PostHog requests are disabled'))

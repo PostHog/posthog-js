@@ -1,3 +1,4 @@
+import { localRemoteConfig } from './helpers'
 import type { Client, ExtensionToken } from '@posthog/browser-common'
 
 import { analytics as createAnalytics } from '../src/analytics'
@@ -42,6 +43,7 @@ describe('@posthog/browser extensions', () => {
         let extensionCanCapture: boolean | undefined
         let flagFromExtension: string | undefined
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -304,6 +306,7 @@ describe('@posthog/browser extensions', () => {
         }
 
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -378,6 +381,7 @@ describe('@posthog/browser extensions', () => {
         }
 
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -439,6 +443,7 @@ describe('@posthog/browser extensions', () => {
             },
         }
         const posthog = await createPostHog({
+            remoteConfig: localRemoteConfig,
             projectToken: 'ph_test',
             capturePageview: false,
             storage: false,
