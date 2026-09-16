@@ -15,11 +15,9 @@ try {
     timeout: 5000,
     posthog,
   })
+  const request = JSON.parse(process.env.REQUEST)
   const stream = await anthropic.messages.create({
-    model: 'synthetic-model',
-    max_tokens: 32,
-    messages: [{ role: 'user', content: 'Say hello.' }],
-    stream: true,
+    ...request,
     posthogDistinctId: 'cassette-test',
   })
   let text = ''

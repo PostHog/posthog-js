@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { VERSION } from '@anthropic-ai/sdk/version'
 import { deepStrictEqual } from 'node:assert'
-import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { startRecorder, startReplay } from './cassette.ts'
 
@@ -25,7 +25,7 @@ const recorder = await startRecorder({
   provenance: {
     source: 'anthropic',
     recordedAt: new Date().toISOString(),
-    providerSdkVersion: createRequire(import.meta.url)('@anthropic-ai/sdk/package.json').version,
+    providerSdkVersion: VERSION,
   },
 })
 let recorded
