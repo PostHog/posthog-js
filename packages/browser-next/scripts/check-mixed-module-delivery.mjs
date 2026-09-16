@@ -1,6 +1,27 @@
 import process from 'node:process'
 /* global globalThis */
 import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
+import assert from 'node:assert/strict'
+
+const commonRequire = createRequire(new URL('../../browser-common/package.json', import.meta.url))
+const { Features, transform } = commonRequire('lightningcss')
+const expectedSurveyStyles = transform({
+    filename: 'survey.css',
+    code: readFileSync(new URL('../../browser-common/src/surveys/survey.css', import.meta.url)),
+    minify: true,
+    include: Features.Nesting | Features.MediaQueries,
+}).code.toString()
+for (const format of ['js', 'mjs']) {
+    const { surveyStyles } = await import(
+        new URL(`../../browser-common/dist/surveys/survey-styles.${format}`, import.meta.url)
+    )
+    assert.equal(
+        surveyStyles,
+        expectedSurveyStyles,
+        `${format} survey CSS must preserve legacy compatibility transforms`
+    )
+}
 
 const guardedGlobals = [
     'addEventListener',
@@ -40,6 +61,8 @@ let flags
 let logs
 let commonJsLogs
 let commonJsFlags
+let surveys
+let commonJsSurveys
 try {
     const require = createRequire(import.meta.url)
     ;({ createPostHog } = require('@posthog/browser'))
@@ -51,6 +74,8 @@ try {
     ;({ flags: commonJsFlags } = require('@posthog/browser/flags'))
     ;({ logs } = await import('@posthog/browser/logs'))
     ;({ logs: commonJsLogs } = require('@posthog/browser/logs'))
+    ;({ surveys } = await import('@posthog/browser/surveys'))
+    ;({ surveys: commonJsSurveys } = require('@posthog/browser/surveys'))
 } finally {
     for (const [name, descriptor] of descriptors) {
         if (descriptor) {
@@ -233,3 +258,20 @@ for (const create of [createPostHog, createEsmPostHog]) {
         throw new Error('Dynamic flags lookup survived disposal')
 }
 process.stdout.write('Built CommonJS/ESM dynamic flags public/shared lookup, async reload, reset and disposal passed\n')
+
+for (const factory of [surveys, commonJsSurveys]) {
+    const client = await createCorePostHog({
+        projectToken: 'ph_surveys_test',
+        storage: false,
+        navigator: false,
+        fetch: false,
+        capturePageview: false,
+        extensions: [factory({ automaticDisplay: false })],
+    })
+    const result = await new Promise((resolve) => client.getSurveys(resolve))
+    if (result.length !== 0 || (await client.canRenderSurvey('missing')).visible) {
+        throw new Error('Mixed-module surveys must return unavailable results without a document')
+    }
+    await client.dispose()
+}
+process.stdout.write('Pure CommonJS/ESM surveys entrypoints and SSR lifecycle passed\n')

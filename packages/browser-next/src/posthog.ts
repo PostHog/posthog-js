@@ -1,6 +1,8 @@
 import { loadRemoteConfig } from './remote-config'
 import type { BrowserClient, IdentifyInfo, GroupInfo } from './browser-client'
 import type { FlagsExtension } from './flags-internal'
+import type { SurveysExtension, SurveysHost } from './surveys-internal'
+import type { SurveyCallback, DisplaySurveyOptions, SurveyRenderReason } from './surveys-options'
 import type { LogsExtension } from './logs-internal'
 import type { CaptureLogOptions } from './logs-options'
 import {
@@ -133,6 +135,7 @@ class PostHogBrowserClient implements PostHog {
     private readonly _identifyPublisher: Publisher<IdentifyInfo>
     private readonly _groupPublisher: Publisher<GroupInfo>
     private readonly _resetPublisher: Publisher<void>
+    readonly _surveysHost: SurveysHost
     readonly _registry: ExtensionRegistry
     readonly _requestRuntime: RequestRuntime
     _captureSink: CaptureSink | undefined
@@ -200,6 +203,12 @@ class PostHogBrowserClient implements PostHog {
         const requestedStorage: StorageLike | undefined =
             options.storage === false ? undefined : (options.storage ?? getDefaultStorage())
         const storage = this._blocked ? undefined : requestedStorage
+        this._surveysHost = {
+            storage,
+            key: `${options.persistenceKey ?? `ph_${projectToken}_posthog_browser_v2`}_surveys`,
+            getFlagsContext: () => this._registry.get<FlagsExtension>('featureFlags')?.getSurveyContext?.(),
+            onSession: (listener) => this._newSessionPublisher.listener((session) => listener(session.sessionId)),
+        }
         this._state = new BrowserState(
             projectToken,
             storage,
@@ -564,7 +573,50 @@ class PostHogBrowserClient implements PostHog {
         this._state.prepare()
         this._state.reset()
         this._resetPublisher.publish(undefined)
+        this._withSurveys((surveys) => surveys?.reset())
         this._withLogs((logs) => logs.reset())
+    }
+
+    private _withSurveys<T>(action: (surveys: SurveysExtension | undefined) => T): T | undefined {
+        if (this._closing || this._disposed) return undefined
+        try {
+            return action(this._registry.get<SurveysExtension>('surveys'))
+        } catch (error) {
+            this.logger.error('Survey operation failed', error)
+            return undefined
+        }
+    }
+
+    getSurveys(callback: SurveyCallback, forceReload?: boolean): void {
+        this._withSurveys((surveys) =>
+            surveys ? surveys.getSurveys(callback, forceReload) : callback([], { isLoaded: false })
+        )
+    }
+    getActiveMatchingSurveys(callback: SurveyCallback, forceReload?: boolean): void {
+        this._withSurveys((surveys) =>
+            surveys ? surveys.getActiveMatchingSurveys(callback, forceReload) : callback([], { isLoaded: false })
+        )
+    }
+    displaySurvey(id: string, options?: DisplaySurveyOptions): void {
+        this._withSurveys((surveys) => surveys?.displaySurvey(id, options))
+    }
+    async canRenderSurvey(id: string, forceReload?: boolean): Promise<SurveyRenderReason> {
+        try {
+            return (
+                (await this._withSurveys((surveys) => surveys?.canRenderSurvey(id, forceReload))) ?? {
+                    visible: false,
+                    disabledReason: 'Surveys unavailable',
+                }
+            )
+        } catch {
+            return { visible: false, disabledReason: 'Surveys unavailable' }
+        }
+    }
+    onSurveysLoaded(callback: SurveyCallback): Disposable {
+        return this._withSurveys((surveys) => surveys?.onSurveysLoaded(callback)) ?? { dispose() {} }
+    }
+    cancelPendingSurvey(id: string): void {
+        this._withSurveys((surveys) => surveys?.cancelPendingSurvey(id))
     }
 
     private _withLogs<T>(action: (logs: LogsExtension) => T): T | undefined {
@@ -1117,6 +1169,9 @@ export const createPostHogCore = async (
                 extension.name === 'featureFlags'
                     ? (extension as FlagsExtension)._shared
                     : undefined
+            if (extension.name === 'surveys') {
+                ;(extension as SurveysExtension).initialize?.(client._surveysHost)
+            }
             if (extension.name === 'logs') {
                 ;(extension as LogsExtension).initialize?.(() => client._logsLastActivity())
             }
