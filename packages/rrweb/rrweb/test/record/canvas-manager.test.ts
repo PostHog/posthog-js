@@ -114,7 +114,6 @@ describe('CanvasManager FPS observer', () => {
     createCanvasManager(win);
 
     expect(rafCallbacks.size).toBe(0);
-    // the user must be able to tell why no canvas events were recorded
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('OffscreenCanvas'),
     );
@@ -156,8 +155,6 @@ describe('CanvasManager FPS observer', () => {
 
     createCanvasManager(win);
 
-    // this path never assigns resetObservers, so teardown cannot undo the patch;
-    // left installed it forces preserveDrawingBuffer for the life of the page
     expect(contextObserverControl.reset).toHaveBeenCalledTimes(1);
   });
 
@@ -308,7 +305,6 @@ describe('CanvasManager FPS observer', () => {
     flushRaf(1000);
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // a canvas that never encodes must say why, with the underlying error
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('snapshot failed'),
       expect.objectContaining({ message: 'GPU context lost' }),
@@ -317,7 +313,6 @@ describe('CanvasManager FPS observer', () => {
     flushRaf(2000);
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // latched: a canvas failing on every frame logs once per recording, not once per frame
     expect(warn).toHaveBeenCalledTimes(1);
     expect(workerControl.instances[0].postMessage).not.toHaveBeenCalled();
   });
@@ -502,7 +497,6 @@ describe('CanvasManager FPS observer', () => {
       getContext: vi.fn(),
     } as unknown as HTMLCanvasElement;
 
-    // the canvas is deliberately never added to the mirror, so getId returns -1
     const mirror = createMirror();
 
     const win = {
@@ -532,10 +526,18 @@ describe('CanvasManager FPS observer', () => {
     flushRaf(1000);
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // every unmirrored canvas shares id -1: one dedup key in the worker and a
-    // mutation the player cannot apply to any node
     expect(vi.mocked(createImageBitmap)).not.toHaveBeenCalled();
     expect(workerControl.instances[0].postMessage).not.toHaveBeenCalled();
+
+    // @ts-expect-error -- using internal method to set up mirror state
+    mirror.add(fakeCanvas, { id: 42 });
+    flushRaf(2000);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(workerControl.instances[0].postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 42, bitmap: fakeBitmap }),
+      [fakeBitmap],
+    );
   });
 
   it('should keep the rAF loop alive when getCanvas throws', async () => {
