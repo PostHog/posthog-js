@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.16.3
+
+### Patch Changes
+
+- [#4967](https://github.com/PostHog/posthog-js/pull/4967) [`916e163`](https://github.com/PostHog/posthog-js/commit/916e16394de38e01789309ea314f23e6ad436c46) Thanks [@gesh](https://github.com/gesh)! - Inject the get_more_tools tool only on the first tools/list page, so a paginated catalogue's concatenated listing carries it once instead of once per page. A real first-page tool with the same name still wins (warning logged); a real tool on a later page is shadowed, with a warning when a client fetches that page — rename the SDK's tool with the `missingCapabilityToolName` option if your catalogue uses the name.
+  (2026-09-16)
+
 ## 0.16.2
 
 ### Patch Changes
