@@ -20,6 +20,7 @@
     "analytics"
   ],
   "scripts": {
+    "check-types": "pnpm prebuild && pnpm typecheck",
     "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/component/version.ts",
     "build": "tsc --project ./tsconfig.build.json",
     "setup:codegen": "test -f .env.local || npx convex dev --once --configure new --dev-deployment local --project posthog-convex-component --typecheck disable || true",
