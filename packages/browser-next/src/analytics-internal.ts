@@ -50,7 +50,8 @@ export type AnalyticsDeliveryFactory = (
     buffer: EventBuffer<AnalyticsMessage>,
     client: Client,
     host: CaptureHost,
-    options: Readonly<Required<AnalyticsOptions>>
+    options: Readonly<Required<AnalyticsOptions>>,
+    beforeTeardown?: () => void
 ) => AnalyticsDriver
 
 /** The capture operations required by core, independent of extension setup or loading. */
@@ -64,11 +65,17 @@ export interface CaptureSink {
     purge(): void
 }
 
+export interface AnalyticsTeardownSubscription {
+    readonly deliveryAvailable: boolean
+    dispose(): void
+}
+
 /** First-party analytics is both a configured extension and the client's capture sink. */
 export interface AnalyticsExtension extends Extension, CaptureSink {
     flush: CaptureSink['flush']
     initialize(host: CaptureHost): void
     start(): Promise<void>
+    onBeforeTeardown?(callback: () => void): AnalyticsTeardownSubscription
 }
 
 export const isAnalyticsExtension = (extension: Extension): extension is AnalyticsExtension =>

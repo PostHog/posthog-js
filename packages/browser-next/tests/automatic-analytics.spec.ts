@@ -30,6 +30,60 @@ const deferred = <T>() => {
 }
 
 describe('@posthog/browser automatic analytics', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals()
+    })
+    it('runs pre-teardown subscribers registered before lazy delivery, contains failures, and removes disposed subscriptions', async () => {
+        const events = new EventTarget()
+        vi.stubGlobal('addEventListener', events.addEventListener.bind(events))
+        vi.stubGlobal('removeEventListener', events.removeEventListener.bind(events))
+        vi.stubGlobal('onpagehide', null)
+        const imported = deferred<AnalyticsDeliveryFactory>()
+        const extension = automaticAnalytics(() => imported.promise)
+        const requests: SentRequest[] = []
+        const client = await createWithAnalytics(
+            {
+                projectToken: 'ph_test',
+                storage: false,
+                navigator: false,
+                capturePageview: false,
+                fetch: createFetch(requests),
+            },
+            extension
+        )
+        const failure = extension.onBeforeTeardown!(() => {
+            throw new Error('product callback')
+        })
+        const callback = vi.fn(() => client.capture('product teardown'))
+        const subscription = extension.onBeforeTeardown!(callback)
+        const skipped = vi.fn()
+        const remover = extension.onBeforeTeardown!(() => removed.dispose())
+        const removed = extension.onBeforeTeardown!(skipped)
+        expect(subscription.deliveryAvailable).toBe(false)
+        client.capture('initial')
+        imported.resolve(createAnalyticsDelivery)
+        await client.flush()
+        expect(subscription.deliveryAvailable).toBe(true)
+        events.dispatchEvent(new Event('pagehide'))
+        expect(callback).toHaveBeenCalledTimes(1)
+        expect(skipped).not.toHaveBeenCalled()
+        remover.dispose()
+        expect(requests.filter(({ init }) => init.keepalive).flatMap(({ body }) => body?.batch ?? [])).toEqual([
+            expect.objectContaining({ event: 'product teardown' }),
+        ])
+        subscription.dispose()
+        subscription.dispose()
+        failure.dispose()
+        events.dispatchEvent(new Event('pagehide'))
+        expect(callback).toHaveBeenCalledTimes(1)
+        const disposed = vi.fn()
+        const stopped = extension.onBeforeTeardown!(disposed)
+        await client.dispose()
+        events.dispatchEvent(new Event('pagehide'))
+        expect(stopped.deliveryAvailable).toBe(false)
+        expect(disposed).not.toHaveBeenCalled()
+    })
+
     it('keeps the same analytics instance and finalized events while delivery loads', async () => {
         const requests: SentRequest[] = []
         const imported = deferred<AnalyticsDeliveryFactory>()
