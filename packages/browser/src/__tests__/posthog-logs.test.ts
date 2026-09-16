@@ -120,6 +120,59 @@ describe('posthog-logs', () => {
         })
 
         describe('shared extension lifecycle', () => {
+            it('maps callback and explicit transports without changing legacy request options', async () => {
+                logs.captureLog({ body: 'callback request' })
+                logs.flushLogs()
+                await Promise.resolve()
+                expect(mockPostHog._send_request).toHaveBeenLastCalledWith({
+                    method: 'POST',
+                    url: 'https://us.i.posthog.com?token=test-token',
+                    data: expect.objectContaining({ resourceLogs: expect.any(Array) }),
+                    compression: 'best-available',
+                    batchKey: 'logs',
+                    fireCallbackOnDrop: true,
+                    callback: expect.any(Function),
+                })
+                logs.captureLog({ body: 'unload request' })
+                logs.flushLogs('sendBeacon')
+                expect(mockPostHog._send_request).toHaveBeenLastCalledWith({
+                    method: 'POST',
+                    url: 'https://us.i.posthog.com?token=test-token',
+                    data: expect.objectContaining({ resourceLogs: expect.any(Array) }),
+                    compression: 'best-available',
+                    batchKey: 'logs',
+                    transport: 'sendBeacon',
+                })
+                expect(mockPostHog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/i/v1/logs')
+                logs.dispose()
+            })
+
+            it('uses current legacy persistence, configuration and loader after construction', () => {
+                const register = vi.fn()
+                mockPostHog.persistence = { register, props: {} } as any
+                mockPostHog.config.token = 'changed token'
+                mockPostHog.config.logs = { serviceName: 'changed-service' }
+                const initialize = vi.fn()
+                assignableWindow.__PosthogExtensions__!.logs = { initializeLogs: initialize }
+                logs.onRemoteConfig({ ok: true, config: flagsResponse })
+                expect(register).toHaveBeenCalledWith({ [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: true })
+                expect(initialize).toHaveBeenCalledWith(mockPostHog)
+                logs.captureLog({ body: 'new configuration' })
+                logs.flushLogs('fetch')
+                expect(mockPostHog._send_request).toHaveBeenLastCalledWith(
+                    expect.objectContaining({
+                        url: 'https://us.i.posthog.com?token=changed%20token',
+                        transport: 'fetch',
+                    })
+                )
+                const request = vi.mocked(mockPostHog._send_request).mock.calls.at(-1)![0]
+                expect((request.data as any).resourceLogs[0].resource.attributes).toContainEqual({
+                    key: 'service.name',
+                    value: { stringValue: 'changed-service' },
+                })
+                logs.dispose()
+            })
+
             it('subscribes to remote config during setup', () => {
                 const remoteConfigDispose = vi.fn()
                 let remoteConfigHandler: ((result: any) => void) | undefined
