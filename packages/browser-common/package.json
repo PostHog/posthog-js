@@ -91,6 +91,15 @@
             ],
             "surveys/survey-translations": [
                 "dist/surveys/survey-translations.d.ts"
+            ],
+            "autocapture": [
+                "dist/autocapture.d.ts"
+            ],
+            "autocapture-config": [
+                "dist/autocapture-config.d.ts"
+            ],
+            "rageclick": [
+                "dist/rageclick.d.ts"
             ]
         }
     },
@@ -214,6 +223,21 @@
             "types": "./dist/surveys/survey-translations.d.ts",
             "require": "./dist/surveys/survey-translations.js",
             "import": "./dist/surveys/survey-translations.mjs"
+        },
+        "./autocapture": {
+            "types": "./dist/autocapture.d.ts",
+            "require": "./dist/autocapture.js",
+            "import": "./dist/autocapture.mjs"
+        },
+        "./autocapture-config": {
+            "types": "./dist/autocapture-config.d.ts",
+            "require": "./dist/autocapture-config.js",
+            "import": "./dist/autocapture-config.mjs"
+        },
+        "./rageclick": {
+            "types": "./dist/rageclick.d.ts",
+            "require": "./dist/rageclick.js",
+            "import": "./dist/rageclick.mjs"
         }
     },
     "scripts": {
