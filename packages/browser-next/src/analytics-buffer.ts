@@ -48,6 +48,20 @@ export const createAnalyticsExtension = (
     let driver: AnalyticsDriver | undefined
     let loading: Promise<void> | undefined
     let disposed = false
+    const teardownCallbacks = new Set<() => void>()
+    const beforeTeardown = () => {
+        for (const callback of teardownCallbacks) {
+            try {
+                callback()
+            } catch (error) {
+                try {
+                    host.reportFailure(error)
+                } catch {
+                    /* A product must not block the handoff. */
+                }
+            }
+        }
+    }
     let failures = 0
     const buffer = new EventBuffer<AnalyticsMessage>(
         1_000,
@@ -85,7 +99,7 @@ export const createAnalyticsExtension = (
                 if (disposed) {
                     return
                 }
-                driver = createDelivery(buffer, client, host, scheduling)
+                driver = createDelivery(buffer, client, host, scheduling, beforeTeardown)
             } catch (error: unknown) {
                 if (!driver) {
                     failures++
@@ -110,7 +124,7 @@ export const createAnalyticsExtension = (
         initialize(value) {
             host = value
             if (deliveryFactory) {
-                driver = deliveryFactory(buffer, client, host, scheduling)
+                driver = deliveryFactory(buffer, client, host, scheduling, beforeTeardown)
             }
         },
         enqueue: (message, bytes) => buffer.enqueue(message, bytes),
@@ -121,6 +135,17 @@ export const createAnalyticsExtension = (
             void ensureDelivery('capture')
         },
         start: () => (eager ? ensureDelivery('eager') : Promise.resolve()),
+        onBeforeTeardown(callback) {
+            if (!disposed) teardownCallbacks.add(callback)
+            return {
+                get deliveryAvailable() {
+                    return !disposed && !!driver
+                },
+                dispose() {
+                    teardownCallbacks.delete(callback)
+                },
+            }
+        },
         async flush(reason = 'flush') {
             if (disposed) {
                 return
@@ -168,6 +193,7 @@ export const createAnalyticsExtension = (
         purge: () => buffer.purge(),
         dispose() {
             disposed = true
+            teardownCallbacks.clear()
             if (driver) {
                 return driver.dispose()
             }

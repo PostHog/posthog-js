@@ -43,6 +43,11 @@
             "types": "./dist/logs.d.ts",
             "import": "./dist/logs.mjs",
             "require": "./dist/logs.js"
+        },
+        "./surveys": {
+            "types": "./dist/surveys.d.ts",
+            "require": "./dist/surveys.js",
+            "import": "./dist/surveys.mjs"
         }
     },
     "scripts": {

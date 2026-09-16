@@ -1,8 +1,10 @@
+import { STORED_PERSON_PROPERTIES_KEY } from '@posthog/browser-common/constants'
 import type { Disposable } from '@posthog/browser-common'
 import { PostHogFeatureFlags } from '@posthog/browser-common/feature-flags'
 import type { FeatureFlagsConfig } from '@posthog/browser-common/feature-flags-config'
 import { FeatureFlagsCommonExtension } from '@posthog/browser-common/extension-tokens'
 import type { BrowserClient } from './browser-client'
+import type { FlagsExtension } from './flags-internal'
 import type { FlagsOptions } from './flags-options'
 import { FeatureFlagsExtension, type FeatureFlags } from './flags-token'
 
@@ -30,9 +32,13 @@ export const flags = (options: FlagsOptions = {}): FeatureFlags => {
     const subscriptions: Disposable[] = []
     const shared = new PostHogFeatureFlags({ get: () => config })
 
-    const extension: FeatureFlags = {
+    const extension: FlagsExtension = {
         name: FeatureFlagsExtension,
         bindings: { [FeatureFlagsCommonExtension]: shared },
+        getSurveyContext: () => ({
+            remoteEvaluation: !config.featureFlagsDisabled,
+            personProperties: client?.kv.get(STORED_PERSON_PROPERTIES_KEY),
+        }),
         setup: async (value: BrowserClient) => {
             client = value
             await shared.setup(value)
